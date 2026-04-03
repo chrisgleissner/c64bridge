@@ -70,8 +70,9 @@ test("operationSchema supports explicit op descriptions and extra properties", (
   assert.equal(schema.additionalProperties, true);
 });
 
-test("discriminatedUnionSchema composes variant schemas", () => {
+test("discriminatedUnionSchema flattens variants into a single object schema", () => {
   const readSchema = operationSchema("read", {
+    description: "Read memory",
     properties: {
       address: { type: "integer" },
       length: { type: "integer" },
@@ -80,6 +81,7 @@ test("discriminatedUnionSchema composes variant schemas", () => {
   });
 
   const writeSchema = operationSchema("write", {
+    description: "Write memory",
     properties: {
       address: { type: "integer" },
       data: { type: "string" },
@@ -92,12 +94,19 @@ test("discriminatedUnionSchema composes variant schemas", () => {
     variants: [readSchema, writeSchema],
   });
 
-  assert.deepEqual(union, {
-    description: "Memory operations",
-    oneOf: [readSchema, writeSchema],
-    discriminator: { propertyName: OPERATION_DISCRIMINATOR },
-    type: "object",
-  });
+  assert.equal(union.type, "object");
+  assert.ok(union.description.includes("Memory operations"));
+  assert.ok(union.description.includes("read:"));
+  assert.ok(union.description.includes("write:"));
+  assert.deepEqual(union.properties[OPERATION_DISCRIMINATOR].enum, ["read", "write"]);
+  assert.deepEqual(union.required, [OPERATION_DISCRIMINATOR]);
+  // All variant properties merged
+  assert.ok(union.properties.address);
+  assert.ok(union.properties.length);
+  assert.ok(union.properties.data);
+  // No oneOf at top level
+  assert.equal(union.oneOf, undefined);
+  assert.equal(union.discriminator, undefined);
 });
 
 test("discriminatedUnionSchema requires at least one variant", () => {
@@ -113,7 +122,8 @@ test("discriminatedUnionSchema supports custom discriminator names", () => {
     variants: [{ type: "object", properties: { mode: { const: "x" } } }],
   });
 
-  assert.equal(union.discriminator.propertyName, "mode");
+  assert.deepEqual(union.properties.mode.enum, ["x"]);
+  assert.deepEqual(union.required, ["mode"]);
 });
 
 test("createOperationDispatcher routes to matching handlers", async () => {
