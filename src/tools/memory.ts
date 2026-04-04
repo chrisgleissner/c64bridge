@@ -8,7 +8,7 @@ import {
   type ToolRunResult,
 } from "./types.js";
 import { booleanSchema, numberSchema, objectSchema, optionalSchema, stringSchema } from "./schema.js";
-import { textResult } from "./responses.js";
+import { jsonResult, textResult } from "./responses.js";
 import {
   ToolError,
   ToolExecutionError,
@@ -217,13 +217,15 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
     const resolvedLength = resolveLength(detailRecord) ?? parsed.length;
 
-    return textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.`, {
-      success: true,
-      address: resolvedAddress,
-      length: resolvedLength,
-      hexData: result.data ?? null,
-      details: detailRecord,
-    });
+    return jsonResult(
+      {
+        success: true,
+        address: resolvedAddress,
+        length: resolvedLength,
+        hexData: result.data ?? null,
+        details: detailRecord,
+      },
+    );
   } catch (error) {
     if (error instanceof ToolError) {
       return toolErrorResult(error);
