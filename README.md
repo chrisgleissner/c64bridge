@@ -811,3 +811,4 @@ Grouped entry point for reading and updating selected VICE resources.
 | `sid-music` | Route SID playback and composition work to the canonical SID skill. |
 
 <!-- AUTO-GENERATED:MCP-DOCS-END -->
+
