@@ -28,6 +28,7 @@ export function delay(ms: number): Promise<void> {
 }
 
 function hasGraphicalSession(): boolean {
+  if (process.platform === "darwin" || process.platform === "win32") return true;
   return configuredDisplay() !== undefined || configuredWaylandDisplay() !== undefined;
 }
 
