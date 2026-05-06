@@ -32,6 +32,10 @@ jobs:
         run: bun run build
       - name: Run matrix coverage
         env:
+          CI: "1"
+          FORCE_XVFB: "1"
+          VICE_VISIBLE: "false"
+          VICE_WARP: "true"
           VICE_DEVICE_TEST_DEBUG: "1"
           npm_config_loglevel: verbose
         run: npm run coverage

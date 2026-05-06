@@ -9,7 +9,35 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_TARGET = "mock";
 const DEFAULT_PLATFORM = "c64u";
 const DEFAULT_BUN_FILE_LIMIT = 4;
-const DEFAULT_BUN_BATCH_SIZE = 12;
+// Keep default Bun shards small enough to avoid descriptor exhaustion on broad suites.
+const DEFAULT_BUN_BATCH_SIZE = DEFAULT_BUN_FILE_LIMIT;
+const DEFAULT_VICE_MOCK_TEST_FILES = [
+  "test/device.test.mjs",
+  "test/viceIntegration.test.mjs",
+  "test/viceModule.test.mjs",
+  "test/groupedToolsShims.test.mjs",
+  "test/toolsTypes.test.mjs",
+  "test/platformRegistry.test.mjs",
+  "test/meta/program.test.mjs",
+  "test/mcpServerIntegration.test.mjs",
+  "test/c64Client.test.mjs",
+  "test/vice/viceSmokeTest.ts",
+];
+const DEFAULT_VICE_DEVICE_TEST_FILES = [
+  "test/device.test.mjs",
+  "test/vice/viceSmokeTest.ts",
+];
+const BUN_ONLY_TEST_IMPORT_RE = /from\s+["']bun:test["']/;
+const BUN_RUNTIME_REQUIRED_TEST_FILES = new Set([
+  "test/generateMcpInterface.test.mjs",
+  "test/scripts/start.test.mjs",
+]);
+const ISOLATED_NODE_TEST_FILES = new Set([
+  "test/pollIntegration.test.mjs",
+  "test/pollValidator.test.mjs",
+  "test/programRunnersModule.test.mjs",
+  "test/toolsCoverage.test.mjs",
+]);
 const ISOLATED_BUN_TEST_FILES = new Set([
   "test/audioRuntime.test.mjs",
 ]);
@@ -42,6 +70,53 @@ export type RunTestsArgs = {
   runCoverage: boolean;
   passthrough: string[];
 };
+
+export function buildMatrixEnv(
+  platform: "c64u" | "vice",
+  target: "mock" | "device",
+  explicitBaseUrl: string | null,
+  envSource: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  const env: Record<string, string> = { ...envSource } as Record<string, string>;
+  env.C64_MODE = platform;
+  env.C64_TEST_TARGET = target === "device" ? "real" : "mock";
+
+  if (platform === "vice") {
+    const useViceMock = target !== "device";
+    env.VICE_TEST_TARGET = useViceMock ? "mock" : "vice";
+    env.C64_TEST_ENABLE_VICE_MOCK = useViceMock ? "1" : "0";
+    if (!useViceMock) {
+      env.VICE_AVAILABLE = "1";
+    }
+  } else {
+    delete env.VICE_TEST_TARGET;
+    delete env.C64_TEST_ENABLE_VICE_MOCK;
+  }
+
+  if (!env.RAG_EMBEDDINGS_DIR) {
+    env.RAG_EMBEDDINGS_DIR = defaultEmbeddingsDir;
+  }
+  if (explicitBaseUrl) {
+    env.C64_TEST_BASE_URL = explicitBaseUrl;
+  }
+  if (platform === "c64u" && target === "device" && !env.C64_TEST_BASE_URL) {
+    env.C64_TEST_BASE_URL = resolveBaseUrlFromConfig(env) ?? "http://c64u";
+  }
+
+  return env;
+}
+
+export function resolveDefaultMatrixTestFiles(
+  platform: "c64u" | "vice",
+  target: "mock" | "device",
+): string[] {
+  if (platform !== "vice") {
+    return [...defaultTestFiles];
+  }
+  return target === "device"
+    ? [...DEFAULT_VICE_DEVICE_TEST_FILES]
+    : [...DEFAULT_VICE_MOCK_TEST_FILES];
+}
 
 export function parseRunTestsArgs(args: string[]): RunTestsArgs {
   let target = DEFAULT_TARGET;
@@ -106,6 +181,10 @@ export function shouldUseNodeFallback(runCoverage: boolean, passthrough: string[
   if (runCoverage) {
     return false;
   }
+  if (String(env.C64_MODE ?? "").trim().toLowerCase() === "vice"
+    && String(env.VICE_TEST_TARGET ?? "").trim().toLowerCase() === "vice") {
+    return true;
+  }
 
   const explicitFiles = passthrough.filter(looksLikeTestFileArg);
   if (passthrough.length === 0) {
@@ -139,11 +218,72 @@ export function buildBunTestBatches(passthrough: string[], env: NodeJS.ProcessEn
   ];
 }
 
+export function splitPassthroughByRuntime(
+  passthrough: string[],
+  root: string = repoRoot,
+): { nodePassthrough: string[]; bunPassthrough: string[] } {
+  const explicitFiles = passthrough.filter(looksLikeTestFileArg);
+  if (explicitFiles.length === 0) {
+    return { nodePassthrough: [...passthrough], bunPassthrough: [] };
+  }
+
+  const sharedArgs = passthrough.filter((arg) => !looksLikeTestFileArg(arg));
+  const bunFiles = explicitFiles.filter((file) => isBunOnlyTestFile(path.join(root, file)));
+  const nodeFiles = explicitFiles.filter((file) => !bunFiles.includes(file));
+
+  return {
+    nodePassthrough: nodeFiles.length > 0 ? [...nodeFiles, ...sharedArgs] : [],
+    bunPassthrough: bunFiles.length > 0 ? [...bunFiles, ...sharedArgs] : [],
+  };
+}
+
+export function buildNodeFallbackBatches(
+  passthrough: string[],
+  root: string = repoRoot,
+): string[][] {
+  const explicitFiles = passthrough.filter(looksLikeTestFileArg);
+  if (explicitFiles.length === 0) {
+    return [passthrough];
+  }
+
+  const sharedArgs = passthrough.filter((arg) => !looksLikeTestFileArg(arg));
+  const isolatedFiles = explicitFiles.filter((file) => isNodeIsolatedTestFile(path.join(root, file)));
+  const sharedFiles = explicitFiles.filter((file) => !isolatedFiles.includes(file));
+  const batches: string[][] = [];
+
+  if (sharedFiles.length > 0) {
+    batches.push([...sharedFiles, ...sharedArgs]);
+  }
+  for (const file of isolatedFiles) {
+    batches.push([file, ...sharedArgs]);
+  }
+
+  return batches.length > 0 ? batches : [passthrough];
+}
+
+function isBunOnlyTestFile(filePath: string): boolean {
+  const relativePath = path.relative(repoRoot, filePath).split(path.sep).join("/");
+  if (BUN_RUNTIME_REQUIRED_TEST_FILES.has(relativePath)) {
+    return true;
+  }
+  try {
+    return BUN_ONLY_TEST_IMPORT_RE.test(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+function isNodeIsolatedTestFile(filePath: string): boolean {
+  const relativePath = path.relative(repoRoot, filePath).split(path.sep).join("/");
+  return ISOLATED_NODE_TEST_FILES.has(relativePath);
+}
+
 async function runNodeFallback(target: string, explicitBaseUrl: string | null, passthrough: string[], env: Record<string, string>, runCoverage: boolean): Promise<number> {
   console.warn("[run-tests] Using Node runner for this test set to avoid Bun memory growth on broad suites");
   if (runCoverage) {
     console.warn("[run-tests] Coverage reporting is unavailable in Node fallback mode");
   }
+  const { nodePassthrough, bunPassthrough } = splitPassthroughByRuntime(passthrough);
   const nodeExecutable = resolveNodeExecutable();
   const nodeScript = path.join(repoRoot, "scripts", "run-tests.mjs");
   const fallbackArgs = [] as string[];
@@ -153,23 +293,46 @@ async function runNodeFallback(target: string, explicitBaseUrl: string | null, p
   if (explicitBaseUrl) {
     fallbackArgs.push(`--base-url=${explicitBaseUrl}`);
   }
-  fallbackArgs.push(...passthrough);
-  return await new Promise<number>((resolve) => {
-    const childProcess = spawn(nodeExecutable, [nodeScript, ...fallbackArgs], {
-      cwd: repoRoot,
-      env,
-      stdio: "inherit",
-    }) as unknown as {
-      on(event: "error", listener: (error: Error) => void): void;
-      on(event: "exit", listener: (code: number | null) => void): void;
-    };
-    childProcess.on("error", (error) => {
-      console.error("[run-tests] Failed to launch Node fallback:", error);
-      resolve(1);
-    });
-    childProcess.on("exit", (code) => {
-      resolve(typeof code === "number" ? code : 1);
-    });
+  if (nodePassthrough.length > 0 || bunPassthrough.length === 0) {
+    const nodeBatches = buildNodeFallbackBatches(nodePassthrough);
+    for (let index = 0; index < nodeBatches.length; index += 1) {
+      const batch = nodeBatches[index] ?? [];
+      if (nodeBatches.length > 1) {
+        console.warn(`[run-tests] Node fallback batch ${index + 1}/${nodeBatches.length} (${batch.filter(looksLikeTestFileArg).length} files)`);
+      }
+      const nodeExitCode = await new Promise<number>((resolve) => {
+        const childProcess = spawn(nodeExecutable, [nodeScript, ...fallbackArgs, ...batch], {
+          cwd: repoRoot,
+          env,
+          stdio: "inherit",
+        }) as unknown as {
+          on(event: "error", listener: (error: Error) => void): void;
+          on(event: "exit", listener: (code: number | null) => void): void;
+        };
+        childProcess.on("error", (error) => {
+          console.error("[run-tests] Failed to launch Node fallback:", error);
+          resolve(1);
+        });
+        childProcess.on("exit", (code) => {
+          resolve(typeof code === "number" ? code : 1);
+        });
+      });
+
+      if (nodeExitCode !== 0) {
+        return nodeExitCode;
+      }
+    }
+  }
+
+  if (bunPassthrough.length === 0) {
+    return 0;
+  }
+
+  console.warn("[run-tests] Running Bun-only tests under Bun to preserve runtime coverage");
+  const bunBatches = buildBunTestBatches(bunPassthrough, env);
+  return await runBunBatches(env, bunBatches, {
+    coverage: false,
+    labelPrefix: "bun-only-suite",
   });
 }
 
@@ -200,24 +363,11 @@ async function main(): Promise<number> {
     fs.mkdirSync(defaultEmbeddingsDir, { recursive: true });
   }
 
-  const env: Record<string, string> = { ...process.env } as Record<string, string>;
   const normalizedTarget = normalizeTarget(target);
-  env.C64_MODE = platform;
-  env.C64_TEST_TARGET = normalizedTarget === "device" ? "real" : "mock";
-  if (platform === "vice") {
-    env.VICE_TEST_TARGET = normalizedTarget === "device" ? "vice" : "mock";
-  } else {
-    delete env.VICE_TEST_TARGET;
-  }
-  if (!env.RAG_EMBEDDINGS_DIR) {
-    env.RAG_EMBEDDINGS_DIR = defaultEmbeddingsDir;
-  }
-  if (explicitBaseUrl) {
-    env.C64_TEST_BASE_URL = explicitBaseUrl;
-  }
-  if (platform === "c64u" && normalizedTarget === "device" && !env.C64_TEST_BASE_URL) {
-    env.C64_TEST_BASE_URL = resolveBaseUrlFromConfig(env) ?? "http://c64u";
-  }
+  const env = buildMatrixEnv(platform, normalizedTarget, explicitBaseUrl);
+  const effectivePassthrough = passthrough.length > 0
+    ? passthrough
+    : resolveDefaultMatrixTestFiles(platform, normalizedTarget);
 
   printMatrixHeading({
     platform,
@@ -230,24 +380,19 @@ async function main(): Promise<number> {
   const bunRuntime = (globalThis as { Bun?: unknown }).Bun;
   if (!bunRuntime) {
     console.warn("[run-tests] Bun runtime not detected; falling back to Node runner");
-    return await runNodeFallback(target, explicitBaseUrl, passthrough, env, runCoverage);
+    return await runNodeFallback(target, explicitBaseUrl, effectivePassthrough, env, runCoverage);
   }
 
-  if (!runCoverage && passthrough.length === 0) {
-    return await runBunBatches(env, buildBunTestBatches([], env), {
+  if (shouldUseNodeFallback(runCoverage, effectivePassthrough, env)) {
+    return await runNodeFallback(target, explicitBaseUrl, effectivePassthrough, env, runCoverage);
+  }
+
+  if (!runCoverage) {
+    const batches = buildBunTestBatches(effectivePassthrough, env);
+    return await runBunBatches(env, batches, {
       coverage: false,
-      labelPrefix: "default-suite",
+      labelPrefix: passthrough.length === 0 ? "default-suite" : "sharded-suite",
     });
-  }
-
-  if (shouldUseNodeFallback(runCoverage, passthrough, env)) {
-    if (!runCoverage) {
-      return await runBunBatches(env, buildBunTestBatches(passthrough, env), {
-        coverage: false,
-        labelPrefix: "sharded-suite",
-      });
-    }
-    return await runNodeFallback(target, explicitBaseUrl, passthrough, env, runCoverage);
   }
 
   const bunArgs = [
@@ -259,7 +404,7 @@ async function main(): Promise<number> {
           "--coverage-reporter=text",
         ]
       : []),
-    ...(passthrough.length > 0 ? passthrough : defaultTestFiles),
+    ...effectivePassthrough,
   ];
   return await runExternalCommand(process.execPath, bunArgs, env);
 }
@@ -354,13 +499,21 @@ async function runBunBatches(
   for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index] ?? [];
     console.log(`[run-tests] ${options.labelPrefix} batch ${index + 1}/${batches.length} (${batch.length} entries)`);
-    const exitCode = await runExternalCommand(process.execPath, ["test", ...coverageArgs, ...batch], env);
+    const bunArgs = batch.map((arg) => normalizeBunBatchArg(arg));
+    const exitCode = await runExternalCommand(process.execPath, ["test", ...coverageArgs, ...bunArgs], env);
     if (exitCode !== 0) {
       return exitCode;
     }
   }
 
   return 0;
+}
+
+function normalizeBunBatchArg(arg: string): string {
+  if (looksLikeTestFileArg(arg) && !arg.startsWith("./") && !arg.startsWith("../") && !path.isAbsolute(arg)) {
+    return `./${arg}`;
+  }
+  return arg;
 }
 
 function listRepoTestFiles(testRoot: string): string[] {

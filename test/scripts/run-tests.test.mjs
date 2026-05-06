@@ -3,7 +3,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildBunTestBatches, parseRunTestsArgs, shouldUseNodeFallback } from "../../scripts/run-tests.ts";
+import { buildBunTestBatches, buildMatrixEnv, buildNodeFallbackBatches, parseRunTestsArgs, resolveDefaultMatrixTestFiles, shouldUseNodeFallback, splitPassthroughByRuntime } from "../../scripts/run-tests.ts";
 import { buildNodeTestArgs } from "../../scripts/run-tests.mjs";
 
 test("run-tests parses CLI args for matrix selection and passthrough", () => {
@@ -102,6 +102,103 @@ test("run-tests isolates mock-heavy explicit Bun files", () => {
     ["test/a.test.mjs", "--timeout", "5000"],
     ["test/audioRuntime.test.mjs", "--timeout", "5000"],
   ]);
+});
+
+test("run-tests routes bun:test files to Bun when Node fallback is selected", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "run-tests-runtime-split-"));
+  fs.mkdirSync(path.join(root, "test"), { recursive: true });
+  fs.writeFileSync(path.join(root, "test", "node.test.mjs"), "import test from '#test/runner';\n", "utf8");
+  fs.writeFileSync(path.join(root, "test", "bun.test.mjs"), "import { test } from 'bun:test';\n", "utf8");
+
+  try {
+    const split = splitPassthroughByRuntime([
+      "test/node.test.mjs",
+      "test/bun.test.mjs",
+      "--timeout",
+      "5000",
+    ], root);
+
+    assert.deepEqual(split, {
+      nodePassthrough: ["test/node.test.mjs", "--timeout", "5000"],
+      bunPassthrough: ["test/bun.test.mjs", "--timeout", "5000"],
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run-tests routes Bun-runtime-dependent tests to Bun even without bun:test imports", () => {
+  const split = splitPassthroughByRuntime([
+    "test/scripts/start.test.mjs",
+    "test/generateMcpInterface.test.mjs",
+    "test/logger.test.mjs",
+  ]);
+
+  assert.deepEqual(split, {
+    nodePassthrough: ["test/logger.test.mjs"],
+    bunPassthrough: ["test/scripts/start.test.mjs", "test/generateMcpInterface.test.mjs"],
+  });
+});
+
+test("run-tests isolates env-sensitive polling files in Node fallback batches", () => {
+  const batches = buildNodeFallbackBatches([
+    "test/logger.test.mjs",
+    "test/pollIntegration.test.mjs",
+    "test/programRunnersModule.test.mjs",
+    "--timeout",
+    "5000",
+  ]);
+
+  assert.deepEqual(batches, [
+    ["test/logger.test.mjs", "--timeout", "5000"],
+    ["test/pollIntegration.test.mjs", "--timeout", "5000"],
+    ["test/programRunnersModule.test.mjs", "--timeout", "5000"],
+  ]);
+});
+
+test("run-tests builds explicit vice mock and device environments", () => {
+  const mockEnv = buildMatrixEnv("vice", "mock", null, {});
+  assert.equal(mockEnv.C64_MODE, "vice");
+  assert.equal(mockEnv.C64_TEST_TARGET, "mock");
+  assert.equal(mockEnv.VICE_TEST_TARGET, "mock");
+  assert.equal(mockEnv.C64_TEST_ENABLE_VICE_MOCK, "1");
+  assert.equal("VICE_AVAILABLE" in mockEnv, false);
+
+  const deviceEnv = buildMatrixEnv("vice", "device", null, {});
+  assert.equal(deviceEnv.C64_MODE, "vice");
+  assert.equal(deviceEnv.C64_TEST_TARGET, "real");
+  assert.equal(deviceEnv.VICE_TEST_TARGET, "vice");
+  assert.equal(deviceEnv.C64_TEST_ENABLE_VICE_MOCK, "0");
+  assert.equal(deviceEnv.VICE_AVAILABLE, "1");
+});
+
+test("run-tests curates default VICE matrix files around supported suites", () => {
+  assert.deepEqual(resolveDefaultMatrixTestFiles("vice", "mock"), [
+    "test/device.test.mjs",
+    "test/viceIntegration.test.mjs",
+    "test/viceModule.test.mjs",
+    "test/groupedToolsShims.test.mjs",
+    "test/toolsTypes.test.mjs",
+    "test/platformRegistry.test.mjs",
+    "test/meta/program.test.mjs",
+    "test/mcpServerIntegration.test.mjs",
+    "test/c64Client.test.mjs",
+    "test/vice/viceSmokeTest.ts",
+  ]);
+  assert.deepEqual(resolveDefaultMatrixTestFiles("vice", "device"), [
+    "test/device.test.mjs",
+    "test/vice/viceSmokeTest.ts",
+  ]);
+});
+
+test("run-tests prefers Node for real VICE runs", () => {
+  assert.equal(
+    shouldUseNodeFallback(false, ["test/device.test.mjs"], {
+      C64_MODE: "vice",
+      VICE_TEST_TARGET: "vice",
+    }),
+    true,
+  );
 });
 
 test("run-tests.mjs scopes bare Node fallback runs to the repo test tree", () => {

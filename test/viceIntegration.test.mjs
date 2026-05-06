@@ -24,6 +24,7 @@ import {
   waitForAnyScreenText,
   waitForBasicReady,
   waitForScreenPattern,
+  waitForStableScreenPattern,
 } from "../src/vice/readiness.js";
 
 async function createViceSession() {
@@ -273,6 +274,30 @@ test("VICE readiness helpers handle timeouts and resume errors safely", async ()
   assert.equal(idx, -1);
   assert.equal(anyText, false);
   assert.deepEqual(ready, { pointersOk: false, promptOk: false });
+  assert.ok(exitCalls > 0);
+});
+
+test("VICE readiness helpers can require a stable prompt across multiple reads", async () => {
+  let readCount = 0;
+  let exitCalls = 0;
+  const stableScreen = Buffer.alloc(1000, 0x20);
+  buildReadyPattern().copy(stableScreen, 0);
+  const blankScreen = Buffer.alloc(1000, 0x20);
+
+  const stubClient = {
+    async memGet() {
+      readCount += 1;
+      return readCount >= 2 ? stableScreen : blankScreen;
+    },
+    async exitMonitor() {
+      exitCalls += 1;
+    },
+  };
+
+  const idx = await waitForStableScreenPattern(stubClient, buildReadyPattern(), 100, 5, 2);
+
+  assert.equal(idx, 0);
+  assert.ok(readCount >= 3);
   assert.ok(exitCalls > 0);
 });
 

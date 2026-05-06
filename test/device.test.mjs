@@ -3,7 +3,8 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { __resolveViceBinaryForTests, createFacade, ViceBackend } from "../src/device.js";
+import { __resolveViceBinaryForTests, __resolveViceLaunchForTests, createFacade, ViceBackend } from "../src/device.js";
+import { ViceClient } from "../src/vice/viceClient.js";
 import { startViceMockServer } from "../src/vice/mockServer.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
 
@@ -1095,6 +1096,33 @@ test("device: ViceBackend defaults to visible launches and parses boolean overri
   });
 });
 
+test("device: ViceBackend resumes the monitor before disconnecting ordinary sessions", async (t) => {
+  const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => {
+    await server.stop();
+  });
+
+  await withEnv({ VICE_TEST_TARGET: "mock" }, async () => {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    const originalExitMonitor = ViceClient.prototype.exitMonitor;
+    const exitCalls = [];
+    ViceClient.prototype.exitMonitor = async function patchedExitMonitor(...args) {
+      exitCalls.push("exit");
+      return await originalExitMonitor.apply(this, args);
+    };
+
+    try {
+      assert.equal(await backend.ping(), true);
+      const data = await backend.readMemory(0x0400, 4);
+      assert.equal(data.length, 4);
+    } finally {
+      ViceClient.prototype.exitMonitor = originalExitMonitor;
+    }
+
+    assert.equal(exitCalls.length >= 2, true);
+  });
+});
+
 test("device: ViceBackend resolves directory and config-driven launch options", async (t) => {
   const viceDir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-resources-"));
   fs.mkdirSync(path.join(viceDir, "C64"), { recursive: true });
@@ -1184,6 +1212,50 @@ test("device: VICE binary resolution falls back when an explicit path is missing
   );
 
   assert.equal(resolved, "/usr/bin/x64sc");
+});
+
+test("device: VICE launch resolution keeps an explicit binary while falling back to a detected resource directory", () => {
+  const resolved = __resolveViceLaunchForTests(
+    { configBinary: "/usr/bin/x64sc" },
+    {
+      findBinary(binary) {
+        if (binary === "/usr/bin/x64sc") {
+          return "/usr/bin/x64sc";
+        }
+        return null;
+      },
+      isResourceDirectory(candidate) {
+        return candidate === "/usr/local/share/vice";
+      },
+    },
+  );
+
+  assert.deepEqual(resolved, {
+    binary: "/usr/bin/x64sc",
+    directory: "/usr/local/share/vice",
+  });
+});
+
+test("device: VICE launch resolution keeps an explicit matching directory", () => {
+  const resolved = __resolveViceLaunchForTests(
+    {
+      configBinary: "/usr/bin/x64sc",
+      configDirectory: "/custom/share/vice",
+    },
+    {
+      findBinary(binary) {
+        return binary === "/usr/bin/x64sc" ? "/usr/bin/x64sc" : null;
+      },
+      isResourceDirectory(candidate) {
+        return candidate === "/custom/share/vice";
+      },
+    },
+  );
+
+  assert.deepEqual(resolved, {
+    binary: "/usr/bin/x64sc",
+    directory: "/custom/share/vice",
+  });
 });
 
 test("device: C64u facade exercises runner, machine, config, drive, stream, and file endpoints", async (t) => {

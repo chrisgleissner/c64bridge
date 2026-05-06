@@ -244,8 +244,8 @@ Use this for managed VICE launches:
 }
 ```
 
-- `directory` is optional. When omitted, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the emulator binary and in common system locations.
-- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override managed VICE startup without editing config files.
+- `directory` is optional. When omitted, or when the configured path is invalid, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the selected emulator binary and in common system locations.
+- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override managed VICE startup without editing config files. Valid explicit `VICE_BINARY` and `VICE_DIRECTORY` values are used as-is; automatic search only fills in missing or invalid values.
 - If no explicit binary is configured, the runtime prefers `/usr/local/bin/x64sc` when present, then falls back to `x64sc` or `x64` on `PATH` so the same setup remains portable across operating systems.
 
 > [!NOTE]
@@ -439,8 +439,8 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `DISABLE_XVFB` | 0 | — | Set to 1 to disable Xvfb fallback and use the current display only |
 | `FORCE_XVFB` | 0 | — | Set to 1 to force managed VICE launches to run under Xvfb |
 | `VICE_ARGS` |  | vice.args | Extra command-line arguments forwarded to managed VICE launches |
-| `VICE_BINARY` | x64sc | vice.exe | VICE binary to launch for managed emulator sessions and audio capture |
-| `VICE_DIRECTORY` | auto-detect | vice.directory | Override the VICE resource directory used for ROM and UI asset discovery |
+| `VICE_BINARY` | x64sc | vice.exe | VICE binary to launch for managed emulator sessions and audio capture; automatic search is used only when this override is missing or invalid |
+| `VICE_DIRECTORY` | auto-detect | vice.directory | Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid |
 | `VICE_HOST` | 127.0.0.1 | vice.host | Override the VICE Binary Monitor host |
 | `VICE_PORT` | 6502 | vice.port | Override the VICE Binary Monitor port |
 | `VICE_VISIBLE` | true | vice.visible | Launch VICE visibly on the desktop instead of headless/Xvfb when possible |
@@ -534,13 +534,21 @@ The [`./build`](./build) script at the project root wraps all development tasks 
 ./build test                                         # integration tests (mock backend)
 ./build test --real                                  # test against real hardware
 ./build test --platform vice --target mock           # single test leg
+./build test:vice:mock                               # curated VICE mock matrix (feature-matrix coverage)
+./build test:vice:device                             # curated real-VICE validation (device backend + smoke, headless/Xvfb by default)
 ./build test:matrix                                  # full matrix (c64u/mock · vice/mock · vice/device)
 ./build coverage                                     # merged coverage report
 ./build coverage:single --platform c64u --target mock
+npm run vice:smoke                                   # direct VICE binary-monitor smoke test
+npm run vice:smoke:visible                           # human-visible VICE boot + HELLO demo (keeps window open)
 ./build check                                        # build + test matrix (no install)
 ./build rag:rebuild                                  # rebuild RAG embeddings
 ./build release --version 1.2.3                      # prepare a release
 ```
+
+The visible smoke demo accepts `true`/`false`, `on`/`off`, and `1`/`0` for `VICE_VISIBLE`, `VICE_WARP`, and `VICE_KEEP_OPEN`. `npm run vice:smoke:visible` forces a visible, warp-off session, waits for a stable `READY.` screen, then injects `HELLO` and keeps the window open for inspection.
+
+Automation note: `npm run test:vice:device` and `./build` force the real-VICE validation leg into headless/Xvfb mode so the CI-style matrix does not open a confusing local emulator window.
 
 > **Starting the MCP server** is not managed by `./build`. Use `npm start` (from source) or `npx -y c64bridge@latest` (published package) as shown in the [Quick Start](#quick-start) section above.
 

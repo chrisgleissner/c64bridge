@@ -113,11 +113,11 @@
       "default": "120000000"
     },
     "VICE_BINARY": {
-      "description": "VICE binary to launch for managed emulator sessions and audio capture",
+      "description": "VICE binary to launch for managed emulator sessions and audio capture; automatic search is used only when this override is missing or invalid",
       "default": "x64sc"
     },
     "VICE_DIRECTORY": {
-      "description": "Override the VICE resource directory used for ROM and UI asset discovery",
+      "description": "Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid",
       "default": "auto-detect"
     },
     "VICE_HOST": {

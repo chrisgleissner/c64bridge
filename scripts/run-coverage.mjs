@@ -13,6 +13,22 @@ const runner = path.join(repoRoot, "scripts", "invoke-bun.mjs");
 const configPath = path.join(repoRoot, ".c8rc.json");
 const testRoot = path.join(repoRoot, "test");
 const DEFAULT_COVERAGE_SHARD_SIZE = 12;
+const DEFAULT_VICE_MOCK_TEST_FILES = [
+  "test/device.test.mjs",
+  "test/viceIntegration.test.mjs",
+  "test/viceModule.test.mjs",
+  "test/groupedToolsShims.test.mjs",
+  "test/toolsTypes.test.mjs",
+  "test/platformRegistry.test.mjs",
+  "test/meta/program.test.mjs",
+  "test/mcpServerIntegration.test.mjs",
+  "test/c64Client.test.mjs",
+  "test/vice/viceSmokeTest.ts",
+];
+const DEFAULT_VICE_DEVICE_TEST_FILES = [
+  "test/device.test.mjs",
+  "test/vice/viceSmokeTest.ts",
+];
 
 const legs = [
   { name: "c64u-mock", args: ["--platform=c64u", "--target=mock"] },
@@ -50,10 +66,19 @@ export async function main() {
   const allTestFiles = await listRepoTestFiles(testRoot);
   const isolatedTestSet = new Set(isolatedTests);
   const defaultTestFiles = allTestFiles.filter((f) => !isolatedTestSet.has(f));
-  const coverageBatches = buildCoverageBatches(defaultTestFiles, [...supplementalTests, ...isolatedTests], process.env);
   for (const leg of legs) {
     const legDir = path.join(coverageDir, "matrix", leg.name);
     await fs.mkdir(legDir, { recursive: true });
+
+    const legDefaultFiles = leg.name === "vice-mock"
+      ? DEFAULT_VICE_MOCK_TEST_FILES
+      : leg.name === "vice-device"
+        ? DEFAULT_VICE_DEVICE_TEST_FILES
+        : defaultTestFiles;
+    const legSupplementalTests = leg.name.startsWith("vice")
+      ? []
+      : [...supplementalTests, ...isolatedTests];
+    const coverageBatches = buildCoverageBatches(legDefaultFiles, legSupplementalTests, process.env);
 
     const reports = [];
     for (const batch of coverageBatches) {

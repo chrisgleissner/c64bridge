@@ -17,6 +17,14 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
 const PLATFORM_RESOURCE_URI = "c64://platform/status";
 const MAX_STDERR_CHARS = 16_384;
+const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
+
+function formatTransportError(error) {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  return String(error);
+}
 
 function parsePlatformStatusText(text) {
   const match = String(text ?? "").match(/Current platform:\s*`([^`]+)`/i);
@@ -76,23 +84,25 @@ function resolveBunExecutable() {
   return "bun";
 }
 
-function ensureDistEntrypoint(entryPath) {
-  try {
-    fs.accessSync(entryPath, fs.constants.F_OK);
-    return entryPath;
-  } catch {
-    throw new Error(
-      "[mcpTestHarness] dist/mcp-server.js missing. Build the project before running Node compatibility tests.",
-    );
-  }
-}
-
 let sharedSetupPromise;
 let executionQueue = Promise.resolve();
 let cleanupRegistered = false;
 let pendingUsers = 0;
 let activeSuites = 0;
 let shutdownInFlight;
+
+export function shouldStartViceMockServer(env = process.env) {
+  const viceMockFlag = String(env.C64_TEST_ENABLE_VICE_MOCK ?? "").trim().toLowerCase();
+  if (viceMockFlag === "true" || viceMockFlag === "1") {
+    return true;
+  }
+  if (viceMockFlag === "false" || viceMockFlag === "0") {
+    return false;
+  }
+  const platform = String(env.C64_MODE ?? "").trim().toLowerCase();
+  const viceTarget = String(env.VICE_TEST_TARGET ?? "").trim().toLowerCase();
+  return platform === "vice" && viceTarget !== "vice";
+}
 
 function appendTail(existing, chunk, maxChars = MAX_STDERR_CHARS) {
   const next = `${existing}${chunk}`;
@@ -101,20 +111,13 @@ function appendTail(existing, chunk, maxChars = MAX_STDERR_CHARS) {
 
 async function setupSharedServer() {
   const mockServer = await startMockC64Server();
-  const viceMockFlag = (process.env.C64_TEST_ENABLE_VICE_MOCK ?? "").toLowerCase();
-  // Always start a vice mock server when the platform is vice.  The MCP
-  // integration tests exercise the protocol layer, not the VICE connection,
-  // so the child server must never try to manage a real emulator process.
-  const shouldStartViceMock = viceMockFlag === "true"
-    || viceMockFlag === "1"
-    || (process.env.C64_MODE ?? "").toLowerCase() === "vice";
+  const shouldStartViceMock = shouldStartViceMockServer(process.env);
   const viceMockServer = shouldStartViceMock
     ? await startViceMockServer({ host: "127.0.0.1" })
     : null;
 
-  const useBunRunner = typeof globalThis.Bun !== "undefined";
+  const useBunRunner = shouldUseBunServerRuntime(process.env);
   const serverEntrypointTs = path.join(repoRoot, "src", "mcp-server.ts");
-  const serverEntrypointDist = path.join(repoRoot, "dist", "mcp-server.js");
   const nodeExecutable = resolveNodeExecutable();
   const bunExecutable = resolveBunExecutable();
 
@@ -143,8 +146,7 @@ async function setupSharedServer() {
     C64BRIDGE_CONFIG: configPath,
     C64_TEST_TARGET: "mock",
   };
-  // Force the child server to use the vice mock server rather than trying to
-  // manage a real emulator process (which would hang waiting for port/readiness).
+  // When a vice mock server is provisioned, force the child process onto it.
   if (viceMockServer) {
     childEnv.VICE_TEST_TARGET = "mock";
   }
@@ -153,7 +155,7 @@ async function setupSharedServer() {
     command: useBunRunner ? bunExecutable : nodeExecutable,
     args: useBunRunner
       ? [serverEntrypointTs]
-      : [ensureDistEntrypoint(serverEntrypointDist)],
+      : ["--import", registerDataUri, serverEntrypointTs],
     cwd: repoRoot,
     env: childEnv,
     stderr: "pipe",
@@ -173,10 +175,16 @@ async function setupSharedServer() {
   try {
     let stderrTail = "";
     const stderr = transport.stderr;
+    transport.onerror = (error) => {
+      stderrTail = appendTail(stderrTail, `[transport error] ${formatTransportError(error)}\n`);
+    };
     if (stderr) {
       stderr.setEncoding("utf8");
       stderr.on("data", (chunk) => {
         stderrTail = appendTail(stderrTail, chunk);
+      });
+      stderr.on("error", (error) => {
+        stderrTail = appendTail(stderrTail, `[stderr error] ${formatTransportError(error)}\n`);
       });
     }
 
@@ -192,6 +200,17 @@ async function setupSharedServer() {
     };
 
     await client.connect(transport);
+
+    const childProcess = transport._process;
+    childProcess?.stdin?.on("error", (error) => {
+      stderrTail = appendTail(stderrTail, `[stdin error] ${formatTransportError(error)}\n`);
+    });
+    childProcess?.stdout?.on("error", (error) => {
+      stderrTail = appendTail(stderrTail, `[stdout error] ${formatTransportError(error)}\n`);
+    });
+    childProcess?.stderr?.on("error", (error) => {
+      stderrTail = appendTail(stderrTail, `[child stderr error] ${formatTransportError(error)}\n`);
+    });
 
     const toolSupport = new Map();
     const configuredPlatform = (process.env.C64_MODE ?? "").toLowerCase() === "vice" ? "vice" : "c64u";
@@ -304,6 +323,17 @@ async function setupSharedServer() {
     }
     throw error;
   }
+}
+
+function shouldUseBunServerRuntime(env = process.env) {
+  const requested = String(env?.C64BRIDGE_TEST_MCP_SERVER_RUNTIME ?? process.env.C64BRIDGE_TEST_MCP_SERVER_RUNTIME ?? "").trim().toLowerCase();
+  if (requested === "node") {
+    return false;
+  }
+  if (requested === "bun") {
+    return true;
+  }
+  return true;
 }
 
 function isConnected(harness) {
