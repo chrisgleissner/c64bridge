@@ -15,6 +15,31 @@ function msSince(start: bigint): number { return Number((process.hrtime.bigint()
 function log(label: string) { console.log(`[+] ${label}`); }
 function logT(sink: Timing[], label: string, start: bigint) { const ms = msSince(start); sink.push({ label, ms }); console.log(`[t] ${label}=${ms}ms`); }
 
+function forwardChildStreamOutput(child: ChildProcess, label: string): void {
+  const forward = (stream: NodeJS.ReadableStream | null | undefined, target: NodeJS.WriteStream, streamLabel: "stdout" | "stderr") => {
+    if (!stream) {
+      return;
+    }
+    stream.setEncoding?.("utf8");
+    stream.on("data", (chunk) => {
+      const text = String(chunk);
+      for (const line of text.split(/\r?\n/)) {
+        if (!line) {
+          continue;
+        }
+        target.write(`[${label} ${streamLabel}] ${line}\n`);
+      }
+    });
+  };
+
+  forward(child.stdout, process.stdout, "stdout");
+  forward(child.stderr, process.stderr, "stderr");
+  child.once("exit", (code, signal) => {
+    const detail = signal ? `signal=${signal}` : `code=${code ?? 0}`;
+    log(`${label} exited (${detail})`);
+  });
+}
+
 const smokeOptions = resolveViceSmokeOptions(process.env, process.argv.slice(2));
 const USE_MOCK = smokeOptions.useMock;
 const VICE_BIN = process.env.VICE_BINARY || "x64sc";
@@ -128,9 +153,10 @@ async function main() {
 
   try {
     if (!USE_MOCK && shouldUseXvfb()) {
-      log("Starting Xvfb...");
+      log(`Starting Xvfb on ${DISPLAY}...`);
       const t0 = nowNs();
-      xvfb = spawn("Xvfb", [DISPLAY, "-screen", "0", "640x480x24"], { stdio: "ignore" });
+      xvfb = spawn("Xvfb", [DISPLAY, "-screen", "0", "640x480x24"], { stdio: ["ignore", "pipe", "pipe"] });
+      forwardChildStreamOutput(xvfb, "xvfb");
       logT(timings, "spawn_xvfb", t0);
       process.env.DISPLAY = DISPLAY;
       await new Promise(r => setTimeout(r, 300));
@@ -147,10 +173,11 @@ async function main() {
       if (!HAS_EXPLICIT_PORT) {
         port = await reserveLoopbackPort();
       }
-      log("Launching VICE...");
       const args = buildViceArgs(port);
+      log(`Launching VICE binary: ${VICE_BIN} ${args.join(" ")}`);
       const t1 = nowNs();
-      vice = spawn(VICE_BIN, args, { stdio: "ignore" });
+      vice = spawn(VICE_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });
+      forwardChildStreamOutput(vice, "vice");
       logT(timings, "spawn_vice", t1);
 
       log(`Waiting for BM port ${port}...`);
