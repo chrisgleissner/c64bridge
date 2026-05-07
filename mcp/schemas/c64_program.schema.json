@@ -1,391 +1,252 @@
 {
   "type": "object",
-  "description": "Program operations available via the c64_program tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Load a PRG from Ultimate storage without executing it.",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
-          "minLength": 1
-        },
-        "op": {
-          "const": "load_prg"
-        }
-      },
-      "required": [
-        "path",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "load_prg",
+        "run_prg",
+        "run_crt",
+        "upload_run_basic",
+        "upload_run_asm",
+        "batch_run",
+        "bundle_run",
+        "cross_platform_greeting"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
-          "minLength": 1
-        },
-        "op": {
-          "const": "run_prg"
-        }
-      },
-      "required": [
-        "path",
-        "op"
-      ],
-      "additionalProperties": false
+    "path": {
+      "type": "string",
+      "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
+      "minLength": 1
     },
-    {
-      "type": "object",
-      "description": "Mount and run a CRT cartridge image.",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Path to the CRT image on Ultimate-visible storage. CRT mounting is only supported on c64u.",
-          "minLength": 1
-        },
-        "op": {
-          "const": "run_crt"
-        }
-      },
-      "required": [
-        "path",
-        "op"
-      ],
-      "additionalProperties": false
+    "program": {
+      "type": "string",
+      "description": "Commodore BASIC v2 program source to upload and run.",
+      "minLength": 1
     },
-    {
-      "type": "object",
-      "description": "Upload Commodore BASIC v2 source and execute it immediately.",
-      "properties": {
-        "program": {
-          "type": "string",
-          "description": "Commodore BASIC v2 program source to upload and run.",
-          "minLength": 1
-        },
-        "verify": {
-          "type": "boolean",
-          "description": "Run post-execution polling to ensure the BASIC program executed without errors.",
-          "default": false
-        },
-        "op": {
-          "const": "upload_run_basic"
-        }
-      },
-      "required": [
-        "program",
-        "op"
-      ],
-      "additionalProperties": false
+    "verify": {
+      "type": "boolean",
+      "description": "Run post-execution polling to ensure the BASIC program executed without errors.",
+      "default": false
     },
-    {
-      "type": "object",
-      "description": "Assemble 6502/6510 source, upload the PRG, and execute it.",
-      "properties": {
-        "program": {
-          "type": "string",
-          "description": "Assembly source that will be assembled to a PRG and executed.",
-          "minLength": 1
-        },
-        "verify": {
-          "type": "boolean",
-          "description": "Run post-execution polling to confirm the assembly program remained stable.",
-          "default": false
-        },
-        "op": {
-          "const": "upload_run_asm"
-        }
-      },
-      "required": [
-        "program",
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Run multiple PRG/CRT programs with post-run assertions.",
-      "properties": {
-        "programs": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "description": "Program to run with assertions",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Program path (PRG or CRT)",
-                "minLength": 1
-              },
-              "assertions": {
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "type": "object",
-                  "description": "Assertion to check after run",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "description": "Assertion type",
-                      "enum": [
-                        "screen_contains",
-                        "memory_equals",
-                        "sid_silent"
-                      ]
-                    },
-                    "pattern": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Pattern for screen_contains",
-                      "minLength": 1
-                    },
-                    "address": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Address for memory_equals",
-                      "minLength": 1
-                    },
-                    "expected": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Expected value (hex)",
-                      "minLength": 1
-                    }
-                  },
-                  "required": [
-                    "type"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            },
-            "required": [
-              "path"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "continueOnError": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Continue running programs after assertion failure",
-          "default": false
-        },
-        "durationMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Duration to run each program before assertions",
-          "minimum": 1,
-          "default": 2000
-        },
-        "outputPath": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Output directory for test results",
-          "minLength": 1
-        },
-        "resetDelayMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Delay after reset operations to allow the platform to settle.",
-          "minimum": 0,
-          "maximum": 1000,
-          "default": 100
-        },
-        "op": {
-          "const": "batch_run"
-        }
-      },
-      "required": [
-        "programs",
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Capture screen, memory, and debug registers into an artifact bundle.",
-      "properties": {
-        "runId": {
-          "type": "string",
-          "description": "Unique identifier for this run",
-          "minLength": 1
-        },
-        "outputPath": {
-          "type": "string",
-          "description": "Output directory for artifacts bundle",
-          "minLength": 1
-        },
-        "captureScreen": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Capture screen content",
-          "default": true
-        },
-        "memoryRanges": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "object",
-            "description": "Memory range to snapshot",
-            "properties": {
-              "address": {
-                "type": "string",
-                "description": "Start address",
-                "minLength": 1
-              },
-              "length": {
-                "type": "integer",
-                "description": "Length in bytes",
-                "minimum": 1
-              }
-            },
-            "required": [
-              "address",
-              "length"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "captureDebugReg": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Capture debugreg state",
-          "default": true
-        },
-        "op": {
-          "const": "bundle_run"
-        }
-      },
-      "required": [
-        "runId",
-        "outputPath",
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
-      "properties": {
-        "platforms": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
+    "programs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Program to run with assertions",
+        "properties": {
+          "path": {
             "type": "string",
-            "description": "Backends to target in sequence.",
-            "minLength": 1,
-            "enum": [
-              "vice",
-              "c64u"
-            ]
+            "description": "Program path (PRG or CRT)",
+            "minLength": 1
           },
-          "default": [
-            "vice",
-            "c64u"
-          ]
+          "assertions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "description": "Assertion to check after run",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Assertion type",
+                  "enum": [
+                    "screen_contains",
+                    "memory_equals",
+                    "sid_silent"
+                  ]
+                },
+                "pattern": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Pattern for screen_contains",
+                  "minLength": 1
+                },
+                "address": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Address for memory_equals",
+                  "minLength": 1
+                },
+                "expected": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Expected value (hex)",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          }
         },
-        "messageTemplate": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Greeting template. Use {PLATFORM}/{BACKEND} for uppercase or {platform}/{backend} for lowercase substitution.",
-          "minLength": 1,
-          "default": "HAVE A GREAT DAY, {PLATFORM}!"
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "continueOnError": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Continue running programs after assertion failure",
+      "default": false
+    },
+    "durationMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Duration to run each program before assertions",
+      "minimum": 1,
+      "default": 2000
+    },
+    "outputPath": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Output directory for test results",
+      "minLength": 1
+    },
+    "resetDelayMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Delay after reset operations to allow the platform to settle.",
+      "minimum": 0,
+      "maximum": 1000,
+      "default": 100
+    },
+    "runId": {
+      "type": "string",
+      "description": "Unique identifier for this run",
+      "minLength": 1
+    },
+    "captureScreen": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Capture screen content",
+      "default": true
+    },
+    "memoryRanges": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "description": "Memory range to snapshot",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Start address",
+            "minLength": 1
+          },
+          "length": {
+            "type": "integer",
+            "description": "Length in bytes",
+            "minimum": 1
+          }
         },
-        "verify": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Poll the text screen and require the rendered greeting to appear.",
-          "default": true
-        },
-        "captureScreenshot": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Capture a framebuffer screenshot and save it as a PNG per backend.",
-          "default": true
-        },
-        "outputPath": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Directory for screenshots and the workflow summary JSON.",
-          "minLength": 1
-        },
-        "restoreActiveBackend": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Restore the backend that was active before the workflow started.",
-          "default": true
-        },
-        "timeoutMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum time to wait for each greeting to appear on screen.",
-          "minimum": 100,
-          "maximum": 5000,
-          "default": 1500
-        },
-        "pollIntervalMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Delay between screen polls while verifying the greeting.",
-          "minimum": 50,
-          "maximum": 1000,
-          "default": 100
-        },
-        "op": {
-          "const": "cross_platform_greeting"
-        }
+        "required": [
+          "address",
+          "length"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "captureDebugReg": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Capture debugreg state",
+      "default": true
+    },
+    "platforms": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "description": "Backends to target in sequence.",
+        "minLength": 1,
+        "enum": [
+          "vice",
+          "c64u"
+        ]
       },
-      "additionalProperties": false,
-      "required": [
-        "op"
+      "default": [
+        "vice",
+        "c64u"
       ]
+    },
+    "messageTemplate": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Greeting template. Use {PLATFORM}/{BACKEND} for uppercase or {platform}/{backend} for lowercase substitution.",
+      "minLength": 1,
+      "default": "HAVE A GREAT DAY, {PLATFORM}!"
+    },
+    "captureScreenshot": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Capture a framebuffer screenshot and save it as a PNG per backend.",
+      "default": true
+    },
+    "restoreActiveBackend": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Restore the backend that was active before the workflow started.",
+      "default": true
+    },
+    "timeoutMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Maximum time to wait for each greeting to appear on screen.",
+      "minimum": 100,
+      "maximum": 5000,
+      "default": 1500
+    },
+    "pollIntervalMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Delay between screen polls while verifying the greeting.",
+      "minimum": 50,
+      "maximum": 1000,
+      "default": 100
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.\n- run_crt: Mount and run a CRT cartridge image.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results."
 }

@@ -1,227 +1,93 @@
 {
   "type": "object",
-  "description": "System operations available via the c64_system tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Pause the machine until resumed.",
-      "properties": {
-        "op": {
-          "const": "pause"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Resume CPU execution after a pause.",
-      "properties": {
-        "op": {
-          "const": "resume"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Issue a soft reset without cutting power.",
-      "properties": {
-        "op": {
-          "const": "reset"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Trigger a firmware reboot to recover from faults.",
-      "properties": {
-        "op": {
-          "const": "reboot"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Request a controlled shutdown via the Ultimate firmware.",
-      "properties": {
-        "op": {
-          "const": "poweroff"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Toggle the Ultimate menu button for navigation.",
-      "properties": {
-        "op": {
-          "const": "menu"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Start a named background task that runs on an interval.",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "Unique task name",
-          "minLength": 1
-        },
-        "operation": {
-          "type": "string",
-          "description": "Operation name (e.g., read, read_screen)",
-          "minLength": 1
-        },
-        "arguments": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "description": "Operation-specific arguments",
-          "properties": {},
-          "additionalProperties": true,
-          "default": {}
-        },
-        "intervalMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Interval milliseconds",
-          "minimum": 1,
-          "default": 1000
-        },
-        "maxIterations": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum number of iterations (omit for indefinite)",
-          "minimum": 1
-        },
-        "op": {
-          "const": "start_task"
-        }
-      },
-      "required": [
-        "name",
-        "operation",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "pause",
+        "resume",
+        "reset",
+        "reboot",
+        "poweroff",
+        "menu",
+        "start_task",
+        "stop_task",
+        "stop_all_tasks",
+        "list_tasks",
+        "performance_report"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Stop a specific background task and clear its timer.",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "Task name",
-          "minLength": 1
-        },
-        "op": {
-          "const": "stop_task"
-        }
-      },
-      "required": [
-        "name",
-        "op"
+    "name": {
+      "type": "string",
+      "description": "Unique task name",
+      "minLength": 1
+    },
+    "operation": {
+      "type": "string",
+      "description": "Operation name (e.g., read, read_screen)",
+      "minLength": 1
+    },
+    "arguments": {
+      "type": [
+        "object",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Operation-specific arguments",
+      "properties": {},
+      "additionalProperties": true,
+      "default": {}
     },
-    {
-      "type": "object",
-      "description": "Stop every running background task and persist state.",
-      "properties": {
-        "op": {
-          "const": "stop_all_tasks"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "intervalMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Interval milliseconds",
+      "minimum": 1,
+      "default": 1000
     },
-    {
-      "type": "object",
-      "description": "List known background tasks with status metadata.",
-      "properties": {
-        "op": {
-          "const": "list_tasks"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "maxIterations": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Maximum number of iterations (omit for indefinite)",
+      "minimum": 1
     },
-    {
-      "type": "object",
-      "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
-      "properties": {
-        "scope": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Which diagnostics session to summarize.",
-          "enum": [
-            "current",
-            "latest"
-          ],
-          "default": "current"
-        },
-        "includeTimeline": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Include the tail of the event timeline.",
-          "default": true
-        },
-        "maxEntries": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum number of span and timeline entries to return.",
-          "minimum": 1,
-          "maximum": 200,
-          "default": 25
-        },
-        "op": {
-          "const": "performance_report"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "scope": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Which diagnostics session to summarize.",
+      "enum": [
+        "current",
+        "latest"
+      ],
+      "default": "current"
+    },
+    "includeTimeline": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Include the tail of the event timeline.",
+      "default": true
+    },
+    "maxEntries": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Maximum number of span and timeline entries to return.",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 25
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed.\n- resume: Resume CPU execution after a pause.\n- reset: Issue a soft reset without cutting power.\n- reboot: Trigger a firmware reboot to recover from faults.\n- poweroff: Request a controlled shutdown via the Ultimate firmware.\n- menu: Toggle the Ultimate menu button for navigation.\n- start_task: Start a named background task that runs on an interval.\n- stop_task: Stop a specific background task and clear its timer.\n- stop_all_tasks: Stop every running background task and persist state.\n- list_tasks: List known background tasks with status metadata.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session."
 }

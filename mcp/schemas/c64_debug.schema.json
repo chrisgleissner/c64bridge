@@ -1,380 +1,200 @@
 {
   "type": "object",
-  "description": "Available debugger operations.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "List all active VICE checkpoints (breakpoints).",
-      "properties": {
-        "op": {
-          "const": "list_checkpoints"
-        }
-      },
-      "required": [
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "list_checkpoints",
+        "get_checkpoint",
+        "create_checkpoint",
+        "delete_checkpoint",
+        "toggle_checkpoint",
+        "set_condition",
+        "list_registers",
+        "get_registers",
+        "set_registers",
+        "step",
+        "step_return"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Fetch a single checkpoint by id.",
-      "properties": {
-        "op": {
-          "const": "get_checkpoint"
-        },
-        "id": {
-          "type": "integer",
-          "description": "Debugger checkpoint identifier.",
-          "minimum": 1
-        }
-      },
-      "required": [
-        "op",
-        "id"
+    "id": {
+      "type": "integer",
+      "description": "Debugger checkpoint identifier.",
+      "minimum": 1
+    },
+    "address": {
+      "type": "string",
+      "description": "Start address (e.g. $0801).",
+      "minLength": 1
+    },
+    "endAddress": {
+      "type": [
+        "string",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Optional end address for range.",
+      "minLength": 1
     },
-    {
-      "type": "object",
-      "description": "Create a new checkpoint (breakpoint) in VICE.",
+    "stopOnHit": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Pause execution when hit (default true).",
+      "default": true
+    },
+    "enabled": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Whether the checkpoint is enabled (default true).",
+      "default": true
+    },
+    "temporary": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Automatically remove after first hit.",
+      "default": false
+    },
+    "operations": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Checkpoint operation filters.",
       "properties": {
-        "op": {
-          "const": "create_checkpoint"
-        },
-        "address": {
-          "type": "string",
-          "description": "Start address (e.g. $0801).",
-          "minLength": 1
-        },
-        "endAddress": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Optional end address for range.",
-          "minLength": 1
-        },
-        "stopOnHit": {
+        "execute": {
           "type": [
             "boolean",
             "null"
           ],
-          "description": "Pause execution when hit (default true).",
+          "description": "Trigger on execute (default true).",
           "default": true
         },
-        "enabled": {
+        "load": {
           "type": [
             "boolean",
             "null"
           ],
-          "description": "Whether the checkpoint is enabled (default true).",
-          "default": true
-        },
-        "temporary": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Automatically remove after first hit.",
+          "description": "Trigger on memory load.",
           "default": false
         },
-        "operations": {
+        "store": {
           "type": [
-            "object",
+            "boolean",
             "null"
           ],
-          "description": "Checkpoint operation filters.",
-          "properties": {
-            "execute": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "description": "Trigger on execute (default true).",
-              "default": true
-            },
-            "load": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "description": "Trigger on memory load.",
-              "default": false
-            },
-            "store": {
-              "type": [
-                "boolean",
-                "null"
-              ],
-              "description": "Trigger on memory store.",
-              "default": false
-            }
-          },
-          "additionalProperties": false
-        },
-        "memspace": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
-          "minimum": 0,
-          "maximum": 4
+          "description": "Trigger on memory store.",
+          "default": false
         }
       },
-      "required": [
-        "op",
-        "address"
-      ],
       "additionalProperties": false
     },
-    {
-      "type": "object",
-      "description": "Remove a checkpoint by id.",
-      "properties": {
-        "op": {
-          "const": "delete_checkpoint"
-        },
-        "id": {
-          "type": "integer",
-          "description": "Debugger checkpoint identifier.",
-          "minimum": 1
-        }
-      },
-      "required": [
-        "op",
-        "id"
+    "memspace": {
+      "type": [
+        "integer",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+      "minimum": 0,
+      "maximum": 4
     },
-    {
-      "type": "object",
-      "description": "Enable or disable a checkpoint by id.",
-      "properties": {
-        "op": {
-          "const": "toggle_checkpoint"
-        },
-        "id": {
-          "type": "integer",
-          "description": "Debugger checkpoint identifier.",
-          "minimum": 1
-        },
-        "enabled": {
-          "type": "boolean",
-          "description": "Set to true to enable, false to disable."
-        }
-      },
-      "required": [
-        "op",
-        "id",
-        "enabled"
+    "expression": {
+      "type": "string",
+      "description": "VICE monitor conditional expression.",
+      "minLength": 1
+    },
+    "registers": {
+      "type": [
+        "array",
+        "null"
       ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Attach a conditional expression to a checkpoint.",
-      "properties": {
-        "op": {
-          "const": "set_condition"
-        },
-        "id": {
-          "type": "integer",
-          "description": "Debugger checkpoint identifier.",
-          "minimum": 1
-        },
-        "expression": {
-          "type": "string",
-          "description": "VICE monitor conditional expression.",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "op",
-        "id",
-        "expression"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "List available registers (metadata).",
-      "properties": {
-        "op": {
-          "const": "list_registers"
-        },
-        "memspace": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
-          "minimum": 0,
-          "maximum": 4
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Read register values, optionally filtered by name or id.",
-      "properties": {
-        "op": {
-          "const": "get_registers"
-        },
-        "memspace": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
-          "minimum": 0,
-          "maximum": 4
-        },
-        "registers": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "description": "Registers to include.",
-          "items": {
-            "type": "object",
-            "description": "Selects a register by id or name.",
-            "properties": {
-              "name": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Register name (case-insensitive)."
-              },
-              "id": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "description": "Register id.",
-                "minimum": 0
-              }
-            },
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Write register values.",
-      "properties": {
-        "op": {
-          "const": "set_registers"
-        },
-        "memspace": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
-          "minimum": 0,
-          "maximum": 4
-        },
-        "writes": {
-          "type": "array",
-          "description": "Register writes to apply.",
-          "items": {
-            "type": "object",
-            "description": "Register write descriptor.",
-            "properties": {
-              "name": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Register name (case-insensitive)."
-              },
-              "id": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "description": "Register id.",
-                "minimum": 0
-              },
-              "value": {
-                "type": "integer",
-                "description": "Value to write.",
-                "minimum": 0
-              }
-            },
-            "required": [
-              "value"
+      "description": "Registers to include.",
+      "items": {
+        "type": "object",
+        "description": "Selects a register by id or name.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
             ],
-            "additionalProperties": false
+            "description": "Register name (case-insensitive)."
           },
-          "minItems": 1
-        }
-      },
-      "required": [
-        "op",
-        "writes"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Single-step CPU execution.",
-      "properties": {
-        "op": {
-          "const": "step"
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Register id.",
+            "minimum": 0
+          }
         },
-        "count": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Number of instructions to step.",
-          "minimum": 1,
-          "default": 1
-        },
-        "mode": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Step mode (into or over).",
-          "enum": [
-            "into",
-            "over"
-          ]
-        }
-      },
-      "required": [
-        "op"
-      ],
-      "additionalProperties": false
+        "additionalProperties": false
+      }
     },
-    {
-      "type": "object",
-      "description": "Continue execution until the current routine returns.",
-      "properties": {
-        "op": {
-          "const": "step_return"
-        }
+    "writes": {
+      "type": "array",
+      "description": "Register writes to apply.",
+      "items": {
+        "type": "object",
+        "description": "Register write descriptor.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Register name (case-insensitive)."
+          },
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Register id.",
+            "minimum": 0
+          },
+          "value": {
+            "type": "integer",
+            "description": "Value to write.",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "additionalProperties": false
       },
-      "required": [
-        "op"
+      "minItems": 1
+    },
+    "count": {
+      "type": [
+        "integer",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Number of instructions to step.",
+      "minimum": 1,
+      "default": 1
+    },
+    "mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Step mode (into or over).",
+      "enum": [
+        "into",
+        "over"
+      ]
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns."
 }
