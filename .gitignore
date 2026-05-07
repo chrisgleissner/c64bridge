@@ -1,4 +1,5 @@
 .c64bridge
+.claude/scheduled_tasks.lock
 .mcpregistry_github_token
 .DS_Store
 .env
