@@ -45,6 +45,36 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const defaultEmbeddingsDir = path.join(repoRoot, "artifacts", "test-embeddings");
 const defaultTestFiles = listRepoTestFiles(path.join(repoRoot, "test"));
 
+function findExecutableOnPath(binary: string, envPath: string | undefined = process.env.PATH): string | null {
+  const normalized = binary.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (path.isAbsolute(normalized) || normalized.includes(path.sep)) {
+    try {
+      fs.accessSync(normalized, fs.constants.X_OK);
+      return normalized;
+    } catch {
+      return null;
+    }
+  }
+
+  for (const entry of (envPath ?? "").split(path.delimiter)) {
+    if (!entry) {
+      continue;
+    }
+    const candidate = path.join(entry, normalized);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // Continue searching PATH.
+    }
+  }
+
+  return null;
+}
+
 function resolveNodeExecutable(): string {
   const candidates = [
     process.env.C64BRIDGE_TEST_NODE_BIN,
@@ -61,6 +91,31 @@ function resolveNodeExecutable(): string {
   }
 
   return "node";
+}
+
+function resolveBunExecutable(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
+    return process.execPath;
+  }
+
+  const candidates = [
+    env.C64BRIDGE_TEST_BUN_BIN,
+    env.C64BRIDGE_BUN_BIN,
+    process.env.C64BRIDGE_TEST_BUN_BIN,
+    process.env.C64BRIDGE_BUN_BIN,
+    "bun",
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === "string" && candidate.trim()) {
+      const resolved = findExecutableOnPath(candidate.trim(), env.PATH ?? process.env.PATH);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+
+  return null;
 }
 
 export type RunTestsArgs = {
@@ -328,10 +383,17 @@ async function runNodeFallback(target: string, explicitBaseUrl: string | null, p
     return 0;
   }
 
+  const bunExecutable = resolveBunExecutable(env);
+  if (!bunExecutable) {
+    console.error("[run-tests] Bun-only tests were selected but no Bun executable is available");
+    return 1;
+  }
+
   console.warn("[run-tests] Running Bun-only tests under Bun to preserve runtime coverage");
   const bunBatches = buildBunTestBatches(bunPassthrough, env);
   return await runBunBatches(env, bunBatches, {
     coverage: false,
+    bunExecutable,
     labelPrefix: "bun-only-suite",
   });
 }
@@ -390,6 +452,7 @@ async function main(): Promise<number> {
   if (!runCoverage) {
     const batches = buildBunTestBatches(effectivePassthrough, env);
     return await runBunBatches(env, batches, {
+      bunExecutable: process.execPath,
       coverage: false,
       labelPrefix: passthrough.length === 0 ? "default-suite" : "sharded-suite",
     });
@@ -490,7 +553,7 @@ function chunkFiles(files: string[], chunkSize: number): string[][] {
 async function runBunBatches(
   env: Record<string, string>,
   batches: string[][],
-  options: { coverage: boolean; labelPrefix: string },
+  options: { coverage: boolean; labelPrefix: string; bunExecutable: string },
 ): Promise<number> {
   const coverageArgs = options.coverage
     ? ["--coverage", "--coverage-reporter=lcov", "--coverage-reporter=text"]
@@ -500,7 +563,7 @@ async function runBunBatches(
     const batch = batches[index] ?? [];
     console.log(`[run-tests] ${options.labelPrefix} batch ${index + 1}/${batches.length} (${batch.length} entries)`);
     const bunArgs = batch.map((arg) => normalizeBunBatchArg(arg));
-    const exitCode = await runExternalCommand(process.execPath, ["test", ...coverageArgs, ...bunArgs], env);
+    const exitCode = await runExternalCommand(options.bunExecutable, ["test", ...coverageArgs, ...bunArgs], env);
     if (exitCode !== 0) {
       return exitCode;
     }

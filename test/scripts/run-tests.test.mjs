@@ -34,13 +34,13 @@ test("run-tests ignores blank passthrough args from shell wrappers", () => {
 });
 
 test("run-tests prefers Node for broad default Bun suites", () => {
-  assert.equal(shouldUseNodeFallback(false, []), true);
+  assert.equal(shouldUseNodeFallback(false, [], {}), true);
 });
 
 test("run-tests keeps Bun for coverage and small targeted slices", () => {
-  assert.equal(shouldUseNodeFallback(true, []), false);
-  assert.equal(shouldUseNodeFallback(false, ["test/logger.test.mjs"]), false);
-  assert.equal(shouldUseNodeFallback(false, ["test/logger.test.mjs", "test/petscii.test.mjs", "--timeout", "5000"]), false);
+  assert.equal(shouldUseNodeFallback(true, [], {}), false);
+  assert.equal(shouldUseNodeFallback(false, ["test/logger.test.mjs"], {}), false);
+  assert.equal(shouldUseNodeFallback(false, ["test/logger.test.mjs", "test/petscii.test.mjs", "--timeout", "5000"], {}), false);
 });
 
 test("run-tests prefers Node when explicit Bun file set is too large unless overridden", () => {
@@ -52,7 +52,7 @@ test("run-tests prefers Node when explicit Bun file set is too large unless over
     "test/e.test.mjs",
   ];
 
-  assert.equal(shouldUseNodeFallback(false, manyFiles), true);
+  assert.equal(shouldUseNodeFallback(false, manyFiles, {}), true);
   assert.equal(shouldUseNodeFallback(false, manyFiles, { C64BRIDGE_TEST_RUNNER: "bun" }), false);
   assert.equal(shouldUseNodeFallback(false, manyFiles, { C64BRIDGE_BUN_FILE_LIMIT: "8" }), false);
   assert.equal(shouldUseNodeFallback(false, manyFiles, { C64BRIDGE_TEST_RUNNER: "node" }), true);

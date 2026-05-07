@@ -23,6 +23,17 @@ function isIgnorableSocketTeardownError(error) {
   return code === "ECONNRESET" || code === "EPIPE" || text.includes("ECONNRESET") || text.includes("EPIPE");
 }
 
+function hasConfiguredBunExecutable(env = process.env) {
+  const candidates = [
+    env?.C64BRIDGE_TEST_BUN_BIN,
+    env?.C64BRIDGE_BUN_BIN,
+    process.env.C64BRIDGE_TEST_BUN_BIN,
+    process.env.C64BRIDGE_BUN_BIN,
+  ];
+
+  return candidates.some((candidate) => typeof candidate === "string" && candidate.trim().length > 0);
+}
+
 export async function createConnectedClient(options = {}) {
   const useBunRunner = shouldUseBunServerRuntime(options.env);
   const serverEntrypointTs = path.join(repoRoot, "src", "mcp-server.ts");
@@ -112,7 +123,7 @@ export async function createConnectedClient(options = {}) {
   };
 }
 
-function shouldUseBunServerRuntime(env = process.env) {
+export function shouldUseBunServerRuntime(env = process.env) {
   const requested = String(env?.C64BRIDGE_TEST_MCP_SERVER_RUNTIME ?? process.env.C64BRIDGE_TEST_MCP_SERVER_RUNTIME ?? "").trim().toLowerCase();
   if (requested === "node") {
     return false;
@@ -120,7 +131,7 @@ function shouldUseBunServerRuntime(env = process.env) {
   if (requested === "bun") {
     return true;
   }
-  return true;
+  return typeof globalThis.Bun !== "undefined" || hasConfiguredBunExecutable(env);
 }
 
 function resolveNodeExecutable() {

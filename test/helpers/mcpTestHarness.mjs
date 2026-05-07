@@ -84,6 +84,17 @@ function resolveBunExecutable() {
   return "bun";
 }
 
+function hasConfiguredBunExecutable(env = process.env) {
+  const candidates = [
+    env?.C64BRIDGE_TEST_BUN_BIN,
+    env?.C64BRIDGE_BUN_BIN,
+    process.env.C64BRIDGE_TEST_BUN_BIN,
+    process.env.C64BRIDGE_BUN_BIN,
+  ];
+
+  return candidates.some((candidate) => typeof candidate === "string" && candidate.trim().length > 0);
+}
+
 let sharedSetupPromise;
 let executionQueue = Promise.resolve();
 let cleanupRegistered = false;
@@ -325,7 +336,7 @@ async function setupSharedServer() {
   }
 }
 
-function shouldUseBunServerRuntime(env = process.env) {
+export function shouldUseBunServerRuntime(env = process.env) {
   const requested = String(env?.C64BRIDGE_TEST_MCP_SERVER_RUNTIME ?? process.env.C64BRIDGE_TEST_MCP_SERVER_RUNTIME ?? "").trim().toLowerCase();
   if (requested === "node") {
     return false;
@@ -333,7 +344,7 @@ function shouldUseBunServerRuntime(env = process.env) {
   if (requested === "bun") {
     return true;
   }
-  return true;
+  return typeof globalThis.Bun !== "undefined" || hasConfiguredBunExecutable(env);
 }
 
 function isConnected(harness) {

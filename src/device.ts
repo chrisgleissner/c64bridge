@@ -112,8 +112,9 @@ function delay(ms: number): Promise<void> {
 
 async function resumeViceMonitor(client: ViceClient, timeoutMs = 250): Promise<void> {
   try {
+    const exitMonitor = client.exitMonitor().catch(() => {});
     await Promise.race([
-      client.exitMonitor(),
+      exitMonitor,
       delay(timeoutMs),
     ]);
   } catch {

@@ -11,7 +11,6 @@ import { startViceMockServer } from "../src/vice/mockServer.js";
 
 const PLATFORM_RESOURCE_URI = "c64://platform/status";
 const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
-const STARTUP_ASSERTION_MS = typeof globalThis.Bun !== "undefined" ? 1_500 : 10_000;
 const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
 
 function delay(ms) {
@@ -339,7 +338,6 @@ test("mcp-server initialises platform state from the active backend", async (t) 
       await server.stop();
     });
 
-    const startedAt = Date.now();
     await withServerConfig(
       {
         vice: {
@@ -352,12 +350,6 @@ test("mcp-server initialises platform state from the active backend", async (t) 
         RAG_INIT_DELAY_MS: "2500",
       },
       async ({ client, diagnosticsDir }) => {
-        const startupMs = Date.now() - startedAt;
-        assert.ok(
-          startupMs < STARTUP_ASSERTION_MS,
-          `expected startup under ${STARTUP_ASSERTION_MS}ms, got ${startupMs}ms`,
-        );
-
         const resource = await client.request(
           { method: "resources/read", params: { uri: PLATFORM_RESOURCE_URI } },
           ReadResourceResultSchema,
@@ -366,7 +358,17 @@ test("mcp-server initialises platform state from the active backend", async (t) 
 
         assert.equal(parsePlatformStatus(text), "vice");
 
+        const readComplete = await waitForDiagnosticEvent(diagnosticsDir, "mcp_read_resource_ok");
         const complete = await waitForDiagnosticEvent(diagnosticsDir, "rag_init_complete");
+        const readCompleteMs = Date.parse(String(readComplete.ts ?? ""));
+        const ragCompleteMs = Date.parse(String(complete.ts ?? ""));
+
+        assert.equal(Number.isFinite(readCompleteMs), true, "expected readable resource completion timestamp");
+        assert.equal(Number.isFinite(ragCompleteMs), true, "expected readable rag completion timestamp");
+        assert.ok(
+          readCompleteMs < ragCompleteMs,
+          `expected platform resource to be served before rag warmup completed (read=${readComplete.ts}, rag=${complete.ts})`,
+        );
         assert.ok(complete.ts);
       },
     );

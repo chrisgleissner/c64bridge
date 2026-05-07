@@ -39,3 +39,23 @@ test("resolveViceSmokeOptions enables a visible demo mode from argv", () => {
   assert.equal(options.keepOpen, true);
   assert.equal(options.warp, false);
 });
+
+test("resolveViceSmokeOptions ignores invalid explicit ports and falls back safely", () => {
+  const options = resolveViceSmokeOptions({
+    VICE_TEST_TARGET: "vice",
+    VICE_PORT: "not-a-port",
+  }, []);
+
+  assert.equal(options.configuredPort, 6502);
+  assert.equal(options.hasExplicitPort, false);
+});
+
+test("resolveViceSmokeOptions accepts only valid TCP port numbers as explicit", () => {
+  const valid = resolveViceSmokeOptions({ VICE_PORT: "6503" }, []);
+  const outOfRange = resolveViceSmokeOptions({ VICE_PORT: "70000" }, []);
+
+  assert.equal(valid.configuredPort, 6503);
+  assert.equal(valid.hasExplicitPort, true);
+  assert.equal(outOfRange.configuredPort, 6502);
+  assert.equal(outOfRange.hasExplicitPort, false);
+});
