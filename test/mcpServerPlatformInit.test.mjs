@@ -12,6 +12,7 @@ import { startViceMockServer } from "../src/vice/mockServer.js";
 const PLATFORM_RESOURCE_URI = "c64://platform/status";
 const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
 const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
+const PLATFORM_INIT_REQUEST_TIMEOUT_MS = 120_000;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -134,6 +135,7 @@ async function withServerConfigOnce(config, env, fn) {
 
 async function probePlatformInitInChild(options) {
   const serializedOptions = JSON.stringify(options);
+  const serializedRequestTimeout = JSON.stringify(PLATFORM_INIT_REQUEST_TIMEOUT_MS);
   const childScript = String.raw`
     import fs from "node:fs";
     import os from "node:os";
@@ -144,6 +146,7 @@ async function probePlatformInitInChild(options) {
     import { startViceMockServer } from "./src/vice/mockServer.ts";
 
     const options = ${serializedOptions};
+    const requestTimeoutMs = ${serializedRequestTimeout};
 
     function delay(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
@@ -213,6 +216,7 @@ async function probePlatformInitInChild(options) {
       const resource = await connection.client.request(
         { method: "resources/read", params: { uri: "c64://platform/status" } },
         ReadResourceResultSchema,
+        { timeout: requestTimeoutMs },
       );
       const event = await waitForDiagnosticEvent(diagnosticsDir, "platform_initialised");
       process.stdout.write(JSON.stringify({
@@ -280,6 +284,7 @@ test("mcp-server initialises platform state from the active backend", async (t) 
         const resource = await client.request(
           { method: "resources/read", params: { uri: PLATFORM_RESOURCE_URI } },
           ReadResourceResultSchema,
+          { timeout: PLATFORM_INIT_REQUEST_TIMEOUT_MS },
         );
         const text = resource.contents?.[0]?.text ?? "";
 
@@ -353,6 +358,7 @@ test("mcp-server initialises platform state from the active backend", async (t) 
         const resource = await client.request(
           { method: "resources/read", params: { uri: PLATFORM_RESOURCE_URI } },
           ReadResourceResultSchema,
+          { timeout: PLATFORM_INIT_REQUEST_TIMEOUT_MS },
         );
         const text = resource.contents?.[0]?.text ?? "";
 

@@ -3,7 +3,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildBunTestBatches, buildMatrixEnv, buildNodeFallbackBatches, parseRunTestsArgs, resolveDefaultMatrixTestFiles, shouldUseNodeFallback, splitPassthroughByRuntime } from "../../scripts/run-tests.ts";
+import { buildBunTestBatches, buildMatrixEnv, buildNodeFallbackBatches, normalizeBunBatchArg, parseRunTestsArgs, resolveDefaultMatrixTestFiles, shouldUseNodeFallback, splitPassthroughByRuntime } from "../../scripts/run-tests.ts";
 import { buildNodeTestArgs } from "../../scripts/run-tests.mjs";
 
 test("run-tests parses CLI args for matrix selection and passthrough", () => {
@@ -91,6 +91,7 @@ test("run-tests isolates mock-heavy explicit Bun files", () => {
   const batches = buildBunTestBatches(
     [
       "test/audioRuntime.test.mjs",
+      "test/mcpServerIntegration.test.mjs",
       "test/a.test.mjs",
       "--timeout",
       "5000",
@@ -101,7 +102,15 @@ test("run-tests isolates mock-heavy explicit Bun files", () => {
   assert.deepEqual(batches, [
     ["test/a.test.mjs", "--timeout", "5000"],
     ["test/audioRuntime.test.mjs", "--timeout", "5000"],
+    ["test/mcpServerIntegration.test.mjs", "--timeout", "5000"],
   ]);
+});
+
+test("run-tests prefixes relative test file args for Bun execution", () => {
+  assert.equal(normalizeBunBatchArg("test/logger.test.mjs"), "./test/logger.test.mjs");
+  assert.equal(normalizeBunBatchArg("./test/logger.test.mjs"), "./test/logger.test.mjs");
+  assert.equal(normalizeBunBatchArg("--timeout"), "--timeout");
+  assert.equal(normalizeBunBatchArg("5000"), "5000");
 });
 
 test("run-tests routes bun:test files to Bun when Node fallback is selected", () => {
@@ -143,6 +152,8 @@ test("run-tests routes Bun-runtime-dependent tests to Bun even without bun:test 
 test("run-tests isolates env-sensitive polling files in Node fallback batches", () => {
   const batches = buildNodeFallbackBatches([
     "test/logger.test.mjs",
+    "test/meta/background.test.mjs",
+    "test/mcpServerIntegration.test.mjs",
     "test/pollIntegration.test.mjs",
     "test/programRunnersModule.test.mjs",
     "--timeout",
@@ -151,6 +162,8 @@ test("run-tests isolates env-sensitive polling files in Node fallback batches", 
 
   assert.deepEqual(batches, [
     ["test/logger.test.mjs", "--timeout", "5000"],
+    ["test/meta/background.test.mjs", "--timeout", "5000"],
+    ["test/mcpServerIntegration.test.mjs", "--timeout", "5000"],
     ["test/pollIntegration.test.mjs", "--timeout", "5000"],
     ["test/programRunnersModule.test.mjs", "--timeout", "5000"],
   ]);

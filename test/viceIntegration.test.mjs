@@ -481,6 +481,10 @@ test("VICE process helpers cover environment, sockets, and termination paths", a
   };
 
   try {
+    delete process.env.CI;
+    delete process.env.DISABLE_XVFB;
+    delete process.env.FORCE_XVFB;
+    delete process.env.VICE_XVFB_DISPLAY;
     process.env.DISPLAY = ":1";
     delete process.env.WAYLAND_DISPLAY;
     assert.deepEqual(shouldUseXvfb(true), { useXvfb: false, display: ":1" });

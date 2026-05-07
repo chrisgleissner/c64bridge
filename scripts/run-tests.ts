@@ -33,6 +33,9 @@ const BUN_RUNTIME_REQUIRED_TEST_FILES = new Set([
   "test/scripts/start.test.mjs",
 ]);
 const ISOLATED_NODE_TEST_FILES = new Set([
+  "test/mcpServerIntegration.test.mjs",
+  "test/mcpServerPlatformInit.test.mjs",
+  "test/meta/background.test.mjs",
   "test/pollIntegration.test.mjs",
   "test/pollValidator.test.mjs",
   "test/programRunnersModule.test.mjs",
@@ -40,6 +43,8 @@ const ISOLATED_NODE_TEST_FILES = new Set([
 ]);
 const ISOLATED_BUN_TEST_FILES = new Set([
   "test/audioRuntime.test.mjs",
+  "test/mcpServerIntegration.test.mjs",
+  "test/mcpServerPlatformInit.test.mjs",
 ]);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultEmbeddingsDir = path.join(repoRoot, "artifacts", "test-embeddings");
@@ -467,7 +472,7 @@ async function main(): Promise<number> {
           "--coverage-reporter=text",
         ]
       : []),
-    ...effectivePassthrough,
+    ...effectivePassthrough.map((arg) => normalizeBunBatchArg(arg)),
   ];
   return await runExternalCommand(process.execPath, bunArgs, env);
 }
@@ -572,7 +577,7 @@ async function runBunBatches(
   return 0;
 }
 
-function normalizeBunBatchArg(arg: string): string {
+export function normalizeBunBatchArg(arg: string): string {
   if (looksLikeTestFileArg(arg) && !arg.startsWith("./") && !arg.startsWith("../") && !path.isAbsolute(arg)) {
     return `./${arg}`;
   }
