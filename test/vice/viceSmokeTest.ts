@@ -5,6 +5,7 @@
 import net from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
 import { ViceClient } from "../../src/vice/viceClient.js";
+import { resolveXvfbDisplayForLaunch } from "../../src/vice/process.js";
 import { waitForScreenPattern, waitForStableScreenPattern, buildReadyPattern, waitForAnyScreenText } from "../../src/vice/readiness.js";
 import { resolveViceSmokeOptions } from "../../src/vice/smokeOptions.js";
 import { startViceMockServer, type ViceMockServer } from "../../src/vice/mockServer.js";
@@ -153,12 +154,13 @@ async function main() {
 
   try {
     if (!USE_MOCK && shouldUseXvfb()) {
-      log(`Starting Xvfb on ${DISPLAY}...`);
+      const xvfbDisplay = resolveXvfbDisplayForLaunch(DISPLAY);
+      log(`Starting Xvfb on ${xvfbDisplay}...`);
       const t0 = nowNs();
-      xvfb = spawn("Xvfb", [DISPLAY, "-screen", "0", "640x480x24"], { stdio: ["ignore", "pipe", "pipe"] });
+      xvfb = spawn("Xvfb", [xvfbDisplay, "-screen", "0", "640x480x24"], { stdio: ["ignore", "pipe", "pipe"] });
       forwardChildStreamOutput(xvfb, "xvfb");
       logT(timings, "spawn_xvfb", t0);
-      process.env.DISPLAY = DISPLAY;
+      process.env.DISPLAY = xvfbDisplay;
       await new Promise(r => setTimeout(r, 300));
     }
 
