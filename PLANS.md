@@ -86,6 +86,7 @@ After committing the stabilization changes (`a2e48ef fix(readme): regenerate REA
 - [x] Build passes.
 - [x] Package verification passes.
 - [x] Original PR attribution preserved via cherry-pick.
+- [x] Reconfirm coverage stays above 90% after the remaining convergence fixes.
 
 ## Notes on the "no new fix commits" rule
 

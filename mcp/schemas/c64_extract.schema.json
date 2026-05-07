@@ -199,5 +199,6 @@
   "required": [
     "op"
   ],
-  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files.\n- charset: Locate and extract 2KB character sets from RAM.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension.\n- firmware_health: Run firmware readiness checks and report status metrics."
+  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files.\n- charset: Locate and extract 2KB character sets from RAM.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
+  "additionalProperties": false
 }

@@ -228,5 +228,6 @@
   "required": [
     "op"
   ],
-  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.\n- render_petscii_text: Display PETSCII text with optional border and background colours.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it."
+  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.\n- render_petscii_text: Display PETSCII text with optional border and background colours.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.",
+  "additionalProperties": false
 }

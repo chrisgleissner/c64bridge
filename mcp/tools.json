@@ -254,7 +254,8 @@
         "required": [
           "op"
         ],
-        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.\n- run_crt: Mount and run a CRT cartridge image.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results."
+        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.\n- run_crt: Mount and run a CRT cartridge image.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "programs",
@@ -427,7 +428,8 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses."
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "memory",
@@ -847,7 +849,8 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.\n- set_volume: Set the SID master volume register at $D418 (0-15).\n- reset: Soft or hard reset of SID registers to clear glitches.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch.\n- note_off: Release a SID voice by clearing its gate bit.\n- silence_all: Silence all SID voices with optional audio verification.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player.\n- generate: Generate a lightweight SID arpeggio playback sequence.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording.\n- analyze: Automatically analyze SID playback when verification is requested.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics."
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.\n- set_volume: Set the SID master volume register at $D418 (0-15).\n- reset: Soft or hard reset of SID registers to clear glitches.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch.\n- note_off: Release a SID voice by clearing its gate bit.\n- silence_all: Silence all SID voices with optional audio verification.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player.\n- generate: Generate a lightweight SID arpeggio playback sequence.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording.\n- analyze: Automatically analyze SID playback when verification is requested.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "audio",
@@ -1026,7 +1029,8 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed.\n- resume: Resume CPU execution after a pause.\n- reset: Issue a soft reset without cutting power.\n- reboot: Trigger a firmware reboot to recover from faults.\n- poweroff: Request a controlled shutdown via the Ultimate firmware.\n- menu: Toggle the Ultimate menu button for navigation.\n- start_task: Start a named background task that runs on an interval.\n- stop_task: Stop a specific background task and clear its timer.\n- stop_all_tasks: Stop every running background task and persist state.\n- list_tasks: List known background tasks with status metadata.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session."
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed.\n- resume: Resume CPU execution after a pause.\n- reset: Issue a soft reset without cutting power.\n- reboot: Trigger a firmware reboot to recover from faults.\n- poweroff: Request a controlled shutdown via the Ultimate firmware.\n- menu: Toggle the Ultimate menu button for navigation.\n- start_task: Start a named background task that runs on an interval.\n- stop_task: Stop a specific background task and clear its timer.\n- stop_all_tasks: Stop every running background task and persist state.\n- list_tasks: List known background tasks with status metadata.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "system",
@@ -1117,7 +1121,8 @@
         "required": [
           "op"
         ],
-        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server."
+        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "platform",
@@ -1387,7 +1392,8 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.\n- render_petscii_text: Display PETSCII text with optional border and background colours.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it."
+        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.\n- render_petscii_text: Display PETSCII text with optional border and background colours.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "graphics",
@@ -1496,7 +1502,8 @@
         "required": [
           "op"
         ],
-        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base."
+        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "rag",
@@ -1742,7 +1749,8 @@
         "required": [
           "op"
         ],
-        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images.\n- mount: Mount a disk image with optional verification and retries.\n- unmount: Remove the mounted image from an Ultimate drive slot.\n- file_info: Inspect metadata for a file on the Ultimate filesystem.\n- create_image: Create a blank disk image of the specified format.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match."
+        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images.\n- mount: Mount a disk image with optional verification and retries.\n- unmount: Remove the mounted image from an Ultimate drive slot.\n- file_info: Inspect metadata for a file on the Ultimate filesystem.\n- create_image: Create a blank disk image of the specified format.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "storage",
@@ -1849,7 +1857,8 @@
         "required": [
           "op"
         ],
-        "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot.\n- power_on: Power on a specific Ultimate drive slot.\n- power_off: Power off a specific Ultimate drive slot.\n- load_rom: Temporarily load a custom ROM into an Ultimate drive slot.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581)."
+        "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot.\n- power_on: Power on a specific Ultimate drive slot.\n- power_off: Power off a specific Ultimate drive slot.\n- load_rom: Temporarily load a custom ROM into an Ultimate drive slot.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581).",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "drive",
@@ -2063,7 +2072,8 @@
         "required": [
           "op"
         ],
-        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.\n- define_chars: Define custom printer characters (Commodore DLL mode)."
+        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.\n- define_chars: Define custom printer characters (Commodore DLL mode).",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "printer",
@@ -2247,7 +2257,8 @@
         "required": [
           "op"
         ],
-        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware.\n- get: Read a configuration category or specific item.\n- set: Write a configuration value in the selected category.\n- batch_update: Apply multiple configuration updates in a single request.\n- load_flash: Load configuration from flash storage.\n- save_flash: Persist the current configuration to flash storage.\n- reset_defaults: Reset firmware configuration to factory defaults.\n- read_debugreg: Read the Ultimate debug register ($D7FF).\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF).\n- info: Retrieve Ultimate hardware information and status.\n- version: Fetch firmware version details.\n- snapshot: Snapshot configuration to disk for later restore or diff.\n- restore: Restore configuration from a snapshot file.\n- diff: Compare the current configuration with a snapshot.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture."
+        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware.\n- get: Read a configuration category or specific item.\n- set: Write a configuration value in the selected category.\n- batch_update: Apply multiple configuration updates in a single request.\n- load_flash: Load configuration from flash storage.\n- save_flash: Persist the current configuration to flash storage.\n- reset_defaults: Reset firmware configuration to factory defaults.\n- read_debugreg: Read the Ultimate debug register ($D7FF).\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF).\n- info: Retrieve Ultimate hardware information and status.\n- version: Fetch firmware version details.\n- snapshot: Snapshot configuration to disk for later restore or diff.\n- restore: Restore configuration from a snapshot file.\n- diff: Compare the current configuration with a snapshot.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "config",
@@ -2528,7 +2539,8 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files.\n- charset: Locate and extract 2KB character sets from RAM.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension.\n- firmware_health: Run firmware readiness checks and report status metrics."
+        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files.\n- charset: Locate and extract 2KB character sets from RAM.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "extract",
@@ -2608,7 +2620,8 @@
         "required": [
           "op"
         ],
-        "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target.\n- stop: Stop an active Ultimate streaming session."
+        "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target.\n- stop: Stop an active Ultimate streaming session.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "stream",
@@ -2856,7 +2869,8 @@
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns."
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns.",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "debug",
@@ -2947,7 +2961,8 @@
         "required": [
           "op"
         ],
-        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only).\n- resource_set: Write a VICE configuration resource (safe prefixes only)."
+        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only).\n- resource_set: Write a VICE configuration resource (safe prefixes only).",
+        "additionalProperties": false
       },
       "_meta": {
         "domain": "vice",

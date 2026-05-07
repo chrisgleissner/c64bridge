@@ -31,5 +31,6 @@
   "required": [
     "op"
   ],
-  "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only).\n- resource_set: Write a VICE configuration resource (safe prefixes only)."
+  "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only).\n- resource_set: Write a VICE configuration resource (safe prefixes only).",
+  "additionalProperties": false
 }

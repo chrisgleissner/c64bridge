@@ -20,5 +20,6 @@
   "required": [
     "op"
   ],
-  "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server."
+  "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server.",
+  "additionalProperties": false
 }

@@ -196,5 +196,6 @@
   "required": [
     "op"
   ],
-  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns."
+  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns.",
+  "additionalProperties": false
 }

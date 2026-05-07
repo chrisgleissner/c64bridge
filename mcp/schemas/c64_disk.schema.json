@@ -191,5 +191,6 @@
   "required": [
     "op"
   ],
-  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images.\n- mount: Mount a disk image with optional verification and retries.\n- unmount: Remove the mounted image from an Ultimate drive slot.\n- file_info: Inspect metadata for a file on the Ultimate filesystem.\n- create_image: Create a blank disk image of the specified format.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match."
+  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images.\n- mount: Mount a disk image with optional verification and retries.\n- unmount: Remove the mounted image from an Ultimate drive slot.\n- file_info: Inspect metadata for a file on the Ultimate filesystem.\n- create_image: Create a blank disk image of the specified format.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match.",
+  "additionalProperties": false
 }

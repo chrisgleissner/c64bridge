@@ -100,5 +100,6 @@
   "required": [
     "op"
   ],
-  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses."
+  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses.",
+  "additionalProperties": false
 }

@@ -159,5 +159,6 @@
   "required": [
     "op"
   ],
-  "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.\n- define_chars: Define custom printer characters (Commodore DLL mode)."
+  "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.\n- define_chars: Define custom printer characters (Commodore DLL mode).",
+  "additionalProperties": false
 }

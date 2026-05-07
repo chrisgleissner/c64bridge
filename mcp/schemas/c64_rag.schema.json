@@ -28,5 +28,6 @@
   "required": [
     "op"
   ],
-  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base."
+  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base.",
+  "additionalProperties": false
 }

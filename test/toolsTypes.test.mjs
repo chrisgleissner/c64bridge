@@ -104,6 +104,7 @@ test("discriminatedUnionSchema flattens variants into a single object schema", (
   assert.ok(union.properties.address);
   assert.ok(union.properties.length);
   assert.ok(union.properties.data);
+  assert.equal(union.additionalProperties, false);
   // No oneOf at top level
   assert.equal(union.oneOf, undefined);
   assert.equal(union.discriminator, undefined);

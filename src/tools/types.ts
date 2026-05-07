@@ -185,6 +185,7 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
       ...mergedProperties,
     },
     required: [discriminator],
+    additionalProperties: false,
   };
 
   return schema;
