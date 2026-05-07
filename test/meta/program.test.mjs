@@ -85,7 +85,11 @@ test("cross_platform_greeting switches backends, captures screenshots, and resto
 
 test("cross_platform_greeting uses the visible VICE fast path by default for a single backend", async () => {
   const originalVisible = process.env.VICE_VISIBLE;
+  const originalForceXvfb = process.env.FORCE_XVFB;
+  const originalDisableXvfb = process.env.DISABLE_XVFB;
   process.env.VICE_VISIBLE = "true";
+  delete process.env.FORCE_XVFB;
+  delete process.env.DISABLE_XVFB;
 
   let activeBackend = "vice";
   let screenReads = 0;
@@ -137,6 +141,16 @@ test("cross_platform_greeting uses the visible VICE fast path by default for a s
       delete process.env.VICE_VISIBLE;
     } else {
       process.env.VICE_VISIBLE = originalVisible;
+    }
+    if (originalForceXvfb === undefined) {
+      delete process.env.FORCE_XVFB;
+    } else {
+      process.env.FORCE_XVFB = originalForceXvfb;
+    }
+    if (originalDisableXvfb === undefined) {
+      delete process.env.DISABLE_XVFB;
+    } else {
+      process.env.DISABLE_XVFB = originalDisableXvfb;
     }
   }
 });

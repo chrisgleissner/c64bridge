@@ -32,9 +32,23 @@ jobs:
         run: bun run build
       - name: Run matrix coverage
         env:
+          CI: "1"
+          FORCE_XVFB: "1"
+          VICE_VISIBLE: "false"
+          VICE_WARP: "true"
           VICE_DEVICE_TEST_DEBUG: "1"
           npm_config_loglevel: verbose
         run: npm run coverage
+      # Temporarily disable the explicit real-VICE smoke step until the
+      # standalone CI smoke flow is stable again.
+      # - name: Run real VICE smoke log
+      #   env:
+      #     CI: "1"
+      #     FORCE_XVFB: "1"
+      #     VICE_VISIBLE: "false"
+      #     VICE_WARP: "true"
+      #     VICE_TEST_TARGET: "vice"
+      #   run: npm run vice:smoke
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:

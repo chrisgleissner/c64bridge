@@ -3,6 +3,20 @@ import assert from "#test/assert";
 import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { toolRegistry } from "../../src/tools/registry/index.js";
 
+function stripUndefinedDeep(value) {
+  if (Array.isArray(value)) {
+    return value.map(stripUndefinedDeep);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .map(([entryKey, entryValue]) => [entryKey, stripUndefinedDeep(entryValue)]),
+  );
+}
+
 function assertDescriptorMetadata(metadata) {
   assert.ok(metadata, "tool metadata should exist");
   assert.equal(typeof metadata.domain, "string", "metadata.domain should be string");
@@ -50,7 +64,11 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
         assert.ok(listed, `tool ${descriptor.name} should be returned`);
         assert.equal(listed.description, descriptor.description, "description should match registry");
         if (descriptor.inputSchema) {
-          assert.deepEqual(listed.inputSchema, descriptor.inputSchema, "input schema should match registry");
+          assert.deepEqual(
+            stripUndefinedDeep(listed.inputSchema),
+            stripUndefinedDeep(descriptor.inputSchema),
+            "input schema should match registry",
+          );
         } else {
           assert.ok(
             listed.inputSchema === undefined || listed.inputSchema === null,

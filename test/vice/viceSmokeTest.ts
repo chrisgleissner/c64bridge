@@ -5,7 +5,9 @@
 import net from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
 import { ViceClient } from "../../src/vice/viceClient.js";
-import { waitForScreenPattern, buildReadyPattern, waitForAnyScreenText } from "../../src/vice/readiness.js";
+import { resolveXvfbDisplayForLaunch } from "../../src/vice/process.js";
+import { waitForScreenPattern, waitForStableScreenPattern, buildReadyPattern, waitForAnyScreenText } from "../../src/vice/readiness.js";
+import { resolveViceSmokeOptions } from "../../src/vice/smokeOptions.js";
 import { startViceMockServer, type ViceMockServer } from "../../src/vice/mockServer.js";
 
 type Timing = { label: string; ms: number };
@@ -14,14 +16,41 @@ function msSince(start: bigint): number { return Number((process.hrtime.bigint()
 function log(label: string) { console.log(`[+] ${label}`); }
 function logT(sink: Timing[], label: string, start: bigint) { const ms = msSince(start); sink.push({ label, ms }); console.log(`[t] ${label}=${ms}ms`); }
 
-const TEST_TARGET = (process.env.VICE_TEST_TARGET || "").toLowerCase();
-const USE_MOCK = TEST_TARGET === "mock";
+function forwardChildStreamOutput(child: ChildProcess, label: string): void {
+  const forward = (stream: NodeJS.ReadableStream | null | undefined, target: NodeJS.WriteStream, streamLabel: "stdout" | "stderr") => {
+    if (!stream) {
+      return;
+    }
+    stream.setEncoding?.("utf8");
+    stream.on("data", (chunk) => {
+      const text = String(chunk);
+      for (const line of text.split(/\r?\n/)) {
+        if (!line) {
+          continue;
+        }
+        target.write(`[${label} ${streamLabel}] ${line}\n`);
+      }
+    });
+  };
+
+  forward(child.stdout, process.stdout, "stdout");
+  forward(child.stderr, process.stderr, "stderr");
+  child.once("exit", (code, signal) => {
+    const detail = signal ? `signal=${signal}` : `code=${code ?? 0}`;
+    log(`${label} exited (${detail})`);
+  });
+}
+
+const smokeOptions = resolveViceSmokeOptions(process.env, process.argv.slice(2));
+const USE_MOCK = smokeOptions.useMock;
 const VICE_BIN = process.env.VICE_BINARY || "x64sc";
-const DEFAULT_PORT = Number(process.env.VICE_PORT || 6502);
-const VISIBLE = process.env.VICE_VISIBLE === "1";
-const KEEP_OPEN = process.env.VICE_KEEP_OPEN === "1";
-const WARP = USE_MOCK ? true : process.env.VICE_WARP !== "0";
-const DISPLAY = process.env.DISPLAY || ":99";
+const CONFIGURED_PORT = smokeOptions.configuredPort;
+const HAS_EXPLICIT_PORT = smokeOptions.hasExplicitPort;
+const VISIBLE = smokeOptions.visible;
+const KEEP_OPEN = smokeOptions.keepOpen;
+const WARP = smokeOptions.warp;
+const DISPLAY = smokeOptions.display;
+const VISIBLE_DEMO = smokeOptions.visibleDemo;
 
 function shouldUseXvfb(): boolean {
   if (USE_MOCK || VISIBLE) return false;
@@ -57,6 +86,28 @@ async function waitForPort(port: number, timeoutMs = 4000): Promise<void> {
   throw new Error(`Timeout waiting for port ${port}`);
 }
 
+async function reserveLoopbackPort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!port) {
+          reject(new Error("Failed to reserve an ephemeral loopback port"));
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
 /**
  * Construct a minimal tokenised BASIC program that prints "HELLO" once.
  *
@@ -82,7 +133,7 @@ async function main() {
   let vice: ChildProcess | null = null;
   let bm: ViceClient | null = null;
   let mock: (ViceMockServer & { port: number }) | null = null;
-  let port = DEFAULT_PORT;
+  let port = CONFIGURED_PORT;
 
   const cleanup = async () => {
     if (bm) {
@@ -103,28 +154,37 @@ async function main() {
 
   try {
     if (!USE_MOCK && shouldUseXvfb()) {
-      log("Starting Xvfb...");
+      const xvfbDisplay = resolveXvfbDisplayForLaunch(DISPLAY);
+      log(`Starting Xvfb on ${xvfbDisplay}...`);
       const t0 = nowNs();
-      xvfb = spawn("Xvfb", [DISPLAY, "-screen", "0", "640x480x24"], { stdio: "ignore" });
+      xvfb = spawn("Xvfb", [xvfbDisplay, "-screen", "0", "640x480x24"], { stdio: ["ignore", "pipe", "pipe"] });
+      forwardChildStreamOutput(xvfb, "xvfb");
       logT(timings, "spawn_xvfb", t0);
-      process.env.DISPLAY = DISPLAY;
+      process.env.DISPLAY = xvfbDisplay;
       await new Promise(r => setTimeout(r, 300));
     }
 
     if (USE_MOCK) {
-      mock = await startViceMockServer({ host: "127.0.0.1", port: DEFAULT_PORT > 0 ? DEFAULT_PORT : undefined });
+      mock = await startViceMockServer({
+        host: "127.0.0.1",
+        port: HAS_EXPLICIT_PORT && CONFIGURED_PORT > 0 ? CONFIGURED_PORT : undefined,
+      });
       port = mock.port;
       log(`[+] Using VICE mock server on port ${port}`);
     } else {
-      log("Launching VICE...");
-      const args = buildViceArgs(DEFAULT_PORT);
+      if (!HAS_EXPLICIT_PORT) {
+        port = await reserveLoopbackPort();
+      }
+      const args = buildViceArgs(port);
+      log(`Launching VICE binary: ${VICE_BIN} ${args.join(" ")}`);
       const t1 = nowNs();
-      vice = spawn(VICE_BIN, args, { stdio: "ignore" });
+      vice = spawn(VICE_BIN, args, { stdio: ["ignore", "pipe", "pipe"] });
+      forwardChildStreamOutput(vice, "vice");
       logT(timings, "spawn_vice", t1);
 
-      log(`Waiting for BM port ${DEFAULT_PORT}...`);
+      log(`Waiting for BM port ${port}...`);
       const t2 = nowNs();
-      await waitForPort(DEFAULT_PORT, 4000);
+      await waitForPort(port, 4000);
       logT(timings, "wait_port", t2);
     }
 
@@ -133,6 +193,10 @@ async function main() {
     await bm.connect(port);
     await bm.info();
     logT(timings, "bm_info", t3);
+
+    if (VISIBLE_DEMO && !USE_MOCK) {
+      log("Visible demo mode enabled: waiting for a stable READY screen before injecting HELLO.");
+    }
 
     const t4 = nowNs();
     await bm.reset(USE_MOCK || !WARP || VISIBLE ? 1 : 0);
@@ -144,10 +208,16 @@ async function main() {
     const between = async () => { try { await bm!.exitMonitor(); } catch {} };
     const anyText = await waitForAnyScreenText(bm, 10_000, 50, undefined, between);
     if (!anyText) throw new Error("Screen stayed blank (no text) after reset");
-    const readyIdx = await waitForScreenPattern(bm, buildReadyPattern(), 10_000, 50, undefined, between);
+    const readyIdx = VISIBLE_DEMO
+      ? await waitForStableScreenPattern(bm, buildReadyPattern(), 10_000, 150, 3, undefined, between)
+      : await waitForScreenPattern(bm, buildReadyPattern(), 10_000, 50, undefined, between);
     logT(timings, "wait_ready", readyStart);
     if (readyIdx < 0) throw new Error("READY. prompt not detected");
     log("[✓] BASIC READY detected");
+
+    if (VISIBLE_DEMO) {
+      await new Promise((r) => setTimeout(r, 750));
+    }
 
     const program = buildHelloProgramBody();
     const programEnd = 0x0801 + program.length;
@@ -175,7 +245,9 @@ async function main() {
       try { bm.close(); } catch {}
       bm = null;
     } else {
-      log("VICE_KEEP_OPEN=1 — keep window open; close it to end.");
+      log(VISIBLE_DEMO
+        ? "Visible VICE demo complete — keeping the emulator window open. Close it to end."
+        : "VICE_KEEP_OPEN=1 — keep window open; close it to end.");
       // eslint-disable-next-line no-constant-condition
       while (true) await new Promise(r => setTimeout(r, 1000));
     }

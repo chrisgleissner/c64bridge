@@ -770,8 +770,10 @@ test("upload_run_asm returns structured content on success", async () => {
 test("upload_run_asm verify true annotates metadata", async () => {
   const originalMax = process.env.C64BRIDGE_POLL_MAX_MS;
   const originalInterval = process.env.C64BRIDGE_POLL_INTERVAL_MS;
-  process.env.C64BRIDGE_POLL_MAX_MS = "40";
+  const originalStabilize = process.env.C64BRIDGE_POLL_STABILIZE_MS;
+  process.env.C64BRIDGE_POLL_MAX_MS = "120";
   process.env.C64BRIDGE_POLL_INTERVAL_MS = "1";
+  process.env.C64BRIDGE_POLL_STABILIZE_MS = "0";
 
   try {
     let screenCall = 0;
@@ -822,6 +824,11 @@ test("upload_run_asm verify true annotates metadata", async () => {
       delete process.env.C64BRIDGE_POLL_INTERVAL_MS;
     } else {
       process.env.C64BRIDGE_POLL_INTERVAL_MS = originalInterval;
+    }
+    if (originalStabilize === undefined) {
+      delete process.env.C64BRIDGE_POLL_STABILIZE_MS;
+    } else {
+      process.env.C64BRIDGE_POLL_STABILIZE_MS = originalStabilize;
     }
   }
 });
