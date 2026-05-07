@@ -70,8 +70,9 @@ test("operationSchema supports explicit op descriptions and extra properties", (
   assert.equal(schema.additionalProperties, true);
 });
 
-test("discriminatedUnionSchema composes variant schemas", () => {
+test("discriminatedUnionSchema flattens variants into a single object schema", () => {
   const readSchema = operationSchema("read", {
+    description: "Read memory",
     properties: {
       address: { type: "integer" },
       length: { type: "integer" },
@@ -80,6 +81,7 @@ test("discriminatedUnionSchema composes variant schemas", () => {
   });
 
   const writeSchema = operationSchema("write", {
+    description: "Write memory",
     properties: {
       address: { type: "integer" },
       data: { type: "string" },
@@ -92,12 +94,20 @@ test("discriminatedUnionSchema composes variant schemas", () => {
     variants: [readSchema, writeSchema],
   });
 
-  assert.deepEqual(union, {
-    description: "Memory operations",
-    oneOf: [readSchema, writeSchema],
-    discriminator: { propertyName: OPERATION_DISCRIMINATOR },
-    type: "object",
-  });
+  assert.equal(union.type, "object");
+  assert.ok(union.description.includes("Memory operations"));
+  assert.ok(union.description.includes("read:"));
+  assert.ok(union.description.includes("write:"));
+  assert.deepEqual(union.properties[OPERATION_DISCRIMINATOR].enum, ["read", "write"]);
+  assert.deepEqual(union.required, [OPERATION_DISCRIMINATOR]);
+  // All variant properties merged
+  assert.ok(union.properties.address);
+  assert.ok(union.properties.length);
+  assert.ok(union.properties.data);
+  assert.equal(union.additionalProperties, false);
+  // No oneOf at top level
+  assert.equal(union.oneOf, undefined);
+  assert.equal(union.discriminator, undefined);
 });
 
 test("discriminatedUnionSchema requires at least one variant", () => {
@@ -113,7 +123,26 @@ test("discriminatedUnionSchema supports custom discriminator names", () => {
     variants: [{ type: "object", properties: { mode: { const: "x" } } }],
   });
 
-  assert.equal(union.discriminator.propertyName, "mode");
+  assert.deepEqual(union.properties.mode.enum, ["x"]);
+  assert.deepEqual(union.required, ["mode"]);
+});
+
+test("discriminatedUnionSchema keeps merged properties when variants omit discriminator constants", () => {
+  const union = discriminatedUnionSchema({
+    variants: [
+      {
+        type: "object",
+        properties: {
+          payload: { type: "string" },
+        },
+      },
+    ],
+  });
+
+  assert.equal(union.properties.op.type, "string");
+  assert.equal(union.properties.op.enum, undefined);
+  assert.equal(union.description, undefined);
+  assert.deepEqual(union.properties.payload, { type: "string" });
 });
 
 test("createOperationDispatcher routes to matching handlers", async () => {
@@ -384,7 +413,7 @@ test("defineToolModule describeTools merges defaults and per-tool metadata", () 
   const module = defineToolModule({
     domain: "test",
     summary: "test module",
-    resources: ["c64://specs/basic"],
+    resources: ["c64://basic/spec"],
     prompts: ["basic-program"],
     defaultTags: ["default"],
     workflowHints: ["module hint"],
@@ -395,7 +424,7 @@ test("defineToolModule describeTools merges defaults and per-tool metadata", () 
         name: "c64_test",
         description: "test grouped tool",
         summary: "summary override",
-        relatedResources: ["c64://specs/vic"],
+        relatedResources: ["c64://graphics/vic/spec"],
         relatedPrompts: ["graphics-demo"],
         tags: ["tool"],
         workflowHints: ["tool hint"],
@@ -411,7 +440,7 @@ test("defineToolModule describeTools merges defaults and per-tool metadata", () 
   const [descriptor] = module.describeTools();
   assert.equal(descriptor.metadata.summary, "summary override");
   assert.equal(descriptor.metadata.lifecycle, "stream");
-  assert.deepEqual(descriptor.metadata.resources, ["c64://specs/basic", "c64://specs/vic"]);
+  assert.deepEqual(descriptor.metadata.resources, ["c64://basic/spec", "c64://graphics/vic/spec"]);
   assert.deepEqual(descriptor.metadata.prompts, ["basic-program", "graphics-demo"]);
   assert.deepEqual(descriptor.metadata.tags, ["default", "tool"]);
   assert.deepEqual(descriptor.metadata.workflowHints, ["module hint", "tool hint"]);

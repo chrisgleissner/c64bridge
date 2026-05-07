@@ -1,302 +1,204 @@
 {
   "type": "object",
-  "description": "Extraction operations available via the c64_extract tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Scan RAM for sprites and optionally export .spr files.",
-      "properties": {
-        "address": {
-          "type": "string",
-          "description": "Start address ($HHHH or decimal)",
-          "minLength": 1
-        },
-        "length": {
-          "type": "integer",
-          "description": "Number of bytes to scan",
-          "minimum": 63,
-          "maximum": 65536
-        },
-        "stride": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Stride between sprite candidates in bytes",
-          "minimum": 1,
-          "default": 64
-        },
-        "maxSprites": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum sprites to return",
-          "minimum": 1,
-          "maximum": 256,
-          "default": 16
-        },
-        "minNonZeroRows": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Minimum non-empty rows required",
-          "minimum": 1,
-          "maximum": 21,
-          "default": 4
-        },
-        "minSetBits": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Minimum number of set bits required",
-          "minimum": 1,
-          "maximum": 504,
-          "default": 12
-        },
-        "includeBase64": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Include base64 data in response",
-          "default": true
-        },
-        "outputDir": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Directory to write .spr files",
-          "minLength": 1
-        },
-        "pauseDuringRead": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Pause the machine during memory read",
-          "default": true
-        },
-        "op": {
-          "const": "sprites"
-        }
-      },
-      "required": [
-        "address",
-        "length",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "sprites",
+        "charset",
+        "memory_dump",
+        "fs_stats",
+        "firmware_health"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Locate and extract 2KB character sets from RAM.",
-      "properties": {
-        "address": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Start address to scan ($HHHH or decimal). If not provided, scans common locations.",
-          "minLength": 1
-        },
-        "scanRange": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Range to scan if address not provided: 'common' or 'full'",
-          "enum": [
-            "common",
-            "full"
-          ],
-          "default": "common"
-        },
-        "outputPath": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "File path to write charset binary",
-          "minLength": 1
-        },
-        "pauseDuringRead": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Pause the machine during memory read",
-          "default": true
-        },
-        "minNonEmptyChars": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Minimum non-empty characters required",
-          "minimum": 1,
-          "maximum": 256,
-          "default": 32
-        },
-        "minEntropy": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "description": "Minimum average entropy threshold",
-          "minimum": 0,
-          "maximum": 1,
-          "default": 0.3
-        },
-        "op": {
-          "const": "charset"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "address": {
+      "type": "string",
+      "description": "Start address ($HHHH or decimal)",
+      "minLength": 1
     },
-    {
-      "type": "object",
-      "description": "Dump a RAM range to hex or binary files with manifest metadata.",
-      "properties": {
-        "address": {
-          "type": "string",
-          "description": "Start address ($HHHH or decimal)",
-          "minLength": 1
-        },
-        "length": {
-          "type": "integer",
-          "description": "Number of bytes to dump",
-          "minimum": 1,
-          "maximum": 65536
-        },
-        "outputPath": {
-          "type": "string",
-          "description": "Destination file path",
-          "minLength": 1
-        },
-        "format": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Output format: hex|binary",
-          "enum": [
-            "hex",
-            "binary"
-          ],
-          "default": "hex"
-        },
-        "chunkSize": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Chunk size for reads",
-          "minimum": 1,
-          "maximum": 4096,
-          "default": 512
-        },
-        "pauseDuringRead": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Pause/resume around dump",
-          "default": true
-        },
-        "retries": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Retries per chunk on failure",
-          "minimum": 0,
-          "default": 1
-        },
-        "op": {
-          "const": "memory_dump"
-        }
-      },
-      "required": [
-        "address",
-        "length",
-        "outputPath",
-        "op"
+    "length": {
+      "type": "integer",
+      "description": "Number of bytes to scan",
+      "minimum": 63,
+      "maximum": 65536
+    },
+    "stride": {
+      "type": [
+        "integer",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Stride between sprite candidates in bytes",
+      "minimum": 1,
+      "default": 64
     },
-    {
-      "type": "object",
-      "description": "Walk the filesystem and aggregate counts/bytes by extension.",
-      "properties": {
-        "root": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Root path to scan",
-          "minLength": 1,
-          "default": "/"
-        },
-        "extensions": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string",
-            "description": "Limit to these extensions (without dot)",
-            "minLength": 1
-          }
-        },
-        "includeContainers": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Include container images (d64/d81/etc.) in extension stats",
-          "default": true
-        },
-        "maxSamplesPerExtension": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Number of sample paths to keep per extension",
-          "minimum": 1,
-          "maximum": 10,
-          "default": 3
-        },
-        "op": {
-          "const": "fs_stats"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "maxSprites": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Maximum sprites to return",
+      "minimum": 1,
+      "maximum": 256,
+      "default": 16
     },
-    {
-      "type": "object",
-      "description": "Run firmware readiness checks and report status metrics.",
-      "properties": {
-        "op": {
-          "const": "firmware_health"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "minNonZeroRows": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Minimum non-empty rows required",
+      "minimum": 1,
+      "maximum": 21,
+      "default": 4
+    },
+    "minSetBits": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Minimum number of set bits required",
+      "minimum": 1,
+      "maximum": 504,
+      "default": 12
+    },
+    "includeBase64": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Include base64 data in response",
+      "default": true
+    },
+    "outputDir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Directory to write .spr files",
+      "minLength": 1
+    },
+    "pauseDuringRead": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Pause the machine during memory read",
+      "default": true
+    },
+    "scanRange": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Range to scan if address not provided: 'common' or 'full'",
+      "enum": [
+        "common",
+        "full"
+      ],
+      "default": "common"
+    },
+    "outputPath": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "File path to write charset binary",
+      "minLength": 1
+    },
+    "minNonEmptyChars": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Minimum non-empty characters required",
+      "minimum": 1,
+      "maximum": 256,
+      "default": 32
+    },
+    "minEntropy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Minimum average entropy threshold",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.3
+    },
+    "format": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Output format: hex|binary",
+      "enum": [
+        "hex",
+        "binary"
+      ],
+      "default": "hex"
+    },
+    "chunkSize": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Chunk size for reads",
+      "minimum": 1,
+      "maximum": 4096,
+      "default": 512
+    },
+    "retries": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Retries per chunk on failure",
+      "minimum": 0,
+      "default": 1
+    },
+    "root": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Root path to scan",
+      "minLength": 1,
+      "default": "/"
+    },
+    "extensions": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "description": "Limit to these extensions (without dot)",
+        "minLength": 1
+      }
+    },
+    "includeContainers": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Include container images (d64/d81/etc.) in extension stats",
+      "default": true
+    },
+    "maxSamplesPerExtension": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Number of sample paths to keep per extension",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files.\n- charset: Locate and extract 2KB character sets from RAM.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
+  "additionalProperties": false
 }

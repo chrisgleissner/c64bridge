@@ -221,14 +221,22 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const detailRecord = toRecord(result.details) ?? {};
     const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
     const resolvedLength = resolveLength(detailRecord) ?? parsed.length;
-
-    return textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.`, {
+    const data = {
       success: true,
       address: resolvedAddress,
       length: resolvedLength,
       hexData: result.data ?? null,
       details: detailRecord,
-    });
+    };
+
+    const base = textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.`, data);
+    return {
+      ...base,
+      structuredContent: {
+        type: "json",
+        data,
+      },
+    };
   } catch (error) {
     if (error instanceof ToolError) {
       return toolErrorResult(error);
@@ -773,9 +781,9 @@ export const memoryModule = defineToolModule({
   summary: "Screen, main memory, and low-level inspection utilities.",
   supportedPlatforms: ["c64u", "vice"] as const,
   resources: [
-    "c64://context/bootstrap",
-    "c64://specs/basic",
-    "c64://specs/assembly",
+    "c64://guide/bootstrap",
+    "c64://basic/spec",
+    "c64://assembly/6510-spec",
   ],
   prompts: ["memory-debug", "basic-program", "assembly-program"],
   defaultTags: ["memory", "debug"],
@@ -786,10 +794,10 @@ export const memoryModule = defineToolModule({
   tools: [
     {
       name: "read_screen",
-      description: "Read the current text screen (40x25) and return its ASCII representation. For PETSCII details, see c64://specs/basic.",
+      description: "Read the current text screen (40x25) and return its ASCII representation. For PETSCII details, see c64://basic/spec.",
       summary: "Fetches screen RAM, converts from PETSCII, and returns the printable output.",
       inputSchema: readScreenArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap", "c64://specs/basic"],
+      relatedResources: ["c64://guide/bootstrap", "c64://basic/spec"],
       relatedPrompts: ["memory-debug", "basic-program", "assembly-program"],
       tags: ["screen", "memory"],
       prerequisites: [],
@@ -809,10 +817,10 @@ export const memoryModule = defineToolModule({
     },
     {
       name: "read",
-      description: "Read a range of bytes from main memory and return the data as hexadecimal. Consult c64://specs/assembly and docs index.",
+      description: "Read a range of bytes from main memory and return the data as hexadecimal. Consult c64://assembly/6510-spec and docs index.",
       summary: "Resolves symbols, reads memory, and returns a hex dump with addressing metadata.",
       inputSchema: readMemoryArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap", "c64://specs/assembly", "c64://docs/index"],
+      relatedResources: ["c64://guide/bootstrap", "c64://assembly/6510-spec", "c64://guide/index"],
       relatedPrompts: ["memory-debug", "assembly-program"],
       tags: ["memory", "hex"],
       prerequisites: [],
@@ -833,10 +841,10 @@ export const memoryModule = defineToolModule({
     },
     {
       name: "write",
-      description: "Write a hexadecimal byte sequence into main memory at the specified address. See c64://context/bootstrap for safety rules.",
+      description: "Write a hexadecimal byte sequence into main memory at the specified address. See c64://guide/bootstrap for safety rules.",
       summary: "Resolves symbols, validates hex data, and writes bytes to RAM.",
       inputSchema: writeMemoryArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap", "c64://specs/assembly", "c64://docs/index"],
+      relatedResources: ["c64://guide/bootstrap", "c64://assembly/6510-spec", "c64://guide/index"],
       relatedPrompts: ["memory-debug", "assembly-program"],
       tags: ["memory", "hex", "write"],
         prerequisites: ["read"],

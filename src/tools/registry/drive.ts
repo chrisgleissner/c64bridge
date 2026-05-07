@@ -70,7 +70,7 @@ export const driveModuleGroup = defineToolModule({
   domain: "drive",
   summary: "Grouped drive power, reset, ROM, and mode helpers.",
   supportedPlatforms: ["c64u", "vice"],
-  resources: ["c64://context/bootstrap"],
+  resources: ["c64://guide/bootstrap"],
   defaultTags: ["drive", "hardware"],
   workflowHints: [
     "State the resulting power/mode/ROM so the user can reconcile IEC behaviour.",

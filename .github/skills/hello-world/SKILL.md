@@ -10,7 +10,7 @@ Use this skill when the user wants the shortest hello-world, greeting, or smoke-
 ## Inputs
 
 - Target backends: `vice`, `c64u`, or both.
-- Optional greeting text or message template.
+- Optional greeting text or message template. Treat explicitly requested on-screen text such as `HELLO WORLD` as literal output to preserve.
 
 ## Execution
 
@@ -19,7 +19,7 @@ Use this skill when the user wants the shortest hello-world, greeting, or smoke-
 2. If the current tool set does not expose `c64_program`, immediately delegate the same request to the `C64` agent instead of inspecting repository files, README sections, or MCP manifests.
 3. Pass `platforms` only when the user pins a backend or wants a subset of the configured backends.
 4. For a single visible VICE greeting, prefer the no-probe fast path: do not request screenshots or monitor-based verification unless the user explicitly asks for them.
-5. Pass `messageTemplate` only when the default greeting is not sufficient.
+5. Pass `messageTemplate` whenever the user specifies the exact text that should appear on screen, including simple phrases such as `HELLO WORLD`. Do not substitute the workflow's default greeting when the prompt implies literal output.
 6. On local machines with a graphical session, assume VICE should render in a real visible emulator window. Only expect Xvfb or other headless behavior in CI or when no framebuffer/display session exists.
 7. Do not re-read README sections, MCP manifests, or BASIC references before executing unless the request is ambiguous or the workflow fails.
 8. Fall back to `.github/skills/basic-program/SKILL.md` only when the user needs custom BASIC logic beyond a static greeting.

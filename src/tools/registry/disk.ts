@@ -345,7 +345,7 @@ export const diskModuleGroup = defineToolModule({
   domain: "storage",
   summary: "Grouped disk image management, mounting, and discovery tools.",
   supportedPlatforms: ["c64u", "vice"],
-  resources: ["c64://context/bootstrap"],
+  resources: ["c64://guide/bootstrap"],
   prompts: ["drive-management"],
   defaultTags: ["storage", "drive"],
   workflowHints: [

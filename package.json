@@ -1,6 +1,6 @@
 {
   "name": "c64bridge",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "mcpName": "io.github.chrisgleissner/c64bridge",
   "description": "C64 Bridge MCP server for Commodore 64 Ultimate hardware and VICE emulator control",
   "type": "module",
@@ -22,9 +22,11 @@
     "lint": "npm run check",
     "test": "node scripts/invoke-bun.mjs scripts/run-tests.ts",
     "test:node": "node scripts/run-tests.mjs",
+    "test:vice:mock": "npm run test -- --platform=vice --target=mock",
+    "test:vice:device": "FORCE_XVFB=1 VICE_VISIBLE=false VICE_WARP=true npm run test -- --platform=vice --target=device",
     "coverage": "node scripts/run-coverage.mjs",
     "coverage:single": "node scripts/invoke-bun.mjs scripts/run-tests.ts --coverage",
-    "test:matrix": "npm run test -- --platform=c64u --target=mock && npm run test -- --platform=vice --target=mock && npm run test -- --platform=vice --target=device",
+    "test:matrix": "npm run test -- --platform=c64u --target=mock && npm run test:vice:mock && npm run test:vice:device",
     "mcp:generate": "node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
     "check:package": "node scripts/check-package.mjs",
     "check:run-local": "bash scripts/run-mcp-check.sh local 5",
@@ -40,7 +42,8 @@
     "changelog:generate": "node scripts/generate-changelog.mjs",
     "release:prepare": "node scripts/prepare-release.mjs",
     "compare:rest": "node scripts/compare-rest-apis.mjs",
-    "vice:smoke": "node scripts/invoke-bun.mjs test/vice/viceSmokeTest.ts"
+    "vice:smoke": "node scripts/invoke-bun.mjs test/vice/viceSmokeTest.ts",
+    "vice:smoke:visible": "node scripts/invoke-bun.mjs test/vice/viceSmokeTest.ts --visible-demo"
   },
   "keywords": [
     "mcp",
@@ -59,24 +62,24 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.20.2",
-    "axios": "^1.7.7",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.16.0",
     "date-fns": "^4.1.0",
-    "fastify": "^5.6.1",
-    "jimp": "^1.6.0",
-    "meyda": "^5.6.2",
-    "octokit": "^5.0.4",
-    "pitchfinder": "^2.2.0",
+    "fastify": "^5.8.5",
+    "jimp": "^1.6.1",
+    "meyda": "^5.6.3",
+    "octokit": "^5.0.5",
+    "pitchfinder": "^2.3.4",
     "reflect-metadata": "^0.2.2",
-    "yaml": "^2.6.0"
+    "yaml": "^2.8.4"
   },
   "optionalDependencies": {
     "naudiodon": "^2.3.6"
   },
   "devDependencies": {
-    "@types/node": "^24.12.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
   },
   "files": [
     "mcp.json",

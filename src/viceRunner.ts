@@ -109,6 +109,7 @@ function which(binary: string): string | null {
 }
 
 function shouldUseXvfb(): boolean {
+  if (process.platform === "darwin" || process.platform === "win32") return false;
   if (process.env.FORCE_XVFB === "1") return true;
   const ciValue = (process.env.CI || "").toLowerCase();
   return ciValue === "true" || ciValue === "1" || ciValue === "yes";

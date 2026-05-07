@@ -1,6 +1,6 @@
 {
   "name": "c64bridge",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Stdio-based Model Context Protocol (MCP) server that bridges Commodore 64 Ultimate hardware with AI agents.",
   "entry": "dist/index.js",
   "type": "stdio",
@@ -113,11 +113,11 @@
       "default": "120000000"
     },
     "VICE_BINARY": {
-      "description": "VICE binary to launch for managed emulator sessions and audio capture",
+      "description": "VICE binary to launch for managed emulator sessions and audio capture; automatic search is used only when this override is missing or invalid",
       "default": "x64sc"
     },
     "VICE_DIRECTORY": {
-      "description": "Override the VICE resource directory used for ROM and UI asset discovery",
+      "description": "Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid",
       "default": "auto-detect"
     },
     "VICE_HOST": {

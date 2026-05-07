@@ -74,6 +74,7 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 - Discover resources and prompts with ListResources and ListPrompts.
 - Use the matching skill in `.github/skills/` to decide the actual tool sequence, validation, and safety behavior.
 - After discovery has already happened for the active session, prefer execution over repeated rediscovery for unambiguous requests.
+- When the request targets the `vice` backend, read `c64://vice/binary-monitor-spec` before executing so Binary Monitor framing, single-client limits, and trap/resume side effects are in scope.
 - Treat `c64_program`, `c64_memory`, `c64_graphics`, `c64_sound`, `c64_system`, `c64_config`, `c64_rag`, `c64_extract`, and similar grouped MCP tools as discriminated unions: every direct call must include `op`.
 - Never call a grouped tool with `{}` or with only secondary arguments. Choose the sub-operation first, then send `{ op: "...", ... }`.
 - When a skill tells you to execute a grouped tool, copy the exact `op` string from the skill instead of inferring it from the tool name.
@@ -113,13 +114,14 @@ Tools and parameters are listed dynamically via ListTools.
 
 Use ListResources to discover built-in knowledge, then read specific URIs to enrich context before coding:
 
-- `c64://specs/basic` — BASIC v2 tokens, syntax, device I/O
-- `c64://specs/assembly` — 6510 opcodes, addressing, zero-page strategy
-- `c64://specs/vic` — raster timing, sprites, colour RAM, bitmap modes
-- `c64://specs/sid` — SID registers, waveforms, ADSR
-- `c64://specs/memory-map` — full 64 KB address map
-- `c64://docs/basic/pitfalls` — quoting, line length, token pitfalls
-- `c64://docs/petscii-style` — readable PETSCII, colour/dither guidance
+- `c64://basic/spec` — BASIC v2 tokens, syntax, device I/O
+- `c64://assembly/6510-spec` — 6510 opcodes, addressing, zero-page strategy
+- `c64://graphics/vic/spec` — raster timing, sprites, colour RAM, bitmap modes
+- `c64://sound/sid/spec` — SID registers, waveforms, ADSR
+- `c64://memory/map` — full 64 KB address map
+- `c64://vice/binary-monitor-spec` — mandatory reference when targeting VICE; covers Binary Monitor transport, command framing, and debugger side effects
+- `c64://basic/pitfalls` — quoting, line length, token pitfalls
+- `c64://graphics/petscii/style-guide` — readable PETSCII, colour/dither guidance
 
 Pull RAG snippets via `c64_rag` (ops `basic`/`asm`) for targeted examples.
 

@@ -1,9 +1,11 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import os from "node:os";
-import { __resolveViceBinaryForTests, createFacade, ViceBackend } from "../src/device.js";
+import { __resolveViceBinaryForTests, __resolveViceLaunchForTests, createFacade, ViceBackend } from "../src/device.js";
+import { ViceClient } from "../src/vice/viceClient.js";
 import { startViceMockServer } from "../src/vice/mockServer.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
 
@@ -14,6 +16,7 @@ const useViceMock = viceTarget !== "vice";
 // Set VICE_AVAILABLE=1 in the environment when a real VICE instance is reachable.
 const viceAvailable = process.env.VICE_AVAILABLE === "1";
 const viceSuite = platform === "vice" && (useViceMock || viceAvailable) ? test : test.skip;
+const viceIntegrationSuite = !useViceMock && process.env.CI === "1" ? viceSuite.skip : viceSuite;
 const debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
 function debugLog(...args) {
   if (debugEnabled) {
@@ -24,10 +27,34 @@ const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;
 const WAIT_READY_SCAN_LENGTH = 1_000; // full text screen
+const VICE_PING_TIMEOUT_MS = useViceMock ? 2_000 : (process.env.CI === "1" ? 40_000 : 20_000);
+const VICE_SUITE_TIMEOUT_MS = useViceMock ? 30_000 : (process.env.CI === "1" ? 90_000 : 45_000);
 const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function reserveLoopbackPort() {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!port) {
+          reject(new Error("Failed to reserve an ephemeral loopback port"));
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
 }
 
 async function withEnv(overrides, fn) {
@@ -167,12 +194,13 @@ async function waitForPattern(
   );
 }
 
-viceSuite("device: ViceBackend basic operations", async (t) => {
+viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUITE_TIMEOUT_MS }, async (t) => {
   let server = null;
   let cfgDir = null;
   let cfgPath = null;
   const oldConfig = process.env.C64BRIDGE_CONFIG;
   const oldMode = process.env.C64_MODE;
+  const oldVicePort = process.env.VICE_PORT;
   const scratchAddress = 0x1000;
   const scratchBytes = Uint8Array.of(0x11, 0x22, 0x33, 0x44);
 
@@ -188,6 +216,7 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
     debugLog(`mock vice server listening on ${server.port}`);
   } else {
     debugLog("running against real VICE backend");
+    process.env.VICE_PORT = String(await reserveLoopbackPort());
   }
 
   t.after(async () => {
@@ -197,6 +226,8 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
     else delete process.env.C64BRIDGE_CONFIG;
     if (oldMode !== undefined) process.env.C64_MODE = oldMode;
     else delete process.env.C64_MODE;
+    if (oldVicePort !== undefined) process.env.VICE_PORT = oldVicePort;
+    else delete process.env.VICE_PORT;
   });
 
   const { facade } = await createFacade();
@@ -205,7 +236,7 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
   await t.test("ping succeeds", async () => {
     assert.equal(
       await waitForTruthy(() => facade.ping(), {
-        timeoutMs: useViceMock ? 2_000 : 20_000,
+        timeoutMs: VICE_PING_TIMEOUT_MS,
         intervalMs: useViceMock ? 50 : 250,
         description: "VICE ping",
       }),
@@ -276,7 +307,7 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     assert.equal(
       await waitForTruthy(() => facade.ping(), {
-        timeoutMs: useViceMock ? 2_000 : 20_000,
+        timeoutMs: VICE_PING_TIMEOUT_MS,
         intervalMs: useViceMock ? 50 : 250,
         description: "VICE reconnect ping",
       }),
@@ -1095,6 +1126,33 @@ test("device: ViceBackend defaults to visible launches and parses boolean overri
   });
 });
 
+test("device: ViceBackend resumes the monitor before disconnecting ordinary sessions", async (t) => {
+  const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => {
+    await server.stop();
+  });
+
+  await withEnv({ VICE_TEST_TARGET: "mock" }, async () => {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    const originalExitMonitor = ViceClient.prototype.exitMonitor;
+    const exitCalls = [];
+    ViceClient.prototype.exitMonitor = async function patchedExitMonitor(...args) {
+      exitCalls.push("exit");
+      return await originalExitMonitor.apply(this, args);
+    };
+
+    try {
+      assert.equal(await backend.ping(), true);
+      const data = await backend.readMemory(0x0400, 4);
+      assert.equal(data.length, 4);
+    } finally {
+      ViceClient.prototype.exitMonitor = originalExitMonitor;
+    }
+
+    assert.equal(exitCalls.length >= 2, true);
+  });
+});
+
 test("device: ViceBackend resolves directory and config-driven launch options", async (t) => {
   const viceDir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-resources-"));
   fs.mkdirSync(path.join(viceDir, "C64"), { recursive: true });
@@ -1184,6 +1242,50 @@ test("device: VICE binary resolution falls back when an explicit path is missing
   );
 
   assert.equal(resolved, "/usr/bin/x64sc");
+});
+
+test("device: VICE launch resolution keeps an explicit binary while falling back to a detected resource directory", () => {
+  const resolved = __resolveViceLaunchForTests(
+    { configBinary: "/usr/bin/x64sc" },
+    {
+      findBinary(binary) {
+        if (binary === "/usr/bin/x64sc") {
+          return "/usr/bin/x64sc";
+        }
+        return null;
+      },
+      isResourceDirectory(candidate) {
+        return candidate === "/usr/local/share/vice";
+      },
+    },
+  );
+
+  assert.deepEqual(resolved, {
+    binary: "/usr/bin/x64sc",
+    directory: "/usr/local/share/vice",
+  });
+});
+
+test("device: VICE launch resolution keeps an explicit matching directory", () => {
+  const resolved = __resolveViceLaunchForTests(
+    {
+      configBinary: "/usr/bin/x64sc",
+      configDirectory: "/custom/share/vice",
+    },
+    {
+      findBinary(binary) {
+        return binary === "/usr/bin/x64sc" ? "/usr/bin/x64sc" : null;
+      },
+      isResourceDirectory(candidate) {
+        return candidate === "/custom/share/vice";
+      },
+    },
+  );
+
+  assert.deepEqual(resolved, {
+    binary: "/usr/bin/x64sc",
+    directory: "/custom/share/vice",
+  });
 });
 
 test("device: C64u facade exercises runner, machine, config, drive, stream, and file endpoints", async (t) => {

@@ -1,6 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { listKnowledgeResources, readKnowledgeResource } from "../src/rag/knowledgeIndex.js";
+import { CANONICAL_KNOWLEDGE_RESOURCE_URIS, RESOURCE_URIS } from "../src/rag/resourceUris.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,34 +14,44 @@ test("listKnowledgeResources returns expected resources including charset", () =
   
   assert.ok(Array.isArray(resources), "should return an array");
   assert.ok(resources.length > 0, "should have at least one resource");
+  assert.deepEqual(
+    resources.map((resource) => resource.uri),
+    [...CANONICAL_KNOWLEDGE_RESOURCE_URIS],
+    "should expose the canonical resource URIs in registry order",
+  );
   
   // Check that charset resource exists
-  const charsetResource = resources.find((r) => r.uri === "c64://specs/charset");
+  const charsetResource = resources.find((r) => r.uri === RESOURCE_URIS.graphics.characterSet);
   assert.ok(charsetResource, "should include charset resource");
   assert.equal(charsetResource.name, "PETSCII Character Set Reference");
   assert.equal(charsetResource.mimeType, "text/markdown");
   assert.ok(typeof charsetResource.buildContent === "function", "charset should have buildContent function");
 
-  const fastPathResource = resources.find((r) => r.uri === "c64://context/fast-paths");
+  const fastPathResource = resources.find((r) => r.uri === RESOURCE_URIS.guide.fastPaths);
   assert.ok(fastPathResource, "should include fast-path workflow resource");
   assert.equal(fastPathResource.metadata.priority, "critical");
+
+  const viceMonitorResource = resources.find((r) => r.uri === RESOURCE_URIS.vice.binaryMonitorSpec);
+  assert.ok(viceMonitorResource, "should include VICE Binary Monitor resource");
+  assert.equal(viceMonitorResource.metadata.priority, "critical");
+  assert.equal(viceMonitorResource.metadata.domain, "vice");
 });
 
 test("readKnowledgeResource returns fast-path workflow guidance", () => {
-  const result = readKnowledgeResource("c64://context/fast-paths", projectRoot);
+  const result = readKnowledgeResource(RESOURCE_URIS.guide.fastPaths, projectRoot);
 
   assert.ok(result, "should return a result");
-  assert.equal(result.uri, "c64://context/fast-paths");
+  assert.equal(result.uri, RESOURCE_URIS.guide.fastPaths);
   assert.equal(result.mimeType, "text/markdown");
   assert.equal(result.text.includes("cross_platform_greeting") || result.text.includes("fuer_elise"), true);
   assert.equal(result.text.includes("Quick Visible Demo") || result.text.includes("Quick Music Demo"), true);
 });
 
 test("readKnowledgeResource generates charset quickref dynamically", () => {
-  const result = readKnowledgeResource("c64://specs/charset", projectRoot);
+  const result = readKnowledgeResource(RESOURCE_URIS.graphics.characterSet, projectRoot);
   
   assert.ok(result, "should return a result");
-  assert.equal(result.uri, "c64://specs/charset");
+  assert.equal(result.uri, RESOURCE_URIS.graphics.characterSet);
   assert.equal(result.mimeType, "text/markdown");
   assert.ok(typeof result.text === "string", "should return text content");
   assert.ok(result.text.length > 100, "should generate substantial content");
@@ -59,13 +70,23 @@ test("readKnowledgeResource generates charset quickref dynamically", () => {
 });
 
 test("readKnowledgeResource returns file-backed resource content", () => {
-  const result = readKnowledgeResource("c64://specs/vic", projectRoot);
+  const result = readKnowledgeResource(RESOURCE_URIS.graphics.vic.spec, projectRoot);
   
   assert.ok(result, "should return a result");
-  assert.equal(result.uri, "c64://specs/vic");
+  assert.equal(result.uri, RESOURCE_URIS.graphics.vic.spec);
   assert.equal(result.mimeType, "text/markdown");
   assert.ok(typeof result.text === "string", "should return text content");
   assert.ok(result.text.length > 100, "should have substantial content");
+});
+
+test("readKnowledgeResource returns VICE Binary Monitor reference", () => {
+  const result = readKnowledgeResource(RESOURCE_URIS.vice.binaryMonitorSpec, projectRoot);
+
+  assert.ok(result, "should return a result");
+  assert.equal(result.uri, RESOURCE_URIS.vice.binaryMonitorSpec);
+  assert.equal(result.mimeType, "text/markdown");
+  assert.ok(result.text.includes("# VICE Binary Monitor Specification"), "should include the VICE monitor title");
+  assert.ok(result.text.includes("dedicated connection configured with `-binarymonitor`") || result.text.includes("Commands may cause asynchronous monitor-entry events"), "should mention Binary Monitor protocol constraints");
 });
 
 test("readKnowledgeResource returns undefined for unknown URI", () => {
@@ -75,7 +96,7 @@ test("readKnowledgeResource returns undefined for unknown URI", () => {
 });
 
 test("charset quickref includes all character data from CSV", () => {
-  const result = readKnowledgeResource("c64://specs/charset", projectRoot);
+  const result = readKnowledgeResource(RESOURCE_URIS.graphics.characterSet, projectRoot);
   
   assert.ok(result, "should return a result");
   
@@ -105,11 +126,44 @@ test("knowledge resources have proper metadata", () => {
   }
 });
 
+test("canonical resource URIs do not expose redundant duplicated prefixes", () => {
+  for (const uri of CANONICAL_KNOWLEDGE_RESOURCE_URIS) {
+    assert.ok(!uri.includes("/basic-spec"), `${uri} should not use redundant basic-spec naming`);
+    assert.ok(!uri.includes("/printer-spec"), `${uri} should not use redundant printer-spec naming`);
+    assert.ok(!uri.includes("/vice-binary-monitor-spec"), `${uri} should not use redundant vice-binary-monitor-spec naming`);
+    assert.ok(!uri.includes("/io-spec"), `${uri} should not use redundant io-spec naming`);
+    assert.ok(!uri.includes("/sid-spec"), `${uri} should not use redundant sid-spec naming`);
+  }
+});
+
+test("legacy resource URIs are not supported", () => {
+  const legacyUris = [
+    "c64://index",
+    "c64://context/bootstrap",
+    "c64://context/fast-paths",
+    "c64://vice/vice-binary-monitor-spec",
+    "c64://basic/basic-spec",
+    "c64://assembly/assembly-spec",
+    "c64://sound/sid-spec",
+    "c64://graphics/vic-spec",
+    "c64://memory/memory-map",
+    "c64://printer/printer-spec",
+  ];
+
+  for (const legacyUri of legacyUris) {
+    assert.equal(
+      readKnowledgeResource(legacyUri, projectRoot),
+      undefined,
+      `${legacyUri} should no longer resolve`,
+    );
+  }
+});
+
 test("readKnowledgeResource generates knowledge index dynamically", () => {
-  const result = readKnowledgeResource("c64://docs/index", projectRoot);
+  const result = readKnowledgeResource(RESOURCE_URIS.guide.index, projectRoot);
   
   assert.ok(result, "should return a result");
-  assert.equal(result.uri, "c64://docs/index");
+  assert.equal(result.uri, RESOURCE_URIS.guide.index);
   assert.equal(result.mimeType, "text/markdown");
   assert.ok(typeof result.text === "string", "should return text content");
   assert.ok(result.text.length > 100, "should generate substantial content");
@@ -126,4 +180,3 @@ test("readKnowledgeResource generates knowledge index dynamically", () => {
   assert.ok(result.text.includes("c64://"), "should include resource URIs");
   assert.ok(result.text.includes("Prompts:") || result.text.includes("Tools:"), "should include prompts or tools");
 });
-

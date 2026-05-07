@@ -89,6 +89,18 @@ export interface ViceConfig {
 }
 export interface C64BridgeConfigFile { c64u?: C64uConfig; vice?: ViceConfig }
 
+interface ViceLaunchResolutionOptions {
+  envBinary?: string;
+  configBinary?: string;
+  envDirectory?: string;
+  configDirectory?: string;
+}
+
+interface ViceLaunchResolutionDependencies {
+  findBinary?: (binary: string) => string | null;
+  isResourceDirectory?: (candidate: string) => boolean;
+}
+
 const DEFAULT_C64U_HOST = "c64u";
 const DEFAULT_C64U_PORT = 80;
 const DEFAULT_VICE_HOST = "127.0.0.1";
@@ -96,6 +108,18 @@ const DEFAULT_VICE_PORT = 6502;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function resumeViceMonitor(client: ViceClient, timeoutMs = 250): Promise<void> {
+  try {
+    const exitMonitor = client.exitMonitor().catch(() => {});
+    await Promise.race([
+      exitMonitor,
+      delay(timeoutMs),
+    ]);
+  } catch {
+    // Ignore resume failures while tearing down a monitor session.
+  }
 }
 
 function coalesceMemoryWriteBlocks(
@@ -331,17 +355,19 @@ export class ViceBackend implements C64Facade {
     const configBinary = config.exe !== undefined
       ? configuredString(config.exe) ?? (typeof config.exe === "string" ? config.exe : String(config.exe))
       : undefined;
-    this.exe = resolveViceBinary({ envBinary, configBinary });
+    const resolvedLaunch = resolveViceLaunch({
+      envBinary,
+      configBinary,
+      envDirectory: configuredString(process.env.VICE_DIRECTORY),
+      configDirectory: configuredString(config.directory),
+    });
+    this.exe = resolvedLaunch.binary;
 
     const envHost = normaliseViceHost(process.env.VICE_HOST);
     const envPort = normaliseVicePort(process.env.VICE_PORT);
     this.host = firstDefined(envHost, normaliseViceHost(config.host)) ?? DEFAULT_VICE_HOST;
     this.port = firstDefined(envPort, normaliseVicePort(config.port)) ?? DEFAULT_VICE_PORT;
-    this.directory = firstDefined(
-      resolveViceDirectory(configuredString(process.env.VICE_DIRECTORY)),
-      resolveViceDirectory(configuredString(config.directory)),
-      findViceResourceDirectory(this.exe),
-    );
+    this.directory = resolvedLaunch.directory;
 
     this.mockMode = (process.env.VICE_TEST_TARGET || "").toLowerCase() === "mock";
     const hostLower = this.host.toLowerCase();
@@ -362,6 +388,7 @@ export class ViceBackend implements C64Facade {
       if (this.debugEnabled) console.error("[vice-backend] probing existing VICE", this.host, this.port);
       await client.connect(this.port, this.host);
       await client.info();
+      try { await client.exitMonitor(); } catch {}
       if (this.debugEnabled) console.error("[vice-backend] existing VICE is reachable");
       return true;
     } catch {
@@ -379,6 +406,7 @@ export class ViceBackend implements C64Facade {
       try {
         await client.connect(this.port, this.host);
         await client.info();
+        try { await client.exitMonitor(); } catch {}
         return;
       } catch (error) {
         lastError = error;
@@ -396,6 +424,7 @@ export class ViceBackend implements C64Facade {
     const client = new ViceClient();
     try {
       await client.connect(this.port, this.host);
+      await client.reset();
       const readiness = await waitForBasicReady(client, { timeoutMs, ensurePrompt: true });
       if (!readiness.pointersOk || !readiness.promptOk) {
         throw new Error(
@@ -480,7 +509,7 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  private async withClient<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {
+  private async withClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
     const previous = this.monitorQueue;
     let releaseQueue: () => void = () => {};
     this.monitorQueue = new Promise<void>((resolve) => {
@@ -504,6 +533,9 @@ export class ViceBackend implements C64Facade {
         if (this.debugEnabled) console.error("[vice-backend] connected to VICE monitor");
         return await fn(client);
       } finally {
+        if (options?.resumeOnClose !== false) {
+          await resumeViceMonitor(client);
+        }
         if (this.debugEnabled) console.error("[vice-backend] closing VICE monitor connection");
         client.close();
       }
@@ -657,7 +689,7 @@ export class ViceBackend implements C64Facade {
         } catch {
           // Ignore transport errors during quit; the emulator will terminate regardless.
         }
-      });
+      }, { resumeOnClose: false });
       if (managedHandle) {
         try {
           await managedHandle.stop();
@@ -898,11 +930,66 @@ function resolveViceBinary(
   return findBinary("x64sc") ?? findBinary("x64") ?? "x64sc";
 }
 
+function resolveViceLaunch(
+  options: ViceLaunchResolutionOptions,
+  dependencies: ViceLaunchResolutionDependencies = {},
+): { binary: string; directory?: string } {
+  const findBinary = dependencies.findBinary ?? which;
+  const isResourceDirectory = dependencies.isResourceDirectory ?? isViceResourceDirectory;
+  const explicitBinary = firstDefined(options.envBinary, options.configBinary);
+  const explicitDirectory = firstDefined(
+    resolveViceDirectoryWithValidator(options.envDirectory, isResourceDirectory),
+    resolveViceDirectoryWithValidator(options.configDirectory, isResourceDirectory),
+  );
+
+  let binary = resolveViceBinary(
+    { envBinary: options.envBinary, configBinary: options.configBinary },
+    findBinary,
+  );
+
+  if (explicitDirectory) {
+    return { binary, directory: explicitDirectory };
+  }
+
+  const adjacentDirectory = findViceResourceDirectory(binary, {
+    allowGlobalFallback: false,
+    isResourceDirectory,
+  });
+  if (adjacentDirectory) {
+    return { binary, directory: adjacentDirectory };
+  }
+
+  if (explicitBinary) {
+    return {
+      binary,
+      directory: findViceResourceDirectory(binary, {
+        allowGlobalFallback: true,
+        isResourceDirectory,
+      }),
+    };
+  }
+
+  return {
+    binary,
+    directory: findViceResourceDirectory(binary, {
+      allowGlobalFallback: true,
+      isResourceDirectory,
+    }),
+  };
+}
+
 export function __resolveViceBinaryForTests(
   options: { envBinary?: string; configBinary?: string },
   findBinary?: (binary: string) => string | null,
 ): string {
   return resolveViceBinary(options, findBinary ?? which);
+}
+
+export function __resolveViceLaunchForTests(
+  options: ViceLaunchResolutionOptions,
+  dependencies?: ViceLaunchResolutionDependencies,
+): { binary: string; directory?: string } {
+  return resolveViceLaunch(options, dependencies);
 }
 
 export interface FacadeSelection { facade: C64Facade; selected: DeviceType; reason: string; details?: Record<string, unknown> }
@@ -1092,7 +1179,22 @@ function resolveViceDirectory(value?: string): string | undefined {
   return isViceResourceDirectory(input) ? input : undefined;
 }
 
-function findViceResourceDirectory(binaryPath: string): string | undefined {
+function resolveViceDirectoryWithValidator(
+  value: string | undefined,
+  isResourceDirectory: (candidate: string) => boolean,
+): string | undefined {
+  const input = configuredString(value);
+  if (!input) {
+    return undefined;
+  }
+  return isResourceDirectory(input) ? input : undefined;
+}
+
+function findViceResourceDirectory(
+  binaryPath: string,
+  options: { allowGlobalFallback?: boolean; isResourceDirectory?: (candidate: string) => boolean } = {},
+): string | undefined {
+  const isResourceDirectory = options.isResourceDirectory ?? isViceResourceDirectory;
   const candidates = new Set<string>();
   const resolvedBinary = configuredString(binaryPath);
   if (resolvedBinary) {
@@ -1100,13 +1202,15 @@ function findViceResourceDirectory(binaryPath: string): string | undefined {
     candidates.add(path.resolve(binaryDir, "..", "share", "vice"));
     candidates.add(path.resolve(binaryDir, "..", "..", "share", "vice"));
   }
-  candidates.add("/usr/local/share/vice");
-  candidates.add("/usr/share/vice");
-  candidates.add("/opt/homebrew/share/vice");
-  candidates.add("/opt/local/share/vice");
+  if (options.allowGlobalFallback !== false) {
+    candidates.add("/usr/local/share/vice");
+    candidates.add("/usr/share/vice");
+    candidates.add("/opt/homebrew/share/vice");
+    candidates.add("/opt/local/share/vice");
+  }
 
   for (const candidate of candidates) {
-    if (isViceResourceDirectory(candidate)) {
+    if (isResourceDirectory(candidate)) {
       return candidate;
     }
   }

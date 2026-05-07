@@ -67,3 +67,13 @@ Additional shell verification:
 - Ran the exact lookup command under strict Bash (`bash -eo pipefail -c 'PACKAGE_VERSION=0.8.0; npm view "c64bridge@${PACKAGE_VERSION}" version --json'`) and it returned `"0.8.0"`.
 - Ran the retry-fragment form for an unpublished version under strict Bash and confirmed it produced an empty `PUBLISHED_VERSION` without aborting the shell.
 - Set `defaults.run.shell: bash` on the release job so GitHub Actions executes the polling loop and variable expansion with explicit Bash semantics instead of relying on the runner default.
+
+## 2026-05-07 13:08 - PR convergence steering and compatibility fixes
+
+Applied a small steering refinement to the active PR convergence work by appending a coverage-specific TODO to `PLANS.md` and immediately executing the related fixes needed to keep the pull request mergeable.
+
+Changed `src/tools/types.ts` so flattened discriminated-union schemas remain strict with `additionalProperties: false`, and updated `src/tools/memory.ts` so memory reads keep the short text summary and metadata fields while still exposing `hexData` through `structuredContent` for Claude-compatible JSON access.
+
+Validation: updated the focused schema and memory tests to cover the restored behavior, then reran those targeted checks to confirm strict schema output, backward-compatible memory read responses, and continued structured JSON access before proceeding to broader validation.
+
+Broader validation completed afterward: `npm run build` passed cleanly, and `npm run coverage` finished with `lines.pct = 90.79`, keeping the repository above the required 90% threshold after the convergence fixes.

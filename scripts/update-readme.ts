@@ -173,10 +173,14 @@ function collectGroupedOperations(schema?: JsonSchema): readonly GroupedOperatio
   const discriminator = (schema as JsonSchema & { discriminator?: { propertyName?: string } }).discriminator;
   const variants = (schema as JsonSchema & { oneOf?: readonly JsonSchema[] }).oneOf;
 
-  if (!discriminator || discriminator.propertyName !== "op" || !Array.isArray(variants)) {
-    return [];
+  if (discriminator && discriminator.propertyName === "op" && Array.isArray(variants)) {
+    return collectFromVariantList(variants);
   }
 
+  return collectFromFlattenedSchema(schema);
+}
+
+function collectFromVariantList(variants: readonly JsonSchema[]): readonly GroupedOperation[] {
   const operations: GroupedOperation[] = [];
 
   for (const variant of variants) {
@@ -225,6 +229,54 @@ function collectGroupedOperations(schema?: JsonSchema): readonly GroupedOperatio
   }
 
   return operations;
+}
+
+function collectFromFlattenedSchema(schema: JsonSchema): readonly GroupedOperation[] {
+  const properties = (schema.properties ?? {}) as Record<string, JsonSchema | undefined>;
+  const opSchema = properties.op;
+  if (!opSchema || !isObject(opSchema)) {
+    return [];
+  }
+
+  const enumValues = (opSchema as JsonSchema).enum;
+  if (!Array.isArray(enumValues) || enumValues.length === 0) {
+    return [];
+  }
+
+  const opNames = enumValues.filter((value): value is string => typeof value === "string" && value.length > 0);
+  if (opNames.length === 0) {
+    return [];
+  }
+
+  const descriptionMap = parseOperationDescriptions(getString(schema.description));
+  const hasVerificationProperty = Object.keys(properties).some((name) =>
+    name !== "op" && name.toLowerCase().startsWith("verify"),
+  );
+  const notes = hasVerificationProperty ? ["supports verify"] : [];
+
+  return opNames.map((opName) => ({
+    op: opName,
+    description: descriptionMap.get(opName) ?? `Operation ${opName}`,
+    required: [] as readonly string[],
+    notes,
+  }));
+}
+
+function parseOperationDescriptions(description: string): Map<string, string> {
+  const result = new Map<string, string>();
+  if (!description) {
+    return result;
+  }
+
+  const lines = description.split(/\r?\n/);
+  for (const line of lines) {
+    const match = line.match(/^\s*-\s+([A-Za-z0-9_]+):\s*(.+)$/);
+    if (match) {
+      result.set(match[1], match[2].trim());
+    }
+  }
+
+  return result;
 }
 
 export function renderToolsSection(modules: readonly ToolModuleDescriptor[] = describeToolModules()): string[] {

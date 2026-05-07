@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CANONICAL_KNOWLEDGE_RESOURCE_URIS, PLATFORM_RESOURCE_URI, RESOURCE_URIS } from "./resourceUris.js";
 
 function generateCharsetQuickref(): string {
   const csvPath = join(process.cwd(), "data/graphics/character-set.csv");
@@ -92,14 +93,14 @@ export interface KnowledgeResourceDefinition {
 
 const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
   {
-    id: "orientation",
-    title: "Workflow & Orientation",
+    id: "guide",
+    title: "Guides & Orientation",
     summary: "Mandatory workflow and safety guidance before issuing any C64 commands.",
     prompts: ["basic-program", "assembly-program", "memory-debug", "cross-platform-demo", "preset-music-demo"],
-  tools: ["upload_run_basic", "upload_run_asm", "cross_platform_greeting", "music_play_preset", "read_screen", "read"],
+    tools: ["upload_run_basic", "upload_run_asm", "cross_platform_greeting", "music_play_preset", "read_screen", "read"],
     resources: [
       {
-        uri: "c64://context/bootstrap",
+        uri: RESOURCE_URIS.guide.bootstrap,
         name: "Workflow Rules & Best Practices",
         description: "CRITICAL: Mandatory workflow rules for all C64 programming",
         relativePath: "data/context/bootstrap.md",
@@ -110,7 +111,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         tags: ["workflow", "safety"],
       },
       {
-        uri: "c64://context/fast-paths",
+        uri: RESOURCE_URIS.guide.fastPaths,
         name: "Fast Path Workflows",
         description: "Shortest reliable workflows for common C64U and VICE tasks, including dual-backend demos.",
         relativePath: "data/context/fast-paths.md",
@@ -118,8 +119,53 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition.",
         prompts: ["basic-program", "graphics-demo", "cross-platform-demo", "sid-music", "preset-music-demo"],
         tools: ["c64_program", "c64_sound", "c64_select_backend", "c64_memory", "c64_graphics"],
-        relatedResources: ["c64://context/bootstrap", "c64://platform/status"],
+        relatedResources: [RESOURCE_URIS.guide.bootstrap, PLATFORM_RESOURCE_URI],
         tags: ["workflow", "fast-path", "routing"],
+      },
+    ],
+  },
+  {
+    id: "vice",
+    title: "VICE Emulator",
+    summary: "Critical Binary Monitor protocol guidance for any workflow that targets the VICE backend.",
+    prompts: [
+      "hello-world",
+      "basic-program",
+      "cross-platform-demo",
+      "preset-music-demo",
+      "assembly-program",
+      "sid-music",
+      "graphics-demo",
+      "memory-debug",
+      "drive-manager",
+    ],
+    tools: ["c64_program", "c64_memory", "c64_debug", "c64_vice", "c64_system"],
+    resources: [
+      {
+        uri: RESOURCE_URIS.vice.binaryMonitorSpec,
+        name: "VICE Binary Monitor Specification",
+        description: "Critical VICE Binary Monitor reference for emulator-backed workflows and debugger operations.",
+        relativePath: "data/vice/vice-binary-monitor-spec.md",
+        priority: "critical",
+        summary: "Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations.",
+        prompts: [
+          "hello-world",
+          "basic-program",
+          "cross-platform-demo",
+          "preset-music-demo",
+          "assembly-program",
+          "sid-music",
+          "graphics-demo",
+          "memory-debug",
+          "drive-manager",
+        ],
+        tools: ["c64_program", "c64_memory", "c64_debug", "c64_vice", "c64_system"],
+        relatedResources: [
+          RESOURCE_URIS.guide.bootstrap,
+          RESOURCE_URIS.guide.fastPaths,
+          PLATFORM_RESOURCE_URI,
+        ],
+        tags: ["vice", "binary-monitor", "emulator", "debugger"],
       },
     ],
   },
@@ -128,10 +174,10 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     title: "Programming Languages",
     summary: "Language references required before generating BASIC or 6502 assembly programs.",
     prompts: ["basic-program", "assembly-program"],
-  tools: ["upload_run_basic", "upload_run_asm", "read_screen", "read"],
+    tools: ["upload_run_basic", "upload_run_asm", "read_screen", "read"],
     resources: [
       {
-        uri: "c64://specs/basic",
+        uri: RESOURCE_URIS.basic.spec,
         name: "Commodore BASIC v2 Specification",
         description: "Complete BASIC v2 reference. READ THIS BEFORE generating any BASIC code!",
         relativePath: "data/basic/basic-spec.md",
@@ -139,11 +185,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Token definitions, syntax rules, and device I/O guidance for BASIC v2.",
         prompts: ["basic-program"],
         tools: ["upload_run_basic", "read_screen"],
-        relatedResources: ["c64://context/bootstrap", "c64://docs/basic/pitfalls"],
+        relatedResources: [RESOURCE_URIS.guide.bootstrap, RESOURCE_URIS.basic.pitfalls],
         tags: ["basic", "language"],
       },
       {
-        uri: "c64://docs/basic/pitfalls",
+        uri: RESOURCE_URIS.basic.pitfalls,
         name: "BASIC Pitfalls & Gotchas",
         description: "Common mistakes and gotchas when writing Commodore BASIC v2 programs",
         relativePath: "data/basic/basic-pitfalls.md",
@@ -151,11 +197,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps.",
         prompts: ["basic-program"],
         tools: ["upload_run_basic"],
-        relatedResources: ["c64://specs/basic"],
+        relatedResources: [RESOURCE_URIS.basic.spec],
         tags: ["basic", "pitfalls", "quickref"],
       },
       {
-        uri: "c64://specs/assembly",
+        uri: RESOURCE_URIS.assembly.spec6510,
         name: "6502/6510 Assembly Reference",
         description: "Full instruction set and addressing modes. READ THIS BEFORE generating assembly!",
         relativePath: "data/assembly/assembly-spec.md",
@@ -163,7 +209,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU.",
         prompts: ["assembly-program"],
   tools: ["upload_run_asm", "read"],
-        relatedResources: ["c64://context/bootstrap"],
+        relatedResources: [RESOURCE_URIS.guide.bootstrap],
         tags: ["assembly", "language"],
       },
     ],
@@ -176,7 +222,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     tools: ["c64_sound"],
     resources: [
       {
-        uri: "c64://specs/sid",
+        uri: RESOURCE_URIS.sound.sid.spec,
         name: "SID Chip Programming Guide",
         description: "Sound Interface Device registers and music programming",
   relativePath: "data/sound/sid-spec.md",
@@ -184,11 +230,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Register map, waveform behaviour, and ADSR envelopes for expressive SID playback.",
         prompts: ["sid-music"],
         tools: ["c64_sound"],
-        relatedResources: ["c64://specs/sidwave", "c64://docs/sid/file-structure"],
+        relatedResources: [RESOURCE_URIS.sound.sidwave.spec, RESOURCE_URIS.sound.sid.fileFormat],
         tags: ["sid", "audio"],
       },
       {
-        uri: "c64://specs/sidwave",
+        uri: RESOURCE_URIS.sound.sidwave.spec,
         name: "SIDWAVE Music Format Specification",
         description: "YAML/JSON music composition format for SID chip",
   relativePath: "data/sound/sidwave.md",
@@ -196,11 +242,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Defines the SIDWAVE interchange format used by the SID composer workflow.",
         prompts: ["sid-music"],
         tools: ["c64_sound"],
-        relatedResources: ["c64://specs/sid", "c64://docs/sid/file-structure"],
+        relatedResources: [RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.sound.sid.fileFormat],
         tags: ["sid", "format"],
       },
       {
-        uri: "c64://docs/sid/file-structure",
+        uri: RESOURCE_URIS.sound.sid.fileFormat,
         name: "SID File Structure Reference",
         description: "Breakdown of the SID file format layout and metadata",
   relativePath: "data/sound/sid-file-structure.md",
@@ -208,11 +254,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music.",
         prompts: ["sid-music"],
         tools: ["c64_sound"],
-        relatedResources: ["c64://specs/sid", "c64://specs/sidwave"],
+        relatedResources: [RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.sound.sidwave.spec],
         tags: ["sid", "format"],
       },
       {
-        uri: "c64://docs/sid/best-practices",
+        uri: RESOURCE_URIS.sound.sid.bestPractices,
         name: "SID Programming Best Practices",
         description: "Expressive SID composition defaults, ADSR guidance, and musical phrasing tips.",
   relativePath: "data/sound/sid-programming-best-practices.md",
@@ -220,7 +266,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Captures proven waveforms, ADSR presets, phrasing, and verification workflow for pleasant SID music.",
         prompts: ["sid-music"],
         tools: ["c64_sound"],
-        relatedResources: ["c64://specs/sid", "c64://specs/sidwave"],
+        relatedResources: [RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.sound.sidwave.spec],
         tags: ["sid", "best-practices", "audio"],
       },
     ],
@@ -233,7 +279,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     tools: ["c64_graphics", "c64_memory"],
     resources: [
       {
-        uri: "c64://specs/vic",
+        uri: RESOURCE_URIS.graphics.vic.spec,
         name: "VIC-II Graphics Specification",
         description: "Video chip, sprites, raster programming, and timing",
   relativePath: "data/graphics/vic-spec.md",
@@ -241,11 +287,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Covers raster timing, sprite control, colour RAM, and bitmap modes on the VIC-II.",
         prompts: ["graphics-demo"],
         tools: ["c64_graphics", "c64_memory"],
-        relatedResources: ["c64://specs/assembly", "c64://specs/charset", "c64://docs/petscii-style"],
+        relatedResources: [RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide],
         tags: ["vic", "graphics"],
       },
       {
-        uri: "c64://specs/charset",
+        uri: RESOURCE_URIS.graphics.characterSet,
         name: "PETSCII Character Set Reference",
         description: "Complete PETSCII character codes, screen codes, and glyph mappings",
   relativePath: "data/graphics/character-set.csv",
@@ -253,11 +299,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Character code table mapping PETSCII codes to screen codes, glyphs, and keyboard input.",
         prompts: ["graphics-demo"],
         tools: ["c64_graphics"],
-        relatedResources: ["c64://specs/vic", "c64://docs/petscii-style"],
+        relatedResources: [RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.petscii.styleGuide],
         tags: ["petscii", "charset", "graphics"],
       },
       {
-        uri: "c64://docs/petscii-style",
+        uri: RESOURCE_URIS.graphics.petscii.styleGuide,
         name: "PETSCII Style Guide and Presets",
         description: "Colour combinations, contrast guidelines, and recommended presets for PETSCII art",
   relativePath: "data/graphics/petscii-style-guide.md",
@@ -265,11 +311,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Documents colour palette, readability presets, dithering patterns, and best practices for creating artistic and readable PETSCII displays.",
         prompts: ["graphics-demo"],
         tools: ["c64_graphics"],
-        relatedResources: ["c64://specs/vic", "c64://specs/charset", "c64://docs/sprite-charset-workflows"],
+        relatedResources: [RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.spriteCharset.bestPractices],
         tags: ["petscii", "style", "colours", "graphics"],
       },
       {
-        uri: "c64://docs/sprite-charset-workflows",
+        uri: RESOURCE_URIS.graphics.spriteCharset.bestPractices,
         name: "Sprite & Charset Workflows Best Practices",
         description: "Comprehensive guide to creating, managing, and deploying sprites and custom character sets",
   relativePath: "data/graphics/sprite-charset-best-practices.md",
@@ -277,7 +323,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics.",
         prompts: ["graphics-demo"],
         tools: ["c64_graphics", "c64_memory", "c64_program"],
-        relatedResources: ["c64://specs/vic", "c64://specs/charset", "c64://docs/petscii-style", "c64://specs/memory-map"],
+        relatedResources: [RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide, RESOURCE_URIS.memory.map],
         tags: ["sprites", "charset", "graphics", "workflows"],
       },
     ],
@@ -290,7 +336,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
   tools: ["read", "write", "verify_and_write_memory", "debugreg_read", "debugreg_write"],
     resources: [
       {
-        uri: "c64://specs/memory-map",
+        uri: RESOURCE_URIS.memory.map,
         name: "C64 Memory Map",
         description: "Complete RAM, ROM, and I/O address map for the Commodore 64.",
         relativePath: "data/memory/memory-map.md",
@@ -298,11 +344,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory"],
-        relatedResources: ["c64://specs/assembly"],
+        relatedResources: [RESOURCE_URIS.assembly.spec6510],
         tags: ["memory", "hardware"],
       },
       {
-        uri: "c64://specs/memory-low",
+        uri: RESOURCE_URIS.memory.zeroPageAndWorkspace,
         name: "Low Memory Usage Guide",
         description: "Zero-page and system vector reference for low-memory addresses.",
         relativePath: "data/memory/low-memory-map.md",
@@ -310,11 +356,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory"],
-        relatedResources: ["c64://specs/memory-map", "c64://specs/assembly"],
+        relatedResources: [RESOURCE_URIS.memory.map, RESOURCE_URIS.assembly.spec6510],
         tags: ["memory", "zero-page"],
       },
       {
-        uri: "c64://specs/memory-kernal",
+        uri: RESOURCE_URIS.kernal.romRoutines,
         name: "KERNAL Memory Map",
         description: "Detailed breakdown of KERNAL ROM routines and entry points.",
         relativePath: "data/memory/kernal-memory-map.md",
@@ -322,11 +368,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Lists KERNAL ROM vectors and service routines for OS-level functionality.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "verify_and_write_memory"],
-        relatedResources: ["c64://specs/memory-map", "c64://specs/assembly"],
+        relatedResources: [RESOURCE_URIS.memory.map, RESOURCE_URIS.assembly.spec6510],
         tags: ["memory", "kernal"],
       },
       {
-        uri: "c64://specs/io",
+        uri: RESOURCE_URIS.io.spec,
         name: "C64 I/O Register Map",
         description: "Comprehensive table of memory-mapped hardware registers.",
         relativePath: "data/io/io-spec.md",
@@ -334,11 +380,11 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory", "debugreg_read", "debugreg_write"],
-        relatedResources: ["c64://specs/memory-map", "c64://specs/assembly"],
+        relatedResources: [RESOURCE_URIS.memory.map, RESOURCE_URIS.assembly.spec6510],
         tags: ["io", "hardware"],
       },
       {
-        uri: "c64://specs/cia",
+        uri: RESOURCE_URIS.io.cia.spec,
         name: "CIA Register Reference",
         description: "Timer, keyboard, and peripheral register reference for CIA chips.",
         relativePath: "data/io/cia-spec.md",
@@ -346,7 +392,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory", "debugreg_read"],
-        relatedResources: ["c64://specs/io", "c64://specs/memory-map"],
+        relatedResources: [RESOURCE_URIS.io.spec, RESOURCE_URIS.memory.map],
         tags: ["io", "hardware"],
       },
     ],
@@ -366,7 +412,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     ],
     resources: [
       {
-        uri: "c64://specs/printer",
+        uri: RESOURCE_URIS.printer.spec,
         name: "Printer Programming Guide",
         description: "Commodore MPS and Epson FX printer control",
         relativePath: "data/printer/printer-spec.md",
@@ -375,30 +421,13 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         prompts: ["printer-job"],
         tools: ["printer_guide", "printer_commodore_text", "printer_epson_text"],
         relatedResources: [
-          "c64://docs/printer/guide",
-          "c64://docs/printer/commodore-text",
-          "c64://docs/printer/epson-text",
+          RESOURCE_URIS.printer.commodore.text,
+          RESOURCE_URIS.printer.epson.text,
         ],
         tags: ["printer", "spec"],
       },
       {
-        uri: "c64://docs/printer/guide",
-        name: "Printer Workflow Guide",
-        description: "Unified quick reference for Commodore and Epson printers",
-        relativePath: "data/printer/printer-spec.md",
-        priority: "reference",
-        summary: "Quick-look workflow covering setup, troubleshooting, and sample jobs for both printer families.",
-        prompts: ["printer-job"],
-        tools: ["printer_guide"],
-        relatedResources: [
-          "c64://specs/printer",
-          "c64://docs/printer/commodore-text",
-          "c64://docs/printer/epson-text",
-        ],
-        tags: ["printer", "workflow"],
-      },
-      {
-        uri: "c64://docs/printer/commodore-text",
+        uri: RESOURCE_URIS.printer.commodore.text,
         name: "Commodore Printer Text Guide",
         description: "Device 4 character printing reference for Commodore MPS printers",
         relativePath: "data/printer/printer-commodore.md",
@@ -407,13 +436,13 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         prompts: ["printer-job"],
         tools: ["printer_commodore_text"],
         relatedResources: [
-          "c64://specs/printer",
-          "c64://docs/printer/commodore-bitmap",
+          RESOURCE_URIS.printer.spec,
+          RESOURCE_URIS.printer.commodore.bitmap,
         ],
         tags: ["printer", "commodore"],
       },
       {
-        uri: "c64://docs/printer/commodore-bitmap",
+        uri: RESOURCE_URIS.printer.commodore.bitmap,
         name: "Commodore Printer Bitmap Guide",
         description: "Bitmap and custom character printing workflow for Commodore printers",
         relativePath: "data/printer/printer-commodore-bitmap.md",
@@ -422,13 +451,13 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         prompts: ["printer-job"],
         tools: ["printer_commodore_bitmap"],
         relatedResources: [
-          "c64://docs/printer/commodore-text",
-          "c64://specs/printer",
+          RESOURCE_URIS.printer.commodore.text,
+          RESOURCE_URIS.printer.spec,
         ],
         tags: ["printer", "commodore", "graphics"],
       },
       {
-        uri: "c64://docs/printer/epson-text",
+        uri: RESOURCE_URIS.printer.epson.text,
         name: "Epson Printer Text Guide",
         description: "Text control sequences for Epson FX-compatible printers",
         relativePath: "data/printer/printer-epson.md",
@@ -437,13 +466,13 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         prompts: ["printer-job"],
         tools: ["printer_epson_text"],
         relatedResources: [
-          "c64://docs/printer/epson-bitmap",
-          "c64://specs/printer",
+          RESOURCE_URIS.printer.epson.bitmap,
+          RESOURCE_URIS.printer.spec,
         ],
         tags: ["printer", "epson"],
       },
       {
-        uri: "c64://docs/printer/epson-bitmap",
+        uri: RESOURCE_URIS.printer.epson.bitmap,
         name: "Epson Printer Bitmap Guide",
         description: "Bitmap printing and graphics control for Epson FX printers",
         relativePath: "data/printer/printer-epson-bitmap.md",
@@ -452,13 +481,13 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         prompts: ["printer-job"],
         tools: ["printer_epson_bitmap"],
         relatedResources: [
-          "c64://docs/printer/epson-text",
-          "c64://specs/printer",
+          RESOURCE_URIS.printer.epson.text,
+          RESOURCE_URIS.printer.spec,
         ],
         tags: ["printer", "epson", "graphics"],
       },
       {
-        uri: "c64://docs/printer/prompts",
+        uri: RESOURCE_URIS.printer.promptGuide,
         name: "Printer Prompt Templates",
         description: "Template prompts and workflow guidance for printer jobs",
         relativePath: "data/printer/printer-prompts.md",
@@ -467,9 +496,9 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         prompts: ["printer-job"],
         tools: ["printer_prompts"],
         relatedResources: [
-          "c64://docs/printer/guide",
-          "c64://docs/printer/commodore-text",
-          "c64://docs/printer/epson-text",
+          RESOURCE_URIS.printer.spec,
+          RESOURCE_URIS.printer.commodore.text,
+          RESOURCE_URIS.printer.epson.text,
         ],
         tags: ["printer", "prompts"],
       },
@@ -477,9 +506,17 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
   },
 ];
 
+const CANONICAL_KNOWLEDGE_RESOURCE_URI_SET = new Set<string>(CANONICAL_KNOWLEDGE_RESOURCE_URIS);
+
 const BASE_RESOURCES: readonly KnowledgeResourceDefinition[] = KNOWLEDGE_BUNDLES.flatMap(
   (bundle, bundleIndex) =>
     bundle.resources.map((resource, resourceIndex): KnowledgeResourceDefinition => {
+      if (!CANONICAL_KNOWLEDGE_RESOURCE_URI_SET.has(resource.uri)) {
+        throw new Error(
+          `Knowledge resource URI ${resource.uri} is not part of the canonical resource set`,
+        );
+      }
+
       const baseResource = {
         uri: resource.uri,
         name: resource.name,
@@ -505,7 +542,7 @@ const BASE_RESOURCES: readonly KnowledgeResourceDefinition[] = KNOWLEDGE_BUNDLES
       };
       
       // Add buildContent for resources that need dynamic generation
-      if (resource.uri === "c64://specs/charset") {
+      if (resource.uri === RESOURCE_URIS.graphics.characterSet) {
         return { ...baseResource, buildContent: generateCharsetQuickref };
       }
       
@@ -514,12 +551,12 @@ const BASE_RESOURCES: readonly KnowledgeResourceDefinition[] = KNOWLEDGE_BUNDLES
 );
 
 const INDEX_RESOURCE: KnowledgeResourceDefinition = {
-  uri: "c64://docs/index",
+  uri: RESOURCE_URIS.guide.index,
   name: "C64 Knowledge Map",
   description: "Start here for a guided tour of all Commodore 64 knowledge resources",
   mimeType: "text/markdown",
   metadata: {
-    domain: "overview",
+    domain: "guide",
     priority: "critical",
     summary: "Explains how to approach each knowledge bundle and when to consult it.",
     prompts: ["basic-program", "assembly-program", "sid-music", "graphics-demo", "printer-job", "memory-debug", "cross-platform-demo", "preset-music-demo"],
@@ -533,7 +570,7 @@ const INDEX_RESOURCE: KnowledgeResourceDefinition = {
     ],
     tags: ["overview"],
     bundle: {
-      id: "overview",
+      id: "guide",
       title: "Knowledge Overview",
       summary: "Read this first to understand how the MCP server organizes Commodore 64 expertise.",
       order: -1,
@@ -606,7 +643,7 @@ export function readKnowledgeResource(
       (item) => item.uri !== resource.uri,
     );
     return {
-      uri: resource.uri,
+      uri,
       mimeType: resource.mimeType,
       text: resource.buildContent(baseResources),
     };
@@ -620,7 +657,7 @@ export function readKnowledgeResource(
   const text = readFileSync(fullPath, "utf-8");
 
   return {
-    uri: resource.uri,
+    uri,
     mimeType: resource.mimeType,
     text,
   };

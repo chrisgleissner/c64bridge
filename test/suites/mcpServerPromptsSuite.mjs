@@ -156,8 +156,8 @@ export function registerMcpServerPromptsTests(withSharedMcpClient) {
       );
 
       const resourceUris = (result._meta?.resources ?? []).map((resource) => resource.uri);
-      assert.ok(resourceUris.includes("c64://docs/printer/epson-text"), "should include Epson text guide");
-      assert.ok(resourceUris.includes("c64://docs/printer/epson-bitmap"), "should include Epson bitmap guide");
+      assert.ok(resourceUris.includes("c64://printer/epson/text"), "should include Epson text guide");
+      assert.ok(resourceUris.includes("c64://printer/epson/bitmap"), "should include Epson bitmap guide");
       assert.ok(
         result._meta?.tools?.some((tool) => tool.name === "c64_printer"),
         "should include c64_printer tool",

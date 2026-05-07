@@ -108,7 +108,7 @@ test("rag_retrieve_basic formats reference metadata and truncated snippets", asy
         return [
           {
             snippet: '10 PRINT "HI"',
-            origin: "c64://specs/basic#Printing",
+            origin: "c64://basic/spec#Printing",
             uri: "https://example.com/basic#printing",
             score: 0.75,
           },
@@ -131,13 +131,13 @@ test("rag_retrieve_basic formats reference metadata and truncated snippets", asy
   const result = await ragModule.invoke("rag_retrieve_basic", { q: "print border" }, ctx);
   const text = result.content[0].text;
 
-  assert.match(text, /1\. c64:\/\/specs\/basic#Printing \| link: https:\/\/example.com\/basic#printing \(score=0\.750\)\n   10 PRINT "HI"/);
+  assert.match(text, /1\. c64:\/\/basic\/spec#Printing \| link: https:\/\/example.com\/basic#printing \(score=0\.750\)\n   10 PRINT "HI"/);
   assert.match(text, /2\. doc\/basic\/long\.md \(score=0\.500\)\n   B{200,}\.\.\./);
   assert.match(text, /3\. link: https:\/\/example.com\/basic#border \(score=0\.250\)\n   POKE 53280,0/);
 
   const refs = result.structuredContent?.data?.refs ?? [];
   assert.equal(refs.length, 3);
-  assert.equal(refs[0].origin, "c64://specs/basic#Printing");
+  assert.equal(refs[0].origin, "c64://basic/spec#Printing");
   assert.equal(refs[1].sourcePath, "doc/basic/long.md");
   assert.equal(refs[2].uri, "https://example.com/basic#border");
 });

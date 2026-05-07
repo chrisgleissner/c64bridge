@@ -45,6 +45,51 @@ export async function waitForScreenPattern(
   return idx;
 }
 
+export async function waitForStableScreenPattern(
+  bm: ViceClient,
+  pattern: Buffer,
+  timeoutMs: number,
+  tickMs = 50,
+  stableReads = 2,
+  onRead?: TimingSink,
+  between?: () => Promise<void> | void,
+): Promise<number> {
+  const requiredStableReads = Math.max(1, stableReads);
+  const start = nowNs();
+  let idx = -1;
+  let stableIdx = -1;
+  let consecutiveMatches = 0;
+
+  while (msSince(start) < timeoutMs) {
+    const t = nowNs();
+    const screen = await bm.memGet(0x0400, 0x0400 + 999);
+    onRead?.("bm_read_screen", t);
+    idx = screen.indexOf(pattern);
+
+    if (idx >= 0) {
+      if (idx === stableIdx) {
+        consecutiveMatches += 1;
+      } else {
+        stableIdx = idx;
+        consecutiveMatches = 1;
+      }
+      if (consecutiveMatches >= requiredStableReads) {
+        break;
+      }
+    } else {
+      stableIdx = -1;
+      consecutiveMatches = 0;
+    }
+
+    await exitMonitorIfNeeded(bm);
+    if (between) await between();
+    await new Promise((r) => setTimeout(r, Math.max(1, tickMs)));
+  }
+
+  await exitMonitorIfNeeded(bm);
+  return consecutiveMatches >= requiredStableReads ? idx : -1;
+}
+
 /** Wait until any non-blank (non-0x00/0x20) character appears on the text screen. */
 export async function waitForAnyScreenText(
   bm: ViceClient,

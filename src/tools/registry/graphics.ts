@@ -247,7 +247,7 @@ const graphicsOperationHandlers = createOperationHandlers(graphicsOperations);
 export const graphicsModuleGroup = defineToolModule({
   domain: "graphics",
   summary: "Grouped frame capture and graphics rendering helpers.",
-  resources: ["c64://specs/vic", "c64://specs/basic", "c64://specs/assembly"],
+  resources: ["c64://graphics/vic/spec", "c64://basic/spec", "c64://assembly/6510-spec"],
   prompts: ["graphics-demo", "basic-program", "assembly-program"],
   defaultTags: ["graphics", "vic"],
   workflowHints: [

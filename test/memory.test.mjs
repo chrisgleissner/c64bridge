@@ -68,7 +68,14 @@ test("read succeeds with valid response", async () => {
   };
   const res = await memoryModule.invoke("read", { address: "$0400", length: 4 }, ctx);
   assert.equal(res.content?.[0].type, "text");
-  assert.ok(res.content?.[0].text.includes("Read"));
+  assert.ok(res.content?.[0].text.includes("Read 4 bytes starting at $0400."));
+  assert.equal(res.structuredContent?.type, "json");
+  const data = res.structuredContent?.data;
+  assert.equal(data.success, true);
+  assert.equal(data.hexData, "$AABBCCDD");
+  assert.equal(data.address, "$0400");
+  assert.equal(data.length, 4);
+  assert.ok(data.details);
   assert.equal(res.metadata?.success, true);
   assert.equal(res.metadata?.hexData, "$AABBCCDD");
 });
@@ -79,7 +86,9 @@ test("read uses default length when not provided", async () => {
     logger: createLogger(),
   };
   const res = await memoryModule.invoke("read", { address: "$0400" }, ctx);
+  assert.ok(res.content?.[0].text.includes("Read 4 bytes starting at $0400."));
   assert.equal(res.metadata?.success, true);
+  assert.equal(res.structuredContent?.data.success, true);
 });
 
 test("read handles failure response", async () => {
@@ -146,7 +155,12 @@ test("read handles response without details", async () => {
     logger: createLogger(),
   };
   const res = await memoryModule.invoke("read", { address: "$0400", length: 2 }, ctx);
-  assert.equal(res.metadata?.success, true);
+  assert.ok(res.content?.[0].text.includes("Read 2 bytes starting at $0400."));
+  const data = res.structuredContent?.data;
+  assert.equal(data.success, true);
+  assert.equal(data.hexData, "$AA55");
+  assert.equal(data.address, "$0400");
+  assert.equal(data.length, 2);
   assert.equal(res.metadata?.hexData, "$AA55");
 });
 

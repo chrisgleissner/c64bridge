@@ -115,7 +115,7 @@ export const platformModuleGroup = defineToolModule({
   domain: "platform",
   summary: "Runtime backend selection and platform-status coordination.",
   supportedPlatforms: ["c64u", "vice"],
-  resources: ["c64://platform/status", "c64://context/bootstrap"],
+  resources: ["c64://platform/status", "c64://guide/bootstrap"],
   prompts: [],
   defaultTags: ["platform", "backend", "grouped"],
   workflowHints: [
