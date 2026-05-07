@@ -69,7 +69,7 @@ const extractOperationHandlers = createOperationHandlers(extractOperations);
 export const extractModule = defineToolModule({
   domain: "extract",
   summary: "Grouped extraction helpers for sprites, charsets, memory dumps, and diagnostics.",
-  resources: ["c64://context/bootstrap", "c64://specs/basic", "c64://specs/assembly"],
+  resources: ["c64://guide/bootstrap", "c64://basic/spec", "c64://assembly/6510-spec"],
   defaultTags: ["extract", "diagnostics"],
   workflowHints: [
     "Pause the machine when advised so dumps and sprite scans remain stable.",

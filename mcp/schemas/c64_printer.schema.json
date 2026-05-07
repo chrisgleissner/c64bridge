@@ -1,218 +1,164 @@
 {
   "type": "object",
-  "description": "Printer operations available via the c64_printer tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Generate BASIC that prints text to device 4.",
-      "properties": {
-        "text": {
-          "type": "string",
-          "description": "Text to print on the connected printer.",
-          "minLength": 1
-        },
-        "target": {
-          "description": "Printer target: Commodore MPS (PETSCII) or Epson FX (ESC/P).",
-          "type": "string",
-          "enum": [
-            "commodore",
-            "epson"
-          ],
-          "default": "commodore"
-        },
-        "secondaryAddress": {
-          "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase).",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "enum": [
-            0,
-            7
-          ]
-        },
-        "formFeed": {
-          "type": "boolean",
-          "description": "Emit a form-feed (CHR$(12)) at the end of the job.",
-          "default": false
-        },
-        "op": {
-          "const": "print_text"
-        }
-      },
-      "required": [
-        "text",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "print_text",
+        "print_bitmap",
+        "define_chars"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.",
-      "properties": {
-        "printer": {
-          "type": "string",
-          "description": "Target printer family.",
-          "enum": [
-            "commodore",
-            "epson"
-          ],
-          "default": "commodore"
-        },
-        "columns": {
-          "type": "array",
-          "description": "Sequence of bitmap columns.",
-          "items": {
-            "type": "integer",
-            "description": "Bitmap column byte (0-255).",
-            "minimum": 0,
-            "maximum": 255
-          },
-          "minItems": 1
-        },
-        "repeats": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Number of times to repeat the row (1-255).",
-          "minimum": 1,
-          "maximum": 255
-        },
-        "useSubRepeat": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Repeat the next byte this many times (Commodore BIM SUB).",
-          "minimum": 1,
-          "maximum": 255
-        },
-        "secondaryAddress": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Secondary address for device 4 (0 or 7).",
-          "minimum": 0,
-          "maximum": 7
-        },
-        "ensureMsb": {
-          "type": "boolean",
-          "description": "Ensure MSB set for Commodore printers.",
-          "default": true
-        },
-        "mode": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Epson ESC/P graphics mode (K/L/Y/Z/*).",
-          "minLength": 1,
-          "maxLength": 1
-        },
-        "density": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Density parameter when using Epson mode '*'.",
-          "minimum": 0,
-          "maximum": 3
-        },
-        "timesPerLine": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Number of times to print the row per line (1-10).",
-          "minimum": 1,
-          "maximum": 10
-        },
-        "op": {
-          "const": "print_bitmap"
-        }
-      },
-      "required": [
-        "printer",
-        "columns",
-        "op"
+    "text": {
+      "type": "string",
+      "description": "Text to print on the connected printer.",
+      "minLength": 1
+    },
+    "target": {
+      "description": "Printer target: Commodore MPS (PETSCII) or Epson FX (ESC/P).",
+      "type": "string",
+      "enum": [
+        "commodore",
+        "epson"
       ],
-      "additionalProperties": false
+      "default": "commodore"
     },
-    {
-      "type": "object",
-      "description": "Define custom printer characters (Commodore DLL mode).",
-      "properties": {
-        "firstChar": {
-          "type": "integer",
-          "description": "PETSCII code of first character to redefine (33-126).",
-          "minimum": 33,
-          "maximum": 126
-        },
-        "chars": {
-          "type": "array",
-          "description": "Character definitions to upload (1-32).",
-          "items": {
-            "type": "object",
-            "description": "Commodore MPS DLL character definition (11 columns).",
-            "properties": {
-              "a": {
-                "description": "Attribute flag (0=normal, 1=graphics).",
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "enum": [
-                  0,
-                  1
-                ]
-              },
-              "columns": {
-                "type": "array",
-                "description": "11 column bytes describing the character.",
-                "items": {
-                  "type": "integer",
-                  "description": "Column byte (0-255).",
-                  "minimum": 0,
-                  "maximum": 255
-                },
-                "minItems": 11,
-                "maxItems": 11
-              }
-            },
-            "required": [
-              "columns"
+    "secondaryAddress": {
+      "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "enum": [
+        0,
+        7
+      ]
+    },
+    "formFeed": {
+      "type": "boolean",
+      "description": "Emit a form-feed (CHR$(12)) at the end of the job.",
+      "default": false
+    },
+    "printer": {
+      "type": "string",
+      "description": "Target printer family.",
+      "enum": [
+        "commodore",
+        "epson"
+      ],
+      "default": "commodore"
+    },
+    "columns": {
+      "type": "array",
+      "description": "Sequence of bitmap columns.",
+      "items": {
+        "type": "integer",
+        "description": "Bitmap column byte (0-255).",
+        "minimum": 0,
+        "maximum": 255
+      },
+      "minItems": 1
+    },
+    "repeats": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Number of times to repeat the row (1-255).",
+      "minimum": 1,
+      "maximum": 255
+    },
+    "useSubRepeat": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Repeat the next byte this many times (Commodore BIM SUB).",
+      "minimum": 1,
+      "maximum": 255
+    },
+    "ensureMsb": {
+      "type": "boolean",
+      "description": "Ensure MSB set for Commodore printers.",
+      "default": true
+    },
+    "mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Epson ESC/P graphics mode (K/L/Y/Z/*).",
+      "minLength": 1,
+      "maxLength": 1
+    },
+    "density": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Density parameter when using Epson mode '*'.",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "timesPerLine": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Number of times to print the row per line (1-10).",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "firstChar": {
+      "type": "integer",
+      "description": "PETSCII code of first character to redefine (33-126).",
+      "minimum": 33,
+      "maximum": 126
+    },
+    "chars": {
+      "type": "array",
+      "description": "Character definitions to upload (1-32).",
+      "items": {
+        "type": "object",
+        "description": "Commodore MPS DLL character definition (11 columns).",
+        "properties": {
+          "a": {
+            "description": "Attribute flag (0=normal, 1=graphics).",
+            "type": [
+              "integer",
+              "null"
             ],
-            "additionalProperties": false
+            "enum": [
+              0,
+              1
+            ]
           },
-          "minItems": 1,
-          "maxItems": 32
+          "columns": {
+            "type": "array",
+            "description": "11 column bytes describing the character.",
+            "items": {
+              "type": "integer",
+              "description": "Column byte (0-255).",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "minItems": 11,
+            "maxItems": 11
+          }
         },
-        "secondaryAddress": {
-          "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase).",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "enum": [
-            0,
-            7
-          ]
-        },
-        "op": {
-          "const": "define_chars"
-        }
+        "required": [
+          "columns"
+        ],
+        "additionalProperties": false
       },
-      "required": [
-        "firstChar",
-        "chars",
-        "op"
-      ],
-      "additionalProperties": false
+      "minItems": 1,
+      "maxItems": 32
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.\n- define_chars: Define custom printer characters (Commodore DLL mode).",
+  "additionalProperties": false
 }

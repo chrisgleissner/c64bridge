@@ -1,67 +1,33 @@
 {
   "type": "object",
-  "description": "RAG operations available via the c64_rag tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Retrieve BASIC references and snippets from the local knowledge base.",
-      "properties": {
-        "q": {
-          "type": "string",
-          "description": "Natural-language query describing the desired BASIC or assembly guidance.",
-          "minLength": 3
-        },
-        "k": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum number of references to return (1-12).",
-          "minimum": 1,
-          "maximum": 12,
-          "default": 3
-        },
-        "op": {
-          "const": "basic"
-        }
-      },
-      "required": [
-        "q",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "basic",
+        "asm"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
-      "properties": {
-        "q": {
-          "type": "string",
-          "description": "Natural-language query describing the desired BASIC or assembly guidance.",
-          "minLength": 3
-        },
-        "k": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum number of references to return (1-12).",
-          "minimum": 1,
-          "maximum": 12,
-          "default": 3
-        },
-        "op": {
-          "const": "asm"
-        }
-      },
-      "required": [
-        "q",
-        "op"
+    "q": {
+      "type": "string",
+      "description": "Natural-language query describing the desired BASIC or assembly guidance.",
+      "minLength": 3
+    },
+    "k": {
+      "type": [
+        "integer",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Maximum number of references to return (1-12).",
+      "minimum": 1,
+      "maximum": 12,
+      "default": 3
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base.",
+  "additionalProperties": false
 }

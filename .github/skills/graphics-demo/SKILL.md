@@ -17,7 +17,7 @@ Use this skill when the user wants visual output on the C64, whether generated d
 
 1. For direct graphics generation, use `c64_graphics` with the relevant operation such as `render_petscii_art`, `render_petscii_text`, `render_sprite`, `render_bitmap`, or `capture_frame`.
 2. When the request needs custom loader logic, delegate code generation to `.github/skills/basic-program/SKILL.md` or `.github/skills/assembly-program/SKILL.md`.
-3. Reference `c64://specs/vic` and any character-set or PETSCII resources needed for the chosen mode.
+3. Reference `c64://graphics/vic/spec` and any character-set or PETSCII resources needed for the chosen mode.
 
 ## Validation
 

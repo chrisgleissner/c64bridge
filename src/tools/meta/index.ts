@@ -30,7 +30,7 @@ const allTools = [
 export const metaModule = defineToolModule({
   domain: "meta",
   summary: "High-level meta tools that orchestrate multiple MCP actions.",
-  resources: ["c64://context/bootstrap", "c64://specs/assembly"],
+  resources: ["c64://guide/bootstrap", "c64://assembly/6510-spec"],
   defaultTags: ["meta", "orchestration", "experimental"],
   supportedPlatforms: ["c64u", "vice"] as const,
   workflowHints: [

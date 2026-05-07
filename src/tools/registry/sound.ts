@@ -227,7 +227,7 @@ export const soundModuleGroup = defineToolModule({
   domain: "audio",
   summary: "Grouped SID control, playback, composition, and analysis operations.",
   supportedPlatforms: ["c64u", "vice"],
-  resources: ["c64://specs/sid", "c64://specs/sidwave", "c64://docs/sid/file-structure"],
+  resources: ["c64://sound/sid/spec", "c64://sound/sidwave/spec", "c64://sound/sid/file-format"],
   prompts: ["sid-music"],
   defaultTags: ["sid", "audio"],
   workflowHints: [

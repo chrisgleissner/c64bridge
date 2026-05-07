@@ -7,8 +7,7 @@ import { register } from 'node:module';
 async function main() {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const projectRoot = path.resolve(__dirname, '..');
-  const tsNodeLoader = pathToFileURL(path.join(projectRoot, 'node_modules', 'ts-node', 'esm.mjs')).href;
-  register(tsNodeLoader, pathToFileURL(projectRoot));
+  register("tsx/esm", pathToFileURL(projectRoot));
   const { fetchFromCsv } = await import('../src/rag/externalFetcher.ts');
   // Resolve sources.csv from env, dist/rag, or src/rag (in that order)
   let csvPath = process.env.RAG_SOURCES_CSV;

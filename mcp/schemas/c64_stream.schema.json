@@ -1,61 +1,32 @@
 {
   "type": "object",
-  "description": "Streaming operations available via the c64_stream tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Start an Ultimate streaming session toward a host:port target.",
-      "properties": {
-        "stream": {
-          "type": "string",
-          "description": "Stream type to control (video/audio/debug).",
-          "enum": [
-            "video",
-            "audio",
-            "debug"
-          ]
-        },
-        "target": {
-          "type": "string",
-          "description": "Destination host:port or UDP target understood by the firmware.",
-          "minLength": 3
-        },
-        "op": {
-          "const": "start"
-        }
-      },
-      "required": [
-        "stream",
-        "target",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "start",
+        "stop"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Stop an active Ultimate streaming session.",
-      "properties": {
-        "stream": {
-          "type": "string",
-          "description": "Stream type to control (video/audio/debug).",
-          "enum": [
-            "video",
-            "audio",
-            "debug"
-          ]
-        },
-        "op": {
-          "const": "stop"
-        }
-      },
-      "required": [
-        "stream",
-        "op"
-      ],
-      "additionalProperties": false
+    "stream": {
+      "type": "string",
+      "description": "Stream type to control (video/audio/debug).",
+      "enum": [
+        "video",
+        "audio",
+        "debug"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "description": "Destination host:port or UDP target understood by the firmware.",
+      "minLength": 3
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target.\n- stop: Stop an active Ultimate streaming session.",
+  "additionalProperties": false
 }

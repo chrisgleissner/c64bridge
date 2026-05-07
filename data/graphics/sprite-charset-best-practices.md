@@ -128,7 +128,7 @@ You don't need to redefine all 256 characters:
 
 **Requirements**:
 
-- Precise raster interrupt timing (see c64://specs/vic)
+- Precise raster interrupt timing (see c64://graphics/vic/spec)
 - Fast register updates (< 63 cycles between sprite positions)
 - Pre-calculated Y-coordinate tables for performance
 
@@ -238,7 +238,7 @@ Custom charsets have minimal performance impact:
 
 1. Use PETSCII style guide for colour selection
 2. Test on both PAL and NTSC if possible
-3. Maintain sufficient contrast (see c64://docs/petscii-style)
+3. Maintain sufficient contrast (see c64://graphics/petscii/style-guide)
 4. Avoid adjacent similar-hue colours
 
 ## Tool Integration
@@ -267,7 +267,7 @@ The tool:
 
 When working with sprites and charsets:
 
-1. Use memory ranges documented in c64://specs/memory-map
+1. Use memory ranges documented in c64://memory/map
 2. Avoid BASIC program area ($0801-$9FFF) unless controlling it
 3. Preserve zero page ($0000-$00FF) and stack ($0100-$01FF)
 4. Use the `c64_memory` operations `read` and `write` for safe access
@@ -308,12 +308,12 @@ When working with sprites and charsets:
 5. **Handle Errors**: Check return values and screen output
 6. **Optimize Last**: Get it working, then optimize if needed
 7. **Verify Hardware**: Test on real C64 or accurate emulator
-8. **Read Resources**: Consult c64://specs/vic for register details
+8. **Read Resources**: Consult c64://graphics/vic/spec for register details
 
 ## Related Resources
 
-- `c64://specs/vic` - Complete VIC-II register reference
-- `c64://specs/charset` - Character code mappings
-- `c64://docs/petscii-style` - Colour and style guidelines
-- `c64://specs/memory-map` - Memory layout and safe ranges
-- `c64://context/bootstrap` - Safety and workflow rules
+- `c64://graphics/vic/spec` - Complete VIC-II register reference
+- `c64://graphics/character-set` - Character code mappings
+- `c64://graphics/petscii/style-guide` - Colour and style guidelines
+- `c64://memory/map` - Memory layout and safe ranges
+- `c64://guide/bootstrap` - Safety and workflow rules

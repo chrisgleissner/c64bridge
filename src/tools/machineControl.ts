@@ -43,7 +43,7 @@ const menuButtonArgsSchema = createNoArgsSchema("No arguments required to toggle
 export const machineControlModule = defineToolModule({
   domain: "machine",
   summary: "Power, reset, pause/resume, and diagnostic controls for the C64 and Ultimate hardware.",
-  resources: ["c64://context/bootstrap"],
+  resources: ["c64://guide/bootstrap"],
   prompts: ["memory-debug"],
   defaultTags: ["machine", "control"],
   workflowHints: [
@@ -53,7 +53,7 @@ export const machineControlModule = defineToolModule({
   tools: [
     {
       name: "reset_c64",
-      description: "Reset the C64 via Ultimate firmware. Review c64://context/bootstrap safety rules.",
+      description: "Reset the C64 via Ultimate firmware. Review c64://guide/bootstrap safety rules.",
       summary: "Issues a soft reset, equivalent to power cycling without cutting power.",
       inputSchema: resetArgsSchema.jsonSchema,
       tags: ["reset"],
@@ -93,7 +93,7 @@ export const machineControlModule = defineToolModule({
     },
     {
       name: "reboot_c64",
-      description: "Reboot the Ultimate firmware and C64. See c64://context/bootstrap.",
+      description: "Reboot the Ultimate firmware and C64. See c64://guide/bootstrap.",
       summary: "Triggers a firmware reboot, useful after configuration changes.",
       inputSchema: rebootArgsSchema.jsonSchema,
       tags: ["reboot"],
@@ -133,7 +133,7 @@ export const machineControlModule = defineToolModule({
     },
     {
       name: "pause",
-      description: "Pause the machine on Ultimate hardware. See memory safety checklist in c64://context/bootstrap.",
+      description: "Pause the machine on Ultimate hardware. See memory safety checklist in c64://guide/bootstrap.",
       summary: "Suspends CPU execution on Ultimate hardware until resumed.",
       inputSchema: pauseArgsSchema.jsonSchema,
       tags: ["pause"],
@@ -213,7 +213,7 @@ export const machineControlModule = defineToolModule({
     },
     {
       name: "poweroff",
-      description: "Power off the machine via Ultimate firmware. See safety notes in c64://context/bootstrap.",
+      description: "Power off the machine via Ultimate firmware. See safety notes in c64://guide/bootstrap.",
       summary: "Attempts a controlled shutdown through the Ultimate control interface.",
       inputSchema: poweroffArgsSchema.jsonSchema,
       tags: ["power"],

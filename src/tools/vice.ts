@@ -44,11 +44,8 @@ const SAFE_RESOURCE_PREFIXES = [
 
 const resourceValueSchema: Schema<string | number> = {
   jsonSchema: {
+    type: ["string", "integer"],
     description: "VICE resource value (string or integer).",
-    oneOf: [
-      { type: "string" },
-      { type: "integer" },
-    ],
   },
   parse(value: unknown, path?: string): string | number {
     const resolvedPath = path ?? "$.value";
@@ -154,7 +151,7 @@ const viceOperationDispatcher = createOperationDispatcher<ViceOperationMap>(
 export const viceModuleGroup = defineToolModule({
   domain: "vice",
   summary: "VICE emulator helpers for safe runtime resource access.",
-  resources: ["c64://specs/memory-map"],
+  resources: ["c64://memory/map"],
   prompts: ["assembly-program", "memory-debug"],
   defaultTags: ["vice", "emulator"],
   workflowHints: [

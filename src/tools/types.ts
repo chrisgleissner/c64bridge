@@ -137,13 +137,55 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
     throw new Error("Discriminated union schemas require at least one variant.");
   }
 
+  // Flatten the discriminated union into a single object schema.
+  // Claude's API does not support oneOf/allOf/anyOf at the top level,
+  // so we merge all variant properties and use an enum for the discriminator.
+  const opValues: string[] = [];
+  const mergedProperties: Record<string, JsonSchema> = {};
+  const opDescriptions: string[] = [];
+
+  for (const variant of variants) {
+    const variantProps = variant.properties ?? {};
+    const discProp = variantProps[discriminator];
+    const opValue = discProp?.const as string | undefined;
+
+    if (opValue) {
+      opValues.push(opValue);
+      const variantDesc = variant.description ?? discProp?.description ?? "";
+      if (variantDesc) {
+        opDescriptions.push(`${opValue}: ${variantDesc}`);
+      }
+    }
+
+    for (const [key, propSchema] of Object.entries(variantProps)) {
+      if (key === discriminator) continue;
+      if (!mergedProperties[key]) {
+        mergedProperties[key] = propSchema;
+      }
+    }
+  }
+
+  const opPropertySchema: JsonSchema = opValues.length > 0
+    ? { type: "string", enum: opValues, description: `Selects the operation.` }
+    : { type: "string", description: `Selects the operation.` };
+
+  const fullDescription = description
+    ? (opDescriptions.length > 0
+        ? `${description}\n\nOperations:\n${opDescriptions.map((d) => `- ${d}`).join("\n")}`
+        : description)
+    : (opDescriptions.length > 0
+        ? `Operations:\n${opDescriptions.map((d) => `- ${d}`).join("\n")}`
+        : undefined);
+
   const schema: JsonSchema = {
     type: "object",
-    ...(description ? { description } : {}),
-    oneOf: [...variants],
-    discriminator: {
-      propertyName: discriminator,
+    ...(fullDescription ? { description: fullDescription } : {}),
+    properties: {
+      [discriminator]: opPropertySchema,
+      ...mergedProperties,
     },
+    required: [discriminator],
+    additionalProperties: false,
   };
 
   return schema;

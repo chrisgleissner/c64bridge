@@ -1,350 +1,133 @@
 {
   "type": "object",
-  "description": "Configuration operations available via the c64_config tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "List configuration categories reported by the firmware.",
-      "properties": {
-        "op": {
-          "const": "list"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Read a configuration category or specific item.",
-      "properties": {
-        "category": {
-          "type": "string",
-          "description": "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
-          "minLength": 1
-        },
-        "item": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Specific configuration item inside the selected category (e.g. 'Volume').",
-          "minLength": 1
-        },
-        "op": {
-          "const": "get"
-        }
-      },
-      "required": [
-        "category",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "list",
+        "get",
+        "set",
+        "batch_update",
+        "load_flash",
+        "save_flash",
+        "reset_defaults",
+        "read_debugreg",
+        "write_debugreg",
+        "info",
+        "version",
+        "snapshot",
+        "restore",
+        "diff",
+        "shuffle"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Write a configuration value in the selected category.",
-      "properties": {
-        "category": {
-          "type": "string",
-          "description": "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
-          "minLength": 1
-        },
-        "item": {
-          "type": "string",
-          "description": "Configuration item name inside the category.",
-          "minLength": 1
-        },
-        "value": {
-          "description": "Primitive configuration value (string, number, or boolean).",
-          "type": [
-            "string",
-            "number",
-            "boolean"
-          ]
-        },
-        "op": {
-          "const": "set"
-        }
-      },
-      "required": [
-        "category",
-        "item",
-        "value",
-        "op"
+    "category": {
+      "type": "string",
+      "description": "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
+      "minLength": 1
+    },
+    "item": {
+      "type": [
+        "string",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Specific configuration item inside the selected category (e.g. 'Volume').",
+      "minLength": 1
     },
-    {
-      "description": "Apply multiple configuration updates in a single request.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "object",
-        "additionalProperties": {
-          "type": [
-            "string",
-            "number",
-            "boolean"
-          ]
-        }
-      },
-      "properties": {
-        "op": {
-          "const": "batch_update"
-        }
-      },
-      "required": [
-        "op"
+    "value": {
+      "description": "Primitive configuration value (string, number, or boolean).",
+      "type": [
+        "string",
+        "number",
+        "boolean"
       ]
     },
-    {
-      "type": "object",
-      "description": "Load configuration from flash storage.",
-      "properties": {
-        "op": {
-          "const": "load_flash"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "path": {
+      "type": "string",
+      "description": "Absolute or workspace-relative path where the snapshot file will be written.",
+      "minLength": 1
     },
-    {
-      "type": "object",
-      "description": "Persist the current configuration to flash storage.",
-      "properties": {
-        "op": {
-          "const": "save_flash"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Reset firmware configuration to factory defaults.",
-      "properties": {
-        "op": {
-          "const": "reset_defaults"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Read the Ultimate debug register ($D7FF).",
-      "properties": {
-        "op": {
-          "const": "read_debugreg"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Write a hex value to the Ultimate debug register ($D7FF).",
-      "properties": {
-        "value": {
-          "type": "string",
-          "description": "Hex value (00-FF) to write to the debug register.",
-          "minLength": 1,
-          "maxLength": 2,
-          "pattern": "^[0-9A-Fa-f]{1,2}$"
-        },
-        "op": {
-          "const": "write_debugreg"
-        }
-      },
-      "required": [
-        "value",
-        "op"
+    "applyToFlash": {
+      "type": [
+        "boolean",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "When true, save the restored configuration to flash immediately.",
+      "default": false
     },
-    {
-      "type": "object",
-      "description": "Retrieve Ultimate hardware information and status.",
-      "properties": {
-        "op": {
-          "const": "info"
-        }
+    "root": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Root path to search for programs",
+      "minLength": 1,
+      "default": "/"
+    },
+    "extensions": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "description": "File extensions to include (without dot)",
+        "minLength": 1
       },
-      "additionalProperties": false,
-      "required": [
-        "op"
+      "default": [
+        "prg",
+        "crt"
       ]
     },
-    {
-      "type": "object",
-      "description": "Fetch firmware version details.",
-      "properties": {
-        "op": {
-          "const": "version"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Snapshot configuration to disk for later restore or diff.",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Absolute or workspace-relative path where the snapshot file will be written.",
-          "minLength": 1
-        },
-        "op": {
-          "const": "snapshot"
-        }
-      },
-      "required": [
-        "path",
-        "op"
+    "durationMs": {
+      "type": [
+        "integer",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Duration to run each program in milliseconds",
+      "minimum": 1,
+      "default": 5000
     },
-    {
-      "type": "object",
-      "description": "Restore configuration from a snapshot file.",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Snapshot file to read (must contain categories payload).",
-          "minLength": 1
-        },
-        "applyToFlash": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "When true, save the restored configuration to flash immediately.",
-          "default": false
-        },
-        "op": {
-          "const": "restore"
-        }
-      },
-      "required": [
-        "path",
-        "op"
+    "captureScreen": {
+      "type": [
+        "boolean",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Capture screen after each run",
+      "default": true
     },
-    {
-      "type": "object",
-      "description": "Compare the current configuration with a snapshot.",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Snapshot file to compare with.",
-          "minLength": 1
-        },
-        "op": {
-          "const": "diff"
-        }
-      },
-      "required": [
-        "path",
-        "op"
+    "maxPrograms": {
+      "type": [
+        "integer",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Maximum number of programs to run",
+      "minimum": 1,
+      "default": 10
     },
-    {
-      "type": "object",
-      "description": "Discover PRG/CRT files and run each with optional screen capture.",
-      "properties": {
-        "root": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Root path to search for programs",
-          "minLength": 1,
-          "default": "/"
-        },
-        "extensions": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string",
-            "description": "File extensions to include (without dot)",
-            "minLength": 1
-          },
-          "default": [
-            "prg",
-            "crt"
-          ]
-        },
-        "durationMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Duration to run each program in milliseconds",
-          "minimum": 1,
-          "default": 5000
-        },
-        "captureScreen": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Capture screen after each run",
-          "default": true
-        },
-        "maxPrograms": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum number of programs to run",
-          "minimum": 1,
-          "default": 10
-        },
-        "outputPath": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Output directory for run logs and captures",
-          "minLength": 1
-        },
-        "resetDelayMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Delay after reset operations to allow the platform to settle.",
-          "minimum": 0,
-          "maximum": 1000,
-          "default": 100
-        },
-        "op": {
-          "const": "shuffle"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
+    "outputPath": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Output directory for run logs and captures",
+      "minLength": 1
+    },
+    "resetDelayMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Delay after reset operations to allow the platform to settle.",
+      "minimum": 0,
+      "maximum": 1000,
+      "default": 100
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware.\n- get: Read a configuration category or specific item.\n- set: Write a configuration value in the selected category.\n- batch_update: Apply multiple configuration updates in a single request.\n- load_flash: Load configuration from flash storage.\n- save_flash: Persist the current configuration to flash storage.\n- reset_defaults: Reset firmware configuration to factory defaults.\n- read_debugreg: Read the Ultimate debug register ($D7FF).\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF).\n- info: Retrieve Ultimate hardware information and status.\n- version: Fetch firmware version details.\n- snapshot: Snapshot configuration to disk for later restore or diff.\n- restore: Restore configuration from a snapshot file.\n- diff: Compare the current configuration with a snapshot.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture.",
+  "additionalProperties": false
 }

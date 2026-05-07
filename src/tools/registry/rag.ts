@@ -42,7 +42,7 @@ const ragOperationHandlers = createOperationHandlers(ragOperations);
 export const ragModuleGroup = defineToolModule({
   domain: "rag",
   summary: "Grouped retrieval helpers for BASIC and assembly references.",
-  resources: ["c64://specs/basic", "c64://specs/assembly", "c64://context/bootstrap"],
+  resources: ["c64://basic/spec", "c64://assembly/6510-spec", "c64://guide/bootstrap"],
   prompts: ["basic-program", "assembly-program"],
   defaultTags: ["rag", "search"],
   workflowHints: [

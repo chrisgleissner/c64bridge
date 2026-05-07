@@ -17,7 +17,7 @@ Use this skill when the user needs a custom BASIC program rather than a one-call
 
 1. If the request is only a hello-world, greeting, or smoke test, delegate to `.github/skills/hello-world/SKILL.md` instead of generating bespoke BASIC.
 2. Clarify missing requirements before generating code when the request is not already specific enough to execute.
-3. Consult `c64://specs/basic` and `c64://context/bootstrap` only when syntax or workflow constraints matter.
+3. Consult `c64://basic/spec` and `c64://guide/bootstrap` only when syntax or workflow constraints matter.
 4. Generate uppercase, line-numbered BASIC.
 5. For VICE-backed local runs, assume the user should see a real visible emulator window unless CI or the lack of a framebuffer/display session forces headless operation.
 6. When running visible VICE BASIC manually, do not immediately follow the run with `read_screen` or `wait_for_text` unless the user explicitly asks for machine verification after the visible output has rendered.

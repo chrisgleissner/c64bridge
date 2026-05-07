@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "c64bridge": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["scripts/start.mjs"],
+      "env": {
+        "VICE_VISIBLE": "true",
+        "VICE_WARP": "false",
+        "VICE_BINARY": "/usr/local/bin/x64sc"
+      }
+    }
+  }
+}

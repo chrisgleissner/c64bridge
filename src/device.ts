@@ -388,6 +388,7 @@ export class ViceBackend implements C64Facade {
       if (this.debugEnabled) console.error("[vice-backend] probing existing VICE", this.host, this.port);
       await client.connect(this.port, this.host);
       await client.info();
+      try { await client.exitMonitor(); } catch {}
       if (this.debugEnabled) console.error("[vice-backend] existing VICE is reachable");
       return true;
     } catch {
@@ -405,6 +406,7 @@ export class ViceBackend implements C64Facade {
       try {
         await client.connect(this.port, this.host);
         await client.info();
+        try { await client.exitMonitor(); } catch {}
         return;
       } catch (error) {
         lastError = error;

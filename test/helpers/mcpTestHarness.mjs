@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
 const PLATFORM_RESOURCE_URI = "c64://platform/status";
 const MAX_STDERR_CHARS = 16_384;
-const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
+const tsLoader = "tsx/esm";
 
 function formatTransportError(error) {
   if (error instanceof Error) {
@@ -166,7 +166,7 @@ async function setupSharedServer() {
     command: useBunRunner ? bunExecutable : nodeExecutable,
     args: useBunRunner
       ? [serverEntrypointTs]
-      : ["--import", registerDataUri, serverEntrypointTs],
+      : ["--import", tsLoader, serverEntrypointTs],
     cwd: repoRoot,
     env: childEnv,
     stderr: "pipe",

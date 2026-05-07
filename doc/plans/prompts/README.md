@@ -27,13 +27,13 @@ suite can assert expectations in upcoming steps.
 
 | Family | Baseline Resources (URIs) | Rationale |
 | --- | --- | --- |
-| `basic-program` | `c64://specs/basic`, `c64://context/bootstrap`, `c64://docs/index` | Reinforce BASIC token rules, PETSCII gotchas, workflow expectations. |
-| `assembly-program` | `c64://specs/assembly`, `c64://context/bootstrap`, `c64://specs/vic`, `c64://specs/sid` | Provide opcode tables, IRQ setup, VIC/SID register references. |
-| `sid-music` | `c64://specs/sid`, `c64://specs/sidwave`, `c64://docs/sid/file-structure` | Supply register map, SIDWAVE format, SID file metadata. |
-| `graphics-demo` | `c64://specs/vic`, `c64://context/bootstrap` | Cover VIC mode bits, raster constraints, general workflow guidance. |
-| `printer-job` | `c64://specs/printer`, `c64://docs/printer/guide`, `c64://docs/printer/prompts` | Document PETSCII vs ESC/P workflows, sample templates, and safety checks. |
-| `memory-debug` | `c64://context/bootstrap`, `c64://specs/assembly`, `c64://docs/index` | Highlight addressing safeguards, workflow rules, and knowledge map summaries. |
-| `drive-manager` | `c64://context/bootstrap` | Ensure awareness of system-wide safety rules before altering drives. |
+| `basic-program` | `c64://basic/spec`, `c64://guide/bootstrap`, `c64://guide/index` | Reinforce BASIC token rules, PETSCII gotchas, workflow expectations. |
+| `assembly-program` | `c64://assembly/6510-spec`, `c64://guide/bootstrap`, `c64://graphics/vic/spec`, `c64://sound/sid/spec` | Provide opcode tables, IRQ setup, VIC/SID register references. |
+| `sid-music` | `c64://sound/sid/spec`, `c64://sound/sidwave/spec`, `c64://sound/sid/file-format` | Supply register map, SIDWAVE format, SID file metadata. |
+| `graphics-demo` | `c64://graphics/vic/spec`, `c64://guide/bootstrap` | Cover VIC mode bits, raster constraints, general workflow guidance. |
+| `printer-job` | `c64://printer/spec`, `c64://printer/commodore/text`, `c64://printer/prompt-guide` | Document PETSCII vs ESC/P workflows, sample templates, and safety checks. |
+| `memory-debug` | `c64://guide/bootstrap`, `c64://assembly/6510-spec`, `c64://guide/index` | Highlight addressing safeguards, workflow rules, and knowledge map summaries. |
+| `drive-manager` | `c64://guide/bootstrap` | Ensure awareness of system-wide safety rules before altering drives. |
 
 Notes:
 

@@ -98,7 +98,7 @@ const programOperationHandlers = createOperationHandlers(programOperations);
 export const programModule = defineToolModule({
   domain: "programs",
   summary: "Grouped program upload, run, and orchestration workflows.",
-  resources: ["c64://context/bootstrap", "c64://specs/basic", "c64://specs/assembly"],
+  resources: ["c64://guide/bootstrap", "c64://basic/spec", "c64://assembly/6510-spec"],
   prompts: ["basic-program", "assembly-program"],
   defaultTags: ["programs", "execution"],
   workflowHints: [

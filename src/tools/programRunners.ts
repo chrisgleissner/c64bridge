@@ -524,7 +524,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       format: "prg" as const,
       entryAddress,
       prgSize: prg.length,
-      resources: ["c64://specs/basic", "c64://context/bootstrap"],
+      resources: ["c64://basic/spec", "c64://guide/bootstrap"],
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...(autoFixInfo
         ? {
@@ -600,7 +600,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       format: "prg" as const,
       entryAddress,
       prgSize: prg.length,
-      resources: ["c64://specs/assembly", "c64://context/bootstrap"],
+      resources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
       ...(shouldVerify && verified ? { verified: true } : {}),
     };
     const base = textResult("Assembly program assembled, uploaded, and executed successfully.", {
@@ -648,7 +648,7 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       format: "prg" as const,
       path: parsed.path,
       entryAddress: null as number | null,
-      resources: ["c64://context/bootstrap"],
+      resources: ["c64://guide/bootstrap"],
     };
     const base = textResult(`PRG ${parsed.path} loaded into memory.`, {
       success: true,
@@ -682,7 +682,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       format: "prg" as const,
       path: parsed.path,
       entryAddress: null as number | null,
-      resources: ["c64://context/bootstrap"],
+      resources: ["c64://guide/bootstrap"],
     };
     const base = textResult(`PRG ${parsed.path} loaded and executed.`, {
       success: true,
@@ -716,7 +716,7 @@ async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       format: "crt" as const,
       path: parsed.path,
       entryAddress: null as number | null,
-      resources: ["c64://context/bootstrap"],
+      resources: ["c64://guide/bootstrap"],
     };
     const base = textResult(`PRG ${parsed.path} loaded and executed.`, {
       success: true,
@@ -745,9 +745,9 @@ export const programRunnersModule = defineToolModule({
   domain: "programs",
   summary: "Program uploaders, runners, and compilation workflows for BASIC, assembly, and PRG files.",
   resources: [
-    "c64://context/bootstrap",
-    "c64://specs/basic",
-    "c64://specs/assembly",
+    "c64://guide/bootstrap",
+    "c64://basic/spec",
+    "c64://assembly/6510-spec",
   ],
   prompts: ["basic-program", "assembly-program"],
   defaultTags: ["programs", "execution"],
@@ -758,10 +758,10 @@ export const programRunnersModule = defineToolModule({
   tools: [
     {
       name: "upload_run_basic",
-      description: "Upload a BASIC program to the C64 and execute it immediately. Refer to c64://specs/basic for syntax and device I/O.",
+      description: "Upload a BASIC program to the C64 and execute it immediately. Refer to c64://basic/spec for syntax and device I/O.",
       summary: "Uploads Commodore BASIC v2 source and runs it via Ultimate 64 firmware.",
       inputSchema: uploadBasicArgsSchema.jsonSchema,
-      relatedResources: ["c64://specs/basic", "c64://docs/basic/pitfalls", "c64://context/bootstrap"],
+      relatedResources: ["c64://basic/spec", "c64://basic/pitfalls", "c64://guide/bootstrap"],
       relatedPrompts: ["basic-program"],
       tags: ["basic", "execution"],
       prerequisites: ["read_screen"],
@@ -783,10 +783,10 @@ export const programRunnersModule = defineToolModule({
     },
     {
       name: "upload_run_asm",
-      description: "Assemble 6502/6510 source code, upload the PRG, and run it immediately. See c64://specs/assembly.",
+      description: "Assemble 6502/6510 source code, upload the PRG, and run it immediately. See c64://assembly/6510-spec.",
       summary: "Compiles assembly to a PRG and executes it on the C64 via Ultimate 64 firmware.",
       inputSchema: uploadAsmArgsSchema.jsonSchema,
-      relatedResources: ["c64://specs/assembly", "c64://context/bootstrap"],
+      relatedResources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
       relatedPrompts: ["assembly-program"],
       tags: ["assembly", "execution"],
       prerequisites: ["read_screen"],
@@ -811,7 +811,7 @@ export const programRunnersModule = defineToolModule({
       description: "Load a PRG into C64 memory without executing it.",
       summary: "Instructs the Ultimate firmware to transfer a PRG into memory without RUN.",
       inputSchema: prgFileArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["programs", "file"],
       prerequisites: ["drives_list"],
       examples: [
@@ -835,7 +835,7 @@ export const programRunnersModule = defineToolModule({
       description: "Run a PRG located on the Ultimate filesystem without uploading source.",
       summary: "Loads and executes a PRG file residing on attached storage.",
       inputSchema: prgFileArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["programs", "execution", "file"],
       workflowHints: [
         "Call when the user provides a PRG path and expects immediate execution without compiling.",
@@ -859,7 +859,7 @@ export const programRunnersModule = defineToolModule({
       description: "Run a cartridge image stored on the Ultimate filesystem.",
       summary: "Mounts and autostarts the specified CRT file through the firmware.",
       inputSchema: crtFileArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["programs", "cartridge"],
       workflowHints: [
         "Use for cartridge images and remind the user that the machine will reset into the CRT.",
@@ -891,7 +891,7 @@ export const programRunnersModule = defineToolModule({
             format: "crt" as const,
             path: parsed.path,
             entryAddress: null as number | null,
-            resources: ["c64://context/bootstrap"],
+            resources: ["c64://guide/bootstrap"],
           };
           const base = textResult(`CRT ${parsed.path} mounted and started.`, {
             success: true,

@@ -173,7 +173,7 @@ export const storageModule = defineToolModule({
   domain: "storage",
   summary: "Drive management, disk image creation, and file inspection utilities.",
   supportedPlatforms: ["c64u", "vice"] as const,
-  resources: ["c64://context/bootstrap"],
+  resources: ["c64://guide/bootstrap"],
   prompts: ["memory-debug"],
   defaultTags: ["drive", "storage"],
   workflowHints: [
@@ -183,10 +183,10 @@ export const storageModule = defineToolModule({
   tools: [
     {
       name: "drives_list",
-      description: "List Ultimate drive slots and their currently mounted images. Read c64://context/bootstrap for drive safety.",
+      description: "List Ultimate drive slots and their currently mounted images. Read c64://guide/bootstrap for drive safety.",
       summary: "Fetches firmware drive status including mounted images, power state, and modes.",
       inputSchema: drivesListArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "status"],
       prerequisites: [],
       examples: [
@@ -222,7 +222,7 @@ export const storageModule = defineToolModule({
       description: "Mount a disk image onto a specific Ultimate drive slot.",
       summary: "Validates parameters and instructs the firmware to mount an image with optional type/mode overrides.",
       inputSchema: driveMountArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "mount"],
       prerequisites: ["drives_list"],
       examples: [
@@ -281,7 +281,7 @@ export const storageModule = defineToolModule({
       description: "Remove the currently mounted disk image from an Ultimate drive slot.",
       summary: "Ejects the image and leaves the drive empty without powering it off.",
       inputSchema: driveOnlyArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "unmount"],
       prerequisites: ["drives_list"],
       examples: [
@@ -324,7 +324,7 @@ export const storageModule = defineToolModule({
       description: "Reset the selected Ultimate drive slot.",
       summary: "Issues a IEC reset for the chosen drive without cycling the entire machine.",
       inputSchema: driveOnlyArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "reset"],
       prerequisites: ["drives_list"],
       examples: [
@@ -367,7 +367,7 @@ export const storageModule = defineToolModule({
       description: "Power on a specific Ultimate drive slot.",
       summary: "Ensures the selected drive is reported as powered and ready on the IEC bus.",
       inputSchema: driveOnlyArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "power"],
       prerequisites: ["drives_list"],
       examples: [
@@ -411,7 +411,7 @@ export const storageModule = defineToolModule({
       description: "Power off a specific Ultimate drive slot.",
       summary: "Disables the drive without altering mounted media so it can be re-enabled later.",
       inputSchema: driveOnlyArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "power"],
       prerequisites: ["drives_list"],
       examples: [
@@ -455,7 +455,7 @@ export const storageModule = defineToolModule({
       description: "Temporarily load a custom ROM into an Ultimate drive slot.",
       summary: "Points the drive at an alternative ROM file without flashing permanent storage.",
       inputSchema: driveLoadRomArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "rom"],
       prerequisites: ["drives_list"],
       examples: [
@@ -499,7 +499,7 @@ export const storageModule = defineToolModule({
       description: "Set the emulation mode for an Ultimate drive slot (1541/1571/1581).",
       summary: "Switches the drive hardware profile to match the mounted media and desired behaviour.",
       inputSchema: driveModeArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["drive", "mode"],
       prerequisites: ["drives_list"],
       examples: [
@@ -543,7 +543,7 @@ export const storageModule = defineToolModule({
       description: "Inspect metadata for a file on the Ultimate filesystem.",
       summary: "Queries the REST API for file size, type, and other details useful when managing disk images.",
       inputSchema: fileInfoArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["storage", "info"],
       prerequisites: [],
       examples: [
@@ -580,7 +580,7 @@ export const storageModule = defineToolModule({
       description: "Create a blank D64 disk image on the Ultimate filesystem.",
       summary: "Allocates a 35 or 40 track D64 image with an optional disk name.",
       inputSchema: createD64ArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["disk", "create"],
       prerequisites: ["drives_list"],
       examples: [
@@ -632,7 +632,7 @@ export const storageModule = defineToolModule({
       description: "Create a blank D71 disk image on the Ultimate filesystem.",
       summary: "Allocates a 1571-compatible disk image with optional labelling.",
       inputSchema: createD71ArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["disk", "create"],
       prerequisites: ["drives_list"],
       examples: [
@@ -681,7 +681,7 @@ export const storageModule = defineToolModule({
       description: "Create a blank D81 disk image on the Ultimate filesystem.",
       summary: "Allocates a 1581-compatible disk image with optional labelling.",
       inputSchema: createD81ArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["disk", "create"],
       prerequisites: ["drives_list"],
       examples: [
@@ -730,7 +730,7 @@ export const storageModule = defineToolModule({
       description: "Create a blank DNP disk image on the Ultimate filesystem.",
       summary: "Allocates a CMD-native DNP image with custom track count and optional label.",
       inputSchema: createDnpArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["disk", "create"],
       prerequisites: [
         "drives_list"

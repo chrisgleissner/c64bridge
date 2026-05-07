@@ -155,8 +155,8 @@ export const developerModule = defineToolModule({
   domain: "developer",
   summary: "Configuration management, diagnostics, and helper utilities for advanced workflows.",
   resources: [
-    "c64://context/bootstrap",
-    "c64://docs/index",
+    "c64://guide/bootstrap",
+    "c64://guide/index",
   ],
   prompts: ["memory-debug"],
   defaultTags: ["developer", "config", "debug"],
@@ -170,7 +170,7 @@ export const developerModule = defineToolModule({
       description: "List configuration categories available on the Ultimate firmware.",
       summary: "Fetches the configuration tree and returns firmware-reported categories.",
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "list"],
       examples: [
         { name: "List configs", description: "Enumerate configuration categories", arguments: {} },
@@ -206,7 +206,7 @@ export const developerModule = defineToolModule({
       description: "Read a configuration category or specific item.",
       summary: "Returns firmware configuration data for the selected category (and item).",
       inputSchema: configGetArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "read"],
       examples: [
         { name: "Get audio config", description: "Read audio category", arguments: { category: "Audio" } },
@@ -243,7 +243,7 @@ export const developerModule = defineToolModule({
       description: "Set a configuration value within a category.",
       summary: "Writes a primitive value to a specific configuration item via firmware APIs.",
       inputSchema: configSetArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "write"],
       examples: [
         { name: "Set volume", description: "Adjust audio volume", arguments: { category: "Audio", item: "Volume", value: 75 } },
@@ -292,7 +292,7 @@ export const developerModule = defineToolModule({
       description: "Apply multiple configuration changes in a single request.",
       summary: "Sends a nested object of category/item values to the firmware batch endpoint.",
       inputSchema: configBatchSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "write"],
       examples: [
         { name: "Batch update", description: "Update multiple settings", arguments: { Audio: { Volume: 80, DACMode: "stereo" } } },
@@ -342,7 +342,7 @@ export const developerModule = defineToolModule({
       description: "Load configuration settings from flash storage.",
       summary: "Restores the firmware configuration by reading the persisted flash snapshot.",
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "flash"],
       examples: [
         { name: "Load from flash", description: "Restore saved configuration", arguments: {} },
@@ -379,7 +379,7 @@ export const developerModule = defineToolModule({
       description: "Persist current configuration settings to flash storage.",
       summary: "Saves the active configuration snapshot so it survives power cycles.",
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "flash"],
       examples: [
         { name: "Save to flash", description: "Persist current config", arguments: {} },
@@ -416,7 +416,7 @@ export const developerModule = defineToolModule({
       description: "Reset configuration categories to their factory defaults.",
       summary: "Instructs the firmware to discard overrides and restore default configuration values.",
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "reset"],
       examples: [
         { name: "Reset config", description: "Restore factory defaults", arguments: {} },
@@ -454,7 +454,7 @@ export const developerModule = defineToolModule({
       summary: "Calls the firmware version endpoint (Ultimate) or returns emulator info (VICE).",
       supportedPlatforms: ["c64u", "vice"] as const,
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["diagnostics", "version"],
       examples: [
         { name: "Get version", description: "Check firmware version", arguments: {} },
@@ -486,7 +486,7 @@ export const developerModule = defineToolModule({
       summary: "Returns the diagnostics payload reported by the firmware (Ultimate) or emulator (VICE).",
       supportedPlatforms: ["c64u", "vice"] as const,
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["diagnostics", "info"],
       examples: [
         { name: "Get hardware info", description: "Query hardware status", arguments: {} },
@@ -517,7 +517,7 @@ export const developerModule = defineToolModule({
       description: "Read the Ultimate debug register ($D7FF).",
       summary: "Returns the current hex value stored in the debug register.",
       inputSchema: noArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["debug"],
       examples: [
         { name: "Read debug register", description: "Check $D7FF value", arguments: {} },
@@ -558,7 +558,7 @@ export const developerModule = defineToolModule({
       description: "Write a value into the Ultimate debug register ($D7FF).",
       summary: "Validates the hex input and forwards it to the firmware.",
       inputSchema: debugWriteArgsSchema.jsonSchema,
-      relatedResources: ["c64://context/bootstrap"],
+      relatedResources: ["c64://guide/bootstrap"],
       tags: ["debug"],
       examples: [
         { name: "Write debug register", description: "Set $D7FF to $42", arguments: { value: "42" } },

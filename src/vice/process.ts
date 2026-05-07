@@ -125,25 +125,35 @@ async function sendResumeMonitorCommand(host: string, port: number, timeoutMs = 
   while (Date.now() < deadline) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const socket = net.connect({ host, port }, () => {
-          const packet = Buffer.alloc(11);
-          packet[0] = 0x02;
-          packet[1] = 0x02;
-          packet.writeUInt32LE(0, 2);
-          packet.writeUInt32LE(1, 6);
-          packet[10] = 0xAA;
+        const socket = net.connect({ host, port });
+        const cleanup = () => {
+          socket.removeAllListeners();
+          socket.destroy();
+        };
+        const packet = Buffer.alloc(11);
+        packet[0] = 0x02;
+        packet[1] = 0x02;
+        packet.writeUInt32LE(0, 2);
+        packet.writeUInt32LE(1, 6);
+        packet[10] = 0xaa;
+
+        socket.setTimeout(500, () => {
+          cleanup();
+          reject(new Error(`Timed out sending VICE monitor resume command to ${host}:${port}`));
+        });
+        socket.once("error", (error) => {
+          cleanup();
+          reject(error);
+        });
+        socket.once("connect", () => {
           socket.write(packet, (error) => {
+            cleanup();
             if (error) {
               reject(error);
               return;
             }
-            socket.end();
             resolve();
           });
-        });
-        socket.on("error", reject);
-        socket.setTimeout(300, () => {
-          socket.destroy(new Error("timeout"));
         });
       });
       return;

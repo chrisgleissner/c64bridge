@@ -38,21 +38,21 @@ const ragRetrieveArgsSchema = objectSchema<RagRetrieveArgs>({
 
 function createRagTool(language: RagLanguage, options: { description: string; summary: string; tags: readonly string[] }) {
   const primaryResourceUris = language === "basic"
-    ? ["c64://specs/basic", "c64://context/bootstrap"]
-    : ["c64://specs/assembly", "c64://context/bootstrap"];
+    ? ["c64://basic/spec", "c64://guide/bootstrap"]
+    : ["c64://assembly/6510-spec", "c64://guide/bootstrap"];
 
   return {
     name: language === "basic" ? "rag_retrieve_basic" : "rag_retrieve_asm",
     description:
       language === "basic"
-        ? "Retrieve BASIC references from local knowledge. See c64://specs/basic before coding."
-        : "Retrieve 6502/6510 assembly references from local knowledge. See c64://specs/assembly.",
+        ? "Retrieve BASIC references from local knowledge. See c64://basic/spec before coding."
+        : "Retrieve 6502/6510 assembly references from local knowledge. See c64://assembly/6510-spec.",
     summary: options.summary,
     inputSchema: ragRetrieveArgsSchema.jsonSchema,
     relatedResources:
       language === "basic"
-        ? ["c64://specs/basic"]
-        : ["c64://specs/assembly"],
+        ? ["c64://basic/spec"]
+        : ["c64://assembly/6510-spec"],
     relatedPrompts:
       language === "basic"
         ? ["basic-program"]
@@ -198,9 +198,9 @@ export const ragModule = defineToolModule({
   domain: "rag",
   summary: "Retrieval-augmented generation helpers for BASIC and assembly examples.",
   resources: [
-    "c64://specs/basic",
-    "c64://specs/assembly",
-    "c64://docs/index",
+    "c64://basic/spec",
+    "c64://assembly/6510-spec",
+    "c64://guide/index",
   ],
   prompts: ["basic-program", "assembly-program"],
   defaultTags: ["rag", "search"],

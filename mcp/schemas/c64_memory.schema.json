@@ -1,155 +1,105 @@
 {
   "type": "object",
-  "description": "Memory operations available via the c64_memory tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Read a range of bytes and return a hex dump with address metadata.",
-      "properties": {
-        "address": {
-          "type": "string",
-          "description": "Start address expressed as $HHHH, decimal, or a documented symbol name.",
-          "minLength": 1
-        },
-        "length": {
-          "type": "integer",
-          "description": "Number of bytes to read starting from the resolved address.",
-          "minimum": 1,
-          "maximum": 4096,
-          "default": 256
-        },
-        "op": {
-          "const": "read"
-        }
-      },
-      "required": [
-        "address",
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write",
+        "read_screen",
+        "wait_for_text"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Write a hexadecimal byte sequence into RAM.",
-      "properties": {
-        "address": {
-          "type": "string",
-          "description": "Destination address expressed as $HHHH, decimal, or a documented symbol name.",
-          "minLength": 1
-        },
-        "bytes": {
-          "type": "string",
-          "description": "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
-          "minLength": 2,
-          "pattern": "^[\\s_0-9A-Fa-f$]+$"
-        },
-        "verify": {
-          "type": "boolean",
-          "description": "When true, verify the write by reading before and after the change; Ultimate hardware also pauses during verification.",
-          "default": false
-        },
-        "expected": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Optional hex data expected before the write (verifies before writing).",
-          "minLength": 2,
-          "pattern": "^[\\s_0-9A-Fa-f$]+$"
-        },
-        "mask": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Optional verification mask (hex); only bits set in the mask are compared.",
-          "minLength": 2,
-          "pattern": "^[\\s_0-9A-Fa-f$]+$"
-        },
-        "abortOnMismatch": {
-          "type": "boolean",
-          "description": "Abort the write when the pre-write verification fails.",
-          "default": true
-        },
-        "op": {
-          "const": "write"
-        }
-      },
-      "required": [
-        "address",
-        "bytes",
-        "op"
+    "address": {
+      "type": "string",
+      "description": "Start address expressed as $HHHH, decimal, or a documented symbol name.",
+      "minLength": 1
+    },
+    "length": {
+      "type": "integer",
+      "description": "Number of bytes to read starting from the resolved address.",
+      "minimum": 1,
+      "maximum": 4096,
+      "default": 256
+    },
+    "bytes": {
+      "type": "string",
+      "description": "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
+      "minLength": 2,
+      "pattern": "^[\\s_0-9A-Fa-f$]+$"
+    },
+    "verify": {
+      "type": "boolean",
+      "description": "When true, verify the write by reading before and after the change; Ultimate hardware also pauses during verification.",
+      "default": false
+    },
+    "expected": {
+      "type": [
+        "string",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Optional hex data expected before the write (verifies before writing).",
+      "minLength": 2,
+      "pattern": "^[\\s_0-9A-Fa-f$]+$"
     },
-    {
-      "type": "object",
-      "description": "Return the current 40x25 text screen converted to ASCII.",
-      "properties": {
-        "op": {
-          "const": "read_screen"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
-      "properties": {
-        "pattern": {
-          "type": "string",
-          "description": "Substring or regex to find",
-          "minLength": 1
-        },
-        "isRegex": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Interpret pattern as regular expression",
-          "default": false
-        },
-        "caseInsensitive": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Case-insensitive search",
-          "default": true
-        },
-        "timeoutMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Overall timeout in milliseconds",
-          "minimum": 1,
-          "default": 3000
-        },
-        "intervalMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Poll interval in milliseconds",
-          "minimum": 1,
-          "default": 100
-        },
-        "op": {
-          "const": "wait_for_text"
-        }
-      },
-      "required": [
-        "pattern",
-        "op"
+    "mask": {
+      "type": [
+        "string",
+        "null"
       ],
-      "additionalProperties": false
+      "description": "Optional verification mask (hex); only bits set in the mask are compared.",
+      "minLength": 2,
+      "pattern": "^[\\s_0-9A-Fa-f$]+$"
+    },
+    "abortOnMismatch": {
+      "type": "boolean",
+      "description": "Abort the write when the pre-write verification fails.",
+      "default": true
+    },
+    "pattern": {
+      "type": "string",
+      "description": "Substring or regex to find",
+      "minLength": 1
+    },
+    "isRegex": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Interpret pattern as regular expression",
+      "default": false
+    },
+    "caseInsensitive": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Case-insensitive search",
+      "default": true
+    },
+    "timeoutMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Overall timeout in milliseconds",
+      "minimum": 1,
+      "default": 3000
+    },
+    "intervalMs": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Poll interval in milliseconds",
+      "minimum": 1,
+      "default": 100
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses.",
+  "additionalProperties": false
 }

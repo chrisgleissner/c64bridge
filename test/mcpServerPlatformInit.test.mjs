@@ -11,7 +11,7 @@ import { startViceMockServer } from "../src/vice/mockServer.js";
 
 const PLATFORM_RESOURCE_URI = "c64://platform/status";
 const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
-const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
+const tsLoader = "tsx/esm";
 const PLATFORM_INIT_REQUEST_TIMEOUT_MS = 120_000;
 
 function delay(ms) {
@@ -241,7 +241,7 @@ async function probePlatformInitInChild(options) {
   const exitCode = await new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["--import", registerDataUri, "--input-type=module", "--eval", childScript],
+      ["--import", tsLoader, "--input-type=module", "--eval", childScript],
       {
         cwd: path.dirname(REPO_CONFIG_PATH),
         env: process.env,
