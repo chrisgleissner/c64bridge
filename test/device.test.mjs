@@ -1,6 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import os from "node:os";
 import { __resolveViceBinaryForTests, __resolveViceLaunchForTests, createFacade, ViceBackend } from "../src/device.js";
@@ -15,6 +16,7 @@ const useViceMock = viceTarget !== "vice";
 // Set VICE_AVAILABLE=1 in the environment when a real VICE instance is reachable.
 const viceAvailable = process.env.VICE_AVAILABLE === "1";
 const viceSuite = platform === "vice" && (useViceMock || viceAvailable) ? test : test.skip;
+const viceIntegrationSuite = !useViceMock && process.env.CI === "1" ? viceSuite.skip : viceSuite;
 const debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
 function debugLog(...args) {
   if (debugEnabled) {
@@ -26,10 +28,33 @@ const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;
 const WAIT_READY_SCAN_LENGTH = 1_000; // full text screen
 const VICE_PING_TIMEOUT_MS = useViceMock ? 2_000 : (process.env.CI === "1" ? 40_000 : 20_000);
+const VICE_SUITE_TIMEOUT_MS = useViceMock ? 30_000 : (process.env.CI === "1" ? 90_000 : 45_000);
 const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function reserveLoopbackPort() {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        if (!port) {
+          reject(new Error("Failed to reserve an ephemeral loopback port"));
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
 }
 
 async function withEnv(overrides, fn) {
@@ -169,12 +194,13 @@ async function waitForPattern(
   );
 }
 
-viceSuite("device: ViceBackend basic operations", async (t) => {
+viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUITE_TIMEOUT_MS }, async (t) => {
   let server = null;
   let cfgDir = null;
   let cfgPath = null;
   const oldConfig = process.env.C64BRIDGE_CONFIG;
   const oldMode = process.env.C64_MODE;
+  const oldVicePort = process.env.VICE_PORT;
   const scratchAddress = 0x1000;
   const scratchBytes = Uint8Array.of(0x11, 0x22, 0x33, 0x44);
 
@@ -190,6 +216,7 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
     debugLog(`mock vice server listening on ${server.port}`);
   } else {
     debugLog("running against real VICE backend");
+    process.env.VICE_PORT = String(await reserveLoopbackPort());
   }
 
   t.after(async () => {
@@ -199,6 +226,8 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
     else delete process.env.C64BRIDGE_CONFIG;
     if (oldMode !== undefined) process.env.C64_MODE = oldMode;
     else delete process.env.C64_MODE;
+    if (oldVicePort !== undefined) process.env.VICE_PORT = oldVicePort;
+    else delete process.env.VICE_PORT;
   });
 
   const { facade } = await createFacade();

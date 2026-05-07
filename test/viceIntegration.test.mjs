@@ -87,6 +87,7 @@ function createFakeViceBinary(t, mode = "listen", options = {}) {
   const monitorScript = path.join(dir, "fake-vice.mjs");
   const wrapperScript = path.join(dir, "fake-vice");
   const argsFile = options.argsFile ? path.resolve(options.argsFile) : null;
+  const trafficFile = options.trafficFile ? path.resolve(options.trafficFile) : null;
   const source = mode === "listen"
     ? `import net from "node:net";
 import fs from "node:fs";
@@ -94,8 +95,12 @@ const args = process.argv.slice(2);
 let host = "127.0.0.1";
 let port = 6502;
 const argsFile = ${JSON.stringify(argsFile)};
+const trafficFile = ${JSON.stringify(trafficFile)};
 if (argsFile) {
   fs.writeFileSync(argsFile, JSON.stringify(args), "utf8");
+}
+if (trafficFile) {
+  fs.writeFileSync(trafficFile, "", "utf8");
 }
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === "-binarymonitoraddress" && typeof args[index + 1] === "string") {
@@ -104,7 +109,13 @@ for (let index = 0; index < args.length; index += 1) {
     port = Number(nextPort || port);
   }
 }
-const server = net.createServer((socket) => socket.end());
+const server = net.createServer((socket) => {
+  socket.on("data", (chunk) => {
+    if (trafficFile) {
+      fs.appendFileSync(trafficFile, chunk.toString("hex") + "\\n");
+    }
+  });
+});
 server.listen(port, host);
 const shutdown = () => server.close(() => process.exit(0));
 process.on("SIGTERM", shutdown);
@@ -605,6 +616,42 @@ test("startViceProcess starts and stops a monitor process without Xvfb", async (
     } else {
       process.env.DISPLAY = previousDisplay;
     }
+  }
+});
+
+test("startViceProcess resumes emulation immediately after the monitor becomes ready", async (t) => {
+  const trafficFile = path.join(os.tmpdir(), `c64bridge-vice-traffic-${process.pid}-${Date.now()}.log`);
+  const fakeVice = createFakeViceBinary(t, "listen", { trafficFile });
+  const previousDisplay = process.env.DISPLAY;
+  process.env.DISPLAY = ":1";
+
+  try {
+    const handle = await startViceProcess({
+      binary: fakeVice,
+      host: "127.0.0.1",
+      port: 6519,
+      visible: true,
+      warp: false,
+    });
+
+    t.after(async () => {
+      await handle.stop();
+      fs.rmSync(trafficFile, { force: true });
+    });
+
+    await delay(25);
+    const frames = fs.readFileSync(trafficFile, "utf8")
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0);
+    assert.equal(frames.some((line) => line.endsWith("aa")), true);
+  } finally {
+    if (previousDisplay === undefined) {
+      delete process.env.DISPLAY;
+    } else {
+      process.env.DISPLAY = previousDisplay;
+    }
+    fs.rmSync(trafficFile, { force: true });
   }
 });
 

@@ -117,6 +117,46 @@ export async function waitForPort(host: string, port: number, timeoutMs = 4000):
   throw new Error(`Timeout waiting for VICE monitor at ${host}:${port}`);
 }
 
+async function sendResumeMonitorCommand(host: string, port: number, timeoutMs = 1_500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const socket = net.connect({ host, port }, () => {
+          const packet = Buffer.alloc(11);
+          packet[0] = 0x02;
+          packet[1] = 0x02;
+          packet.writeUInt32LE(0, 2);
+          packet.writeUInt32LE(1, 6);
+          packet[10] = 0xAA;
+          socket.write(packet, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            socket.end();
+            resolve();
+          });
+        });
+        socket.on("error", reject);
+        socket.setTimeout(300, () => {
+          socket.destroy(new Error("timeout"));
+        });
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      await delay(50);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Failed to resume VICE monitor at ${host}:${port}`);
+}
+
 async function waitForXvfb(display: string, timeoutMs = 5_000): Promise<void> {
   const match = /^:([0-9]+)/.exec(display.trim());
   if (!match) {
@@ -207,6 +247,7 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     });
     viceEnv.DISPLAY = display;
     await waitForXvfb(display);
+    await delay(300);
   }
 
   const args = [
@@ -265,7 +306,8 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
       child.once("exit", onExit);
       child.once("error", onError);
       waitForPort(options.host, options.port)
-        .then(() => {
+        .then(async () => {
+          await sendResumeMonitorCommand(options.host, options.port);
           if (debugEnabled) {
             console.error("[vice-process] monitor port is ready", { host: options.host, port: options.port });
           }

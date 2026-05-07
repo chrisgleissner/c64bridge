@@ -422,6 +422,7 @@ export class ViceBackend implements C64Facade {
     const client = new ViceClient();
     try {
       await client.connect(this.port, this.host);
+      await client.reset();
       const readiness = await waitForBasicReady(client, { timeoutMs, ensurePrompt: true });
       if (!readiness.pointersOk || !readiness.promptOk) {
         throw new Error(
