@@ -22,7 +22,8 @@ import {
 
 // ---------------------------------------------------------------------------
 // PETSCII token expansion table
-// Maps {TOKEN} placeholders → raw ASCII byte value (sent to keyboardFeed).
+// Maps {TOKEN} placeholders to PETSCII/control-byte values that are queued via
+// KERNAL keyboard-buffer injection on both C64U and VICE.
 // ---------------------------------------------------------------------------
 const PETSCII_TOKENS: Readonly<Record<string, number>> = {
   RETURN: 13,

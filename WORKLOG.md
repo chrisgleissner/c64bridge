@@ -77,3 +77,11 @@ Changed `src/tools/types.ts` so flattened discriminated-union schemas remain str
 Validation: updated the focused schema and memory tests to cover the restored behavior, then reran those targeted checks to confirm strict schema output, backward-compatible memory read responses, and continued structured JSON access before proceeding to broader validation.
 
 Broader validation completed afterward: `npm run build` passed cleanly, and `npm run coverage` finished with `lines.pct = 90.79`, keeping the repository above the required 90% threshold after the convergence fixes.
+
+## 2026-05-07 22:04 - VICE monitor spec steering refresh
+
+Updated `data/vice/vice-binary-monitor-spec.md` to replace stale unmapped notes for BM `0x72` Keyboard Feed and `0xa2` Joyport Set with the current public C64 Bridge surfaces: `c64_input.write_text` / `c64_input.key` for keyboard injection and `c64_input.joystick` for joystick simulation.
+
+Why: the monitor spec predated those MCP capabilities, so it no longer accurately reflected the public bridge surface even though snapshot, CPU-history, and userport commands remain unmapped.
+
+Validation: confirmed the implementation surface in `src/tools/input.ts`, `src/c64Client.ts`, and `README.md`; re-searched `data/vice/vice-binary-monitor-spec.md` so only the still-unmapped commands retain the `No primary public C64 Bridge MCP mapping` note.

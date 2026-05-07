@@ -218,6 +218,37 @@ test("ViceBackend nuclearReset reports unmanaged instances as unsupported", asyn
   assert.equal(result.details.code, "UNSUPPORTED");
 });
 
+test("ViceBackend writeMemoryBlocks coalesces adjacent writes before sending them", async () => {
+  const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  const writes = [];
+  backend.withClient = async (fn) => fn({
+    async memSet(address, bytes) {
+      writes.push({ address, bytes: Array.from(bytes) });
+    },
+  });
+
+  await backend.writeMemoryBlocks([
+    { address: 0x1000, bytes: Uint8Array.of(0x11, 0x22) },
+    { address: 0x1002, bytes: Uint8Array.of(0x33, 0x44) },
+  ]);
+
+  assert.deepEqual(writes, [{ address: 0x1000, bytes: [0x11, 0x22, 0x33, 0x44] }]);
+});
+
+test("ViceBackend withMonitor forwards to withClient", async () => {
+  const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  let forwarded = false;
+  backend.withClient = async (fn) => {
+    forwarded = true;
+    return fn("monitor-client");
+  };
+
+  const result = await backend.withMonitor(async (client) => client);
+
+  assert.equal(forwarded, true);
+  assert.equal(result, "monitor-client");
+});
+
 viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUITE_TIMEOUT_MS }, async (t) => {
   let server = null;
   let cfgDir = null;
@@ -1455,9 +1486,14 @@ test("device: C64u facade exercises runner, machine, config, drive, stream, and 
     await facade.writeMemory(0x2100, Uint8Array.of(0xAA, 0xBB));
     const largeWrite = new Uint8Array(129).fill(0x5A);
     await facade.writeMemory(0x2200, largeWrite);
+    await facade.writeMemoryBlocks([
+      { address: 0x2300, bytes: Uint8Array.of(0x01, 0x02) },
+      { address: 0x2302, bytes: Uint8Array.of(0x03, 0x04) },
+    ]);
     assert.deepEqual(writes, [
       { kind: "small", address: "2100", data: "AABB" },
       { kind: "large", address: "2200", length: 129 },
+      { kind: "small", address: "2300", data: "01020304" },
     ]);
 
     assert.equal((await facade.reset()).success, true);

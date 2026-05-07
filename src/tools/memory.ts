@@ -458,7 +458,7 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
     const address = parseAddressArg(parsed.address, "$.address");
 
     const bytes = await ctx.client.readMemoryRaw(address, length);
-    const symbols = getViceSymbols();
+  const symbols = ctx.platform?.id === "vice" ? getViceSymbols() : undefined;
     const lines = disassemble(bytes, address, parsed.instructionCount, symbols);
     const text = formatDisassembly(lines);
 
@@ -506,10 +506,6 @@ function fmtAddr(addr: number): string {
   return `$${addr.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
-function bytesToHexString(bytes: Uint8Array): string {
-  return `$${Buffer.from(bytes).toString("hex").toUpperCase()}`;
-}
-
 function validateRangeWithinAddressSpace(start: number, length: number, fieldPath: string): void {
   const end = start + length - 1;
   if (end > 0xffff) {
@@ -544,11 +540,7 @@ async function executeCopyMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     validateRangeWithinAddressSpace(dst, len, "$.dest");
     ctx.logger.info("Copying memory", { src: fmtAddr(src), dst: fmtAddr(dst), len });
     const bytes = await ctx.client.readMemoryRaw(src, len);
-    const hex = bytesToHexString(bytes);
-    const writeResult = await ctx.client.writeMemory(fmtAddr(dst), hex);
-    if (!writeResult.success) {
-      throw new ToolExecutionError("Write failed after read", { details: normaliseFailure(writeResult.details) });
-    }
+    await ctx.client.writeMemoryRaw(dst, bytes);
     return textResult(`Copied ${bytes.length} bytes from ${fmtAddr(src)} to ${fmtAddr(dst)}.`, {
       success: true, source: fmtAddr(src), dest: fmtAddr(dst), bytesCopied: bytes.length,
     });
@@ -585,9 +577,7 @@ async function executeFillMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     if (patternBytes.length === 0) throw new ToolValidationError("Pattern must not be empty", { path: "$.pattern" });
     const buf = new Uint8Array(parsed.length);
     for (let i = 0; i < parsed.length; i++) buf[i] = patternBytes[i % patternBytes.length]!;
-    const hex = bytesToHexString(buf);
-    const result = await ctx.client.writeMemory(fmtAddr(addr), hex);
-    if (!result.success) throw new ToolExecutionError("Fill write failed", { details: normaliseFailure(result.details) });
+    await ctx.client.writeMemoryRaw(addr, buf);
     ctx.logger.info("Filled memory", { address: fmtAddr(addr), length: parsed.length, pattern: parsed.pattern });
     return textResult(`Filled ${parsed.length} bytes at ${fmtAddr(addr)} with pattern ${parsed.pattern.trim()}.`, {
       success: true, address: fmtAddr(addr), length: parsed.length, pattern: parsed.pattern.trim(),

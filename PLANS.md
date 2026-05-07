@@ -139,3 +139,4 @@ Audit and refactor the C64 Bridge MCP resource URI namespace so the active resou
 ## Remaining work
 
 - None.
+- [x] Steering: refresh `data/vice/vice-binary-monitor-spec.md` so stale `No primary public C64 Bridge MCP mapping` notes are replaced where Binary Monitor commands now have public MCP mappings.

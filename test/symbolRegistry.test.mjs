@@ -30,3 +30,31 @@ test("setViceSymbols clears old mappings before loading new ones", () => {
   assert.equal(getViceSymbol(0x0810), "next");
   assert.equal(getViceSymbols().size, 1);
 });
+
+test("parseViceSymbolFile ignores comments, malformed rows, and out-of-range addresses", () => {
+  const symbols = parseViceSymbolFile([
+    "",
+    "; comment",
+    "# comment",
+    "garbage row",
+    "add_label 10000 .too_high",
+    "add_label 0810 .valid",
+  ].join("\n"));
+
+  assert.equal(symbols.size, 1);
+  assert.equal(symbols.get("valid"), 0x0810);
+  assert.equal(symbols.get("too_high"), undefined);
+});
+
+test("clearViceSymbols empties the shared registry", () => {
+  setViceSymbols([
+    ["start", 0x0801],
+    ["ignored_negative", -1],
+  ]);
+  assert.equal(getViceSymbols().size, 1);
+
+  clearViceSymbols();
+
+  assert.equal(getViceSymbols().size, 0);
+  assert.equal(getViceSymbol(0x0801), undefined);
+});

@@ -510,6 +510,7 @@ export class ViceBackend implements C64Facade {
       return;
     }
     ViceBackend.cleanupRegistered = true;
+    /* c8 ignore next 5 -- global process exit hooks are not practical to exercise in the unit test process */
     process.once("exit", () => {
       for (const [, handle] of ViceBackend.supervisors) {
         handle.stop().catch(() => {});
