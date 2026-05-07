@@ -117,6 +117,19 @@ function supportsMachinePause(ctx: { platform?: { id?: string } }): boolean {
   return platformId !== "vice";
 }
 
+export const __memoryHelpersForTests = {
+  toRecord,
+  normaliseFailure,
+  cleanHex,
+  parseUserHex,
+  parseFirmwareHex,
+  formatByte,
+  resolveAddressLabel,
+  resolveLength,
+  supportsMachinePause,
+  stripOperationDiscriminator,
+};
+
 const readScreenArgsSchema = objectSchema<Record<string, never>>({
   description: "No arguments are required for reading the current screen contents.",
   properties: {},

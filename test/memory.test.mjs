@@ -3,7 +3,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { memoryModule } from "../src/tools/memory.js";
+import { __memoryHelpersForTests, memoryModule } from "../src/tools/memory.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { setViceSymbols, clearViceSymbols } from "../src/tools/symbolRegistry.js";
 
@@ -41,6 +41,45 @@ function createMockClient(overrides = {}) {
 
 test.afterEach(() => {
   clearViceSymbols();
+});
+
+test("memory helpers normalise records, hex payloads, and address labels", () => {
+  assert.deepEqual(__memoryHelpersForTests.toRecord({ ok: true }), { ok: true });
+  assert.equal(__memoryHelpersForTests.toRecord("boom"), undefined);
+  assert.equal(__memoryHelpersForTests.normaliseFailure(undefined), undefined);
+  assert.deepEqual(__memoryHelpersForTests.normaliseFailure("boom"), { value: "boom" });
+  assert.equal(__memoryHelpersForTests.cleanHex(" $aa bb_cc "), "AABBCC");
+  assert.deepEqual(
+    __memoryHelpersForTests.parseUserHex("AA BB", "$.bytes"),
+    { bytes: Uint8Array.of(0xAA, 0xBB), canonical: "$AABB" },
+  );
+  assert.equal(__memoryHelpersForTests.formatByte(0x0f), "$0F");
+  assert.equal(__memoryHelpersForTests.resolveAddressLabel({ address: 1024 }, "0400"), "$0400");
+  assert.equal(__memoryHelpersForTests.resolveAddressLabel({ address: "0401" }, "0400"), "$0401");
+  assert.equal(__memoryHelpersForTests.resolveAddressLabel({}, "0402"), "$0402");
+  assert.equal(__memoryHelpersForTests.resolveLength({ length: 4 }), 4);
+  assert.equal(__memoryHelpersForTests.resolveLength({ length: "4" }), undefined);
+  assert.equal(__memoryHelpersForTests.supportsMachinePause({ platform: { id: "c64u" } }), true);
+  assert.equal(__memoryHelpersForTests.supportsMachinePause({ platform: { id: "vice" } }), false);
+  assert.deepEqual(
+    __memoryHelpersForTests.stripOperationDiscriminator({ op: "read", address: "$0400", length: 2 }),
+    { address: "$0400", length: 2 },
+  );
+});
+
+test("memory helpers reject malformed firmware hex payloads", () => {
+  assert.throws(
+    () => __memoryHelpersForTests.parseUserHex("ABC", "$.bytes"),
+    /even number of characters/,
+  );
+  assert.throws(
+    () => __memoryHelpersForTests.parseFirmwareHex(42, "post-read"),
+    /invalid post-read hex data/,
+  );
+  assert.throws(
+    () => __memoryHelpersForTests.parseFirmwareHex("ABC", "pre-read"),
+    /malformed pre-read hex data/,
+  );
 });
 
 // --- read_screen ---

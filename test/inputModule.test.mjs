@@ -89,6 +89,20 @@ test("c64_input.write_text works the same way under VICE", async () => {
   assert.equal(inject.bytes.length, 4);
 });
 
+test("c64_input.write_text expands numeric PETSCII tokens and preserves unknown tokens", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "write_text",
+    text: "A{$1D}{29}{unknown}",
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  const inject = writes.find((w) => w.kind === "kbd_queue");
+  assert.ok(inject);
+  assert.deepEqual(Array.from(inject.bytes.slice(0, 3)), [65, 29, 29]);
+  assert.equal(String.fromCharCode(...inject.bytes.slice(3)), "{unknown}");
+});
+
 test("c64_input.key sends single-byte injections for token names", async () => {
   const { ctx, writes } = createInputContext({ platformId: "c64u" });
   const result = await toolRegistry.invoke("c64_input", {
@@ -103,6 +117,21 @@ test("c64_input.key sends single-byte injections for token names", async () => {
     assert.equal(inject.bytes.length, 1);
     assert.equal(inject.bytes[0], 133, "F1 PETSCII = 133");
   }
+});
+
+test("c64_input.key accepts single printable characters and reports duration metadata", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "vice" });
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "key",
+    key: "A",
+    durationMs: 1,
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(result.metadata?.durationMs, 1);
+  const inject = writes.find((w) => w.kind === "kbd_queue");
+  assert.ok(inject);
+  assert.deepEqual(Array.from(inject.bytes), [65]);
 });
 
 test("c64_input.joystick rejects on c64u and works on vice", async () => {
@@ -122,6 +151,28 @@ test("c64_input.joystick rejects on c64u and works on vice", async () => {
   const memSet = writes.find((w) => w.kind === "vice_mem_set");
   assert.ok(memSet, "joystick press must perform a memory write");
   assert.equal(memSet.address, 0xDC00);
+});
+
+test("c64_input.joystick supports release and tap actions on vice", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "vice" });
+  const releaseResult = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 1, controls: [], action: "release",
+  }, ctx);
+  const tapResult = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 2, controls: ["up", "fire"], action: "tap", durationMs: 10,
+  }, ctx);
+
+  assert.equal(releaseResult.isError, undefined);
+  assert.equal(tapResult.isError, undefined);
+  const viceWrites = writes.filter((w) => w.kind === "vice_mem_set");
+  assert.deepEqual(
+    viceWrites.map((entry) => ({ address: entry.address, bytes: Array.from(entry.bytes) })),
+    [
+      { address: 0xDC01, bytes: [0xFF] },
+      { address: 0xDC00, bytes: [0xEE] },
+      { address: 0xDC00, bytes: [0xFF] },
+    ],
+  );
 });
 
 test("c64_input.write_text rejects unrecognised key tokens cleanly", async () => {
