@@ -190,7 +190,17 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
 const RELATIVE_ONLY = new Set<string>(["BCC", "BCS", "BEQ", "BMI", "BNE", "BPL", "BVC", "BVS"]);
 
 
+export interface AssemblyResult {
+  readonly prg: Buffer;
+  /** Global label name -> resolved address (after both passes). */
+  readonly symbols: ReadonlyMap<string, number>;
+}
+
 export function assemblyToPrg(source: string, options?: AssembleOptions): Buffer {
+  return assemblyToPrgDetailed(source, options).prg;
+}
+
+export function assemblyToPrgDetailed(source: string, options?: AssembleOptions): AssemblyResult {
   const normalized = normalizeSource(source);
   const loadAddress = options?.loadAddress ?? DEFAULT_LOAD_ADDRESS;
   const rootFile = options?.fileName ?? "(input)";
@@ -203,7 +213,7 @@ export function assemblyToPrg(source: string, options?: AssembleOptions): Buffer
   assembler.runPass(0);
   assembler.runPass(1);
 
-  return assembler.buildPrg();
+  return { prg: assembler.buildPrg(), symbols: assembler.getSymbols() };
 }
 
 function normalizeSource(input: string): string {
@@ -801,6 +811,10 @@ class SymbolTable {
     return this.globals.get(label);
   }
 
+  allGlobals(): ReadonlyMap<string, number> {
+    return this.globals;
+  }
+
   private ensureLocalScope(scope: string): Map<string, number> {
     if (!this.locals.has(scope)) {
       this.locals.set(scope, new Map());
@@ -854,6 +868,10 @@ class Assembler {
     const header = Buffer.alloc(2);
     header.writeUInt16LE(start, 0);
     return Buffer.concat([header, Buffer.from(body)]);
+  }
+
+  getSymbols(): ReadonlyMap<string, number> {
+    return this.symbolTable.allGlobals();
   }
 
   private processLine(line: ParsedLine, pass: 0 | 1): void {

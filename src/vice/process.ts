@@ -12,6 +12,8 @@ export interface ViceProcessOptions {
   visible?: boolean;
   display?: string;
   extraArgs?: string[];
+  /** When true, pass -headless to VICE and skip Xvfb. Requires VICE 3.5+. */
+  headless?: boolean;
 }
 
 export interface ViceProcessHandle {
@@ -213,8 +215,18 @@ export async function terminateProcess(child: ChildProcess | null, signal: NodeJ
 
 export async function startViceProcess(options: ViceProcessOptions): Promise<ViceProcessHandle> {
   const debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
-  const { useXvfb, display: requestedDisplay } = shouldUseXvfb(options.visible);
-  const display = useXvfb ? resolveXvfbDisplayForLaunch(requestedDisplay) : requestedDisplay;
+  // When headless=true, skip Xvfb entirely and rely on VICE's own -headless flag (VICE 3.5+).
+  const useHeadless = options.headless === true || process.env.VICE_HEADLESS === "1";
+  let useXvfb: boolean;
+  let display: string;
+  if (useHeadless) {
+    useXvfb = false;
+    display = "";
+  } else {
+    const probe = shouldUseXvfb(options.visible);
+    useXvfb = probe.useXvfb;
+    display = useXvfb ? resolveXvfbDisplayForLaunch(probe.display) : probe.display;
+  }
   const viceEnv: NodeJS.ProcessEnv = { ...process.env };
   let xvfb: ChildProcess | null = null;
   const xvfbOutput = createOutputTailCapture("xvfb");
@@ -225,6 +237,7 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     directory: options.directory,
     display,
     extraArgs: options.extraArgs ?? [],
+    headless: useHeadless,
     host: options.host,
     port: options.port,
     useXvfb,
@@ -266,6 +279,7 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     "-binarymonitoraddress", `${options.host}:${options.port}`,
     "-sounddev", "dummy",
     "-config", "/dev/null",
+    ...(useHeadless ? ["-headless"] : []),
     ...(options.directory ? ["-directory", options.directory] : []),
     ...(options.extraArgs ?? []),
   ];
@@ -397,14 +411,42 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
   return { host: options.host, port: options.port, process: child, stop };
 }
 
+function isIgnorableSocketDirError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+  const code = String((error as NodeJS.ErrnoException).code ?? "");
+  return code === "EACCES" || code === "EPERM" || code === "EROFS" || code === "EEXIST";
+}
+
 export function ensureXvfbSocketDir(debugEnabled: boolean): void {
   const socketDir = "/tmp/.X11-unix";
   try {
     if (!fs.existsSync(socketDir)) {
       fs.mkdirSync(socketDir, { mode: 0o1777 });
     }
+  } catch (error) {
+    if (isIgnorableSocketDirError(error)) {
+      if (debugEnabled) {
+        console.error("[vice-process] unable to create Xvfb socket dir; continuing", error);
+      }
+      return;
+    }
+    writeDiagnosticEvent("xvfb_socket_dir_failed", { socketDir, error });
+    if (debugEnabled) {
+      console.error("[vice-process] failed to prepare Xvfb socket dir", error);
+    }
+    return;
+  }
+  try {
     fs.chmodSync(socketDir, 0o1777);
   } catch (error) {
+    if (isIgnorableSocketDirError(error)) {
+      if (debugEnabled) {
+        console.error("[vice-process] unable to chmod Xvfb socket dir; continuing", error);
+      }
+      return;
+    }
     writeDiagnosticEvent("xvfb_socket_dir_failed", { socketDir, error });
     if (debugEnabled) {
       console.error("[vice-process] failed to prepare Xvfb socket dir", error);

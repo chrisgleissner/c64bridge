@@ -287,15 +287,14 @@ export function objectSchema<T extends Record<string, unknown>>(
   options: ObjectSchemaOptions<T>,
 ): Schema<T> {
   const required = options.required ?? [];
+  const additionalProperties = options.additionalProperties ?? false;
   const propertyEntries = Object.entries(options.properties).map(([key, schema]) => [key, schema.jsonSchema] as const);
   const jsonSchema: JsonSchema = {
     type: "object",
     ...(options.description ? { description: options.description } : {}),
     properties: Object.fromEntries(propertyEntries),
     ...(required.length > 0 ? { required: required.map((key) => key as string) } : {}),
-    ...(options.additionalProperties !== undefined
-      ? { additionalProperties: options.additionalProperties }
-      : { additionalProperties: false }),
+    additionalProperties,
   };
 
   return createSchema<T>(jsonSchema, (value, path) => {
@@ -332,7 +331,7 @@ export function objectSchema<T extends Record<string, unknown>>(
       }
     }
 
-    if (options.additionalProperties === false) {
+    if (!additionalProperties) {
       for (const key of Object.keys(input)) {
         if (!hasOwn.call(options.properties, key)) {
           throw new ToolValidationError("Unexpected property", {
@@ -340,7 +339,7 @@ export function objectSchema<T extends Record<string, unknown>>(
           });
         }
       }
-    } else if (options.additionalProperties === true) {
+    } else {
       for (const key of Object.keys(input)) {
         if (!hasOwn.call(options.properties, key)) {
           result[key] = input[key];

@@ -191,6 +191,344 @@
   "required": [
     "op"
   ],
-  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images.\n- mount: Mount a disk image with optional verification and retries.\n- unmount: Remove the mounted image from an Ultimate drive slot.\n- file_info: Inspect metadata for a file on the Ultimate filesystem.\n- create_image: Create a blank disk image of the specified format.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match.",
-  "additionalProperties": false
+  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "list_drives",
+      "description": "List Ultimate drive slots and their mounted images.",
+      "required": [],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "List Ultimate drive slots and their mounted images.",
+        "properties": {
+          "op": {
+            "const": "list_drives"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "mount",
+      "description": "Mount a disk image with optional verification and retries.",
+      "required": [
+        "drive",
+        "image"
+      ],
+      "optional": [
+        "type",
+        "attachmentMode",
+        "driveMode",
+        "verify",
+        "powerOnIfNeeded",
+        "resetAfterMount",
+        "maxRetries",
+        "retryDelayMs"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Mount a disk image with optional verification and retries.",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier (for example drive8).",
+            "minLength": 1
+          },
+          "image": {
+            "type": "string",
+            "description": "Absolute or Ultimate filesystem path to the disk image.",
+            "minLength": 1
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Override detected image type when firmware guesses incorrectly.",
+            "enum": [
+              "d64",
+              "g64",
+              "d71",
+              "g71",
+              "d81"
+            ]
+          },
+          "attachmentMode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Attachment mode controlling how the firmware treats the mounted image.",
+            "enum": [
+              "readwrite",
+              "readonly",
+              "unlinked"
+            ]
+          },
+          "driveMode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Drive emulation mode to switch to during verification.",
+            "enum": [
+              "1541",
+              "1571",
+              "1581"
+            ]
+          },
+          "verify": {
+            "type": "boolean",
+            "description": "When true, power on/reset/verify using the reliability workflow.",
+            "default": false
+          },
+          "powerOnIfNeeded": {
+            "type": "boolean",
+            "description": "Power on the drive automatically before mounting when verify=true.",
+            "default": true
+          },
+          "resetAfterMount": {
+            "type": "boolean",
+            "description": "Issue a drive reset after mounting when verify=true.",
+            "default": true
+          },
+          "maxRetries": {
+            "type": "integer",
+            "description": "Maximum number of mount retries when verify=true.",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 2
+          },
+          "retryDelayMs": {
+            "type": "integer",
+            "description": "Delay between mount retry attempts when verify=true.",
+            "minimum": 0,
+            "maximum": 5000,
+            "default": 500
+          },
+          "op": {
+            "const": "mount"
+          }
+        },
+        "required": [
+          "drive",
+          "image",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "unmount",
+      "description": "Remove the mounted image from an Ultimate drive slot.",
+      "required": [
+        "drive"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Remove the mounted image from an Ultimate drive slot.",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "unmount"
+          }
+        },
+        "required": [
+          "drive",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "file_info",
+      "description": "Inspect metadata for a file on the Ultimate filesystem.",
+      "required": [
+        "path"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Inspect metadata for a file on the Ultimate filesystem.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or Ultimate filesystem path to the disk image to mount or manage.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "file_info"
+          }
+        },
+        "required": [
+          "path",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "create_image",
+      "description": "Create a blank disk image of the specified format.",
+      "required": [
+        "format",
+        "path"
+      ],
+      "optional": [
+        "diskname",
+        "tracks"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Create a blank disk image of the specified format.",
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "Disk image format to create.",
+            "enum": [
+              "d64",
+              "d71",
+              "d81",
+              "dnp"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Destination path on the Ultimate filesystem.",
+            "minLength": 1
+          },
+          "diskname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional disk label (1-16 characters, converted to PETSCII).",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "tracks": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Track count (D64 supports 35 or 40; DNP requires explicit tracks).",
+            "minimum": 1,
+            "maximum": 255
+          },
+          "op": {
+            "const": "create_image"
+          }
+        },
+        "required": [
+          "format",
+          "path",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "find_and_run",
+      "description": "Search for a PRG/CRT by name substring and run the first match.",
+      "required": [
+        "nameContains"
+      ],
+      "optional": [
+        "root",
+        "extensions",
+        "caseInsensitive",
+        "sort",
+        "waitMs",
+        "captureCandidates"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Search for a PRG/CRT by name substring and run the first match.",
+        "properties": {
+          "root": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Root path to search",
+            "minLength": 1,
+            "default": "/"
+          },
+          "nameContains": {
+            "type": "string",
+            "description": "Substring to match",
+            "minLength": 1
+          },
+          "extensions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "description": "File extensions to include (without dot)",
+              "minLength": 1
+            }
+          },
+          "caseInsensitive": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Case-insensitive name match",
+            "default": true
+          },
+          "sort": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Sort order for matches",
+            "enum": [
+              "discovered",
+              "alphabetical"
+            ],
+            "default": "discovered"
+          },
+          "waitMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Delay after firmware run before returning",
+            "minimum": 0,
+            "default": 0
+          },
+          "captureCandidates": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Include up to this many candidates in result",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10
+          },
+          "op": {
+            "const": "find_and_run"
+          }
+        },
+        "required": [
+          "nameContains",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

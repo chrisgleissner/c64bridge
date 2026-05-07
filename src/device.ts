@@ -11,7 +11,7 @@ import { Api } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
-import { startViceProcess, type ViceProcessHandle } from "./vice/process.js";
+import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 
 export type DeviceType = "c64u" | "vice";
 
@@ -99,6 +99,16 @@ interface ViceLaunchResolutionOptions {
 interface ViceLaunchResolutionDependencies {
   findBinary?: (binary: string) => string | null;
   isResourceDirectory?: (candidate: string) => boolean;
+}
+
+interface ManagedViceProcessOptionsInput {
+  binary: string;
+  directory?: string;
+  host: string;
+  port: number;
+  warp: boolean;
+  visible: boolean;
+  extraArgs: string[];
 }
 
 const DEFAULT_C64U_HOST = "c64u";
@@ -459,15 +469,15 @@ export class ViceBackend implements C64Facade {
         extraArgs: this.extraArgs,
       });
     }
-    const handle = await startViceProcess({
+    const handle = await startViceProcess(buildManagedViceProcessOptions({
       binary: this.exe,
       directory: this.directory,
       host: this.host,
       port: this.port,
       warp: this.warp,
       visible: this.visible,
-      extraArgs: this.extraArgs.length > 0 ? this.extraArgs : undefined,
-    });
+      extraArgs: this.extraArgs,
+    }));
     this.lastProcessStart = Date.now();
     if (this.debugEnabled) {
       console.error("[vice-backend] VICE process started", { pid: handle.process.pid });
@@ -500,6 +510,7 @@ export class ViceBackend implements C64Facade {
       return;
     }
     ViceBackend.cleanupRegistered = true;
+    /* c8 ignore next 5 -- global process exit hooks are not practical to exercise in the unit test process */
     process.once("exit", () => {
       for (const [, handle] of ViceBackend.supervisors) {
         handle.stop().catch(() => {});
@@ -703,6 +714,31 @@ export class ViceBackend implements C64Facade {
       return { success: false, details };
     }
   }
+  async nuclearReset(): Promise<RunResult> {
+    const poweroffResult = await this.poweroff();
+    if (!poweroffResult.success) {
+      return poweroffResult;
+    }
+    if (!this.manageProcess) {
+      return {
+        success: false,
+        details: {
+          code: "UNSUPPORTED",
+          message: "VICE nuclear reset requires a managed process; unmanaged instances can only be powered off.",
+        },
+      };
+    }
+    try {
+      await this.ensureProcess();
+      return { success: true };
+    } catch (error) {
+      const details = error instanceof Error
+        ? { message: error.message }
+        : error;
+      return { success: false, details };
+    }
+  }
+
   async menuButton(): Promise<RunResult> { throw unsupported("menuButton"); }
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> { throw unsupported("debugregRead"); }
   async debugregWrite(_v: string): Promise<{ success: boolean; value?: string; details?: unknown }> { throw unsupported("debugregWrite"); }
@@ -969,6 +1005,18 @@ function resolveViceLaunch(
   };
 }
 
+function buildManagedViceProcessOptions(input: ManagedViceProcessOptionsInput): ViceProcessOptions {
+  return {
+    binary: input.binary,
+    directory: input.directory,
+    host: input.host,
+    port: input.port,
+    warp: input.warp,
+    visible: input.visible,
+    extraArgs: input.extraArgs.length > 0 ? input.extraArgs : undefined,
+  };
+}
+
 export function __resolveViceBinaryForTests(
   options: { envBinary?: string; configBinary?: string },
   findBinary?: (binary: string) => string | null,
@@ -981,6 +1029,10 @@ export function __resolveViceLaunchForTests(
   dependencies?: ViceLaunchResolutionDependencies,
 ): { binary: string; directory?: string } {
   return resolveViceLaunch(options, dependencies);
+}
+
+export function __buildViceProcessOptionsForTests(input: ManagedViceProcessOptionsInput): ViceProcessOptions {
+  return buildManagedViceProcessOptions(input);
 }
 
 export interface FacadeSelection { facade: C64Facade; selected: DeviceType; reason: string; details?: Record<string, unknown> }

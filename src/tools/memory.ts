@@ -1,4 +1,6 @@
 import { Buffer } from "node:buffer";
+import fs from "node:fs";
+import path from "node:path";
 import {
   defineToolModule,
   OPERATION_DISCRIMINATOR,
@@ -8,7 +10,7 @@ import {
   type ToolRunResult,
 } from "./types.js";
 import { booleanSchema, numberSchema, objectSchema, optionalSchema, stringSchema } from "./schema.js";
-import { textResult } from "./responses.js";
+import { jsonResult, textResult } from "./responses.js";
 import {
   ToolError,
   ToolExecutionError,
@@ -16,6 +18,9 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+import { disassemble, formatDisassembly } from "./disassembler.js";
+import { getViceSymbols } from "./symbolRegistry.js";
+import { resolveAddressSymbol } from "../knowledge.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -111,6 +116,19 @@ function supportsMachinePause(ctx: { platform?: { id?: string } }): boolean {
   const platformId = ctx.platform?.id;
   return platformId !== "vice";
 }
+
+export const __memoryHelpersForTests = {
+  toRecord,
+  normaliseFailure,
+  cleanHex,
+  parseUserHex,
+  parseFirmwareHex,
+  formatByte,
+  resolveAddressLabel,
+  resolveLength,
+  supportsMachinePause,
+  stripOperationDiscriminator,
+};
 
 const readScreenArgsSchema = objectSchema<Record<string, never>>({
   description: "No arguments are required for reading the current screen contents.",
@@ -419,26 +437,343 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
   }
 }
 
+const disassembleArgsSchema = objectSchema({
+  description: "Parameters for disassembling a block of VICE memory into 6502/6510 instructions.",
+  properties: {
+    address: stringSchema({
+      description: "Start address as $HHHH, decimal, or symbol name.",
+      minLength: 1,
+    }),
+    length: numberSchema({
+      description: "Number of bytes to read and disassemble.",
+      integer: true,
+      minimum: 1,
+      maximum: 4096,
+      default: 64,
+    }),
+    instructionCount: optionalSchema(numberSchema({
+      description: "Stop after this many instructions (overrides length as a termination condition).",
+      integer: true,
+      minimum: 1,
+      maximum: 512,
+    })),
+  },
+  required: ["address"],
+  additionalProperties: false,
+});
+
+async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    const parsed = disassembleArgsSchema.parse(rawArgs ?? {});
+    const length = parsed.length ?? 64;
+    ctx.logger.info("Disassembling VICE memory", { address: parsed.address, length });
+
+    const address = parseAddressArg(parsed.address, "$.address");
+
+    const bytes = await ctx.client.readMemoryRaw(address, length);
+  const symbols = ctx.platform?.id === "vice" ? getViceSymbols() : undefined;
+    const lines = disassemble(bytes, address, parsed.instructionCount, symbols);
+    const text = formatDisassembly(lines);
+
+    const addrHex = `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
+    return textResult(`Disassembly of ${lines.length} instructions starting at ${addrHex}:\n\n${text}`, {
+      success: true,
+      address: addrHex,
+      bytesRead: bytes.length,
+      instructionCount: lines.length,
+    });
+  } catch (error) {
+    if (error instanceof ToolError) {
+      return toolErrorResult(error);
+    }
+    return unknownErrorResult(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared address-parsing helper
+// ---------------------------------------------------------------------------
+function parseAddressArg(raw: string, fieldPath: string): number {
+  const trimmed = raw.trim();
+  let addr: number;
+  if (/^\$[0-9A-Fa-f]+$/.test(trimmed)) {
+    addr = parseInt(trimmed.slice(1), 16);
+  } else if (/^0[xX][0-9A-Fa-f]+$/.test(trimmed)) {
+    addr = parseInt(trimmed.slice(2), 16);
+  } else if (/^[0-9]+$/.test(trimmed)) {
+    addr = parseInt(trimmed, 10);
+  } else {
+    const resolved = resolveAddressSymbol(trimmed);
+    if (resolved === undefined) {
+      throw new ToolValidationError(`Unknown address or symbol: ${trimmed}`, { path: fieldPath });
+    }
+    addr = resolved;
+  }
+  if (!Number.isInteger(addr) || addr < 0 || addr > 0xffff) {
+    throw new ToolValidationError("Address must be in range $0000-$FFFF", { path: fieldPath });
+  }
+  return addr;
+}
+
+function fmtAddr(addr: number): string {
+  return `$${addr.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+function validateRangeWithinAddressSpace(start: number, length: number, fieldPath: string): void {
+  const end = start + length - 1;
+  if (end > 0xffff) {
+    throw new ToolValidationError(
+      `${fieldPath} range exceeds address space; ${fmtAddr(start)} + ${length} bytes would pass $FFFF.`,
+      { path: fieldPath },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// copy_memory
+// ---------------------------------------------------------------------------
+const copyMemoryArgsSchema = objectSchema({
+  description: "Copy a region of RAM from one address to another.",
+  properties: {
+    source: stringSchema({ description: "Source start address ($HHHH, decimal, or symbol).", minLength: 1 }),
+    dest: stringSchema({ description: "Destination start address.", minLength: 1 }),
+    length: numberSchema({ description: "Number of bytes to copy (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
+  },
+  required: ["source", "dest", "length"],
+  additionalProperties: false,
+});
+
+async function executeCopyMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    const parsed = copyMemoryArgsSchema.parse(rawArgs ?? {});
+    const src = parseAddressArg(parsed.source, "$.source");
+    const dst = parseAddressArg(parsed.dest, "$.dest");
+    const len = parsed.length;
+    validateRangeWithinAddressSpace(src, len, "$.source");
+    validateRangeWithinAddressSpace(dst, len, "$.dest");
+    ctx.logger.info("Copying memory", { src: fmtAddr(src), dst: fmtAddr(dst), len });
+    const bytes = await ctx.client.readMemoryRaw(src, len);
+    await ctx.client.writeMemoryRaw(dst, bytes);
+    return textResult(`Copied ${bytes.length} bytes from ${fmtAddr(src)} to ${fmtAddr(dst)}.`, {
+      success: true, source: fmtAddr(src), dest: fmtAddr(dst), bytesCopied: bytes.length,
+    });
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
+    return unknownErrorResult(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// fill_memory
+// ---------------------------------------------------------------------------
+const fillMemoryArgsSchema = objectSchema({
+  description: "Fill a memory region with a repeating byte pattern.",
+  properties: {
+    address: stringSchema({ description: "Start address ($HHHH, decimal, or symbol).", minLength: 1 }),
+    length: numberSchema({ description: "Number of bytes to fill (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
+    pattern: stringSchema({
+      description: "Hex bytes to repeat, e.g. 'FF' or 'AA 55'. Space-separated or run together.",
+      minLength: 2,
+      pattern: /^[\s0-9A-Fa-f$]+$/,
+    }),
+  },
+  required: ["address", "length", "pattern"],
+  additionalProperties: false,
+});
+
+async function executeFillMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    const parsed = fillMemoryArgsSchema.parse(rawArgs ?? {});
+    const addr = parseAddressArg(parsed.address, "$.address");
+    validateRangeWithinAddressSpace(addr, parsed.length, "$.address");
+    const { bytes: patternBytes } = parseUserHex(parsed.pattern, "$.pattern");
+    if (patternBytes.length === 0) throw new ToolValidationError("Pattern must not be empty", { path: "$.pattern" });
+    const buf = new Uint8Array(parsed.length);
+    for (let i = 0; i < parsed.length; i++) buf[i] = patternBytes[i % patternBytes.length]!;
+    await ctx.client.writeMemoryRaw(addr, buf);
+    ctx.logger.info("Filled memory", { address: fmtAddr(addr), length: parsed.length, pattern: parsed.pattern });
+    return textResult(`Filled ${parsed.length} bytes at ${fmtAddr(addr)} with pattern ${parsed.pattern.trim()}.`, {
+      success: true, address: fmtAddr(addr), length: parsed.length, pattern: parsed.pattern.trim(),
+    });
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
+    return unknownErrorResult(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// search_memory
+// ---------------------------------------------------------------------------
+const searchMemoryArgsSchema = objectSchema({
+  description: "Search for a byte pattern within a memory range.",
+  properties: {
+    startAddress: stringSchema({ description: "Start of search range ($HHHH, decimal, or symbol).", minLength: 1 }),
+    endAddress: stringSchema({ description: "End of search range (inclusive).", minLength: 1 }),
+    pattern: stringSchema({
+      description: "Hex bytes to find, e.g. 'A9 00' for LDA #$00.",
+      minLength: 2,
+      pattern: /^[\s0-9A-Fa-f$]+$/,
+    }),
+    maxResults: optionalSchema(numberSchema({ description: "Maximum matches to return (default 10).", integer: true, minimum: 1, maximum: 100, default: 10 })),
+  },
+  required: ["startAddress", "endAddress", "pattern"],
+  additionalProperties: false,
+});
+
+async function executeSearchMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    const parsed = searchMemoryArgsSchema.parse(rawArgs ?? {});
+    const start = parseAddressArg(parsed.startAddress, "$.startAddress");
+    const end = parseAddressArg(parsed.endAddress, "$.endAddress");
+    if (end < start) throw new ToolValidationError("endAddress must be ≥ startAddress", { path: "$.endAddress" });
+    const { bytes: needle } = parseUserHex(parsed.pattern, "$.pattern");
+    if (needle.length === 0) throw new ToolValidationError("Pattern must not be empty", { path: "$.pattern" });
+    const maxResults = parsed.maxResults ?? 10;
+    const len = end - start + 1;
+    ctx.logger.info("Searching memory", { start: fmtAddr(start), end: fmtAddr(end), pattern: parsed.pattern });
+    const haystack = await ctx.client.readMemoryRaw(start, len);
+    const matches: string[] = [];
+    outer: for (let i = 0; i <= haystack.length - needle.length && matches.length < maxResults; i++) {
+      for (let j = 0; j < needle.length; j++) {
+        if (haystack[i + j] !== needle[j]) continue outer;
+      }
+      matches.push(fmtAddr(start + i));
+    }
+    return jsonResult(
+      { found: matches.length, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) } },
+      { success: true, found: matches.length },
+    );
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
+    return unknownErrorResult(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// compare_memory
+// ---------------------------------------------------------------------------
+const compareMemoryArgsSchema = objectSchema({
+  description: "Compare two memory regions and report differing bytes.",
+  properties: {
+    address1: stringSchema({ description: "First region start address.", minLength: 1 }),
+    address2: stringSchema({ description: "Second region start address.", minLength: 1 }),
+    length: numberSchema({ description: "Number of bytes to compare (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
+    maxDiffs: optionalSchema(numberSchema({ description: "Max differences to report (default 10).", integer: true, minimum: 1, maximum: 200, default: 10 })),
+  },
+  required: ["address1", "address2", "length"],
+  additionalProperties: false,
+});
+
+async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    const parsed = compareMemoryArgsSchema.parse(rawArgs ?? {});
+    const a1 = parseAddressArg(parsed.address1, "$.address1");
+    const a2 = parseAddressArg(parsed.address2, "$.address2");
+    const len = parsed.length;
+    const maxDiffs = parsed.maxDiffs ?? 10;
+    ctx.logger.info("Comparing memory regions", { a1: fmtAddr(a1), a2: fmtAddr(a2), len });
+    const [r1, r2] = await Promise.all([
+      ctx.client.readMemoryRaw(a1, len),
+      ctx.client.readMemoryRaw(a2, len),
+    ]);
+    type Diff = { offset: number; address1: string; address2: string; value1: string; value2: string };
+    const diffs: Diff[] = [];
+    for (let i = 0; i < len && diffs.length < maxDiffs; i++) {
+      if (r1[i] !== r2[i]) {
+        diffs.push({
+          offset: i,
+          address1: fmtAddr(a1 + i),
+          address2: fmtAddr(a2 + i),
+          value1: formatByte(r1[i] ?? 0),
+          value2: formatByte(r2[i] ?? 0),
+        });
+      }
+    }
+    const identical = diffs.length === 0;
+    return jsonResult(
+      { identical, diffCount: diffs.length, diffs, region1: fmtAddr(a1), region2: fmtAddr(a2), length: len },
+      { success: true, identical, diffCount: diffs.length },
+    );
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
+    return unknownErrorResult(error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// save_memory
+// ---------------------------------------------------------------------------
+const saveMemoryArgsSchema = objectSchema({
+  description: "Dump a memory region to a local file, optionally with a PRG load-address header.",
+  properties: {
+    startAddress: stringSchema({ description: "Start address of region to save.", minLength: 1 }),
+    endAddress: stringSchema({ description: "End address (inclusive).", minLength: 1 }),
+    filePath: stringSchema({ description: "Absolute or relative path for the output file.", minLength: 1 }),
+    asPrg: optionalSchema(booleanSchema({ description: "Prepend a 2-byte little-endian load-address header (PRG format). Default: true.", default: true })),
+  },
+  required: ["startAddress", "endAddress", "filePath"],
+  additionalProperties: false,
+});
+
+async function executeSaveMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    const parsed = saveMemoryArgsSchema.parse(rawArgs ?? {});
+    const start = parseAddressArg(parsed.startAddress, "$.startAddress");
+    const end = parseAddressArg(parsed.endAddress, "$.endAddress");
+    if (end < start) throw new ToolValidationError("endAddress must be ≥ startAddress", { path: "$.endAddress" });
+    const asPrg = parsed.asPrg !== false;
+    const len = end - start + 1;
+    const resolvedPath = path.resolve(parsed.filePath);
+    ctx.logger.info("Saving memory to file", { start: fmtAddr(start), end: fmtAddr(end), filePath: resolvedPath, asPrg });
+    const bytes = await ctx.client.readMemoryRaw(start, len);
+    const header = asPrg ? Buffer.from([start & 0xff, (start >> 8) & 0xff]) : Buffer.alloc(0);
+    await fs.promises.mkdir(path.dirname(resolvedPath), { recursive: true });
+    await fs.promises.writeFile(resolvedPath, Buffer.concat([header, Buffer.from(bytes)]));
+    const fileSize = bytes.length + header.length;
+    return textResult(
+      `Saved ${bytes.length} bytes (${fmtAddr(start)}–${fmtAddr(end)}) to ${resolvedPath}${asPrg ? " (PRG, with load address header)" : ""}.`,
+      { success: true, filePath: resolvedPath, bytesRead: bytes.length, fileSize, asPrg, startAddress: fmtAddr(start), endAddress: fmtAddr(end) },
+    );
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
+    return unknownErrorResult(error);
+  }
+}
+
 export interface MemoryOperationMap extends OperationMap {
-  readonly read: {
-    readonly address: string;
-    readonly length?: number;
-  };
+  readonly read: { readonly address: string; readonly length?: number };
   readonly write: {
-    readonly address: string;
-    readonly bytes: string;
-    readonly verify?: boolean;
-    readonly expected?: string;
-    readonly mask?: string;
-    readonly abortOnMismatch?: boolean;
+    readonly address: string; readonly bytes: string; readonly verify?: boolean;
+    readonly expected?: string; readonly mask?: string; readonly abortOnMismatch?: boolean;
   };
   readonly read_screen: Record<string, never>;
+  readonly disassemble: { readonly address: string; readonly length?: number; readonly instructionCount?: number };
+  readonly copy_memory: { readonly source: string; readonly dest: string; readonly length: number };
+  readonly fill_memory: { readonly address: string; readonly length: number; readonly pattern: string };
+  readonly search_memory: { readonly startAddress: string; readonly endAddress: string; readonly pattern: string; readonly maxResults?: number };
+  readonly compare_memory: { readonly address1: string; readonly address2: string; readonly length: number; readonly maxDiffs?: number };
+  readonly save_memory: { readonly startAddress: string; readonly endAddress: string; readonly filePath: string; readonly asPrg?: boolean };
 }
 
 export const memoryOperationHandlers: OperationHandlerMap<MemoryOperationMap> = {
   read: async (args, ctx) => executeReadMemory(stripOperationDiscriminator(args), ctx),
   write: async (args, ctx) => executeWriteMemory(stripOperationDiscriminator(args), ctx),
   read_screen: async (args, ctx) => executeReadScreen(stripOperationDiscriminator(args), ctx),
+  disassemble: async (args, ctx) => executeDisassemble(stripOperationDiscriminator(args), ctx),
+  copy_memory: async (args, ctx) => executeCopyMemory(stripOperationDiscriminator(args), ctx),
+  fill_memory: async (args, ctx) => executeFillMemory(stripOperationDiscriminator(args), ctx),
+  search_memory: async (args, ctx) => executeSearchMemory(stripOperationDiscriminator(args), ctx),
+  compare_memory: async (args, ctx) => executeCompareMemory(stripOperationDiscriminator(args), ctx),
+  save_memory: async (args, ctx) => executeSaveMemory(stripOperationDiscriminator(args), ctx),
+};
+
+export {
+  disassembleArgsSchema,
+  copyMemoryArgsSchema,
+  fillMemoryArgsSchema,
+  searchMemoryArgsSchema,
+  compareMemoryArgsSchema,
+  saveMemoryArgsSchema,
 };
 
 export const memoryModule = defineToolModule({

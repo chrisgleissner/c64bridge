@@ -9,8 +9,8 @@ See <https://www.gnu.org/licenses/> for details.
 import { Buffer } from "node:buffer";
 import { createSocket, type Socket } from "node:dgram";
 import axios from "axios";
-import { basicToPrg } from "./basicConverter.js";
-import { assemblyToPrg } from "./assemblyConverter.js";
+import { basicToPrg } from "./tools/basicTokenizer.js";
+import { assemblyToPrg } from "./tools/assember.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import { C64Facade, createAllFacades, createFacade, type DeviceType, ViceBackend } from "./device.js";
@@ -1706,6 +1706,97 @@ export class C64Client {
     }
     return body instanceof ArrayBuffer ? new Uint8Array(body) : this.extractBytes(body);
   }
+
+  /**
+   * Low-level memory write that delegates to the active backend's facade.
+   * Public so tools that need to drive cross-platform machine state (e.g.
+   * keyboard-buffer injection) can avoid backend-specific paths.
+   */
+  async writeMemoryRaw(address: number, bytes: Uint8Array | Buffer): Promise<void> {
+    const facade = await this.facadePromise;
+    const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    await facade.writeMemory(address, buf);
+  }
+
+  /**
+   * Inject a sequence of PETSCII byte values into the KERNAL keyboard buffer
+   * using shared memory writes. Works on both C64U and VICE because both
+   * backends expose `writeMemory`/`readMemory` against the C64 zero-page and
+   * the keyboard queue at $0277.
+   *
+   * The KERNAL buffer ($0277-$0280) holds 10 bytes; $00C6 (NDX) tracks the
+   * number of pending characters. We chunk the input, then poll NDX until
+   * the kernel has consumed each chunk before queueing the next one.
+   *
+   * @param bytes      Raw PETSCII bytes (already token-expanded by caller)
+   * @param options    Optional knobs for chunk size, drain timing, and total
+   *                   timeout. The defaults mirror KERNAL behavior.
+   */
+  async injectKeyboardQueue(
+    bytes: Uint8Array | Buffer | readonly number[],
+    options?: {
+      readonly chunkSize?: number;
+      readonly drainPollMs?: number;
+      readonly drainTimeoutMs?: number;
+    },
+  ): Promise<void> {
+    const data = Buffer.isBuffer(bytes)
+      ? bytes
+      : Buffer.from(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes));
+    if (data.length === 0) {
+      return;
+    }
+    const chunkSize = Math.max(1, Math.min(10, options?.chunkSize ?? 10));
+    const pollMs = Math.max(1, options?.drainPollMs ?? 8);
+    const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
+
+    const facade = await this.facadePromise;
+    const KEYD = 0x0277; // KERNAL keyboard buffer base
+    const NDX = 0x00C6;  // pending byte count
+
+    for (let offset = 0; offset < data.length; offset += chunkSize) {
+      const slice = data.subarray(offset, Math.min(data.length, offset + chunkSize));
+      // Write the bytes into the queue first so KERNAL never reads a stale
+      // length+old-byte combination.
+      await facade.writeMemory(KEYD, Buffer.from(slice));
+      await facade.writeMemory(NDX, Buffer.from([slice.length]));
+
+      // Drain: wait for KERNAL to consume the queue. If the machine is paused
+      // or otherwise not running, give up after the timeout and continue —
+      // higher layers can decide whether that is a failure for their context.
+      const drainStart = Date.now();
+      while (Date.now() - drainStart < totalTimeoutMs) {
+        const ndx = await facade.readMemory(NDX, 1);
+        if ((ndx[0] ?? 0) === 0) {
+          break;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+      }
+    }
+  }
+
+    async viceExitMonitor(): Promise<void> {
+      await this.withViceMonitor((client) => client.exitMonitor());
+    }
+
+    async viceKeyboardFeed(text: string): Promise<void> {
+      await this.withViceMonitor((client) => client.keyboardFeed(text));
+    }
+
+    async viceMemSet(address: number, bytes: Uint8Array | Buffer): Promise<void> {
+      const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+      await this.withViceMonitor((client) => client.memSet(address, buf));
+    }
+
+    async viceMemGet(address: number, length: number): Promise<Buffer> {
+      const end = (address + length - 1) & 0xffff;
+      return this.withViceMonitor((client) => client.memGet(address, end));
+    }
+
+    async viceNuclearReset(): Promise<void> {
+      const backend = await this.requireViceBackend();
+      await backend.nuclearReset();
+    }
 
     async viceCheckpointList(): Promise<ViceCheckpoint[]> {
       return this.withViceMonitor((client) => client.checkpointList());

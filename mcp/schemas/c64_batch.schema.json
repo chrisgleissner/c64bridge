@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "properties": {
+    "commands": {
+      "type": "array",
+      "description": "Ordered list of commands to execute.",
+      "items": {
+        "type": "object",
+        "description": "A single batch command.",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "description": "MCP tool name (e.g. c64_memory, c64_debug).",
+            "minLength": 1
+          },
+          "args": {
+            "type": "object",
+            "description": "Arguments to pass to the tool (must include 'op' for grouped tools).",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional label for this command in the result.",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "tool",
+          "args"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "stopOnError": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Halt the batch after the first failure. Default: true.",
+      "default": true
+    }
+  },
+  "required": [
+    "commands"
+  ],
+  "description": "Execute multiple tool calls in one request.",
+  "additionalProperties": false
+}

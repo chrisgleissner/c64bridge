@@ -18,6 +18,8 @@ const DEFAULT_VICE_MOCK_TEST_FILES = [
   "test/viceIntegration.test.mjs",
   "test/viceModule.test.mjs",
   "test/groupedToolsShims.test.mjs",
+  "test/inputModule.test.mjs",
+  "test/batchAndDisplayState.test.mjs",
   "test/toolsTypes.test.mjs",
   "test/platformRegistry.test.mjs",
   "test/meta/program.test.mjs",
@@ -40,6 +42,11 @@ const supplementalTests = [
   "test/toolsCoverage.test.mjs",
   "test/audioModule.test.mjs",
   "test/updateReadme.test.mjs",
+  "test/toolsSchema.test.mjs",
+  "test/symbolRegistry.test.mjs",
+  "test/programRunnersModule.test.mjs",
+  "test/batchAndDisplayState.test.mjs",
+  "test/inputModule.test.mjs",
   "test/viceIntegration.test.mjs",
 ];
 

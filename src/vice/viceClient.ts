@@ -92,6 +92,11 @@ export class ViceClient {
   private nextReqId = 1;
   private pending: Map<number, PendingRequest> = new Map();
   private closing = false;
+  private onUnsolicitedHandler?: (type: number, frame: Buffer) => void;
+
+  setUnsolicitedHandler(handler: (type: number, frame: Buffer) => void): void {
+    this.onUnsolicitedHandler = handler;
+  }
 
   async connect(port: number, host = "127.0.0.1"): Promise<void> {
     this.socket = net.connect({ host, port });
@@ -164,7 +169,8 @@ export class ViceClient {
       const err = frame[7];
       const reqId = frame.readUInt32LE(8);
       if (reqId === 0xffffffff) {
-        continue; // unsolicited event
+        this.onUnsolicitedHandler?.(responseType, frame);
+        continue;
       }
 
       const pending = this.pending.get(reqId);

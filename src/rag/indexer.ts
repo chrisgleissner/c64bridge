@@ -549,19 +549,28 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
   const embeddingsDir = resolveEmbeddingsDir(overrideDir);
   const paths = embeddingIndexPaths(embeddingsDir);
 
-  // Collect all markdown files under doc/ recursively, plus any explicitly provided RAG_DOC_FILES
+  // Production indexing defaults to the repo docs tree. Tests and other callers can
+  // override that set explicitly, including passing an empty array to opt out.
   const docCandidates: string[] = [];
-  try {
-    const mdFiles = await collectFiles(DOC_ROOT, [".md"]);
-    for (const f of mdFiles) {
+  if (docFiles !== undefined) {
+    for (const f of docFiles) {
       if (!shouldExcludeDocFile(f)) {
         docCandidates.push(f);
       }
     }
-  } catch {}
-  for (const f of ENV_DOC_FILES) {
-    if (!shouldExcludeDocFile(f)) {
-      docCandidates.push(f);
+  } else {
+    try {
+      const mdFiles = await collectFiles(DOC_ROOT, [".md"]);
+      for (const f of mdFiles) {
+        if (!shouldExcludeDocFile(f)) {
+          docCandidates.push(f);
+        }
+      }
+    } catch {}
+    for (const f of ENV_DOC_FILES) {
+      if (!shouldExcludeDocFile(f)) {
+        docCandidates.push(f);
+      }
     }
   }
   // De-duplicate

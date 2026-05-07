@@ -363,6 +363,797 @@
   "required": [
     "op"
   ],
-  "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.\n- set_volume: Set the SID master volume register at $D418 (0-15).\n- reset: Soft or hard reset of SID registers to clear glitches.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch.\n- note_off: Release a SID voice by clearing its gate bit.\n- silence_all: Silence all SID voices with optional audio verification.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player.\n- generate: Generate a lightweight SID arpeggio playback sequence.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording.\n- analyze: Automatically analyze SID playback when verification is requested.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics.",
-  "additionalProperties": false
+  "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request. Optional inputs: durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "capture_samples",
+      "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
+      "required": [],
+      "optional": [
+        "count",
+        "encoding"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
+        "properties": {
+          "op": {
+            "const": "capture_samples"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Number of stereo sample pairs to capture.",
+            "minimum": 1,
+            "maximum": 65536,
+            "default": 256
+          },
+          "encoding": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Encoding used for the PCM sample payload.",
+            "enum": [
+              "base64",
+              "hex"
+            ],
+            "default": "base64"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "set_volume",
+      "description": "Set the SID master volume register at $D418 (0-15).",
+      "required": [
+        "volume"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Set the SID master volume register at $D418 (0-15).",
+        "properties": {
+          "volume": {
+            "type": "number",
+            "description": "Desired SID master volume. Values outside 0-15 are clamped.",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "op": {
+            "const": "set_volume"
+          }
+        },
+        "required": [
+          "volume",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "reset",
+      "description": "Soft or hard reset of SID registers to clear glitches.",
+      "required": [],
+      "optional": [
+        "hard"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Soft or hard reset of SID registers to clear glitches.",
+        "properties": {
+          "hard": {
+            "type": "boolean",
+            "description": "If true, perform a hard register scrub; otherwise silence voices softly.",
+            "default": false
+          },
+          "op": {
+            "const": "reset"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "note_on",
+      "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
+      "required": [],
+      "optional": [
+        "voice",
+        "note",
+        "frequencyHz",
+        "system",
+        "waveform",
+        "pulseWidth",
+        "attack",
+        "decay",
+        "sustain",
+        "release"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
+        "properties": {
+          "voice": {
+            "type": "integer",
+            "description": "SID voice to trigger (1-3).",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 1
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Musical note like A4, C#5, or Bb3. Overrides frequencyHz if provided.",
+            "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$"
+          },
+          "frequencyHz": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Explicit frequency in Hz. Used when note is omitted.",
+            "minimum": 1
+          },
+          "system": {
+            "type": "string",
+            "description": "Video system for frequency calculation.",
+            "enum": [
+              "PAL",
+              "NTSC"
+            ],
+            "default": "PAL"
+          },
+          "waveform": {
+            "type": "string",
+            "description": "SID waveform to enable.",
+            "enum": [
+              "pulse",
+              "saw",
+              "tri",
+              "noise"
+            ],
+            "default": "pulse"
+          },
+          "pulseWidth": {
+            "type": "integer",
+            "description": "Pulse width (0-4095). Used for pulse waveform.",
+            "minimum": 0,
+            "maximum": 4095,
+            "default": 2048
+          },
+          "attack": {
+            "type": "integer",
+            "description": "Attack rate nibble (0-15).",
+            "minimum": 0,
+            "maximum": 15,
+            "default": 1
+          },
+          "decay": {
+            "type": "integer",
+            "description": "Decay rate nibble (0-15).",
+            "minimum": 0,
+            "maximum": 15,
+            "default": 1
+          },
+          "sustain": {
+            "type": "integer",
+            "description": "Sustain level nibble (0-15).",
+            "minimum": 0,
+            "maximum": 15,
+            "default": 15
+          },
+          "release": {
+            "type": "integer",
+            "description": "Release rate nibble (0-15).",
+            "minimum": 0,
+            "maximum": 15,
+            "default": 3
+          },
+          "op": {
+            "const": "note_on"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "note_off",
+      "description": "Release a SID voice by clearing its gate bit.",
+      "required": [
+        "voice"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Release a SID voice by clearing its gate bit.",
+        "properties": {
+          "voice": {
+            "type": "integer",
+            "description": "SID voice to release (1-3).",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "op": {
+            "const": "note_off"
+          }
+        },
+        "required": [
+          "voice",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "silence_all",
+      "description": "Silence all SID voices with optional audio verification.",
+      "required": [],
+      "optional": [
+        "verify"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Silence all SID voices with optional audio verification.",
+        "properties": {
+          "verify": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "When true, record audio after silencing to confirm the SID output is quiet.",
+            "default": false
+          },
+          "op": {
+            "const": "silence_all"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "play_sid_file",
+      "description": "Play a SID file stored on the Ultimate filesystem.",
+      "required": [
+        "path"
+      ],
+      "optional": [
+        "songnr"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Play a SID file stored on the Ultimate filesystem.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or Ultimate filesystem path to the SID, PRG, or audio file.",
+            "minLength": 1
+          },
+          "songnr": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Song number within the SID file (0-based index).",
+            "minimum": 0
+          },
+          "op": {
+            "const": "play_sid_file"
+          }
+        },
+        "required": [
+          "path",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "play_mod_file",
+      "description": "Play a MOD tracker module via the Ultimate SID player.",
+      "required": [
+        "path"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Play a MOD tracker module via the Ultimate SID player.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or Ultimate filesystem path to the SID, PRG, or audio file.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "play_mod_file"
+          }
+        },
+        "required": [
+          "path",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "generate",
+      "description": "Generate a lightweight SID arpeggio playback sequence.",
+      "required": [],
+      "optional": [
+        "root",
+        "pattern",
+        "steps",
+        "tempoMs",
+        "waveform",
+        "preset"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Generate a lightweight SID arpeggio playback sequence.",
+        "properties": {
+          "root": {
+            "type": "string",
+            "description": "Root note for the arpeggio such as C4 or A#3.",
+            "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$",
+            "default": "C4"
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Comma-separated semitone offsets (e.g. '0,4,7').",
+            "minLength": 1,
+            "default": "0,4,7"
+          },
+          "steps": {
+            "type": "integer",
+            "description": "Number of notes to schedule.",
+            "minimum": 1,
+            "maximum": 128,
+            "default": 16
+          },
+          "tempoMs": {
+            "type": "integer",
+            "description": "Delay in milliseconds between notes.",
+            "minimum": 20,
+            "maximum": 2000,
+            "default": 120
+          },
+          "waveform": {
+            "type": "string",
+            "description": "Waveform for playback.",
+            "enum": [
+              "pulse",
+              "saw",
+              "tri",
+              "noise"
+            ],
+            "default": "tri"
+          },
+          "preset": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional musical preset to influence timing/expression.",
+            "enum": [
+              "classic",
+              "expression"
+            ],
+            "default": "classic"
+          },
+          "op": {
+            "const": "generate"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "compile_play",
+      "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
+      "required": [],
+      "optional": [
+        "sidwave",
+        "cpg",
+        "format",
+        "output",
+        "dryRun"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
+        "properties": {
+          "sidwave": {
+            "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+            "type": [
+              "string",
+              "object",
+              "null"
+            ]
+          },
+          "cpg": {
+            "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+            "type": [
+              "string",
+              "object",
+              "null"
+            ]
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Source format hint when providing raw text.",
+            "enum": [
+              "yaml",
+              "json"
+            ]
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Playback target format.",
+            "enum": [
+              "prg",
+              "sid"
+            ],
+            "default": "prg"
+          },
+          "dryRun": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "When true, skip playback and only return compilation metadata.",
+            "default": false
+          },
+          "op": {
+            "const": "compile_play"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "play_preset",
+      "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
+      "required": [],
+      "optional": [
+        "preset",
+        "platforms",
+        "verify",
+        "analysisDurationSeconds",
+        "waitBeforeCaptureMs",
+        "restoreActiveBackend"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
+        "properties": {
+          "preset": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Named SID preset to compile and play. Canonical public preset: fuer_elise.",
+            "minLength": 1,
+            "default": "fuer_elise"
+          },
+          "platforms": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "description": "Backends to target in sequence.",
+              "minLength": 1,
+              "enum": [
+                "vice",
+                "c64u"
+              ]
+            }
+          },
+          "verify": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Capture and analyze audio on supported backends after playback starts.",
+            "default": true
+          },
+          "analysisDurationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Length of the verification recording on analyzable backends.",
+            "minimum": 0.5,
+            "maximum": 20,
+            "default": 4
+          },
+          "waitBeforeCaptureMs": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Delay between starting playback and beginning verification capture.",
+            "minimum": 0,
+            "maximum": 5000,
+            "default": 400
+          },
+          "restoreActiveBackend": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Restore the backend that was active before the workflow started.",
+            "default": true
+          },
+          "op": {
+            "const": "play_preset"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "pipeline",
+      "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
+      "required": [],
+      "optional": [
+        "sidwave",
+        "cpg",
+        "output",
+        "waitBeforeCaptureMs",
+        "analysisDurationSeconds",
+        "expectedSidwave",
+        "verifySilenceBefore",
+        "verifySilenceAfter",
+        "silenceDurationSeconds",
+        "silenceRmsThreshold",
+        "postSilenceWaitMs",
+        "silenceWaitMs"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
+        "properties": {
+          "sidwave": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SIDWAVE source in YAML or JSON format.",
+            "minLength": 1
+          },
+          "cpg": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Legacy CPG input format.",
+            "minLength": 1
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Playback artifact format.",
+            "enum": [
+              "prg",
+              "sid"
+            ],
+            "default": "prg"
+          },
+          "waitBeforeCaptureMs": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Delay between starting playback and beginning analysis capture (milliseconds).",
+            "minimum": 0,
+            "maximum": 5000,
+            "default": 500
+          },
+          "analysisDurationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Audio capture length in seconds.",
+            "minimum": 0.5,
+            "maximum": 20,
+            "default": 3
+          },
+          "expectedSidwave": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional expected SIDWAVE used to refine analysis comparisons.",
+            "minLength": 1
+          },
+          "verifySilenceBefore": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Run silence verification before playback to ensure a quiet baseline.",
+            "default": true
+          },
+          "verifySilenceAfter": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Run silence verification after playback to ensure voices are released.",
+            "default": true
+          },
+          "silenceDurationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Audio capture length used for silence verification.",
+            "minimum": 0.5,
+            "maximum": 10,
+            "default": 1.5
+          },
+          "silenceRmsThreshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "RMS threshold applied to silence verification captures.",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.02
+          },
+          "postSilenceWaitMs": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Delay between main analysis capture and the post-playback silence check (milliseconds).",
+            "minimum": 0,
+            "maximum": 5000,
+            "default": 200
+          },
+          "silenceWaitMs": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Delay between silencing the SID and recording during pre/post checks (milliseconds).",
+            "minimum": 0,
+            "maximum": 5000,
+            "default": 150
+          },
+          "op": {
+            "const": "pipeline"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "analyze",
+      "description": "Automatically analyze SID playback when verification is requested.",
+      "required": [
+        "request"
+      ],
+      "optional": [
+        "durationSeconds",
+        "expectedSidwave"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Automatically analyze SID playback when verification is requested.",
+        "properties": {
+          "request": {
+            "type": "string",
+            "description": "Natural language user request describing the verification goal.",
+            "minLength": 1
+          },
+          "durationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Override capture duration in seconds.",
+            "minimum": 0.5,
+            "maximum": 30
+          },
+          "expectedSidwave": {
+            "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+            "type": [
+              "string",
+              "object",
+              "null"
+            ]
+          },
+          "op": {
+            "const": "analyze"
+          }
+        },
+        "required": [
+          "request",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "record_analyze",
+      "description": "Record audio for a fixed duration and return SID analysis metrics.",
+      "required": [
+        "durationSeconds"
+      ],
+      "optional": [
+        "expectedSidwave"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Record audio for a fixed duration and return SID analysis metrics.",
+        "properties": {
+          "durationSeconds": {
+            "type": "number",
+            "description": "Capture duration in seconds (0.5 - 30).",
+            "minimum": 0.5,
+            "maximum": 30
+          },
+          "expectedSidwave": {
+            "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+            "type": [
+              "string",
+              "object",
+              "null"
+            ]
+          },
+          "op": {
+            "const": "record_analyze"
+          }
+        },
+        "required": [
+          "durationSeconds",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

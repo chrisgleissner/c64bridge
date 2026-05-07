@@ -1,0 +1,136 @@
+{
+  "type": "object",
+  "description": "Input operations: write_text, key, joystick.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "Send a text string to the keyboard buffer, with PETSCII token expansion.",
+      "properties": {
+        "op": {
+          "const": "write_text"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text to type. Use {RETURN}, {CLR}, {F1}…{F8}, {UP/DOWN/LEFT/RIGHT}, colour names, etc.",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "delayMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Delay in ms after sending (default 0).",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 0
+        }
+      },
+      "required": [
+        "op",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "description": "Tap a single key or hold it for a duration.",
+      "properties": {
+        "op": {
+          "const": "key"
+        },
+        "key": {
+          "type": "string",
+          "description": "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.).",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "durationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Delay in ms after each queued key press before the next press (default 0 = no delay).",
+          "minimum": 0,
+          "maximum": 5000,
+          "default": 0
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of times to press the key (default 1).",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 1
+        }
+      },
+      "required": [
+        "op",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+      "properties": {
+        "op": {
+          "const": "joystick"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Joystick port (1 = $DC01, 2 = $DC00).",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "controls": {
+          "type": "array",
+          "description": "List of controls to activate simultaneously.",
+          "items": {
+            "type": "string",
+            "description": "Control to activate.",
+            "enum": [
+              "up",
+              "down",
+              "left",
+              "right",
+              "fire"
+            ]
+          },
+          "minItems": 0
+        },
+        "action": {
+          "type": "string",
+          "description": "press = hold until a release call; release = restore all bits; tap = press then release after durationMs.",
+          "enum": [
+            "press",
+            "release",
+            "tap"
+          ]
+        },
+        "durationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Duration to hold for tap action in ms (default 80).",
+          "minimum": 10,
+          "maximum": 5000,
+          "default": 80
+        }
+      },
+      "required": [
+        "op",
+        "port",
+        "controls",
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "discriminator": {
+    "propertyName": "op"
+  }
+}

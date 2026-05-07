@@ -21,12 +21,12 @@ import {
   type GroupedOperationConfig,
   type GenericOperationMap,
 } from "./utils.js";
+import { jsonResult } from "../responses.js";
 import {
   ToolError,
   toolErrorResult,
   unknownErrorResult,
 } from "../errors.js";
-import { jsonResult } from "../responses.js";
 
 const graphicsDescriptorIndex = buildDescriptorIndex(graphicsModule);
 
@@ -50,6 +50,69 @@ const captureFrameArgsSchema = objectSchema({
       enum: ["base64", "hex"],
       default: "base64",
     }), "base64"),
+  },
+  required: ["op"],
+  additionalProperties: false,
+});
+
+// ---------------------------------------------------------------------------
+// get_display_state helpers — VIC-II register decoding
+// ---------------------------------------------------------------------------
+function parseVicState(d011: number, d016: number, d018: number, dd00: number, d020: number, d021: number) {
+  const bank = (~dd00) & 0x03; // CIA2 Port A bits 0-1 select VIC bank (inverted)
+  const bankBase = bank * 0x4000;
+  const bitmapMode = (d011 & 0x20) !== 0;
+  const extendedColor = (d011 & 0x40) !== 0;
+  const multicolor = (d016 & 0x10) !== 0;
+  const screenVisible = (d011 & 0x10) !== 0;
+  const raster8 = (d011 & 0x80) !== 0;
+  const vertScroll = d011 & 0x07;
+  const horizScroll = d016 & 0x07;
+  const columns40 = (d016 & 0x08) !== 0;
+  const rows25 = (d011 & 0x08) !== 0;
+  // D018 bits 4-7 = screen RAM offset (× $0400); bits 1-3 = char/bitmap pointer (× $0800)
+  const screenRamOffset = ((d018 >> 4) & 0x0f) * 0x0400;
+  const screenRamAddress = bankBase + screenRamOffset;
+  const charOrBitmapPointer = ((d018 >> 1) & 0x07) * 0x0800;
+  const charOrBitmapAddress = bankBase + charOrBitmapPointer;
+  let mode: string;
+  if (bitmapMode && multicolor) mode = "multicolor_bitmap";
+  else if (bitmapMode) mode = "hires_bitmap";
+  else if (extendedColor) mode = "extended_color_text";
+  else if (multicolor) mode = "multicolor_text";
+  else mode = "standard_text";
+  return {
+    mode,
+    bank,
+    bankBase: `$${bankBase.toString(16).toUpperCase().padStart(4, "0")}`,
+    screenRamAddress: `$${screenRamAddress.toString(16).toUpperCase().padStart(4, "0")}`,
+    charOrBitmapAddress: `$${charOrBitmapAddress.toString(16).toUpperCase().padStart(4, "0")}`,
+    screenVisible,
+    bitmapMode,
+    extendedColor,
+    multicolor,
+    rows25,
+    columns40,
+    vertScroll,
+    horizScroll,
+    raster8,
+    borderColor: d020 & 0x0f,
+    backgroundColor: d021 & 0x0f,
+    registers: {
+      d011: `$${d011.toString(16).toUpperCase().padStart(2, "0")}`,
+      d016: `$${d016.toString(16).toUpperCase().padStart(2, "0")}`,
+      d018: `$${d018.toString(16).toUpperCase().padStart(2, "0")}`,
+      d020: `$${d020.toString(16).toUpperCase().padStart(2, "0")}`,
+      d021: `$${d021.toString(16).toUpperCase().padStart(2, "0")}`,
+      dd00: `$${dd00.toString(16).toUpperCase().padStart(2, "0")}`,
+    },
+  };
+}
+
+const getDisplayStateArgsSchema = objectSchema({
+  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+  properties: {
+    op: literalSchema("get_display_state"),
   },
   required: ["op"],
   additionalProperties: false,
@@ -151,6 +214,33 @@ const graphicsOperations: GroupedOperationConfig[] = [
     ),
     handler: groupedGraphicsHandlers.render_bitmap,
   },
+  {
+    op: "get_display_state",
+    schema: getDisplayStateArgsSchema.jsonSchema,
+    handler: async (_rawArgs, ctx) => {
+      try {
+        // Use cross-platform memory reads so the same handler works on both
+        // C64U and VICE. The VIC-II and CIA2 registers live in machine memory
+        // either way; the underlying facade hides the transport difference.
+        const vicRegs = await ctx.client.readMemoryRaw(0xD011, 8);
+        const colorRegs = await ctx.client.readMemoryRaw(0xD020, 2);
+        const cia2 = await ctx.client.readMemoryRaw(0xDD00, 1);
+        const d011 = vicRegs[0] ?? 0;
+        const d016 = vicRegs[5] ?? 0; // $D016 = $D011 + 5
+        const d018 = vicRegs[7] ?? 0; // $D018 = $D011 + 7
+        const d020 = colorRegs[0] ?? 0;
+        const d021 = colorRegs[1] ?? 0;
+        const dd00 = cia2[0] ?? 0x03;
+        const backend = await ctx.client.getActiveBackendType();
+        const state = { ...parseVicState(d011, d016, d018, dd00, d020, d021), backend };
+        ctx.logger.info("Read VIC-II display state", { mode: state.mode, bank: state.bank, backend });
+        return jsonResult(state, { success: true, mode: state.mode, backend });
+      } catch (error) {
+        if (error instanceof ToolError) return toolErrorResult(error);
+        return unknownErrorResult(error);
+      }
+    },
+  },
 ];
 
 const graphicsOperationHandlers = createOperationHandlers(graphicsOperations);
@@ -201,6 +291,11 @@ export const graphicsModuleGroup = defineToolModule({
           name: "Import bitmap image",
           description: "Convert a PNG into VIC bitmap memory and display it",
           arguments: { op: "render_bitmap", imagePath: "./artifacts/sample.png", format: "hires" },
+        },
+        {
+          name: "Read VIC-II state",
+          description: "Decode graphics mode, memory layout, and colours from VIC-II registers (cross-platform)",
+          arguments: { op: "get_display_state" },
         },
       ],
       execute: createOperationDispatcher<GenericOperationMap>(

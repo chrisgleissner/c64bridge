@@ -35,6 +35,161 @@
   "required": [
     "op"
   ],
-  "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot.\n- power_on: Power on a specific Ultimate drive slot.\n- power_off: Power off a specific Ultimate drive slot.\n- load_rom: Temporarily load a custom ROM into an Ultimate drive slot.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581).",
-  "additionalProperties": false
+  "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "reset",
+      "description": "Issue an IEC reset for the selected drive slot.",
+      "required": [
+        "drive"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Issue an IEC reset for the selected drive slot.",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "reset"
+          }
+        },
+        "required": [
+          "drive",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "power_on",
+      "description": "Power on a specific Ultimate drive slot.",
+      "required": [
+        "drive"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Power on a specific Ultimate drive slot.",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "power_on"
+          }
+        },
+        "required": [
+          "drive",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "power_off",
+      "description": "Power off a specific Ultimate drive slot.",
+      "required": [
+        "drive"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Power off a specific Ultimate drive slot.",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "power_off"
+          }
+        },
+        "required": [
+          "drive",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "load_rom",
+      "description": "Temporarily load a custom ROM into an Ultimate drive slot.",
+      "required": [
+        "drive",
+        "path"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Temporarily load a custom ROM into an Ultimate drive slot.",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "description": "Absolute or Ultimate filesystem path to the disk image to mount or manage.",
+            "minLength": 1
+          },
+          "op": {
+            "const": "load_rom"
+          }
+        },
+        "required": [
+          "drive",
+          "path",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "set_mode",
+      "description": "Set the emulation mode for a drive slot (1541/1571/1581).",
+      "required": [
+        "drive",
+        "mode"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Set the emulation mode for a drive slot (1541/1571/1581).",
+        "properties": {
+          "drive": {
+            "type": "string",
+            "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+            "minLength": 1
+          },
+          "mode": {
+            "type": "string",
+            "description": "Drive hardware profile to emulate.",
+            "enum": [
+              "1541",
+              "1571",
+              "1581"
+            ]
+          },
+          "op": {
+            "const": "set_mode"
+          }
+        },
+        "required": [
+          "drive",
+          "mode",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

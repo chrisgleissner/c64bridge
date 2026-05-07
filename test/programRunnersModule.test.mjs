@@ -1,7 +1,11 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { programOperationHandlers, programRunnersModule } from "../src/tools/programRunners.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { __programRunnerHelpersForTests, programOperationHandlers, programRunnersModule } from "../src/tools/programRunners.js";
 import { ToolUnsupportedPlatformError } from "../src/tools/errors.js";
+import { clearViceSymbols, getViceSymbol, setViceSymbols } from "../src/tools/symbolRegistry.js";
 
 function createLogger() {
   return {
@@ -15,6 +19,85 @@ function createLogger() {
 function createPlatformStatus(id) {
   return { id, features: [], limitedFeatures: [] };
 }
+
+test.afterEach(() => {
+  clearViceSymbols();
+});
+
+test("program runner helper adapters normalise detail payloads and strip op tags", () => {
+  assert.equal(__programRunnerHelpersForTests.extractFailureDetails(undefined), undefined);
+  assert.equal(__programRunnerHelpersForTests.extractFailureDetails(null), undefined);
+  assert.deepEqual(__programRunnerHelpersForTests.extractFailureDetails({ code: "FAIL" }), { code: "FAIL" });
+  assert.deepEqual(__programRunnerHelpersForTests.extractFailureDetails("boom"), { value: "boom" });
+
+  assert.equal(__programRunnerHelpersForTests.toRecord(undefined), undefined);
+  assert.equal(__programRunnerHelpersForTests.toRecord(null), undefined);
+  assert.deepEqual(__programRunnerHelpersForTests.toRecord({ ok: true }), { ok: true });
+  assert.deepEqual(__programRunnerHelpersForTests.toRecord(42), { value: 42 });
+  assert.deepEqual(
+    __programRunnerHelpersForTests.stripOperationDiscriminator({ op: "run_prg", path: "//USB0/demo.prg", verify: true }),
+    { path: "//USB0/demo.prg", verify: true },
+  );
+});
+
+test("program runner helper parser extracts unique BASIC runtime errors", () => {
+  const errors = __programRunnerHelpersForTests.parseBasicRuntimeErrors([
+    "READY.",
+    "?SYNTAX ERROR IN 10",
+    "?SYNTAX ERROR IN 10",
+    "?TYPE   MISMATCH ERROR IN 20",
+    "?BAD ERROR IN 999999",
+    "ERROR IN nope",
+  ].join("\r\n"));
+
+  assert.deepEqual(errors, [
+    { line: 10, type: "SYNTAX", raw: "?SYNTAX ERROR IN 10" },
+    { line: 20, type: "TYPE MISMATCH", raw: "?TYPE   MISMATCH ERROR IN 20" },
+  ]);
+});
+
+test("program runner helper auto-fix appends quotes and parentheses while ignoring REM text", () => {
+  const fixed = __programRunnerHelpersForTests.attemptAutoFixBasicProgram(
+    '10 PRINT ("HELLO":REM ")"\n20 PRINT "A""B\n30 END',
+    [
+      { line: 10, type: "SYNTAX", raw: "?SYNTAX ERROR IN 10" },
+      { line: 20, type: "SYNTAX", raw: "?SYNTAX ERROR IN 20" },
+    ],
+  );
+
+  assert.ok(fixed);
+  assert.equal(fixed.changes.length, 2);
+  assert.equal(fixed.program.includes('10 PRINT ("HELLO":REM ")")'), true);
+  assert.equal(fixed.program.includes('20 PRINT "A""B"'), true);
+  assert.ok(fixed.changes[0].notes.some((note) => note.includes("closing parenthesis")));
+  assert.ok(fixed.changes[1].notes.some((note) => note.includes("closing quote")));
+});
+
+test("program runner helper auto-fix returns undefined when nothing can be changed", () => {
+  assert.equal(
+    __programRunnerHelpersForTests.attemptAutoFixBasicProgram("10 PRINT \"OK\"", []),
+    undefined,
+  );
+  assert.equal(
+    __programRunnerHelpersForTests.attemptAutoFixBasicProgram(
+      "10 PRINT \"OK\"",
+      [{ line: 99, type: "SYNTAX", raw: "?SYNTAX ERROR IN 99" }],
+    ),
+    undefined,
+  );
+});
+
+test("program runner helper normalises runtime errors without adding empty types", () => {
+  const normalized = __programRunnerHelpersForTests.normalizeRuntimeErrors([
+    { line: 10, type: "SYNTAX", raw: "?SYNTAX ERROR IN 10" },
+    { line: 20, raw: "?ERROR IN 20" },
+  ]);
+
+  assert.deepEqual(normalized, [
+    { line: 10, type: "SYNTAX", text: "?SYNTAX ERROR IN 10" },
+    { line: 20, text: "?ERROR IN 20" },
+  ]);
+});
 
 test("run_prg executes via client", async () => {
   const calls = [];
@@ -95,6 +178,52 @@ test("run_prg returns structured content with path", async () => {
   assert.equal(data.format, "prg");
   assert.equal(data.path, "//USB0/run.prg");
   assert.deepEqual(calls, ["//USB0/run.prg"]);
+});
+
+test("run_prg clears stale VICE symbols when no symbols file is provided", async () => {
+  setViceSymbols([["stale", 0x0810]]);
+  const ctx = {
+    client: {
+      async runPrgFile() {
+        return { success: true, details: { ok: true } };
+      },
+    },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  };
+
+  const result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg" }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(getViceSymbol(0x0810), undefined);
+});
+
+test("run_prg loads VICE symbols from file", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-symbols-"));
+  const symbolsPath = path.join(tempDir, "demo.vs");
+  fs.writeFileSync(symbolsPath, "add_label 0x0810 .main\n", "utf8");
+
+  const ctx = {
+    client: {
+      async runPrgFile() {
+        return { success: true, details: { ok: true } };
+      },
+    },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  };
+
+  try {
+    const result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: symbolsPath }, ctx);
+
+    assert.equal(result.isError, undefined);
+    assert.equal(result.metadata.symbolsLoaded, 1);
+    assert.equal(getViceSymbol(0x0810), "main");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("run_crt returns structured content with path", async () => {

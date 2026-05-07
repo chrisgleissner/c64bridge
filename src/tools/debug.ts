@@ -31,6 +31,7 @@ interface DebugOperationMap extends OperationMap {
     readonly stopOnHit?: boolean;
     readonly enabled?: boolean;
     readonly temporary?: boolean;
+    readonly label?: string;
     readonly operations?: {
       readonly execute?: boolean;
       readonly load?: boolean;
@@ -52,6 +53,10 @@ interface DebugOperationMap extends OperationMap {
   };
   readonly step: { readonly count?: number; readonly mode?: "into" | "over" };
   readonly step_return: Record<string, never>;
+  readonly get_monitor_state: { readonly memspace?: number };
+  readonly wait_for_state: { readonly expectedPC?: string; readonly timeoutMs?: number; readonly pollMs?: number };
+  readonly nuclear_reset: Record<string, never>;
+  readonly continue_execution: Record<string, never>;
 }
 
 interface RegisterSelector {
@@ -139,6 +144,7 @@ const createCheckpointArgsSchema = objectSchema({
     stopOnHit: optionalSchema(booleanSchema({ description: "Pause execution when hit (default true).", default: true })),
     enabled: optionalSchema(booleanSchema({ description: "Whether the checkpoint is enabled (default true).", default: true })),
     temporary: optionalSchema(booleanSchema({ description: "Automatically remove after first hit.", default: false })),
+    label: optionalSchema(stringSchema({ description: "Optional human-readable label stored in-process.", maxLength: 64 })),
     operations: optionalSchema(objectSchema<CheckpointOperationsRecord>({
       description: "Checkpoint operation filters.",
       properties: {
@@ -238,6 +244,46 @@ const stepReturnArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+const getMonitorStateArgsSchema = objectSchema({
+  description: "Read CPU registers and return the current monitor state.",
+  properties: {
+    op: literalSchema("get_monitor_state"),
+    memspace: memspaceSchema,
+  },
+  required: ["op"],
+  additionalProperties: false,
+});
+
+const waitForStateArgsSchema = objectSchema({
+  description: "Poll CPU registers until PC equals expectedPC or timeout elapses.",
+  properties: {
+    op: literalSchema("wait_for_state"),
+    expectedPC: optionalSchema(stringSchema({ description: "Target PC address to wait for (e.g. $0810).", minLength: 1 })),
+    timeoutMs: optionalSchema(numberSchema({ description: "Maximum wait time in milliseconds.", integer: true, minimum: 1, maximum: 60000, default: 5000 })),
+    pollMs: optionalSchema(numberSchema({ description: "Poll interval in milliseconds.", integer: true, minimum: 10, maximum: 1000, default: 100 })),
+  },
+  required: ["op"],
+  additionalProperties: false,
+});
+
+const nuclearResetArgsSchema = objectSchema({
+  description: "Kill and restart the VICE process (managed instances only).",
+  properties: {
+    op: literalSchema("nuclear_reset"),
+  },
+  required: ["op"],
+  additionalProperties: false,
+});
+
+const continueExecutionArgsSchema = objectSchema({
+  description: "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+  properties: {
+    op: literalSchema("continue_execution"),
+  },
+  required: ["op"],
+  additionalProperties: false,
+});
+
 const debugOperationSchemas = [
   listCheckpointsArgsSchema,
   getCheckpointArgsSchema,
@@ -250,7 +296,13 @@ const debugOperationSchemas = [
   setRegistersArgsSchema,
   stepArgsSchema,
   stepReturnArgsSchema,
+  getMonitorStateArgsSchema,
+  waitForStateArgsSchema,
+  nuclearResetArgsSchema,
+  continueExecutionArgsSchema,
 ] as const;
+
+const checkpointLabels = new Map<number, string>();
 
 const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
   list_checkpoints: async (_args, ctx) => {
@@ -259,7 +311,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       ctx.logger.info("Listing VICE checkpoints");
       const checkpoints = await ctx.client.viceCheckpointList();
       return jsonResult(
-        { checkpoints: checkpoints.map(formatCheckpoint) },
+        { checkpoints: checkpoints.map((cp) => formatCheckpoint(cp, checkpointLabels.get(cp.id))) },
         { success: true, count: checkpoints.length },
       );
     } catch (error) {
@@ -271,7 +323,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const parsed = getCheckpointArgsSchema.parse(args);
       const checkpoint = await ctx.client.viceCheckpointGet(parsed.id);
       return jsonResult(
-        { checkpoint: formatCheckpoint(checkpoint) },
+        { checkpoint: formatCheckpoint(checkpoint, checkpointLabels.get(checkpoint.id)) },
         { success: true },
       );
     } catch (error) {
@@ -297,9 +349,12 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         },
         memspace: normaliseMemspace(parsed.memspace),
       });
-      ctx.logger.info("Created VICE checkpoint", { id: created.id, start: formatAddress(created.start) });
+      if (parsed.label) {
+        checkpointLabels.set(created.id, parsed.label);
+      }
+      ctx.logger.info("Created VICE checkpoint", { id: created.id, start: formatAddress(created.start), label: parsed.label });
       return jsonResult(
-        { checkpoint: formatCheckpoint(created) },
+        { checkpoint: formatCheckpoint(created, checkpointLabels.get(created.id)) },
         { success: true, id: created.id },
       );
     } catch (error) {
@@ -310,6 +365,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       const parsed = deleteCheckpointArgsSchema.parse(args);
       await ctx.client.viceCheckpointDelete(parsed.id);
+      checkpointLabels.delete(parsed.id);
       ctx.logger.info("Deleted VICE checkpoint", { id: parsed.id });
       return textResult(`Deleted checkpoint ${parsed.id}.`, { success: true, id: parsed.id });
     } catch (error) {
@@ -453,6 +509,89 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       return handleToolError(error);
     }
   },
+  get_monitor_state: async (args, ctx) => {
+    try {
+      const parsed = getMonitorStateArgsSchema.parse(args);
+      const memspace = normaliseMemspace(parsed.memspace);
+      const [metadata, values] = await Promise.all([
+        ctx.client.viceRegistersAvailable(memspace),
+        ctx.client.viceRegistersGet(memspace),
+      ]);
+      const metadataById = new Map(metadata.map((m) => [m.id, m]));
+      const registers = values.map((v) => {
+        const meta = metadataById.get(v.id);
+        return { id: v.id, name: meta?.name, bits: meta?.bits, size: v.size, value: v.value };
+      });
+      const pc = registers.find((r) => r.name?.toUpperCase() === "PC");
+      ctx.logger.info("Read monitor state", { memspace, pc: pc ? formatAddress(pc.value) : "unknown" });
+      return jsonResult(
+        { memspace, registers, pc: pc ? formatAddress(pc.value) : undefined },
+        { success: true, memspace, count: registers.length },
+      );
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  wait_for_state: async (args, ctx) => {
+    try {
+      const parsed = waitForStateArgsSchema.parse(args);
+      const timeoutMs = parsed.timeoutMs ?? 5000;
+      const pollMs = parsed.pollMs ?? 100;
+      const targetPC = parsed.expectedPC ? parseAddress(parsed.expectedPC, "expectedPC") : undefined;
+      const metadata = await ctx.client.viceRegistersAvailable(0);
+      const metadataById = new Map(metadata.map((m) => [m.id, m]));
+      const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+      const deadline = Date.now() + timeoutMs;
+      let values: import("../vice/viceClient.js").ViceRegisterValue[] = [];
+      let currentPC: number | undefined;
+      while (Date.now() < deadline) {
+        values = await ctx.client.viceRegistersGet(0);
+        currentPC = pcId !== undefined ? values.find((v) => v.id === pcId)?.value : undefined;
+        if (targetPC === undefined || currentPC === targetPC) {
+          break;
+        }
+        await new Promise<void>((res) => setTimeout(res, pollMs));
+      }
+      const matched = targetPC === undefined || currentPC === targetPC;
+      const regs = values.map((v) => {
+        const meta = metadataById.get(v.id);
+        return { id: v.id, name: meta?.name, bits: meta?.bits, size: v.size, value: v.value };
+      });
+      ctx.logger.info("wait_for_state settled", { matched, pc: currentPC !== undefined ? formatAddress(currentPC) : "unknown" });
+      return jsonResult(
+        {
+          matched,
+          timedOut: !matched,
+          pc: currentPC !== undefined ? formatAddress(currentPC) : undefined,
+          registers: regs,
+        },
+        { success: true, matched },
+      );
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  nuclear_reset: async (args, ctx) => {
+    try {
+      nuclearResetArgsSchema.parse(args);
+      ctx.logger.info("Performing nuclear reset of VICE process");
+      await ctx.client.viceNuclearReset();
+      checkpointLabels.clear();
+      return textResult("VICE process stopped and restarted.", { success: true });
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  continue_execution: async (args, ctx) => {
+    try {
+      continueExecutionArgsSchema.parse(args);
+      await ctx.client.viceExitMonitor();
+      ctx.logger.info("Exited Binary Monitor — CPU resumed");
+      return textResult("Execution resumed.", { success: true });
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
 };
 
 const debugOperationDispatcher = createOperationDispatcher<DebugOperationMap>(
@@ -497,6 +636,31 @@ export const debugModuleGroup = defineToolModule({
           description: "Read CPU registers from memspace 0 (default).",
           arguments: { op: "get_registers" },
         },
+        {
+          name: "Create labelled breakpoint",
+          description: "Set a breakpoint at $0810 with a descriptive label.",
+          arguments: { op: "create_checkpoint", address: "$0810", label: "entry_point" },
+        },
+        {
+          name: "Get monitor state",
+          description: "Read current CPU state including all registers and PC.",
+          arguments: { op: "get_monitor_state" },
+        },
+        {
+          name: "Wait for PC",
+          description: "Poll until PC reaches $0810 or 5 s elapses.",
+          arguments: { op: "wait_for_state", expectedPC: "$0810", timeoutMs: 5000 },
+        },
+        {
+          name: "Nuclear reset",
+          description: "Kill and restart the VICE process, clearing all state.",
+          arguments: { op: "nuclear_reset" },
+        },
+        {
+          name: "Continue execution",
+          description: "Exit the BM monitor and let the CPU run freely.",
+          arguments: { op: "continue_execution" },
+        },
       ],
       execute: debugOperationDispatcher,
     },
@@ -510,9 +674,10 @@ function handleToolError(error: unknown) {
   return unknownErrorResult(error);
 }
 
-function formatCheckpoint(checkpoint: import("../vice/viceClient.js").ViceCheckpoint) {
+function formatCheckpoint(checkpoint: import("../vice/viceClient.js").ViceCheckpoint, label?: string) {
   return {
     id: checkpoint.id,
+    ...(label ? { label } : {}),
     start: formatAddress(checkpoint.start),
     end: formatAddress(checkpoint.end),
     enabled: checkpoint.enabled,

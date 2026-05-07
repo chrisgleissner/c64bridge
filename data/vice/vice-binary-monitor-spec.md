@@ -13,6 +13,7 @@ Recommended C64 Bridge entry points:
 | Select the VICE backend | `c64_select_backend` | `select` |
 | Read or write memory | `c64_memory` | `read`, `write`, `read_screen`, `wait_for_text` |
 | Debug registers and checkpoints | `c64_debug` | `get_registers`, `set_registers`, `create_checkpoint`, `list_checkpoints`, `step`, `step_return` |
+| Send keyboard or joystick input | `c64_input` | `write_text`, `key`, `joystick` |
 | Capture emulator display | `c64_graphics` | `capture_frame` |
 | Reset or resume execution | `c64_system` | `reset`, `resume` |
 | Read or write VICE resources | `c64_vice` | `resource_get`, `resource_set` |
@@ -429,7 +430,14 @@ cmd: TL:u8 | TC:bytes[TL]
 rsp: 0x72 | empty
 ```
 
-No primary public C64 Bridge MCP mapping is listed in the README API reference.
+C64 Bridge mapping:
+
+| MCP tool    | Operation    |
+| ----------- | ------------ |
+| `c64_input` | `write_text` |
+| `c64_input` | `key`        |
+
+Public input tools inject PETSCII through the shared KERNAL keyboard queue for cross-platform parity. The VICE backend still exposes BM `0x72` internally via `ViceClient.keyboardFeed()` when a direct monitor call is needed.
 
 ---
 
@@ -589,7 +597,13 @@ cmd: PN:u16 | PV:u16
 rsp: 0xa2 | empty
 ```
 
-No primary public C64 Bridge MCP mapping is listed in the README API reference.
+C64 Bridge mapping:
+
+| MCP tool    | Operation  |
+| ----------- | ---------- |
+| `c64_input` | `joystick` |
+
+The public joystick tool simulates the same port state by writing CIA1 joyport registers directly, rather than issuing BM `0xa2`.
 
 ---
 
@@ -772,7 +786,7 @@ Usually emitted with `request_id = 0xffffffff`.
 | Resource Get         | `0x51` |                   `0x51` | `c64_vice.resource_get`                                                             |
 | Resource Set         | `0x52` |                   `0x52` | `c64_vice.resource_set`                                                             |
 | Advance Instructions | `0x71` |                   `0x71` | `c64_debug.step`                                                                    |
-| Keyboard Feed        | `0x72` |                   `0x72` | internal or unmapped                                                                |
+| Keyboard Feed        | `0x72` |                   `0x72` | `c64_input.write_text`, `c64_input.key`                                             |
 | Execute Until Return | `0x73` |                   `0x73` | `c64_debug.step_return`                                                             |
 | Ping                 | `0x81` |                   `0x81` | internal                                                                            |
 | Banks Available      | `0x82` |                   `0x82` | internal                                                                            |
@@ -781,7 +795,7 @@ Usually emitted with `request_id = 0xffffffff`.
 | VICE Info            | `0x85` |                   `0x85` | internal diagnostics                                                                |
 | CPU History          | `0x86` |                   `0x86` | internal or unmapped                                                                |
 | Palette Get          | `0x91` |                   `0x91` | internal display support                                                            |
-| Joyport Set          | `0xa2` |                   `0xa2` | internal or unmapped                                                                |
+| Joyport Set          | `0xa2` |                   `0xa2` | `c64_input.joystick`                                                                |
 | Userport Set         | `0xb2` |                   `0xb2` | internal or unmapped                                                                |
 | Exit                 | `0xaa` |                   `0xaa` | `c64_system.resume`                                                                 |
 | Quit                 | `0xbb` |                   `0xbb` | managed VICE lifecycle                                                              |
@@ -803,6 +817,9 @@ Examples:
 | Read memory at `$0801`          | `c64_memory` with `op = read`             |
 | Write bytes to RAM              | `c64_memory` with `op = write`            |
 | Show the current text screen    | `c64_memory` with `op = read_screen`      |
+| Type `LOAD"*",8,1` then Return  | `c64_input` with `op = write_text`        |
+| Tap a function key or Return    | `c64_input` with `op = key`               |
+| Simulate joystick fire or left  | `c64_input` with `op = joystick`          |
 | Capture the current video frame | `c64_graphics` with `op = capture_frame`  |
 | Set a breakpoint                | `c64_debug` with `op = create_checkpoint` |
 | List breakpoints                | `c64_debug` with `op = list_checkpoints`  |

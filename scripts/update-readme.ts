@@ -142,6 +142,8 @@ type GroupedOperation = {
   readonly op: string;
   readonly description: string;
   readonly required: readonly string[];
+  readonly optional: readonly string[];
+  readonly properties: Readonly<Record<string, JsonSchema | undefined>>;
   readonly notes: readonly string[];
 };
 
@@ -165,9 +167,25 @@ function toTableValue(values: readonly string[]): string {
   return values.join(", ");
 }
 
+function formatInputName(name: string, schema?: JsonSchema): string {
+  const defaultSuffix = schema && Object.prototype.hasOwnProperty.call(schema, "default")
+    ? `=${JSON.stringify(schema.default)}`
+    : "";
+  return `\`${name}${defaultSuffix}\``;
+}
+
+function formatInputs(names: readonly string[], properties: Readonly<Record<string, JsonSchema | undefined>>): string {
+  return toTableValue(names.map((name) => formatInputName(name, properties[name])));
+}
+
 function collectGroupedOperations(schema?: JsonSchema): readonly GroupedOperation[] {
   if (!schema || !isObject(schema)) {
     return [];
+  }
+
+  const metadataOperations = collectFromOperationMetadata(schema);
+  if (metadataOperations.length > 0) {
+    return metadataOperations;
   }
 
   const discriminator = (schema as JsonSchema & { discriminator?: { propertyName?: string } }).discriminator;
@@ -178,6 +196,57 @@ function collectGroupedOperations(schema?: JsonSchema): readonly GroupedOperatio
   }
 
   return collectFromFlattenedSchema(schema);
+}
+
+function collectFromOperationMetadata(schema: JsonSchema): readonly GroupedOperation[] {
+  const metadata = (schema as JsonSchema & {
+    readonly "x-c64bridge-operations"?: readonly unknown[];
+  })["x-c64bridge-operations"];
+
+  if (!Array.isArray(metadata)) {
+    return [];
+  }
+
+  const operations: GroupedOperation[] = [];
+
+  for (const entry of metadata) {
+    if (!isObject(entry)) {
+      continue;
+    }
+
+    const opName = getString(entry.op);
+    if (!opName) {
+      continue;
+    }
+
+    const inputSchema = isObject(entry.inputSchema) ? (entry.inputSchema as JsonSchema) : undefined;
+    const properties = (inputSchema?.properties ?? {}) as Record<string, JsonSchema | undefined>;
+    const requiredProps = Array.isArray(entry.required)
+      ? entry.required.filter((name): name is string => typeof name === "string" && name !== "op")
+      : [];
+    const optionalProps = Array.isArray(entry.optional)
+      ? entry.optional.filter((name): name is string => typeof name === "string" && name !== "op")
+      : Object.keys(properties).filter((name) => name !== "op" && !requiredProps.includes(name));
+
+    const notes: string[] = [];
+    const hasVerificationProperty = Object.keys(properties).some((name) =>
+      name.toLowerCase().startsWith("verify"),
+    );
+    if (hasVerificationProperty) {
+      notes.push("supports verify");
+    }
+
+    operations.push({
+      op: opName,
+      description: getString(entry.description, `Operation ${opName}`),
+      required: requiredProps,
+      optional: optionalProps,
+      properties,
+      notes,
+    });
+  }
+
+  return operations;
 }
 
 function collectFromVariantList(variants: readonly JsonSchema[]): readonly GroupedOperation[] {
@@ -224,6 +293,8 @@ function collectFromVariantList(variants: readonly JsonSchema[]): readonly Group
       op: opName,
       description,
       required: requiredProps,
+      optional: Object.keys(properties).filter((name) => name !== "op" && !requiredProps.includes(name)),
+      properties,
       notes,
     });
   }
@@ -258,6 +329,8 @@ function collectFromFlattenedSchema(schema: JsonSchema): readonly GroupedOperati
     op: opName,
     description: descriptionMap.get(opName) ?? `Operation ${opName}`,
     required: [] as readonly string[],
+    optional: Object.keys(properties).filter((name) => name !== "op"),
+    properties,
     notes,
   }));
 }
@@ -302,6 +375,9 @@ export function renderToolsSection(modules: readonly ToolModuleDescriptor[] = de
       if (operations.length === 0) {
         lines.push("_No operations defined._");
       } else {
+        if (!lines.includes("_Address range convention: `address` + `length` means start address plus byte count; `startAddress` + `endAddress` means inclusive bounds._")) {
+          lines.splice(2, 0, "_Address range convention: `address` + `length` means start address plus byte count; `startAddress` + `endAddress` means inclusive bounds._", "");
+        }
         const toolPlatforms: readonly string[] = tool.metadata.platforms ?? ["c64u"];
         const opPlatformOverrides: Record<string, readonly string[]> = tool.metadata.operationPlatforms ?? {};
         const operationRows = operations
@@ -312,14 +388,15 @@ export function renderToolsSection(modules: readonly ToolModuleDescriptor[] = de
             return [
               `\`${operation.op}\``,
               escapeCell(operation.description),
-              escapeCell(toTableValue(operation.required.map((name) => `\`${name}\``))),
+              escapeCell(formatInputs(operation.required, operation.properties)),
+              escapeCell(formatInputs(operation.optional, operation.properties)),
               operation.notes.length ? escapeCell(operation.notes.join(", ")) : "—",
               effectivePlatforms.includes("c64u") ? "✅" : "",
               effectivePlatforms.includes("vice") ? "✅" : "",
             ];
           });
 
-        lines.push(renderTable(["Operation", "Description", "Required Inputs", "Notes", "C64U", "VICE"], operationRows));
+        lines.push(renderTable(["Operation", "Description", "Required Inputs", "Optional Inputs", "Notes", "C64U", "VICE"], operationRows));
       }
 
       lines.push("");

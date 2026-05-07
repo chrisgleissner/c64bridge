@@ -14,7 +14,6 @@ Your AI Command Bridge for the Commodore 64.
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D&quality=insiders)
 [![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D)
 [![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSIsIlZJQ0VfQklOQVJZIjoiL3Vzci9sb2NhbC9iaW4veDY0c2MiLCJWSUNFX0RJUkVDVE9SWSI6Ii91c3IvbG9jYWwvc2hhcmUvdmljZSIsIlZJQ0VfVklTSUJMRSI6InRydWUiLCJWSUNFX1dBUlAiOiJmYWxzZSJ9fQ==)
-[![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
 C64 Bridge is an MCP server for controlling and working with a Commodore 64 from an AI client.
 
@@ -53,7 +52,6 @@ C64 Bridge is listed in the [Official MCP Registry](https://registry.modelcontex
       - [SID Playback](#sid-playback)
       - [RAG](#rag)
       - [Testing](#testing)
-  - [Claude Code](#claude-code)
   - [Example Workflow](#example-workflow)
   - [HTTP Invocation](#http-invocation)
   - [Build and Test](#build-and-test)
@@ -193,14 +191,9 @@ The detailed lookup order, merge rules, backend examples, and override model are
 
 ### 4. Connect from an MCP Client
 
-C64 Bridge ships a single canonical `stdio` entry point that every MCP client uses:
+If you use VS Code, follow the [VS Code MCP Setup](#vs-code-mcp-setup) section below.
 
-- **VS Code (GitHub Copilot)** — see [VS Code MCP Setup](#vs-code-mcp-setup).
-- **Claude Code (CLI and VS Code plugin)** — see [Claude Code](#claude-code).
-- **Cursor, Visual Studio, VS Code Insiders** — use the install badges at the top of this README.
-- **Any other MCP client** — point it at the same `stdio` server, with the environment variables documented in [Runtime Environment Variable Reference](#runtime-environment-variable-reference) and the registry manifest in [mcp.json](./mcp.json).
-
-The startup command is the same across clients: `npx -y c64bridge@latest` for the published package, or `node scripts/start.mjs` from a local checkout. Backend selection (`c64u` vs `vice`) and credentials live in the shared [Configuration](#configuration) files and environment variables — clients only need to know the command.
+If you use another MCP client, point it at the `stdio` server entry point and pass any required environment variables exactly as documented in this README and in [mcp.json](./mcp.json).
 
 ## Configuration
 
@@ -251,8 +244,8 @@ Use this for managed VICE launches:
 }
 ```
 
-- `directory` is optional. When omitted, or when the configured path is invalid, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the selected emulator binary and in common system locations.
-- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override managed VICE startup without editing config files. Valid explicit `VICE_BINARY` and `VICE_DIRECTORY` values are used as-is; automatic search only fills in missing or invalid values.
+- `directory` is optional. When omitted, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the emulator binary and in common system locations.
+- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override managed VICE startup without editing config files.
 - If no explicit binary is configured, the runtime prefers `/usr/local/bin/x64sc` when present, then falls back to `x64sc` or `x64` on `PATH` so the same setup remains portable across operating systems.
 
 > [!NOTE]
@@ -283,8 +276,6 @@ The screenshots below were captured from actual backend bitmap responses after t
 | VICE | ![VICE backend switch example](doc/img/backend-switch/hello-vice.png) |
 
 ## VS Code MCP Setup
-
-This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.
 
 If this repository is checked out locally, open the prepared [.vscode/mcp.json](./.vscode/mcp.json).
 
@@ -492,24 +483,6 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 
 <!-- AUTO-GENERATED:ENV-VARS-END -->
 
-## Claude Code
-
-[Claude Code](https://docs.claude.com/en/docs/claude-code/mcp) is supported as a first-class MCP client. It uses the same canonical start command and the same backend [Configuration](#configuration) files and environment variables as every other client — only the discovery file differs.
-
-**Claude Code CLI** — register the published server in one command:
-
-```bash
-claude mcp add c64bridge -- npx -y c64bridge@latest
-```
-
-Use `--scope user` to make it available across all your projects, or `--scope project` to write a `.mcp.json` next to the current repo. Backend selection (`c64u` vs `vice`), host, port, and password come from the same files documented in [Configuration](#configuration); per-shell overrides come from the variables in [Runtime Environment Variable Reference](#runtime-environment-variable-reference).
-
-**Project-scoped discovery** — this repository ships a checked-in [.mcp.json](./.mcp.json) that points Claude Code at the local source via `node scripts/start.mjs`. When you open the repo with `claude` (CLI or VS Code plugin), Claude Code prompts to enable the project-scoped server on first run. Approve it once and the `c64_*` tools become discoverable in that workspace.
-
-**Claude Code VS Code plugin** — the plugin reads the same `.mcp.json` and the same user-scope `claude mcp add` registrations as the CLI. No extra setup is required beyond installing the plugin and approving the project server prompt. The existing [.vscode/mcp.json](./.vscode/mcp.json) is read by GitHub Copilot, not by Claude Code; the two files coexist without conflict because they target different clients with different config schemas.
-
-**Verify it works** — after registration, run `claude mcp list` (CLI) or open the MCP panel (plugin) and look for `c64bridge`. Then ask Claude Code something like *“use vice: write a small BASIC program that clears the screen and prints HELLO CLAUDE”* — it should call `c64_select_backend` and `c64_program` directly. If tools do not appear, confirm Node 24+ is on `PATH`, that the server was approved at the requested scope, and that the backend is reachable per the [Configuration](#configuration) section.
-
 ## Example Workflow
 
 Compose a children’s song with ChatGPT and VS Code:
@@ -561,21 +534,13 @@ The [`./build`](./build) script at the project root wraps all development tasks 
 ./build test                                         # integration tests (mock backend)
 ./build test --real                                  # test against real hardware
 ./build test --platform vice --target mock           # single test leg
-./build test:vice:mock                               # curated VICE mock matrix (feature-matrix coverage)
-./build test:vice:device                             # curated real-VICE validation (device backend + smoke, headless/Xvfb by default)
 ./build test:matrix                                  # full matrix (c64u/mock · vice/mock · vice/device)
 ./build coverage                                     # merged coverage report
 ./build coverage:single --platform c64u --target mock
-npm run vice:smoke                                   # direct VICE binary-monitor smoke test
-npm run vice:smoke:visible                           # human-visible VICE boot + HELLO demo (keeps window open)
 ./build check                                        # build + test matrix (no install)
 ./build rag:rebuild                                  # rebuild RAG embeddings
 ./build release --version 1.2.3                      # prepare a release
 ```
-
-The visible smoke demo accepts `true`/`false`, `on`/`off`, and `1`/`0` for `VICE_VISIBLE`, `VICE_WARP`, and `VICE_KEEP_OPEN`. `npm run vice:smoke:visible` forces a visible, warp-off session, waits for a stable `READY.` screen, then injects `HELLO` and keeps the window open for inspection.
-
-Automation note: `npm run test:vice:device` and `./build` force the real-VICE validation leg into headless/Xvfb mode so the CI-style matrix does not open a confusing local emulator window.
 
 > **Starting the MCP server** is not managed by `./build`. Use `npm start` (from source) or `npx -y c64bridge@latest` (published package) as shown in the [Quick Start](#quick-start) section above.
 
@@ -596,208 +561,237 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **15 tools**, **26 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **26 resources**, and **10 prompts** for controlling your Commodore 64.
 
 ### Tools
+
+_Address range convention: `address` + `length` means start address plus byte count; `startAddress` + `endAddress` means inclusive bounds._
+
+#### c64_batch
+
+Execute multiple c64bridge tool calls in a single request. Reduces latency for multi-step workflows.
+
+_No operations defined._
 
 #### c64_config
 
 Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `batch_update` | Apply multiple configuration updates in a single request. | — | — | ✅ | ✅ |
-| `diff` | Compare the current configuration with a snapshot. | — | — | ✅ | ✅ |
-| `get` | Read a configuration category or specific item. | — | — | ✅ | ✅ |
-| `info` | Retrieve Ultimate hardware information and status. | — | — | ✅ | ✅ |
-| `list` | List configuration categories reported by the firmware. | — | — | ✅ | ✅ |
-| `load_flash` | Load configuration from flash storage. | — | — | ✅ |  |
-| `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |
-| `reset_defaults` | Reset firmware configuration to factory defaults. | — | — | ✅ |  |
-| `restore` | Restore configuration from a snapshot file. | — | — | ✅ | ✅ |
-| `save_flash` | Persist the current configuration to flash storage. | — | — | ✅ |  |
-| `set` | Write a configuration value in the selected category. | — | — | ✅ | ✅ |
-| `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | — | ✅ |  |
-| `snapshot` | Snapshot configuration to disk for later restore or diff. | — | — | ✅ | ✅ |
-| `version` | Fetch firmware version details. | — | — | ✅ | ✅ |
-| `write_debugreg` | Write a hex value to the Ultimate debug register ($D7FF). | — | — | ✅ |  |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `batch_update` | Apply multiple configuration updates in a single request. | — | — | — | ✅ | ✅ |
+| `diff` | Compare the current configuration with a snapshot. | `path` | — | — | ✅ | ✅ |
+| `get` | Read a configuration category or specific item. | `category` | `item` | — | ✅ | ✅ |
+| `info` | Retrieve Ultimate hardware information and status. | — | — | — | ✅ | ✅ |
+| `list` | List configuration categories reported by the firmware. | — | — | — | ✅ | ✅ |
+| `load_flash` | Load configuration from flash storage. | — | — | — | ✅ |  |
+| `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | — | ✅ |  |
+| `reset_defaults` | Reset firmware configuration to factory defaults. | — | — | — | ✅ |  |
+| `restore` | Restore configuration from a snapshot file. | `path` | `applyToFlash=false` | — | ✅ | ✅ |
+| `save_flash` | Persist the current configuration to flash storage. | — | — | — | ✅ |  |
+| `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | — | ✅ | ✅ |
+| `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | — | ✅ |  |
+| `snapshot` | Snapshot configuration to disk for later restore or diff. | `path` | — | — | ✅ | ✅ |
+| `version` | Fetch firmware version details. | — | — | — | ✅ | ✅ |
+| `write_debugreg` | Write a hex value to the Ultimate debug register ($D7FF). | `value` | — | — | ✅ |  |
 
 #### c64_debug
 
 Grouped entry point for VICE debugger operations (breakpoints, registers, stepping).
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `create_checkpoint` | Create a new checkpoint (breakpoint) in VICE. | — | — |  | ✅ |
-| `delete_checkpoint` | Remove a checkpoint by id. | — | — |  | ✅ |
-| `get_checkpoint` | Fetch a single checkpoint by id. | — | — |  | ✅ |
-| `get_registers` | Read register values, optionally filtered by name or id. | — | — |  | ✅ |
-| `list_checkpoints` | List all active VICE checkpoints (breakpoints). | — | — |  | ✅ |
-| `list_registers` | List available registers (metadata). | — | — |  | ✅ |
-| `set_condition` | Attach a conditional expression to a checkpoint. | — | — |  | ✅ |
-| `set_registers` | Write register values. | — | — |  | ✅ |
-| `step` | Single-step CPU execution. | — | — |  | ✅ |
-| `step_return` | Continue execution until the current routine returns. | — | — |  | ✅ |
-| `toggle_checkpoint` | Enable or disable a checkpoint by id. | — | — |  | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `continue_execution` | Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). | — | — | — |  | ✅ |
+| `create_checkpoint` | Create a new checkpoint (breakpoint) in VICE. | `address` | `endAddress`, `stopOnHit=true`, `enabled=true`, `temporary=false`, `label`, `operations`, `memspace` | — |  | ✅ |
+| `delete_checkpoint` | Remove a checkpoint by id. | `id` | — | — |  | ✅ |
+| `get_checkpoint` | Fetch a single checkpoint by id. | `id` | — | — |  | ✅ |
+| `get_monitor_state` | Read CPU registers and return the current monitor state. | — | `memspace` | — |  | ✅ |
+| `get_registers` | Read register values, optionally filtered by name or id. | — | `memspace`, `registers` | — |  | ✅ |
+| `list_checkpoints` | List all active VICE checkpoints (breakpoints). | — | — | — |  | ✅ |
+| `list_registers` | List available registers (metadata). | — | `memspace` | — |  | ✅ |
+| `nuclear_reset` | Kill and restart the VICE process (managed instances only). | — | — | — |  | ✅ |
+| `set_condition` | Attach a conditional expression to a checkpoint. | `id`, `expression` | — | — |  | ✅ |
+| `set_registers` | Write register values. | `writes` | `memspace` | — |  | ✅ |
+| `step` | Single-step CPU execution. | — | `count=1`, `mode` | — |  | ✅ |
+| `step_return` | Continue execution until the current routine returns. | — | — | — |  | ✅ |
+| `toggle_checkpoint` | Enable or disable a checkpoint by id. | `id`, `enabled` | — | — |  | ✅ |
+| `wait_for_state` | Poll CPU registers until PC equals expectedPC or timeout elapses. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` | — |  | ✅ |
 
 #### c64_disk
 
 Grouped entry point for disk mounts, listings, image creation, and program discovery.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `create_image` | Create a blank disk image of the specified format. | — | supports verify | ✅ |  |
-| `file_info` | Inspect metadata for a file on the Ultimate filesystem. | — | supports verify | ✅ |  |
-| `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | — | supports verify | ✅ |  |
-| `list_drives` | List Ultimate drive slots and their mounted images. | — | supports verify | ✅ | ✅ |
-| `mount` | Mount a disk image with optional verification and retries. | — | supports verify | ✅ | ✅ |
-| `unmount` | Remove the mounted image from an Ultimate drive slot. | — | supports verify | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `create_image` | Create a blank disk image of the specified format. | `format`, `path` | `diskname`, `tracks` | — | ✅ |  |
+| `file_info` | Inspect metadata for a file on the Ultimate filesystem. | `path` | — | — | ✅ |  |
+| `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | — | ✅ |  |
+| `list_drives` | List Ultimate drive slots and their mounted images. | — | — | — | ✅ | ✅ |
+| `mount` | Mount a disk image with optional verification and retries. | `drive`, `image` | `type`, `attachmentMode`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | supports verify | ✅ | ✅ |
+| `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | — | ✅ | ✅ |
 
 #### c64_drive
 
 Grouped entry point for drive power, mode, reset, and ROM operations.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `load_rom` | Temporarily load a custom ROM into an Ultimate drive slot. | — | — | ✅ |  |
-| `power_off` | Power off a specific Ultimate drive slot. | — | — | ✅ | ✅ |
-| `power_on` | Power on a specific Ultimate drive slot. | — | — | ✅ | ✅ |
-| `reset` | Issue an IEC reset for the selected drive slot. | — | — | ✅ | ✅ |
-| `set_mode` | Set the emulation mode for a drive slot (1541/1571/1581). | — | — | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `load_rom` | Temporarily load a custom ROM into an Ultimate drive slot. | `drive`, `path` | — | — | ✅ |  |
+| `power_off` | Power off a specific Ultimate drive slot. | `drive` | — | — | ✅ | ✅ |
+| `power_on` | Power on a specific Ultimate drive slot. | `drive` | — | — | ✅ | ✅ |
+| `reset` | Issue an IEC reset for the selected drive slot. | `drive` | — | — | ✅ | ✅ |
+| `set_mode` | Set the emulation mode for a drive slot (1541/1571/1581). | `drive`, `mode` | — | — | ✅ | ✅ |
 
 #### c64_extract
 
 Grouped entry point for sprite/charset extraction, memory dumps, filesystem stats, and firmware health checks.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `charset` | Locate and extract 2KB character sets from RAM. | — | — | ✅ |  |
-| `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ |  |
-| `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | — | ✅ |  |
-| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | — | — | ✅ |  |
-| `sprites` | Scan RAM for sprites and optionally export .spr files. | — | — | ✅ |  |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `charset` | Locate and extract 2KB character sets from RAM. | — | `address`, `scanRange="common"`, `outputPath`, `pauseDuringRead=true`, `minNonEmptyChars=32`, `minEntropy=0.3` | — | ✅ |  |
+| `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | — | ✅ |  |
+| `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | — | ✅ |  |
+| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize=512`, `pauseDuringRead=true`, `retries=1` | — | ✅ |  |
+| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=true`, `outputDir`, `pauseDuringRead=true` | — | ✅ |  |
 
 #### c64_graphics
 
 Grouped entry point for frame capture and graphics rendering workflows.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `capture_frame` | Capture one or more complete video frames from the active backend. | — | — | ✅ | ✅ |
-| `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | — | — | ✅ | ✅ |
-| `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | — | ✅ | ✅ |
-| `render_petscii_text` | Display PETSCII text with optional border and background colours. | — | — | ✅ | ✅ |
-| `render_sprite` | Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. | — | — | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=true`, `encoding="base64"` | — | ✅ | ✅ |
+| `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. | — | — | — | ✅ | ✅ |
+| `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | — | ✅ | ✅ |
+| `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | — | ✅ | ✅ |
+| `render_petscii_text` | Display PETSCII text with optional border and background colours. | `text` | `borderColor`, `backgroundColor` | — | ✅ | ✅ |
+| `render_sprite` | Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. | `sprite` | `index=0`, `x=100`, `y=100`, `color=1`, `multicolour=false` | — | ✅ | ✅ |
+
+#### c64_input
+
+Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).
+
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `joystick` | Simulate joystick input by writing directly to CIA1 Port A/B registers. | `port`, `controls`, `action` | `durationMs=80` | — |  | ✅ |
+| `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | — | ✅ | ✅ |
+| `write_text` | Send a text string to the keyboard buffer, with PETSCII token expansion. | `text` | `delayMs=0` | — | ✅ | ✅ |
 
 #### c64_memory
 
 Grouped entry point for memory I/O, screen reads, and screen polling.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `read` | Read a range of bytes and return a hex dump with address metadata. | — | supports verify | ✅ | ✅ |
-| `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | supports verify | ✅ | ✅ |
-| `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | — | supports verify | ✅ | ✅ |
-| `write` | Write a hexadecimal byte sequence into RAM. | — | supports verify | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | `maxDiffs=10` | — | ✅ | ✅ |
+| `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | — | — | ✅ | ✅ |
+| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. | `address` | `length=64`, `instructionCount` | — | ✅ | ✅ |
+| `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | — | ✅ | ✅ |
+| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256` | — | ✅ | ✅ |
+| `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | — | ✅ | ✅ |
+| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true` | — | ✅ | ✅ |
+| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10` | — | ✅ | ✅ |
+| `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | — | ✅ | ✅ |
+| `write` | Write a hexadecimal byte sequence into RAM. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | supports verify | ✅ | ✅ |
 
 #### c64_printer
 
 Grouped entry point for Commodore and Epson printing helpers.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `define_chars` | Define custom printer characters (Commodore DLL mode). | — | — | ✅ |  |
-| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | — | — | ✅ |  |
-| `print_text` | Generate BASIC that prints text to device 4. | — | — | ✅ |  |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `define_chars` | Define custom printer characters (Commodore DLL mode). | `firstChar`, `chars` | `secondaryAddress` | — | ✅ |  |
+| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | `printer="commodore"`, `columns` | `repeats`, `useSubRepeat`, `secondaryAddress`, `ensureMsb=true`, `mode`, `density`, `timesPerLine` | — | ✅ |  |
+| `print_text` | Generate BASIC that prints text to device 4. | `text` | `target="commodore"`, `secondaryAddress`, `formFeed=false` | — | ✅ |  |
 
 #### c64_program
 
 Grouped entry point for program upload, execution, and batch workflows.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | — | supports verify | ✅ | ✅ |
-| `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | — | supports verify | ✅ |  |
-| `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. | — | supports verify | ✅ | ✅ |
-| `load_prg` | Load a PRG from Ultimate storage without executing it. | — | supports verify | ✅ |  |
-| `run_crt` | Mount and run a CRT cartridge image. | — | supports verify | ✅ |  |
-| `run_prg` | Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. | — | supports verify | ✅ | ✅ |
-| `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. | — | supports verify | ✅ | ✅ |
-| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. | — | supports verify | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | `continueOnError=false`, `durationMs=2000`, `outputPath`, `resetDelayMs=100` | — | ✅ | ✅ |
+| `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg=true` | — | ✅ |  |
+| `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. | — | `platforms=["vice","c64u"]`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | supports verify | ✅ | ✅ |
+| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | — | ✅ |  |
+| `run_crt` | Mount and run a CRT cartridge image. | `path` | — | — | ✅ |  |
+| `run_prg` | Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. | `path` | `symbolsFile` | — | ✅ | ✅ |
+| `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. | `program` | `verify=false` | supports verify | ✅ | ✅ |
+| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. | `program` | `verify=false` | supports verify | ✅ | ✅ |
 
 #### c64_rag
 
 Grouped entry point for BASIC and assembly RAG lookups.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `asm` | Retrieve 6502/6510 assembly references from the local knowledge base. | — | — | ✅ | ✅ |
-| `basic` | Retrieve BASIC references and snippets from the local knowledge base. | — | — | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `asm` | Retrieve 6502/6510 assembly references from the local knowledge base. | `q` | `k=3` | — | ✅ | ✅ |
+| `basic` | Retrieve BASIC references and snippets from the local knowledge base. | `q` | `k=3` | — | ✅ | ✅ |
 
 #### c64_select_backend
 
 Switch the active backend between C64U hardware and the VICE emulator at runtime.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `select` | Switch the active runtime backend without restarting the MCP server. | — | — | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `select` | Switch the active runtime backend without restarting the MCP server. | `backend` | — | — | ✅ | ✅ |
 
 #### c64_sound
 
 Grouped entry point for SID control, playback, composition, and analysis workflows.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `analyze` | Automatically analyze SID playback when verification is requested. | — | supports verify | ✅ |  |
-| `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | supports verify | ✅ |  |
-| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | supports verify | ✅ | ✅ |
-| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | supports verify | ✅ | ✅ |
-| `note_off` | Release a SID voice by clearing its gate bit. | — | supports verify | ✅ | ✅ |
-| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | supports verify | ✅ | ✅ |
-| `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. | — | supports verify | ✅ |  |
-| `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | — | supports verify | ✅ |  |
-| `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. | — | supports verify | ✅ | ✅ |
-| `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | — | supports verify | ✅ |  |
-| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. | — | supports verify | ✅ |  |
-| `reset` | Soft or hard reset of SID registers to clear glitches. | — | supports verify | ✅ | ✅ |
-| `set_volume` | Set the SID master volume register at $D418 (0-15). | — | supports verify | ✅ | ✅ |
-| `silence_all` | Silence all SID voices with optional audio verification. | — | supports verify | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | `durationSeconds`, `expectedSidwave` | — | ✅ |  |
+| `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | — | ✅ |  |
+| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false` | — | ✅ | ✅ |
+| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"` | — | ✅ | ✅ |
+| `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | — | ✅ | ✅ |
+| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system="PAL"`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | — | ✅ | ✅ |
+| `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=true`, `verifySilenceAfter=true`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | supports verify | ✅ |  |
+| `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | — | ✅ |  |
+| `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. | — | `preset="fuer_elise"`, `platforms`, `verify=true`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | supports verify | ✅ | ✅ |
+| `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | — | ✅ |  |
+| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. | `durationSeconds` | `expectedSidwave` | — | ✅ |  |
+| `reset` | Soft or hard reset of SID registers to clear glitches. | — | `hard=false` | — | ✅ | ✅ |
+| `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | — | — | ✅ | ✅ |
+| `silence_all` | Silence all SID voices with optional audio verification. | — | `verify=false` | supports verify | ✅ | ✅ |
 
 #### c64_stream
 
 Grouped entry point for starting and stopping Ultimate streaming sessions.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `start` | Start an Ultimate streaming session toward a host:port target. | — | — | ✅ |  |
-| `stop` | Stop an active Ultimate streaming session. | — | — | ✅ |  |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `start` | Start an Ultimate streaming session toward a host:port target. | `stream`, `target` | — | — | ✅ |  |
+| `stop` | Stop an active Ultimate streaming session. | `stream` | — | — | ✅ |  |
 
 #### c64_system
 
 Grouped entry point for power, reset, menu, and background task control.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `list_tasks` | List known background tasks with status metadata. | — | — | ✅ | ✅ |
-| `menu` | Toggle the Ultimate menu button for navigation. | — | — | ✅ |  |
-| `pause` | Pause the machine until resumed. | — | — | ✅ |  |
-| `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | — | ✅ | ✅ |
-| `poweroff` | Request a controlled shutdown via the Ultimate firmware. | — | — | ✅ | ✅ |
-| `reboot` | Trigger a firmware reboot to recover from faults. | — | — | ✅ | ✅ |
-| `reset` | Issue a soft reset without cutting power. | — | — | ✅ | ✅ |
-| `resume` | Resume CPU execution after a pause. | — | — | ✅ |  |
-| `start_task` | Start a named background task that runs on an interval. | — | — | ✅ | ✅ |
-| `stop_all_tasks` | Stop every running background task and persist state. | — | — | ✅ | ✅ |
-| `stop_task` | Stop a specific background task and clear its timer. | — | — | ✅ | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `list_tasks` | List known background tasks with status metadata. | — | — | — | ✅ | ✅ |
+| `menu` | Toggle the Ultimate menu button for navigation. | — | — | — | ✅ |  |
+| `pause` | Pause the machine until resumed. | — | — | — | ✅ |  |
+| `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | — | ✅ | ✅ |
+| `poweroff` | Request a controlled shutdown via the Ultimate firmware. | — | — | — | ✅ | ✅ |
+| `reboot` | Trigger a firmware reboot to recover from faults. | — | — | — | ✅ | ✅ |
+| `reset` | Issue a soft reset without cutting power. | — | — | — | ✅ | ✅ |
+| `resume` | Resume CPU execution after a pause. | — | — | — | ✅ |  |
+| `start_task` | Start a named background task that runs on an interval. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | — | ✅ | ✅ |
+| `stop_all_tasks` | Stop every running background task and persist state. | — | — | — | ✅ | ✅ |
+| `stop_task` | Stop a specific background task and clear its timer. | `name` | — | — | ✅ | ✅ |
 
 #### c64_vice
 
 Grouped entry point for reading and updating selected VICE resources.
 
-| Operation | Description | Required Inputs | Notes | C64U | VICE |
-| --- | --- | --- | --- | --- | --- |
-| `resource_get` | Read a VICE configuration resource (safe prefixes only). | — | — |  | ✅ |
-| `resource_set` | Write a VICE configuration resource (safe prefixes only). | — | — |  | ✅ |
+| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `resource_get` | Read a VICE configuration resource (safe prefixes only). | `name` | — | — |  | ✅ |
+| `resource_set` | Write a VICE configuration resource (safe prefixes only). | `name`, `value` | — | — |  | ✅ |
 
 ### Resources
 
