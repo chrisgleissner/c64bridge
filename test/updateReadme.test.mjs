@@ -154,6 +154,66 @@ describe("update-readme grouped operations", () => {
     expect(output).toContain("| `probe` | Probe emulator state. | — | supports verify | ✅ | ✅ |");
   });
 
+  it("renders required inputs from flattened grouped schema metadata", () => {
+    const output = renderToolsSection([
+      {
+        tools: [
+          {
+            name: "c64_flattened_metadata",
+            description: "Flattened grouped tool with operation metadata.",
+            inputSchema: {
+              type: "object",
+              description: "Flattened operations.",
+              properties: {
+                op: { type: "string", enum: ["upload", "probe"] },
+                payload: { type: "string", description: "Payload" },
+                verifyWrite: { type: "boolean", description: "Verify write" },
+              },
+              required: ["op"],
+              additionalProperties: false,
+              "x-c64bridge-operations": [
+                {
+                  op: "upload",
+                  description: "Upload bytes into memory.",
+                  required: ["payload"],
+                  inputSchema: {
+                    type: "object",
+                    properties: {
+                      op: { const: "upload" },
+                      payload: { type: "string", description: "Payload" },
+                      verifyWrite: { type: "boolean", description: "Verify write" },
+                    },
+                    required: ["op", "payload"],
+                    additionalProperties: false,
+                  },
+                },
+                {
+                  op: "probe",
+                  description: "Probe emulator state.",
+                  required: [],
+                  inputSchema: {
+                    type: "object",
+                    properties: {
+                      op: { const: "probe" },
+                    },
+                    required: ["op"],
+                    additionalProperties: false,
+                  },
+                },
+              ],
+            },
+            metadata: {
+              platforms: ["c64u", "vice"],
+            },
+          },
+        ],
+      },
+    ]).join("\n");
+
+    expect(output).toContain("| `upload` | Upload bytes into memory. | `payload` | supports verify | ✅ | ✅ |");
+    expect(output).toContain("| `probe` | Probe emulator state. | — | — | ✅ | ✅ |");
+  });
+
   it("escapes tables and updates the generated README section", async () => {
     expect(renderTable(["A", "B"], [["left|side", "line1\nline2"]])).toContain("left|side");
 

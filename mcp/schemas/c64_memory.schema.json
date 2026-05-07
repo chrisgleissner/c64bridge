@@ -178,6 +178,456 @@
   "required": [
     "op"
   ],
-  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.\n- copy_memory: Copy a RAM region to another address.\n- fill_memory: Fill a memory range with a repeating byte pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses.\n- compare_memory: Compare two memory regions byte-by-byte and report differences.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header.",
-  "additionalProperties": false
+  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "read",
+      "description": "Read a range of bytes and return a hex dump with address metadata.",
+      "required": [
+        "address"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Read a range of bytes and return a hex dump with address metadata.",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Start address expressed as $HHHH, decimal, or a documented symbol name.",
+            "minLength": 1
+          },
+          "length": {
+            "type": "integer",
+            "description": "Number of bytes to read starting from the resolved address.",
+            "minimum": 1,
+            "maximum": 4096,
+            "default": 256
+          },
+          "op": {
+            "const": "read"
+          }
+        },
+        "required": [
+          "address",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "write",
+      "description": "Write a hexadecimal byte sequence into RAM.",
+      "required": [
+        "address",
+        "bytes"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Write a hexadecimal byte sequence into RAM.",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Destination address expressed as $HHHH, decimal, or a documented symbol name.",
+            "minLength": 1
+          },
+          "bytes": {
+            "type": "string",
+            "description": "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
+            "minLength": 2,
+            "pattern": "^[\\s_0-9A-Fa-f$]+$"
+          },
+          "verify": {
+            "type": "boolean",
+            "description": "When true, verify the write by reading before and after the change; Ultimate hardware also pauses during verification.",
+            "default": false
+          },
+          "expected": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional hex data expected before the write (verifies before writing).",
+            "minLength": 2,
+            "pattern": "^[\\s_0-9A-Fa-f$]+$"
+          },
+          "mask": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional verification mask (hex); only bits set in the mask are compared.",
+            "minLength": 2,
+            "pattern": "^[\\s_0-9A-Fa-f$]+$"
+          },
+          "abortOnMismatch": {
+            "type": "boolean",
+            "description": "Abort the write when the pre-write verification fails.",
+            "default": true
+          },
+          "op": {
+            "const": "write"
+          }
+        },
+        "required": [
+          "address",
+          "bytes",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "read_screen",
+      "description": "Return the current 40x25 text screen converted to ASCII.",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Return the current 40x25 text screen converted to ASCII.",
+        "properties": {
+          "op": {
+            "const": "read_screen"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ]
+      }
+    },
+    {
+      "op": "wait_for_text",
+      "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
+      "required": [
+        "pattern"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Substring or regex to find",
+            "minLength": 1
+          },
+          "isRegex": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Interpret pattern as regular expression",
+            "default": false
+          },
+          "caseInsensitive": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Case-insensitive search",
+            "default": true
+          },
+          "timeoutMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Overall timeout in milliseconds",
+            "minimum": 1,
+            "default": 3000
+          },
+          "intervalMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Poll interval in milliseconds",
+            "minimum": 1,
+            "default": 100
+          },
+          "op": {
+            "const": "wait_for_text"
+          }
+        },
+        "required": [
+          "pattern",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "disassemble",
+      "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
+      "required": [
+        "address"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Start address as $HHHH, decimal, or symbol name.",
+            "minLength": 1
+          },
+          "length": {
+            "type": "integer",
+            "description": "Number of bytes to read and disassemble.",
+            "minimum": 1,
+            "maximum": 4096,
+            "default": 64
+          },
+          "instructionCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Stop after this many instructions (overrides length as a termination condition).",
+            "minimum": 1,
+            "maximum": 512
+          },
+          "op": {
+            "const": "disassemble"
+          }
+        },
+        "required": [
+          "address",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "copy_memory",
+      "description": "Copy a RAM region to another address.",
+      "required": [
+        "source",
+        "dest",
+        "length"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Copy a RAM region to another address.",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Source start address ($HHHH, decimal, or symbol).",
+            "minLength": 1
+          },
+          "dest": {
+            "type": "string",
+            "description": "Destination start address.",
+            "minLength": 1
+          },
+          "length": {
+            "type": "integer",
+            "description": "Number of bytes to copy (1–16384).",
+            "minimum": 1,
+            "maximum": 16384
+          },
+          "op": {
+            "const": "copy_memory"
+          }
+        },
+        "required": [
+          "source",
+          "dest",
+          "length",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "fill_memory",
+      "description": "Fill a memory range with a repeating byte pattern.",
+      "required": [
+        "address",
+        "length",
+        "pattern"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Fill a memory range with a repeating byte pattern.",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "Start address ($HHHH, decimal, or symbol).",
+            "minLength": 1
+          },
+          "length": {
+            "type": "integer",
+            "description": "Number of bytes to fill (1–16384).",
+            "minimum": 1,
+            "maximum": 16384
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Hex bytes to repeat, e.g. 'FF' or 'AA 55'. Space-separated or run together.",
+            "minLength": 2,
+            "pattern": "^[\\s0-9A-Fa-f$]+$"
+          },
+          "op": {
+            "const": "fill_memory"
+          }
+        },
+        "required": [
+          "address",
+          "length",
+          "pattern",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "search_memory",
+      "description": "Search for a byte pattern within a memory range and return matching addresses.",
+      "required": [
+        "startAddress",
+        "endAddress",
+        "pattern"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Search for a byte pattern within a memory range and return matching addresses.",
+        "properties": {
+          "startAddress": {
+            "type": "string",
+            "description": "Start of search range ($HHHH, decimal, or symbol).",
+            "minLength": 1
+          },
+          "endAddress": {
+            "type": "string",
+            "description": "End of search range (inclusive).",
+            "minLength": 1
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Hex bytes to find, e.g. 'A9 00' for LDA #$00.",
+            "minLength": 2,
+            "pattern": "^[\\s0-9A-Fa-f$]+$"
+          },
+          "maxResults": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum matches to return (default 10).",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 10
+          },
+          "op": {
+            "const": "search_memory"
+          }
+        },
+        "required": [
+          "startAddress",
+          "endAddress",
+          "pattern",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "compare_memory",
+      "description": "Compare two memory regions byte-by-byte and report differences.",
+      "required": [
+        "address1",
+        "address2",
+        "length"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Compare two memory regions byte-by-byte and report differences.",
+        "properties": {
+          "address1": {
+            "type": "string",
+            "description": "First region start address.",
+            "minLength": 1
+          },
+          "address2": {
+            "type": "string",
+            "description": "Second region start address.",
+            "minLength": 1
+          },
+          "length": {
+            "type": "integer",
+            "description": "Number of bytes to compare (1–16384).",
+            "minimum": 1,
+            "maximum": 16384
+          },
+          "maxDiffs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Max differences to report (default 10).",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 10
+          },
+          "op": {
+            "const": "compare_memory"
+          }
+        },
+        "required": [
+          "address1",
+          "address2",
+          "length",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "save_memory",
+      "description": "Dump a memory range to a local file, with an optional PRG load-address header.",
+      "required": [
+        "startAddress",
+        "endAddress",
+        "filePath"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Dump a memory range to a local file, with an optional PRG load-address header.",
+        "properties": {
+          "startAddress": {
+            "type": "string",
+            "description": "Start address of region to save.",
+            "minLength": 1
+          },
+          "endAddress": {
+            "type": "string",
+            "description": "End address (inclusive).",
+            "minLength": 1
+          },
+          "filePath": {
+            "type": "string",
+            "description": "Absolute or relative path for the output file.",
+            "minLength": 1
+          },
+          "asPrg": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Prepend a 2-byte little-endian load-address header (PRG format). Default: true.",
+            "default": true
+          },
+          "op": {
+            "const": "save_memory"
+          }
+        },
+        "required": [
+          "startAddress",
+          "endAddress",
+          "filePath",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

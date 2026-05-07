@@ -236,6 +236,565 @@
   "required": [
     "op"
   ],
-  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns.\n- get_monitor_state: Read CPU registers and return the current monitor state.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses.\n- nuclear_reset: Kill and restart the VICE process (managed instances only).\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
-  "additionalProperties": false
+  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none.\n- set_registers: Write register values. Required inputs: writes.\n- step: Single-step CPU execution. Required inputs: none.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "list_checkpoints",
+      "description": "List all active VICE checkpoints (breakpoints).",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "List all active VICE checkpoints (breakpoints).",
+        "properties": {
+          "op": {
+            "const": "list_checkpoints"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "get_checkpoint",
+      "description": "Fetch a single checkpoint by id.",
+      "required": [
+        "id"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Fetch a single checkpoint by id.",
+        "properties": {
+          "op": {
+            "const": "get_checkpoint"
+          },
+          "id": {
+            "type": "integer",
+            "description": "Debugger checkpoint identifier.",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "op",
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "create_checkpoint",
+      "description": "Create a new checkpoint (breakpoint) in VICE.",
+      "required": [
+        "address"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Create a new checkpoint (breakpoint) in VICE.",
+        "properties": {
+          "op": {
+            "const": "create_checkpoint"
+          },
+          "address": {
+            "type": "string",
+            "description": "Start address (e.g. $0801).",
+            "minLength": 1
+          },
+          "endAddress": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional end address for range.",
+            "minLength": 1
+          },
+          "stopOnHit": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Pause execution when hit (default true).",
+            "default": true
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the checkpoint is enabled (default true).",
+            "default": true
+          },
+          "temporary": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Automatically remove after first hit.",
+            "default": false
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional human-readable label stored in-process.",
+            "maxLength": 64
+          },
+          "operations": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Checkpoint operation filters.",
+            "properties": {
+              "execute": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Trigger on execute (default true).",
+                "default": true
+              },
+              "load": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Trigger on memory load.",
+                "default": false
+              },
+              "store": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Trigger on memory store.",
+                "default": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "memspace": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+            "minimum": 0,
+            "maximum": 4
+          }
+        },
+        "required": [
+          "op",
+          "address"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "delete_checkpoint",
+      "description": "Remove a checkpoint by id.",
+      "required": [
+        "id"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Remove a checkpoint by id.",
+        "properties": {
+          "op": {
+            "const": "delete_checkpoint"
+          },
+          "id": {
+            "type": "integer",
+            "description": "Debugger checkpoint identifier.",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "op",
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "toggle_checkpoint",
+      "description": "Enable or disable a checkpoint by id.",
+      "required": [
+        "id",
+        "enabled"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Enable or disable a checkpoint by id.",
+        "properties": {
+          "op": {
+            "const": "toggle_checkpoint"
+          },
+          "id": {
+            "type": "integer",
+            "description": "Debugger checkpoint identifier.",
+            "minimum": 1
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Set to true to enable, false to disable."
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "enabled"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "set_condition",
+      "description": "Attach a conditional expression to a checkpoint.",
+      "required": [
+        "id",
+        "expression"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Attach a conditional expression to a checkpoint.",
+        "properties": {
+          "op": {
+            "const": "set_condition"
+          },
+          "id": {
+            "type": "integer",
+            "description": "Debugger checkpoint identifier.",
+            "minimum": 1
+          },
+          "expression": {
+            "type": "string",
+            "description": "VICE monitor conditional expression.",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "expression"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "list_registers",
+      "description": "List available registers (metadata).",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "List available registers (metadata).",
+        "properties": {
+          "op": {
+            "const": "list_registers"
+          },
+          "memspace": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+            "minimum": 0,
+            "maximum": 4
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "get_registers",
+      "description": "Read register values, optionally filtered by name or id.",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Read register values, optionally filtered by name or id.",
+        "properties": {
+          "op": {
+            "const": "get_registers"
+          },
+          "memspace": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "registers": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "description": "Registers to include.",
+            "items": {
+              "type": "object",
+              "description": "Selects a register by id or name.",
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Register name (case-insensitive)."
+                },
+                "id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Register id.",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "set_registers",
+      "description": "Write register values.",
+      "required": [
+        "writes"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Write register values.",
+        "properties": {
+          "op": {
+            "const": "set_registers"
+          },
+          "memspace": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "writes": {
+            "type": "array",
+            "description": "Register writes to apply.",
+            "items": {
+              "type": "object",
+              "description": "Register write descriptor.",
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Register name (case-insensitive)."
+                },
+                "id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Register id.",
+                  "minimum": 0
+                },
+                "value": {
+                  "type": "integer",
+                  "description": "Value to write.",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "op",
+          "writes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "step",
+      "description": "Single-step CPU execution.",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Single-step CPU execution.",
+        "properties": {
+          "op": {
+            "const": "step"
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Number of instructions to step.",
+            "minimum": 1,
+            "default": 1
+          },
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Step mode (into or over).",
+            "enum": [
+              "into",
+              "over"
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "step_return",
+      "description": "Continue execution until the current routine returns.",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Continue execution until the current routine returns.",
+        "properties": {
+          "op": {
+            "const": "step_return"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "get_monitor_state",
+      "description": "Read CPU registers and return the current monitor state.",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Read CPU registers and return the current monitor state.",
+        "properties": {
+          "op": {
+            "const": "get_monitor_state"
+          },
+          "memspace": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+            "minimum": 0,
+            "maximum": 4
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "wait_for_state",
+      "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
+        "properties": {
+          "op": {
+            "const": "wait_for_state"
+          },
+          "expectedPC": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target PC address to wait for (e.g. $0810).",
+            "minLength": 1
+          },
+          "timeoutMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum wait time in milliseconds.",
+            "minimum": 1,
+            "maximum": 60000,
+            "default": 5000
+          },
+          "pollMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Poll interval in milliseconds.",
+            "minimum": 10,
+            "maximum": 1000,
+            "default": 100
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "nuclear_reset",
+      "description": "Kill and restart the VICE process (managed instances only).",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Kill and restart the VICE process (managed instances only).",
+        "properties": {
+          "op": {
+            "const": "nuclear_reset"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "continue_execution",
+      "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+      "required": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+        "properties": {
+          "op": {
+            "const": "continue_execution"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

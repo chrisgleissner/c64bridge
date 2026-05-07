@@ -170,6 +170,11 @@ function collectGroupedOperations(schema?: JsonSchema): readonly GroupedOperatio
     return [];
   }
 
+  const metadataOperations = collectFromOperationMetadata(schema);
+  if (metadataOperations.length > 0) {
+    return metadataOperations;
+  }
+
   const discriminator = (schema as JsonSchema & { discriminator?: { propertyName?: string } }).discriminator;
   const variants = (schema as JsonSchema & { oneOf?: readonly JsonSchema[] }).oneOf;
 
@@ -178,6 +183,52 @@ function collectGroupedOperations(schema?: JsonSchema): readonly GroupedOperatio
   }
 
   return collectFromFlattenedSchema(schema);
+}
+
+function collectFromOperationMetadata(schema: JsonSchema): readonly GroupedOperation[] {
+  const metadata = (schema as JsonSchema & {
+    readonly "x-c64bridge-operations"?: readonly unknown[];
+  })["x-c64bridge-operations"];
+
+  if (!Array.isArray(metadata)) {
+    return [];
+  }
+
+  const operations: GroupedOperation[] = [];
+
+  for (const entry of metadata) {
+    if (!isObject(entry)) {
+      continue;
+    }
+
+    const opName = getString(entry.op);
+    if (!opName) {
+      continue;
+    }
+
+    const inputSchema = isObject(entry.inputSchema) ? (entry.inputSchema as JsonSchema) : undefined;
+    const properties = (inputSchema?.properties ?? {}) as Record<string, JsonSchema | undefined>;
+    const requiredProps = Array.isArray(entry.required)
+      ? entry.required.filter((name): name is string => typeof name === "string" && name !== "op")
+      : [];
+
+    const notes: string[] = [];
+    const hasVerificationProperty = Object.keys(properties).some((name) =>
+      name.toLowerCase().startsWith("verify"),
+    );
+    if (hasVerificationProperty) {
+      notes.push("supports verify");
+    }
+
+    operations.push({
+      op: opName,
+      description: getString(entry.description, `Operation ${opName}`),
+      required: requiredProps,
+      notes,
+    });
+  }
+
+  return operations;
 }
 
 function collectFromVariantList(variants: readonly JsonSchema[]): readonly GroupedOperation[] {

@@ -34,7 +34,16 @@ export type JsonSchema = {
   readonly discriminator?: {
     readonly propertyName: string;
   };
+  readonly "x-c64bridge-operations"?: readonly OperationInputMetadata[];
 };
+
+export interface OperationInputMetadata {
+  readonly op: string;
+  readonly description?: string;
+  readonly required: readonly string[];
+  readonly optional: readonly string[];
+  readonly inputSchema: JsonSchema;
+}
 
 export type ToolLifecycle = "request-response" | "stream" | "fire-and-forget";
 
@@ -143,18 +152,34 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
   const opValues: string[] = [];
   const mergedProperties: Record<string, JsonSchema> = {};
   const opDescriptions: string[] = [];
+  const operationMetadata: OperationInputMetadata[] = [];
 
   for (const variant of variants) {
     const variantProps = variant.properties ?? {};
     const discProp = variantProps[discriminator];
     const opValue = discProp?.const as string | undefined;
+    const variantDesc = variant.description ?? discProp?.description ?? "";
+    const requiredInputs = (variant.required ?? []).filter((name) => name !== discriminator);
+    const optionalInputs = Object.keys(variantProps).filter((name) =>
+      name !== discriminator && !requiredInputs.includes(name),
+    );
 
     if (opValue) {
       opValues.push(opValue);
-      const variantDesc = variant.description ?? discProp?.description ?? "";
-      if (variantDesc) {
-        opDescriptions.push(`${opValue}: ${variantDesc}`);
-      }
+      const requiredSummary = requiredInputs.length > 0
+        ? ` Required inputs: ${requiredInputs.join(", ")}.`
+        : " Required inputs: none.";
+      const optionalSummary = optionalInputs.length > 0
+        ? ` Optional inputs: ${optionalInputs.join(", ")}.`
+        : "";
+      opDescriptions.push(`${opValue}: ${variantDesc || `Operation ${opValue}`}${requiredSummary}${optionalSummary}`);
+      operationMetadata.push({
+        op: opValue,
+        ...(variantDesc ? { description: variantDesc } : {}),
+        required: requiredInputs,
+        optional: optionalInputs,
+        inputSchema: variant,
+      });
     }
 
     for (const [key, propSchema] of Object.entries(variantProps)) {
@@ -186,6 +211,7 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
     },
     required: [discriminator],
     additionalProperties: false,
+    ...(operationMetadata.length > 0 ? { "x-c64bridge-operations": operationMetadata } : {}),
   };
 
   return schema;

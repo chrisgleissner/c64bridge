@@ -578,20 +578,20 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
 | `batch_update` | Apply multiple configuration updates in a single request. | — | — | ✅ | ✅ |
-| `diff` | Compare the current configuration with a snapshot. | — | — | ✅ | ✅ |
-| `get` | Read a configuration category or specific item. | — | — | ✅ | ✅ |
+| `diff` | Compare the current configuration with a snapshot. | `path` | — | ✅ | ✅ |
+| `get` | Read a configuration category or specific item. | `category` | — | ✅ | ✅ |
 | `info` | Retrieve Ultimate hardware information and status. | — | — | ✅ | ✅ |
 | `list` | List configuration categories reported by the firmware. | — | — | ✅ | ✅ |
 | `load_flash` | Load configuration from flash storage. | — | — | ✅ |  |
 | `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |
 | `reset_defaults` | Reset firmware configuration to factory defaults. | — | — | ✅ |  |
-| `restore` | Restore configuration from a snapshot file. | — | — | ✅ | ✅ |
+| `restore` | Restore configuration from a snapshot file. | `path` | — | ✅ | ✅ |
 | `save_flash` | Persist the current configuration to flash storage. | — | — | ✅ |  |
-| `set` | Write a configuration value in the selected category. | — | — | ✅ | ✅ |
+| `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | ✅ | ✅ |
 | `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | — | ✅ |  |
-| `snapshot` | Snapshot configuration to disk for later restore or diff. | — | — | ✅ | ✅ |
+| `snapshot` | Snapshot configuration to disk for later restore or diff. | `path` | — | ✅ | ✅ |
 | `version` | Fetch firmware version details. | — | — | ✅ | ✅ |
-| `write_debugreg` | Write a hex value to the Ultimate debug register ($D7FF). | — | — | ✅ |  |
+| `write_debugreg` | Write a hex value to the Ultimate debug register ($D7FF). | `value` | — | ✅ |  |
 
 #### c64_debug
 
@@ -600,19 +600,19 @@ Grouped entry point for VICE debugger operations (breakpoints, registers, steppi
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
 | `continue_execution` | Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). | — | — |  | ✅ |
-| `create_checkpoint` | Create a new checkpoint (breakpoint) in VICE. | — | — |  | ✅ |
-| `delete_checkpoint` | Remove a checkpoint by id. | — | — |  | ✅ |
-| `get_checkpoint` | Fetch a single checkpoint by id. | — | — |  | ✅ |
+| `create_checkpoint` | Create a new checkpoint (breakpoint) in VICE. | `address` | — |  | ✅ |
+| `delete_checkpoint` | Remove a checkpoint by id. | `id` | — |  | ✅ |
+| `get_checkpoint` | Fetch a single checkpoint by id. | `id` | — |  | ✅ |
 | `get_monitor_state` | Read CPU registers and return the current monitor state. | — | — |  | ✅ |
 | `get_registers` | Read register values, optionally filtered by name or id. | — | — |  | ✅ |
 | `list_checkpoints` | List all active VICE checkpoints (breakpoints). | — | — |  | ✅ |
 | `list_registers` | List available registers (metadata). | — | — |  | ✅ |
 | `nuclear_reset` | Kill and restart the VICE process (managed instances only). | — | — |  | ✅ |
-| `set_condition` | Attach a conditional expression to a checkpoint. | — | — |  | ✅ |
-| `set_registers` | Write register values. | — | — |  | ✅ |
+| `set_condition` | Attach a conditional expression to a checkpoint. | `id`, `expression` | — |  | ✅ |
+| `set_registers` | Write register values. | `writes` | — |  | ✅ |
 | `step` | Single-step CPU execution. | — | — |  | ✅ |
 | `step_return` | Continue execution until the current routine returns. | — | — |  | ✅ |
-| `toggle_checkpoint` | Enable or disable a checkpoint by id. | — | — |  | ✅ |
+| `toggle_checkpoint` | Enable or disable a checkpoint by id. | `id`, `enabled` | — |  | ✅ |
 | `wait_for_state` | Poll CPU registers until PC equals expectedPC or timeout elapses. | — | — |  | ✅ |
 
 #### c64_disk
@@ -621,12 +621,12 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `create_image` | Create a blank disk image of the specified format. | — | supports verify | ✅ |  |
-| `file_info` | Inspect metadata for a file on the Ultimate filesystem. | — | supports verify | ✅ |  |
-| `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | — | supports verify | ✅ |  |
-| `list_drives` | List Ultimate drive slots and their mounted images. | — | supports verify | ✅ | ✅ |
-| `mount` | Mount a disk image with optional verification and retries. | — | supports verify | ✅ | ✅ |
-| `unmount` | Remove the mounted image from an Ultimate drive slot. | — | supports verify | ✅ | ✅ |
+| `create_image` | Create a blank disk image of the specified format. | `format`, `path` | — | ✅ |  |
+| `file_info` | Inspect metadata for a file on the Ultimate filesystem. | `path` | — | ✅ |  |
+| `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | — | ✅ |  |
+| `list_drives` | List Ultimate drive slots and their mounted images. | — | — | ✅ | ✅ |
+| `mount` | Mount a disk image with optional verification and retries. | `drive`, `image` | supports verify | ✅ | ✅ |
+| `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | ✅ | ✅ |
 
 #### c64_drive
 
@@ -634,11 +634,11 @@ Grouped entry point for drive power, mode, reset, and ROM operations.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `load_rom` | Temporarily load a custom ROM into an Ultimate drive slot. | — | — | ✅ |  |
-| `power_off` | Power off a specific Ultimate drive slot. | — | — | ✅ | ✅ |
-| `power_on` | Power on a specific Ultimate drive slot. | — | — | ✅ | ✅ |
-| `reset` | Issue an IEC reset for the selected drive slot. | — | — | ✅ | ✅ |
-| `set_mode` | Set the emulation mode for a drive slot (1541/1571/1581). | — | — | ✅ | ✅ |
+| `load_rom` | Temporarily load a custom ROM into an Ultimate drive slot. | `drive`, `path` | — | ✅ |  |
+| `power_off` | Power off a specific Ultimate drive slot. | `drive` | — | ✅ | ✅ |
+| `power_on` | Power on a specific Ultimate drive slot. | `drive` | — | ✅ | ✅ |
+| `reset` | Issue an IEC reset for the selected drive slot. | `drive` | — | ✅ | ✅ |
+| `set_mode` | Set the emulation mode for a drive slot (1541/1571/1581). | `drive`, `mode` | — | ✅ | ✅ |
 
 #### c64_extract
 
@@ -649,8 +649,8 @@ Grouped entry point for sprite/charset extraction, memory dumps, filesystem stat
 | `charset` | Locate and extract 2KB character sets from RAM. | — | — | ✅ |  |
 | `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ |  |
 | `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | — | ✅ |  |
-| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | — | — | ✅ |  |
-| `sprites` | Scan RAM for sprites and optionally export .spr files. | — | — | ✅ |  |
+| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | — | ✅ |  |
+| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | — | ✅ |  |
 
 #### c64_graphics
 
@@ -660,10 +660,10 @@ Grouped entry point for frame capture and graphics rendering workflows.
 | --- | --- | --- | --- | --- | --- |
 | `capture_frame` | Capture one or more complete video frames from the active backend. | — | — | ✅ | ✅ |
 | `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. | — | — | ✅ | ✅ |
-| `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | — | — | ✅ | ✅ |
+| `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | `imagePath`, `format` | — | ✅ | ✅ |
 | `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | — | ✅ | ✅ |
-| `render_petscii_text` | Display PETSCII text with optional border and background colours. | — | — | ✅ | ✅ |
-| `render_sprite` | Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. | — | — | ✅ | ✅ |
+| `render_petscii_text` | Display PETSCII text with optional border and background colours. | `text` | — | ✅ | ✅ |
+| `render_sprite` | Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. | `sprite` | — | ✅ | ✅ |
 
 #### c64_input
 
@@ -681,16 +681,16 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | — | supports verify | ✅ | ✅ |
-| `copy_memory` | Copy a RAM region to another address. | — | supports verify | ✅ | ✅ |
-| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. | — | supports verify | ✅ | ✅ |
-| `fill_memory` | Fill a memory range with a repeating byte pattern. | — | supports verify | ✅ | ✅ |
-| `read` | Read a range of bytes and return a hex dump with address metadata. | — | supports verify | ✅ | ✅ |
-| `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | supports verify | ✅ | ✅ |
-| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | — | supports verify | ✅ | ✅ |
-| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | — | supports verify | ✅ | ✅ |
-| `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | — | supports verify | ✅ | ✅ |
-| `write` | Write a hexadecimal byte sequence into RAM. | — | supports verify | ✅ | ✅ |
+| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | — | ✅ | ✅ |
+| `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | — | ✅ | ✅ |
+| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. | `address` | — | ✅ | ✅ |
+| `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ |
+| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | — | ✅ | ✅ |
+| `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ |
+| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | — | ✅ | ✅ |
+| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | — | ✅ | ✅ |
+| `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | `pattern` | — | ✅ | ✅ |
+| `write` | Write a hexadecimal byte sequence into RAM. | `address`, `bytes` | supports verify | ✅ | ✅ |
 
 #### c64_printer
 
@@ -698,9 +698,9 @@ Grouped entry point for Commodore and Epson printing helpers.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `define_chars` | Define custom printer characters (Commodore DLL mode). | — | — | ✅ |  |
-| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | — | — | ✅ |  |
-| `print_text` | Generate BASIC that prints text to device 4. | — | — | ✅ |  |
+| `define_chars` | Define custom printer characters (Commodore DLL mode). | `firstChar`, `chars` | — | ✅ |  |
+| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | `printer`, `columns` | — | ✅ |  |
+| `print_text` | Generate BASIC that prints text to device 4. | `text` | — | ✅ |  |
 
 #### c64_program
 
@@ -708,14 +708,14 @@ Grouped entry point for program upload, execution, and batch workflows.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | — | supports verify | ✅ | ✅ |
-| `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | — | supports verify | ✅ |  |
+| `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | — | ✅ | ✅ |
+| `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | `runId`, `outputPath` | — | ✅ |  |
 | `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. | — | supports verify | ✅ | ✅ |
-| `load_prg` | Load a PRG from Ultimate storage without executing it. | — | supports verify | ✅ |  |
-| `run_crt` | Mount and run a CRT cartridge image. | — | supports verify | ✅ |  |
-| `run_prg` | Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. | — | supports verify | ✅ | ✅ |
-| `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. | — | supports verify | ✅ | ✅ |
-| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. | — | supports verify | ✅ | ✅ |
+| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | — | ✅ |  |
+| `run_crt` | Mount and run a CRT cartridge image. | `path` | — | ✅ |  |
+| `run_prg` | Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. | `path` | — | ✅ | ✅ |
+| `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. | `program` | supports verify | ✅ | ✅ |
+| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. | `program` | supports verify | ✅ | ✅ |
 
 #### c64_rag
 
@@ -723,8 +723,8 @@ Grouped entry point for BASIC and assembly RAG lookups.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `asm` | Retrieve 6502/6510 assembly references from the local knowledge base. | — | — | ✅ | ✅ |
-| `basic` | Retrieve BASIC references and snippets from the local knowledge base. | — | — | ✅ | ✅ |
+| `asm` | Retrieve 6502/6510 assembly references from the local knowledge base. | `q` | — | ✅ | ✅ |
+| `basic` | Retrieve BASIC references and snippets from the local knowledge base. | `q` | — | ✅ | ✅ |
 
 #### c64_select_backend
 
@@ -732,7 +732,7 @@ Switch the active backend between C64U hardware and the VICE emulator at runtime
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `select` | Switch the active runtime backend without restarting the MCP server. | — | — | ✅ | ✅ |
+| `select` | Switch the active runtime backend without restarting the MCP server. | `backend` | — | ✅ | ✅ |
 
 #### c64_sound
 
@@ -740,19 +740,19 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `analyze` | Automatically analyze SID playback when verification is requested. | — | supports verify | ✅ |  |
-| `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | supports verify | ✅ |  |
-| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | supports verify | ✅ | ✅ |
-| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | supports verify | ✅ | ✅ |
-| `note_off` | Release a SID voice by clearing its gate bit. | — | supports verify | ✅ | ✅ |
-| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | supports verify | ✅ | ✅ |
+| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | — | ✅ |  |
+| `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | — | ✅ |  |
+| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | — | ✅ | ✅ |
+| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | — | ✅ | ✅ |
+| `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | ✅ | ✅ |
+| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | — | ✅ | ✅ |
 | `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. | — | supports verify | ✅ |  |
-| `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | — | supports verify | ✅ |  |
+| `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. | — | supports verify | ✅ | ✅ |
-| `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | — | supports verify | ✅ |  |
-| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. | — | supports verify | ✅ |  |
-| `reset` | Soft or hard reset of SID registers to clear glitches. | — | supports verify | ✅ | ✅ |
-| `set_volume` | Set the SID master volume register at $D418 (0-15). | — | supports verify | ✅ | ✅ |
+| `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | — | ✅ |  |
+| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. | `durationSeconds` | — | ✅ |  |
+| `reset` | Soft or hard reset of SID registers to clear glitches. | — | — | ✅ | ✅ |
+| `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | — | ✅ | ✅ |
 | `silence_all` | Silence all SID voices with optional audio verification. | — | supports verify | ✅ | ✅ |
 
 #### c64_stream
@@ -761,8 +761,8 @@ Grouped entry point for starting and stopping Ultimate streaming sessions.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `start` | Start an Ultimate streaming session toward a host:port target. | — | — | ✅ |  |
-| `stop` | Stop an active Ultimate streaming session. | — | — | ✅ |  |
+| `start` | Start an Ultimate streaming session toward a host:port target. | `stream`, `target` | — | ✅ |  |
+| `stop` | Stop an active Ultimate streaming session. | `stream` | — | ✅ |  |
 
 #### c64_system
 
@@ -778,9 +778,9 @@ Grouped entry point for power, reset, menu, and background task control.
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | — | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | — | ✅ | ✅ |
 | `resume` | Resume CPU execution after a pause. | — | — | ✅ |  |
-| `start_task` | Start a named background task that runs on an interval. | — | — | ✅ | ✅ |
+| `start_task` | Start a named background task that runs on an interval. | `name`, `operation` | — | ✅ | ✅ |
 | `stop_all_tasks` | Stop every running background task and persist state. | — | — | ✅ | ✅ |
-| `stop_task` | Stop a specific background task and clear its timer. | — | — | ✅ | ✅ |
+| `stop_task` | Stop a specific background task and clear its timer. | `name` | — | ✅ | ✅ |
 
 #### c64_vice
 
@@ -788,8 +788,8 @@ Grouped entry point for reading and updating selected VICE resources.
 
 | Operation | Description | Required Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- |
-| `resource_get` | Read a VICE configuration resource (safe prefixes only). | — | — |  | ✅ |
-| `resource_set` | Write a VICE configuration resource (safe prefixes only). | — | — |  | ✅ |
+| `resource_get` | Read a VICE configuration resource (safe prefixes only). | `name` | — |  | ✅ |
+| `resource_set` | Write a VICE configuration resource (safe prefixes only). | `name`, `value` | — |  | ✅ |
 
 ### Resources
 

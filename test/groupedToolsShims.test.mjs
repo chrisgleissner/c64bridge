@@ -1934,6 +1934,282 @@ test("c64_debug step over delegates to VICE stepping", async () => {
   }
 });
 
+test("c64_debug create_checkpoint persists labels for list and get operations", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const checkpoint = {
+      id: 91,
+      hit: false,
+      start: 0x0810,
+      end: 0x0810,
+      stopOnHit: true,
+      enabled: true,
+      temporary: false,
+      operations: { execute: true, load: false, store: false },
+      hitCount: 0,
+      ignoreCount: 0,
+      hasCondition: false,
+      memspace: 0,
+    };
+    const stubClient = {
+      async viceCheckpointCreate() {
+        return checkpoint;
+      },
+      async viceCheckpointGet(id) {
+        assert.equal(id, checkpoint.id);
+        return checkpoint;
+      },
+      async viceCheckpointList() {
+        return [checkpoint];
+      },
+      async viceCheckpointDelete(id) {
+        assert.equal(id, checkpoint.id);
+      },
+    };
+
+    const ctx = {
+      client: stubClient,
+      rag: {},
+      logger: {
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+      },
+      platform: getPlatformStatus(),
+      setPlatform,
+    };
+
+    const created = await toolRegistry.invoke(
+      "c64_debug",
+      { op: "create_checkpoint", address: "$0810", label: "entry_point" },
+      ctx,
+    );
+    const listed = await toolRegistry.invoke("c64_debug", { op: "list_checkpoints" }, ctx);
+    const fetched = await toolRegistry.invoke("c64_debug", { op: "get_checkpoint", id: checkpoint.id }, ctx);
+    const deleted = await toolRegistry.invoke("c64_debug", { op: "delete_checkpoint", id: checkpoint.id }, ctx);
+
+    assert.equal(created.isError, undefined);
+    assert.equal(created.structuredContent?.data?.checkpoint?.label, "entry_point");
+    assert.equal(listed.structuredContent?.data?.checkpoints[0]?.label, "entry_point");
+    assert.equal(fetched.structuredContent?.data?.checkpoint?.label, "entry_point");
+    assert.equal(deleted.isError, undefined);
+  } finally {
+    setPlatform(restore);
+  }
+});
+
+test("c64_debug get_monitor_state formats the current PC from register values", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const stubClient = {
+      async viceRegistersAvailable(memspace) {
+        assert.equal(memspace, 1);
+        return [
+          { id: 0, name: "PC", bits: 16, size: 2 },
+          { id: 1, name: "A", bits: 8, size: 1 },
+        ];
+      },
+      async viceRegistersGet(memspace) {
+        assert.equal(memspace, 1);
+        return [
+          { id: 0, size: 2, value: 0x1234 },
+          { id: 1, size: 1, value: 0x20 },
+        ];
+      },
+    };
+
+    const ctx = {
+      client: stubClient,
+      rag: {},
+      logger: {
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+      },
+      platform: getPlatformStatus(),
+      setPlatform,
+    };
+
+    const result = await toolRegistry.invoke("c64_debug", { op: "get_monitor_state", memspace: 1 }, ctx);
+
+    assert.equal(result.isError, undefined);
+    assert.equal(result.metadata?.memspace, 1);
+    assert.equal(result.structuredContent?.data?.pc, "$1234");
+    assert.equal(result.structuredContent?.data?.registers.length, 2);
+  } finally {
+    setPlatform(restore);
+  }
+});
+
+test("c64_debug wait_for_state reports matched and timed out outcomes", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    let reads = 0;
+    const matchedClient = {
+      async viceRegistersAvailable(memspace) {
+        assert.equal(memspace, 0);
+        return [{ id: 0, name: "PC", bits: 16, size: 2 }];
+      },
+      async viceRegistersGet(memspace) {
+        assert.equal(memspace, 0);
+        reads += 1;
+        return [{ id: 0, size: 2, value: reads === 1 ? 0x1000 : 0x1004 }];
+      },
+    };
+    const timedOutClient = {
+      async viceRegistersAvailable() {
+        return [{ id: 0, name: "PC", bits: 16, size: 2 }];
+      },
+      async viceRegistersGet() {
+        return [{ id: 0, size: 2, value: 0x2000 }];
+      },
+    };
+
+    const logger = {
+      debug() {},
+      info() {},
+      warn() {},
+      error() {},
+    };
+
+    const matched = await toolRegistry.invoke(
+      "c64_debug",
+      { op: "wait_for_state", expectedPC: "$1004", timeoutMs: 50, pollMs: 10 },
+      { client: matchedClient, rag: {}, logger, platform: getPlatformStatus(), setPlatform },
+    );
+    const timedOut = await toolRegistry.invoke(
+      "c64_debug",
+      { op: "wait_for_state", expectedPC: "$2001", timeoutMs: 20, pollMs: 10 },
+      { client: timedOutClient, rag: {}, logger, platform: getPlatformStatus(), setPlatform },
+    );
+
+    assert.equal(matched.isError, undefined);
+    assert.equal(matched.structuredContent?.data?.matched, true);
+    assert.equal(matched.structuredContent?.data?.pc, "$1004");
+    assert.equal(timedOut.isError, undefined);
+    assert.equal(timedOut.structuredContent?.data?.matched, false);
+    assert.equal(timedOut.structuredContent?.data?.timedOut, true);
+    assert.equal(timedOut.structuredContent?.data?.pc, "$2000");
+  } finally {
+    setPlatform(restore);
+  }
+});
+
+test("c64_debug continue_execution and nuclear_reset delegate to VICE control paths", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const checkpoint = {
+      id: 92,
+      hit: false,
+      start: 0x0900,
+      end: 0x0900,
+      stopOnHit: true,
+      enabled: true,
+      temporary: false,
+      operations: { execute: true, load: false, store: false },
+      hitCount: 0,
+      ignoreCount: 0,
+      hasCondition: false,
+      memspace: 0,
+    };
+    let exitMonitorCalls = 0;
+    let nuclearResetCalls = 0;
+    const stubClient = {
+      async viceCheckpointCreate() {
+        return checkpoint;
+      },
+      async viceCheckpointList() {
+        return [checkpoint];
+      },
+      async viceExitMonitor() {
+        exitMonitorCalls += 1;
+      },
+      async viceNuclearReset() {
+        nuclearResetCalls += 1;
+      },
+    };
+
+    const ctx = {
+      client: stubClient,
+      rag: {},
+      logger: {
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+      },
+      platform: getPlatformStatus(),
+      setPlatform,
+    };
+
+    await toolRegistry.invoke("c64_debug", { op: "create_checkpoint", address: "$0900", label: "to_clear" }, ctx);
+    const beforeReset = await toolRegistry.invoke("c64_debug", { op: "list_checkpoints" }, ctx);
+    const resumed = await toolRegistry.invoke("c64_debug", { op: "continue_execution" }, ctx);
+    const reset = await toolRegistry.invoke("c64_debug", { op: "nuclear_reset" }, ctx);
+    const afterReset = await toolRegistry.invoke("c64_debug", { op: "list_checkpoints" }, ctx);
+
+    assert.equal(beforeReset.structuredContent?.data?.checkpoints[0]?.label, "to_clear");
+    assert.equal(resumed.isError, undefined);
+    assert.equal(reset.isError, undefined);
+    assert.equal(exitMonitorCalls, 1);
+    assert.equal(nuclearResetCalls, 1);
+    assert.equal(afterReset.structuredContent?.data?.checkpoints[0]?.label, undefined);
+  } finally {
+    setPlatform(restore);
+  }
+});
+
+test("c64_debug new monitor control operations surface client failures", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const failingCtx = {
+      client: {
+        viceRegistersAvailable() {
+          throw new Error("register metadata failed");
+        },
+        viceRegistersGet() {
+          throw new Error("register read failed");
+        },
+        viceNuclearReset() {
+          throw new Error("nuclear reset failed");
+        },
+        viceExitMonitor() {
+          throw new Error("exit monitor failed");
+        },
+      },
+      rag: {},
+      logger: {
+        debug() {},
+        info() {},
+        warn() {},
+        error() {},
+      },
+      platform: getPlatformStatus(),
+      setPlatform,
+    };
+
+    for (const args of [
+      { op: "get_monitor_state" },
+      { op: "wait_for_state", expectedPC: "$0810", timeoutMs: 10, pollMs: 10 },
+      { op: "nuclear_reset" },
+      { op: "continue_execution" },
+    ]) {
+      const result = await toolRegistry.invoke("c64_debug", args, failingCtx);
+      assert.equal(result.isError, true);
+      assert.equal(result.metadata?.error?.kind, "unknown");
+    }
+  } finally {
+    setPlatform(restore);
+  }
+});
+
 test("c64_vice resource_set writes allowed resources", async () => {
   const restore = getPlatformStatus().id;
   setPlatform("vice");

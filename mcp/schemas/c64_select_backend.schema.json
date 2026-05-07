@@ -20,6 +20,38 @@
   "required": [
     "op"
   ],
-  "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server.",
-  "additionalProperties": false
+  "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "select",
+      "description": "Switch the active runtime backend without restarting the MCP server.",
+      "required": [
+        "backend"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Switch the active runtime backend without restarting the MCP server.",
+        "properties": {
+          "op": {
+            "const": "select",
+            "description": "Selects the select operation."
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "c64u",
+              "vice"
+            ],
+            "description": "Backend to activate for subsequent tool calls."
+          }
+        },
+        "required": [
+          "op",
+          "backend"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

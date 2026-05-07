@@ -28,6 +28,80 @@
   "required": [
     "op"
   ],
-  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base.",
-  "additionalProperties": false
+  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "basic",
+      "description": "Retrieve BASIC references and snippets from the local knowledge base.",
+      "required": [
+        "q"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Retrieve BASIC references and snippets from the local knowledge base.",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Natural-language query describing the desired BASIC or assembly guidance.",
+            "minLength": 3
+          },
+          "k": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum number of references to return (1-12).",
+            "minimum": 1,
+            "maximum": 12,
+            "default": 3
+          },
+          "op": {
+            "const": "basic"
+          }
+        },
+        "required": [
+          "q",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "asm",
+      "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
+      "required": [
+        "q"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Natural-language query describing the desired BASIC or assembly guidance.",
+            "minLength": 3
+          },
+          "k": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum number of references to return (1-12).",
+            "minimum": 1,
+            "maximum": 12,
+            "default": 3
+          },
+          "op": {
+            "const": "asm"
+          }
+        },
+        "required": [
+          "q",
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

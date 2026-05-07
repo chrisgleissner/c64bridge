@@ -98,8 +98,18 @@ test("discriminatedUnionSchema flattens variants into a single object schema", (
   assert.ok(union.description.includes("Memory operations"));
   assert.ok(union.description.includes("read:"));
   assert.ok(union.description.includes("write:"));
+  assert.ok(union.description.includes("Required inputs: address."));
+  assert.ok(union.description.includes("Required inputs: address, data."));
   assert.deepEqual(union.properties[OPERATION_DISCRIMINATOR].enum, ["read", "write"]);
   assert.deepEqual(union.required, [OPERATION_DISCRIMINATOR]);
+  assert.deepEqual(union["x-c64bridge-operations"].map((operation) => ({
+    op: operation.op,
+    required: operation.required,
+  })), [
+    { op: "read", required: ["address"] },
+    { op: "write", required: ["address", "data"] },
+  ]);
+  assert.equal(union["x-c64bridge-operations"][0].inputSchema, readSchema);
   // All variant properties merged
   assert.ok(union.properties.address);
   assert.ok(union.properties.length);
@@ -142,6 +152,7 @@ test("discriminatedUnionSchema keeps merged properties when variants omit discri
   assert.equal(union.properties.op.type, "string");
   assert.equal(union.properties.op.enum, undefined);
   assert.equal(union.description, undefined);
+  assert.equal(union["x-c64bridge-operations"], undefined);
   assert.deepEqual(union.properties.payload, { type: "string" });
 });
 

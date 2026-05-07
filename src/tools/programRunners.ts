@@ -258,6 +258,15 @@ function normalizeRuntimeErrors(errors: readonly BasicRuntimeError[]): readonly 
   }));
 }
 
+export const __programRunnerHelpersForTests = {
+  extractFailureDetails,
+  toRecord,
+  stripOperationDiscriminator,
+  parseBasicRuntimeErrors,
+  attemptAutoFixBasicProgram,
+  normalizeRuntimeErrors,
+};
+
 function structuredExecutionError(
   message: string,
   data: Record<string, unknown>,

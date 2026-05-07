@@ -262,8 +262,463 @@
         "required": [
           "op"
         ],
-        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.\n- run_crt: Mount and run a CRT cartridge image.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
-        "additionalProperties": false
+        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. Required inputs: path.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "load_prg",
+            "description": "Load a PRG from Ultimate storage without executing it.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Load a PRG from Ultimate storage without executing it.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
+                  "minLength": 1
+                },
+                "symbolsFile": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Path to a VICE symbol file (.vs) to load alongside the PRG. Symbols are used by the disassemble tool when annotating addresses.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "load_prg"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "run_prg",
+            "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
+                  "minLength": 1
+                },
+                "symbolsFile": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Path to a VICE symbol file (.vs) to load alongside the PRG. Symbols are used by the disassemble tool when annotating addresses.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "run_prg"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "run_crt",
+            "description": "Mount and run a CRT cartridge image.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Mount and run a CRT cartridge image.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path to the CRT image on Ultimate-visible storage. CRT mounting is only supported on c64u.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "run_crt"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "upload_run_basic",
+            "description": "Upload Commodore BASIC v2 source and execute it immediately.",
+            "required": [
+              "program"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Upload Commodore BASIC v2 source and execute it immediately.",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "description": "Commodore BASIC v2 program source to upload and run.",
+                  "minLength": 1
+                },
+                "verify": {
+                  "type": "boolean",
+                  "description": "Run post-execution polling to ensure the BASIC program executed without errors.",
+                  "default": false
+                },
+                "op": {
+                  "const": "upload_run_basic"
+                }
+              },
+              "required": [
+                "program",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "upload_run_asm",
+            "description": "Assemble 6502/6510 source, upload the PRG, and execute it.",
+            "required": [
+              "program"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Assemble 6502/6510 source, upload the PRG, and execute it.",
+              "properties": {
+                "program": {
+                  "type": "string",
+                  "description": "Assembly source that will be assembled to a PRG and executed.",
+                  "minLength": 1
+                },
+                "verify": {
+                  "type": "boolean",
+                  "description": "Run post-execution polling to confirm the assembly program remained stable.",
+                  "default": false
+                },
+                "op": {
+                  "const": "upload_run_asm"
+                }
+              },
+              "required": [
+                "program",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "batch_run",
+            "description": "Run multiple PRG/CRT programs with post-run assertions.",
+            "required": [
+              "programs"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Run multiple PRG/CRT programs with post-run assertions.",
+              "properties": {
+                "programs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Program to run with assertions",
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "description": "Program path (PRG or CRT)",
+                        "minLength": 1
+                      },
+                      "assertions": {
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "type": "object",
+                          "description": "Assertion to check after run",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "description": "Assertion type",
+                              "enum": [
+                                "screen_contains",
+                                "memory_equals",
+                                "sid_silent"
+                              ]
+                            },
+                            "pattern": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Pattern for screen_contains",
+                              "minLength": 1
+                            },
+                            "address": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Address for memory_equals",
+                              "minLength": 1
+                            },
+                            "expected": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Expected value (hex)",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "continueOnError": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Continue running programs after assertion failure",
+                  "default": false
+                },
+                "durationMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Duration to run each program before assertions",
+                  "minimum": 1,
+                  "default": 2000
+                },
+                "outputPath": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Output directory for test results",
+                  "minLength": 1
+                },
+                "resetDelayMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Delay after reset operations to allow the platform to settle.",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 100
+                },
+                "op": {
+                  "const": "batch_run"
+                }
+              },
+              "required": [
+                "programs",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "bundle_run",
+            "description": "Capture screen, memory, and debug registers into an artifact bundle.",
+            "required": [
+              "runId",
+              "outputPath"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Capture screen, memory, and debug registers into an artifact bundle.",
+              "properties": {
+                "runId": {
+                  "type": "string",
+                  "description": "Unique identifier for this run",
+                  "minLength": 1
+                },
+                "outputPath": {
+                  "type": "string",
+                  "description": "Output directory for artifacts bundle",
+                  "minLength": 1
+                },
+                "captureScreen": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Capture screen content",
+                  "default": true
+                },
+                "memoryRanges": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "description": "Memory range to snapshot",
+                    "properties": {
+                      "address": {
+                        "type": "string",
+                        "description": "Start address",
+                        "minLength": 1
+                      },
+                      "length": {
+                        "type": "integer",
+                        "description": "Length in bytes",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "address",
+                      "length"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "captureDebugReg": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Capture debugreg state",
+                  "default": true
+                },
+                "op": {
+                  "const": "bundle_run"
+                }
+              },
+              "required": [
+                "runId",
+                "outputPath",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "cross_platform_greeting",
+            "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
+              "properties": {
+                "platforms": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "Backends to target in sequence.",
+                    "minLength": 1,
+                    "enum": [
+                      "vice",
+                      "c64u"
+                    ]
+                  },
+                  "default": [
+                    "vice",
+                    "c64u"
+                  ]
+                },
+                "messageTemplate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Greeting template. Use {PLATFORM}/{BACKEND} for uppercase or {platform}/{backend} for lowercase substitution.",
+                  "minLength": 1,
+                  "default": "HAVE A GREAT DAY, {PLATFORM}!"
+                },
+                "verify": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Poll the text screen and require the rendered greeting to appear.",
+                  "default": true
+                },
+                "captureScreenshot": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Capture a framebuffer screenshot and save it as a PNG per backend.",
+                  "default": true
+                },
+                "outputPath": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Directory for screenshots and the workflow summary JSON.",
+                  "minLength": 1
+                },
+                "restoreActiveBackend": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Restore the backend that was active before the workflow started.",
+                  "default": true
+                },
+                "timeoutMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum time to wait for each greeting to appear on screen.",
+                  "minimum": 100,
+                  "maximum": 5000,
+                  "default": 1500
+                },
+                "pollIntervalMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Delay between screen polls while verifying the greeting.",
+                  "minimum": 50,
+                  "maximum": 1000,
+                  "default": 100
+                },
+                "op": {
+                  "const": "cross_platform_greeting"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "programs",
@@ -514,8 +969,458 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata.\n- write: Write a hexadecimal byte sequence into RAM.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.\n- copy_memory: Copy a RAM region to another address.\n- fill_memory: Fill a memory range with a repeating byte pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses.\n- compare_memory: Compare two memory regions byte-by-byte and report differences.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header.",
-        "additionalProperties": false
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "read",
+            "description": "Read a range of bytes and return a hex dump with address metadata.",
+            "required": [
+              "address"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read a range of bytes and return a hex dump with address metadata.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "Start address expressed as $HHHH, decimal, or a documented symbol name.",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to read starting from the resolved address.",
+                  "minimum": 1,
+                  "maximum": 4096,
+                  "default": 256
+                },
+                "op": {
+                  "const": "read"
+                }
+              },
+              "required": [
+                "address",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "write",
+            "description": "Write a hexadecimal byte sequence into RAM.",
+            "required": [
+              "address",
+              "bytes"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Write a hexadecimal byte sequence into RAM.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "Destination address expressed as $HHHH, decimal, or a documented symbol name.",
+                  "minLength": 1
+                },
+                "bytes": {
+                  "type": "string",
+                  "description": "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
+                  "minLength": 2,
+                  "pattern": "^[\\s_0-9A-Fa-f$]+$"
+                },
+                "verify": {
+                  "type": "boolean",
+                  "description": "When true, verify the write by reading before and after the change; Ultimate hardware also pauses during verification.",
+                  "default": false
+                },
+                "expected": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional hex data expected before the write (verifies before writing).",
+                  "minLength": 2,
+                  "pattern": "^[\\s_0-9A-Fa-f$]+$"
+                },
+                "mask": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional verification mask (hex); only bits set in the mask are compared.",
+                  "minLength": 2,
+                  "pattern": "^[\\s_0-9A-Fa-f$]+$"
+                },
+                "abortOnMismatch": {
+                  "type": "boolean",
+                  "description": "Abort the write when the pre-write verification fails.",
+                  "default": true
+                },
+                "op": {
+                  "const": "write"
+                }
+              },
+              "required": [
+                "address",
+                "bytes",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "read_screen",
+            "description": "Return the current 40x25 text screen converted to ASCII.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Return the current 40x25 text screen converted to ASCII.",
+              "properties": {
+                "op": {
+                  "const": "read_screen"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "wait_for_text",
+            "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
+            "required": [
+              "pattern"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "Substring or regex to find",
+                  "minLength": 1
+                },
+                "isRegex": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Interpret pattern as regular expression",
+                  "default": false
+                },
+                "caseInsensitive": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Case-insensitive search",
+                  "default": true
+                },
+                "timeoutMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Overall timeout in milliseconds",
+                  "minimum": 1,
+                  "default": 3000
+                },
+                "intervalMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Poll interval in milliseconds",
+                  "minimum": 1,
+                  "default": 100
+                },
+                "op": {
+                  "const": "wait_for_text"
+                }
+              },
+              "required": [
+                "pattern",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "disassemble",
+            "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
+            "required": [
+              "address"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "Start address as $HHHH, decimal, or symbol name.",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to read and disassemble.",
+                  "minimum": 1,
+                  "maximum": 4096,
+                  "default": 64
+                },
+                "instructionCount": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Stop after this many instructions (overrides length as a termination condition).",
+                  "minimum": 1,
+                  "maximum": 512
+                },
+                "op": {
+                  "const": "disassemble"
+                }
+              },
+              "required": [
+                "address",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "copy_memory",
+            "description": "Copy a RAM region to another address.",
+            "required": [
+              "source",
+              "dest",
+              "length"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Copy a RAM region to another address.",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Source start address ($HHHH, decimal, or symbol).",
+                  "minLength": 1
+                },
+                "dest": {
+                  "type": "string",
+                  "description": "Destination start address.",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to copy (1–16384).",
+                  "minimum": 1,
+                  "maximum": 16384
+                },
+                "op": {
+                  "const": "copy_memory"
+                }
+              },
+              "required": [
+                "source",
+                "dest",
+                "length",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "fill_memory",
+            "description": "Fill a memory range with a repeating byte pattern.",
+            "required": [
+              "address",
+              "length",
+              "pattern"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Fill a memory range with a repeating byte pattern.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "Start address ($HHHH, decimal, or symbol).",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to fill (1–16384).",
+                  "minimum": 1,
+                  "maximum": 16384
+                },
+                "pattern": {
+                  "type": "string",
+                  "description": "Hex bytes to repeat, e.g. 'FF' or 'AA 55'. Space-separated or run together.",
+                  "minLength": 2,
+                  "pattern": "^[\\s0-9A-Fa-f$]+$"
+                },
+                "op": {
+                  "const": "fill_memory"
+                }
+              },
+              "required": [
+                "address",
+                "length",
+                "pattern",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "search_memory",
+            "description": "Search for a byte pattern within a memory range and return matching addresses.",
+            "required": [
+              "startAddress",
+              "endAddress",
+              "pattern"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Search for a byte pattern within a memory range and return matching addresses.",
+              "properties": {
+                "startAddress": {
+                  "type": "string",
+                  "description": "Start of search range ($HHHH, decimal, or symbol).",
+                  "minLength": 1
+                },
+                "endAddress": {
+                  "type": "string",
+                  "description": "End of search range (inclusive).",
+                  "minLength": 1
+                },
+                "pattern": {
+                  "type": "string",
+                  "description": "Hex bytes to find, e.g. 'A9 00' for LDA #$00.",
+                  "minLength": 2,
+                  "pattern": "^[\\s0-9A-Fa-f$]+$"
+                },
+                "maxResults": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum matches to return (default 10).",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 10
+                },
+                "op": {
+                  "const": "search_memory"
+                }
+              },
+              "required": [
+                "startAddress",
+                "endAddress",
+                "pattern",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "compare_memory",
+            "description": "Compare two memory regions byte-by-byte and report differences.",
+            "required": [
+              "address1",
+              "address2",
+              "length"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Compare two memory regions byte-by-byte and report differences.",
+              "properties": {
+                "address1": {
+                  "type": "string",
+                  "description": "First region start address.",
+                  "minLength": 1
+                },
+                "address2": {
+                  "type": "string",
+                  "description": "Second region start address.",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to compare (1–16384).",
+                  "minimum": 1,
+                  "maximum": 16384
+                },
+                "maxDiffs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Max differences to report (default 10).",
+                  "minimum": 1,
+                  "maximum": 200,
+                  "default": 10
+                },
+                "op": {
+                  "const": "compare_memory"
+                }
+              },
+              "required": [
+                "address1",
+                "address2",
+                "length",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "save_memory",
+            "description": "Dump a memory range to a local file, with an optional PRG load-address header.",
+            "required": [
+              "startAddress",
+              "endAddress",
+              "filePath"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Dump a memory range to a local file, with an optional PRG load-address header.",
+              "properties": {
+                "startAddress": {
+                  "type": "string",
+                  "description": "Start address of region to save.",
+                  "minLength": 1
+                },
+                "endAddress": {
+                  "type": "string",
+                  "description": "End address (inclusive).",
+                  "minLength": 1
+                },
+                "filePath": {
+                  "type": "string",
+                  "description": "Absolute or relative path for the output file.",
+                  "minLength": 1
+                },
+                "asPrg": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Prepend a 2-byte little-endian load-address header (PRG format). Default: true.",
+                  "default": true
+                },
+                "op": {
+                  "const": "save_memory"
+                }
+              },
+              "required": [
+                "startAddress",
+                "endAddress",
+                "filePath",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "memory",
@@ -994,8 +1899,727 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.\n- set_volume: Set the SID master volume register at $D418 (0-15).\n- reset: Soft or hard reset of SID registers to clear glitches.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch.\n- note_off: Release a SID voice by clearing its gate bit.\n- silence_all: Silence all SID voices with optional audio verification.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player.\n- generate: Generate a lightweight SID arpeggio playback sequence.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording.\n- analyze: Automatically analyze SID playback when verification is requested.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics.",
-        "additionalProperties": false
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem. Required inputs: path.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Required inputs: durationSeconds.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "capture_samples",
+            "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
+              "properties": {
+                "op": {
+                  "const": "capture_samples"
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Number of stereo sample pairs to capture.",
+                  "minimum": 1,
+                  "maximum": 65536,
+                  "default": 256
+                },
+                "encoding": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Encoding used for the PCM sample payload.",
+                  "enum": [
+                    "base64",
+                    "hex"
+                  ],
+                  "default": "base64"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "set_volume",
+            "description": "Set the SID master volume register at $D418 (0-15).",
+            "required": [
+              "volume"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Set the SID master volume register at $D418 (0-15).",
+              "properties": {
+                "volume": {
+                  "type": "number",
+                  "description": "Desired SID master volume. Values outside 0-15 are clamped.",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "op": {
+                  "const": "set_volume"
+                }
+              },
+              "required": [
+                "volume",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "reset",
+            "description": "Soft or hard reset of SID registers to clear glitches.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Soft or hard reset of SID registers to clear glitches.",
+              "properties": {
+                "hard": {
+                  "type": "boolean",
+                  "description": "If true, perform a hard register scrub; otherwise silence voices softly.",
+                  "default": false
+                },
+                "op": {
+                  "const": "reset"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "note_on",
+            "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
+              "properties": {
+                "voice": {
+                  "type": "integer",
+                  "description": "SID voice to trigger (1-3).",
+                  "minimum": 1,
+                  "maximum": 3,
+                  "default": 1
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Musical note like A4, C#5, or Bb3. Overrides frequencyHz if provided.",
+                  "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$"
+                },
+                "frequencyHz": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Explicit frequency in Hz. Used when note is omitted.",
+                  "minimum": 1
+                },
+                "system": {
+                  "type": "string",
+                  "description": "Video system for frequency calculation.",
+                  "enum": [
+                    "PAL",
+                    "NTSC"
+                  ],
+                  "default": "PAL"
+                },
+                "waveform": {
+                  "type": "string",
+                  "description": "SID waveform to enable.",
+                  "enum": [
+                    "pulse",
+                    "saw",
+                    "tri",
+                    "noise"
+                  ],
+                  "default": "pulse"
+                },
+                "pulseWidth": {
+                  "type": "integer",
+                  "description": "Pulse width (0-4095). Used for pulse waveform.",
+                  "minimum": 0,
+                  "maximum": 4095,
+                  "default": 2048
+                },
+                "attack": {
+                  "type": "integer",
+                  "description": "Attack rate nibble (0-15).",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 1
+                },
+                "decay": {
+                  "type": "integer",
+                  "description": "Decay rate nibble (0-15).",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 1
+                },
+                "sustain": {
+                  "type": "integer",
+                  "description": "Sustain level nibble (0-15).",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 15
+                },
+                "release": {
+                  "type": "integer",
+                  "description": "Release rate nibble (0-15).",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 3
+                },
+                "op": {
+                  "const": "note_on"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "note_off",
+            "description": "Release a SID voice by clearing its gate bit.",
+            "required": [
+              "voice"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Release a SID voice by clearing its gate bit.",
+              "properties": {
+                "voice": {
+                  "type": "integer",
+                  "description": "SID voice to release (1-3).",
+                  "minimum": 1,
+                  "maximum": 3
+                },
+                "op": {
+                  "const": "note_off"
+                }
+              },
+              "required": [
+                "voice",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "silence_all",
+            "description": "Silence all SID voices with optional audio verification.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Silence all SID voices with optional audio verification.",
+              "properties": {
+                "verify": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "When true, record audio after silencing to confirm the SID output is quiet.",
+                  "default": false
+                },
+                "op": {
+                  "const": "silence_all"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "play_sid_file",
+            "description": "Play a SID file stored on the Ultimate filesystem.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Play a SID file stored on the Ultimate filesystem.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Absolute or Ultimate filesystem path to the SID, PRG, or audio file.",
+                  "minLength": 1
+                },
+                "songnr": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Song number within the SID file (0-based index).",
+                  "minimum": 0
+                },
+                "op": {
+                  "const": "play_sid_file"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "play_mod_file",
+            "description": "Play a MOD tracker module via the Ultimate SID player.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Play a MOD tracker module via the Ultimate SID player.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Absolute or Ultimate filesystem path to the SID, PRG, or audio file.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "play_mod_file"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "generate",
+            "description": "Generate a lightweight SID arpeggio playback sequence.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Generate a lightweight SID arpeggio playback sequence.",
+              "properties": {
+                "root": {
+                  "type": "string",
+                  "description": "Root note for the arpeggio such as C4 or A#3.",
+                  "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$",
+                  "default": "C4"
+                },
+                "pattern": {
+                  "type": "string",
+                  "description": "Comma-separated semitone offsets (e.g. '0,4,7').",
+                  "minLength": 1,
+                  "default": "0,4,7"
+                },
+                "steps": {
+                  "type": "integer",
+                  "description": "Number of notes to schedule.",
+                  "minimum": 1,
+                  "maximum": 128,
+                  "default": 16
+                },
+                "tempoMs": {
+                  "type": "integer",
+                  "description": "Delay in milliseconds between notes.",
+                  "minimum": 20,
+                  "maximum": 2000,
+                  "default": 120
+                },
+                "waveform": {
+                  "type": "string",
+                  "description": "Waveform for playback.",
+                  "enum": [
+                    "pulse",
+                    "saw",
+                    "tri",
+                    "noise"
+                  ],
+                  "default": "tri"
+                },
+                "preset": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional musical preset to influence timing/expression.",
+                  "enum": [
+                    "classic",
+                    "expression"
+                  ],
+                  "default": "classic"
+                },
+                "op": {
+                  "const": "generate"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "compile_play",
+            "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
+              "properties": {
+                "sidwave": {
+                  "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+                  "type": [
+                    "string",
+                    "object",
+                    "null"
+                  ]
+                },
+                "cpg": {
+                  "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+                  "type": [
+                    "string",
+                    "object",
+                    "null"
+                  ]
+                },
+                "format": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Source format hint when providing raw text.",
+                  "enum": [
+                    "yaml",
+                    "json"
+                  ]
+                },
+                "output": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Playback target format.",
+                  "enum": [
+                    "prg",
+                    "sid"
+                  ],
+                  "default": "prg"
+                },
+                "dryRun": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "When true, skip playback and only return compilation metadata.",
+                  "default": false
+                },
+                "op": {
+                  "const": "compile_play"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "play_preset",
+            "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
+              "properties": {
+                "preset": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Named SID preset to compile and play. Canonical public preset: fuer_elise.",
+                  "minLength": 1,
+                  "default": "fuer_elise"
+                },
+                "platforms": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "Backends to target in sequence.",
+                    "minLength": 1,
+                    "enum": [
+                      "vice",
+                      "c64u"
+                    ]
+                  }
+                },
+                "verify": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Capture and analyze audio on supported backends after playback starts.",
+                  "default": true
+                },
+                "analysisDurationSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Length of the verification recording on analyzable backends.",
+                  "minimum": 0.5,
+                  "maximum": 20,
+                  "default": 4
+                },
+                "waitBeforeCaptureMs": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Delay between starting playback and beginning verification capture.",
+                  "minimum": 0,
+                  "maximum": 5000,
+                  "default": 400
+                },
+                "restoreActiveBackend": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Restore the backend that was active before the workflow started.",
+                  "default": true
+                },
+                "op": {
+                  "const": "play_preset"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "pipeline",
+            "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
+              "properties": {
+                "sidwave": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "SIDWAVE source in YAML or JSON format.",
+                  "minLength": 1
+                },
+                "cpg": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Legacy CPG input format.",
+                  "minLength": 1
+                },
+                "output": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Playback artifact format.",
+                  "enum": [
+                    "prg",
+                    "sid"
+                  ],
+                  "default": "prg"
+                },
+                "waitBeforeCaptureMs": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Delay between starting playback and beginning analysis capture (milliseconds).",
+                  "minimum": 0,
+                  "maximum": 5000,
+                  "default": 500
+                },
+                "analysisDurationSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Audio capture length in seconds.",
+                  "minimum": 0.5,
+                  "maximum": 20,
+                  "default": 3
+                },
+                "expectedSidwave": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional expected SIDWAVE used to refine analysis comparisons.",
+                  "minLength": 1
+                },
+                "verifySilenceBefore": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Run silence verification before playback to ensure a quiet baseline.",
+                  "default": true
+                },
+                "verifySilenceAfter": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Run silence verification after playback to ensure voices are released.",
+                  "default": true
+                },
+                "silenceDurationSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Audio capture length used for silence verification.",
+                  "minimum": 0.5,
+                  "maximum": 10,
+                  "default": 1.5
+                },
+                "silenceRmsThreshold": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "RMS threshold applied to silence verification captures.",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.02
+                },
+                "postSilenceWaitMs": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Delay between main analysis capture and the post-playback silence check (milliseconds).",
+                  "minimum": 0,
+                  "maximum": 5000,
+                  "default": 200
+                },
+                "silenceWaitMs": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Delay between silencing the SID and recording during pre/post checks (milliseconds).",
+                  "minimum": 0,
+                  "maximum": 5000,
+                  "default": 150
+                },
+                "op": {
+                  "const": "pipeline"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "analyze",
+            "description": "Automatically analyze SID playback when verification is requested.",
+            "required": [
+              "request"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Automatically analyze SID playback when verification is requested.",
+              "properties": {
+                "request": {
+                  "type": "string",
+                  "description": "Natural language user request describing the verification goal.",
+                  "minLength": 1
+                },
+                "durationSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Override capture duration in seconds.",
+                  "minimum": 0.5,
+                  "maximum": 30
+                },
+                "expectedSidwave": {
+                  "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+                  "type": [
+                    "string",
+                    "object",
+                    "null"
+                  ]
+                },
+                "op": {
+                  "const": "analyze"
+                }
+              },
+              "required": [
+                "request",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "record_analyze",
+            "description": "Record audio for a fixed duration and return SID analysis metrics.",
+            "required": [
+              "durationSeconds"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Record audio for a fixed duration and return SID analysis metrics.",
+              "properties": {
+                "durationSeconds": {
+                  "type": "number",
+                  "description": "Capture duration in seconds (0.5 - 30).",
+                  "minimum": 0.5,
+                  "maximum": 30
+                },
+                "expectedSidwave": {
+                  "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+                  "type": [
+                    "string",
+                    "object",
+                    "null"
+                  ]
+                },
+                "op": {
+                  "const": "record_analyze"
+                }
+              },
+              "required": [
+                "durationSeconds",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "audio",
@@ -1174,8 +2798,288 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed.\n- resume: Resume CPU execution after a pause.\n- reset: Issue a soft reset without cutting power.\n- reboot: Trigger a firmware reboot to recover from faults.\n- poweroff: Request a controlled shutdown via the Ultimate firmware.\n- menu: Toggle the Ultimate menu button for navigation.\n- start_task: Start a named background task that runs on an interval.\n- stop_task: Stop a specific background task and clear its timer.\n- stop_all_tasks: Stop every running background task and persist state.\n- list_tasks: List known background tasks with status metadata.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
-        "additionalProperties": false
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "pause",
+            "description": "Pause the machine until resumed.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Pause the machine until resumed.",
+              "properties": {
+                "op": {
+                  "const": "pause"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "resume",
+            "description": "Resume CPU execution after a pause.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Resume CPU execution after a pause.",
+              "properties": {
+                "op": {
+                  "const": "resume"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "reset",
+            "description": "Issue a soft reset without cutting power.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Issue a soft reset without cutting power.",
+              "properties": {
+                "op": {
+                  "const": "reset"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "reboot",
+            "description": "Trigger a firmware reboot to recover from faults.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Trigger a firmware reboot to recover from faults.",
+              "properties": {
+                "op": {
+                  "const": "reboot"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "poweroff",
+            "description": "Request a controlled shutdown via the Ultimate firmware.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Request a controlled shutdown via the Ultimate firmware.",
+              "properties": {
+                "op": {
+                  "const": "poweroff"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "menu",
+            "description": "Toggle the Ultimate menu button for navigation.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Toggle the Ultimate menu button for navigation.",
+              "properties": {
+                "op": {
+                  "const": "menu"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "start_task",
+            "description": "Start a named background task that runs on an interval.",
+            "required": [
+              "name",
+              "operation"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Start a named background task that runs on an interval.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Unique task name",
+                  "minLength": 1
+                },
+                "operation": {
+                  "type": "string",
+                  "description": "Operation name (e.g., read, read_screen)",
+                  "minLength": 1
+                },
+                "arguments": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Operation-specific arguments",
+                  "properties": {},
+                  "additionalProperties": true,
+                  "default": {}
+                },
+                "intervalMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Interval milliseconds",
+                  "minimum": 1,
+                  "default": 1000
+                },
+                "maxIterations": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum number of iterations (omit for indefinite)",
+                  "minimum": 1
+                },
+                "op": {
+                  "const": "start_task"
+                }
+              },
+              "required": [
+                "name",
+                "operation",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "stop_task",
+            "description": "Stop a specific background task and clear its timer.",
+            "required": [
+              "name"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Stop a specific background task and clear its timer.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Task name",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "stop_task"
+                }
+              },
+              "required": [
+                "name",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "stop_all_tasks",
+            "description": "Stop every running background task and persist state.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Stop every running background task and persist state.",
+              "properties": {
+                "op": {
+                  "const": "stop_all_tasks"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "list_tasks",
+            "description": "List known background tasks with status metadata.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "List known background tasks with status metadata.",
+              "properties": {
+                "op": {
+                  "const": "list_tasks"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "performance_report",
+            "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
+              "properties": {
+                "scope": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Which diagnostics session to summarize.",
+                  "enum": [
+                    "current",
+                    "latest"
+                  ],
+                  "default": "current"
+                },
+                "includeTimeline": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Include the tail of the event timeline.",
+                  "default": true
+                },
+                "maxEntries": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum number of span and timeline entries to return.",
+                  "minimum": 1,
+                  "maximum": 200,
+                  "default": 25
+                },
+                "op": {
+                  "const": "performance_report"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "system",
@@ -1266,8 +3170,40 @@
         "required": [
           "op"
         ],
-        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server.",
-        "additionalProperties": false
+        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "select",
+            "description": "Switch the active runtime backend without restarting the MCP server.",
+            "required": [
+              "backend"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Switch the active runtime backend without restarting the MCP server.",
+              "properties": {
+                "op": {
+                  "const": "select",
+                  "description": "Selects the select operation."
+                },
+                "backend": {
+                  "type": "string",
+                  "enum": [
+                    "c64u",
+                    "vice"
+                  ],
+                  "description": "Backend to activate for subsequent tool calls."
+                }
+              },
+              "required": [
+                "op",
+                "backend"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "platform",
@@ -1538,8 +3474,384 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.\n- render_petscii_text: Display PETSCII text with optional border and background colours.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
-        "additionalProperties": false
+        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. Required inputs: none.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "capture_frame",
+            "description": "Capture one or more complete video frames from the active backend.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Capture one or more complete video frames from the active backend.",
+              "properties": {
+                "op": {
+                  "const": "capture_frame"
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Number of frames to capture.",
+                  "minimum": 1,
+                  "maximum": 32,
+                  "default": 1
+                },
+                "includePixels": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Include pixel payload bytes in the response.",
+                  "default": true
+                },
+                "encoding": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Encoding used for the pixel payload when included.",
+                  "enum": [
+                    "base64",
+                    "hex"
+                  ],
+                  "default": "base64"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "render_petscii_art",
+            "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
+              "properties": {
+                "prompt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Natural language prompt describing the desired PETSCII art.",
+                  "minLength": 1
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Exact text to render in PETSCII (overrides prompt derivation).",
+                  "minLength": 1
+                },
+                "maxWidth": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum bitmap width in pixels (1-320).",
+                  "minimum": 1,
+                  "maximum": 320
+                },
+                "maxHeight": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum bitmap height in pixels (1-200).",
+                  "minimum": 1,
+                  "maximum": 200
+                },
+                "borderColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Border colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "backgroundColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Background colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "foregroundColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Foreground colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "dryRun": {
+                  "type": "boolean",
+                  "description": "When true, skip uploading the generated BASIC program to the C64.",
+                  "default": false
+                },
+                "bitmap": {
+                  "description": "Explicit bitmap definition for PETSCII rendering.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "width": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 320
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 200
+                    },
+                    "pixels": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "width",
+                    "height",
+                    "pixels"
+                  ],
+                  "additionalProperties": false
+                },
+                "op": {
+                  "const": "render_petscii_art"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "render_petscii_text",
+            "description": "Display PETSCII text with optional border and background colours.",
+            "required": [
+              "text"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Display PETSCII text with optional border and background colours.",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "The PETSCII text to print after clearing the screen.",
+                  "minLength": 1
+                },
+                "borderColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Border colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "backgroundColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Background colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "op": {
+                  "const": "render_petscii_text"
+                }
+              },
+              "required": [
+                "text",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "render_sprite",
+            "description": "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.",
+            "required": [
+              "sprite"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.",
+              "properties": {
+                "sprite": {
+                  "description": "63-byte sprite definition provided as base64/hex string or array of bytes.",
+                  "type": [
+                    "string",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 63,
+                  "maxItems": 63
+                },
+                "index": {
+                  "type": "integer",
+                  "description": "Sprite index (0-7) to configure in screen memory.",
+                  "minimum": 0,
+                  "maximum": 7,
+                  "default": 0
+                },
+                "x": {
+                  "type": "integer",
+                  "description": "Sprite X position (0-511).",
+                  "minimum": 0,
+                  "maximum": 511,
+                  "default": 100
+                },
+                "y": {
+                  "type": "integer",
+                  "description": "Sprite Y position (0-255).",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "default": 100
+                },
+                "color": {
+                  "type": "integer",
+                  "description": "Sprite colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 1
+                },
+                "multicolour": {
+                  "type": "boolean",
+                  "description": "Enable multicolour mode for the sprite.",
+                  "default": false
+                },
+                "op": {
+                  "const": "render_sprite"
+                }
+              },
+              "required": [
+                "sprite",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "render_bitmap",
+            "description": "Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.",
+            "required": [
+              "imagePath",
+              "format"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.",
+              "properties": {
+                "imagePath": {
+                  "type": "string",
+                  "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
+                  "minLength": 1
+                },
+                "format": {
+                  "description": "Bitmap encoding mode to generate for the VIC-II display.",
+                  "type": "string",
+                  "enum": [
+                    "hires",
+                    "multicolor"
+                  ]
+                },
+                "bitmapAddress": {
+                  "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+                  "type": [
+                    "integer",
+                    "string",
+                    "null"
+                  ],
+                  "default": 8192
+                },
+                "screenAddress": {
+                  "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+                  "type": [
+                    "integer",
+                    "string",
+                    "null"
+                  ],
+                  "default": 1024
+                },
+                "borderColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Border colour index (0-15).",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 0
+                },
+                "backgroundColor": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Background colour index (0-15). Used for multicolor mode and aspect-ratio padding.",
+                  "minimum": 0,
+                  "maximum": 15,
+                  "default": 0
+                },
+                "preserveAspect": {
+                  "type": "boolean",
+                  "description": "Preserve the source image aspect ratio and pad with the background colour.",
+                  "default": true
+                },
+                "op": {
+                  "const": "render_bitmap"
+                }
+              },
+              "required": [
+                "imagePath",
+                "format",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "get_display_state",
+            "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+              "properties": {
+                "op": {
+                  "const": "get_display_state"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "graphics",
@@ -1655,8 +3967,82 @@
         "required": [
           "op"
         ],
-        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base.",
-        "additionalProperties": false
+        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "basic",
+            "description": "Retrieve BASIC references and snippets from the local knowledge base.",
+            "required": [
+              "q"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Retrieve BASIC references and snippets from the local knowledge base.",
+              "properties": {
+                "q": {
+                  "type": "string",
+                  "description": "Natural-language query describing the desired BASIC or assembly guidance.",
+                  "minLength": 3
+                },
+                "k": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum number of references to return (1-12).",
+                  "minimum": 1,
+                  "maximum": 12,
+                  "default": 3
+                },
+                "op": {
+                  "const": "basic"
+                }
+              },
+              "required": [
+                "q",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "asm",
+            "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
+            "required": [
+              "q"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
+              "properties": {
+                "q": {
+                  "type": "string",
+                  "description": "Natural-language query describing the desired BASIC or assembly guidance.",
+                  "minLength": 3
+                },
+                "k": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum number of references to return (1-12).",
+                  "minimum": 1,
+                  "maximum": 12,
+                  "default": 3
+                },
+                "op": {
+                  "const": "asm"
+                }
+              },
+              "required": [
+                "q",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "rag",
@@ -1902,8 +4288,321 @@
         "required": [
           "op"
         ],
-        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images.\n- mount: Mount a disk image with optional verification and retries.\n- unmount: Remove the mounted image from an Ultimate drive slot.\n- file_info: Inspect metadata for a file on the Ultimate filesystem.\n- create_image: Create a blank disk image of the specified format.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match.",
-        "additionalProperties": false
+        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image.\n- unmount: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image: Create a blank disk image of the specified format. Required inputs: format, path.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "list_drives",
+            "description": "List Ultimate drive slots and their mounted images.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "List Ultimate drive slots and their mounted images.",
+              "properties": {
+                "op": {
+                  "const": "list_drives"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "mount",
+            "description": "Mount a disk image with optional verification and retries.",
+            "required": [
+              "drive",
+              "image"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Mount a disk image with optional verification and retries.",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier (for example drive8).",
+                  "minLength": 1
+                },
+                "image": {
+                  "type": "string",
+                  "description": "Absolute or Ultimate filesystem path to the disk image.",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Override detected image type when firmware guesses incorrectly.",
+                  "enum": [
+                    "d64",
+                    "g64",
+                    "d71",
+                    "g71",
+                    "d81"
+                  ]
+                },
+                "attachmentMode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Attachment mode controlling how the firmware treats the mounted image.",
+                  "enum": [
+                    "readwrite",
+                    "readonly",
+                    "unlinked"
+                  ]
+                },
+                "driveMode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Drive emulation mode to switch to during verification.",
+                  "enum": [
+                    "1541",
+                    "1571",
+                    "1581"
+                  ]
+                },
+                "verify": {
+                  "type": "boolean",
+                  "description": "When true, power on/reset/verify using the reliability workflow.",
+                  "default": false
+                },
+                "powerOnIfNeeded": {
+                  "type": "boolean",
+                  "description": "Power on the drive automatically before mounting when verify=true.",
+                  "default": true
+                },
+                "resetAfterMount": {
+                  "type": "boolean",
+                  "description": "Issue a drive reset after mounting when verify=true.",
+                  "default": true
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "description": "Maximum number of mount retries when verify=true.",
+                  "minimum": 0,
+                  "maximum": 5,
+                  "default": 2
+                },
+                "retryDelayMs": {
+                  "type": "integer",
+                  "description": "Delay between mount retry attempts when verify=true.",
+                  "minimum": 0,
+                  "maximum": 5000,
+                  "default": 500
+                },
+                "op": {
+                  "const": "mount"
+                }
+              },
+              "required": [
+                "drive",
+                "image",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "unmount",
+            "description": "Remove the mounted image from an Ultimate drive slot.",
+            "required": [
+              "drive"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Remove the mounted image from an Ultimate drive slot.",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "unmount"
+                }
+              },
+              "required": [
+                "drive",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "file_info",
+            "description": "Inspect metadata for a file on the Ultimate filesystem.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Inspect metadata for a file on the Ultimate filesystem.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Absolute or Ultimate filesystem path to the disk image to mount or manage.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "file_info"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "create_image",
+            "description": "Create a blank disk image of the specified format.",
+            "required": [
+              "format",
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Create a blank disk image of the specified format.",
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "description": "Disk image format to create.",
+                  "enum": [
+                    "d64",
+                    "d71",
+                    "d81",
+                    "dnp"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Destination path on the Ultimate filesystem.",
+                  "minLength": 1
+                },
+                "diskname": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional disk label (1-16 characters, converted to PETSCII).",
+                  "minLength": 1,
+                  "maxLength": 16
+                },
+                "tracks": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Track count (D64 supports 35 or 40; DNP requires explicit tracks).",
+                  "minimum": 1,
+                  "maximum": 255
+                },
+                "op": {
+                  "const": "create_image"
+                }
+              },
+              "required": [
+                "format",
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "find_and_run",
+            "description": "Search for a PRG/CRT by name substring and run the first match.",
+            "required": [
+              "nameContains"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Search for a PRG/CRT by name substring and run the first match.",
+              "properties": {
+                "root": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Root path to search",
+                  "minLength": 1,
+                  "default": "/"
+                },
+                "nameContains": {
+                  "type": "string",
+                  "description": "Substring to match",
+                  "minLength": 1
+                },
+                "extensions": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "File extensions to include (without dot)",
+                    "minLength": 1
+                  }
+                },
+                "caseInsensitive": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Case-insensitive name match",
+                  "default": true
+                },
+                "sort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Sort order for matches",
+                  "enum": [
+                    "discovered",
+                    "alphabetical"
+                  ],
+                  "default": "discovered"
+                },
+                "waitMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Delay after firmware run before returning",
+                  "minimum": 0,
+                  "default": 0
+                },
+                "captureCandidates": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Include up to this many candidates in result",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 10
+                },
+                "op": {
+                  "const": "find_and_run"
+                }
+              },
+              "required": [
+                "nameContains",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "storage",
@@ -2010,8 +4709,158 @@
         "required": [
           "op"
         ],
-        "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot.\n- power_on: Power on a specific Ultimate drive slot.\n- power_off: Power off a specific Ultimate drive slot.\n- load_rom: Temporarily load a custom ROM into an Ultimate drive slot.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581).",
-        "additionalProperties": false
+        "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "reset",
+            "description": "Issue an IEC reset for the selected drive slot.",
+            "required": [
+              "drive"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Issue an IEC reset for the selected drive slot.",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "reset"
+                }
+              },
+              "required": [
+                "drive",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "power_on",
+            "description": "Power on a specific Ultimate drive slot.",
+            "required": [
+              "drive"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Power on a specific Ultimate drive slot.",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "power_on"
+                }
+              },
+              "required": [
+                "drive",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "power_off",
+            "description": "Power off a specific Ultimate drive slot.",
+            "required": [
+              "drive"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Power off a specific Ultimate drive slot.",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "power_off"
+                }
+              },
+              "required": [
+                "drive",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "load_rom",
+            "description": "Temporarily load a custom ROM into an Ultimate drive slot.",
+            "required": [
+              "drive",
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Temporarily load a custom ROM into an Ultimate drive slot.",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+                  "minLength": 1
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Absolute or Ultimate filesystem path to the disk image to mount or manage.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "load_rom"
+                }
+              },
+              "required": [
+                "drive",
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "set_mode",
+            "description": "Set the emulation mode for a drive slot (1541/1571/1581).",
+            "required": [
+              "drive",
+              "mode"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Set the emulation mode for a drive slot (1541/1571/1581).",
+              "properties": {
+                "drive": {
+                  "type": "string",
+                  "description": "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+                  "minLength": 1
+                },
+                "mode": {
+                  "type": "string",
+                  "description": "Drive hardware profile to emulate.",
+                  "enum": [
+                    "1541",
+                    "1571",
+                    "1581"
+                  ]
+                },
+                "op": {
+                  "const": "set_mode"
+                }
+              },
+              "required": [
+                "drive",
+                "mode",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "drive",
@@ -2225,8 +5074,242 @@
         "required": [
           "op"
         ],
-        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.\n- define_chars: Define custom printer characters (Commodore DLL mode).",
-        "additionalProperties": false
+        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4. Required inputs: text.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns.\n- define_chars: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "print_text",
+            "description": "Generate BASIC that prints text to device 4.",
+            "required": [
+              "text"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Generate BASIC that prints text to device 4.",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "Text to print on the connected printer.",
+                  "minLength": 1
+                },
+                "target": {
+                  "description": "Printer target: Commodore MPS (PETSCII) or Epson FX (ESC/P).",
+                  "type": "string",
+                  "enum": [
+                    "commodore",
+                    "epson"
+                  ],
+                  "default": "commodore"
+                },
+                "secondaryAddress": {
+                  "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase).",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "enum": [
+                    0,
+                    7
+                  ]
+                },
+                "formFeed": {
+                  "type": "boolean",
+                  "description": "Emit a form-feed (CHR$(12)) at the end of the job.",
+                  "default": false
+                },
+                "op": {
+                  "const": "print_text"
+                }
+              },
+              "required": [
+                "text",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "print_bitmap",
+            "description": "Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.",
+            "required": [
+              "printer",
+              "columns"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows.",
+              "properties": {
+                "printer": {
+                  "type": "string",
+                  "description": "Target printer family.",
+                  "enum": [
+                    "commodore",
+                    "epson"
+                  ],
+                  "default": "commodore"
+                },
+                "columns": {
+                  "type": "array",
+                  "description": "Sequence of bitmap columns.",
+                  "items": {
+                    "type": "integer",
+                    "description": "Bitmap column byte (0-255).",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "minItems": 1
+                },
+                "repeats": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Number of times to repeat the row (1-255).",
+                  "minimum": 1,
+                  "maximum": 255
+                },
+                "useSubRepeat": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Repeat the next byte this many times (Commodore BIM SUB).",
+                  "minimum": 1,
+                  "maximum": 255
+                },
+                "secondaryAddress": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Secondary address for device 4 (0 or 7).",
+                  "minimum": 0,
+                  "maximum": 7
+                },
+                "ensureMsb": {
+                  "type": "boolean",
+                  "description": "Ensure MSB set for Commodore printers.",
+                  "default": true
+                },
+                "mode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Epson ESC/P graphics mode (K/L/Y/Z/*).",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "density": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Density parameter when using Epson mode '*'.",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "timesPerLine": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Number of times to print the row per line (1-10).",
+                  "minimum": 1,
+                  "maximum": 10
+                },
+                "op": {
+                  "const": "print_bitmap"
+                }
+              },
+              "required": [
+                "printer",
+                "columns",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "define_chars",
+            "description": "Define custom printer characters (Commodore DLL mode).",
+            "required": [
+              "firstChar",
+              "chars"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Define custom printer characters (Commodore DLL mode).",
+              "properties": {
+                "firstChar": {
+                  "type": "integer",
+                  "description": "PETSCII code of first character to redefine (33-126).",
+                  "minimum": 33,
+                  "maximum": 126
+                },
+                "chars": {
+                  "type": "array",
+                  "description": "Character definitions to upload (1-32).",
+                  "items": {
+                    "type": "object",
+                    "description": "Commodore MPS DLL character definition (11 columns).",
+                    "properties": {
+                      "a": {
+                        "description": "Attribute flag (0=normal, 1=graphics).",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "enum": [
+                          0,
+                          1
+                        ]
+                      },
+                      "columns": {
+                        "type": "array",
+                        "description": "11 column bytes describing the character.",
+                        "items": {
+                          "type": "integer",
+                          "description": "Column byte (0-255).",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        "minItems": 11,
+                        "maxItems": 11
+                      }
+                    },
+                    "required": [
+                      "columns"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 32
+                },
+                "secondaryAddress": {
+                  "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase).",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "enum": [
+                    0,
+                    7
+                  ]
+                },
+                "op": {
+                  "const": "define_chars"
+                }
+              },
+              "required": [
+                "firstChar",
+                "chars",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "printer",
@@ -2410,8 +5493,440 @@
         "required": [
           "op"
         ],
-        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware.\n- get: Read a configuration category or specific item.\n- set: Write a configuration value in the selected category.\n- batch_update: Apply multiple configuration updates in a single request.\n- load_flash: Load configuration from flash storage.\n- save_flash: Persist the current configuration to flash storage.\n- reset_defaults: Reset firmware configuration to factory defaults.\n- read_debugreg: Read the Ultimate debug register ($D7FF).\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF).\n- info: Retrieve Ultimate hardware information and status.\n- version: Fetch firmware version details.\n- snapshot: Snapshot configuration to disk for later restore or diff.\n- restore: Restore configuration from a snapshot file.\n- diff: Compare the current configuration with a snapshot.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture.",
-        "additionalProperties": false
+        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "list",
+            "description": "List configuration categories reported by the firmware.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "List configuration categories reported by the firmware.",
+              "properties": {
+                "op": {
+                  "const": "list"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "get",
+            "description": "Read a configuration category or specific item.",
+            "required": [
+              "category"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read a configuration category or specific item.",
+              "properties": {
+                "category": {
+                  "type": "string",
+                  "description": "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
+                  "minLength": 1
+                },
+                "item": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Specific configuration item inside the selected category (e.g. 'Volume').",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "get"
+                }
+              },
+              "required": [
+                "category",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "set",
+            "description": "Write a configuration value in the selected category.",
+            "required": [
+              "category",
+              "item",
+              "value"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Write a configuration value in the selected category.",
+              "properties": {
+                "category": {
+                  "type": "string",
+                  "description": "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
+                  "minLength": 1
+                },
+                "item": {
+                  "type": "string",
+                  "description": "Configuration item name inside the category.",
+                  "minLength": 1
+                },
+                "value": {
+                  "description": "Primitive configuration value (string, number, or boolean).",
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                },
+                "op": {
+                  "const": "set"
+                }
+              },
+              "required": [
+                "category",
+                "item",
+                "value",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "batch_update",
+            "description": "Apply multiple configuration updates in a single request.",
+            "required": [],
+            "inputSchema": {
+              "description": "Apply multiple configuration updates in a single request.",
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "properties": {
+                "op": {
+                  "const": "batch_update"
+                }
+              },
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "load_flash",
+            "description": "Load configuration from flash storage.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Load configuration from flash storage.",
+              "properties": {
+                "op": {
+                  "const": "load_flash"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "save_flash",
+            "description": "Persist the current configuration to flash storage.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Persist the current configuration to flash storage.",
+              "properties": {
+                "op": {
+                  "const": "save_flash"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "reset_defaults",
+            "description": "Reset firmware configuration to factory defaults.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Reset firmware configuration to factory defaults.",
+              "properties": {
+                "op": {
+                  "const": "reset_defaults"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "read_debugreg",
+            "description": "Read the Ultimate debug register ($D7FF).",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read the Ultimate debug register ($D7FF).",
+              "properties": {
+                "op": {
+                  "const": "read_debugreg"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "write_debugreg",
+            "description": "Write a hex value to the Ultimate debug register ($D7FF).",
+            "required": [
+              "value"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Write a hex value to the Ultimate debug register ($D7FF).",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "Hex value (00-FF) to write to the debug register.",
+                  "minLength": 1,
+                  "maxLength": 2,
+                  "pattern": "^[0-9A-Fa-f]{1,2}$"
+                },
+                "op": {
+                  "const": "write_debugreg"
+                }
+              },
+              "required": [
+                "value",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "info",
+            "description": "Retrieve Ultimate hardware information and status.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Retrieve Ultimate hardware information and status.",
+              "properties": {
+                "op": {
+                  "const": "info"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "version",
+            "description": "Fetch firmware version details.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Fetch firmware version details.",
+              "properties": {
+                "op": {
+                  "const": "version"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "snapshot",
+            "description": "Snapshot configuration to disk for later restore or diff.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Snapshot configuration to disk for later restore or diff.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Absolute or workspace-relative path where the snapshot file will be written.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "snapshot"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "restore",
+            "description": "Restore configuration from a snapshot file.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Restore configuration from a snapshot file.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Snapshot file to read (must contain categories payload).",
+                  "minLength": 1
+                },
+                "applyToFlash": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "When true, save the restored configuration to flash immediately.",
+                  "default": false
+                },
+                "op": {
+                  "const": "restore"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "diff",
+            "description": "Compare the current configuration with a snapshot.",
+            "required": [
+              "path"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Compare the current configuration with a snapshot.",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Snapshot file to compare with.",
+                  "minLength": 1
+                },
+                "op": {
+                  "const": "diff"
+                }
+              },
+              "required": [
+                "path",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "shuffle",
+            "description": "Discover PRG/CRT files and run each with optional screen capture.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Discover PRG/CRT files and run each with optional screen capture.",
+              "properties": {
+                "root": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Root path to search for programs",
+                  "minLength": 1,
+                  "default": "/"
+                },
+                "extensions": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "File extensions to include (without dot)",
+                    "minLength": 1
+                  },
+                  "default": [
+                    "prg",
+                    "crt"
+                  ]
+                },
+                "durationMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Duration to run each program in milliseconds",
+                  "minimum": 1,
+                  "default": 5000
+                },
+                "captureScreen": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Capture screen after each run",
+                  "default": true
+                },
+                "maxPrograms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum number of programs to run",
+                  "minimum": 1,
+                  "default": 10
+                },
+                "outputPath": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Output directory for run logs and captures",
+                  "minLength": 1
+                },
+                "resetDelayMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Delay after reset operations to allow the platform to settle.",
+                  "minimum": 0,
+                  "maximum": 1000,
+                  "default": 100
+                },
+                "op": {
+                  "const": "shuffle"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "config",
@@ -2692,8 +6207,335 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files.\n- charset: Locate and extract 2KB character sets from RAM.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
-        "additionalProperties": false
+        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length.\n- charset: Locate and extract 2KB character sets from RAM. Required inputs: none.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "sprites",
+            "description": "Scan RAM for sprites and optionally export .spr files.",
+            "required": [
+              "address",
+              "length"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Scan RAM for sprites and optionally export .spr files.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "Start address ($HHHH or decimal)",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to scan",
+                  "minimum": 63,
+                  "maximum": 65536
+                },
+                "stride": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Stride between sprite candidates in bytes",
+                  "minimum": 1,
+                  "default": 64
+                },
+                "maxSprites": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum sprites to return",
+                  "minimum": 1,
+                  "maximum": 256,
+                  "default": 16
+                },
+                "minNonZeroRows": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Minimum non-empty rows required",
+                  "minimum": 1,
+                  "maximum": 21,
+                  "default": 4
+                },
+                "minSetBits": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Minimum number of set bits required",
+                  "minimum": 1,
+                  "maximum": 504,
+                  "default": 12
+                },
+                "includeBase64": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Include base64 data in response",
+                  "default": true
+                },
+                "outputDir": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Directory to write .spr files",
+                  "minLength": 1
+                },
+                "pauseDuringRead": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Pause the machine during memory read",
+                  "default": true
+                },
+                "op": {
+                  "const": "sprites"
+                }
+              },
+              "required": [
+                "address",
+                "length",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "charset",
+            "description": "Locate and extract 2KB character sets from RAM.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Locate and extract 2KB character sets from RAM.",
+              "properties": {
+                "address": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Start address to scan ($HHHH or decimal). If not provided, scans common locations.",
+                  "minLength": 1
+                },
+                "scanRange": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Range to scan if address not provided: 'common' or 'full'",
+                  "enum": [
+                    "common",
+                    "full"
+                  ],
+                  "default": "common"
+                },
+                "outputPath": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "File path to write charset binary",
+                  "minLength": 1
+                },
+                "pauseDuringRead": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Pause the machine during memory read",
+                  "default": true
+                },
+                "minNonEmptyChars": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Minimum non-empty characters required",
+                  "minimum": 1,
+                  "maximum": 256,
+                  "default": 32
+                },
+                "minEntropy": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Minimum average entropy threshold",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.3
+                },
+                "op": {
+                  "const": "charset"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "memory_dump",
+            "description": "Dump a RAM range to hex or binary files with manifest metadata.",
+            "required": [
+              "address",
+              "length",
+              "outputPath"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Dump a RAM range to hex or binary files with manifest metadata.",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "Start address ($HHHH or decimal)",
+                  "minLength": 1
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Number of bytes to dump",
+                  "minimum": 1,
+                  "maximum": 65536
+                },
+                "outputPath": {
+                  "type": "string",
+                  "description": "Destination file path",
+                  "minLength": 1
+                },
+                "format": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Output format: hex|binary",
+                  "enum": [
+                    "hex",
+                    "binary"
+                  ],
+                  "default": "hex"
+                },
+                "chunkSize": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Chunk size for reads",
+                  "minimum": 1,
+                  "maximum": 4096,
+                  "default": 512
+                },
+                "pauseDuringRead": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Pause/resume around dump",
+                  "default": true
+                },
+                "retries": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Retries per chunk on failure",
+                  "minimum": 0,
+                  "default": 1
+                },
+                "op": {
+                  "const": "memory_dump"
+                }
+              },
+              "required": [
+                "address",
+                "length",
+                "outputPath",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "fs_stats",
+            "description": "Walk the filesystem and aggregate counts/bytes by extension.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Walk the filesystem and aggregate counts/bytes by extension.",
+              "properties": {
+                "root": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Root path to scan",
+                  "minLength": 1,
+                  "default": "/"
+                },
+                "extensions": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string",
+                    "description": "Limit to these extensions (without dot)",
+                    "minLength": 1
+                  }
+                },
+                "includeContainers": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Include container images (d64/d81/etc.) in extension stats",
+                  "default": true
+                },
+                "maxSamplesPerExtension": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Number of sample paths to keep per extension",
+                  "minimum": 1,
+                  "maximum": 10,
+                  "default": 3
+                },
+                "op": {
+                  "const": "fs_stats"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "firmware_health",
+            "description": "Run firmware readiness checks and report status metrics.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Run firmware readiness checks and report status metrics.",
+              "properties": {
+                "op": {
+                  "const": "firmware_health"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "extract",
@@ -2773,8 +6615,77 @@
         "required": [
           "op"
         ],
-        "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target.\n- stop: Stop an active Ultimate streaming session.",
-        "additionalProperties": false
+        "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop: Stop an active Ultimate streaming session. Required inputs: stream.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "start",
+            "description": "Start an Ultimate streaming session toward a host:port target.",
+            "required": [
+              "stream",
+              "target"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Start an Ultimate streaming session toward a host:port target.",
+              "properties": {
+                "stream": {
+                  "type": "string",
+                  "description": "Stream type to control (video/audio/debug).",
+                  "enum": [
+                    "video",
+                    "audio",
+                    "debug"
+                  ]
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Destination host:port or UDP target understood by the firmware.",
+                  "minLength": 3
+                },
+                "op": {
+                  "const": "start"
+                }
+              },
+              "required": [
+                "stream",
+                "target",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "stop",
+            "description": "Stop an active Ultimate streaming session.",
+            "required": [
+              "stream"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Stop an active Ultimate streaming session.",
+              "properties": {
+                "stream": {
+                  "type": "string",
+                  "description": "Stream type to control (video/audio/debug).",
+                  "enum": [
+                    "video",
+                    "audio",
+                    "debug"
+                  ]
+                },
+                "op": {
+                  "const": "stop"
+                }
+              },
+              "required": [
+                "stream",
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "stream",
@@ -3062,8 +6973,567 @@
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE.\n- delete_checkpoint: Remove a checkpoint by id.\n- toggle_checkpoint: Enable or disable a checkpoint by id.\n- set_condition: Attach a conditional expression to a checkpoint.\n- list_registers: List available registers (metadata).\n- get_registers: Read register values, optionally filtered by name or id.\n- set_registers: Write register values.\n- step: Single-step CPU execution.\n- step_return: Continue execution until the current routine returns.\n- get_monitor_state: Read CPU registers and return the current monitor state.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses.\n- nuclear_reset: Kill and restart the VICE process (managed instances only).\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
-        "additionalProperties": false
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none.\n- set_registers: Write register values. Required inputs: writes.\n- step: Single-step CPU execution. Required inputs: none.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "list_checkpoints",
+            "description": "List all active VICE checkpoints (breakpoints).",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "List all active VICE checkpoints (breakpoints).",
+              "properties": {
+                "op": {
+                  "const": "list_checkpoints"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "get_checkpoint",
+            "description": "Fetch a single checkpoint by id.",
+            "required": [
+              "id"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Fetch a single checkpoint by id.",
+              "properties": {
+                "op": {
+                  "const": "get_checkpoint"
+                },
+                "id": {
+                  "type": "integer",
+                  "description": "Debugger checkpoint identifier.",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "op",
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "create_checkpoint",
+            "description": "Create a new checkpoint (breakpoint) in VICE.",
+            "required": [
+              "address"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Create a new checkpoint (breakpoint) in VICE.",
+              "properties": {
+                "op": {
+                  "const": "create_checkpoint"
+                },
+                "address": {
+                  "type": "string",
+                  "description": "Start address (e.g. $0801).",
+                  "minLength": 1
+                },
+                "endAddress": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional end address for range.",
+                  "minLength": 1
+                },
+                "stopOnHit": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Pause execution when hit (default true).",
+                  "default": true
+                },
+                "enabled": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Whether the checkpoint is enabled (default true).",
+                  "default": true
+                },
+                "temporary": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Automatically remove after first hit.",
+                  "default": false
+                },
+                "label": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional human-readable label stored in-process.",
+                  "maxLength": 64
+                },
+                "operations": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Checkpoint operation filters.",
+                  "properties": {
+                    "execute": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "Trigger on execute (default true).",
+                      "default": true
+                    },
+                    "load": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "Trigger on memory load.",
+                      "default": false
+                    },
+                    "store": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "description": "Trigger on memory store.",
+                      "default": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "memspace": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+                  "minimum": 0,
+                  "maximum": 4
+                }
+              },
+              "required": [
+                "op",
+                "address"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "delete_checkpoint",
+            "description": "Remove a checkpoint by id.",
+            "required": [
+              "id"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Remove a checkpoint by id.",
+              "properties": {
+                "op": {
+                  "const": "delete_checkpoint"
+                },
+                "id": {
+                  "type": "integer",
+                  "description": "Debugger checkpoint identifier.",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "op",
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "toggle_checkpoint",
+            "description": "Enable or disable a checkpoint by id.",
+            "required": [
+              "id",
+              "enabled"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Enable or disable a checkpoint by id.",
+              "properties": {
+                "op": {
+                  "const": "toggle_checkpoint"
+                },
+                "id": {
+                  "type": "integer",
+                  "description": "Debugger checkpoint identifier.",
+                  "minimum": 1
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Set to true to enable, false to disable."
+                }
+              },
+              "required": [
+                "op",
+                "id",
+                "enabled"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "set_condition",
+            "description": "Attach a conditional expression to a checkpoint.",
+            "required": [
+              "id",
+              "expression"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Attach a conditional expression to a checkpoint.",
+              "properties": {
+                "op": {
+                  "const": "set_condition"
+                },
+                "id": {
+                  "type": "integer",
+                  "description": "Debugger checkpoint identifier.",
+                  "minimum": 1
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "VICE monitor conditional expression.",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "op",
+                "id",
+                "expression"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "list_registers",
+            "description": "List available registers (metadata).",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "List available registers (metadata).",
+              "properties": {
+                "op": {
+                  "const": "list_registers"
+                },
+                "memspace": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+                  "minimum": 0,
+                  "maximum": 4
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "get_registers",
+            "description": "Read register values, optionally filtered by name or id.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read register values, optionally filtered by name or id.",
+              "properties": {
+                "op": {
+                  "const": "get_registers"
+                },
+                "memspace": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "registers": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "description": "Registers to include.",
+                  "items": {
+                    "type": "object",
+                    "description": "Selects a register by id or name.",
+                    "properties": {
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Register name (case-insensitive)."
+                      },
+                      "id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "description": "Register id.",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "set_registers",
+            "description": "Write register values.",
+            "required": [
+              "writes"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Write register values.",
+              "properties": {
+                "op": {
+                  "const": "set_registers"
+                },
+                "memspace": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "writes": {
+                  "type": "array",
+                  "description": "Register writes to apply.",
+                  "items": {
+                    "type": "object",
+                    "description": "Register write descriptor.",
+                    "properties": {
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "description": "Register name (case-insensitive)."
+                      },
+                      "id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "description": "Register id.",
+                        "minimum": 0
+                      },
+                      "value": {
+                        "type": "integer",
+                        "description": "Value to write.",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "op",
+                "writes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "step",
+            "description": "Single-step CPU execution.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Single-step CPU execution.",
+              "properties": {
+                "op": {
+                  "const": "step"
+                },
+                "count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Number of instructions to step.",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "mode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Step mode (into or over).",
+                  "enum": [
+                    "into",
+                    "over"
+                  ]
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "step_return",
+            "description": "Continue execution until the current routine returns.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Continue execution until the current routine returns.",
+              "properties": {
+                "op": {
+                  "const": "step_return"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "get_monitor_state",
+            "description": "Read CPU registers and return the current monitor state.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read CPU registers and return the current monitor state.",
+              "properties": {
+                "op": {
+                  "const": "get_monitor_state"
+                },
+                "memspace": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "VICE memory space (0=CPU, 1=Drive8, etc.).",
+                  "minimum": 0,
+                  "maximum": 4
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "wait_for_state",
+            "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
+              "properties": {
+                "op": {
+                  "const": "wait_for_state"
+                },
+                "expectedPC": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Target PC address to wait for (e.g. $0810).",
+                  "minLength": 1
+                },
+                "timeoutMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Maximum wait time in milliseconds.",
+                  "minimum": 1,
+                  "maximum": 60000,
+                  "default": 5000
+                },
+                "pollMs": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "Poll interval in milliseconds.",
+                  "minimum": 10,
+                  "maximum": 1000,
+                  "default": 100
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "nuclear_reset",
+            "description": "Kill and restart the VICE process (managed instances only).",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Kill and restart the VICE process (managed instances only).",
+              "properties": {
+                "op": {
+                  "const": "nuclear_reset"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "continue_execution",
+            "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+            "required": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+              "properties": {
+                "op": {
+                  "const": "continue_execution"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "debug",
@@ -3189,8 +7659,75 @@
         "required": [
           "op"
         ],
-        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only).\n- resource_set: Write a VICE configuration resource (safe prefixes only).",
-        "additionalProperties": false
+        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.",
+        "additionalProperties": false,
+        "x-c64bridge-operations": [
+          {
+            "op": "resource_get",
+            "description": "Read a VICE configuration resource (safe prefixes only).",
+            "required": [
+              "name"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read a VICE configuration resource (safe prefixes only).",
+              "properties": {
+                "op": {
+                  "const": "resource_get"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "VICE resource name (example: SidEngine, C64Model).",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Z][A-Za-z0-9_.-]{0,63}$"
+                }
+              },
+              "required": [
+                "op",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "resource_set",
+            "description": "Write a VICE configuration resource (safe prefixes only).",
+            "required": [
+              "name",
+              "value"
+            ],
+            "inputSchema": {
+              "type": "object",
+              "description": "Write a VICE configuration resource (safe prefixes only).",
+              "properties": {
+                "op": {
+                  "const": "resource_set"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "VICE resource name (example: SidEngine, C64Model).",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[A-Z][A-Za-z0-9_.-]{0,63}$"
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ],
+                  "description": "VICE resource value (string or integer)."
+                }
+              },
+              "required": [
+                "op",
+                "name",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ]
       },
       "_meta": {
         "domain": "vice",

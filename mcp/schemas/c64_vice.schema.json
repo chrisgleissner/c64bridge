@@ -27,6 +27,73 @@
   "required": [
     "op"
   ],
-  "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only).\n- resource_set: Write a VICE configuration resource (safe prefixes only).",
-  "additionalProperties": false
+  "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.",
+  "additionalProperties": false,
+  "x-c64bridge-operations": [
+    {
+      "op": "resource_get",
+      "description": "Read a VICE configuration resource (safe prefixes only).",
+      "required": [
+        "name"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Read a VICE configuration resource (safe prefixes only).",
+        "properties": {
+          "op": {
+            "const": "resource_get"
+          },
+          "name": {
+            "type": "string",
+            "description": "VICE resource name (example: SidEngine, C64Model).",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Z][A-Za-z0-9_.-]{0,63}$"
+          }
+        },
+        "required": [
+          "op",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "resource_set",
+      "description": "Write a VICE configuration resource (safe prefixes only).",
+      "required": [
+        "name",
+        "value"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "description": "Write a VICE configuration resource (safe prefixes only).",
+        "properties": {
+          "op": {
+            "const": "resource_set"
+          },
+          "name": {
+            "type": "string",
+            "description": "VICE resource name (example: SidEngine, C64Model).",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Z][A-Za-z0-9_.-]{0,63}$"
+          },
+          "value": {
+            "type": [
+              "string",
+              "integer"
+            ],
+            "description": "VICE resource value (string or integer)."
+          }
+        },
+        "required": [
+          "op",
+          "name",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
 }

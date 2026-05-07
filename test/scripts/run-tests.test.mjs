@@ -191,6 +191,8 @@ test("run-tests curates default VICE matrix files around supported suites", () =
     "test/viceIntegration.test.mjs",
     "test/viceModule.test.mjs",
     "test/groupedToolsShims.test.mjs",
+    "test/inputModule.test.mjs",
+    "test/batchAndDisplayState.test.mjs",
     "test/toolsTypes.test.mjs",
     "test/platformRegistry.test.mjs",
     "test/meta/program.test.mjs",
