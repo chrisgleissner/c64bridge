@@ -128,13 +128,14 @@
   "required": [
     "op"
   ],
-  "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none.",
+  "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
       "op": "list",
       "description": "List configuration categories reported by the firmware.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "List configuration categories reported by the firmware.",
@@ -154,6 +155,9 @@
       "description": "Read a configuration category or specific item.",
       "required": [
         "category"
+      ],
+      "optional": [
+        "item"
       ],
       "inputSchema": {
         "type": "object",
@@ -191,6 +195,7 @@
         "item",
         "value"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Write a configuration value in the selected category.",
@@ -230,6 +235,7 @@
       "op": "batch_update",
       "description": "Apply multiple configuration updates in a single request.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "description": "Apply multiple configuration updates in a single request.",
         "type": "object",
@@ -257,6 +263,7 @@
       "op": "load_flash",
       "description": "Load configuration from flash storage.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Load configuration from flash storage.",
@@ -275,6 +282,7 @@
       "op": "save_flash",
       "description": "Persist the current configuration to flash storage.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Persist the current configuration to flash storage.",
@@ -293,6 +301,7 @@
       "op": "reset_defaults",
       "description": "Reset firmware configuration to factory defaults.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Reset firmware configuration to factory defaults.",
@@ -311,6 +320,7 @@
       "op": "read_debugreg",
       "description": "Read the Ultimate debug register ($D7FF).",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Read the Ultimate debug register ($D7FF).",
@@ -331,6 +341,7 @@
       "required": [
         "value"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Write a hex value to the Ultimate debug register ($D7FF).",
@@ -357,6 +368,7 @@
       "op": "info",
       "description": "Retrieve Ultimate hardware information and status.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Retrieve Ultimate hardware information and status.",
@@ -375,6 +387,7 @@
       "op": "version",
       "description": "Fetch firmware version details.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Fetch firmware version details.",
@@ -395,6 +408,7 @@
       "required": [
         "path"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Snapshot configuration to disk for later restore or diff.",
@@ -420,6 +434,9 @@
       "description": "Restore configuration from a snapshot file.",
       "required": [
         "path"
+      ],
+      "optional": [
+        "applyToFlash"
       ],
       "inputSchema": {
         "type": "object",
@@ -455,6 +472,7 @@
       "required": [
         "path"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Compare the current configuration with a snapshot.",
@@ -479,6 +497,15 @@
       "op": "shuffle",
       "description": "Discover PRG/CRT files and run each with optional screen capture.",
       "required": [],
+      "optional": [
+        "root",
+        "extensions",
+        "durationMs",
+        "captureScreen",
+        "maxPrograms",
+        "outputPath",
+        "resetDelayMs"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Discover PRG/CRT files and run each with optional screen capture.",

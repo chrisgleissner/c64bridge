@@ -236,13 +236,14 @@
   "required": [
     "op"
   ],
-  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none.\n- set_registers: Write register values. Required inputs: writes.\n- step: Single-step CPU execution. Required inputs: none.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
+  "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none. Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none. Optional inputs: memspace, registers.\n- set_registers: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step: Single-step CPU execution. Required inputs: none. Optional inputs: count, mode.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none. Optional inputs: memspace.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
       "op": "list_checkpoints",
       "description": "List all active VICE checkpoints (breakpoints).",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "List all active VICE checkpoints (breakpoints).",
@@ -263,6 +264,7 @@
       "required": [
         "id"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Fetch a single checkpoint by id.",
@@ -288,6 +290,15 @@
       "description": "Create a new checkpoint (breakpoint) in VICE.",
       "required": [
         "address"
+      ],
+      "optional": [
+        "endAddress",
+        "stopOnHit",
+        "enabled",
+        "temporary",
+        "label",
+        "operations",
+        "memspace"
       ],
       "inputSchema": {
         "type": "object",
@@ -398,6 +409,7 @@
       "required": [
         "id"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Remove a checkpoint by id.",
@@ -425,6 +437,7 @@
         "id",
         "enabled"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Enable or disable a checkpoint by id.",
@@ -457,6 +470,7 @@
         "id",
         "expression"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Attach a conditional expression to a checkpoint.",
@@ -487,6 +501,9 @@
       "op": "list_registers",
       "description": "List available registers (metadata).",
       "required": [],
+      "optional": [
+        "memspace"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "List available registers (metadata).",
@@ -514,6 +531,10 @@
       "op": "get_registers",
       "description": "Read register values, optionally filtered by name or id.",
       "required": [],
+      "optional": [
+        "memspace",
+        "registers"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Read register values, optionally filtered by name or id.",
@@ -571,6 +592,9 @@
       "description": "Write register values.",
       "required": [
         "writes"
+      ],
+      "optional": [
+        "memspace"
       ],
       "inputSchema": {
         "type": "object",
@@ -635,6 +659,10 @@
       "op": "step",
       "description": "Single-step CPU execution.",
       "required": [],
+      "optional": [
+        "count",
+        "mode"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Single-step CPU execution.",
@@ -673,6 +701,7 @@
       "op": "step_return",
       "description": "Continue execution until the current routine returns.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Continue execution until the current routine returns.",
@@ -691,6 +720,9 @@
       "op": "get_monitor_state",
       "description": "Read CPU registers and return the current monitor state.",
       "required": [],
+      "optional": [
+        "memspace"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Read CPU registers and return the current monitor state.",
@@ -718,6 +750,11 @@
       "op": "wait_for_state",
       "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
       "required": [],
+      "optional": [
+        "expectedPC",
+        "timeoutMs",
+        "pollMs"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
@@ -764,6 +801,7 @@
       "op": "nuclear_reset",
       "description": "Kill and restart the VICE process (managed instances only).",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Kill and restart the VICE process (managed instances only).",
@@ -782,6 +820,7 @@
       "op": "continue_execution",
       "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",

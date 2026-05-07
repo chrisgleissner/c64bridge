@@ -28,7 +28,7 @@
   "required": [
     "op"
   ],
-  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q.",
+  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -36,6 +36,9 @@
       "description": "Retrieve BASIC references and snippets from the local knowledge base.",
       "required": [
         "q"
+      ],
+      "optional": [
+        "k"
       ],
       "inputSchema": {
         "type": "object",
@@ -72,6 +75,9 @@
       "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
       "required": [
         "q"
+      ],
+      "optional": [
+        "k"
       ],
       "inputSchema": {
         "type": "object",

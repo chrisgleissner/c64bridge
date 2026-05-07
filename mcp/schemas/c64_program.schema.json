@@ -256,7 +256,7 @@
   "required": [
     "op"
   ],
-  "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. Required inputs: path.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none.",
+  "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: symbolsFile.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. Required inputs: path. Optional inputs: symbolsFile.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -264,6 +264,9 @@
       "description": "Load a PRG from Ultimate storage without executing it.",
       "required": [
         "path"
+      ],
+      "optional": [
+        "symbolsFile"
       ],
       "inputSchema": {
         "type": "object",
@@ -299,6 +302,9 @@
       "required": [
         "path"
       ],
+      "optional": [
+        "symbolsFile"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
@@ -333,6 +339,7 @@
       "required": [
         "path"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Mount and run a CRT cartridge image.",
@@ -358,6 +365,9 @@
       "description": "Upload Commodore BASIC v2 source and execute it immediately.",
       "required": [
         "program"
+      ],
+      "optional": [
+        "verify"
       ],
       "inputSchema": {
         "type": "object",
@@ -390,6 +400,9 @@
       "required": [
         "program"
       ],
+      "optional": [
+        "verify"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Assemble 6502/6510 source, upload the PRG, and execute it.",
@@ -420,6 +433,12 @@
       "description": "Run multiple PRG/CRT programs with post-run assertions.",
       "required": [
         "programs"
+      ],
+      "optional": [
+        "continueOnError",
+        "durationMs",
+        "outputPath",
+        "resetDelayMs"
       ],
       "inputSchema": {
         "type": "object",
@@ -545,6 +564,11 @@
         "runId",
         "outputPath"
       ],
+      "optional": [
+        "captureScreen",
+        "memoryRanges",
+        "captureDebugReg"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Capture screen, memory, and debug registers into an artifact bundle.",
@@ -618,6 +642,16 @@
       "op": "cross_platform_greeting",
       "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
       "required": [],
+      "optional": [
+        "platforms",
+        "messageTemplate",
+        "verify",
+        "captureScreenshot",
+        "outputPath",
+        "restoreActiveBackend",
+        "timeoutMs",
+        "pollIntervalMs"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",

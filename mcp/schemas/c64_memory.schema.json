@@ -178,7 +178,7 @@
   "required": [
     "op"
   ],
-  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath.",
+  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -186,6 +186,9 @@
       "description": "Read a range of bytes and return a hex dump with address metadata.",
       "required": [
         "address"
+      ],
+      "optional": [
+        "length"
       ],
       "inputSchema": {
         "type": "object",
@@ -220,6 +223,12 @@
       "required": [
         "address",
         "bytes"
+      ],
+      "optional": [
+        "verify",
+        "expected",
+        "mask",
+        "abortOnMismatch"
       ],
       "inputSchema": {
         "type": "object",
@@ -280,6 +289,7 @@
       "op": "read_screen",
       "description": "Return the current 40x25 text screen converted to ASCII.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Return the current 40x25 text screen converted to ASCII.",
@@ -299,6 +309,12 @@
       "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
       "required": [
         "pattern"
+      ],
+      "optional": [
+        "isRegex",
+        "caseInsensitive",
+        "timeoutMs",
+        "intervalMs"
       ],
       "inputSchema": {
         "type": "object",
@@ -360,6 +376,10 @@
       "required": [
         "address"
       ],
+      "optional": [
+        "length",
+        "instructionCount"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
@@ -404,6 +424,7 @@
         "dest",
         "length"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Copy a RAM region to another address.",
@@ -445,6 +466,7 @@
         "length",
         "pattern"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Fill a memory range with a repeating byte pattern.",
@@ -486,6 +508,9 @@
         "startAddress",
         "endAddress",
         "pattern"
+      ],
+      "optional": [
+        "maxResults"
       ],
       "inputSchema": {
         "type": "object",
@@ -538,6 +563,9 @@
         "address2",
         "length"
       ],
+      "optional": [
+        "maxDiffs"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Compare two memory regions byte-by-byte and report differences.",
@@ -588,6 +616,9 @@
         "startAddress",
         "endAddress",
         "filePath"
+      ],
+      "optional": [
+        "asPrg"
       ],
       "inputSchema": {
         "type": "object",

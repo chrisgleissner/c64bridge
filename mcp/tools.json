@@ -262,7 +262,7 @@
         "required": [
           "op"
         ],
-        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. Required inputs: path.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none.",
+        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: symbolsFile.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. Required inputs: path. Optional inputs: symbolsFile.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -270,6 +270,9 @@
             "description": "Load a PRG from Ultimate storage without executing it.",
             "required": [
               "path"
+            ],
+            "optional": [
+              "symbolsFile"
             ],
             "inputSchema": {
               "type": "object",
@@ -305,6 +308,9 @@
             "required": [
               "path"
             ],
+            "optional": [
+              "symbolsFile"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
@@ -339,6 +345,7 @@
             "required": [
               "path"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Mount and run a CRT cartridge image.",
@@ -364,6 +371,9 @@
             "description": "Upload Commodore BASIC v2 source and execute it immediately.",
             "required": [
               "program"
+            ],
+            "optional": [
+              "verify"
             ],
             "inputSchema": {
               "type": "object",
@@ -396,6 +406,9 @@
             "required": [
               "program"
             ],
+            "optional": [
+              "verify"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Assemble 6502/6510 source, upload the PRG, and execute it.",
@@ -426,6 +439,12 @@
             "description": "Run multiple PRG/CRT programs with post-run assertions.",
             "required": [
               "programs"
+            ],
+            "optional": [
+              "continueOnError",
+              "durationMs",
+              "outputPath",
+              "resetDelayMs"
             ],
             "inputSchema": {
               "type": "object",
@@ -551,6 +570,11 @@
               "runId",
               "outputPath"
             ],
+            "optional": [
+              "captureScreen",
+              "memoryRanges",
+              "captureDebugReg"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Capture screen, memory, and debug registers into an artifact bundle.",
@@ -624,6 +648,16 @@
             "op": "cross_platform_greeting",
             "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
             "required": [],
+            "optional": [
+              "platforms",
+              "messageTemplate",
+              "verify",
+              "captureScreenshot",
+              "outputPath",
+              "restoreActiveBackend",
+              "timeoutMs",
+              "pollIntervalMs"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results.",
@@ -969,7 +1003,7 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath.",
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -977,6 +1011,9 @@
             "description": "Read a range of bytes and return a hex dump with address metadata.",
             "required": [
               "address"
+            ],
+            "optional": [
+              "length"
             ],
             "inputSchema": {
               "type": "object",
@@ -1011,6 +1048,12 @@
             "required": [
               "address",
               "bytes"
+            ],
+            "optional": [
+              "verify",
+              "expected",
+              "mask",
+              "abortOnMismatch"
             ],
             "inputSchema": {
               "type": "object",
@@ -1071,6 +1114,7 @@
             "op": "read_screen",
             "description": "Return the current 40x25 text screen converted to ASCII.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Return the current 40x25 text screen converted to ASCII.",
@@ -1090,6 +1134,12 @@
             "description": "Poll the screen until a substring or regex appears, or timeout elapses.",
             "required": [
               "pattern"
+            ],
+            "optional": [
+              "isRegex",
+              "caseInsensitive",
+              "timeoutMs",
+              "intervalMs"
             ],
             "inputSchema": {
               "type": "object",
@@ -1151,6 +1201,10 @@
             "required": [
               "address"
             ],
+            "optional": [
+              "length",
+              "instructionCount"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
@@ -1195,6 +1249,7 @@
               "dest",
               "length"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Copy a RAM region to another address.",
@@ -1236,6 +1291,7 @@
               "length",
               "pattern"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Fill a memory range with a repeating byte pattern.",
@@ -1277,6 +1333,9 @@
               "startAddress",
               "endAddress",
               "pattern"
+            ],
+            "optional": [
+              "maxResults"
             ],
             "inputSchema": {
               "type": "object",
@@ -1329,6 +1388,9 @@
               "address2",
               "length"
             ],
+            "optional": [
+              "maxDiffs"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Compare two memory regions byte-by-byte and report differences.",
@@ -1379,6 +1441,9 @@
               "startAddress",
               "endAddress",
               "filePath"
+            ],
+            "optional": [
+              "asPrg"
             ],
             "inputSchema": {
               "type": "object",
@@ -1899,13 +1964,17 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem. Required inputs: path.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Required inputs: durationSeconds.",
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request. Optional inputs: durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
             "op": "capture_samples",
             "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
             "required": [],
+            "optional": [
+              "count",
+              "encoding"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
@@ -1948,6 +2017,7 @@
             "required": [
               "volume"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Set the SID master volume register at $D418 (0-15).",
@@ -1973,6 +2043,9 @@
             "op": "reset",
             "description": "Soft or hard reset of SID registers to clear glitches.",
             "required": [],
+            "optional": [
+              "hard"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Soft or hard reset of SID registers to clear glitches.",
@@ -1996,6 +2069,18 @@
             "op": "note_on",
             "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
             "required": [],
+            "optional": [
+              "voice",
+              "note",
+              "frequencyHz",
+              "system",
+              "waveform",
+              "pulseWidth",
+              "attack",
+              "decay",
+              "sustain",
+              "release"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
@@ -2094,6 +2179,7 @@
             "required": [
               "voice"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Release a SID voice by clearing its gate bit.",
@@ -2119,6 +2205,9 @@
             "op": "silence_all",
             "description": "Silence all SID voices with optional audio verification.",
             "required": [],
+            "optional": [
+              "verify"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Silence all SID voices with optional audio verification.",
@@ -2146,6 +2235,9 @@
             "description": "Play a SID file stored on the Ultimate filesystem.",
             "required": [
               "path"
+            ],
+            "optional": [
+              "songnr"
             ],
             "inputSchema": {
               "type": "object",
@@ -2181,6 +2273,7 @@
             "required": [
               "path"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Play a MOD tracker module via the Ultimate SID player.",
@@ -2205,6 +2298,14 @@
             "op": "generate",
             "description": "Generate a lightweight SID arpeggio playback sequence.",
             "required": [],
+            "optional": [
+              "root",
+              "pattern",
+              "steps",
+              "tempoMs",
+              "waveform",
+              "preset"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Generate a lightweight SID arpeggio playback sequence.",
@@ -2272,6 +2373,13 @@
             "op": "compile_play",
             "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
             "required": [],
+            "optional": [
+              "sidwave",
+              "cpg",
+              "format",
+              "output",
+              "dryRun"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
@@ -2337,6 +2445,14 @@
             "op": "play_preset",
             "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
             "required": [],
+            "optional": [
+              "preset",
+              "platforms",
+              "verify",
+              "analysisDurationSeconds",
+              "waitBeforeCaptureMs",
+              "restoreActiveBackend"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
@@ -2415,6 +2531,20 @@
             "op": "pipeline",
             "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
             "required": [],
+            "optional": [
+              "sidwave",
+              "cpg",
+              "output",
+              "waitBeforeCaptureMs",
+              "analysisDurationSeconds",
+              "expectedSidwave",
+              "verifySilenceBefore",
+              "verifySilenceAfter",
+              "silenceDurationSeconds",
+              "silenceRmsThreshold",
+              "postSilenceWaitMs",
+              "silenceWaitMs"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
@@ -2547,6 +2677,10 @@
             "required": [
               "request"
             ],
+            "optional": [
+              "durationSeconds",
+              "expectedSidwave"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Automatically analyze SID playback when verification is requested.",
@@ -2589,6 +2723,9 @@
             "description": "Record audio for a fixed duration and return SID analysis metrics.",
             "required": [
               "durationSeconds"
+            ],
+            "optional": [
+              "expectedSidwave"
             ],
             "inputSchema": {
               "type": "object",
@@ -2798,13 +2935,14 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none.",
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
             "op": "pause",
             "description": "Pause the machine until resumed.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Pause the machine until resumed.",
@@ -2823,6 +2961,7 @@
             "op": "resume",
             "description": "Resume CPU execution after a pause.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Resume CPU execution after a pause.",
@@ -2841,6 +2980,7 @@
             "op": "reset",
             "description": "Issue a soft reset without cutting power.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Issue a soft reset without cutting power.",
@@ -2859,6 +2999,7 @@
             "op": "reboot",
             "description": "Trigger a firmware reboot to recover from faults.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Trigger a firmware reboot to recover from faults.",
@@ -2877,6 +3018,7 @@
             "op": "poweroff",
             "description": "Request a controlled shutdown via the Ultimate firmware.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Request a controlled shutdown via the Ultimate firmware.",
@@ -2895,6 +3037,7 @@
             "op": "menu",
             "description": "Toggle the Ultimate menu button for navigation.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Toggle the Ultimate menu button for navigation.",
@@ -2915,6 +3058,11 @@
             "required": [
               "name",
               "operation"
+            ],
+            "optional": [
+              "arguments",
+              "intervalMs",
+              "maxIterations"
             ],
             "inputSchema": {
               "type": "object",
@@ -2975,6 +3123,7 @@
             "required": [
               "name"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Stop a specific background task and clear its timer.",
@@ -2999,6 +3148,7 @@
             "op": "stop_all_tasks",
             "description": "Stop every running background task and persist state.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Stop every running background task and persist state.",
@@ -3017,6 +3167,7 @@
             "op": "list_tasks",
             "description": "List known background tasks with status metadata.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "List known background tasks with status metadata.",
@@ -3035,6 +3186,11 @@
             "op": "performance_report",
             "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
             "required": [],
+            "optional": [
+              "scope",
+              "includeTimeline",
+              "maxEntries"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
@@ -3179,6 +3335,7 @@
             "required": [
               "backend"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Switch the active runtime backend without restarting the MCP server.",
@@ -3474,13 +3631,18 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. Required inputs: none.",
+        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. Required inputs: none.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
             "op": "capture_frame",
             "description": "Capture one or more complete video frames from the active backend.",
             "required": [],
+            "optional": [
+              "count",
+              "includePixels",
+              "encoding"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Capture one or more complete video frames from the active backend.",
@@ -3529,6 +3691,17 @@
             "op": "render_petscii_art",
             "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
             "required": [],
+            "optional": [
+              "prompt",
+              "text",
+              "maxWidth",
+              "maxHeight",
+              "borderColor",
+              "backgroundColor",
+              "foregroundColor",
+              "dryRun",
+              "bitmap"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
@@ -3648,6 +3821,10 @@
             "required": [
               "text"
             ],
+            "optional": [
+              "borderColor",
+              "backgroundColor"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Display PETSCII text with optional border and background colours.",
@@ -3691,6 +3868,13 @@
             "description": "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.",
             "required": [
               "sprite"
+            ],
+            "optional": [
+              "index",
+              "x",
+              "y",
+              "color",
+              "multicolour"
             ],
             "inputSchema": {
               "type": "object",
@@ -3760,6 +3944,13 @@
             "required": [
               "imagePath",
               "format"
+            ],
+            "optional": [
+              "bitmapAddress",
+              "screenAddress",
+              "borderColor",
+              "backgroundColor",
+              "preserveAspect"
             ],
             "inputSchema": {
               "type": "object",
@@ -3837,6 +4028,7 @@
             "op": "get_display_state",
             "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
@@ -3967,7 +4159,7 @@
         "required": [
           "op"
         ],
-        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q.",
+        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -3975,6 +4167,9 @@
             "description": "Retrieve BASIC references and snippets from the local knowledge base.",
             "required": [
               "q"
+            ],
+            "optional": [
+              "k"
             ],
             "inputSchema": {
               "type": "object",
@@ -4011,6 +4206,9 @@
             "description": "Retrieve 6502/6510 assembly references from the local knowledge base.",
             "required": [
               "q"
+            ],
+            "optional": [
+              "k"
             ],
             "inputSchema": {
               "type": "object",
@@ -4288,13 +4486,14 @@
         "required": [
           "op"
         ],
-        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image.\n- unmount: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image: Create a blank disk image of the specified format. Required inputs: format, path.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains.",
+        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
             "op": "list_drives",
             "description": "List Ultimate drive slots and their mounted images.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "List Ultimate drive slots and their mounted images.",
@@ -4315,6 +4514,16 @@
             "required": [
               "drive",
               "image"
+            ],
+            "optional": [
+              "type",
+              "attachmentMode",
+              "driveMode",
+              "verify",
+              "powerOnIfNeeded",
+              "resetAfterMount",
+              "maxRetries",
+              "retryDelayMs"
             ],
             "inputSchema": {
               "type": "object",
@@ -4415,6 +4624,7 @@
             "required": [
               "drive"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Remove the mounted image from an Ultimate drive slot.",
@@ -4441,6 +4651,7 @@
             "required": [
               "path"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Inspect metadata for a file on the Ultimate filesystem.",
@@ -4467,6 +4678,10 @@
             "required": [
               "format",
               "path"
+            ],
+            "optional": [
+              "diskname",
+              "tracks"
             ],
             "inputSchema": {
               "type": "object",
@@ -4522,6 +4737,14 @@
             "description": "Search for a PRG/CRT by name substring and run the first match.",
             "required": [
               "nameContains"
+            ],
+            "optional": [
+              "root",
+              "extensions",
+              "caseInsensitive",
+              "sort",
+              "waitMs",
+              "captureCandidates"
             ],
             "inputSchema": {
               "type": "object",
@@ -4718,6 +4941,7 @@
             "required": [
               "drive"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Issue an IEC reset for the selected drive slot.",
@@ -4744,6 +4968,7 @@
             "required": [
               "drive"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Power on a specific Ultimate drive slot.",
@@ -4770,6 +4995,7 @@
             "required": [
               "drive"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Power off a specific Ultimate drive slot.",
@@ -4797,6 +5023,7 @@
               "drive",
               "path"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Temporarily load a custom ROM into an Ultimate drive slot.",
@@ -4830,6 +5057,7 @@
               "drive",
               "mode"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Set the emulation mode for a drive slot (1541/1571/1581).",
@@ -5074,7 +5302,7 @@
         "required": [
           "op"
         ],
-        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4. Required inputs: text.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns.\n- define_chars: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars.",
+        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4. Required inputs: text. Optional inputs: target, secondaryAddress, formFeed.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns. Optional inputs: repeats, useSubRepeat, secondaryAddress, ensureMsb, mode, density, timesPerLine.\n- define_chars: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars. Optional inputs: secondaryAddress.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -5082,6 +5310,11 @@
             "description": "Generate BASIC that prints text to device 4.",
             "required": [
               "text"
+            ],
+            "optional": [
+              "target",
+              "secondaryAddress",
+              "formFeed"
             ],
             "inputSchema": {
               "type": "object",
@@ -5134,6 +5367,15 @@
             "required": [
               "printer",
               "columns"
+            ],
+            "optional": [
+              "repeats",
+              "useSubRepeat",
+              "secondaryAddress",
+              "ensureMsb",
+              "mode",
+              "density",
+              "timesPerLine"
             ],
             "inputSchema": {
               "type": "object",
@@ -5236,6 +5478,9 @@
             "required": [
               "firstChar",
               "chars"
+            ],
+            "optional": [
+              "secondaryAddress"
             ],
             "inputSchema": {
               "type": "object",
@@ -5493,13 +5738,14 @@
         "required": [
           "op"
         ],
-        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none.",
+        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
             "op": "list",
             "description": "List configuration categories reported by the firmware.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "List configuration categories reported by the firmware.",
@@ -5519,6 +5765,9 @@
             "description": "Read a configuration category or specific item.",
             "required": [
               "category"
+            ],
+            "optional": [
+              "item"
             ],
             "inputSchema": {
               "type": "object",
@@ -5556,6 +5805,7 @@
               "item",
               "value"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Write a configuration value in the selected category.",
@@ -5595,6 +5845,7 @@
             "op": "batch_update",
             "description": "Apply multiple configuration updates in a single request.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "description": "Apply multiple configuration updates in a single request.",
               "type": "object",
@@ -5622,6 +5873,7 @@
             "op": "load_flash",
             "description": "Load configuration from flash storage.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Load configuration from flash storage.",
@@ -5640,6 +5892,7 @@
             "op": "save_flash",
             "description": "Persist the current configuration to flash storage.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Persist the current configuration to flash storage.",
@@ -5658,6 +5911,7 @@
             "op": "reset_defaults",
             "description": "Reset firmware configuration to factory defaults.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Reset firmware configuration to factory defaults.",
@@ -5676,6 +5930,7 @@
             "op": "read_debugreg",
             "description": "Read the Ultimate debug register ($D7FF).",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Read the Ultimate debug register ($D7FF).",
@@ -5696,6 +5951,7 @@
             "required": [
               "value"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Write a hex value to the Ultimate debug register ($D7FF).",
@@ -5722,6 +5978,7 @@
             "op": "info",
             "description": "Retrieve Ultimate hardware information and status.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Retrieve Ultimate hardware information and status.",
@@ -5740,6 +5997,7 @@
             "op": "version",
             "description": "Fetch firmware version details.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Fetch firmware version details.",
@@ -5760,6 +6018,7 @@
             "required": [
               "path"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Snapshot configuration to disk for later restore or diff.",
@@ -5785,6 +6044,9 @@
             "description": "Restore configuration from a snapshot file.",
             "required": [
               "path"
+            ],
+            "optional": [
+              "applyToFlash"
             ],
             "inputSchema": {
               "type": "object",
@@ -5820,6 +6082,7 @@
             "required": [
               "path"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Compare the current configuration with a snapshot.",
@@ -5844,6 +6107,15 @@
             "op": "shuffle",
             "description": "Discover PRG/CRT files and run each with optional screen capture.",
             "required": [],
+            "optional": [
+              "root",
+              "extensions",
+              "durationMs",
+              "captureScreen",
+              "maxPrograms",
+              "outputPath",
+              "resetDelayMs"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Discover PRG/CRT files and run each with optional screen capture.",
@@ -6207,7 +6479,7 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length.\n- charset: Locate and extract 2KB character sets from RAM. Required inputs: none.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
+        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, outputDir, pauseDuringRead.\n- charset: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -6216,6 +6488,15 @@
             "required": [
               "address",
               "length"
+            ],
+            "optional": [
+              "stride",
+              "maxSprites",
+              "minNonZeroRows",
+              "minSetBits",
+              "includeBase64",
+              "outputDir",
+              "pauseDuringRead"
             ],
             "inputSchema": {
               "type": "object",
@@ -6311,6 +6592,14 @@
             "op": "charset",
             "description": "Locate and extract 2KB character sets from RAM.",
             "required": [],
+            "optional": [
+              "address",
+              "scanRange",
+              "outputPath",
+              "pauseDuringRead",
+              "minNonEmptyChars",
+              "minEntropy"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Locate and extract 2KB character sets from RAM.",
@@ -6389,6 +6678,12 @@
               "length",
               "outputPath"
             ],
+            "optional": [
+              "format",
+              "chunkSize",
+              "pauseDuringRead",
+              "retries"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Dump a RAM range to hex or binary files with manifest metadata.",
@@ -6465,6 +6760,12 @@
             "op": "fs_stats",
             "description": "Walk the filesystem and aggregate counts/bytes by extension.",
             "required": [],
+            "optional": [
+              "root",
+              "extensions",
+              "includeContainers",
+              "maxSamplesPerExtension"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Walk the filesystem and aggregate counts/bytes by extension.",
@@ -6521,6 +6822,7 @@
             "op": "firmware_health",
             "description": "Run firmware readiness checks and report status metrics.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Run firmware readiness checks and report status metrics.",
@@ -6625,6 +6927,7 @@
               "stream",
               "target"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Start an Ultimate streaming session toward a host:port target.",
@@ -6661,6 +6964,7 @@
             "required": [
               "stream"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Stop an active Ultimate streaming session.",
@@ -6973,13 +7277,14 @@
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none.\n- set_registers: Write register values. Required inputs: writes.\n- step: Single-step CPU execution. Required inputs: none.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none. Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none. Optional inputs: memspace, registers.\n- set_registers: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step: Single-step CPU execution. Required inputs: none. Optional inputs: count, mode.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none. Optional inputs: memspace.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
             "op": "list_checkpoints",
             "description": "List all active VICE checkpoints (breakpoints).",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "List all active VICE checkpoints (breakpoints).",
@@ -7000,6 +7305,7 @@
             "required": [
               "id"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Fetch a single checkpoint by id.",
@@ -7025,6 +7331,15 @@
             "description": "Create a new checkpoint (breakpoint) in VICE.",
             "required": [
               "address"
+            ],
+            "optional": [
+              "endAddress",
+              "stopOnHit",
+              "enabled",
+              "temporary",
+              "label",
+              "operations",
+              "memspace"
             ],
             "inputSchema": {
               "type": "object",
@@ -7135,6 +7450,7 @@
             "required": [
               "id"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Remove a checkpoint by id.",
@@ -7162,6 +7478,7 @@
               "id",
               "enabled"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Enable or disable a checkpoint by id.",
@@ -7194,6 +7511,7 @@
               "id",
               "expression"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Attach a conditional expression to a checkpoint.",
@@ -7224,6 +7542,9 @@
             "op": "list_registers",
             "description": "List available registers (metadata).",
             "required": [],
+            "optional": [
+              "memspace"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "List available registers (metadata).",
@@ -7251,6 +7572,10 @@
             "op": "get_registers",
             "description": "Read register values, optionally filtered by name or id.",
             "required": [],
+            "optional": [
+              "memspace",
+              "registers"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Read register values, optionally filtered by name or id.",
@@ -7308,6 +7633,9 @@
             "description": "Write register values.",
             "required": [
               "writes"
+            ],
+            "optional": [
+              "memspace"
             ],
             "inputSchema": {
               "type": "object",
@@ -7372,6 +7700,10 @@
             "op": "step",
             "description": "Single-step CPU execution.",
             "required": [],
+            "optional": [
+              "count",
+              "mode"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Single-step CPU execution.",
@@ -7410,6 +7742,7 @@
             "op": "step_return",
             "description": "Continue execution until the current routine returns.",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Continue execution until the current routine returns.",
@@ -7428,6 +7761,9 @@
             "op": "get_monitor_state",
             "description": "Read CPU registers and return the current monitor state.",
             "required": [],
+            "optional": [
+              "memspace"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Read CPU registers and return the current monitor state.",
@@ -7455,6 +7791,11 @@
             "op": "wait_for_state",
             "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
             "required": [],
+            "optional": [
+              "expectedPC",
+              "timeoutMs",
+              "pollMs"
+            ],
             "inputSchema": {
               "type": "object",
               "description": "Poll CPU registers until PC equals expectedPC or timeout elapses.",
@@ -7501,6 +7842,7 @@
             "op": "nuclear_reset",
             "description": "Kill and restart the VICE process (managed instances only).",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Kill and restart the VICE process (managed instances only).",
@@ -7519,6 +7861,7 @@
             "op": "continue_execution",
             "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
             "required": [],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
@@ -7668,6 +8011,7 @@
             "required": [
               "name"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Read a VICE configuration resource (safe prefixes only).",
@@ -7697,6 +8041,7 @@
               "name",
               "value"
             ],
+            "optional": [],
             "inputSchema": {
               "type": "object",
               "description": "Write a VICE configuration resource (safe prefixes only).",

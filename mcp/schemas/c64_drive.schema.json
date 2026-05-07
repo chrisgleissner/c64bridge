@@ -44,6 +44,7 @@
       "required": [
         "drive"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Issue an IEC reset for the selected drive slot.",
@@ -70,6 +71,7 @@
       "required": [
         "drive"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Power on a specific Ultimate drive slot.",
@@ -96,6 +98,7 @@
       "required": [
         "drive"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Power off a specific Ultimate drive slot.",
@@ -123,6 +126,7 @@
         "drive",
         "path"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Temporarily load a custom ROM into an Ultimate drive slot.",
@@ -156,6 +160,7 @@
         "drive",
         "mode"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Set the emulation mode for a drive slot (1541/1571/1581).",

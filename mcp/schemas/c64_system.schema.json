@@ -89,13 +89,14 @@
   "required": [
     "op"
   ],
-  "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none.",
+  "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
       "op": "pause",
       "description": "Pause the machine until resumed.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Pause the machine until resumed.",
@@ -114,6 +115,7 @@
       "op": "resume",
       "description": "Resume CPU execution after a pause.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Resume CPU execution after a pause.",
@@ -132,6 +134,7 @@
       "op": "reset",
       "description": "Issue a soft reset without cutting power.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Issue a soft reset without cutting power.",
@@ -150,6 +153,7 @@
       "op": "reboot",
       "description": "Trigger a firmware reboot to recover from faults.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Trigger a firmware reboot to recover from faults.",
@@ -168,6 +172,7 @@
       "op": "poweroff",
       "description": "Request a controlled shutdown via the Ultimate firmware.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Request a controlled shutdown via the Ultimate firmware.",
@@ -186,6 +191,7 @@
       "op": "menu",
       "description": "Toggle the Ultimate menu button for navigation.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Toggle the Ultimate menu button for navigation.",
@@ -206,6 +212,11 @@
       "required": [
         "name",
         "operation"
+      ],
+      "optional": [
+        "arguments",
+        "intervalMs",
+        "maxIterations"
       ],
       "inputSchema": {
         "type": "object",
@@ -266,6 +277,7 @@
       "required": [
         "name"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Stop a specific background task and clear its timer.",
@@ -290,6 +302,7 @@
       "op": "stop_all_tasks",
       "description": "Stop every running background task and persist state.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Stop every running background task and persist state.",
@@ -308,6 +321,7 @@
       "op": "list_tasks",
       "description": "List known background tasks with status metadata.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "List known background tasks with status metadata.",
@@ -326,6 +340,11 @@
       "op": "performance_report",
       "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",
       "required": [],
+      "optional": [
+        "scope",
+        "includeTimeline",
+        "maxEntries"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Summarize diagnostics spans and tool latencies from the current or latest MCP session.",

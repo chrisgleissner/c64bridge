@@ -42,6 +42,11 @@ const supplementalTests = [
   "test/toolsCoverage.test.mjs",
   "test/audioModule.test.mjs",
   "test/updateReadme.test.mjs",
+  "test/toolsSchema.test.mjs",
+  "test/symbolRegistry.test.mjs",
+  "test/programRunnersModule.test.mjs",
+  "test/batchAndDisplayState.test.mjs",
+  "test/inputModule.test.mjs",
   "test/viceIntegration.test.mjs",
 ];
 

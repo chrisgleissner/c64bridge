@@ -229,13 +229,18 @@
   "required": [
     "op"
   ],
-  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. Required inputs: none.",
+  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. Required inputs: none.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
       "op": "capture_frame",
       "description": "Capture one or more complete video frames from the active backend.",
       "required": [],
+      "optional": [
+        "count",
+        "includePixels",
+        "encoding"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Capture one or more complete video frames from the active backend.",
@@ -284,6 +289,17 @@
       "op": "render_petscii_art",
       "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
       "required": [],
+      "optional": [
+        "prompt",
+        "text",
+        "maxWidth",
+        "maxHeight",
+        "borderColor",
+        "backgroundColor",
+        "foregroundColor",
+        "dryRun",
+        "bitmap"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
@@ -403,6 +419,10 @@
       "required": [
         "text"
       ],
+      "optional": [
+        "borderColor",
+        "backgroundColor"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Display PETSCII text with optional border and background colours.",
@@ -446,6 +466,13 @@
       "description": "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.",
       "required": [
         "sprite"
+      ],
+      "optional": [
+        "index",
+        "x",
+        "y",
+        "color",
+        "multicolour"
       ],
       "inputSchema": {
         "type": "object",
@@ -515,6 +542,13 @@
       "required": [
         "imagePath",
         "format"
+      ],
+      "optional": [
+        "bitmapAddress",
+        "screenAddress",
+        "borderColor",
+        "backgroundColor",
+        "preserveAspect"
       ],
       "inputSchema": {
         "type": "object",
@@ -592,6 +626,7 @@
       "op": "get_display_state",
       "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",

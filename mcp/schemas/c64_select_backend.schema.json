@@ -29,6 +29,7 @@
       "required": [
         "backend"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Switch the active runtime backend without restarting the MCP server.",

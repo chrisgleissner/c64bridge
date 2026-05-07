@@ -99,15 +99,17 @@ test("discriminatedUnionSchema flattens variants into a single object schema", (
   assert.ok(union.description.includes("read:"));
   assert.ok(union.description.includes("write:"));
   assert.ok(union.description.includes("Required inputs: address."));
+  assert.ok(union.description.includes("Optional inputs: length."));
   assert.ok(union.description.includes("Required inputs: address, data."));
   assert.deepEqual(union.properties[OPERATION_DISCRIMINATOR].enum, ["read", "write"]);
   assert.deepEqual(union.required, [OPERATION_DISCRIMINATOR]);
   assert.deepEqual(union["x-c64bridge-operations"].map((operation) => ({
     op: operation.op,
     required: operation.required,
+    optional: operation.optional,
   })), [
-    { op: "read", required: ["address"] },
-    { op: "write", required: ["address", "data"] },
+    { op: "read", required: ["address"], optional: ["length"] },
+    { op: "write", required: ["address", "data"], optional: [] },
   ]);
   assert.equal(union["x-c64bridge-operations"][0].inputSchema, readSchema);
   // All variant properties merged

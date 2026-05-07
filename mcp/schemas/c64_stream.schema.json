@@ -37,6 +37,7 @@
         "stream",
         "target"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Start an Ultimate streaming session toward a host:port target.",
@@ -73,6 +74,7 @@
       "required": [
         "stream"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Stop an active Ultimate streaming session.",

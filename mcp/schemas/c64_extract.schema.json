@@ -199,7 +199,7 @@
   "required": [
     "op"
   ],
-  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length.\n- charset: Locate and extract 2KB character sets from RAM. Required inputs: none.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
+  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, outputDir, pauseDuringRead.\n- charset: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -208,6 +208,15 @@
       "required": [
         "address",
         "length"
+      ],
+      "optional": [
+        "stride",
+        "maxSprites",
+        "minNonZeroRows",
+        "minSetBits",
+        "includeBase64",
+        "outputDir",
+        "pauseDuringRead"
       ],
       "inputSchema": {
         "type": "object",
@@ -303,6 +312,14 @@
       "op": "charset",
       "description": "Locate and extract 2KB character sets from RAM.",
       "required": [],
+      "optional": [
+        "address",
+        "scanRange",
+        "outputPath",
+        "pauseDuringRead",
+        "minNonEmptyChars",
+        "minEntropy"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Locate and extract 2KB character sets from RAM.",
@@ -381,6 +398,12 @@
         "length",
         "outputPath"
       ],
+      "optional": [
+        "format",
+        "chunkSize",
+        "pauseDuringRead",
+        "retries"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Dump a RAM range to hex or binary files with manifest metadata.",
@@ -457,6 +480,12 @@
       "op": "fs_stats",
       "description": "Walk the filesystem and aggregate counts/bytes by extension.",
       "required": [],
+      "optional": [
+        "root",
+        "extensions",
+        "includeContainers",
+        "maxSamplesPerExtension"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Walk the filesystem and aggregate counts/bytes by extension.",
@@ -513,6 +542,7 @@
       "op": "firmware_health",
       "description": "Run firmware readiness checks and report status metrics.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Run firmware readiness checks and report status metrics.",

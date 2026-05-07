@@ -191,13 +191,14 @@
   "required": [
     "op"
   ],
-  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image.\n- unmount: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image: Create a blank disk image of the specified format. Required inputs: format, path.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains.",
+  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
       "op": "list_drives",
       "description": "List Ultimate drive slots and their mounted images.",
       "required": [],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "List Ultimate drive slots and their mounted images.",
@@ -218,6 +219,16 @@
       "required": [
         "drive",
         "image"
+      ],
+      "optional": [
+        "type",
+        "attachmentMode",
+        "driveMode",
+        "verify",
+        "powerOnIfNeeded",
+        "resetAfterMount",
+        "maxRetries",
+        "retryDelayMs"
       ],
       "inputSchema": {
         "type": "object",
@@ -318,6 +329,7 @@
       "required": [
         "drive"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Remove the mounted image from an Ultimate drive slot.",
@@ -344,6 +356,7 @@
       "required": [
         "path"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Inspect metadata for a file on the Ultimate filesystem.",
@@ -370,6 +383,10 @@
       "required": [
         "format",
         "path"
+      ],
+      "optional": [
+        "diskname",
+        "tracks"
       ],
       "inputSchema": {
         "type": "object",
@@ -425,6 +442,14 @@
       "description": "Search for a PRG/CRT by name substring and run the first match.",
       "required": [
         "nameContains"
+      ],
+      "optional": [
+        "root",
+        "extensions",
+        "caseInsensitive",
+        "sort",
+        "waitMs",
+        "captureCandidates"
       ],
       "inputSchema": {
         "type": "object",

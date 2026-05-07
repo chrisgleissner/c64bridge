@@ -159,7 +159,7 @@
   "required": [
     "op"
   ],
-  "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4. Required inputs: text.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns.\n- define_chars: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars.",
+  "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4. Required inputs: text. Optional inputs: target, secondaryAddress, formFeed.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns. Optional inputs: repeats, useSubRepeat, secondaryAddress, ensureMsb, mode, density, timesPerLine.\n- define_chars: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars. Optional inputs: secondaryAddress.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -167,6 +167,11 @@
       "description": "Generate BASIC that prints text to device 4.",
       "required": [
         "text"
+      ],
+      "optional": [
+        "target",
+        "secondaryAddress",
+        "formFeed"
       ],
       "inputSchema": {
         "type": "object",
@@ -219,6 +224,15 @@
       "required": [
         "printer",
         "columns"
+      ],
+      "optional": [
+        "repeats",
+        "useSubRepeat",
+        "secondaryAddress",
+        "ensureMsb",
+        "mode",
+        "density",
+        "timesPerLine"
       ],
       "inputSchema": {
         "type": "object",
@@ -321,6 +335,9 @@
       "required": [
         "firstChar",
         "chars"
+      ],
+      "optional": [
+        "secondaryAddress"
       ],
       "inputSchema": {
         "type": "object",

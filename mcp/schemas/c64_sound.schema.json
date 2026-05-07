@@ -363,13 +363,17 @@
   "required": [
     "op"
   ],
-  "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem. Required inputs: path.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Required inputs: durationSeconds.",
+  "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request. Optional inputs: durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
       "op": "capture_samples",
       "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
       "required": [],
+      "optional": [
+        "count",
+        "encoding"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
@@ -412,6 +416,7 @@
       "required": [
         "volume"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Set the SID master volume register at $D418 (0-15).",
@@ -437,6 +442,9 @@
       "op": "reset",
       "description": "Soft or hard reset of SID registers to clear glitches.",
       "required": [],
+      "optional": [
+        "hard"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Soft or hard reset of SID registers to clear glitches.",
@@ -460,6 +468,18 @@
       "op": "note_on",
       "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
       "required": [],
+      "optional": [
+        "voice",
+        "note",
+        "frequencyHz",
+        "system",
+        "waveform",
+        "pulseWidth",
+        "attack",
+        "decay",
+        "sustain",
+        "release"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Trigger a SID voice with configurable waveform, ADSR, and pitch.",
@@ -558,6 +578,7 @@
       "required": [
         "voice"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Release a SID voice by clearing its gate bit.",
@@ -583,6 +604,9 @@
       "op": "silence_all",
       "description": "Silence all SID voices with optional audio verification.",
       "required": [],
+      "optional": [
+        "verify"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Silence all SID voices with optional audio verification.",
@@ -610,6 +634,9 @@
       "description": "Play a SID file stored on the Ultimate filesystem.",
       "required": [
         "path"
+      ],
+      "optional": [
+        "songnr"
       ],
       "inputSchema": {
         "type": "object",
@@ -645,6 +672,7 @@
       "required": [
         "path"
       ],
+      "optional": [],
       "inputSchema": {
         "type": "object",
         "description": "Play a MOD tracker module via the Ultimate SID player.",
@@ -669,6 +697,14 @@
       "op": "generate",
       "description": "Generate a lightweight SID arpeggio playback sequence.",
       "required": [],
+      "optional": [
+        "root",
+        "pattern",
+        "steps",
+        "tempoMs",
+        "waveform",
+        "preset"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Generate a lightweight SID arpeggio playback sequence.",
@@ -736,6 +772,13 @@
       "op": "compile_play",
       "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
       "required": [],
+      "optional": [
+        "sidwave",
+        "cpg",
+        "format",
+        "output",
+        "dryRun"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Compile SIDWAVE or CPG source and optionally play it immediately.",
@@ -801,6 +844,14 @@
       "op": "play_preset",
       "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
       "required": [],
+      "optional": [
+        "preset",
+        "platforms",
+        "verify",
+        "analysisDurationSeconds",
+        "waitBeforeCaptureMs",
+        "restoreActiveBackend"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Compile and play a built-in SID preset such as Für Elise by Beethoven.",
@@ -879,6 +930,20 @@
       "op": "pipeline",
       "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
       "required": [],
+      "optional": [
+        "sidwave",
+        "cpg",
+        "output",
+        "waitBeforeCaptureMs",
+        "analysisDurationSeconds",
+        "expectedSidwave",
+        "verifySilenceBefore",
+        "verifySilenceAfter",
+        "silenceDurationSeconds",
+        "silenceRmsThreshold",
+        "postSilenceWaitMs",
+        "silenceWaitMs"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Compile a SIDWAVE score, play it, and analyze the recording.",
@@ -1011,6 +1076,10 @@
       "required": [
         "request"
       ],
+      "optional": [
+        "durationSeconds",
+        "expectedSidwave"
+      ],
       "inputSchema": {
         "type": "object",
         "description": "Automatically analyze SID playback when verification is requested.",
@@ -1053,6 +1122,9 @@
       "description": "Record audio for a fixed duration and return SID analysis metrics.",
       "required": [
         "durationSeconds"
+      ],
+      "optional": [
+        "expectedSidwave"
       ],
       "inputSchema": {
         "type": "object",
