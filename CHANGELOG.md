@@ -1,6 +1,29 @@
 # Changelog
 
 
+## 0.9.0 - 2026-05-07
+
+### Highlights
+
+- Added Claude Code as a first-class MCP client, including `.mcp.json` configuration and updated setup documentation.
+- Improved Claude compatibility by flattening MCP tool schemas and returning structured JSON for memory reads. (Thanks @air)
+- Standardised MCP resource paths for more consistent tool and resource discovery.
+- Enhanced VICE backend support, documentation, smoke testing, and CI stability.
+
+### Fixes
+
+- Improved child-process output handling and logging.
+- Stabilised CI startup checks, matrix validation, and Xvfb usage across platforms.
+
+### Other
+
+- Strengthened MCP schema validation, error handling, executable resolution, and integration test reliability.
+- Regenerated README and MCP schemas for the updated tool format.
+- Improved Bun integration, port validation, mock server management, and coverage checks.
+- Added explicit VICE smoke-test logging.
+- Updated ignore rules and minor test expectations.- add explicit vice smoke log step (d4a5442)
+- 3rd party version updates
+
 ## 0.8.1 - 2026-03-27
 
 - Added automatic publication to https://registry.modelcontextprotocol.io/
