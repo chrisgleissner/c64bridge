@@ -463,7 +463,7 @@ const debugOperationDispatcher = createOperationDispatcher<DebugOperationMap>(
 export const debugModuleGroup = defineToolModule({
   domain: "debug",
   summary: "VICE Binary Monitor debugger operations (breakpoints, registers, stepping).",
-  resources: ["c64://specs/assembly", "c64://specs/memory-map"],
+  resources: ["c64://assembly/6510-spec", "c64://memory/map"],
   prompts: ["assembly-program", "memory-debug"],
   defaultTags: ["debug", "vice"],
   workflowHints: [

@@ -47,7 +47,7 @@ describe("update-readme grouped operations", () => {
     expect(environment).toContain("#### C64 Ultimate");
     expect(environment).toContain("C64U_HOST");
     expect(resources).toContain("### Resources");
-    expect(resources).toContain("c64://specs/basic");
+    expect(resources).toContain("c64://basic/spec");
     expect(prompts).toContain("### Prompts");
     expect(prompts).toContain("basic-program");
   });

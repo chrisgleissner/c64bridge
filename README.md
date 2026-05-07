@@ -596,7 +596,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **15 tools**, **27 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **15 tools**, **26 resources**, and **10 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -803,33 +803,32 @@ Grouped entry point for reading and updating selected VICE resources.
 
 | Name | Summary |
 | --- | --- |
-| `c64://docs/index` | Explains how to approach each knowledge bundle and when to consult it. |
-| `c64://context/bootstrap` | Step-by-step rules for safe automation, verification, and rollback on the C64. |
-| `c64://context/fast-paths` | Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition. |
-| `c64://docs/vice/binary-monitor-spec` | Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations. |
-| `c64://specs/basic` | Token definitions, syntax rules, and device I/O guidance for BASIC v2. |
-| `c64://docs/basic/pitfalls` | Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps. |
-| `c64://specs/assembly` | Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU. |
-| `c64://specs/sid` | Register map, waveform behaviour, and ADSR envelopes for expressive SID playback. |
-| `c64://specs/sidwave` | Defines the SIDWAVE interchange format used by the SID composer workflow. |
-| `c64://docs/sid/file-structure` | Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music. |
-| `c64://docs/sid/best-practices` | Captures proven waveforms, ADSR presets, phrasing, and verification workflow for pleasant SID music. |
-| `c64://specs/vic` | Covers raster timing, sprite control, colour RAM, and bitmap modes on the VIC-II. |
-| `c64://specs/charset` | Character code table mapping PETSCII codes to screen codes, glyphs, and keyboard input. |
-| `c64://docs/petscii-style` | Documents colour palette, readability presets, dithering patterns, and best practices for creating artistic and readable PETSCII displays. |
-| `c64://docs/sprite-charset-workflows` | Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics. |
-| `c64://specs/memory-map` | Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions. |
-| `c64://specs/memory-low` | Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses. |
-| `c64://specs/memory-kernal` | Lists KERNAL ROM vectors and service routines for OS-level functionality. |
-| `c64://specs/io` | Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes. |
-| `c64://specs/cia` | Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout. |
-| `c64://specs/printer` | Covers device setup, control codes, and Ultimate 64 integration for printers. |
-| `c64://docs/printer/guide` | Quick-look workflow covering setup, troubleshooting, and sample jobs for both printer families. |
-| `c64://docs/printer/commodore-text` | Character sets, control codes, and formatting for Commodore MPS text output. |
-| `c64://docs/printer/commodore-bitmap` | Details bitmap modes, graphics commands, and data layout for MPS bitmap printing. |
-| `c64://docs/printer/epson-text` | Lists ESC/P control codes and formatting advice for Epson FX text output. |
-| `c64://docs/printer/epson-bitmap` | Explains bit-image modes, density options, and data packing for Epson bitmap jobs. |
-| `c64://docs/printer/prompts` | Reusable prompt templates that drive complex printer jobs through the MCP server. |
+| `c64://guide/index` | Explains how to approach each knowledge bundle and when to consult it. |
+| `c64://guide/bootstrap` | Step-by-step rules for safe automation, verification, and rollback on the C64. |
+| `c64://guide/fast-paths` | Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition. |
+| `c64://vice/binary-monitor-spec` | Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations. |
+| `c64://basic/spec` | Token definitions, syntax rules, and device I/O guidance for BASIC v2. |
+| `c64://basic/pitfalls` | Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps. |
+| `c64://assembly/6510-spec` | Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU. |
+| `c64://sound/sid/spec` | Register map, waveform behaviour, and ADSR envelopes for expressive SID playback. |
+| `c64://sound/sidwave/spec` | Defines the SIDWAVE interchange format used by the SID composer workflow. |
+| `c64://sound/sid/file-format` | Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music. |
+| `c64://sound/sid/best-practices` | Captures proven waveforms, ADSR presets, phrasing, and verification workflow for pleasant SID music. |
+| `c64://graphics/vic/spec` | Covers raster timing, sprite control, colour RAM, and bitmap modes on the VIC-II. |
+| `c64://graphics/character-set` | Character code table mapping PETSCII codes to screen codes, glyphs, and keyboard input. |
+| `c64://graphics/petscii/style-guide` | Documents colour palette, readability presets, dithering patterns, and best practices for creating artistic and readable PETSCII displays. |
+| `c64://graphics/sprite-charset/best-practices` | Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics. |
+| `c64://memory/map` | Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions. |
+| `c64://memory/zero-page-and-workspace` | Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses. |
+| `c64://kernal/rom-routines` | Lists KERNAL ROM vectors and service routines for OS-level functionality. |
+| `c64://io/spec` | Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes. |
+| `c64://io/cia/spec` | Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout. |
+| `c64://printer/spec` | Covers device setup, control codes, and Ultimate 64 integration for printers. |
+| `c64://printer/commodore/text` | Character sets, control codes, and formatting for Commodore MPS text output. |
+| `c64://printer/commodore/bitmap` | Details bitmap modes, graphics commands, and data layout for MPS bitmap printing. |
+| `c64://printer/epson/text` | Lists ESC/P control codes and formatting advice for Epson FX text output. |
+| `c64://printer/epson/bitmap` | Explains bit-image modes, density options, and data packing for Epson bitmap jobs. |
+| `c64://printer/prompt-guide` | Reusable prompt templates that drive complex printer jobs through the MCP server. |
 
 ### Prompts
 

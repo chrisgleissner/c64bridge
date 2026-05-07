@@ -250,7 +250,7 @@ const configOperationHandlers = createOperationHandlers(configOperations);
 export const configModuleGroup = defineToolModule({
   domain: "config",
   summary: "Grouped configuration management, diagnostics, and snapshot workflows.",
-  resources: ["c64://context/bootstrap", "c64://docs/index"],
+  resources: ["c64://guide/bootstrap", "c64://guide/index"],
   prompts: ["memory-debug"],
   defaultTags: ["config", "diagnostics"],
   supportedPlatforms: ["c64u", "vice"],

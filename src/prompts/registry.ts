@@ -1,5 +1,6 @@
 import { listKnowledgeResources } from "../rag/knowledgeIndex.js";
 import type { KnowledgeResourceDefinition } from "../rag/knowledgeIndex.js";
+import { RESOURCE_URIS } from "../rag/resourceUris.js";
 import { toolRegistry } from "../tools/registry/index.js";
 import type { ToolDescriptor } from "../tools/types.js";
 
@@ -96,7 +97,7 @@ const ROUTING_CORE_SEGMENT: PromptSegment = {
   content: [
     "Prompts in this repository define intent and routing only.",
     "Execution logic, validation steps, and safety rules live exclusively in `.github/skills/*/SKILL.md`.",
-    "When the request targets the `vice` backend, read `c64://docs/vice/binary-monitor-spec` before executing the skill so Binary Monitor single-client behaviour, trap/resume semantics, and monitor-side side effects stay in scope.",
+    `When the request targets the \`vice\` backend, read \`${RESOURCE_URIS.vice.binaryMonitorSpec}\` before executing the skill so Binary Monitor single-client behaviour, trap/resume semantics, and monitor-side side effects stay in scope.`,
     "Use the referenced skill, extract missing inputs from the user request, execute the skill, and summarize the outcome.",
   ].join("\n"),
 };
@@ -194,7 +195,7 @@ export function createPromptRegistry(): PromptRegistry {
         name: "hello-world",
         title: "Hello World Workflow",
         description: "Route ultra-fast hello-world and smoke-test requests to the canonical greeting skill.",
-        requiredResources: ["c64://context/bootstrap", "c64://context/fast-paths", "c64://docs/index"],
+        requiredResources: [RESOURCE_URIS.guide.bootstrap, RESOURCE_URIS.guide.fastPaths, RESOURCE_URIS.guide.index],
         optionalResources: [],
         tools: ["c64_program"],
         tags: ["hello", "demo", "greeting", "smoke-test"],
@@ -213,8 +214,8 @@ export function createPromptRegistry(): PromptRegistry {
         name: "basic-program",
         title: "BASIC Program Workflow",
         description: "Route bespoke Commodore BASIC v2 requests to the canonical BASIC skill.",
-        requiredResources: ["c64://specs/basic", "c64://context/bootstrap", "c64://docs/index"],
-        optionalResources: ["c64://context/fast-paths"],
+        requiredResources: [RESOURCE_URIS.basic.spec, RESOURCE_URIS.guide.bootstrap, RESOURCE_URIS.guide.index],
+        optionalResources: [RESOURCE_URIS.guide.fastPaths],
         tools: ["c64_program", "c64_memory"],
         tags: ["basic", "program"],
       },
@@ -229,7 +230,7 @@ export function createPromptRegistry(): PromptRegistry {
         name: "cross-platform-demo",
         title: "Cross-Platform Demo Workflow",
         description: "Route quick visible demo requests to the cross-platform demo skill.",
-        requiredResources: ["c64://context/bootstrap", "c64://context/fast-paths", "c64://docs/index"],
+        requiredResources: [RESOURCE_URIS.guide.bootstrap, RESOURCE_URIS.guide.fastPaths, RESOURCE_URIS.guide.index],
         optionalResources: [],
         tools: ["c64_program"],
         tags: ["demo", "platform", "greeting"],
@@ -245,8 +246,8 @@ export function createPromptRegistry(): PromptRegistry {
         name: "preset-music-demo",
         title: "Preset Music Demo Workflow",
         description: "Route quick recognizable tune requests to the SID music skill.",
-        requiredResources: ["c64://specs/sid", "c64://specs/sidwave", "c64://context/fast-paths"],
-        optionalResources: ["c64://docs/sid/best-practices"],
+        requiredResources: [RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.sound.sidwave.spec, RESOURCE_URIS.guide.fastPaths],
+        optionalResources: [RESOURCE_URIS.sound.sid.bestPractices],
         tools: ["c64_sound"],
         tags: ["sid", "music", "demo"],
       },
@@ -260,8 +261,8 @@ export function createPromptRegistry(): PromptRegistry {
         name: "assembly-program",
         title: "Assembly Program Workflow",
         description: "Route 6502/6510 routine requests to the canonical assembly skill.",
-        requiredResources: ["c64://specs/assembly", "c64://specs/vic", "c64://specs/sid", "c64://context/bootstrap"],
-        optionalResources: ["c64://docs/sid/best-practices"],
+        requiredResources: [RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.guide.bootstrap],
+        optionalResources: [RESOURCE_URIS.sound.sid.bestPractices],
         tools: ["c64_program", "c64_memory"],
         tags: ["assembly", "program"],
       },
@@ -280,7 +281,7 @@ export function createPromptRegistry(): PromptRegistry {
       selectOptionalResources: (args) => {
         const hardware = args.hardware as AssemblyHardware | undefined;
         return hardware === "sid" || hardware === "multi"
-          ? ["c64://docs/sid/best-practices"]
+          ? [RESOURCE_URIS.sound.sid.bestPractices]
           : [];
       },
       renderRoutingNotes: (args) => {
@@ -299,12 +300,12 @@ export function createPromptRegistry(): PromptRegistry {
         title: "SID Composition Workflow",
         description: "Route SID playback and composition work to the canonical SID skill.",
         requiredResources: [
-          "c64://specs/sid",
-          "c64://specs/sidwave",
-          "c64://docs/sid/file-structure",
-          "c64://docs/sid/best-practices",
+          RESOURCE_URIS.sound.sid.spec,
+          RESOURCE_URIS.sound.sidwave.spec,
+          RESOURCE_URIS.sound.sid.fileFormat,
+          RESOURCE_URIS.sound.sid.bestPractices,
         ],
-        optionalResources: ["c64://context/fast-paths"],
+        optionalResources: [RESOURCE_URIS.guide.fastPaths],
         tools: ["c64_sound"],
         tags: ["sid", "music"],
       },
@@ -318,8 +319,8 @@ export function createPromptRegistry(): PromptRegistry {
         name: "graphics-demo",
         title: "Graphics Demo Workflow",
         description: "Route graphics requests to the canonical graphics skill.",
-        requiredResources: ["c64://specs/vic", "c64://context/bootstrap"],
-        optionalResources: ["c64://specs/assembly", "c64://specs/charset", "c64://docs/petscii-style"],
+        requiredResources: [RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.guide.bootstrap],
+        optionalResources: [RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide],
         tools: ["c64_program", "c64_memory", "c64_graphics"],
         tags: ["graphics", "vic"],
       },
@@ -350,12 +351,12 @@ export function createPromptRegistry(): PromptRegistry {
         name: "printer-job",
         title: "Printer Job Workflow",
         description: "Route printer work to the canonical printer skill.",
-        requiredResources: ["c64://specs/printer", "c64://docs/printer/guide", "c64://docs/printer/prompts"],
+        requiredResources: [RESOURCE_URIS.printer.spec, RESOURCE_URIS.printer.promptGuide],
         optionalResources: [
-          "c64://docs/printer/commodore-text",
-          "c64://docs/printer/commodore-bitmap",
-          "c64://docs/printer/epson-text",
-          "c64://docs/printer/epson-bitmap",
+          RESOURCE_URIS.printer.commodore.text,
+          RESOURCE_URIS.printer.commodore.bitmap,
+          RESOURCE_URIS.printer.epson.text,
+          RESOURCE_URIS.printer.epson.bitmap,
         ],
         tools: ["c64_printer"],
         tags: ["printer"],
@@ -375,10 +376,10 @@ export function createPromptRegistry(): PromptRegistry {
       selectOptionalResources: (args) => {
         const printerType = args.printerType as PrinterType | undefined;
         if (printerType === "commodore") {
-          return ["c64://docs/printer/commodore-text", "c64://docs/printer/commodore-bitmap"];
+          return [RESOURCE_URIS.printer.commodore.text, RESOURCE_URIS.printer.commodore.bitmap];
         }
         if (printerType === "epson") {
-          return ["c64://docs/printer/epson-text", "c64://docs/printer/epson-bitmap"];
+          return [RESOURCE_URIS.printer.epson.text, RESOURCE_URIS.printer.epson.bitmap];
         }
         return [];
       },
@@ -394,7 +395,7 @@ export function createPromptRegistry(): PromptRegistry {
         name: "memory-debug",
         title: "Memory Debug Workflow",
         description: "Route reversible memory inspection or patching work to the canonical memory skill.",
-        requiredResources: ["c64://context/bootstrap", "c64://specs/assembly", "c64://docs/index"],
+        requiredResources: [RESOURCE_URIS.guide.bootstrap, RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.guide.index],
         optionalResources: [],
         tools: ["c64_memory", "c64_system"],
         tags: ["memory", "debug"],
@@ -409,7 +410,7 @@ export function createPromptRegistry(): PromptRegistry {
         name: "drive-manager",
         title: "Drive Manager Workflow",
         description: "Route disk-image and drive-state requests to the canonical drive skill.",
-        requiredResources: ["c64://context/bootstrap"],
+        requiredResources: [RESOURCE_URIS.guide.bootstrap],
         optionalResources: [],
         tools: ["c64_disk", "c64_drive"],
         tags: ["drive", "storage"],

@@ -16,7 +16,7 @@ Use this skill for custom assembly routines, register work, IRQ handlers, and ha
 ## Execution
 
 1. Clarify which hardware blocks and memory ranges the routine may touch.
-2. Consult `c64://specs/assembly`, `c64://specs/memory-map`, and any hardware-specific resource that applies.
+2. Consult `c64://assembly/6510-spec`, `c64://memory/map`, and any hardware-specific resource that applies.
 3. Use `c64_rag` with `op: "asm"` when targeted timing tables or code examples are needed.
 4. Generate assembly source with explicit labels and memory usage.
 5. Execute with `c64_program` using `op: "upload_run_asm"`.

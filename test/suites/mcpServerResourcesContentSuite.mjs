@@ -8,53 +8,14 @@ import {
   ReadResourceResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { listKnowledgeResources } from "../../src/rag/knowledgeIndex.js";
+import {
+  CANONICAL_KNOWLEDGE_RESOURCE_URIS,
+  PLATFORM_RESOURCE_URI,
+} from "../../src/rag/resourceUris.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
-
-// The MCP server adds a synthetic platform status resource alongside knowledge resources
-const PLATFORM_RESOURCE_URI = "c64://platform/status";
-
-// Hardcode the full set of expected knowledge resource URIs. This ensures that
-// any addition/removal must be intentional and reflected here.
-const EXPECTED_RESOURCE_URIS = [
-  // Orientation
-  "c64://context/bootstrap",
-  "c64://context/fast-paths",
-  // VICE emulator
-  "c64://docs/vice/binary-monitor-spec",
-  // Languages
-  "c64://specs/basic",
-  "c64://docs/basic/pitfalls",
-  "c64://specs/assembly",
-  // Audio / SID
-  "c64://specs/sid",
-  "c64://specs/sidwave",
-  "c64://docs/sid/file-structure",
-  "c64://docs/sid/best-practices",
-  // Graphics / VIC-II
-  "c64://specs/vic",
-  "c64://specs/charset",
-  "c64://docs/petscii-style",
-  "c64://docs/sprite-charset-workflows",
-  // Memory & I/O
-  "c64://specs/memory-map",
-  "c64://specs/memory-low",
-  "c64://specs/memory-kernal",
-  "c64://specs/io",
-  "c64://specs/cia",
-  // Printers
-  "c64://specs/printer",
-  "c64://docs/printer/guide",
-  "c64://docs/printer/commodore-text",
-  "c64://docs/printer/commodore-bitmap",
-  "c64://docs/printer/epson-text",
-  "c64://docs/printer/epson-bitmap",
-  "c64://docs/printer/prompts",
-  // Knowledge index (synthetic)
-  "c64://docs/index",
-];
 
 export function registerMcpServerResourcesContentTests(withSharedMcpClient) {
   test("MCP resources list matches knowledgeIndex + platform; file-backed contents exact", async () => {
@@ -69,7 +30,7 @@ export function registerMcpServerResourcesContentTests(withSharedMcpClient) {
 
       // 2) Build expected set from hardcoded list + platform resource
       const knowledge = listKnowledgeResources();
-      const expectedUris = new Set([...EXPECTED_RESOURCE_URIS, PLATFORM_RESOURCE_URI]);
+      const expectedUris = new Set([...CANONICAL_KNOWLEDGE_RESOURCE_URIS, PLATFORM_RESOURCE_URI]);
 
       // Ensure both sets match exactly
       const missingOnServer = [...expectedUris].filter((u) => !serverUris.has(u));
@@ -128,6 +89,33 @@ export function registerMcpServerResourcesContentTests(withSharedMcpClient) {
           fileText,
           `resource ${uri} text should exactly match ${relativePath}`,
         );
+      }
+    });
+  });
+
+  test("MCP resources list excludes removed legacy URIs", async () => {
+    const legacyUris = [
+      "c64://index",
+      "c64://context/bootstrap",
+      "c64://context/fast-paths",
+      "c64://vice/vice-binary-monitor-spec",
+      "c64://basic/basic-spec",
+      "c64://assembly/assembly-spec",
+      "c64://sound/sid-spec",
+      "c64://graphics/vic-spec",
+      "c64://memory/memory-map",
+      "c64://printer/printer-spec",
+    ];
+
+    await withSharedMcpClient(async ({ client }) => {
+      const listResult = await client.request(
+        { method: "resources/list", params: {} },
+        ListResourcesResultSchema,
+      );
+
+      const serverUris = new Set(listResult.resources.map((resource) => resource.uri));
+      for (const legacyUri of legacyUris) {
+        assert.ok(!serverUris.has(legacyUri), `${legacyUri} should not be listed`);
       }
     });
   });

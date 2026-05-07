@@ -1,6 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { createPromptRegistry } from "../src/prompts/registry.js";
+import { RESOURCE_URIS } from "../src/rag/resourceUris.js";
 
 const registry = createPromptRegistry();
 
@@ -28,9 +29,9 @@ test("promptRegistry.resolve resolves a basic prompt", () => {
   assert.ok(result.messages.length > 0, "should have at least one message");
   assert.ok(Array.isArray(result.resources), "should have resources");
   assert.ok(Array.isArray(result.tools), "should have tools");
-  assert.equal(result.resources.some((resource) => resource.uri === "c64://context/fast-paths"), true);
+  assert.equal(result.resources.some((resource) => resource.uri === RESOURCE_URIS.guide.fastPaths), true);
   assert.equal(result.messages.some((message) => message.content.includes(".github/skills/basic-program/SKILL.md")), true);
-  assert.equal(result.messages.some((message) => message.content.includes("c64://docs/vice/binary-monitor-spec")), true);
+  assert.equal(result.messages.some((message) => message.content.includes(RESOURCE_URIS.vice.binaryMonitorSpec)), true);
 });
 
 test("promptRegistry.resolve exposes the cross-platform demo prompt", () => {
@@ -39,8 +40,8 @@ test("promptRegistry.resolve exposes the cross-platform demo prompt", () => {
   assert.equal(result.name, "cross-platform-demo");
   assert.equal(result.tools.length, 1);
   assert.equal(result.tools[0]?.name, "c64_program");
-  assert.equal(result.resources.some((resource) => resource.uri === "c64://context/fast-paths"), true);
-  assert.equal(result.messages.some((message) => message.content.includes("c64://docs/vice/binary-monitor-spec")), true);
+  assert.equal(result.resources.some((resource) => resource.uri === RESOURCE_URIS.guide.fastPaths), true);
+  assert.equal(result.messages.some((message) => message.content.includes(RESOURCE_URIS.vice.binaryMonitorSpec)), true);
 });
 
 test("promptRegistry.resolve exposes the preset music demo prompt", () => {
@@ -49,7 +50,7 @@ test("promptRegistry.resolve exposes the preset music demo prompt", () => {
   assert.equal(result.name, "preset-music-demo");
   assert.equal(result.tools.length, 1);
   assert.equal(result.tools[0]?.name, "c64_sound");
-  assert.equal(result.resources.some((resource) => resource.uri === "c64://context/fast-paths"), true);
+  assert.equal(result.resources.some((resource) => resource.uri === RESOURCE_URIS.guide.fastPaths), true);
   assert.equal(result.messages.some((message) => message.content.includes(".github/skills/sid-music/SKILL.md")), true);
 });
 

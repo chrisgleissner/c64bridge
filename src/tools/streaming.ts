@@ -48,8 +48,8 @@ export const streamingModule = defineToolModule({
   domain: "streaming",
   summary: "Long-running or streaming workflows such as audio capture or SID playback monitoring.",
   resources: [
-    "c64://specs/sid",
-    "c64://docs/index",
+    "c64://sound/sid/spec",
+    "c64://guide/index",
   ],
   prompts: ["sid-music"],
   defaultLifecycle: "stream",
@@ -62,7 +62,7 @@ export const streamingModule = defineToolModule({
   tools: [
     {
       name: "stream_start",
-      description: "Start an Ultimate streaming session (video/audio/debug) targeting a host:port destination. See c64://docs/index for usage notes.",
+      description: "Start an Ultimate streaming session (video/audio/debug) targeting a host:port destination. See c64://guide/index for usage notes.",
       summary: "Validates stream arguments and forwards the request to firmware, returning status metadata.",
       inputSchema: streamStartArgsSchema.jsonSchema,
       tags: ["stream", "start"],

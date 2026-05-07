@@ -262,9 +262,9 @@
         "summary": "Runs PRG/CRT files, uploads BASIC or ASM, and coordinates batch test flows.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap",
-          "c64://specs/basic",
-          "c64://specs/assembly"
+          "c64://guide/bootstrap",
+          "c64://basic/spec",
+          "c64://assembly/6510-spec"
         ],
         "prompts": [
           "basic-program",
@@ -436,9 +436,9 @@
         "summary": "Reads or writes RAM, captures the screen, or waits for text matches in one tool.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap",
-          "c64://specs/basic",
-          "c64://specs/assembly"
+          "c64://guide/bootstrap",
+          "c64://basic/spec",
+          "c64://assembly/6510-spec"
         ],
         "prompts": [
           "memory-debug",
@@ -857,9 +857,9 @@
         "summary": "Adjusts SID registers, plays files, composes music, and runs verification captures.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://specs/sid",
-          "c64://specs/sidwave",
-          "c64://docs/sid/file-structure"
+          "c64://sound/sid/spec",
+          "c64://sound/sidwave/spec",
+          "c64://sound/sid/file-format"
         ],
         "prompts": [
           "sid-music"
@@ -1037,7 +1037,7 @@
         "summary": "Manages machine state (pause, reset, power) and schedules recurring background tasks.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap"
+          "c64://guide/bootstrap"
         ],
         "prompts": [
           "memory-debug"
@@ -1130,7 +1130,7 @@
         "lifecycle": "request-response",
         "resources": [
           "c64://platform/status",
-          "c64://context/bootstrap"
+          "c64://guide/bootstrap"
         ],
         "prompts": [],
         "examples": [
@@ -1400,9 +1400,9 @@
         "summary": "Captures frames, renders PETSCII text or art, previews sprites, and displays bitmap images from one tool.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://specs/vic",
-          "c64://specs/basic",
-          "c64://specs/assembly"
+          "c64://graphics/vic/spec",
+          "c64://basic/spec",
+          "c64://assembly/6510-spec"
         ],
         "prompts": [
           "graphics-demo",
@@ -1510,9 +1510,9 @@
         "summary": "Returns curated knowledge references for BASIC or 6502/6510 assembly queries.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://specs/basic",
-          "c64://specs/assembly",
-          "c64://context/bootstrap"
+          "c64://basic/spec",
+          "c64://assembly/6510-spec",
+          "c64://guide/bootstrap"
         ],
         "prompts": [
           "basic-program",
@@ -1757,7 +1757,7 @@
         "summary": "Mount or unmount images, create new disks, list drives, and find programs from one tool.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap"
+          "c64://guide/bootstrap"
         ],
         "prompts": [
           "drive-management"
@@ -1865,7 +1865,7 @@
         "summary": "Power cycle drive slots, reset IEC state, switch emulation modes, or load custom ROMs.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap"
+          "c64://guide/bootstrap"
         ],
         "prompts": [],
         "examples": [
@@ -2080,7 +2080,7 @@
         "summary": "Print text or bitmaps and define custom characters for Commodore or Epson printers.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap"
+          "c64://guide/bootstrap"
         ],
         "prompts": [],
         "examples": [
@@ -2265,8 +2265,8 @@
         "summary": "List or update settings, access firmware info, take snapshots, and run program shuffle workflows.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap",
-          "c64://docs/index"
+          "c64://guide/bootstrap",
+          "c64://guide/index"
         ],
         "prompts": [
           "memory-debug"
@@ -2547,9 +2547,9 @@
         "summary": "Export sprites or charsets, dump RAM, compute filesystem stats, or run firmware health checks.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://context/bootstrap",
-          "c64://specs/basic",
-          "c64://specs/assembly"
+          "c64://guide/bootstrap",
+          "c64://basic/spec",
+          "c64://assembly/6510-spec"
         ],
         "prompts": [],
         "examples": [
@@ -2628,8 +2628,8 @@
         "summary": "Start or stop audio/video/debug streaming in a single tool.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://docs/index",
-          "c64://specs/sid"
+          "c64://guide/index",
+          "c64://sound/sid/spec"
         ],
         "prompts": [
           "sid-music"
@@ -2877,8 +2877,8 @@
         "summary": "Manage breakpoints, inspect registers, and step through code on the VICE backend.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://specs/assembly",
-          "c64://specs/memory-map"
+          "c64://assembly/6510-spec",
+          "c64://memory/map"
         ],
         "prompts": [
           "assembly-program",
@@ -2965,7 +2965,7 @@
         "summary": "Reads or updates selected VICE resources that are safe to expose through MCP.",
         "lifecycle": "request-response",
         "resources": [
-          "c64://specs/memory-map"
+          "c64://memory/map"
         ],
         "prompts": [
           "assembly-program",

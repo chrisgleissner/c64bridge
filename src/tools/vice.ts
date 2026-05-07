@@ -151,7 +151,7 @@ const viceOperationDispatcher = createOperationDispatcher<ViceOperationMap>(
 export const viceModuleGroup = defineToolModule({
   domain: "vice",
   summary: "VICE emulator helpers for safe runtime resource access.",
-  resources: ["c64://specs/memory-map"],
+  resources: ["c64://memory/map"],
   prompts: ["assembly-program", "memory-debug"],
   defaultTags: ["vice", "emulator"],
   workflowHints: [

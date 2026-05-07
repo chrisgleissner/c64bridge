@@ -413,7 +413,7 @@ test("defineToolModule describeTools merges defaults and per-tool metadata", () 
   const module = defineToolModule({
     domain: "test",
     summary: "test module",
-    resources: ["c64://specs/basic"],
+    resources: ["c64://basic/spec"],
     prompts: ["basic-program"],
     defaultTags: ["default"],
     workflowHints: ["module hint"],
@@ -424,7 +424,7 @@ test("defineToolModule describeTools merges defaults and per-tool metadata", () 
         name: "c64_test",
         description: "test grouped tool",
         summary: "summary override",
-        relatedResources: ["c64://specs/vic"],
+        relatedResources: ["c64://graphics/vic/spec"],
         relatedPrompts: ["graphics-demo"],
         tags: ["tool"],
         workflowHints: ["tool hint"],
@@ -440,7 +440,7 @@ test("defineToolModule describeTools merges defaults and per-tool metadata", () 
   const [descriptor] = module.describeTools();
   assert.equal(descriptor.metadata.summary, "summary override");
   assert.equal(descriptor.metadata.lifecycle, "stream");
-  assert.deepEqual(descriptor.metadata.resources, ["c64://specs/basic", "c64://specs/vic"]);
+  assert.deepEqual(descriptor.metadata.resources, ["c64://basic/spec", "c64://graphics/vic/spec"]);
   assert.deepEqual(descriptor.metadata.prompts, ["basic-program", "graphics-demo"]);
   assert.deepEqual(descriptor.metadata.tags, ["default", "tool"]);
   assert.deepEqual(descriptor.metadata.workflowHints, ["module hint", "tool hint"]);

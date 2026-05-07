@@ -20,6 +20,7 @@ import {
   listKnowledgeResources,
   readKnowledgeResource,
 } from "./rag/knowledgeIndex.js";
+import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
 import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
@@ -489,8 +490,6 @@ async function main() {
     diagnosticsFile: diagnostics.filePath,
   });
 }
-
-const PLATFORM_RESOURCE_URI = "c64://platform/status";
 
 function createPlatformResourceDescriptor() {
   return {

@@ -6,9 +6,9 @@
       "description": "Route ultra-fast hello-world and smoke-test requests to the canonical greeting skill.",
       "_meta": {
         "requiredResources": [
-          "c64://context/bootstrap",
-          "c64://context/fast-paths",
-          "c64://docs/index"
+          "c64://guide/bootstrap",
+          "c64://guide/fast-paths",
+          "c64://guide/index"
         ],
         "optionalResources": [],
         "tools": [
@@ -29,12 +29,12 @@
       "description": "Route bespoke Commodore BASIC v2 requests to the canonical BASIC skill.",
       "_meta": {
         "requiredResources": [
-          "c64://specs/basic",
-          "c64://context/bootstrap",
-          "c64://docs/index"
+          "c64://basic/spec",
+          "c64://guide/bootstrap",
+          "c64://guide/index"
         ],
         "optionalResources": [
-          "c64://context/fast-paths"
+          "c64://guide/fast-paths"
         ],
         "tools": [
           "c64_program",
@@ -53,9 +53,9 @@
       "description": "Route quick visible demo requests to the cross-platform demo skill.",
       "_meta": {
         "requiredResources": [
-          "c64://context/bootstrap",
-          "c64://context/fast-paths",
-          "c64://docs/index"
+          "c64://guide/bootstrap",
+          "c64://guide/fast-paths",
+          "c64://guide/index"
         ],
         "optionalResources": [],
         "tools": [
@@ -75,12 +75,12 @@
       "description": "Route quick recognizable tune requests to the SID music skill.",
       "_meta": {
         "requiredResources": [
-          "c64://specs/sid",
-          "c64://specs/sidwave",
-          "c64://context/fast-paths"
+          "c64://sound/sid/spec",
+          "c64://sound/sidwave/spec",
+          "c64://guide/fast-paths"
         ],
         "optionalResources": [
-          "c64://docs/sid/best-practices"
+          "c64://sound/sid/best-practices"
         ],
         "tools": [
           "c64_sound"
@@ -105,13 +105,13 @@
       ],
       "_meta": {
         "requiredResources": [
-          "c64://specs/assembly",
-          "c64://specs/vic",
-          "c64://specs/sid",
-          "c64://context/bootstrap"
+          "c64://assembly/6510-spec",
+          "c64://graphics/vic/spec",
+          "c64://sound/sid/spec",
+          "c64://guide/bootstrap"
         ],
         "optionalResources": [
-          "c64://docs/sid/best-practices"
+          "c64://sound/sid/best-practices"
         ],
         "tools": [
           "c64_program",
@@ -137,13 +137,13 @@
       "description": "Route SID playback and composition work to the canonical SID skill.",
       "_meta": {
         "requiredResources": [
-          "c64://specs/sid",
-          "c64://specs/sidwave",
-          "c64://docs/sid/file-structure",
-          "c64://docs/sid/best-practices"
+          "c64://sound/sid/spec",
+          "c64://sound/sidwave/spec",
+          "c64://sound/sid/file-format",
+          "c64://sound/sid/best-practices"
         ],
         "optionalResources": [
-          "c64://context/fast-paths"
+          "c64://guide/fast-paths"
         ],
         "tools": [
           "c64_sound"
@@ -167,13 +167,13 @@
       ],
       "_meta": {
         "requiredResources": [
-          "c64://specs/vic",
-          "c64://context/bootstrap"
+          "c64://graphics/vic/spec",
+          "c64://guide/bootstrap"
         ],
         "optionalResources": [
-          "c64://specs/assembly",
-          "c64://specs/charset",
-          "c64://docs/petscii-style"
+          "c64://assembly/6510-spec",
+          "c64://graphics/character-set",
+          "c64://graphics/petscii/style-guide"
         ],
         "tools": [
           "c64_program",
@@ -206,15 +206,14 @@
       ],
       "_meta": {
         "requiredResources": [
-          "c64://specs/printer",
-          "c64://docs/printer/guide",
-          "c64://docs/printer/prompts"
+          "c64://printer/spec",
+          "c64://printer/prompt-guide"
         ],
         "optionalResources": [
-          "c64://docs/printer/commodore-text",
-          "c64://docs/printer/commodore-bitmap",
-          "c64://docs/printer/epson-text",
-          "c64://docs/printer/epson-bitmap"
+          "c64://printer/commodore/text",
+          "c64://printer/commodore/bitmap",
+          "c64://printer/epson/text",
+          "c64://printer/epson/bitmap"
         ],
         "tools": [
           "c64_printer"
@@ -236,9 +235,9 @@
       "description": "Route reversible memory inspection or patching work to the canonical memory skill.",
       "_meta": {
         "requiredResources": [
-          "c64://context/bootstrap",
-          "c64://specs/assembly",
-          "c64://docs/index"
+          "c64://guide/bootstrap",
+          "c64://assembly/6510-spec",
+          "c64://guide/index"
         ],
         "optionalResources": [],
         "tools": [
@@ -258,7 +257,7 @@
       "description": "Route disk-image and drive-state requests to the canonical drive skill.",
       "_meta": {
         "requiredResources": [
-          "c64://context/bootstrap"
+          "c64://guide/bootstrap"
         ],
         "optionalResources": [],
         "tools": [

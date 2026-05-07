@@ -126,7 +126,7 @@ export const systemModuleGroup = defineToolModule({
   domain: "system",
   summary: "Grouped machine control and background task orchestration.",
   supportedPlatforms: ["c64u", "vice"],
-  resources: ["c64://context/bootstrap"],
+  resources: ["c64://guide/bootstrap"],
   prompts: ["memory-debug"],
   defaultTags: ["system", "control"],
   workflowHints: [

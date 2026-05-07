@@ -170,7 +170,7 @@ function invokePrintTool(toolName: string, rawArgs: Record<string, unknown>, ctx
 export const printerModuleGroup = defineToolModule({
   domain: "printer",
   summary: "Grouped printer text, bitmap, and character definition helpers.",
-  resources: ["c64://context/bootstrap"],
+  resources: ["c64://guide/bootstrap"],
   defaultTags: ["printer", "device"],
   workflowHints: [
     "Mention device/secondary addresses so the user knows which printer workflow ran.",

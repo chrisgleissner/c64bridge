@@ -42,7 +42,7 @@ const streamOperationHandlers = createOperationHandlers(streamOperations);
 export const streamModule = defineToolModule({
   domain: "stream",
   summary: "Grouped streaming helpers for starting and stopping Ultimate capture sessions.",
-  resources: ["c64://docs/index", "c64://specs/sid"],
+  resources: ["c64://guide/index", "c64://sound/sid/spec"],
   prompts: ["sid-music"],
   defaultTags: ["stream", "monitor"],
   workflowHints: [
