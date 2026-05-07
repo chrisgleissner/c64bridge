@@ -23,6 +23,33 @@ export interface ViceProcessHandle {
 
 const DEFAULT_DISPLAY = ":99";
 
+function hasDisplayArtifacts(display: string): boolean {
+  const match = /^:([0-9]+)$/.exec(display.trim());
+  if (!match) {
+    return false;
+  }
+  const displayNumber = match[1];
+  return fs.existsSync(`/tmp/.X11-unix/X${displayNumber}`) || fs.existsSync(`/tmp/.X${displayNumber}-lock`);
+}
+
+export function resolveXvfbDisplayForLaunch(display: string): string {
+  const explicitDisplay = process.env.VICE_XVFB_DISPLAY?.trim();
+  if (explicitDisplay) {
+    return explicitDisplay;
+  }
+  if (display !== DEFAULT_DISPLAY || !hasDisplayArtifacts(display)) {
+    return display;
+  }
+  const baseDisplay = Number.parseInt(display.slice(1), 10);
+  for (let candidate = baseDisplay + 1; candidate < baseDisplay + 100; candidate += 1) {
+    const candidateDisplay = `:${candidate}`;
+    if (!hasDisplayArtifacts(candidateDisplay)) {
+      return candidateDisplay;
+    }
+  }
+  return display;
+}
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -135,7 +162,8 @@ export async function terminateProcess(child: ChildProcess | null, signal: NodeJ
 
 export async function startViceProcess(options: ViceProcessOptions): Promise<ViceProcessHandle> {
   const debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
-  const { useXvfb, display } = shouldUseXvfb(options.visible);
+  const { useXvfb, display: requestedDisplay } = shouldUseXvfb(options.visible);
+  const display = useXvfb ? resolveXvfbDisplayForLaunch(requestedDisplay) : requestedDisplay;
   const viceEnv: NodeJS.ProcessEnv = { ...process.env };
   let xvfb: ChildProcess | null = null;
   const xvfbOutput = createOutputTailCapture("xvfb");

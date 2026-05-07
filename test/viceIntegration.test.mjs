@@ -12,6 +12,7 @@ import { startViceMockServer } from "../src/vice/mockServer.js";
 import {
   delay,
   ensureXvfbSocketDir,
+  resolveXvfbDisplayForLaunch,
   startViceProcess,
   shouldUseXvfb,
   terminateProcess,
@@ -550,6 +551,27 @@ test("VICE process helpers cover environment, sockets, and termination paths", a
     assert.ok(Date.now() - start >= 0);
   } finally {
     restoreEnv();
+  }
+});
+
+test("resolveXvfbDisplayForLaunch skips occupied default displays unless explicitly pinned", () => {
+  const previousDisplay = process.env.VICE_XVFB_DISPLAY;
+  const originalExistsSync = fs.existsSync;
+  fs.existsSync = (targetPath) => targetPath === "/tmp/.X99-lock";
+
+  try {
+    delete process.env.VICE_XVFB_DISPLAY;
+    assert.equal(resolveXvfbDisplayForLaunch(":99"), ":100");
+
+    process.env.VICE_XVFB_DISPLAY = ":99";
+    assert.equal(resolveXvfbDisplayForLaunch(":99"), ":99");
+  } finally {
+    fs.existsSync = originalExistsSync;
+    if (previousDisplay === undefined) {
+      delete process.env.VICE_XVFB_DISPLAY;
+    } else {
+      process.env.VICE_XVFB_DISPLAY = previousDisplay;
+    }
   }
 });
 
