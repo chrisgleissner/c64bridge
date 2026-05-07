@@ -1,6 +1,19 @@
 # Changelog
 
 
+## 0.9.1 - 2026-05-07
+
+### Highlights
+
+- Added VICE monitor tooling, including monitor-state queries, continue execution, nuclear reset, and labeled checkpoints.
+- Introduced grouped input and display-state workflows for keyboard and joystick control across supported backends.
+- Expanded memory and debugging workflows with disassembly, symbol loading, batch execution, and bulk memory operations.
+
+### Fixes
+
+- Improved input handling, memory validation, and VICE backend reset/error-reporting behaviour.
+- Fixed tool parameters in README.md
+
 ## 0.9.0 - 2026-05-07
 
 ### Highlights

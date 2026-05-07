@@ -1,6 +1,6 @@
 {
   "name": "c64bridge",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Stdio-based Model Context Protocol (MCP) server that bridges Commodore 64 Ultimate hardware with AI agents.",
   "entry": "dist/index.js",
   "type": "stdio",
