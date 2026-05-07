@@ -11,7 +11,7 @@ import { Api } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
-import { startViceProcess, type ViceProcessHandle } from "./vice/process.js";
+import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 
 export type DeviceType = "c64u" | "vice";
 
@@ -714,11 +714,28 @@ export class ViceBackend implements C64Facade {
     }
   }
   async nuclearReset(): Promise<RunResult> {
-    await this.poweroff();
-    if (this.manageProcess) {
-      await this.ensureProcess();
+    const poweroffResult = await this.poweroff();
+    if (!poweroffResult.success) {
+      return poweroffResult;
     }
-    return { success: true };
+    if (!this.manageProcess) {
+      return {
+        success: false,
+        details: {
+          code: "UNSUPPORTED",
+          message: "VICE nuclear reset requires a managed process; unmanaged instances can only be powered off.",
+        },
+      };
+    }
+    try {
+      await this.ensureProcess();
+      return { success: true };
+    } catch (error) {
+      const details = error instanceof Error
+        ? { message: error.message }
+        : error;
+      return { success: false, details };
+    }
   }
 
   async menuButton(): Promise<RunResult> { throw unsupported("menuButton"); }

@@ -2,6 +2,7 @@ import {
   defineToolModule,
   type ToolExecutionContext,
 } from "../types.js";
+import { getPlatformStatus } from "../../platform.js";
 import {
   arraySchema,
   booleanSchema,
@@ -121,9 +122,26 @@ export const batchModuleGroup = defineToolModule({
               continue;
             }
 
+            if (toolName === "c64_batch") {
+              results.push({
+                index: i,
+                tool: toolName,
+                description: label,
+                success: false,
+                error: "Nested c64_batch execution is not supported.",
+                elapsedMs: 0,
+              });
+              failed++;
+              if (stopOnError) break;
+              continue;
+            }
+
             const cmdStart = Date.now();
             try {
-              const toolResult = await toolRegistry.invoke(toolName, args, ctx);
+              const toolResult = await toolRegistry.invoke(toolName, args, {
+                ...ctx,
+                platform: getPlatformStatus(),
+              });
               const elapsedMs = Date.now() - cmdStart;
               const isError = toolResult.isError === true;
               const text = toolResult.content.map((c) => c.text).join("\n");

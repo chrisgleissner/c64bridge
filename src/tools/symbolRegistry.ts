@@ -41,7 +41,7 @@ export function parseViceSymbolFile(content: string): Map<string, number> {
   for (const rawLine of content.split("\n")) {
     const line = rawLine.trim();
     if (!line || line.startsWith(";") || line.startsWith("#")) continue;
-    const match = /^(?:add_label|al)\s+(?:[A-Za-z]+:)?([0-9A-Fa-f]+)\s+\.?(\S+)/i.exec(line);
+    const match = /^(?:add_label|al)\s+(?:[A-Za-z]+:)?(?:0x|\$)?([0-9A-Fa-f]+)\s+\.?(\S+)/i.exec(line);
     if (match) {
       const addr = parseInt(match[1]!, 16);
       const name = match[2]!;

@@ -455,23 +455,7 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
     const length = parsed.length ?? 64;
     ctx.logger.info("Disassembling VICE memory", { address: parsed.address, length });
 
-    const addrRaw = parsed.address.trim();
-    let address: number;
-    if (/^\$[0-9A-Fa-f]+$/.test(addrRaw)) {
-      address = parseInt(addrRaw.slice(1), 16);
-    } else if (/^[0-9]+$/.test(addrRaw)) {
-      address = parseInt(addrRaw, 10);
-    } else {
-      const resolved = resolveAddressSymbol(addrRaw);
-      if (resolved === undefined) {
-        throw new ToolValidationError(`Unknown address symbol: ${addrRaw}`, { path: "$.address" });
-      }
-      address = resolved;
-    }
-
-    if (address < 0 || address > 0xffff) {
-      throw new ToolValidationError("Address must be in range $0000-$FFFF", { path: "$.address" });
-    }
+    const address = parseAddressArg(parsed.address, "$.address");
 
     const bytes = await ctx.client.readMemoryRaw(address, length);
     const symbols = getViceSymbols();
@@ -523,7 +507,17 @@ function fmtAddr(addr: number): string {
 }
 
 function bytesToHexString(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+  return `$${Buffer.from(bytes).toString("hex").toUpperCase()}`;
+}
+
+function validateRangeWithinAddressSpace(start: number, length: number, fieldPath: string): void {
+  const end = start + length - 1;
+  if (end > 0xffff) {
+    throw new ToolValidationError(
+      `${fieldPath} range exceeds address space; ${fmtAddr(start)} + ${length} bytes would pass $FFFF.`,
+      { path: fieldPath },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -546,9 +540,11 @@ async function executeCopyMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const src = parseAddressArg(parsed.source, "$.source");
     const dst = parseAddressArg(parsed.dest, "$.dest");
     const len = parsed.length;
+    validateRangeWithinAddressSpace(src, len, "$.source");
+    validateRangeWithinAddressSpace(dst, len, "$.dest");
     ctx.logger.info("Copying memory", { src: fmtAddr(src), dst: fmtAddr(dst), len });
     const bytes = await ctx.client.readMemoryRaw(src, len);
-    const hex = Buffer.from(bytes).toString("hex").toUpperCase().replace(/../g, (h) => `$${h} `).trimEnd();
+    const hex = bytesToHexString(bytes);
     const writeResult = await ctx.client.writeMemory(fmtAddr(dst), hex);
     if (!writeResult.success) {
       throw new ToolExecutionError("Write failed after read", { details: normaliseFailure(writeResult.details) });
@@ -584,11 +580,12 @@ async function executeFillMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
   try {
     const parsed = fillMemoryArgsSchema.parse(rawArgs ?? {});
     const addr = parseAddressArg(parsed.address, "$.address");
+    validateRangeWithinAddressSpace(addr, parsed.length, "$.address");
     const { bytes: patternBytes } = parseUserHex(parsed.pattern, "$.pattern");
     if (patternBytes.length === 0) throw new ToolValidationError("Pattern must not be empty", { path: "$.pattern" });
     const buf = new Uint8Array(parsed.length);
     for (let i = 0; i < parsed.length; i++) buf[i] = patternBytes[i % patternBytes.length]!;
-    const hex = Buffer.from(buf).toString("hex").toUpperCase().replace(/../g, (h) => `$${h} `).trimEnd();
+    const hex = bytesToHexString(buf);
     const result = await ctx.client.writeMemory(fmtAddr(addr), hex);
     if (!result.success) throw new ToolExecutionError("Fill write failed", { details: normaliseFailure(result.details) });
     ctx.logger.info("Filled memory", { address: fmtAddr(addr), length: parsed.length, pattern: parsed.pattern });
@@ -727,8 +724,8 @@ async function executeSaveMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     ctx.logger.info("Saving memory to file", { start: fmtAddr(start), end: fmtAddr(end), filePath: resolvedPath, asPrg });
     const bytes = await ctx.client.readMemoryRaw(start, len);
     const header = asPrg ? Buffer.from([start & 0xff, (start >> 8) & 0xff]) : Buffer.alloc(0);
-    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
-    fs.writeFileSync(resolvedPath, Buffer.concat([header, Buffer.from(bytes)]));
+    await fs.promises.mkdir(path.dirname(resolvedPath), { recursive: true });
+    await fs.promises.writeFile(resolvedPath, Buffer.concat([header, Buffer.from(bytes)]));
     const fileSize = bytes.length + header.length;
     return textResult(
       `Saved ${bytes.length} bytes (${fmtAddr(start)}–${fmtAddr(end)}) to ${resolvedPath}${asPrg ? " (PRG, with load address header)" : ""}.`,

@@ -19,7 +19,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { pollForProgramOutcome } from "./pollValidator.js";
-import { setViceSymbols, parseViceSymbolFile } from "./symbolRegistry.js";
+import { clearViceSymbols, setViceSymbols, parseViceSymbolFile } from "./symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
   if (details === undefined || details === null) {
@@ -681,17 +681,20 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     ctx.logger.info("Running PRG file", { path: parsed.path });
 
     let symbolsLoaded = 0;
-    if (ctx.platform.id === "vice" && parsed.symbolsFile) {
-      try {
-        const content = fs.readFileSync(parsed.symbolsFile, "utf8");
-        const syms = parseViceSymbolFile(content);
-        setViceSymbols(syms.entries());
-        symbolsLoaded = syms.size;
-        ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
-      } catch (fileError) {
-        throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
-          details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
-        });
+    if (ctx.platform.id === "vice") {
+      clearViceSymbols();
+      if (parsed.symbolsFile) {
+        try {
+          const content = await fs.promises.readFile(parsed.symbolsFile, "utf8");
+          const syms = parseViceSymbolFile(content);
+          setViceSymbols(syms.entries());
+          symbolsLoaded = syms.size;
+          ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
+        } catch (fileError) {
+          throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
+            details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
+          });
+        }
       }
     }
 

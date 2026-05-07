@@ -123,6 +123,54 @@ test("c64_batch with stopOnError=false continues through failures", async () => 
   assert.equal(data.succeeded, 1);
 });
 
+test("c64_batch refreshes platform context after backend switches", async () => {
+  setPlatform("c64u");
+  const ctx = makeCtx({
+    platformId: "c64u",
+    clientOverrides: {
+      getAvailableBackends() {
+        return ["c64u", "vice"];
+      },
+      switchBackend(target) {
+        setPlatform(target);
+      },
+      async viceCheckpointList() {
+        return [];
+      },
+    },
+  });
+
+  const result = await toolRegistry.invoke("c64_batch", {
+    commands: [
+      { tool: "c64_select_backend", args: { op: "select", backend: "vice" } },
+      { tool: "c64_debug", args: { op: "list_checkpoints" } },
+    ],
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  const data = result.structuredContent?.data;
+  assert.equal(data.failed, 0);
+  assert.equal(data.succeeded, 2);
+  assert.equal(data.results[1].success, true);
+});
+
+test("c64_batch rejects nested batch execution", async () => {
+  const ctx = makeCtx();
+  const result = await toolRegistry.invoke("c64_batch", {
+    stopOnError: false,
+    commands: [
+      { tool: "c64_batch", args: { commands: [{ tool: "c64_memory", args: { op: "read", address: "$0400", length: 1 } }] } },
+      { tool: "c64_memory", args: { op: "read", address: "$0400", length: 1 } },
+    ],
+  }, ctx);
+
+  const data = result.structuredContent?.data;
+  assert.equal(data.executed, 2);
+  assert.equal(data.failed, 1);
+  assert.equal(data.succeeded, 1);
+  assert.match(data.results[0].error, /Nested c64_batch execution is not supported/);
+});
+
 test("c64_batch rejects unknown tools per command without aborting the batch", async () => {
   const ctx = makeCtx();
   const result = await toolRegistry.invoke("c64_batch", {

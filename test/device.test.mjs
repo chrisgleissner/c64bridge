@@ -194,6 +194,30 @@ async function waitForPattern(
   );
 }
 
+test("ViceBackend nuclearReset propagates poweroff failures", async () => {
+  const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  backend.poweroff = async () => ({ success: false, details: { message: "quit failed" } });
+  backend.ensureProcess = async () => {
+    throw new Error("should not restart after failed poweroff");
+  };
+
+  const result = await backend.nuclearReset();
+
+  assert.equal(result.success, false);
+  assert.deepEqual(result.details, { message: "quit failed" });
+});
+
+test("ViceBackend nuclearReset reports unmanaged instances as unsupported", async () => {
+  const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  backend.manageProcess = false;
+  backend.poweroff = async () => ({ success: true });
+
+  const result = await backend.nuclearReset();
+
+  assert.equal(result.success, false);
+  assert.equal(result.details.code, "UNSUPPORTED");
+});
+
 viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUITE_TIMEOUT_MS }, async (t) => {
   let server = null;
   let cfgDir = null;

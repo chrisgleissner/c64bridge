@@ -1,7 +1,11 @@
 import test from "#test/runner";
 import assert from "#test/assert";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { programOperationHandlers, programRunnersModule } from "../src/tools/programRunners.js";
 import { ToolUnsupportedPlatformError } from "../src/tools/errors.js";
+import { clearViceSymbols, getViceSymbol, setViceSymbols } from "../src/tools/symbolRegistry.js";
 
 function createLogger() {
   return {
@@ -15,6 +19,10 @@ function createLogger() {
 function createPlatformStatus(id) {
   return { id, features: [], limitedFeatures: [] };
 }
+
+test.afterEach(() => {
+  clearViceSymbols();
+});
 
 test("run_prg executes via client", async () => {
   const calls = [];
@@ -95,6 +103,52 @@ test("run_prg returns structured content with path", async () => {
   assert.equal(data.format, "prg");
   assert.equal(data.path, "//USB0/run.prg");
   assert.deepEqual(calls, ["//USB0/run.prg"]);
+});
+
+test("run_prg clears stale VICE symbols when no symbols file is provided", async () => {
+  setViceSymbols([["stale", 0x0810]]);
+  const ctx = {
+    client: {
+      async runPrgFile() {
+        return { success: true, details: { ok: true } };
+      },
+    },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  };
+
+  const result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg" }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(getViceSymbol(0x0810), undefined);
+});
+
+test("run_prg loads VICE symbols from file", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-symbols-"));
+  const symbolsPath = path.join(tempDir, "demo.vs");
+  fs.writeFileSync(symbolsPath, "add_label 0x0810 .main\n", "utf8");
+
+  const ctx = {
+    client: {
+      async runPrgFile() {
+        return { success: true, details: { ok: true } };
+      },
+    },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  };
+
+  try {
+    const result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: symbolsPath }, ctx);
+
+    assert.equal(result.isError, undefined);
+    assert.equal(result.metadata.symbolsLoaded, 1);
+    assert.equal(getViceSymbol(0x0810), "main");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test("run_crt returns structured content with path", async () => {

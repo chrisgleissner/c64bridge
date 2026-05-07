@@ -1,6 +1,11 @@
 import test from "#test/runner";
 import assert from "#test/assert";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { memoryModule } from "../src/tools/memory.js";
+import { toolRegistry } from "../src/tools/registry/index.js";
+import { setViceSymbols, clearViceSymbols } from "../src/tools/symbolRegistry.js";
 
 const isVice = (process.env.C64_MODE ?? "").toLowerCase() === "vice";
 const testC64uOnly = isVice ? test.skip : test;
@@ -30,6 +35,10 @@ function createMockClient(overrides = {}) {
     ...overrides,
   };
 }
+
+test.afterEach(() => {
+  clearViceSymbols();
+});
 
 // --- read_screen ---
 
@@ -446,4 +455,118 @@ test("write fails when post-write verification detects differences", async () =>
 
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
+});
+
+test("disassemble accepts 0x-prefixed addresses and includes symbol annotations", async () => {
+  setViceSymbols([["start", 0x0810]]);
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        assert.equal(address, 0x0810);
+        assert.equal(length, 4);
+        return Uint8Array.of(0xA9, 0x00, 0x60, 0xEA);
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "0x0810", length: 4 }, ctx);
+
+  assert.equal(res.isError, undefined);
+  assert.match(res.content[0].text, /start:/);
+  assert.match(res.content[0].text, /LDA/);
+});
+
+test("copy_memory writes a canonical hex payload", async () => {
+  const writes = [];
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        assert.equal(address, 0x2000);
+        assert.equal(length, 3);
+        return Uint8Array.of(0xAA, 0xBB, 0xCC);
+      },
+      async writeMemory(address, bytes) {
+        writes.push({ address, bytes });
+        return { success: true, details: { address: "3000", length: 3 } };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "copy_memory", source: "$2000", dest: "$3000", length: 3 }, ctx);
+
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(writes, [{ address: "$3000", bytes: "$AABBCC" }]);
+});
+
+test("copy_memory rejects address ranges that wrap past $FFFF", async () => {
+  const ctx = {
+    client: createMockClient(),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "copy_memory", source: "$FFFE", dest: "$2000", length: 4 }, ctx);
+
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata.error.kind, "validation");
+});
+
+test("fill_memory writes a canonical repeating pattern", async () => {
+  const writes = [];
+  const ctx = {
+    client: createMockClient({
+      async writeMemory(address, bytes) {
+        writes.push({ address, bytes });
+        return { success: true, details: { address: "4000", length: 5 } };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "fill_memory", address: "$4000", length: 5, pattern: "AA 55" }, ctx);
+
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(writes, [{ address: "$4000", bytes: "$AA55AA55AA" }]);
+});
+
+test("fill_memory rejects address ranges that wrap past $FFFF", async () => {
+  const ctx = {
+    client: createMockClient(),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "fill_memory", address: "$FFFF", length: 2, pattern: "AA" }, ctx);
+
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata.error.kind, "validation");
+});
+
+test("save_memory writes a PRG header and payload to disk", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-memory-"));
+  const outputPath = path.join(tempDir, "dump.prg");
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        assert.equal(address, 0x2000);
+        assert.equal(length, 3);
+        return Uint8Array.of(0x11, 0x22, 0x33);
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  try {
+    const res = await toolRegistry.invoke("c64_memory", { op: "save_memory",
+      startAddress: "$2000",
+      endAddress: "$2002",
+      filePath: outputPath,
+    }, ctx);
+
+    assert.equal(res.isError, undefined);
+    const written = fs.readFileSync(outputPath);
+    assert.deepEqual(Array.from(written), [0x00, 0x20, 0x11, 0x22, 0x33]);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

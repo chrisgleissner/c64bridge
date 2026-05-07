@@ -176,7 +176,7 @@ export const keyArgsSchema = objectSchema({
       maxLength: 32,
     }),
     durationMs: optionalSchema(numberSchema({
-      description: "How long to hold the key before releasing (default 0 = instant tap).",
+      description: "Delay in ms after each queued key press before the next press (default 0 = no delay).",
       integer: true,
       minimum: 0,
       maximum: 5000,
