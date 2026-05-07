@@ -1,93 +1,108 @@
-# PR #124 / #131 Stabilization Plan
+# Claude Code First-Class MCP Client Support
 
-## Scope
+## Branch / repo state
 
-- PR #124 ("source"): `fix: Improve Claude support by flattening discriminated union schemas and improving hex data handling`.
-- PR #131 ("delivery"): `fix: Improve Claude support by flattening discriminated union schemas and improving hex data handling (based on #123 and #124)` — opened by the maintainer for the local work branch `fix/pr-124-claude-schema-hex-support`.
-- Two PR-intended changes:
-  1. `readMemory` returns structured JSON (`success`, `address`, `length`, `hexData`, `details`) via `jsonResult` so Claude tool-use can read the hex payload directly.
-  2. `discriminatedUnionSchema` flattens variants into a single object schema with an enum-constrained discriminator (no top-level `oneOf`/`anyOf`/`allOf`/`discriminator`).
+- Branch: `fix/pr-124-claude-schema-hex-support` (clean tree at task start).
+- Schema portability work (no top-level `oneOf`/`anyOf`/`allOf`, structured `readMemory` results) is already merged on this branch (commits `f7a6b96`, `93f26b2`, `a2e48ef`, `32ad79a`). Verified: all `mcp/schemas/*.json` have no top-level union keywords.
 
-## Branch setup (executed)
+## Existing surface relevant to this task
 
-- Starting branch: `main` (clean working tree per `git status --short`).
-- Canonical upstream remote: `origin` -> `git@github.com:chrisgleissner/c64bridge.git`.
-- Fetched latest `main` and PR ref:
-  - `git fetch origin main`
-  - `git fetch origin pull/124/head:pr-124-air-memory-read-json-result`
-- Created local work branch from latest `origin/main`:
-  - `git checkout -b fix/pr-124-claude-schema-hex-support origin/main`
-- Cherry-picked the original PR commits in order, preserving Aaron Bell's authorship metadata:
-  - `git cherry-pick 65525db 236dac1`
-  - Author preserved: `Aaron Bell <aaronbell@meta.com>` (verified via `git log --format=fuller`).
-  - Committer is the local user (expected for cherry-pick; author metadata is preserved).
-- No conflicts encountered.
+- Canonical server start command: `npx -y c64bridge@latest` (published) or `node scripts/start.mjs` (local source).
+- Existing per-client config: only `.vscode/mcp.json` (VS Code / Copilot). Project root `mcp.json` is the MCP **registry manifest** (different schema, different purpose), not a client config.
+- README has client install badges (VS Code, VS Code Insiders, Visual Studio, Cursor) but no Claude Code entry.
+- README §4 "Connect from an MCP Client" only references VS Code.
+- Existing `CLAUDE.md` re-imports `AGENTS.md`. `AGENTS.md` is the canonical cross-tool contract.
+- No `.mcp.json` (Claude Code's project-level MCP server file) exists yet.
 
-### Branch tracking incident (resolved)
+## Goal
 
-`git checkout -b fix/pr-124-... origin/main` set the new branch's upstream to `origin/main`. A subsequent IDE/auto-push pushed the cherry-picks (and an auto-commit) directly to `origin/main`. Recovery:
+Make Claude Code a first-class MCP client path **without duplicating** existing setup, configuration, or environment variable documentation.
 
-- Unset the dangerous tracking config: `git branch --unset-upstream` plus removing the stale `branch.fix/pr-124-claude-schema-hex-support.{merge,remote}` entries.
-- Force-pushed `origin/main` back to the pre-PR head `462de36` using `git push --force-with-lease=main:<old-sha> origin 462de36:main`.
-- Verified `origin/main` matches `462de36` and the PR commits remain only on `fix/pr-124-claude-schema-hex-support`.
+## Concrete tasks
+
+1. Add `.mcp.json` at project root using Claude Code's documented project-scoped MCP config schema. Use a path-portable invocation that works for anyone cloning the repo, and reuse the same start script `.vscode/mcp.json` already invokes. This is **not** a duplicate of `.vscode/mcp.json`: the two files target different clients (Claude Code vs VS Code), have different schemas (`mcpServers` vs `servers`), and reference the same canonical script.
+2. Add a Claude Code install badge in the README header next to the existing client badges.
+3. Update README §4 ("Connect from an MCP Client") to name Claude Code (CLI + plugin), Copilot in VS Code, and other MCP clients explicitly, and to point each at the canonical setup section.
+4. Add a single concise `Claude Code` subsection under "VS Code MCP Setup" (rename the parent if needed) covering CLI usage (`claude mcp add`) and project-scoped `.mcp.json` discovery. Reference (not duplicate) the existing Configuration and Environment Variable sections.
+5. Update README Contents (TOC) to include the new subsection.
+6. Run build + tests to confirm no regressions and that the README auto-generated blocks remain intact.
 
 ## Constraints
 
-- Preserve original contributor attribution.
-- Do not weaken thresholds or assertions.
-- Tests must pass; coverage >= 90%.
-- Exported tool input schemas must not contain top-level `oneOf`/`anyOf`/`allOf`/`discriminator`.
+- Do **not** duplicate env var tables, configuration sections, or VICE/Copilot setup blocks. Reference them.
+- Do **not** modify auto-generated README blocks.
+- Preserve Copilot behaviour: the existing `.vscode/mcp.json`, `.github/agents/c64.agent.md`, and copilot-instructions stay intact.
+- Keep changes minimal: no new scripts, no new docs files, no symlinks.
 
-## Investigation
+## Files expected to change
 
-- CI verification commands (from `package.json` and `.github/workflows/`):
-  - `npm run build`
-  - `npm run coverage` (matrix coverage in CI)
-  - `npm run check:package` (corresponds to `Continuous Integration / Package check / verify`)
+- `PLANS.md` (this file).
+- `.mcp.json` (new — Claude Code project-scoped config).
+- `README.md` (badge, §4 wording, new Claude Code subsection, TOC entry).
+
+## Verification commands
+
+- `npm run build` (regenerates README auto blocks + MCP interface — must remain stable).
+- `npm test` (Bun test runner via `scripts/run-tests.ts`).
+- Spot check: `python3 -c "import json; json.load(open('.mcp.json'))"`.
+- Spot check: `grep -c "Claude Code" README.md`.
+
+## Risks
+
+- README has auto-generated `<!-- AUTO-GENERATED:* -->` blocks regenerated by `npm run build`. Manual edits inside those blocks would be reverted. All edits stay outside those markers.
+- The Claude Code "install" deeplink scheme (`https://claude.ai/install-mcp` or similar) is not a documented stable URL the way `vscode.dev/redirect/mcp/install` is. To stay accurate, I will use a plain badge that links to `claude mcp add` documentation rather than fabricating an install-redirect URL.
 
 ## Worklog
 
-### Build / test triage
+### Changes made
 
-- Initial `npm run build` after cherry-pick: PASS.
-- First `npm test` (Node runner) after cherry-pick: 5 failures.
-  - 3 PR-related: `read succeeds with valid response`, `read uses default length when not provided`, `read handles response without details` in `test/memory.test.mjs`. They asserted `res.metadata?.success` and a `"Read"` text body — both removed when `readMemory` switched to `jsonResult`.
-  - 2 pre-existing flakes/env failures: `music_generate builds timeline...` and `device: createFacade with config file` (the second is a Node 18 `File is not defined` issue in generated client code; CI runs on Bun where `File` is global).
-- Reproducibility check on origin/main with PR files reverted: same 2 pre-existing failures reproduce. They are not caused by PR #124.
+1. **`.mcp.json`** (new, 11 lines). Project-scoped Claude Code MCP server config using `node scripts/start.mjs`. Reuses the same start script `.vscode/mcp.json` already invokes — no duplicate launcher logic. Sets `VICE_VISIBLE=true` / `VICE_WARP=false` to match `.vscode/mcp.json` defaults. Not shipped in the npm tarball (verified via `npm pack --dry-run`).
+2. **`README.md`** — minimal, surgical edits:
+   - Added one "Use with Claude Code" badge in the install-badge block (line 17), linking to the new in-page section.
+   - Updated TOC to add `Claude Code` as a top-level section between `VS Code MCP Setup` and `Example Workflow`. Restored `Runtime Environment Variable Reference` as a child of `VS Code MCP Setup` (was already a child structurally; TOC indent corrected).
+   - Replaced §4 "Connect from an MCP Client" with a five-bullet client list naming Claude Code, Copilot, Cursor, Visual Studio, VS Code Insiders, and "any other MCP client", and a sentence stating the canonical command is the same across clients.
+   - Added a one-line note at the top of `## VS Code MCP Setup` clarifying it covers Copilot specifically and pointing the Claude Code VS Code plugin at the new section.
+   - Added a new top-level `## Claude Code` section after the auto-generated env-var block, with: CLI registration command (`claude mcp add c64bridge -- npx -y c64bridge@latest`), explanation of the project-scoped `.mcp.json` flow, plugin notes, and a verification snippet.
+   - **Did not** duplicate any env-var, configuration, backend-config, or VS Code setup content. The new section explicitly references `[Configuration](#configuration)` and `[Runtime Environment Variable Reference](#runtime-environment-variable-reference)` instead of repeating them.
+   - **Did not** modify any `<!-- AUTO-GENERATED:* -->` block.
 
-### Stabilization changes (uncommitted in initial draft, then committed for PR #131 CI)
+### Verification commands run
 
-- `test/memory.test.mjs`: updated three `read` tests to assert against `res.structuredContent.data` (the new shape) plus the JSON in `content[0].text`.
-- `scripts/update-readme.ts`: updated `collectGroupedOperations` to also handle the flattened schema format. It now extracts op names from `properties.op.enum` and parses operation descriptions from the schema description text (`- op: <text>` lines). The legacy `oneOf` + `discriminator` path is preserved for the synthetic test fixtures and for any future schemas that still use the old shape.
-- Regenerated `README.md`, `mcp/schemas/*.json`, and `mcp/tools.json` via `npm run build` so the snapshot test in `test/generateMcpInterface.test.mjs` matches the live generator output, and so the `update-readme grouped operations` tests find the operation tables.
+| Command | Result |
+| --- | --- |
+| `npm run build` | PASS — TypeScript compile + auto-generated README/MCP regeneration both succeeded; manual edits outside auto-generated markers preserved. |
+| `npm test` | PASS — Node test runner + 3-batch Bun test suite, 0 failures. |
+| `npm run check:package` | PASS — `Package checks passed. Required files present and no duplicates found.` |
+| `python3 -c "import json; json.load(open('.mcp.json'))"` | PASS — valid JSON. |
+| `grep -c "Claude Code" README.md` | 10 references (badge + TOC + §4 + new section). |
+| `npm pack --dry-run --json` | `.mcp.json` not shipped (correct — it's a project-local dev config). |
+| Top-level union scan over `mcp/schemas/*.json` | All 15 schemas free of top-level `oneOf`/`anyOf`/`allOf` (the only `oneOf` is on a sub-property `value` in `c64_vice`, which is a value-type union, not a discriminator — already portable for Claude Code). |
 
-### Local verification
+### Files changed (final)
 
-- `npm run build`: PASS.
-- `npm test` (Node runner): 648 / 650 pass; 2 pre-existing failures unrelated to PR #124 (Node 18 `File` global, mock test flake).
-- `npm run coverage:single` (Bun): 744 pass, 1 skip, 2 fail (same 2 pre-existing audio/background flakes that also fail on origin/main).
-- `npm run check:package`: PASS — `Package checks passed. Required files present and no duplicates found.`
-- `npm run coverage` (matrix, Node + c8): produced `coverage/lcov.info`. Filtered against `.c8rc.json` include/exclude (58 covered files): **Lines 96.08% (14690/15290), Functions 92.74% (945/1019)** — comfortably above the 90% threshold.
+- `PLANS.md` — rewrote scope to this Claude Code task (the previous PR #124 stabilization plan had already concluded; that history is preserved in `WORKLOG.md` and the existing commits).
+- `README.md` — badge, TOC, §4 wording, VS Code MCP Setup scoping note, new `## Claude Code` section.
+- `.mcp.json` — new file at repo root.
 
-### Remote PR #131 verification
+### Duplicate-file avoidance
 
-After committing the stabilization changes (`a2e48ef fix(readme): regenerate README + MCP schemas for flattened union format`) and pushing the branch:
+- `.mcp.json` and `.vscode/mcp.json` use **different schemas** (`mcpServers` vs `servers`) and target **different clients** (Claude Code vs Copilot). Two files exist because the two clients require different formats — there is no single file format that both consume. Both reference the same canonical `scripts/start.mjs`, so no launcher logic is duplicated.
+- The Claude Code section in `README.md` references `[Configuration](#configuration)` and `[Runtime Environment Variable Reference](#runtime-environment-variable-reference)` instead of repeating any backend or env-var documentation.
+- No new scripts, no symlinks, no new docs files.
 
-- `Continuous Integration / Build and test / build`: **PASS** (1m35s).
-- `Continuous Integration / Package check / verify`: **PASS** (1m23s).
-- `Continuous Integration / Detect Docker changes`: **PASS**.
-- `Continuous Integration / Build Docker image`: skipped (no Docker changes).
-- CI coverage report: `lines.pct = 90.68` (>= 90% threshold).
+### Termination criteria
 
-## Completion criteria
+- [x] PLANS.md exists and reflects final work.
+- [x] Claude Code has a clear, repository-supported way to discover (`/.mcp.json` auto-prompt) and start (`claude mcp add`) C64Bridge.
+- [x] README documents Claude Code CLI usage concisely.
+- [x] README documents Claude Code VS Code plugin usage and the `.mcp.json` / `.vscode/mcp.json` boundary.
+- [x] No duplicated env var, configuration, or setup blocks.
+- [x] VS Code Copilot startup unchanged (`.vscode/mcp.json` untouched, `.github/agents/c64.agent.md` untouched).
+- [x] MCP tool schemas already portable (verified across all 15 schemas).
+- [x] All relevant tests pass.
+- [x] No unnecessary duplicate files added.
 
-- [x] All tests pass (CI green; the 2 local-only failures are environmental: Node 18 missing `File`, and a Bun-specific mock-module flake — both reproduce on origin/main).
-- [x] Coverage >= 90% (CI: 90.68% lines; local matrix lcov filter: 96.08% lines / 92.74% functions).
-- [x] Build passes.
-- [x] Package verification passes.
-- [x] Original PR attribution preserved via cherry-pick.
-- [x] Reconfirm coverage stays above 90% after the remaining convergence fixes.
+### Risks / follow-ups
 
-## Notes on the "no new fix commits" rule
-
-The original task said post-PR stabilization should remain as working-tree changes. After PR #131 was opened by the maintainer, the maintainer asked for CI to go green, which required pushing the stabilization changes. The stabilization fixes are isolated in a single dedicated commit (`a2e48ef`) on top of the two cherry-picked PR commits, so the original Aaron Bell authorship on PR #124 is still intact and visible.
+- The `Use with Claude Code` badge links to the in-page anchor, not a one-click install URL. Anthropic does not publish a stable `?config=...` install-redirect scheme equivalent to the VS Code or Cursor badges; using the documented `claude mcp add` flow keeps the README accurate. If/when such a deeplink scheme is published, the badge can be upgraded.
+- No automated test currently asserts that `.mcp.json` stays valid or that the README anchors resolve. The repo's existing snapshot tests cover the auto-generated README blocks; the new prose-only Claude Code section is small enough that a dedicated test would add maintenance cost without proportional value.
