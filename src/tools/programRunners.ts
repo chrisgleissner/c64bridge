@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import { assemblyToPrgDetailed, AssemblyError } from "../assemblyConverter.js";
-import { basicToPrg } from "../basicConverter.js";
+import { assemblyToPrgDetailed, AssemblyError } from "./assember.js";
+import { basicToPrg } from "./basicTokenizer.js";
 import {
   defineToolModule,
   OPERATION_DISCRIMINATOR,
@@ -323,7 +323,7 @@ const prgFileArgsSchema = objectSchema({
       minLength: 1,
     }),
     symbolsFile: optionalSchema(stringSchema({
-      description: "Path to a VICE symbol file (.vs) to load alongside the PRG. Symbols are used by the disassemble tool (VICE only).",
+      description: "Path to a VICE symbol file (.vs) to load alongside the PRG. Symbols are used by the disassemble tool when annotating addresses.",
       minLength: 1,
     })),
   },

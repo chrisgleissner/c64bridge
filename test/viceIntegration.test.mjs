@@ -586,6 +586,25 @@ test("resolveXvfbDisplayForLaunch skips occupied default displays unless explici
   }
 });
 
+test("ensureXvfbSocketDir ignores chmod permission errors on existing socket dirs", () => {
+  const originalExistsSync = fs.existsSync;
+  const originalChmodSync = fs.chmodSync;
+
+  fs.existsSync = (targetPath) => targetPath === "/tmp/.X11-unix";
+  fs.chmodSync = () => {
+    const error = new Error("operation not permitted");
+    error.code = "EPERM";
+    throw error;
+  };
+
+  try {
+    ensureXvfbSocketDir(true);
+  } finally {
+    fs.existsSync = originalExistsSync;
+    fs.chmodSync = originalChmodSync;
+  }
+});
+
 test("startViceProcess starts and stops a monitor process without Xvfb", async (t) => {
   const fakeVice = createFakeViceBinary(t, "listen");
   const previousDisplay = process.env.DISPLAY;

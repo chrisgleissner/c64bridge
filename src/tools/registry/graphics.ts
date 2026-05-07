@@ -110,7 +110,7 @@ function parseVicState(d011: number, d016: number, d018: number, dd00: number, d
 }
 
 const getDisplayStateArgsSchema = objectSchema({
-  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout (VICE only).",
+  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
   properties: {
     op: literalSchema("get_display_state"),
   },
@@ -219,21 +219,22 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: getDisplayStateArgsSchema.jsonSchema,
     handler: async (_rawArgs, ctx) => {
       try {
-        // Read $D011, $D016, $D018 from VIC-II (3 bytes starting at $D011)
-        const vicRegs = await ctx.client.viceMemGet(0xD011, 8);
-        // Read $D020 (border colour) and $D021 (background 0)
-        const colorRegs = await ctx.client.viceMemGet(0xD020, 2);
-        // Read CIA2 Port A ($DD00) for VIC bank
-        const cia2 = await ctx.client.viceMemGet(0xDD00, 1);
+        // Use cross-platform memory reads so the same handler works on both
+        // C64U and VICE. The VIC-II and CIA2 registers live in machine memory
+        // either way; the underlying facade hides the transport difference.
+        const vicRegs = await ctx.client.readMemoryRaw(0xD011, 8);
+        const colorRegs = await ctx.client.readMemoryRaw(0xD020, 2);
+        const cia2 = await ctx.client.readMemoryRaw(0xDD00, 1);
         const d011 = vicRegs[0] ?? 0;
         const d016 = vicRegs[5] ?? 0; // $D016 = $D011 + 5
         const d018 = vicRegs[7] ?? 0; // $D018 = $D011 + 7
         const d020 = colorRegs[0] ?? 0;
         const d021 = colorRegs[1] ?? 0;
         const dd00 = cia2[0] ?? 0x03;
-        const state = parseVicState(d011, d016, d018, dd00, d020, d021);
-        ctx.logger.info("Read VIC-II display state", { mode: state.mode, bank: state.bank });
-        return jsonResult(state, { success: true, mode: state.mode });
+        const backend = await ctx.client.getActiveBackendType();
+        const state = { ...parseVicState(d011, d016, d018, dd00, d020, d021), backend };
+        ctx.logger.info("Read VIC-II display state", { mode: state.mode, bank: state.bank, backend });
+        return jsonResult(state, { success: true, mode: state.mode, backend });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
@@ -265,7 +266,6 @@ export const graphicsModuleGroup = defineToolModule({
         variants: graphicsOperations.map((operation) => operation.schema),
       }),
       tags: ["graphics", "vic", "grouped"],
-      operationPlatforms: { get_display_state: ["vice"] },
       examples: [
         {
           name: "Capture one frame",
@@ -294,7 +294,7 @@ export const graphicsModuleGroup = defineToolModule({
         },
         {
           name: "Read VIC-II state",
-          description: "Decode graphics mode, memory layout, and colours from VIC-II registers (VICE only)",
+          description: "Decode graphics mode, memory layout, and colours from VIC-II registers (cross-platform)",
           arguments: { op: "get_display_state" },
         },
       ],

@@ -101,6 +101,16 @@ interface ViceLaunchResolutionDependencies {
   isResourceDirectory?: (candidate: string) => boolean;
 }
 
+interface ManagedViceProcessOptionsInput {
+  binary: string;
+  directory?: string;
+  host: string;
+  port: number;
+  warp: boolean;
+  visible: boolean;
+  extraArgs: string[];
+}
+
 const DEFAULT_C64U_HOST = "c64u";
 const DEFAULT_C64U_PORT = 80;
 const DEFAULT_VICE_HOST = "127.0.0.1";
@@ -459,16 +469,15 @@ export class ViceBackend implements C64Facade {
         extraArgs: this.extraArgs,
       });
     }
-    const handle = await startViceProcess({
+    const handle = await startViceProcess(buildManagedViceProcessOptions({
       binary: this.exe,
       directory: this.directory,
       host: this.host,
       port: this.port,
       warp: this.warp,
       visible: this.visible,
-      headless: !this.visible,
-      extraArgs: this.extraArgs.length > 0 ? this.extraArgs : undefined,
-    });
+      extraArgs: this.extraArgs,
+    }));
     this.lastProcessStart = Date.now();
     if (this.debugEnabled) {
       console.error("[vice-backend] VICE process started", { pid: handle.process.pid });
@@ -978,6 +987,18 @@ function resolveViceLaunch(
   };
 }
 
+function buildManagedViceProcessOptions(input: ManagedViceProcessOptionsInput): ViceProcessOptions {
+  return {
+    binary: input.binary,
+    directory: input.directory,
+    host: input.host,
+    port: input.port,
+    warp: input.warp,
+    visible: input.visible,
+    extraArgs: input.extraArgs.length > 0 ? input.extraArgs : undefined,
+  };
+}
+
 export function __resolveViceBinaryForTests(
   options: { envBinary?: string; configBinary?: string },
   findBinary?: (binary: string) => string | null,
@@ -990,6 +1011,10 @@ export function __resolveViceLaunchForTests(
   dependencies?: ViceLaunchResolutionDependencies,
 ): { binary: string; directory?: string } {
   return resolveViceLaunch(options, dependencies);
+}
+
+export function __buildViceProcessOptionsForTests(input: ManagedViceProcessOptionsInput): ViceProcessOptions {
+  return buildManagedViceProcessOptions(input);
 }
 
 export interface FacadeSelection { facade: C64Facade; selected: DeviceType; reason: string; details?: Record<string, unknown> }

@@ -411,14 +411,42 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
   return { host: options.host, port: options.port, process: child, stop };
 }
 
+function isIgnorableSocketDirError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+  const code = String((error as NodeJS.ErrnoException).code ?? "");
+  return code === "EACCES" || code === "EPERM" || code === "EROFS" || code === "EEXIST";
+}
+
 export function ensureXvfbSocketDir(debugEnabled: boolean): void {
   const socketDir = "/tmp/.X11-unix";
   try {
     if (!fs.existsSync(socketDir)) {
       fs.mkdirSync(socketDir, { mode: 0o1777 });
     }
+  } catch (error) {
+    if (isIgnorableSocketDirError(error)) {
+      if (debugEnabled) {
+        console.error("[vice-process] unable to create Xvfb socket dir; continuing", error);
+      }
+      return;
+    }
+    writeDiagnosticEvent("xvfb_socket_dir_failed", { socketDir, error });
+    if (debugEnabled) {
+      console.error("[vice-process] failed to prepare Xvfb socket dir", error);
+    }
+    return;
+  }
+  try {
     fs.chmodSync(socketDir, 0o1777);
   } catch (error) {
+    if (isIgnorableSocketDirError(error)) {
+      if (debugEnabled) {
+        console.error("[vice-process] unable to chmod Xvfb socket dir; continuing", error);
+      }
+      return;
+    }
     writeDiagnosticEvent("xvfb_socket_dir_failed", { socketDir, error });
     if (debugEnabled) {
       console.error("[vice-process] failed to prepare Xvfb socket dir", error);

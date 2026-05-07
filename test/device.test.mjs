@@ -4,7 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import os from "node:os";
-import { __resolveViceBinaryForTests, __resolveViceLaunchForTests, createFacade, ViceBackend } from "../src/device.js";
+import { __buildViceProcessOptionsForTests, __resolveViceBinaryForTests, __resolveViceLaunchForTests, createFacade, ViceBackend } from "../src/device.js";
 import { ViceClient } from "../src/vice/viceClient.js";
 import { startViceMockServer } from "../src/vice/mockServer.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
@@ -1185,6 +1185,34 @@ test("device: ViceBackend resolves directory and config-driven launch options", 
     assert.equal(backend.warp, true);
     assert.deepEqual(backend.extraArgs, ["-limitcycles", "1234"]);
   });
+});
+
+test("device: invisible managed VICE launches keep headless mode opt-in", () => {
+  const options = __buildViceProcessOptionsForTests({
+    binary: "/usr/local/bin/x64sc",
+    directory: "/usr/local/share/vice",
+    host: "127.0.0.1",
+    port: 6510,
+    warp: true,
+    visible: false,
+    extraArgs: [],
+  });
+
+  assert.equal(options.visible, false);
+  assert.equal(options.headless, undefined);
+  assert.equal(options.extraArgs, undefined);
+
+  const withArgs = __buildViceProcessOptionsForTests({
+    binary: "/usr/local/bin/x64sc",
+    host: "127.0.0.1",
+    port: 6510,
+    warp: false,
+    visible: true,
+    extraArgs: ["-limitcycles", "1234"],
+  });
+
+  assert.deepEqual(withArgs.extraArgs, ["-limitcycles", "1234"]);
+  assert.equal(withArgs.headless, undefined);
 });
 
 test("device: VICE binary resolution prefers env override over config", () => {

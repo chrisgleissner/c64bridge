@@ -233,12 +233,22 @@ export const joystickArgsSchema = objectSchema({
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
+
+function textToPetsciiBytes(text: string): Uint8Array {
+  const bytes: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    bytes.push(text.charCodeAt(i) & 0xff);
+  }
+  return Uint8Array.from(bytes);
+}
+
 const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
   write_text: async (args, ctx) => {
     try {
       const parsed = writeTextArgsSchema.parse(args);
       const expanded = expandPetsciiTokens(parsed.text);
-      await ctx.client.viceKeyboardFeed(expanded);
+      const petsciiBytes = textToPetsciiBytes(expanded);
+      await ctx.client.injectKeyboardQueue(petsciiBytes);
       if (parsed.delayMs && parsed.delayMs > 0) {
         await new Promise<void>((res) => setTimeout(res, parsed.delayMs));
       }
@@ -257,15 +267,15 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const durationMs = parsed.durationMs ?? 0;
       // Resolve key to a character: try token first, then single char
       const tokenCode = PETSCII_TOKENS[parsed.key.toUpperCase()];
-      const keyChar = tokenCode !== undefined
-        ? String.fromCharCode(tokenCode)
+      const keyByte = tokenCode !== undefined
+        ? tokenCode
         : parsed.key.length === 1
-          ? parsed.key
+          ? parsed.key.charCodeAt(0) & 0xff
           : (() => {
               throw new ToolValidationError(`Unrecognised key: ${parsed.key}. Use a single character or a PETSCII token name.`, { path: "$.key" });
             })();
       for (let i = 0; i < count; i++) {
-        await ctx.client.viceKeyboardFeed(keyChar);
+        await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte));
         if (durationMs > 0) {
           await new Promise<void>((res) => setTimeout(res, durationMs));
         }
@@ -326,20 +336,21 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
 // ---------------------------------------------------------------------------
 export const inputModule = defineToolModule({
   domain: "input",
-  summary: "VICE-only keyboard and joystick input simulation.",
-  supportedPlatforms: ["vice"],
+  summary: "Cross-platform keyboard input plus VICE-only joystick simulation.",
+  supportedPlatforms: ["c64u", "vice"],
   resources: ["c64://specs/assembly", "c64://specs/memory-map"],
   prompts: [],
-  defaultTags: ["input", "vice"],
+  defaultTags: ["input"],
   workflowHints: [
     "Use write_text with {RETURN} tokens to automate BASIC entry; prefer key for individual control keys.",
-    "Joystick tap is suitable for one-shot moves; use press/release pairs for timed holds.",
+    "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
+    "Joystick tap is suitable for one-shot moves; use press/release pairs for timed holds. Joystick is VICE-only.",
   ],
   tools: [
     {
       name: "c64_input",
-      description: "VICE-only keyboard feed and joystick simulation via CIA1 register writes.",
-      summary: "Types text, taps keys, and simulates joystick movements in VICE.",
+      description: "Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).",
+      summary: "Types text, taps keys, and simulates joystick movements.",
       inputSchema: {
         type: "object",
         description: "Input operations: write_text, key, joystick.",
@@ -350,7 +361,8 @@ export const inputModule = defineToolModule({
         ],
         discriminator: { propertyName: "op" },
       },
-      tags: ["input", "keyboard", "joystick", "vice"],
+      operationPlatforms: { joystick: ["vice"] },
+      tags: ["input", "keyboard", "joystick"],
       examples: [
         {
           name: "Type BASIC line",

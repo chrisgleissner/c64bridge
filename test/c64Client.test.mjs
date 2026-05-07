@@ -11,7 +11,7 @@ import {
   buildEpsonBitmapBasicProgram,
   buildCommodoreDllBasicProgram,
 } from "../src/c64Client.js";
-import { basicToPrg } from "../src/basicConverter.js";
+import { basicToPrg } from "../src/tools/basicTokenizer.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
 import { startViceMockServer } from "../src/vice/mockServer.js";
 

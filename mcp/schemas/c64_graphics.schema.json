@@ -1,346 +1,234 @@
 {
   "type": "object",
-  "description": "Graphics operations available via the c64_graphics tool.",
-  "oneOf": [
-    {
-      "type": "object",
-      "description": "Capture one or more complete video frames from the active backend.",
-      "properties": {
-        "op": {
-          "const": "capture_frame"
-        },
-        "count": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Number of frames to capture.",
-          "minimum": 1,
-          "maximum": 32,
-          "default": 1
-        },
-        "includePixels": {
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "description": "Include pixel payload bytes in the response.",
-          "default": true
-        },
-        "encoding": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Encoding used for the pixel payload when included.",
-          "enum": [
-            "base64",
-            "hex"
-          ],
-          "default": "base64"
-        }
-      },
-      "required": [
-        "op"
+  "properties": {
+    "op": {
+      "type": "string",
+      "enum": [
+        "capture_frame",
+        "render_petscii_art",
+        "render_petscii_text",
+        "render_sprite",
+        "render_bitmap",
+        "get_display_state"
       ],
-      "additionalProperties": false
+      "description": "Selects the operation."
     },
-    {
-      "type": "object",
-      "description": "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.",
+    "count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Number of frames to capture.",
+      "minimum": 1,
+      "maximum": 32,
+      "default": 1
+    },
+    "includePixels": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Include pixel payload bytes in the response.",
+      "default": true
+    },
+    "encoding": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Encoding used for the pixel payload when included.",
+      "enum": [
+        "base64",
+        "hex"
+      ],
+      "default": "base64"
+    },
+    "prompt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Natural language prompt describing the desired PETSCII art.",
+      "minLength": 1
+    },
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Exact text to render in PETSCII (overrides prompt derivation).",
+      "minLength": 1
+    },
+    "maxWidth": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Maximum bitmap width in pixels (1-320).",
+      "minimum": 1,
+      "maximum": 320
+    },
+    "maxHeight": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Maximum bitmap height in pixels (1-200).",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "borderColor": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Border colour index (0-15).",
+      "minimum": 0,
+      "maximum": 15
+    },
+    "backgroundColor": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Background colour index (0-15).",
+      "minimum": 0,
+      "maximum": 15
+    },
+    "foregroundColor": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Foreground colour index (0-15).",
+      "minimum": 0,
+      "maximum": 15
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "When true, skip uploading the generated BASIC program to the C64.",
+      "default": false
+    },
+    "bitmap": {
+      "description": "Explicit bitmap definition for PETSCII rendering.",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
-        "prompt": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Natural language prompt describing the desired PETSCII art.",
-          "minLength": 1
-        },
-        "text": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Exact text to render in PETSCII (overrides prompt derivation).",
-          "minLength": 1
-        },
-        "maxWidth": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum bitmap width in pixels (1-320).",
+        "width": {
+          "type": "integer",
           "minimum": 1,
           "maximum": 320
         },
-        "maxHeight": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Maximum bitmap height in pixels (1-200).",
+        "height": {
+          "type": "integer",
           "minimum": 1,
           "maximum": 200
         },
-        "borderColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Border colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15
-        },
-        "backgroundColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Background colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15
-        },
-        "foregroundColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Foreground colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15
-        },
-        "dryRun": {
-          "type": "boolean",
-          "description": "When true, skip uploading the generated BASIC program to the C64.",
-          "default": false
-        },
-        "bitmap": {
-          "description": "Explicit bitmap definition for PETSCII rendering.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "width": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 320
-            },
-            "height": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 200
-            },
-            "pixels": {
-              "type": "array",
-              "items": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 1
-              }
-            }
-          },
-          "required": [
-            "width",
-            "height",
-            "pixels"
-          ],
-          "additionalProperties": false
-        },
-        "op": {
-          "const": "render_petscii_art"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "op"
-      ]
-    },
-    {
-      "type": "object",
-      "description": "Display PETSCII text with optional border and background colours.",
-      "properties": {
-        "text": {
-          "type": "string",
-          "description": "The PETSCII text to print after clearing the screen.",
-          "minLength": 1
-        },
-        "borderColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Border colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15
-        },
-        "backgroundColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Background colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15
-        },
-        "op": {
-          "const": "render_petscii_text"
-        }
-      },
-      "required": [
-        "text",
-        "op"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "description": "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.",
-      "properties": {
-        "sprite": {
-          "description": "63-byte sprite definition provided as base64/hex string or array of bytes.",
-          "type": [
-            "string",
-            "array"
-          ],
+        "pixels": {
+          "type": "array",
           "items": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 255
-          },
-          "minItems": 63,
-          "maxItems": 63
-        },
-        "index": {
-          "type": "integer",
-          "description": "Sprite index (0-7) to configure in screen memory.",
-          "minimum": 0,
-          "maximum": 7,
-          "default": 0
-        },
-        "x": {
-          "type": "integer",
-          "description": "Sprite X position (0-511).",
-          "minimum": 0,
-          "maximum": 511,
-          "default": 100
-        },
-        "y": {
-          "type": "integer",
-          "description": "Sprite Y position (0-255).",
-          "minimum": 0,
-          "maximum": 255,
-          "default": 100
-        },
-        "color": {
-          "type": "integer",
-          "description": "Sprite colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15,
-          "default": 1
-        },
-        "multicolour": {
-          "type": "boolean",
-          "description": "Enable multicolour mode for the sprite.",
-          "default": false
-        },
-        "op": {
-          "const": "render_sprite"
+            "maximum": 1
+          }
         }
       },
       "required": [
-        "sprite",
-        "op"
+        "width",
+        "height",
+        "pixels"
       ],
       "additionalProperties": false
     },
-    {
-      "type": "object",
-      "description": "Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.",
-      "properties": {
-        "imagePath": {
-          "type": "string",
-          "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
-          "minLength": 1
-        },
-        "format": {
-          "description": "Bitmap encoding mode to generate for the VIC-II display.",
-          "type": "string",
-          "enum": [
-            "hires",
-            "multicolor"
-          ]
-        },
-        "bitmapAddress": {
-          "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
-          "type": [
-            "integer",
-            "string",
-            "null"
-          ],
-          "default": 8192
-        },
-        "screenAddress": {
-          "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
-          "type": [
-            "integer",
-            "string",
-            "null"
-          ],
-          "default": 1024
-        },
-        "borderColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Border colour index (0-15).",
-          "minimum": 0,
-          "maximum": 15,
-          "default": 0
-        },
-        "backgroundColor": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "description": "Background colour index (0-15). Used for multicolor mode and aspect-ratio padding.",
-          "minimum": 0,
-          "maximum": 15,
-          "default": 0
-        },
-        "preserveAspect": {
-          "type": "boolean",
-          "description": "Preserve the source image aspect ratio and pad with the background colour.",
-          "default": true
-        },
-        "op": {
-          "const": "render_bitmap"
-        }
-      },
-      "required": [
-        "imagePath",
-        "format",
-        "op"
+    "sprite": {
+      "description": "63-byte sprite definition provided as base64/hex string or array of bytes.",
+      "type": [
+        "string",
+        "array"
       ],
-      "additionalProperties": false
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255
+      },
+      "minItems": 63,
+      "maxItems": 63
     },
-    {
-      "type": "object",
-      "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout (VICE only).",
-      "properties": {
-        "op": {
-          "const": "get_display_state"
-        }
-      },
-      "required": [
-        "op"
+    "index": {
+      "type": "integer",
+      "description": "Sprite index (0-7) to configure in screen memory.",
+      "minimum": 0,
+      "maximum": 7,
+      "default": 0
+    },
+    "x": {
+      "type": "integer",
+      "description": "Sprite X position (0-511).",
+      "minimum": 0,
+      "maximum": 511,
+      "default": 100
+    },
+    "y": {
+      "type": "integer",
+      "description": "Sprite Y position (0-255).",
+      "minimum": 0,
+      "maximum": 255,
+      "default": 100
+    },
+    "color": {
+      "type": "integer",
+      "description": "Sprite colour index (0-15).",
+      "minimum": 0,
+      "maximum": 15,
+      "default": 1
+    },
+    "multicolour": {
+      "type": "boolean",
+      "description": "Enable multicolour mode for the sprite.",
+      "default": false
+    },
+    "imagePath": {
+      "type": "string",
+      "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
+      "minLength": 1
+    },
+    "format": {
+      "description": "Bitmap encoding mode to generate for the VIC-II display.",
+      "type": "string",
+      "enum": [
+        "hires",
+        "multicolor"
+      ]
+    },
+    "bitmapAddress": {
+      "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+      "type": [
+        "integer",
+        "string",
+        "null"
       ],
-      "additionalProperties": false
+      "default": 8192
+    },
+    "screenAddress": {
+      "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+      "type": [
+        "integer",
+        "string",
+        "null"
+      ],
+      "default": 1024
+    },
+    "preserveAspect": {
+      "type": "boolean",
+      "description": "Preserve the source image aspect ratio and pad with the background colour.",
+      "default": true
     }
+  },
+  "required": [
+    "op"
   ],
-  "discriminator": {
-    "propertyName": "op"
-  }
+  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64.\n- render_petscii_text: Display PETSCII text with optional border and background colours.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+  "additionalProperties": false
 }

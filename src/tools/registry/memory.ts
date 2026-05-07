@@ -69,7 +69,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "disassemble",
       disassembleArgsSchema.jsonSchema,
-      { description: "Disassemble a memory region into annotated 6502/6510 instructions (VICE only)." },
+      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE." },
     ),
     handler: groupedMemoryHandlers.disassemble,
   },
@@ -143,7 +143,6 @@ export const memoryModuleGroup = defineToolModule({
         variants: memoryOperations.map((operation) => operation.schema),
       }),
       tags: ["memory", "screen", "grouped"],
-      operationPlatforms: { disassemble: ["vice"] },
       examples: [
         {
           name: "Read colour RAM",
@@ -157,7 +156,7 @@ export const memoryModuleGroup = defineToolModule({
         },
         {
           name: "Disassemble entry point",
-          description: "Disassemble 20 instructions starting at $0810 (VICE only)",
+          description: "Disassemble 20 instructions starting at $0810",
           arguments: { op: "disassemble", address: "$0810", instructionCount: 20 },
         },
         {
