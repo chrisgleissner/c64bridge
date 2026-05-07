@@ -25,6 +25,7 @@ const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;
 const WAIT_READY_SCAN_LENGTH = 1_000; // full text screen
+const VICE_PING_TIMEOUT_MS = useViceMock ? 2_000 : (process.env.CI === "1" ? 40_000 : 20_000);
 const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
 
 function delay(ms) {
@@ -206,7 +207,7 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
   await t.test("ping succeeds", async () => {
     assert.equal(
       await waitForTruthy(() => facade.ping(), {
-        timeoutMs: useViceMock ? 2_000 : 20_000,
+        timeoutMs: VICE_PING_TIMEOUT_MS,
         intervalMs: useViceMock ? 50 : 250,
         description: "VICE ping",
       }),
@@ -277,7 +278,7 @@ viceSuite("device: ViceBackend basic operations", async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     assert.equal(
       await waitForTruthy(() => facade.ping(), {
-        timeoutMs: useViceMock ? 2_000 : 20_000,
+        timeoutMs: VICE_PING_TIMEOUT_MS,
         intervalMs: useViceMock ? 50 : 250,
         description: "VICE reconnect ping",
       }),
