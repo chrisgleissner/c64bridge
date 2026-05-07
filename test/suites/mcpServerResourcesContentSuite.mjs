@@ -22,6 +22,8 @@ const EXPECTED_RESOURCE_URIS = [
   // Orientation
   "c64://context/bootstrap",
   "c64://context/fast-paths",
+  // VICE emulator
+  "c64://docs/vice/binary-monitor-spec",
   // Languages
   "c64://specs/basic",
   "c64://docs/basic/pitfalls",

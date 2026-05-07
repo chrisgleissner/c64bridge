@@ -2,6 +2,7 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import fs from "node:fs";
 import net from "node:net";
 import { createOutputTailCapture, getDiagnosticsSessionInfo, writeDiagnosticEvent } from "../diagnostics.js";
+import { ViceClient } from "./viceClient.js";
 
 export interface ViceProcessOptions {
   binary: string;
@@ -123,33 +124,16 @@ async function sendResumeMonitorCommand(host: string, port: number, timeoutMs = 
   let lastError: unknown;
 
   while (Date.now() < deadline) {
+    const client = new ViceClient();
     try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = net.connect({ host, port }, () => {
-          const packet = Buffer.alloc(11);
-          packet[0] = 0x02;
-          packet[1] = 0x02;
-          packet.writeUInt32LE(0, 2);
-          packet.writeUInt32LE(1, 6);
-          packet[10] = 0xAA;
-          socket.write(packet, (error) => {
-            if (error) {
-              reject(error);
-              return;
-            }
-            socket.end();
-            resolve();
-          });
-        });
-        socket.on("error", reject);
-        socket.setTimeout(300, () => {
-          socket.destroy(new Error("timeout"));
-        });
-      });
+      await client.connect(port, host);
+      await client.exitMonitor();
       return;
     } catch (error) {
       lastError = error;
       await delay(50);
+    } finally {
+      client.close();
     }
   }
 

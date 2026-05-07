@@ -10,6 +10,7 @@ const expectedResources = [
   { uri: "c64://docs/index", domain: "overview", priority: "critical", includeInIndex: true },
   { uri: "c64://context/bootstrap", domain: "orientation", priority: "critical", includeInIndex: true },
   { uri: "c64://context/fast-paths", domain: "orientation", priority: "critical", includeInIndex: true },
+  { uri: "c64://docs/vice/binary-monitor-spec", domain: "vice", priority: "critical", includeInIndex: true },
   { uri: "c64://specs/basic", domain: "languages", priority: "critical", includeInIndex: true },
   { uri: "c64://docs/basic/pitfalls", domain: "languages", priority: "reference", includeInIndex: true },
   { uri: "c64://specs/assembly", domain: "languages", priority: "critical", includeInIndex: true },

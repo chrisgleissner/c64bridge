@@ -96,6 +96,7 @@ const ROUTING_CORE_SEGMENT: PromptSegment = {
   content: [
     "Prompts in this repository define intent and routing only.",
     "Execution logic, validation steps, and safety rules live exclusively in `.github/skills/*/SKILL.md`.",
+    "When the request targets the `vice` backend, read `c64://docs/vice/binary-monitor-spec` before executing the skill so Binary Monitor single-client behaviour, trap/resume semantics, and monitor-side side effects stay in scope.",
     "Use the referenced skill, extract missing inputs from the user request, execute the skill, and summarize the outcome.",
   ].join("\n"),
 };

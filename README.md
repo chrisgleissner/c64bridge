@@ -596,7 +596,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **15 tools**, **26 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **15 tools**, **27 resources**, and **10 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -806,6 +806,7 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://docs/index` | Explains how to approach each knowledge bundle and when to consult it. |
 | `c64://context/bootstrap` | Step-by-step rules for safe automation, verification, and rollback on the C64. |
 | `c64://context/fast-paths` | Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition. |
+| `c64://docs/vice/binary-monitor-spec` | Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations. |
 | `c64://specs/basic` | Token definitions, syntax rules, and device I/O guidance for BASIC v2. |
 | `c64://docs/basic/pitfalls` | Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps. |
 | `c64://specs/assembly` | Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU. |

@@ -96,7 +96,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     title: "Workflow & Orientation",
     summary: "Mandatory workflow and safety guidance before issuing any C64 commands.",
     prompts: ["basic-program", "assembly-program", "memory-debug", "cross-platform-demo", "preset-music-demo"],
-  tools: ["upload_run_basic", "upload_run_asm", "cross_platform_greeting", "music_play_preset", "read_screen", "read"],
+    tools: ["upload_run_basic", "upload_run_asm", "cross_platform_greeting", "music_play_preset", "read_screen", "read"],
     resources: [
       {
         uri: "c64://context/bootstrap",
@@ -124,11 +124,56 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     ],
   },
   {
+    id: "vice",
+    title: "VICE Emulator",
+    summary: "Critical Binary Monitor protocol guidance for any workflow that targets the VICE backend.",
+    prompts: [
+      "hello-world",
+      "basic-program",
+      "cross-platform-demo",
+      "preset-music-demo",
+      "assembly-program",
+      "sid-music",
+      "graphics-demo",
+      "memory-debug",
+      "drive-manager",
+    ],
+    tools: ["c64_program", "c64_memory", "c64_debug", "c64_vice", "c64_system"],
+    resources: [
+      {
+        uri: "c64://docs/vice/binary-monitor-spec",
+        name: "VICE Binary Monitor Specification",
+        description: "Critical VICE Binary Monitor reference for emulator-backed workflows and debugger operations.",
+        relativePath: "data/vice/vice-binary-monitor-spec.md",
+        priority: "critical",
+        summary: "Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations.",
+        prompts: [
+          "hello-world",
+          "basic-program",
+          "cross-platform-demo",
+          "preset-music-demo",
+          "assembly-program",
+          "sid-music",
+          "graphics-demo",
+          "memory-debug",
+          "drive-manager",
+        ],
+        tools: ["c64_program", "c64_memory", "c64_debug", "c64_vice", "c64_system"],
+        relatedResources: [
+          "c64://context/bootstrap",
+          "c64://context/fast-paths",
+          "c64://platform/status",
+        ],
+        tags: ["vice", "binary-monitor", "emulator", "debugger"],
+      },
+    ],
+  },
+  {
     id: "languages",
     title: "Programming Languages",
     summary: "Language references required before generating BASIC or 6502 assembly programs.",
     prompts: ["basic-program", "assembly-program"],
-  tools: ["upload_run_basic", "upload_run_asm", "read_screen", "read"],
+    tools: ["upload_run_basic", "upload_run_asm", "read_screen", "read"],
     resources: [
       {
         uri: "c64://specs/basic",

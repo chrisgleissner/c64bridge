@@ -127,6 +127,24 @@ test("discriminatedUnionSchema supports custom discriminator names", () => {
   assert.deepEqual(union.required, ["mode"]);
 });
 
+test("discriminatedUnionSchema keeps merged properties when variants omit discriminator constants", () => {
+  const union = discriminatedUnionSchema({
+    variants: [
+      {
+        type: "object",
+        properties: {
+          payload: { type: "string" },
+        },
+      },
+    ],
+  });
+
+  assert.equal(union.properties.op.type, "string");
+  assert.equal(union.properties.op.enum, undefined);
+  assert.equal(union.description, undefined);
+  assert.deepEqual(union.properties.payload, { type: "string" });
+});
+
 test("createOperationDispatcher routes to matching handlers", async () => {
   const calls = [];
 

@@ -30,6 +30,7 @@ test("promptRegistry.resolve resolves a basic prompt", () => {
   assert.ok(Array.isArray(result.tools), "should have tools");
   assert.equal(result.resources.some((resource) => resource.uri === "c64://context/fast-paths"), true);
   assert.equal(result.messages.some((message) => message.content.includes(".github/skills/basic-program/SKILL.md")), true);
+  assert.equal(result.messages.some((message) => message.content.includes("c64://docs/vice/binary-monitor-spec")), true);
 });
 
 test("promptRegistry.resolve exposes the cross-platform demo prompt", () => {
@@ -39,6 +40,7 @@ test("promptRegistry.resolve exposes the cross-platform demo prompt", () => {
   assert.equal(result.tools.length, 1);
   assert.equal(result.tools[0]?.name, "c64_program");
   assert.equal(result.resources.some((resource) => resource.uri === "c64://context/fast-paths"), true);
+  assert.equal(result.messages.some((message) => message.content.includes("c64://docs/vice/binary-monitor-spec")), true);
 });
 
 test("promptRegistry.resolve exposes the preset music demo prompt", () => {

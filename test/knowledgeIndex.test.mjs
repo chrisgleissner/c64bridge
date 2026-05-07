@@ -24,6 +24,11 @@ test("listKnowledgeResources returns expected resources including charset", () =
   const fastPathResource = resources.find((r) => r.uri === "c64://context/fast-paths");
   assert.ok(fastPathResource, "should include fast-path workflow resource");
   assert.equal(fastPathResource.metadata.priority, "critical");
+
+  const viceMonitorResource = resources.find((r) => r.uri === "c64://docs/vice/binary-monitor-spec");
+  assert.ok(viceMonitorResource, "should include VICE Binary Monitor resource");
+  assert.equal(viceMonitorResource.metadata.priority, "critical");
+  assert.equal(viceMonitorResource.metadata.domain, "vice");
 });
 
 test("readKnowledgeResource returns fast-path workflow guidance", () => {
@@ -66,6 +71,16 @@ test("readKnowledgeResource returns file-backed resource content", () => {
   assert.equal(result.mimeType, "text/markdown");
   assert.ok(typeof result.text === "string", "should return text content");
   assert.ok(result.text.length > 100, "should have substantial content");
+});
+
+test("readKnowledgeResource returns VICE Binary Monitor reference", () => {
+  const result = readKnowledgeResource("c64://docs/vice/binary-monitor-spec", projectRoot);
+
+  assert.ok(result, "should return a result");
+  assert.equal(result.uri, "c64://docs/vice/binary-monitor-spec");
+  assert.equal(result.mimeType, "text/markdown");
+  assert.ok(result.text.includes("# VICE Binary Monitor Specification"), "should include the VICE monitor title");
+  assert.ok(result.text.includes("dedicated connection configured with `-binarymonitor`") || result.text.includes("Commands may cause asynchronous monitor-entry events"), "should mention Binary Monitor protocol constraints");
 });
 
 test("readKnowledgeResource returns undefined for unknown URI", () => {

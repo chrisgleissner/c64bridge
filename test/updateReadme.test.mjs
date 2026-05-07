@@ -116,6 +116,44 @@ describe("update-readme grouped operations", () => {
     expect(output).toContain("_No operations defined._");
   });
 
+  it("renders flattened grouped schemas produced for Claude-compatible tools", () => {
+    const output = renderToolsSection([
+      {
+        tools: [
+          {
+            name: "c64_flattened",
+            description: "Flattened grouped tool.",
+            inputSchema: {
+              type: "object",
+              description: [
+                "Flattened operations for Claude.",
+                "",
+                "Operations:",
+                "- upload: Upload bytes into memory.",
+                "- probe: Probe emulator state.",
+              ].join("\n"),
+              properties: {
+                op: { type: "string", enum: ["upload", "probe"] },
+                payload: { type: "string", description: "Payload" },
+                verifyWrite: { type: "boolean", description: "Verify write" },
+              },
+              required: ["op"],
+              additionalProperties: false,
+            },
+            metadata: {
+              platforms: ["c64u", "vice"],
+              operationPlatforms: { upload: ["c64u"] },
+            },
+          },
+        ],
+      },
+    ]).join("\n");
+
+    expect(output).toContain("#### c64_flattened");
+    expect(output).toContain("| `upload` | Upload bytes into memory. | — | supports verify | ✅ |  |");
+    expect(output).toContain("| `probe` | Probe emulator state. | — | supports verify | ✅ | ✅ |");
+  });
+
   it("escapes tables and updates the generated README section", async () => {
     expect(renderTable(["A", "B"], [["left|side", "line1\nline2"]])).toContain("left|side");
 

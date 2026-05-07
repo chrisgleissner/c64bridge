@@ -80,6 +80,53 @@
       }
     },
     {
+      "name": "VICE Binary Monitor Specification",
+      "uri": "c64://docs/vice/binary-monitor-spec",
+      "description": "Critical VICE Binary Monitor reference for emulator-backed workflows and debugger operations.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "vice",
+        "priority": "critical",
+        "summary": "Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations.",
+        "prompts": [
+          "hello-world",
+          "basic-program",
+          "cross-platform-demo",
+          "preset-music-demo",
+          "assembly-program",
+          "sid-music",
+          "graphics-demo",
+          "memory-debug",
+          "drive-manager"
+        ],
+        "tools": [
+          "c64_program",
+          "c64_memory",
+          "c64_debug",
+          "c64_vice",
+          "c64_system"
+        ],
+        "tags": [
+          "vice",
+          "binary-monitor",
+          "emulator",
+          "debugger"
+        ],
+        "bundle": {
+          "id": "vice",
+          "title": "VICE Emulator",
+          "summary": "Critical Binary Monitor protocol guidance for any workflow that targets the VICE backend.",
+          "order": 1
+        },
+        "order": 0,
+        "relatedResources": [
+          "c64://context/bootstrap",
+          "c64://context/fast-paths",
+          "c64://platform/status"
+        ]
+      }
+    },
+    {
       "name": "Commodore BASIC v2 Specification",
       "uri": "c64://specs/basic",
       "description": "Complete BASIC v2 reference. READ THIS BEFORE generating any BASIC code!",
@@ -103,7 +150,7 @@
           "id": "languages",
           "title": "Programming Languages",
           "summary": "Language references required before generating BASIC or 6502 assembly programs.",
-          "order": 1
+          "order": 2
         },
         "order": 0,
         "relatedResources": [
@@ -136,7 +183,7 @@
           "id": "languages",
           "title": "Programming Languages",
           "summary": "Language references required before generating BASIC or 6502 assembly programs.",
-          "order": 1
+          "order": 2
         },
         "order": 1,
         "relatedResources": [
@@ -168,7 +215,7 @@
           "id": "languages",
           "title": "Programming Languages",
           "summary": "Language references required before generating BASIC or 6502 assembly programs.",
-          "order": 1
+          "order": 2
         },
         "order": 2,
         "relatedResources": [
@@ -199,7 +246,7 @@
           "id": "audio",
           "title": "SID & Audio",
           "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 2
+          "order": 3
         },
         "order": 0,
         "relatedResources": [
@@ -231,7 +278,7 @@
           "id": "audio",
           "title": "SID & Audio",
           "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 2
+          "order": 3
         },
         "order": 1,
         "relatedResources": [
@@ -263,7 +310,7 @@
           "id": "audio",
           "title": "SID & Audio",
           "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 2
+          "order": 3
         },
         "order": 2,
         "relatedResources": [
@@ -296,7 +343,7 @@
           "id": "audio",
           "title": "SID & Audio",
           "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 2
+          "order": 3
         },
         "order": 3,
         "relatedResources": [
@@ -329,7 +376,7 @@
           "id": "graphics",
           "title": "Graphics & VIC-II",
           "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 3
+          "order": 4
         },
         "order": 0,
         "relatedResources": [
@@ -363,7 +410,7 @@
           "id": "graphics",
           "title": "Graphics & VIC-II",
           "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 3
+          "order": 4
         },
         "order": 1,
         "relatedResources": [
@@ -397,7 +444,7 @@
           "id": "graphics",
           "title": "Graphics & VIC-II",
           "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 3
+          "order": 4
         },
         "order": 2,
         "relatedResources": [
@@ -434,7 +481,7 @@
           "id": "graphics",
           "title": "Graphics & VIC-II",
           "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 3
+          "order": 4
         },
         "order": 3,
         "relatedResources": [
@@ -471,7 +518,7 @@
           "id": "memory",
           "title": "Memory & I/O Reference",
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 4
+          "order": 5
         },
         "order": 0,
         "relatedResources": [
@@ -505,7 +552,7 @@
           "id": "memory",
           "title": "Memory & I/O Reference",
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 4
+          "order": 5
         },
         "order": 1,
         "relatedResources": [
@@ -539,7 +586,7 @@
           "id": "memory",
           "title": "Memory & I/O Reference",
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 4
+          "order": 5
         },
         "order": 2,
         "relatedResources": [
@@ -576,7 +623,7 @@
           "id": "memory",
           "title": "Memory & I/O Reference",
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 4
+          "order": 5
         },
         "order": 3,
         "relatedResources": [
@@ -612,7 +659,7 @@
           "id": "memory",
           "title": "Memory & I/O Reference",
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 4
+          "order": 5
         },
         "order": 4,
         "relatedResources": [
@@ -646,7 +693,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 0,
         "relatedResources": [
@@ -679,7 +726,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 1,
         "relatedResources": [
@@ -712,7 +759,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 2,
         "relatedResources": [
@@ -745,7 +792,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 3,
         "relatedResources": [
@@ -777,7 +824,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 4,
         "relatedResources": [
@@ -810,7 +857,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 5,
         "relatedResources": [
@@ -842,7 +889,7 @@
           "id": "printer",
           "title": "Printers & Hardcopy",
           "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 5
+          "order": 6
         },
         "order": 6,
         "relatedResources": [
@@ -892,6 +939,7 @@
         "relatedResources": [
           "c64://context/bootstrap",
           "c64://context/fast-paths",
+          "c64://docs/vice/binary-monitor-spec",
           "c64://specs/basic",
           "c64://docs/basic/pitfalls",
           "c64://specs/assembly",
