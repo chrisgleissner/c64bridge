@@ -8,7 +8,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
-const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
+const tsLoader = "tsx/esm";
 
 function formatTransportError(error) {
   if (error instanceof Error) {
@@ -40,7 +40,7 @@ export async function createConnectedClient(options = {}) {
   const command = useBunRunner ? resolveBunExecutable() : resolveNodeExecutable();
   const args = useBunRunner
     ? [serverEntrypointTs]
-    : ["--import", registerDataUri, serverEntrypointTs];
+    : ["--import", tsLoader, serverEntrypointTs];
 
   const transport = new StdioClientTransport({
     command,

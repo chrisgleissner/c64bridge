@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 export const DEFAULT_TARGET = "mock";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const registerDataUri = "data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));";
+const tsLoader = "tsx/esm";
 const { nodeArgs, target, explicitBaseUrl } = buildNodeTestArgs(process.argv.slice(2));
 const defaultEmbeddingsDir = path.join(repoRoot, "artifacts", "test-embeddings");
 if (!fs.existsSync(defaultEmbeddingsDir)) {
@@ -180,7 +180,7 @@ function isMainModule(moduleUrl) {
 
 export function buildNodeTestArgs(args, root = repoRoot) {
   const defaultTestFiles = listRepoTestFiles(path.join(root, "test"), root);
-  const nodeArgs = ["--import", registerDataUri, "--test"];
+  const nodeArgs = ["--import", tsLoader, "--test"];
   let target = DEFAULT_TARGET;
   let explicitBaseUrl = null;
   let hasExplicitTestFiles = false;

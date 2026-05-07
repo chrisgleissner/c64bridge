@@ -62,24 +62,24 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.20.2",
-    "axios": "^1.7.7",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.16.0",
     "date-fns": "^4.1.0",
-    "fastify": "^5.6.1",
-    "jimp": "^1.6.0",
-    "meyda": "^5.6.2",
-    "octokit": "^5.0.4",
-    "pitchfinder": "^2.2.0",
+    "fastify": "^5.8.5",
+    "jimp": "^1.6.1",
+    "meyda": "^5.6.3",
+    "octokit": "^5.0.5",
+    "pitchfinder": "^2.3.4",
     "reflect-metadata": "^0.2.2",
-    "yaml": "^2.6.0"
+    "yaml": "^2.8.4"
   },
   "optionalDependencies": {
     "naudiodon": "^2.3.6"
   },
   "devDependencies": {
-    "@types/node": "^24.12.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
   },
   "files": [
     "mcp.json",

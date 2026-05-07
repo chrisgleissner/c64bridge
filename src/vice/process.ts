@@ -2,7 +2,6 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import fs from "node:fs";
 import net from "node:net";
 import { createOutputTailCapture, getDiagnosticsSessionInfo, writeDiagnosticEvent } from "../diagnostics.js";
-import { ViceClient } from "./viceClient.js";
 
 export interface ViceProcessOptions {
   binary: string;
@@ -124,16 +123,43 @@ async function sendResumeMonitorCommand(host: string, port: number, timeoutMs = 
   let lastError: unknown;
 
   while (Date.now() < deadline) {
-    const client = new ViceClient();
     try {
-      await client.connect(port, host);
-      await client.exitMonitor();
+      await new Promise<void>((resolve, reject) => {
+        const socket = net.connect({ host, port });
+        const cleanup = () => {
+          socket.removeAllListeners();
+          socket.destroy();
+        };
+        const packet = Buffer.alloc(11);
+        packet[0] = 0x02;
+        packet[1] = 0x02;
+        packet.writeUInt32LE(0, 2);
+        packet.writeUInt32LE(1, 6);
+        packet[10] = 0xaa;
+
+        socket.setTimeout(500, () => {
+          cleanup();
+          reject(new Error(`Timed out sending VICE monitor resume command to ${host}:${port}`));
+        });
+        socket.once("error", (error) => {
+          cleanup();
+          reject(error);
+        });
+        socket.once("connect", () => {
+          socket.write(packet, (error) => {
+            cleanup();
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+      });
       return;
     } catch (error) {
       lastError = error;
       await delay(50);
-    } finally {
-      client.close();
     }
   }
 
