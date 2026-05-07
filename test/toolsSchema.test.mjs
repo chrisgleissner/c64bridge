@@ -49,6 +49,49 @@ test("string schema validation", async (t) => {
   await assertThrowsValidation(() => schema.parse(42, "$.value"), /Expected a string/);
 });
 
+test("schema builders expose rich json schema metadata", () => {
+  const str = stringSchema({
+    description: "Video mode",
+    minLength: 1,
+    maxLength: 4,
+    pattern: /^[A-Z]+$/,
+    enum: ["PAL", "NTSC"],
+    default: "PAL",
+  });
+  const num = numberSchema({ description: "Count", minimum: 1, maximum: 10, default: 2 });
+  const int = integerSchema({ description: "Index", minimum: 0, maximum: 3, default: 1 });
+  const bool = booleanSchema({ description: "Enabled", default: true });
+
+  assert.deepEqual(str.jsonSchema, {
+    type: "string",
+    description: "Video mode",
+    minLength: 1,
+    maxLength: 4,
+    pattern: "^[A-Z]+$",
+    enum: ["PAL", "NTSC"],
+    default: "PAL",
+  });
+  assert.deepEqual(num.jsonSchema, {
+    type: "number",
+    description: "Count",
+    minimum: 1,
+    maximum: 10,
+    default: 2,
+  });
+  assert.deepEqual(int.jsonSchema, {
+    type: "integer",
+    description: "Index",
+    minimum: 0,
+    maximum: 3,
+    default: 1,
+  });
+  assert.deepEqual(bool.jsonSchema, {
+    type: "boolean",
+    description: "Enabled",
+    default: true,
+  });
+});
+
 test("number schema validation", async () => {
   const schema = numberSchema({ minimum: 0, maximum: 10 });
   assert.equal(schema.parse(3), 3);
@@ -63,6 +106,8 @@ test("number schema validation", async () => {
   const defaultSchema = numberSchema({ default: 7 });
   assert.equal(defaultSchema.parse(undefined), 7);
   await assertThrowsValidation(() => schema.parse("3"), /Expected a number/);
+  await assertThrowsValidation(() => schema.parse(Number.NaN), /Expected a number/);
+  await assertThrowsValidation(() => schema.parse(Number.POSITIVE_INFINITY), /Expected a number/);
 });
 
 test("boolean and literal schemas", async () => {
@@ -76,6 +121,10 @@ test("boolean and literal schemas", async () => {
   const literal = literalSchema("RUN");
   assert.equal(literal.parse("RUN"), "RUN");
   await assertThrowsValidation(() => literal.parse("STOP"), /literal/);
+
+  const describedLiteral = literalSchema(true, "Toggle");
+  assert.deepEqual(describedLiteral.jsonSchema, { const: true, description: "Toggle" });
+  assert.equal(describedLiteral.parse(true), true);
 });
 
 test("array schema validation", async () => {
@@ -112,6 +161,20 @@ test("optional schema exposes null-aware json schema and inherits defaults", () 
   assert.equal(optional.parse(null), "READY");
 });
 
+test("optional schema preserves existing null unions and explicit defaults", () => {
+  const custom = {
+    jsonSchema: { type: ["string", "null"], default: "A" },
+    parse(value) {
+      return value === undefined || value === null ? "A" : String(value);
+    },
+  };
+
+  const optional = optionalSchema(custom, "B");
+  assert.deepEqual(optional.jsonSchema.type, ["string", "null"]);
+  assert.equal(optional.jsonSchema.default, "B");
+  assert.equal(optional.parse(undefined), "B");
+});
+
 test("object schema validation", async () => {
   const schema = objectSchema({
     description: "Example payload",
@@ -141,6 +204,15 @@ test("object schema can preserve additional properties", () => {
 
   const parsed = schema.parse({ name: "tool", extra: { ok: true }, count: 2 });
   assert.deepEqual(parsed, { name: "tool", extra: { ok: true }, count: 2 });
+});
+
+test("object schema defaults additionalProperties to false", async () => {
+  const schema = objectSchema({
+    properties: { name: stringSchema() },
+  });
+
+  assert.equal(schema.jsonSchema.additionalProperties, false);
+  await assertThrowsValidation(() => schema.parse({ name: "tool", extra: true }), /Unexpected property/);
 });
 
 test("object schema applies defaults when optional provided", () => {

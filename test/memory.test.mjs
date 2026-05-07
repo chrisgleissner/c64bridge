@@ -500,6 +500,173 @@ test("write records pre-read mismatches when abortOnMismatch is false", async ()
   assert.ok(mismatches.length > 0);
 });
 
+test("write verification uses masks and skips pause on vice", async () => {
+  const events = [];
+  const ctx = {
+    client: createMockClient({
+      readCount: 0,
+      async pause() {
+        events.push("pause");
+        return { success: true };
+      },
+      async resume() {
+        events.push("resume");
+        return { success: true };
+      },
+      async readMemory(_address, length) {
+        this.readCount += 1;
+        return {
+          success: true,
+          data: this.readCount === 1 ? "$0F0F" : "$AABB",
+          details: { address: "0400", length: Number(length) },
+        };
+      },
+      async writeMemory() {
+        events.push("write");
+        return { success: true, details: { address: "0400", length: 2 } };
+      },
+    }),
+    logger: createLogger(),
+    platform: { id: "vice", features: [], limitedFeatures: [] },
+  };
+
+  const res = await memoryModule.invoke("write", {
+    address: "$0400",
+    bytes: "$AABB",
+    expected: "$FFFF",
+    mask: "$0000",
+    verify: true,
+  }, ctx);
+
+  assert.equal(res.isError, undefined);
+  assert.equal(res.metadata?.verified, true);
+  assert.equal(res.metadata?.paused, false);
+  assert.equal(res.metadata?.verification?.mask, "$0000");
+  assert.deepEqual(events, ["write"]);
+});
+
+testC64uOnly("write verification fails when pause fails", async () => {
+  const ctx = {
+    client: createMockClient({
+      async pause() {
+        return { success: false, details: "pause failed" };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA", verify: true }, ctx);
+
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+});
+
+testC64uOnly("write verification handles malformed firmware reads and writeback failures", async () => {
+  const loggerCalls = [];
+  const baseLogger = createLogger();
+  const ctx = {
+    client: createMockClient({
+      readCount: 0,
+      async pause() { return { success: true }; },
+      async resume() { return { success: false, details: "resume failed" }; },
+      async readMemory(_address, length) {
+        this.readCount += 1;
+        if (this.readCount === 1) {
+          return { success: true, data: "$ABC", details: { address: "0400", length: Number(length) } };
+        }
+        return { success: true, data: "$AA", details: { address: "0400", length: Number(length) } };
+      },
+    }),
+    logger: {
+      ...baseLogger,
+      warn(message, details) {
+        loggerCalls.push({ message, details });
+      },
+    },
+  };
+
+  const malformedPreRead = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA", verify: true }, ctx);
+  assert.equal(malformedPreRead.isError, true);
+  assert.equal(malformedPreRead.metadata?.error?.kind, "execution");
+  assert.ok(loggerCalls.some((entry) => entry.message.includes("resume reported failure")));
+
+  const postReadFailureCtx = {
+    client: createMockClient({
+      readCount: 0,
+      async pause() { return { success: true }; },
+      async resume() { return { success: true }; },
+      async readMemory(_address, length) {
+        this.readCount += 1;
+        if (this.readCount === 1) {
+          return { success: true, data: "$00", details: { address: "0400", length: Number(length) } };
+        }
+        return { success: false, details: "post-read failed" };
+      },
+      async writeMemory() {
+        return { success: true, details: { address: "0400", length: 1 } };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const postReadFailure = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA", verify: true }, postReadFailureCtx);
+  assert.equal(postReadFailure.isError, true);
+  assert.equal(postReadFailure.metadata?.error?.kind, "execution");
+
+  const writeFailureCtx = {
+    client: createMockClient({
+      async pause() { return { success: true }; },
+      async resume() { return { success: true }; },
+      async readMemory(_address, length) {
+        return { success: true, data: "$00", details: { address: "0400", length: Number(length) } };
+      },
+      async writeMemory() {
+        return { success: false, details: "write failed" };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const writeFailure = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA", verify: true }, writeFailureCtx);
+  assert.equal(writeFailure.isError, true);
+  assert.equal(writeFailure.metadata?.error?.kind, "execution");
+});
+
+testC64uOnly("write verification handles thrown resume errors and malformed post-read payloads", async () => {
+  const loggerCalls = [];
+  const ctx = {
+    client: createMockClient({
+      readCount: 0,
+      async pause() { return { success: true }; },
+      async resume() {
+        throw new Error("resume exploded");
+      },
+      async readMemory(_address, length) {
+        this.readCount += 1;
+        if (this.readCount === 1) {
+          return { success: true, data: "$00", details: { address: "0400", length: Number(length) } };
+        }
+        return { success: true, data: "$ABC", details: { address: "0400", length: Number(length) } };
+      },
+      async writeMemory() {
+        return { success: true, details: { address: "0400", length: 1 } };
+      },
+    }),
+    logger: {
+      ...createLogger(),
+      warn(message, details) {
+        loggerCalls.push({ message, details });
+      },
+    },
+  };
+
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA", verify: true }, ctx);
+
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+  assert.ok(loggerCalls.some((entry) => entry.message.includes("Failed to resume C64 after write")));
+});
+
 test("write fails when post-write verification detects differences", async () => {
   const ctx = {
     client: createMockClient({
