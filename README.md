@@ -276,7 +276,7 @@ Prompt illustration (issued via Copilot in VS Code, using GPT 5.4 Medium):
 c64u: write a small BASIC program that clears the screen and prints HELLO C64U
 ```
 
-```
+```text
 vice: write a small BASIC program that clears the screen and prints HELLO VICE
 ```
 
