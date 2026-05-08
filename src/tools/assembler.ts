@@ -84,7 +84,7 @@ type DirectiveArg =
 type Operand =
   | { kind: "none" }
   | { kind: "immediate"; expr: Expression }
-  | { kind: "expression"; expr: Expression; register?: "X" | "Y" }
+  | { kind: "expression"; expr: Expression; register?: "X" | "Y" | "S" }
   | { kind: "indirect"; expr: Expression; register?: "X" | "Y" }
   | { kind: "accumulator" };
 
@@ -120,6 +120,7 @@ enum AddressingMode {
   ZeroPage = "zeroPage",
   ZeroPageX = "zeroPageX",
   ZeroPageY = "zeroPageY",
+  ZeroPageS = "zeroPageS",
   Absolute = "absolute",
   AbsoluteX = "absoluteX",
   AbsoluteY = "absoluteY",
@@ -710,7 +711,19 @@ function parseOperand(stream: TokenStream): Operand {
 
   if (first.kind === "punct" && first.value === "(") {
     stream.consumePunct("(");
-    const expr = parseExpression(stream, new Set<string>([")"]));
+    const expr = parseExpression(stream, new Set<string>([",", ")"]));
+    if (stream.peek()?.kind === "punct" && stream.peek()?.value === ",") {
+      stream.consumePunct(",");
+      const register = stream.consumeSymbol("Expected X before ')'").toUpperCase();
+      if (register !== "X") {
+        throw new Error("Only X is allowed inside pre-indexed indirect operands");
+      }
+      stream.consumePunct(")", "Expected ')' to close indirect operand");
+      if (!stream.isAtEnd()) {
+        throw new Error("Unexpected tokens after indirect operand");
+      }
+      return { kind: "indirect", expr, register: "X" };
+    }
     stream.consumePunct(")", "Expected ')' to close indirect operand");
 
     if (stream.isAtEnd()) {
@@ -741,9 +754,9 @@ function parseOperand(stream: TokenStream): Operand {
   const next = stream.peek();
   if (next && next.kind === "punct" && next.value === ",") {
     stream.consumePunct(",");
-    const register = stream.consumeSymbol("Expected X or Y after comma").toUpperCase();
-    if (register !== "X" && register !== "Y") {
-      throw new Error("Only X or Y are allowed after comma");
+    const register = stream.consumeSymbol("Expected X, Y, or S after comma").toUpperCase();
+    if (register !== "X" && register !== "Y" && register !== "S") {
+      throw new Error("Only X, Y, or S are allowed after comma");
     }
     return { kind: "expression", expr, register };
   }
@@ -1035,6 +1048,7 @@ class Assembler {
       case AddressingMode.ZeroPage:
       case AddressingMode.ZeroPageX:
       case AddressingMode.ZeroPageY:
+      case AddressingMode.ZeroPageS:
       case AddressingMode.IndirectX:
       case AddressingMode.IndirectY:
         this.writeByte(info.value ?? 0, location);
@@ -1272,6 +1286,10 @@ function chooseAddressingMode(
         if (available.has(AddressingMode.AbsoluteY)) {
           return AddressingMode.AbsoluteY;
         }
+      } else if (register === "S") {
+        if (available.has(AddressingMode.ZeroPageS)) {
+          return AddressingMode.ZeroPageS;
+        }
       } else {
         if (available.has(AddressingMode.ZeroPage) && value !== undefined && fitsByte(value)) {
           return AddressingMode.ZeroPage;
@@ -1300,6 +1318,7 @@ function instructionSize(mode: AddressingMode): number {
     case AddressingMode.ZeroPage:
     case AddressingMode.ZeroPageX:
     case AddressingMode.ZeroPageY:
+    case AddressingMode.ZeroPageS:
     case AddressingMode.IndirectX:
     case AddressingMode.IndirectY:
     case AddressingMode.Relative:
@@ -1336,6 +1355,7 @@ function normalizeOperandValue(
     case AddressingMode.ZeroPage:
     case AddressingMode.ZeroPageX:
     case AddressingMode.ZeroPageY:
+    case AddressingMode.ZeroPageS:
     case AddressingMode.IndirectX:
     case AddressingMode.IndirectY:
       if (value === undefined) return undefined;
@@ -1392,7 +1412,10 @@ function buildInstructionTable(): Map<string, Map<AddressingMode, number>> {
     if (!table.has(mnemonic)) {
       table.set(mnemonic, new Map());
     }
-    table.get(mnemonic)!.set(entry.mode, entry.opcode);
+    const modes = table.get(mnemonic)!;
+    if (!modes.has(entry.mode)) {
+      modes.set(entry.mode, entry.opcode);
+    }
   }
   return table;
 }
@@ -1549,6 +1572,111 @@ const INSTRUCTION_DATA: InstructionInfo[] = [
   { mnemonic: "TXA", mode: AddressingMode.Implied, opcode: 0x8a },
   { mnemonic: "TXS", mode: AddressingMode.Implied, opcode: 0x9a },
   { mnemonic: "TYA", mode: AddressingMode.Implied, opcode: 0x98 },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x02 },
+  { mnemonic: "SLO", mode: AddressingMode.IndirectX, opcode: 0x03 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPage, opcode: 0x04 },
+  { mnemonic: "SLO", mode: AddressingMode.ZeroPage, opcode: 0x07 },
+  { mnemonic: "ANC", mode: AddressingMode.Immediate, opcode: 0x0b },
+  { mnemonic: "NOP", mode: AddressingMode.Absolute, opcode: 0x0c },
+  { mnemonic: "SLO", mode: AddressingMode.Absolute, opcode: 0x0f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x12 },
+  { mnemonic: "SLO", mode: AddressingMode.IndirectY, opcode: 0x13 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPageX, opcode: 0x14 },
+  { mnemonic: "SLO", mode: AddressingMode.ZeroPageX, opcode: 0x17 },
+  { mnemonic: "NOP", mode: AddressingMode.Implied, opcode: 0x1a },
+  { mnemonic: "SLO", mode: AddressingMode.AbsoluteY, opcode: 0x1b },
+  { mnemonic: "NOP", mode: AddressingMode.AbsoluteX, opcode: 0x1c },
+  { mnemonic: "SLO", mode: AddressingMode.AbsoluteX, opcode: 0x1f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x22 },
+  { mnemonic: "RLA", mode: AddressingMode.IndirectX, opcode: 0x23 },
+  { mnemonic: "RLA", mode: AddressingMode.ZeroPage, opcode: 0x27 },
+  { mnemonic: "ANC", mode: AddressingMode.Immediate, opcode: 0x2b },
+  { mnemonic: "RLA", mode: AddressingMode.Absolute, opcode: 0x2f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x32 },
+  { mnemonic: "RLA", mode: AddressingMode.IndirectY, opcode: 0x33 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPageX, opcode: 0x34 },
+  { mnemonic: "RLA", mode: AddressingMode.ZeroPageX, opcode: 0x37 },
+  { mnemonic: "NOP", mode: AddressingMode.Implied, opcode: 0x3a },
+  { mnemonic: "RLA", mode: AddressingMode.AbsoluteY, opcode: 0x3b },
+  { mnemonic: "NOP", mode: AddressingMode.AbsoluteX, opcode: 0x3c },
+  { mnemonic: "RLA", mode: AddressingMode.AbsoluteX, opcode: 0x3f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x42 },
+  { mnemonic: "SRE", mode: AddressingMode.IndirectX, opcode: 0x43 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPage, opcode: 0x44 },
+  { mnemonic: "SRE", mode: AddressingMode.ZeroPage, opcode: 0x47 },
+  { mnemonic: "ALR", mode: AddressingMode.Immediate, opcode: 0x4b },
+  { mnemonic: "SRE", mode: AddressingMode.Absolute, opcode: 0x4f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x52 },
+  { mnemonic: "SRE", mode: AddressingMode.IndirectY, opcode: 0x53 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPageX, opcode: 0x54 },
+  { mnemonic: "SRE", mode: AddressingMode.ZeroPageX, opcode: 0x57 },
+  { mnemonic: "NOP", mode: AddressingMode.Implied, opcode: 0x5a },
+  { mnemonic: "SRE", mode: AddressingMode.AbsoluteY, opcode: 0x5b },
+  { mnemonic: "NOP", mode: AddressingMode.AbsoluteX, opcode: 0x5c },
+  { mnemonic: "SRE", mode: AddressingMode.AbsoluteX, opcode: 0x5f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x62 },
+  { mnemonic: "RRA", mode: AddressingMode.IndirectX, opcode: 0x63 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPage, opcode: 0x64 },
+  { mnemonic: "RRA", mode: AddressingMode.ZeroPage, opcode: 0x67 },
+  { mnemonic: "ARR", mode: AddressingMode.Immediate, opcode: 0x6b },
+  { mnemonic: "RRA", mode: AddressingMode.Absolute, opcode: 0x6f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x72 },
+  { mnemonic: "RRA", mode: AddressingMode.IndirectY, opcode: 0x73 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPageX, opcode: 0x74 },
+  { mnemonic: "RRA", mode: AddressingMode.ZeroPageX, opcode: 0x77 },
+  { mnemonic: "NOP", mode: AddressingMode.Implied, opcode: 0x7a },
+  { mnemonic: "RRA", mode: AddressingMode.AbsoluteY, opcode: 0x7b },
+  { mnemonic: "NOP", mode: AddressingMode.AbsoluteX, opcode: 0x7c },
+  { mnemonic: "RRA", mode: AddressingMode.AbsoluteX, opcode: 0x7f },
+  { mnemonic: "NOP", mode: AddressingMode.Immediate, opcode: 0x80 },
+  { mnemonic: "NOP", mode: AddressingMode.Immediate, opcode: 0x82 },
+  { mnemonic: "SAX", mode: AddressingMode.IndirectX, opcode: 0x83 },
+  { mnemonic: "SAX", mode: AddressingMode.ZeroPage, opcode: 0x87 },
+  { mnemonic: "NOP", mode: AddressingMode.Immediate, opcode: 0x89 },
+  { mnemonic: "XAA", mode: AddressingMode.Immediate, opcode: 0x8b },
+  { mnemonic: "SAX", mode: AddressingMode.Absolute, opcode: 0x8f },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0x92 },
+  { mnemonic: "AHX", mode: AddressingMode.IndirectY, opcode: 0x93 },
+  { mnemonic: "SAX", mode: AddressingMode.ZeroPageY, opcode: 0x97 },
+  { mnemonic: "TAS", mode: AddressingMode.AbsoluteY, opcode: 0x9b },
+  { mnemonic: "SHY", mode: AddressingMode.AbsoluteX, opcode: 0x9c },
+  { mnemonic: "SHX", mode: AddressingMode.AbsoluteY, opcode: 0x9e },
+  { mnemonic: "AHX", mode: AddressingMode.AbsoluteY, opcode: 0x9f },
+  { mnemonic: "LAX", mode: AddressingMode.IndirectX, opcode: 0xa3 },
+  { mnemonic: "LAX", mode: AddressingMode.ZeroPage, opcode: 0xa7 },
+  { mnemonic: "LAX", mode: AddressingMode.Immediate, opcode: 0xab },
+  { mnemonic: "LAX", mode: AddressingMode.Absolute, opcode: 0xaf },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0xb2 },
+  { mnemonic: "LAX", mode: AddressingMode.IndirectY, opcode: 0xb3 },
+  { mnemonic: "LAX", mode: AddressingMode.ZeroPageY, opcode: 0xb7 },
+  { mnemonic: "LAS", mode: AddressingMode.AbsoluteY, opcode: 0xbb },
+  { mnemonic: "LAX", mode: AddressingMode.AbsoluteY, opcode: 0xbf },
+  { mnemonic: "NOP", mode: AddressingMode.Immediate, opcode: 0xc2 },
+  { mnemonic: "DCP", mode: AddressingMode.IndirectX, opcode: 0xc3 },
+  { mnemonic: "DCP", mode: AddressingMode.ZeroPage, opcode: 0xc7 },
+  { mnemonic: "AXS", mode: AddressingMode.Immediate, opcode: 0xcb },
+  { mnemonic: "DCP", mode: AddressingMode.Absolute, opcode: 0xcf },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0xd2 },
+  { mnemonic: "DCP", mode: AddressingMode.IndirectY, opcode: 0xd3 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPageX, opcode: 0xd4 },
+  { mnemonic: "DCP", mode: AddressingMode.ZeroPageX, opcode: 0xd7 },
+  { mnemonic: "NOP", mode: AddressingMode.Implied, opcode: 0xda },
+  { mnemonic: "DCP", mode: AddressingMode.AbsoluteY, opcode: 0xdb },
+  { mnemonic: "NOP", mode: AddressingMode.AbsoluteX, opcode: 0xdc },
+  { mnemonic: "DCP", mode: AddressingMode.AbsoluteX, opcode: 0xdf },
+  { mnemonic: "NOP", mode: AddressingMode.Immediate, opcode: 0xe2 },
+  { mnemonic: "ISC", mode: AddressingMode.IndirectX, opcode: 0xe3 },
+  { mnemonic: "ISC", mode: AddressingMode.ZeroPage, opcode: 0xe7 },
+  { mnemonic: "SBC", mode: AddressingMode.Immediate, opcode: 0xeb },
+  { mnemonic: "ISC", mode: AddressingMode.Absolute, opcode: 0xef },
+  { mnemonic: "JAM", mode: AddressingMode.Implied, opcode: 0xf2 },
+  { mnemonic: "ISC", mode: AddressingMode.IndirectY, opcode: 0xf3 },
+  { mnemonic: "NOP", mode: AddressingMode.ZeroPageS, opcode: 0xf4 },
+  { mnemonic: "ISC", mode: AddressingMode.ZeroPageX, opcode: 0xf7 },
+  { mnemonic: "NOP", mode: AddressingMode.Implied, opcode: 0xfa },
+  { mnemonic: "ISC", mode: AddressingMode.AbsoluteY, opcode: 0xfb },
+  { mnemonic: "NOP", mode: AddressingMode.AbsoluteX, opcode: 0xfc },
+  { mnemonic: "ISC", mode: AddressingMode.AbsoluteX, opcode: 0xff },
 ];
 
 const INSTRUCTION_TABLE: Map<string, Map<AddressingMode, number>> = buildInstructionTable();
