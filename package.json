@@ -1,6 +1,6 @@
 {
   "name": "c64bridge",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "mcpName": "io.github.chrisgleissner/c64bridge",
   "description": "C64 Bridge MCP server for Commodore 64 Ultimate hardware and VICE emulator control",
   "type": "module",
