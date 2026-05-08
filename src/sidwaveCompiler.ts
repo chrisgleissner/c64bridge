@@ -7,7 +7,7 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
-import { assemblyToPrg } from "./tools/assember.js";
+import { assemblyToPrg } from "./tools/assembler.js";
 import type { ParsedSidwave, SystemMode, SidwaveVoice } from "./sidwave.js";
 import { midiToHz, noteNameToMidi } from "./sidwave.js";
 

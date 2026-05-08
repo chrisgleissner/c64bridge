@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { assemblyToPrgDetailed, AssemblyError } from "./assember.js";
+import { assemblyToPrgDetailed, AssemblyError } from "./assembler.js";
 import { basicToPrg } from "./basicTokenizer.js";
 import {
   defineToolModule,

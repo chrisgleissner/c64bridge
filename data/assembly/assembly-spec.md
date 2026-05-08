@@ -506,4 +506,4 @@ Screen-code conversion
 
 - If input is ASCII uppercase 'A'..'Z', convert: screen = PETSCII - $40 (e.g. $41→$01). Implement in a small loop if needed.
 
-This file is intentionally minimal: use `basicConverter` / `assemblyConverter` in `src/` for tokenization/PRG building and `data/graphics/character-set.csv` for exact screen-code mappings.
+This file is intentionally minimal: use `src/tools/basicTokenizer.ts` / `src/tools/assembler.ts` for tokenization/PRG building and `data/graphics/character-set.csv` for exact screen-code mappings.

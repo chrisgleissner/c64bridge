@@ -14,6 +14,7 @@ Your AI Command Bridge for the Commodore 64.
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D&quality=insiders)
 [![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D)
 [![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSIsIlZJQ0VfQklOQVJZIjoiL3Vzci9sb2NhbC9iaW4veDY0c2MiLCJWSUNFX0RJUkVDVE9SWSI6Ii91c3IvbG9jYWwvc2hhcmUvdmljZSIsIlZJQ0VfVklTSUJMRSI6InRydWUiLCJWSUNFX1dBUlAiOiJmYWxzZSJ9fQ==)
+[![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
 C64 Bridge is an MCP server for controlling and working with a Commodore 64 from an AI client.
 
@@ -52,6 +53,7 @@ C64 Bridge is listed in the [Official MCP Registry](https://registry.modelcontex
       - [SID Playback](#sid-playback)
       - [RAG](#rag)
       - [Testing](#testing)
+  - [Claude Code](#claude-code)
   - [Example Workflow](#example-workflow)
   - [HTTP Invocation](#http-invocation)
   - [Build and Test](#build-and-test)
@@ -59,12 +61,14 @@ C64 Bridge is listed in the [Official MCP Registry](https://registry.modelcontex
   - [Static MCP Interface](#static-mcp-interface)
   - [MCP API Reference](#mcp-api-reference)
     - [Tools](#tools)
+      - [c64\_batch](#c64_batch)
       - [c64\_config](#c64_config)
       - [c64\_debug](#c64_debug)
       - [c64\_disk](#c64_disk)
       - [c64\_drive](#c64_drive)
       - [c64\_extract](#c64_extract)
       - [c64\_graphics](#c64_graphics)
+      - [c64\_input](#c64_input)
       - [c64\_memory](#c64_memory)
       - [c64\_printer](#c64_printer)
       - [c64\_program](#c64_program)
@@ -191,9 +195,14 @@ The detailed lookup order, merge rules, backend examples, and override model are
 
 ### 4. Connect from an MCP Client
 
-If you use VS Code, follow the [VS Code MCP Setup](#vs-code-mcp-setup) section below.
+C64 Bridge ships a single canonical `stdio` entry point that every MCP client uses:
 
-If you use another MCP client, point it at the `stdio` server entry point and pass any required environment variables exactly as documented in this README and in [mcp.json](./mcp.json).
+- **VS Code (GitHub Copilot)** — see [VS Code MCP Setup](#vs-code-mcp-setup).
+- **Claude Code (CLI and VS Code plugin)** — see [Claude Code](#claude-code).
+- **Cursor, Visual Studio, VS Code Insiders** — use the install badges at the top of this README.
+- **Any other MCP client** — point it at the same `stdio` server, with the environment variables documented in [Runtime Environment Variable Reference](#runtime-environment-variable-reference) and the registry manifest in [mcp.json](./mcp.json).
+
+The startup command is the same across clients: `npx -y c64bridge@latest` for the published package, or `node scripts/start.mjs` from a local checkout. Backend selection (`c64u` vs `vice`) and credentials live in the shared [Configuration](#configuration) files and environment variables — clients only need to know the command.
 
 ## Configuration
 
@@ -265,6 +274,9 @@ Prompt illustration (issued via Copilot in VS Code, using GPT 5.4 Medium):
 
 ```text
 c64u: write a small BASIC program that clears the screen and prints HELLO C64U
+```
+
+```
 vice: write a small BASIC program that clears the screen and prints HELLO VICE
 ```
 
@@ -276,6 +288,8 @@ The screenshots below were captured from actual backend bitmap responses after t
 | VICE | ![VICE backend switch example](doc/img/backend-switch/hello-vice.png) |
 
 ## VS Code MCP Setup
+
+This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.
 
 If this repository is checked out locally, open the prepared [.vscode/mcp.json](./.vscode/mcp.json).
 
@@ -482,6 +496,24 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64_TEST_TARGET` |  | — | Overrides integration tests to hit mock or real hardware (mock\|real) |
 
 <!-- AUTO-GENERATED:ENV-VARS-END -->
+
+## Claude Code
+
+[Claude Code](https://docs.claude.com/en/docs/claude-code/mcp) is supported as a first-class MCP client. It uses the same canonical start command and the same backend [Configuration](#configuration) files and environment variables as every other client — only the discovery file differs.
+
+**Claude Code CLI** — register the published server in one command:
+
+```bash
+claude mcp add c64bridge -- npx -y c64bridge@latest
+```
+
+Use `--scope user` to make it available across all your projects, or `--scope project` to write a `.mcp.json` next to the current repo. Backend selection (`c64u` vs `vice`), host, port, and password come from the same files documented in [Configuration](#configuration); per-shell overrides come from the variables in [Runtime Environment Variable Reference](#runtime-environment-variable-reference).
+
+**Project-scoped discovery** — this repository ships a checked-in [.mcp.json](./.mcp.json) that points Claude Code at the local source via `node scripts/start.mjs`. When you open the repo with `claude` (CLI or VS Code plugin), Claude Code prompts to enable the project-scoped server on first run. Approve it once and the `c64_*` tools become discoverable in that workspace.
+
+**Claude Code VS Code plugin** — the plugin reads the same `.mcp.json` and the same user-scope `claude mcp add` registrations as the CLI. No extra setup is required beyond installing the plugin and approving the project server prompt. The existing [.vscode/mcp.json](./.vscode/mcp.json) is read by GitHub Copilot, not by Claude Code; the two files coexist without conflict because they target different clients with different config schemas.
+
+**Verify it works** — after registration, run `claude mcp list` (CLI) or open the MCP panel (plugin) and look for `c64bridge`. Then ask Claude Code something like *“use vice: write a small BASIC program that clears the screen and prints HELLO CLAUDE”* — it should call `c64_select_backend` and `c64_program` directly. If tools do not appear, confirm Node 24+ is on `PATH`, that the server was approved at the requested scope, and that the backend is reachable per the [Configuration](#configuration) section.
 
 ## Example Workflow
 

@@ -10,7 +10,7 @@ import { Buffer } from "node:buffer";
 import { createSocket, type Socket } from "node:dgram";
 import axios from "axios";
 import { basicToPrg } from "./tools/basicTokenizer.js";
-import { assemblyToPrg } from "./tools/assember.js";
+import { assemblyToPrg } from "./tools/assembler.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import { C64Facade, createAllFacades, createFacade, type DeviceType, ViceBackend } from "./device.js";
