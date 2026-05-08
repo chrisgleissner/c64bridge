@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { __memoryHelpersForTests, memoryModule } from "../src/tools/memory.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
-import { setViceSymbols, clearViceSymbols } from "../src/tools/symbolRegistry.js";
+import { setViceSymbols, clearViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
 const isVice = (process.env.C64_MODE ?? "").toLowerCase() === "vice";
 const testC64uOnly = isVice ? test.skip : test;
@@ -73,12 +73,20 @@ test("memory helpers reject malformed firmware hex payloads", () => {
     /even number of characters/,
   );
   assert.throws(
+    () => __memoryHelpersForTests.parseUserHex("AAZZ", "$.bytes"),
+    /non-hexadecimal/,
+  );
+  assert.throws(
     () => __memoryHelpersForTests.parseFirmwareHex(42, "post-read"),
     /invalid post-read hex data/,
   );
   assert.throws(
     () => __memoryHelpersForTests.parseFirmwareHex("ABC", "pre-read"),
     /malformed pre-read hex data/,
+  );
+  assert.throws(
+    () => __memoryHelpersForTests.parseFirmwareHex("AAZZ", "post-read"),
+    /malformed post-read hex data/,
   );
 });
 
@@ -792,6 +800,18 @@ test("disassemble rejects out-of-range addresses", async () => {
   assert.equal(res.metadata.error.kind, "validation");
 });
 
+test("disassemble rejects ranges that wrap past $FFFF", async () => {
+  const ctx = {
+    client: createMockClient(),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$FFF0", length: 32 }, ctx);
+
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata.error.kind, "validation");
+});
+
 test("disassemble surfaces read failures as unknown errors", async () => {
   const ctx = {
     client: createMockClient({
@@ -1022,6 +1042,23 @@ test("compare_memory surfaces read failures as unknown errors", async () => {
 
   assert.equal(res.isError, true);
   assert.equal(res.metadata.error.kind, "unknown");
+});
+
+test("compare_memory rejects address ranges that wrap past $FFFF", async () => {
+  const ctx = {
+    client: createMockClient(),
+    logger: createLogger(),
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", {
+    op: "compare_memory",
+    address1: "$FFFE",
+    address2: "$3000",
+    length: 4,
+  }, ctx);
+
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata.error.kind, "validation");
 });
 
 test("save_memory writes a PRG header and payload to disk", async () => {

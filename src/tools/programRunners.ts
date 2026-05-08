@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import { assemblyToPrgDetailed, AssemblyError } from "./assember.js";
-import { basicToPrg } from "./basicTokenizer.js";
+import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
+import { basicToPrg } from "./translation/basicTokenizer.js";
 import {
   defineToolModule,
   OPERATION_DISCRIMINATOR,
@@ -19,7 +19,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { pollForProgramOutcome } from "./pollValidator.js";
-import { clearViceSymbols, setViceSymbols, parseViceSymbolFile } from "./symbolRegistry.js";
+import { clearViceSymbols, setViceSymbols, parseViceSymbolFile } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
   if (details === undefined || details === null) {

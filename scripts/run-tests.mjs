@@ -18,6 +18,7 @@ if (!fs.existsSync(defaultEmbeddingsDir)) {
 const env = {
   ...process.env,
   C64_TEST_TARGET: target,
+  VICE_VISIBLE: "false",
 };
 
 if (!env.RAG_EMBEDDINGS_DIR) {

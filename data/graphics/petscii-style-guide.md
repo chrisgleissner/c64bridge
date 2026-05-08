@@ -63,7 +63,7 @@ Conversion: Screen code ≠ PETSCII code. Use charset reference (c64://graphics/
 
 - BASIC/printing: Use PETSCII codes with CHR$() or PRINT
 - Direct screen memory: Use screen codes with POKE to $0400+offset
-- Tools: `c64_graphics` (`render_petscii_art`) returns both `petsciiCodes` array and screen memory data
+- Tools: `c64_graphics` with `op: "render_petscii_art"` returns both `petsciiCodes` array and screen memory data
 
 ## Essential PETSCII Symbols
 

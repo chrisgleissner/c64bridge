@@ -18,8 +18,8 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
-import { disassemble, formatDisassembly } from "./disassembler.js";
-import { getViceSymbols } from "./symbolRegistry.js";
+import { disassemble, formatDisassembly } from "./translation/disassembler.js";
+import { getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
@@ -61,6 +61,13 @@ function parseHexInternal(value: string, path: string): HexParseResult {
 
   if (cleaned.length === 0) {
     return { bytes: new Uint8Array(), canonical: "$" };
+  }
+
+  if (!/^[0-9A-F]+$/.test(cleaned)) {
+    throw new ToolValidationError("Hex string contains non-hexadecimal characters", {
+      path,
+      details: { value },
+    });
   }
 
   const bytes = Uint8Array.from(Buffer.from(cleaned, "hex"));
@@ -469,6 +476,7 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
     ctx.logger.info("Disassembling VICE memory", { address: parsed.address, length });
 
     const address = parseAddressArg(parsed.address, "$.address");
+    validateRangeWithinAddressSpace(address, length, "$.address");
 
     const bytes = await ctx.client.readMemoryRaw(address, length);
   const symbols = ctx.platform?.id === "vice" ? getViceSymbols() : undefined;
@@ -671,6 +679,8 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
     const a2 = parseAddressArg(parsed.address2, "$.address2");
     const len = parsed.length;
     const maxDiffs = parsed.maxDiffs ?? 10;
+    validateRangeWithinAddressSpace(a1, len, "$.address1");
+    validateRangeWithinAddressSpace(a2, len, "$.address2");
     ctx.logger.info("Comparing memory regions", { a1: fmtAddr(a1), a2: fmtAddr(a2), len });
     const [r1, r2] = await Promise.all([
       ctx.client.readMemoryRaw(a1, len),

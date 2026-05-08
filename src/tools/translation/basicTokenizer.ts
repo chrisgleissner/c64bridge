@@ -7,7 +7,7 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
-import { asciiToPetscii, encodeStringWithNames } from "../petscii.js";
+import { asciiToPetscii, encodeStringWithNames } from "../../petscii.js";
 
 const DEFAULT_START_ADDRESS = 0x0801;
 const REM_TOKEN = 0x8f;

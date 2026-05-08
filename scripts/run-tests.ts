@@ -142,6 +142,7 @@ export function buildMatrixEnv(
   const env: Record<string, string> = { ...envSource } as Record<string, string>;
   env.C64_MODE = platform;
   env.C64_TEST_TARGET = target === "device" ? "real" : "mock";
+  env.VICE_VISIBLE = "false";
 
   if (platform === "vice") {
     const useViceMock = target !== "device";

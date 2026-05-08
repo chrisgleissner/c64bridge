@@ -126,18 +126,18 @@ This solution was developed through:
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' \
-  -d '{"program": "... BASIC program ..."}' \
-  http://localhost:8000/tools/upload_run_basic
+  -d '{"op": "upload_run_basic", "program": "... BASIC program ..."}' \
+  http://localhost:8000/tools/c64_program
 ```
 
 ### Future Audio Analysis
 
-The working scale can now be used with the `analyze_audio` tool:
+The working scale can now be used with `c64_sound` and `op: "analyze"`:
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' \
-  -d '{"request": "verify the scale sounds correct"}' \
-  http://localhost:8000/tools/analyze_audio
+  -d '{"op": "analyze", "request": "verify the scale sounds correct"}' \
+  http://localhost:8000/tools/c64_sound
 ```
 
 ## Musical Expression Example: "Alle meine Entchen"

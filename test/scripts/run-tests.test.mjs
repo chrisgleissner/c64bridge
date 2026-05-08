@@ -173,6 +173,7 @@ test("run-tests builds explicit vice mock and device environments", () => {
   const mockEnv = buildMatrixEnv("vice", "mock", null, {});
   assert.equal(mockEnv.C64_MODE, "vice");
   assert.equal(mockEnv.C64_TEST_TARGET, "mock");
+  assert.equal(mockEnv.VICE_VISIBLE, "false");
   assert.equal(mockEnv.VICE_TEST_TARGET, "mock");
   assert.equal(mockEnv.C64_TEST_ENABLE_VICE_MOCK, "1");
   assert.equal("VICE_AVAILABLE" in mockEnv, false);
@@ -180,9 +181,16 @@ test("run-tests builds explicit vice mock and device environments", () => {
   const deviceEnv = buildMatrixEnv("vice", "device", null, {});
   assert.equal(deviceEnv.C64_MODE, "vice");
   assert.equal(deviceEnv.C64_TEST_TARGET, "real");
+  assert.equal(deviceEnv.VICE_VISIBLE, "false");
   assert.equal(deviceEnv.VICE_TEST_TARGET, "vice");
   assert.equal(deviceEnv.C64_TEST_ENABLE_VICE_MOCK, "0");
   assert.equal(deviceEnv.VICE_AVAILABLE, "1");
+});
+
+test("run-tests forces VICE invisible even when the parent environment asks for visible", () => {
+  const env = buildMatrixEnv("c64u", "mock", null, { VICE_VISIBLE: "true" });
+
+  assert.equal(env.VICE_VISIBLE, "false");
 });
 
 test("run-tests curates default VICE matrix files around supported suites", () => {

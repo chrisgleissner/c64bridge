@@ -15,7 +15,7 @@ Recommended C64 Bridge entry points:
 | Debug registers and checkpoints | `c64_debug` | `get_registers`, `set_registers`, `create_checkpoint`, `list_checkpoints`, `step`, `step_return` |
 | Send keyboard or joystick input | `c64_input` | `write_text`, `key`, `joystick` |
 | Capture emulator display | `c64_graphics` | `capture_frame` |
-| Reset or resume execution | `c64_system` | `reset`, `resume` |
+| Reset or continue execution | `c64_system`, `c64_debug` | `reset`, `continue_execution` |
 | Read or write VICE resources | `c64_vice` | `resource_get`, `resource_set` |
 
 ---
@@ -633,7 +633,7 @@ C64 Bridge mapping:
 
 | MCP tool     | Operation |
 | ------------ | --------- |
-| `c64_system` | `resume`  |
+| `c64_debug` | `continue_execution` |
 
 ---
 
@@ -797,7 +797,7 @@ Usually emitted with `request_id = 0xffffffff`.
 | Palette Get          | `0x91` |                   `0x91` | internal display support                                                            |
 | Joyport Set          | `0xa2` |                   `0xa2` | `c64_input.joystick`                                                                |
 | Userport Set         | `0xb2` |                   `0xb2` | internal or unmapped                                                                |
-| Exit                 | `0xaa` |                   `0xaa` | `c64_system.resume`                                                                 |
+| Exit                 | `0xaa` |                   `0xaa` | `c64_debug.continue_execution`                                                       |
 | Quit                 | `0xbb` |                   `0xbb` | managed VICE lifecycle                                                              |
 | Reset                | `0xcc` |                   `0xcc` | `c64_system.reset`, `c64_system.reboot`, `c64_drive.reset`                          |
 | Autostart / Autoload | `0xdd` |                   `0xdd` | `c64_program.run_prg`, `c64_program.upload_run_basic`, `c64_program.upload_run_asm` |
@@ -827,17 +827,16 @@ Examples:
 | Read PC and A                   | `c64_debug` with `op = get_registers`     |
 | Step one instruction            | `c64_debug` with `op = step`              |
 | Step until return               | `c64_debug` with `op = step_return`       |
-| Continue execution              | `c64_system` with `op = resume`           |
+| Continue execution              | `c64_debug` with `op = continue_execution` |
 | Reset VICE                      | `c64_system` with `op = reset`            |
 | Change a VICE setting           | `c64_vice` with `op = resource_set`       |
 
 ## Backend Selection
 
-If both C64 Ultimate and VICE are configured, use `c64_select_backend` before making VICE-specific requests.
+If both C64 Ultimate and VICE are configured, call `c64_select_backend` with these arguments before making VICE-specific requests:
 
 ```json
 {
-  "tool": "c64_select_backend",
   "op": "select",
   "backend": "vice"
 }

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { __programRunnerHelpersForTests, programOperationHandlers, programRunnersModule } from "../src/tools/programRunners.js";
 import { ToolUnsupportedPlatformError } from "../src/tools/errors.js";
-import { clearViceSymbols, getViceSymbol, setViceSymbols } from "../src/tools/symbolRegistry.js";
+import { clearViceSymbols, getViceSymbol, setViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
 function createLogger() {
   return {

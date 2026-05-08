@@ -162,7 +162,8 @@ async function listRepoTestFiles(root) {
   return files;
 }
 
-function runCoverageLeg(leg, legDir, label, files) {
+async function runCoverageLeg(leg, legDir, label, files) {
+  const knownTempFiles = new Set(await listCoverageTempFiles(coverageDir));
   return new Promise((resolve, reject) => {
     const outputPath = path.join(legDir, `${label}.lcov.info`);
     const args = [runner, "scripts/run-tests.ts", "--coverage", ...leg.args, ...files];
@@ -178,13 +179,63 @@ function runCoverageLeg(leg, legDir, label, files) {
         return;
       }
       try {
-        await fs.copyFile(path.join(coverageDir, "lcov.info"), outputPath);
+        await copyCoverageOutput(coverageDir, outputPath, knownTempFiles);
         resolve(outputPath);
       } catch (error) {
         reject(error);
       }
     });
   });
+}
+
+export async function copyCoverageOutput(sourceDir, outputPath, knownTempFiles = new Set()) {
+  const stablePath = path.join(sourceDir, "lcov.info");
+  try {
+    await fs.copyFile(stablePath, outputPath);
+    return outputPath;
+  } catch (error) {
+    if (!isNodeErrorCode(error, "ENOENT")) {
+      throw error;
+    }
+  }
+
+  const tempFiles = await listCoverageTempFiles(sourceDir);
+  const newTempFiles = tempFiles.filter((filePath) => !knownTempFiles.has(filePath));
+  if (newTempFiles.length === 0) {
+    throw new Error(`Coverage run completed but no LCOV report was produced in ${sourceDir}`);
+  }
+
+  const newest = await newestFile(newTempFiles);
+  await fs.copyFile(newest, outputPath);
+  return outputPath;
+}
+
+async function listCoverageTempFiles(dir) {
+  let entries;
+  try {
+    entries = await fs.readdir(dir);
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return [];
+    }
+    throw error;
+  }
+  return entries
+    .filter((entry) => /^\.lcov\.info\.[^.]+\.tmp$/.test(entry))
+    .map((entry) => path.join(dir, entry));
+}
+
+async function newestFile(filePaths) {
+  const stats = await Promise.all(filePaths.map(async (filePath) => ({
+    filePath,
+    mtimeMs: (await fs.stat(filePath)).mtimeMs,
+  })));
+  stats.sort((a, b) => b.mtimeMs - a.mtimeMs || a.filePath.localeCompare(b.filePath));
+  return stats[0].filePath;
+}
+
+function isNodeErrorCode(error, code) {
+  return Boolean(error && typeof error === "object" && error.code === code);
 }
 
 async function readReport(filePath) {
