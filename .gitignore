@@ -10,6 +10,7 @@
 *.log
 *.pid
 *.tsbuildinfo
+doc/audit/*.generated.json
 artifacts/
 build/
 coverage/
