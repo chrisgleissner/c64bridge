@@ -93,7 +93,7 @@ Prepare `/home/runner/work/c64bridge/c64bridge` for release `0.9.2` without publ
 ## Remaining Risks / Blockers
 - No hard blocker in the release metadata itself.
 - `./build test:matrix` is not green in this environment because the vice/device leg expects `x64sc`, which is missing here.
-- `./build coverage` remains nondeterministic due a pre-existing MCP streaming test flake (`ECONNREFUSED`) in one c64u/mock coverage shard.
+- `./build coverage` remains nondeterministic due to a pre-existing MCP streaming test flake (`ECONNREFUSED`) in one c64u/mock coverage shard.
 - These validation failures appear environmental/flaky rather than caused by the release-preparation edits, but they should be reviewed before publishing.
 
 ## Intentional Files Changed
