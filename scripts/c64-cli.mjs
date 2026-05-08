@@ -18,7 +18,7 @@ async function loadCoreModules() {
   }
 
   if (typeof globalThis.Bun !== "undefined") {
-    ({ basicToPrg } = await import("../src/tools/basicTokenizer.ts"));
+    ({ basicToPrg } = await import("../src/tools/translation/basicTokenizer.ts"));
     ({ loadConfig } = await import("../src/config.ts"));
     ({ C64Client } = await import("../src/c64Client.ts"));
     return;
@@ -26,7 +26,7 @@ async function loadCoreModules() {
 
   const distPath = resolve(projectRoot, "dist");
   try {
-    ({ basicToPrg } = await import(pathToFileURL(resolve(distPath, "tools/basicTokenizer.js")).href));
+    ({ basicToPrg } = await import(pathToFileURL(resolve(distPath, "tools/translation/basicTokenizer.js")).href));
     ({ loadConfig } = await import(pathToFileURL(resolve(distPath, "config.js")).href));
     ({ C64Client } = await import(pathToFileURL(resolve(distPath, "c64Client.js")).href));
   } catch (error) {

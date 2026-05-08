@@ -18,8 +18,8 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
-import { disassemble, formatDisassembly } from "./disassembler.js";
-import { getViceSymbols } from "./symbolRegistry.js";
+import { disassemble, formatDisassembly } from "./translation/disassembler.js";
+import { getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {

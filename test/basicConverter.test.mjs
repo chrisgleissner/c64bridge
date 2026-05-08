@@ -2,7 +2,7 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { basicToPrg } from "../src/tools/basicTokenizer.js";
+import { basicToPrg } from "../src/tools/translation/basicTokenizer.js";
 import { encodeStringWithNames } from "../src/petscii.js";
 
 test("basicToPrg encodes line pointers, tokens, and terminator", () => {

@@ -1,7 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { assemblyToPrg, AssemblyError } from "../src/tools/assembler.js";
-import { disassemble } from "../src/tools/disassembler.js";
+import { assemblyToPrg, AssemblyError } from "../src/tools/translation/assembler.js";
+import { disassemble } from "../src/tools/translation/disassembler.js";
 
 test("assemblyToPrg assembles simple program with default load address", () => {
   const source = `

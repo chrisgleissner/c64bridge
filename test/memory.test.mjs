@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { __memoryHelpersForTests, memoryModule } from "../src/tools/memory.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
-import { setViceSymbols, clearViceSymbols } from "../src/tools/symbolRegistry.js";
+import { setViceSymbols, clearViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
 const isVice = (process.env.C64_MODE ?? "").toLowerCase() === "vice";
 const testC64uOnly = isVice ? test.skip : test;

@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { clearViceSymbols, getViceSymbol, getViceSymbols, parseViceSymbolFile, setViceSymbols } from "../src/tools/symbolRegistry.js";
+import { clearViceSymbols, getViceSymbol, getViceSymbols, parseViceSymbolFile, setViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
 test.afterEach(() => {
   clearViceSymbols();
