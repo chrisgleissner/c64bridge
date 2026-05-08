@@ -1,6 +1,18 @@
 # Changelog
 
 
+## 0.9.2 - 2026-05-08
+
+### Highlights
+
+- Expanded the translation toolchain with a stronger 6510 assembler, BASIC tokenization, full opcode inventory coverage, and disassembly output that can reuse VICE symbols.
+- Improved `c64_input` compatibility by flattening its grouped MCP schema and aligning its resource metadata with the current documentation set.
+
+### Fixes
+
+- Hardened memory helpers so malformed hex payloads and address ranges that overflow past `$FFFF` are rejected before reaching the backend.
+- Improved coverage-report handling for temporary LCOV output and polished a README reference used in pull request workflows.
+
 ## 0.9.1 - 2026-05-07
 
 ### Highlights
