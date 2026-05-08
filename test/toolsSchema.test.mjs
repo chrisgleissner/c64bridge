@@ -17,6 +17,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "../src/tools/errors.ts";
+import { textResult } from "../src/tools/responses.ts";
 
 const assertThrowsValidation = async (fn, messageIncludes) => {
   try {
@@ -295,10 +296,27 @@ test("tool error helpers produce consistent metadata", () => {
     code: "E_FAIL",
     details: { endpoint: "/rest" },
   });
+  assert.equal(result.structuredContent?.type, "json");
+  assert.equal(result.structuredContent?.data?.error?.kind, "execution");
 });
 
 test("unknown errors wrap safely", () => {
   const result = unknownErrorResult(new Error("Oops"));
   assert.equal(result.isError, true);
   assert.equal(result.metadata?.error.kind, "unknown");
+  assert.equal(result.structuredContent?.data?.error?.kind, "unknown");
+});
+
+test("text results expose metadata through structured content", () => {
+  const result = textResult("Wrote bytes.", { success: true, address: "$0400" });
+
+  assert.deepEqual(result.metadata, { success: true, address: "$0400" });
+  assert.deepEqual(result.structuredContent, {
+    type: "json",
+    data: {
+      message: "Wrote bytes.",
+      success: true,
+      address: "$0400",
+    },
+  });
 });

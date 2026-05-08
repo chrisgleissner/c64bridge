@@ -61,6 +61,12 @@ test("c64_input is registered as a grouped tool with both backends", () => {
   // Joystick must remain VICE-only via operationPlatforms metadata.
   const opPlatforms = tool.metadata?.operationPlatforms ?? {};
   assert.ok(opPlatforms.joystick && opPlatforms.joystick.includes("vice") && !opPlatforms.joystick.includes("c64u"), "joystick must be VICE-only");
+  assert.equal(tool.inputSchema.oneOf, undefined, "schema must be flattened for MCP client compatibility");
+  assert.equal(tool.inputSchema.discriminator, undefined, "schema must not use top-level discriminator metadata");
+  assert.deepEqual(tool.inputSchema.properties.op.enum, ["write_text", "key", "joystick"]);
+  assert.ok(Array.isArray(tool.inputSchema["x-c64bridge-operations"]));
+  assert.ok(tool.metadata.resources.includes("c64://memory/map"));
+  assert.ok(!tool.metadata.resources.some((uri) => uri.startsWith("c64://specs/")));
 });
 
 test("c64_input.write_text injects PETSCII bytes via the shared keyboard queue (C64U)", async () => {

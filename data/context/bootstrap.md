@@ -17,12 +17,12 @@ Do not assume the current backend is correct without checking
 
 ## Fast Paths
 
-- Grouped MCP tools are never called bare. For tools such as `c64_program`, `c64_memory`, `c64_graphics`, `c64_sound`, and `c64_system`, always send an object with `op` first.
-- Wrong: `c64_program {}`. Correct: `c64_program { op: "cross_platform_greeting" }`.
+- Grouped MCP tools are never called bare. For tools such as `c64_program`, `c64_memory`, `c64_graphics`, `c64_sound`, and `c64_system`, call the tool with flat arguments that include `op`.
+- Wrong: `c64_program {}` or `{ "c64_program": { "op": "cross_platform_greeting" } }`. Correct: call tool `c64_program` with `{ "op": "cross_platform_greeting" }`.
 - For simple visible confirmation on `vice`, `c64u`, or both, prefer `c64_program` with `op: "cross_platform_greeting"`.
 - For trivial hello-world and smoke-test requests, route to `.github/skills/hello-world/SKILL.md` and let that skill use the shortest greeting workflow.
 - That workflow switches backends internally, writes a platform-customized BASIC greeting, captures screenshots, and verifies the rendered text without extra tool composition.
-- Use manual `c64_select_backend` plus `upload_run_basic` only when the user needs custom program logic beyond a quick greeting or text demo.
+- Use manual `c64_select_backend` with `op: "select"` plus `c64_program` with `op: "upload_run_basic"` only when the user needs custom program logic beyond a quick greeting or text demo.
 - On local machines with a graphical session, assume VICE should be visible by default. Only expect Xvfb or other headless fallback in CI or when no framebuffer/display session exists.
 - For manual visible VICE BASIC runs, avoid immediate `read_screen` or `wait_for_text` calls, because Binary Monitor traffic traps execution while servicing requests.
 

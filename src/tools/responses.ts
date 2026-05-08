@@ -4,7 +4,7 @@ export function textResult(
   text: string,
   metadata?: Record<string, unknown>,
 ): ToolRunResult {
-  return {
+  const result: ToolRunResult = {
     content: [
       {
         type: "text",
@@ -13,6 +13,19 @@ export function textResult(
     ],
     metadata,
   };
+  if (metadata !== undefined) {
+    return {
+      ...result,
+      structuredContent: {
+        type: "json",
+        data: {
+          message: text,
+          ...metadata,
+        },
+      },
+    };
+  }
+  return result;
 }
 
 export function jsonResult(

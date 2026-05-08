@@ -6,6 +6,15 @@ import {
   isUndocumentedOpcode,
   opcodeMetadata,
 } from "../src/tools/disassembler.js";
+import { OPCODE_INVENTORY } from "../src/tools/opcodeInventory.js";
+
+test("shared opcode inventory is sorted and covers all 256 opcodes", () => {
+  assert.equal(OPCODE_INVENTORY.length, 256);
+  for (let opcode = 0; opcode < 256; opcode++) {
+    const entry = OPCODE_INVENTORY[opcode];
+    assert.equal(entry?.opcode, opcode);
+  }
+});
 
 test("disassembler covers the full 256-opcode space", () => {
   for (let opcode = 0; opcode < 256; opcode++) {

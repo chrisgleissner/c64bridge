@@ -1,6 +1,7 @@
 import {
   createOperationDispatcher,
   defineToolModule,
+  discriminatedUnionSchema,
   type OperationHandlerMap,
   type OperationMap,
 } from "./types.js";
@@ -339,7 +340,7 @@ export const inputModule = defineToolModule({
   domain: "input",
   summary: "Cross-platform keyboard input plus VICE-only joystick simulation.",
   supportedPlatforms: ["c64u", "vice"],
-  resources: ["c64://specs/assembly", "c64://specs/memory-map"],
+  resources: ["c64://guide/bootstrap", "c64://memory/map", "c64://io/cia/spec"],
   prompts: [],
   defaultTags: ["input"],
   workflowHints: [
@@ -352,16 +353,14 @@ export const inputModule = defineToolModule({
       name: "c64_input",
       description: "Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).",
       summary: "Types text, taps keys, and simulates joystick movements.",
-      inputSchema: {
-        type: "object",
+      inputSchema: discriminatedUnionSchema({
         description: "Input operations: write_text, key, joystick.",
-        oneOf: [
+        variants: [
           writeTextArgsSchema.jsonSchema,
           keyArgsSchema.jsonSchema,
           joystickArgsSchema.jsonSchema,
         ],
-        discriminator: { propertyName: "op" },
-      },
+      }),
       operationPlatforms: { joystick: ["vice"] },
       tags: ["input", "keyboard", "joystick"],
       examples: [

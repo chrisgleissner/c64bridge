@@ -27,6 +27,8 @@ Use these routing shortcuts when the user wants a quick visible or audible resul
 
 Example:
 
+Call tool `c64_sound` with:
+
 ```json
 {
   "op": "play_preset",

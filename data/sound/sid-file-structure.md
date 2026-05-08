@@ -5,12 +5,12 @@ This guide summarizes the High Voltage SID Collection (HVSC) "PSID file format" 
 - A header containing metadata and playback parameters
 - The actual 6502 machine code and data that the player runs on the C64
 
-You can play a SID file on a connected device using the REST API via the MCP tool `sidplay_file`.
+You can play a SID file on a connected device with the MCP tool `c64_sound` and `op: "play_sid_file"`.
 
-## Quick start: play a SID via REST/MCP
+## Quick start: play a SID via MCP
 
-- Endpoint: `POST /tools/sidplay_file`
-- Body: `{ "path": "/flash/music/Example.sid", "songnr": 1 }` (optional `songnr`)
+- Tool: `c64_sound`
+- Arguments: `{ "op": "play_sid_file", "path": "/flash/music/Example.sid", "songnr": 1 }` (optional `songnr`)
 
 Refer to `doc/c64u/c64-rest-api.md` for the underlying device endpoint and options.
 
@@ -85,7 +85,7 @@ SID files do not embed duration. HVSC ships a `Songlengths.md5` database mapping
 
 ## Related API and tools
 
-- Play from device filesystem: `sidplay_file` (see generated `mcp-manifest.json` and `src/index.ts`)
+- Play from device filesystem: `c64_sound` with `op: "play_sid_file"` (see generated `mcp/tools.json` and `mcp/schemas/c64_sound.schema.json`)
 - Low-level SID register programming: see `data/sound/sid-spec.md`
 
 References for further reading: HVSC PSID v2NG file format (spec), community resources, and project notes from implementations like SIDman.

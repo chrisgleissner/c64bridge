@@ -246,13 +246,14 @@ Custom charsets have minimal performance impact:
 ### Using render_sprite
 
 ```javascript
-{
-  spriteData: "base64-encoded-63-bytes",
+await callTool("c64_graphics", {
+  op: "render_sprite",
+  sprite: "base64-encoded-63-bytes",
   x: 160,           // Center horizontally
   y: 100,           // Center vertically  
-  colour: 1,        // White
+  color: 1,         // White
   multicolour: false
-}
+})
 ```
 
 The tool:
@@ -270,26 +271,26 @@ When working with sprites and charsets:
 1. Use memory ranges documented in c64://memory/map
 2. Avoid BASIC program area ($0801-$9FFF) unless controlling it
 3. Preserve zero page ($0000-$00FF) and stack ($0100-$01FF)
-4. Use the `c64_memory` operations `read` and `write` for safe access
+4. Use `c64_memory` with `op: "read"` and `op: "write"` for safe access
 
 ## Example Workflows
 
 ### Simple Sprite Display
 
 1. Prepare 24×21 sprite bitmap
-2. Call `render_sprite` with sprite data
+2. Call `c64_graphics` with `op: "render_sprite"` and sprite data
 3. Tool writes sprite data and patches VIC-II state automatically
-4. Use `read_screen` to verify appearance
-5. Optionally call `c64_memory` `write` to adjust position/colour
+4. Use `c64_memory` with `op: "read_screen"` to verify appearance
+5. Optionally call `c64_memory` with `op: "write"` to adjust position/colour
 
 ### Custom Charset Installation
 
 1. Design character set (full or partial)
 2. Encode to 8-byte-per-char format
-3. Use `c64_memory` `write` to copy the charset to $2000
+3. Use `c64_memory` with `op: "write"` to copy the charset to $2000
 4. POKE $D018 to point VIC-II at new charset
-5. Use `upload_run_basic` to test character display
-6. Verify with `read_screen`
+5. Use `c64_program` with `op: "upload_run_basic"` to test character display
+6. Verify with `c64_memory` and `op: "read_screen"`
 
 ### Animated Sprite Sequence
 
@@ -297,13 +298,13 @@ When working with sprites and charsets:
 2. Upload all frames to consecutive memory locations
 3. Generate BASIC program that cycles sprite pointer
 4. Use raster timing for smooth animation
-5. Verify frame timing with `c64_memory` `read` checks
+5. Verify frame timing with `c64_memory` and `op: "read"` checks
 
 ## Best Practices Summary
 
 1. **Plan Memory Layout**: Map out sprite and charset locations before coding
 2. **Test Incrementally**: Display one sprite/char before adding more
-3. **Use Tools**: Leverage `render_sprite` and memory tools
+3. **Use Tools**: Leverage `c64_graphics` with `op: "render_sprite"` and `c64_memory` operations
 4. **Document State**: Note which sprites/chars are active
 5. **Handle Errors**: Check return values and screen output
 6. **Optimize Last**: Get it working, then optimize if needed

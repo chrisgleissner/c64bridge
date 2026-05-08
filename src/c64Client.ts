@@ -144,6 +144,18 @@ const DEFAULT_BORDER_COLOR = 6;
 const DEFAULT_BACKGROUND_COLOR = 0;
 const SPACE_SCREEN_CODE = 0x20;
 
+function validateMemoryRange(address: number, length: number): void {
+  if (!Number.isInteger(address) || address < 0 || address > 0xffff) {
+    throw new Error("Address must be within 0x0000 - 0xFFFF");
+  }
+  if (!Number.isInteger(length) || length <= 0) {
+    throw new Error("Length must be greater than zero");
+  }
+  if (address + length - 1 > 0xffff) {
+    throw new Error("Memory range must stay within 0x0000 - 0xFFFF");
+  }
+}
+
 export class C64Client {
   private readonly baseUrl: string;
   private readonly http: HttpClient<unknown>;
@@ -683,9 +695,7 @@ export class C64Client {
       const resolved = resolveAddressSymbol(addressInput);
       const address = resolved ?? this.parseNumeric(addressInput);
       const length = this.parseNumeric(lengthInput);
-      if (length <= 0) {
-        throw new Error("Length must be greater than zero");
-      }
+      validateMemoryRange(address, length);
 
       const rawBytes = await this.readMemoryRaw(address, length);
       const bytes = rawBytes.slice(0, length);
@@ -711,9 +721,7 @@ export class C64Client {
       const resolved = resolveAddressSymbol(addressInput);
       const address = resolved ?? this.parseNumeric(addressInput);
       const dataBuffer = this.hexStringToBuffer(bytesInput);
-      if (dataBuffer.length === 0) {
-        throw new Error("No bytes provided");
-      }
+      validateMemoryRange(address, dataBuffer.length);
 
       // Prefer PUT with hex data for up to 128 bytes; fall back to POST binary for larger writes
       const addrStr = this.formatAddress(address);
@@ -1678,6 +1686,7 @@ export class C64Client {
    * Public to allow advanced polling and monitoring use cases.
    */
   async readMemoryRaw(address: number, length: number): Promise<Uint8Array> {
+    validateMemoryRange(address, length);
     try {
       const facade = await this.facadePromise;
       return await facade.readMemory(address, length);
@@ -1713,8 +1722,12 @@ export class C64Client {
    * keyboard-buffer injection) can avoid backend-specific paths.
    */
   async writeMemoryRaw(address: number, bytes: Uint8Array | Buffer): Promise<void> {
+    if (!Number.isInteger(address) || address < 0 || address > 0xffff) {
+      throw new Error("Address must be within 0x0000 - 0xFFFF");
+    }
     const facade = await this.facadePromise;
     const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    validateMemoryRange(address, buf.length);
     await facade.writeMemory(address, buf);
   }
 
@@ -1956,15 +1969,25 @@ export class C64Client {
     let radix = 10;
     let literal = lower;
 
+    let pattern: RegExp;
     if (lower.startsWith("$")) {
       radix = 16;
       literal = lower.slice(1);
+      pattern = /^[0-9a-f]+$/;
     } else if (lower.startsWith("0x")) {
       radix = 16;
       literal = lower.slice(2);
+      pattern = /^[0-9a-f]+$/;
     } else if (lower.startsWith("%")) {
       radix = 2;
       literal = lower.slice(1);
+      pattern = /^[01]+$/;
+    } else {
+      pattern = /^[0-9]+$/;
+    }
+
+    if (!pattern.test(literal)) {
+      throw new Error(`Unable to parse numeric value "${value}"`);
     }
 
     const parsed = Number.parseInt(literal, radix);
@@ -2004,6 +2027,9 @@ export class C64Client {
     }
     if (cleaned.length % 2 !== 0) {
       throw new Error("Hex string must contain an even number of characters");
+    }
+    if (!/^[0-9a-f]+$/.test(cleaned)) {
+      throw new Error("Hex string contains non-hexadecimal characters");
     }
 
     return Buffer.from(cleaned, "hex");

@@ -18,7 +18,7 @@
     "mcp": "node scripts/invoke-bun.mjs src/mcp-server.ts",
     "mcp:node": "node dist/mcp-server.js",
     "mcp:build": "npm run build && node dist/mcp-server.js",
-    "build": "node scripts/prebuild.mjs && tsc -p tsconfig.json && node scripts/postbuild.mjs && node scripts/invoke-bun.mjs scripts/update-readme.ts && node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
+    "build": "VICE_VISIBLE=false node scripts/prebuild.mjs && VICE_VISIBLE=false tsc -p tsconfig.json && VICE_VISIBLE=false node scripts/postbuild.mjs && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/update-readme.ts && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
     "lint": "npm run check",
     "test": "node scripts/invoke-bun.mjs scripts/run-tests.ts",
     "test:node": "node scripts/run-tests.mjs",
