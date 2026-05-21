@@ -578,10 +578,11 @@ The [`./build`](./build) script at the project root wraps all development tasks 
 
 ## Documentation
 
-- [doc/developer.md](doc/developer.md) — development workflow and RAG details
-- [data/context/bootstrap.md](data/context/bootstrap.md) — primer injected ahead of prompts
-- [doc/c64u/c64-openapi.yaml](doc/c64u/c64-openapi.yaml) — REST surface (OpenAPI 3.1)
-- [AGENTS.md](AGENTS.md) — LLM-facing quick setup, usage, and personas
+- [DeepWiki](https://deepwiki.com/chrisgleissner/c64bridge) - architecture and implementation overview
+- [doc/developer.md](doc/developer.md) - development workflow and RAG details
+- [data/context/bootstrap.md](data/context/bootstrap.md) - primer injected ahead of prompts
+- [doc/c64u/c64-openapi.yaml](doc/c64u/c64-openapi.yaml) - REST surface (OpenAPI 3.1)
+- [AGENTS.md](AGENTS.md) - LLM-facing quick setup, usage, and personas
 
 ## Static MCP Interface
 
