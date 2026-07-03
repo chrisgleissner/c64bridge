@@ -40,6 +40,8 @@ C64 Bridge is listed in the [Official MCP Registry](https://registry.modelcontex
     - [Configuration Merge Rules](#configuration-merge-rules)
     - [Backend Configuration: C64 Ultimate](#backend-configuration-c64-ultimate)
     - [Backend Configuration: VICE](#backend-configuration-vice)
+      - [VICE Window Modes](#vice-window-modes)
+      - [Recommended VICE Configurations](#recommended-vice-configurations)
     - [Runtime Backend Switching](#runtime-backend-switching)
   - [VS Code MCP Setup](#vs-code-mcp-setup)
     - [Enable the C64 Agent](#enable-the-c64-agent)
@@ -242,7 +244,7 @@ Use this for a C64 Ultimate or Ultimate 64:
 
 ### Backend Configuration: VICE
 
-Use this for managed VICE launches:
+C64 Bridge can either connect to an already running VICE Binary Monitor or manage a local VICE process for you. The usual managed setup only needs the emulator binary and, when auto-detection cannot find it, the VICE resource directory:
 
 ```json
 {
@@ -253,26 +255,68 @@ Use this for managed VICE launches:
 }
 ```
 
+- `exe` is optional when `x64sc` or `x64` is on `PATH`. If no explicit binary is configured, the runtime prefers `/usr/local/bin/x64sc` when present, then falls back to `x64sc` or `x64` on `PATH`.
 - `directory` is optional. When omitted, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the emulator binary and in common system locations.
-- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override managed VICE startup without editing config files.
-- If no explicit binary is configured, the runtime prefers `/usr/local/bin/x64sc` when present, then falls back to `x64sc` or `x64` on `PATH` so the same setup remains portable across operating systems.
+- `host` and `port` are optional and default to `127.0.0.1:6502`, the Binary Monitor endpoint C64 Bridge starts for managed local sessions. On local endpoints, C64 Bridge first tries to reuse an already running monitor before starting its own process.
+- `visible`, `warp`, and `args` are optional runtime controls. They can live in JSON config, but most users set their environment-variable equivalents from the MCP client because they are per-session preferences.
+- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override the JSON values without editing config files.
 
-> [!TIP]
-> **Start VICE minimized.** When an agent drives the emulator you usually don't want its window popping up and stealing focus on every launch. Forward VICE's own `-minimized` flag through `VICE_ARGS` so the window starts iconified while staying fully controllable over the Binary Monitor — screen reads, `display_get`, and keyboard input all work exactly as they do for a visible window (the emulator is never paused by being minimized):
->
-> ```json
-> {
->   "servers": {
->     "c64bridge": {
->       "command": "npx",
->       "args": ["-y", "c64bridge@latest"],
->       "env": { "VICE_ARGS": "-minimized" }
->     }
->   }
-> }
-> ```
->
-> Keep `VICE_VISIBLE` at its default (`true`) — `-minimized` governs a real, on-desktop window, whereas `VICE_VISIBLE=false` drops to a headless/Xvfb backend with no window at all.
+#### VICE Window Modes
+
+Choose the window mode based on where the MCP server runs:
+
+| Mode | Configuration | What happens | Use when |
+| --- | --- | --- | --- |
+| Visible | `VICE_VISIBLE=true` | VICE opens a normal desktop window. Warp defaults to off. | You are developing locally and want to watch or interact with the emulator. |
+| Minimized | `VICE_VISIBLE=true`, `VICE_ARGS="-minimized"` | VICE still runs as a normal desktop app, but its window starts iconified. Binary Monitor operations, screen reads, frame capture, and keyboard input continue to work. | You are using an agent locally and do not want the emulator stealing focus, but still want the option to restore the window. |
+| Headless/Xvfb | `VICE_VISIBLE=false` | C64 Bridge launches VICE without a user-facing desktop window, using Xvfb unless disabled. Warp defaults to on. | CI, unattended tests, servers, or any session where no one needs to inspect the emulator window. |
+
+Minimized and headless are not the same thing. Minimized is still a visible desktop session with a real VICE window; it is simply hidden by the window manager at startup. Headless/Xvfb has no user-facing window, so it is better for automation but less convenient when you need to debug by looking at the emulator.
+
+For normal local MCP use, prefer minimized VICE. It avoids focus stealing while preserving the ability to restore the window for visual inspection. Prefer headless/Xvfb for CI and remote or display-less environments.
+
+`FORCE_XVFB=1` forces the Xvfb path even if a graphical session is available. `DISABLE_XVFB=1` disables that fallback and uses the current display, which is mainly useful for troubleshooting display detection.
+
+#### Recommended VICE Configurations
+
+Local agent session, VICE starts minimized:
+
+```json
+{
+  "servers": {
+    "c64bridge": {
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": {
+        "C64_MODE": "vice",
+        "VICE_VISIBLE": "true",
+        "VICE_ARGS": "-minimized",
+        "VICE_WARP": "false"
+      }
+    }
+  }
+}
+```
+
+Headless automation, VICE runs without a visible desktop window:
+
+```json
+{
+  "servers": {
+    "c64bridge": {
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": {
+        "C64_MODE": "vice",
+        "VICE_VISIBLE": "false",
+        "VICE_WARP": "true"
+      }
+    }
+  }
+}
+```
+
+If VICE is installed outside the usual search paths, add `VICE_BINARY` and, if ROM/resource auto-detection fails, `VICE_DIRECTORY` to either example.
 
 > [!NOTE]
 > VICE supports only the operations marked with a VICE checkmark in the [MCP API Reference](#mcp-api-reference). Unsupported operations return `unsupported_platform`.
@@ -373,6 +417,8 @@ You can add `env` entries in `.vscode/mcp.json` to select a config file, overrid
 - `C64_MODE` forces the initial backend to `c64u` or `vice`
 - `LOG_LEVEL=debug` enables verbose logging
 
+For VICE-specific overrides such as `VICE_ARGS=-minimized`, `VICE_VISIBLE=false`, or custom VICE paths, use the patterns in [Backend Configuration: VICE](#backend-configuration-vice).
+
 ### Environment Variables in MCP Client Configs
 
 Every runtime environment variable documented in the root [mcp.json](./mcp.json) can be supplied by your MCP client configuration, including `.vscode/mcp.json` under `servers.c64bridge.env`.
@@ -390,7 +436,7 @@ When an environment variable has no JSON config equivalent, the order is:
 
 That rule applies uniformly across the documented runtime environment variables below.
 
-Example: visible VICE with a specific ROM or resource directory, plus a hardware fallback that can still be selected instantly at runtime:
+Example: start on minimized VICE with a specific ROM or resource directory, plus a hardware fallback that can still be selected instantly at runtime:
 
 ```json
 {
@@ -406,6 +452,7 @@ Example: visible VICE with a specific ROM or resource directory, plus a hardware
         "VICE_BINARY": "/usr/local/bin/x64sc",
         "VICE_DIRECTORY": "/usr/local/share/vice",
         "VICE_VISIBLE": "true",
+        "VICE_ARGS": "-minimized",
         "VICE_WARP": "false"
       }
     }
@@ -468,13 +515,13 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | Variable | Default | JSON Config Key | Description |
 | --- | --- | --- | --- |
 | `DISABLE_XVFB` | 0 | — | Set to 1 to disable Xvfb fallback and use the current display only |
-| `FORCE_XVFB` | 0 | — | Set to 1 to force managed VICE launches to run under Xvfb |
-| `VICE_ARGS` |  | vice.args | Extra command-line arguments forwarded to managed VICE launches |
+| `FORCE_XVFB` | 0 | — | Set to 1 to force managed VICE launches to use Xvfb even when a graphical session is detected |
+| `VICE_ARGS` |  | vice.args | Extra command-line arguments forwarded to managed VICE launches, such as -minimized for a visible window that starts iconified |
 | `VICE_BINARY` | x64sc | vice.exe | VICE binary to launch for managed emulator sessions and audio capture; automatic search is used only when this override is missing or invalid |
 | `VICE_DIRECTORY` | auto-detect | vice.directory | Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid |
 | `VICE_HOST` | 127.0.0.1 | vice.host | Override the VICE Binary Monitor host |
 | `VICE_PORT` | 6502 | vice.port | Override the VICE Binary Monitor port |
-| `VICE_VISIBLE` | true | vice.visible | Launch VICE visibly on the desktop instead of headless/Xvfb when possible |
+| `VICE_VISIBLE` | true | vice.visible | Launch VICE as a desktop window when true; use headless/Xvfb managed launch when false |
 | `VICE_WARP` | false when visible, true when headless | vice.warp | Enable warp mode for managed VICE sessions |
 | `VICE_XVFB_DISPLAY` | :99 | — | Display number to use when managed VICE launches under Xvfb |
 

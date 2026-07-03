@@ -129,7 +129,7 @@
       "default": "6502"
     },
     "VICE_VISIBLE": {
-      "description": "Launch VICE visibly on the desktop instead of headless/Xvfb when possible",
+      "description": "Launch VICE as a desktop window when true; use headless/Xvfb managed launch when false",
       "default": "true"
     },
     "VICE_WARP": {
@@ -137,7 +137,7 @@
       "default": "false when visible, true when headless"
     },
     "VICE_ARGS": {
-      "description": "Extra command-line arguments forwarded to managed VICE launches",
+      "description": "Extra command-line arguments forwarded to managed VICE launches, such as -minimized for a visible window that starts iconified",
       "default": ""
     },
     "VICE_RUN_TIMEOUT_MS": {
@@ -145,7 +145,7 @@
       "default": "10000"
     },
     "FORCE_XVFB": {
-      "description": "Set to 1 to force managed VICE launches to run under Xvfb",
+      "description": "Set to 1 to force managed VICE launches to use Xvfb even when a graphical session is detected",
       "default": "0"
     },
     "DISABLE_XVFB": {
