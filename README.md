@@ -257,6 +257,23 @@ Use this for managed VICE launches:
 - `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override managed VICE startup without editing config files.
 - If no explicit binary is configured, the runtime prefers `/usr/local/bin/x64sc` when present, then falls back to `x64sc` or `x64` on `PATH` so the same setup remains portable across operating systems.
 
+> [!TIP]
+> **Start VICE minimized.** When an agent drives the emulator you usually don't want its window popping up and stealing focus on every launch. Forward VICE's own `-minimized` flag through `VICE_ARGS` so the window starts iconified while staying fully controllable over the Binary Monitor — screen reads, `display_get`, and keyboard input all work exactly as they do for a visible window (the emulator is never paused by being minimized):
+>
+> ```json
+> {
+>   "servers": {
+>     "c64bridge": {
+>       "command": "npx",
+>       "args": ["-y", "c64bridge@latest"],
+>       "env": { "VICE_ARGS": "-minimized" }
+>     }
+>   }
+> }
+> ```
+>
+> Keep `VICE_VISIBLE` at its default (`true`) — `-minimized` governs a real, on-desktop window, whereas `VICE_VISIBLE=false` drops to a headless/Xvfb backend with no window at all.
+
 > [!NOTE]
 > VICE supports only the operations marked with a VICE checkmark in the [MCP API Reference](#mcp-api-reference). Unsupported operations return `unsupported_platform`.
 
