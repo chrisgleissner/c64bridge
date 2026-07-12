@@ -4,7 +4,7 @@
   "title": "C64 Bridge",
   "description": "MCP server for Commodore 64 Ultimate hardware and VICE emulator control.",
   "repository": {
-    "url": "git+https://github.com/chrisgleissner/c64bridge.git",
+    "url": "https://github.com/chrisgleissner/c64bridge",
     "source": "github"
   },
   "websiteUrl": "https://github.com/chrisgleissner/c64bridge",

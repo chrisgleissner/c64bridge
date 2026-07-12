@@ -26,8 +26,19 @@ const fileExists = async (relativePath) => {
 };
 
 const getRepositoryMetadata = (repository) => {
-  const url = typeof repository === 'string' ? repository : repository?.url;
-  if (!url) {
+  const rawUrl = typeof repository === 'string' ? repository : repository?.url;
+  if (!rawUrl) {
+    return undefined;
+  }
+
+  let url = rawUrl.trim();
+  if (url.startsWith('git+')) {
+    url = url.slice(4);
+  }
+  if (url.endsWith('.git')) {
+    url = url.slice(0, -4);
+  }
+  if (!/^https?:\/\//.test(url)) {
     return undefined;
   }
 
