@@ -86,6 +86,7 @@ export interface ViceConfig {
   visible?: boolean | string;
   warp?: boolean | string;
   args?: string | string[];
+  prewarm?: boolean | string | number;
 }
 export interface C64BridgeConfigFile { c64u?: C64uConfig; vice?: ViceConfig }
 

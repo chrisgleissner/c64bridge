@@ -259,7 +259,39 @@ C64 Bridge can either connect to an already running VICE Binary Monitor or manag
 - `directory` is optional. When omitted, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the emulator binary and in common system locations.
 - `host` and `port` are optional and default to `127.0.0.1:6502`, the Binary Monitor endpoint C64 Bridge starts for managed local sessions. On local endpoints, C64 Bridge first tries to reuse an already running monitor before starting its own process.
 - `visible`, `warp`, and `args` are optional runtime controls. They can live in JSON config, but most users set their environment-variable equivalents from the MCP client because they are per-session preferences.
-- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override the JSON values without editing config files.
+- `prewarm` is optional and defaults to `false`. When enabled, C64 Bridge starts or connects VICE in the background during MCP startup instead of waiting for the first VICE operation.
+- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, `VICE_ARGS`, and `VICE_PREWARM` override the JSON values without editing config files.
+
+#### VICE Prewarming
+
+VICE prewarming is disabled by default. With the default lazy behavior, a configured VICE backend is discoverable immediately, but the emulator process is not started until the first VICE operation needs it. Enable prewarming only when you prefer paying the VICE startup cost during MCP server startup.
+
+Enable it with an environment variable:
+
+```json
+{
+  "servers": {
+    "c64bridge": {
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": {
+        "VICE_PREWARM": "1"
+      }
+    }
+  }
+}
+```
+
+Or in `.c64bridge.json`:
+
+```json
+{
+  "vice": {
+    "exe": "/usr/bin/x64sc",
+    "prewarm": true
+  }
+}
+```
 
 #### VICE Window Modes
 
@@ -521,6 +553,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `VICE_DIRECTORY` | auto-detect | vice.directory | Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid |
 | `VICE_HOST` | 127.0.0.1 | vice.host | Override the VICE Binary Monitor host |
 | `VICE_PORT` | 6502 | vice.port | Override the VICE Binary Monitor port |
+| `VICE_PREWARM` | 0 | vice.prewarm | Set to 1 to start/connect VICE in the background during MCP startup; disabled by default so VICE starts lazily on first use |
 | `VICE_VISIBLE` | true | vice.visible | Launch VICE as a desktop window when true; use headless/Xvfb managed launch when false |
 | `VICE_WARP` | false when visible, true when headless | vice.warp | Enable warp mode for managed VICE sessions |
 | `VICE_XVFB_DISPLAY` | :99 | — | Display number to use when managed VICE launches under Xvfb |

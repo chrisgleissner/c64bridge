@@ -1,6 +1,19 @@
 # Changelog
 
 
+
+## 0.9.3 - 2026-07-12
+
+### Highlights
+
+- Added a concise BASIC memory map resource with consistent filesystem-to-resource URI mapping and cross-references alongside the existing KERNAL and full memory map documents.
+- Standardised ROM routine resource filenames and paths so `c64://rom-routines/*` URLs map intuitively to matching Markdown files.
+- Made VICE prewarming opt-in via `VICE_PREWARM=1` or `vice.prewarm: true`; default startup now keeps VICE lazy until first use.
+
+### Maintenance
+
+- Updated MCP server dependencies to current patch/minor versions and refreshed npm/Bun lockfiles.
+
 ## 0.9.2 - 2026-05-08
 
 ### Highlights
