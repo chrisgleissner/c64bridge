@@ -319,8 +319,21 @@ jobs:
 
       - name: Publish to npm
         run: |
+          npm install -g npm@^11.18.0
+          npm --version
+
+      - name: Verify trusted-publishing environment
+        run: |
+          node --version
+          npm --version
+          npm config get registry
           npm config delete //registry.npmjs.org/:_authToken || true
-          npm publish --provenance --access public
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_URL missing; OIDC not available"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN missing; OIDC not available"; exit 1; }
+
+      - name: Publish to npm
+        run: |
+          npm publish --access public
 
       - name: Wait for npm package visibility
         env:
