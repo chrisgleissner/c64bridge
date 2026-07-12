@@ -5,6 +5,12 @@ on:
     tags:
       - '*.*.*'
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.9.3) for re-validation of an already-published release.'
+        required: true
+        type: string
 
 jobs:
   release:
@@ -19,7 +25,7 @@ jobs:
       id-token: write
       packages: read
     outputs:
-      pkg_version: ${{ steps.version.outputs.version }}
+      pkg_version: ${{ steps.state.outputs.version }}
 
     steps:
       - name: Checkout repository
@@ -36,19 +42,50 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
-      - name: Determine tag version
-        id: version
+      - name: Determine release state
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          CLEAN="${TAG#v}"
-          echo "version=$CLEAN" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          PUBLISHED=$(npm view "c64bridge@${VERSION}" version 2>/dev/null | tr -d '"' || true)
+          if [ -z "$PUBLISHED" ]; then
+            PUBLISHED=""
+          fi
+
+          GITHUB_RELEASE_TAG=""
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            GITHUB_RELEASE_TAG="$TAG"
+          fi
+
+          echo "Detected npm-published='${PUBLISHED}' github-release='${GITHUB_RELEASE_TAG:-<none>}'"
+
+          if [ "$PUBLISHED" = "$VERSION" ] && [ -n "$GITHUB_RELEASE_TAG" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "skip_prepare=true" >> "$GITHUB_OUTPUT"
+            echo "skip_release_notes=true" >> "$GITHUB_OUTPUT"
+            echo "Re-validation mode for ${VERSION}: already published to npm and GitHub; skipping publication."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "skip_prepare=false" >> "$GITHUB_OUTPUT"
+            echo "skip_release_notes=false" >> "$GITHUB_OUTPUT"
+            echo "Fresh release of ${VERSION}: publication required."
+          fi
 
       - name: Determine previous tag
         id: previous
         env:
-          CURRENT_VERSION: ${{ steps.version.outputs.version }}
-          CURRENT_TAG: ${{ steps.version.outputs.tag }}
+          CURRENT_VERSION: ${{ steps.state.outputs.version }}
+          CURRENT_TAG: ${{ steps.state.outputs.tag }}
         run: |
           node <<'NODE'
           import { execSync } from 'node:child_process';
@@ -127,8 +164,9 @@ jobs:
         run: npm ci
 
       - name: Run release-prepare
+        if: ${{ steps.state.outputs.skip_prepare != 'true' }}
         run: |
-          npm run release:prepare -- "${{ steps.version.outputs.version }}"
+          npm run release:prepare -- "${{ steps.state.outputs.version }}"
 
       - name: Configure git
         run: |
@@ -136,12 +174,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Commit and push release preparation changes
+        if: ${{ steps.state.outputs.skip_prepare != 'true' }}
         run: |
           git add package.json package-lock.json mcp.json server.json CHANGELOG.md
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: prepare release ${{ steps.version.outputs.version }}"
+            git commit -m "chore: prepare release ${{ steps.state.outputs.version }}"
             git push origin HEAD:main
           fi
 
@@ -157,17 +196,19 @@ jobs:
 
       - name: Extract changelog entry
         id: changelog
+        if: ${{ steps.state.outputs.skip_release_notes != 'true' }}
         run: |
-          ENTRY=$(node scripts/extract-changelog-entry.mjs "${{ steps.version.outputs.version }}")
+          ENTRY=$(node scripts/extract-changelog-entry.mjs "${{ steps.state.outputs.version }}")
           echo "entry<<EOF" >> "$GITHUB_OUTPUT"
           echo "$ENTRY" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Format release notes
         id: notes
+        if: ${{ steps.state.outputs.skip_release_notes != 'true' }}
         env:
           CHANGELOG_ENTRY: ${{ steps.changelog.outputs.entry }}
-          CURRENT_TAG: ${{ steps.version.outputs.tag }}
+          CURRENT_TAG: ${{ steps.state.outputs.tag }}
           PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
         run: |
           node <<'NODE'
@@ -202,10 +243,11 @@ jobs:
           NODE
 
       - name: Update GitHub release notes
+        if: ${{ steps.state.outputs.skip_release_notes != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BODY: ${{ steps.notes.outputs.body }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
           node <<'NODE'
           import process from 'node:process';
@@ -318,11 +360,13 @@ jobs:
           NODE
 
       - name: Use npm with trusted publishing support
+        if: ${{ steps.state.outputs.publish == 'true' }}
         run: |
           npm install -g npm@^11.18.0
           npm --version
 
       - name: Verify trusted-publishing environment
+        if: ${{ steps.state.outputs.publish == 'true' }}
         run: |
           node --version
           npm --version
@@ -332,12 +376,14 @@ jobs:
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN missing; OIDC not available"; exit 1; }
 
       - name: Publish to npm
+        if: ${{ steps.state.outputs.publish == 'true' }}
         run: |
           npm publish --access public
 
       - name: Wait for npm package visibility
+        if: ${{ steps.state.outputs.publish == 'true' }}
         env:
-          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+          PACKAGE_VERSION: ${{ steps.state.outputs.version }}
         run: |
           for attempt in $(seq 1 30); do
             if PUBLISHED_VERSION=$(npm view "c64bridge@${PACKAGE_VERSION}" version --json 2>/dev/null | tr -d '"'); then
@@ -360,9 +406,11 @@ jobs:
         run: ./mcp-publisher validate server.json
 
       - name: Authenticate to MCP Registry
+        if: ${{ steps.state.outputs.publish == 'true' }}
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
+        if: ${{ steps.state.outputs.publish == 'true' }}
         run: ./mcp-publisher publish server.json
 
       - name: Logout from MCP Registry
