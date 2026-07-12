@@ -317,7 +317,7 @@ jobs:
           });
           NODE
 
-      - name: Publish to npm
+      - name: Use npm with trusted publishing support
         run: |
           npm install -g npm@^11.18.0
           npm --version
