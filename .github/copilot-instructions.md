@@ -38,6 +38,7 @@ This repository contains a Model Context Protocol (MCP) server that drives Commo
 - Use `npm run release:prepare -- <semver>` to bump versions in `package.json` / `mcp.json`, regenerate the MCP manifest, and prepend changelog notes distilled from commit history.
 - Run `npm run test:matrix` locally before pushing to ensure CI will pass the comprehensive suite.
 - GitHub Actions release workflow publishes on semantic tags (`X.Y.Z`) and runs a post-publish smoke test via npm.
+- npm publication is expected to use npm trusted publishing via GitHub OIDC, not a long-lived `NPM_TOKEN`.
 - Provide documentation updates (`doc/`, `README.md`, `CHANGELOG.md`) with user-facing changes.
 
 ## Prompts & Personas

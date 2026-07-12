@@ -124,9 +124,10 @@ Environment knobs: `RAG_EMBEDDINGS_DIR`, `RAG_BUILD_ON_START`, `RAG_REINDEX_INTE
 
 Tagging a release through the GitHub release UI triggers [`.github/workflows/release.yaml`](../.github/workflows/release.yaml), which publishes the npm package and then publishes the same version to the MCP Registry.
 
-- Required GitHub secret: `NPM_TOKEN`
+- npm publication now uses trusted publishing over GitHub OIDC rather than an `NPM_TOKEN` secret
+- One-time npm setup is required in the package settings for `c64bridge`: provider `GitHub Actions`, repository `chrisgleissner/c64bridge`, workflow `.github/workflows/release.yaml`, and allowed action `npm publish`
 - No dedicated MCP Registry secret is required for the GitHub-driven flow; the workflow uses `mcp-publisher login github-oidc`
-- The release workflow must grant `id-token: write` so GitHub Actions can mint the short-lived OIDC token used by `mcp-publisher`
+- The release workflow must grant `id-token: write` so GitHub Actions can mint the short-lived OIDC tokens used by both npm trusted publishing and `mcp-publisher`
 - Keep [`package.json`](../package.json) `mcpName` aligned with [`server.json`](../server.json) `name`
 - The root [`server.json`](../server.json) is the MCP Registry manifest; [`mcp/server.json`](../mcp/server.json) remains generated MCP interface output
 
