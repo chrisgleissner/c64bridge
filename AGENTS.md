@@ -115,12 +115,17 @@ Tools and parameters are listed dynamically via ListTools.
 Use ListResources to discover built-in knowledge, then read specific URIs to enrich context before coding:
 
 - `c64://basic/spec` — BASIC v2 tokens, syntax, device I/O
+- `c64://basic/rom-routines` — BASIC ROM routines, parser/evaluator helpers, numeric/string machinery
 - `c64://assembly/6510-spec` — 6510 opcodes, addressing, zero-page strategy
 - `c64://graphics/vic/spec` — raster timing, sprites, colour RAM, bitmap modes
 - `c64://sound/sid/spec` — SID registers, waveforms, ADSR
 - `c64://memory/map` — full 64 KB address map
+- `c64://memory/zero-page-and-workspace` — zero page, stack, page-2 buffers, page-3 vectors
 - `c64://vice/binary-monitor-spec` — mandatory reference when targeting VICE; covers Binary Monitor transport, command framing, and debugger side effects
 - `c64://basic/pitfalls` — quoting, line length, token pitfalls
+- `c64://kernal/rom-routines` — KERNAL ROM routines, jump table, vectors, serial/tape/screen services
+- `c64://io/spec` — memory-mapped VIC-II, SID, CIA, colour RAM, and expansion I/O registers
+- `c64://io/cia/spec` — CIA timers, keyboard matrix, serial bus, TOD, IRQ/NMI details
 - `c64://graphics/petscii/style-guide` — readable PETSCII, colour/dither guidance
 
 Pull RAG snippets via `c64_rag` (ops `basic`/`asm`) for targeted examples.

@@ -658,7 +658,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **26 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **27 resources**, and **10 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -911,7 +911,8 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://graphics/sprite-charset/best-practices` | Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics. |
 | `c64://memory/map` | Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions. |
 | `c64://memory/zero-page-and-workspace` | Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses. |
-| `c64://kernal/rom-routines` | Lists KERNAL ROM vectors and service routines for OS-level functionality. |
+| `c64://basic/rom-routines` | Maps BASIC ROM landmarks, reusable interpreter routines, numeric helpers, string helpers, and C64-specific BASIC continuation entries. |
+| `c64://kernal/rom-routines` | Maps KERNAL ROM vectors, jump table entries, internal routines, serial/tape/screen services, and reset handlers. |
 | `c64://io/spec` | Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes. |
 | `c64://io/cia/spec` | Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout. |
 | `c64://printer/spec` | Covers device setup, control codes, and Ultimate 64 integration for printers. |

@@ -182,7 +182,6 @@ export class C64Client {
       }).then((sel) => sel.facade);
       this.allFacades.set("c64u", this.facadePromise);
       this.initPromise = Promise.resolve();
-      void this.primeGreetingDd00Cache(["c64u"]);
       return;
     }
 
@@ -200,12 +199,6 @@ export class C64Client {
         this.allFacades.set(secondaryType, Promise.resolve(secondary));
       }
     });
-    void this.initPromise.then(async () => {
-      if (this.allFacades.has("vice")) {
-        await this.prewarmBackends(["vice"]);
-      }
-      void this.primeGreetingDd00Cache();
-    }).catch(() => {});
   }
 
   private async requireViceBackend(): Promise<ViceBackend> {

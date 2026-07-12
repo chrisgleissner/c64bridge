@@ -105,7 +105,7 @@ User‑port mapping for CIA2 PRB and PRA b2 is defined in `io-spec.md` (pin lett
 
 - **System I/O (IEC, tape, user/expansion ports, keyboard algorithm):** `io-spec.md`  
 - **Printers:** `data/printer/printer-spec.md`  
-- **KERNAL vector/entry points:** `data/memory/kernal-api-spec.md`
+- **KERNAL vector/entry points:** `../kernal/rom-routines.md`
 
 ---
 

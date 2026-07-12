@@ -98,11 +98,6 @@ async function main() {
   const initialBackendType = await withDiagnosticSpan("startup", "resolve_active_backend", {}, () => client.getActiveBackendType());
   setPlatform(initialBackendType);
   writeDiagnosticEvent("platform_initialised", { platform: initialBackendType });
-  void withDiagnosticSpan("startup", "prewarm_backends", { backends: ["vice"] }, () => client.prewarmBackends(["vice"])).then((results) => {
-    writeDiagnosticEvent("backend_prewarm_complete", { results });
-  }).catch((error) => {
-    writeDiagnosticEvent("backend_prewarm_failed", { error });
-  });
   const rag: RagRetriever = createLazyRagRetriever(() => initRag(), {
     onInitStart() {
       writeDiagnosticEvent("rag_init_start");

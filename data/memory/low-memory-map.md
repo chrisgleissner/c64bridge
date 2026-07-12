@@ -5,6 +5,7 @@
 > Style: Same compact table schema used in your KERNAL/BASIC specs. **Hex + decimal** addresses. **Bold** = key/callable vectors.  
 
 > Hints: Zero page gives **1‑byte addressing** → faster code; keep ML temporaries in $FB–$FE. If **tape is unused**, the **cassette buffer $033C–$03FB (828–1019)** is ideal for **small ML helpers** or even **sprite/char data** (e.g., sprite blocks 13 @ $0340–$037F, 14 @ $0380–$03BF). Keyboard buffering enables **“dynamic keyboard”** input injection. Adjust **LORAM/HIRAM/CHAREN** via $0001 for ROM/RAM banking.
+> Related memory maps: `memory-map.md`, `../basic/rom-routines.md`, `../kernal/rom-routines.md`, `../io/io-spec.md`.
 
 ## Legend
 

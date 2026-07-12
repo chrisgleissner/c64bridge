@@ -33,7 +33,7 @@ Do not assume the current backend is correct without checking
 
 ## Memory Map (default RAM layout)
 
-For Full details see `../memory/memory-map.md` with focus on low-memory (pages 0-3) in `../memory/low-memory-map.md` and  KERNAL memory in `../memory/kernal-memory-map.md`.
+For full details see `../memory/memory-map.md`. Use `../memory/low-memory-map.md` for zero page/pages 0-3, `../basic/rom-routines.md` for BASIC ROM routines, `../kernal/rom-routines.md` for KERNAL ROM routines, and `../io/io-spec.md` or `../io/cia-spec.md` for hardware registers.
 
 - $0000–$00FF: Zero page
 - $0100–$01FF: Stack

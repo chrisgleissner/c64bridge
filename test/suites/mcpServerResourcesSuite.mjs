@@ -22,6 +22,7 @@ const expectedResources = [
   { uri: RESOURCE_URIS.graphics.vic.spec, domain: "graphics", priority: "critical", includeInIndex: true },
   { uri: RESOURCE_URIS.memory.map, domain: "memory", priority: "critical", includeInIndex: true },
   { uri: RESOURCE_URIS.memory.zeroPageAndWorkspace, domain: "memory", priority: "reference", includeInIndex: true },
+  { uri: RESOURCE_URIS.basic.romRoutines, domain: "memory", priority: "reference", includeInIndex: true },
   { uri: RESOURCE_URIS.kernal.romRoutines, domain: "memory", priority: "reference", includeInIndex: true },
   { uri: RESOURCE_URIS.io.spec, domain: "memory", priority: "critical", includeInIndex: true },
   { uri: RESOURCE_URIS.io.cia.spec, domain: "memory", priority: "reference", includeInIndex: true },
