@@ -2,6 +2,19 @@
 
 All addresses are shown as `hex` / `dec`. Group related entries to minimise token usage while keeping lookup simple.
 
+## Memory Map Reference Routing
+
+Use this quick map to select the narrowest reference before coding or patching memory.
+
+| Need | MCP resource | File |
+| --- | --- | --- |
+| Whole 64 KB layout, RAM/ROM/I/O banks, VIC/SID/CIA ranges | `c64://memory/map` | `data/memory/memory-map.md` |
+| Zero page, stack, page-2 buffers, page-3 vectors, cassette buffer | `c64://memory/zero-page-and-workspace` | `data/memory/low-memory-map.md` |
+| BASIC ROM routines, parser/evaluator helpers, variables, strings, token dispatch | `c64://basic/rom-routines` | `data/basic/rom-routines.md` |
+| KERNAL ROM routines, jump table, vectors, serial/tape/screen services | `c64://kernal/rom-routines` | `data/kernal/rom-routines.md` |
+| Hardware register map for VIC-II, SID, CIA, colour RAM, expansion I/O | `c64://io/spec` | `data/io/io-spec.md` |
+| CIA timer, keyboard, serial, TOD, IRQ/NMI register details | `c64://io/cia/spec` | `data/io/cia-spec.md` |
+
 ## Zero Page ($0000-$00FF)
 
 | Label | Address | Purpose |

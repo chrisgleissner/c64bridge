@@ -1,8 +1,9 @@
-# C64 KERNAL Memory Map — Complete ($E000–$FFFF)
+# C64 KERNAL ROM Routines Memory Map — Complete ($E000–$FFFF)
 
 > Purpose: Exhaustive sequential map of KERNAL ROM: callable routines, internal subroutines, constants, tables, IRQ/NMI handlers, and vectors.  
 > Format: One table row per symbol; **bold** names indicate callable/public API (also present in `data/api/kernal-api-spec.md`).  
 > Conventions: A=Accumulator, X,Y=Index, C=Carry; “—” not applicable.
+> Related memory maps: `../memory/memory-map.md`, `../memory/low-memory-map.md`, `../basic/rom-routines.md`, `../io/io-spec.md`.
 
 | Address | Decimal | Name | Function | Args | Input | Output | Notes |
 |:--------|:--------|:-----|:---------|:-----|:------|:-------|:------|
@@ -37,7 +38,7 @@
 | `$E38B` | 58251 | Error msg | BASIC error/READY printing | X=index | Vector `$0302` next | — | — |
 | `$E394` | 58260 | Cold BASIC | Power‑on BASIC init | — | — | — | Copies vectors to RAM |
 | `$E3A2` | 58274 | INITAT | CHRGET text (to $0073) | — | — | — | Moved to ZP |
-| `$E3BA` | 59298 | RND seed | Initial RND seed (5‑byte) | — | — | — | Constant |
+| `$E3BA` | 58298 | RND seed | Initial RND seed (5‑byte) | — | — | — | Constant |
 | `$E3BF` | 58303 | INIT | BASIC ZP init; copy CHRGET | — | — | — | — |
 | `$E422` | 58402 | Startup msgs | Print banner & BYTES FREE | — | — | — | — |
 | `$E447` | 58439 | BASIC vec tbl | ROM vector table (→RAM $0300) | — | — | — | — |

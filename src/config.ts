@@ -7,6 +7,7 @@ export interface C64BridgeConfig {
   baseUrl: string;
   c64_port: number;
   networkPassword?: string;
+  vicePrewarm: boolean;
 }
 
 const DEFAULT_HOST = "c64u";
@@ -16,6 +17,7 @@ const DEFAULT_CONFIG: C64BridgeConfig = {
   c64_host: DEFAULT_HOST,
   baseUrl: buildBaseUrl(DEFAULT_HOST, DEFAULT_PORT),
   c64_port: DEFAULT_PORT,
+  vicePrewarm: false,
 };
 
 let cachedConfig: C64BridgeConfig | null = null;
@@ -55,6 +57,9 @@ export function loadConfig(): C64BridgeConfig {
     baseUrl?: string;
     port?: number | string;
     networkPassword?: string;
+  } | undefined;
+  const vice = rawConfig?.vice as {
+    prewarm?: boolean | string | number;
   } | undefined;
 
   const parsedC64uHost = parseEndpoint(configuredString(c64u?.host));
@@ -103,6 +108,11 @@ export function loadConfig(): C64BridgeConfig {
       configuredString(c64u?.networkPassword),
       configuredString(rawConfig?.networkPassword),
     ),
+    vicePrewarm: firstDefined(
+      configuredBoolean(process.env.VICE_PREWARM),
+      configuredBoolean(vice?.prewarm),
+      configuredBoolean(rawConfig?.vicePrewarm),
+    ) ?? false,
   };
 
   cachedConfig = config;
@@ -122,6 +132,22 @@ function configuredPort(value: unknown): number | undefined {
     if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
       return parsed;
     }
+  }
+  return undefined;
+}
+
+function configuredBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
   }
   return undefined;
 }

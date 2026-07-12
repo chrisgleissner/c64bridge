@@ -247,6 +247,7 @@ test("loadConfig falls back to defaults when no config candidates exist", (t) =>
   assert.equal(config.baseUrl, "http://c64u");
   assert.equal(config.c64_port, 80);
   assert.equal(config.networkPassword, undefined);
+  assert.equal(config.vicePrewarm, false);
 
   t.after(() => {
     __resetConfigCacheForTests();
@@ -263,6 +264,76 @@ test("loadConfig falls back to defaults when no config candidates exist", (t) =>
     if (repoConfigExisted && repoConfigContents !== null) {
       writeFileSync(repoConfigPath, repoConfigContents, "utf8");
     }
+  });
+});
+
+test("loadConfig keeps VICE prewarming disabled by default", (t) => {
+  const originalEnv = {
+    C64BRIDGE_CONFIG: process.env.C64BRIDGE_CONFIG,
+    VICE_PREWARM: process.env.VICE_PREWARM,
+  };
+  const { dir, file } = writeTempConfig({
+    vice: {
+      host: "127.0.0.1",
+      port: 6502,
+    },
+  });
+
+  process.env.C64BRIDGE_CONFIG = file;
+  delete process.env.VICE_PREWARM;
+  __resetConfigCacheForTests();
+
+  const config = loadConfig();
+  assert.equal(config.vicePrewarm, false);
+
+  t.after(() => {
+    __resetConfigCacheForTests();
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+test("loadConfig supports VICE prewarming via config and env override", (t) => {
+  const originalEnv = {
+    C64BRIDGE_CONFIG: process.env.C64BRIDGE_CONFIG,
+    VICE_PREWARM: process.env.VICE_PREWARM,
+  };
+  const { dir, file } = writeTempConfig({
+    vice: {
+      host: "127.0.0.1",
+      prewarm: true,
+    },
+  });
+
+  process.env.C64BRIDGE_CONFIG = file;
+  delete process.env.VICE_PREWARM;
+  __resetConfigCacheForTests();
+
+  const configEnabled = loadConfig();
+  assert.equal(configEnabled.vicePrewarm, true);
+
+  process.env.VICE_PREWARM = "0";
+  __resetConfigCacheForTests();
+
+  const configDisabledByEnv = loadConfig();
+  assert.equal(configDisabledByEnv.vicePrewarm, false);
+
+  t.after(() => {
+    __resetConfigCacheForTests();
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 

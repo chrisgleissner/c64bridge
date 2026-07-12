@@ -88,6 +88,7 @@ async function main() {
   writeDiagnosticEvent("config_loaded", {
     baseUrl,
     hasNetworkPassword: Boolean(config.networkPassword),
+    vicePrewarm: config.vicePrewarm,
   });
   
   // Initialize C64 client (reuse existing)
@@ -98,11 +99,21 @@ async function main() {
   const initialBackendType = await withDiagnosticSpan("startup", "resolve_active_backend", {}, () => client.getActiveBackendType());
   setPlatform(initialBackendType);
   writeDiagnosticEvent("platform_initialised", { platform: initialBackendType });
-  void withDiagnosticSpan("startup", "prewarm_backends", { backends: ["vice"] }, () => client.prewarmBackends(["vice"])).then((results) => {
-    writeDiagnosticEvent("backend_prewarm_complete", { results });
-  }).catch((error) => {
-    writeDiagnosticEvent("backend_prewarm_failed", { error });
-  });
+  if (config.vicePrewarm) {
+    const availableBackends = client.getAvailableBackends();
+    if (availableBackends.includes("vice")) {
+      writeDiagnosticEvent("vice_prewarm_start");
+      void client.prewarmBackends(["vice"])
+        .then((result) => {
+          writeDiagnosticEvent("vice_prewarm_complete", { result });
+        })
+        .catch((error) => {
+          writeDiagnosticEvent("vice_prewarm_failed", { error });
+        });
+    } else {
+      writeDiagnosticEvent("vice_prewarm_skipped", { reason: "vice_not_configured" });
+    }
+  }
   const rag: RagRetriever = createLazyRagRetriever(() => initRag(), {
     onInitStart() {
       writeDiagnosticEvent("rag_init_start");

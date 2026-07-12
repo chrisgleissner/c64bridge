@@ -10,6 +10,7 @@ export const RESOURCE_URIS = {
   basic: {
     spec: "c64://basic/spec",
     pitfalls: "c64://basic/pitfalls",
+    romRoutines: "c64://basic/rom-routines",
   },
   assembly: {
     spec6510: "c64://assembly/6510-spec",
@@ -82,6 +83,7 @@ export const CANONICAL_KNOWLEDGE_RESOURCE_URIS: readonly string[] = Object.freez
   RESOURCE_URIS.graphics.spriteCharset.bestPractices,
   RESOURCE_URIS.memory.map,
   RESOURCE_URIS.memory.zeroPageAndWorkspace,
+  RESOURCE_URIS.basic.romRoutines,
   RESOURCE_URIS.kernal.romRoutines,
   RESOURCE_URIS.io.spec,
   RESOURCE_URIS.io.cia.spec,

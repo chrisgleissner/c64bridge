@@ -1181,6 +1181,39 @@ test("device: ViceBackend defaults to visible launches and parses boolean overri
   });
 });
 
+test("device: ViceBackend attaches to an already running local VICE monitor without supervising a new process", async (t) => {
+  const vice = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => {
+    await vice.stop();
+  });
+
+  await withEnv({
+    VICE_TEST_TARGET: undefined,
+    VICE_HOST: undefined,
+    VICE_PORT: undefined,
+    VICE_VISIBLE: "false",
+    VICE_WARP: "true",
+  }, async () => {
+    const backend = new ViceBackend({
+      host: "127.0.0.1",
+      port: vice.port,
+      visible: true,
+      warp: false,
+      args: ["-minimized"],
+    });
+
+    assert.equal(ViceBackend.supervisors.size, 0);
+    assert.equal(await backend.ping(), true);
+    assert.equal(ViceBackend.supervisors.size, 0);
+
+    const info = await backend.info();
+    assert.equal(info?.emulator, "vice");
+    assert.equal(info?.host, "127.0.0.1");
+    assert.equal(info?.port, vice.port);
+    assert.equal(ViceBackend.supervisors.size, 0);
+  });
+});
+
 test("device: ViceBackend resumes the monitor before disconnecting ordinary sessions", async (t) => {
   const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
   t.after(async () => {

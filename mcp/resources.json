@@ -522,6 +522,11 @@
         },
         "order": 0,
         "relatedResources": [
+          "c64://memory/zero-page-and-workspace",
+          "c64://basic/rom-routines",
+          "c64://kernal/rom-routines",
+          "c64://io/spec",
+          "c64://io/cia/spec",
           "c64://assembly/6510-spec"
         ]
       }
@@ -557,19 +562,60 @@
         "order": 1,
         "relatedResources": [
           "c64://memory/map",
+          "c64://basic/rom-routines",
+          "c64://kernal/rom-routines",
           "c64://assembly/6510-spec"
         ]
       }
     },
     {
-      "name": "KERNAL Memory Map",
-      "uri": "c64://kernal/rom-routines",
-      "description": "Detailed breakdown of KERNAL ROM routines and entry points.",
+      "name": "BASIC ROM Routines Memory Map",
+      "uri": "c64://basic/rom-routines",
+      "description": "Memory-map-style breakdown of BASIC ROM routines, tables, parser helpers, and entry points.",
       "mimeType": "text/markdown",
       "_meta": {
         "domain": "memory",
         "priority": "reference",
-        "summary": "Lists KERNAL ROM vectors and service routines for OS-level functionality.",
+        "summary": "Maps BASIC ROM landmarks, reusable interpreter routines, numeric helpers, string helpers, and C64-specific BASIC continuation entries.",
+        "prompts": [
+          "memory-debug",
+          "assembly-program",
+          "basic-program"
+        ],
+        "tools": [
+          "read",
+          "verify_and_write_memory"
+        ],
+        "tags": [
+          "memory",
+          "basic",
+          "rom"
+        ],
+        "bundle": {
+          "id": "memory",
+          "title": "Memory & I/O Reference",
+          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
+          "order": 5
+        },
+        "order": 2,
+        "relatedResources": [
+          "c64://memory/map",
+          "c64://memory/zero-page-and-workspace",
+          "c64://kernal/rom-routines",
+          "c64://basic/spec",
+          "c64://assembly/6510-spec"
+        ]
+      }
+    },
+    {
+      "name": "KERNAL ROM Routines Memory Map",
+      "uri": "c64://kernal/rom-routines",
+      "description": "Memory-map-style breakdown of KERNAL ROM routines, vectors, tables, and entry points.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "memory",
+        "priority": "reference",
+        "summary": "Maps KERNAL ROM vectors, jump table entries, internal routines, serial/tape/screen services, and reset handlers.",
         "prompts": [
           "memory-debug",
           "assembly-program"
@@ -588,9 +634,12 @@
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
           "order": 5
         },
-        "order": 2,
+        "order": 3,
         "relatedResources": [
           "c64://memory/map",
+          "c64://memory/zero-page-and-workspace",
+          "c64://basic/rom-routines",
+          "c64://io/spec",
           "c64://assembly/6510-spec"
         ]
       }
@@ -625,9 +674,11 @@
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
           "order": 5
         },
-        "order": 3,
+        "order": 4,
         "relatedResources": [
           "c64://memory/map",
+          "c64://memory/zero-page-and-workspace",
+          "c64://io/cia/spec",
           "c64://assembly/6510-spec"
         ]
       }
@@ -661,10 +712,11 @@
           "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
           "order": 5
         },
-        "order": 4,
+        "order": 5,
         "relatedResources": [
           "c64://io/spec",
-          "c64://memory/map"
+          "c64://memory/map",
+          "c64://memory/zero-page-and-workspace"
         ]
       }
     },
@@ -919,6 +971,7 @@
           "c64://graphics/sprite-charset/best-practices",
           "c64://memory/map",
           "c64://memory/zero-page-and-workspace",
+          "c64://basic/rom-routines",
           "c64://kernal/rom-routines",
           "c64://io/spec",
           "c64://io/cia/spec",

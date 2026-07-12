@@ -259,7 +259,8 @@ C64 Bridge can either connect to an already running VICE Binary Monitor or manag
 - `directory` is optional. When omitted, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the emulator binary and in common system locations.
 - `host` and `port` are optional and default to `127.0.0.1:6502`, the Binary Monitor endpoint C64 Bridge starts for managed local sessions. On local endpoints, C64 Bridge first tries to reuse an already running monitor before starting its own process.
 - `visible`, `warp`, and `args` are optional runtime controls. They can live in JSON config, but most users set their environment-variable equivalents from the MCP client because they are per-session preferences.
-- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, and `VICE_ARGS` override the JSON values without editing config files.
+- By default, VICE is started lazily on first access. When setting the environment variable `VICE_PREWARM=1`, C64 Bridge starts or connects VICE in the background during MCP startup.
+- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, `VICE_ARGS`, and `VICE_PREWARM` override the JSON values without editing config files.
 
 #### VICE Window Modes
 
@@ -521,6 +522,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `VICE_DIRECTORY` | auto-detect | vice.directory | Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid |
 | `VICE_HOST` | 127.0.0.1 | vice.host | Override the VICE Binary Monitor host |
 | `VICE_PORT` | 6502 | vice.port | Override the VICE Binary Monitor port |
+| `VICE_PREWARM` | 0 | vice.prewarm | Set to 1 to start/connect VICE in the background during MCP startup; disabled by default so VICE starts lazily on first use |
 | `VICE_VISIBLE` | true | vice.visible | Launch VICE as a desktop window when true; use headless/Xvfb managed launch when false |
 | `VICE_WARP` | false when visible, true when headless | vice.warp | Enable warp mode for managed VICE sessions |
 | `VICE_XVFB_DISPLAY` | :99 | — | Display number to use when managed VICE launches under Xvfb |
@@ -658,7 +660,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **26 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **27 resources**, and **10 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -911,7 +913,8 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://graphics/sprite-charset/best-practices` | Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics. |
 | `c64://memory/map` | Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions. |
 | `c64://memory/zero-page-and-workspace` | Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses. |
-| `c64://kernal/rom-routines` | Lists KERNAL ROM vectors and service routines for OS-level functionality. |
+| `c64://basic/rom-routines` | Maps BASIC ROM landmarks, reusable interpreter routines, numeric helpers, string helpers, and C64-specific BASIC continuation entries. |
+| `c64://kernal/rom-routines` | Maps KERNAL ROM vectors, jump table entries, internal routines, serial/tape/screen services, and reset handlers. |
 | `c64://io/spec` | Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes. |
 | `c64://io/cia/spec` | Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout. |
 | `c64://printer/spec` | Covers device setup, control codes, and Ultimate 64 integration for printers. |

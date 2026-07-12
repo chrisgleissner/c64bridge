@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { C64Client } from "../src/c64Client.js";
+import { ViceBackend } from "../src/device.js";
 import {
   buildPrinterBasicProgram,
   buildCommodoreBitmapBasicProgram,
@@ -686,6 +687,65 @@ test("C64Client backend selection and switching", async (t) => {
         assert.equal(await client.getActiveBackendType(), "vice");
         assert.equal(await client.getBackendType(), "vice");
         assert.equal((await client.info())?.emulator, "vice");
+      },
+    );
+  });
+
+  await t.test("vice backend stays lazy until a vice-routed request needs it", async () => {
+    const c64u = await startMockC64Server();
+    const vice = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+    t.after(async () => {
+      await Promise.all([c64u.close(), vice.stop()]);
+    });
+
+    await withConfigScenario(
+      {
+        repoConfig: { c64u: { baseUrl: c64u.baseUrl } },
+        homeConfig: { vice: { host: "127.0.0.1", port: vice.port } },
+        mode: "c64u",
+      },
+      async () => {
+        const originalPing = ViceBackend.prototype.ping;
+        const originalReadMemory = ViceBackend.prototype.readMemory;
+        const originalInfo = ViceBackend.prototype.info;
+        let vicePingCalls = 0;
+        let viceReadCalls = 0;
+        let viceInfoCalls = 0;
+
+        ViceBackend.prototype.ping = async function patchedPing(...args) {
+          vicePingCalls += 1;
+          return await originalPing.apply(this, args);
+        };
+        ViceBackend.prototype.readMemory = async function patchedReadMemory(...args) {
+          viceReadCalls += 1;
+          return await originalReadMemory.apply(this, args);
+        };
+        ViceBackend.prototype.info = async function patchedInfo(...args) {
+          viceInfoCalls += 1;
+          return await originalInfo.apply(this, args);
+        };
+
+        try {
+          const client = new C64Client("http://unused.local", { forceC64uFacade: false });
+
+          assert.equal(await client.getActiveBackendType(), "c64u");
+          assert.deepEqual(client.getAvailableBackends().sort(), ["c64u", "vice"]);
+          assert.equal(vicePingCalls, 0);
+          assert.equal(viceReadCalls, 0);
+          assert.equal(viceInfoCalls, 0);
+
+          client.switchBackend("vice");
+          const info = await client.info();
+
+          assert.equal(info?.emulator, "vice");
+          assert.equal(vicePingCalls, 0);
+          assert.equal(viceReadCalls, 0);
+          assert.equal(viceInfoCalls, 1);
+        } finally {
+          ViceBackend.prototype.ping = originalPing;
+          ViceBackend.prototype.readMemory = originalReadMemory;
+          ViceBackend.prototype.info = originalInfo;
+        }
       },
     );
   });

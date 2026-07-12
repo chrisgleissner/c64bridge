@@ -86,6 +86,7 @@ function resolveJsonConfigKey(name: string): string {
     VICE_VISIBLE: "vice.visible",
     VICE_WARP: "vice.warp",
     VICE_ARGS: "vice.args",
+    VICE_PREWARM: "vice.prewarm",
   };
   return map[name] ?? "—";
 }
