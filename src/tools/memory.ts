@@ -789,7 +789,7 @@ export {
 export const memoryModule = defineToolModule({
   domain: "memory",
   summary: "Screen, main memory, and low-level inspection utilities.",
-  supportedPlatforms: ["c64u", "vice"] as const,
+  supportedPlatforms: ["c64u", "u2", "vice"] as const,
   resources: [
     "c64://guide/bootstrap",
     "c64://basic/spec",

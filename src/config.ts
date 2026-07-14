@@ -50,7 +50,8 @@ export function loadConfig(): C64BridgeConfig {
 
   rawConfig ??= {};
 
-  // New schema: prefer c64u.{host,port,baseUrl}; keep legacy fields as fallback
+  // New schema: choose the configured Ultimate hardware profile; retain
+  // c64u and legacy fields as the default when C64_MODE is not set to u2.
   const c64u = rawConfig?.c64u as {
     host?: string;
     hostname?: string;
@@ -58,17 +59,20 @@ export function loadConfig(): C64BridgeConfig {
     port?: number | string;
     networkPassword?: string;
   } | undefined;
+  const u2 = rawConfig?.u2 as typeof c64u;
+  const useU2 = process.env.C64_MODE?.trim().toLowerCase() === "u2";
+  const hardware = useU2 ? (u2 ?? c64u) : (c64u ?? u2);
   const vice = rawConfig?.vice as {
     prewarm?: boolean | string | number;
   } | undefined;
 
-  const parsedC64uHost = parseEndpoint(configuredString(c64u?.host));
-  const parsedC64uHostname = parseEndpoint(configuredString(c64u?.hostname));
+  const parsedC64uHost = parseEndpoint(configuredString(hardware?.host));
+  const parsedC64uHostname = parseEndpoint(configuredString(hardware?.hostname));
   const parsedLegacyHost = parseEndpoint(configuredString(rawConfig?.c64_host));
   const parsedLegacyIp = parseEndpoint(configuredString(rawConfig?.c64_ip));
-  const parsedEnvHost = parseEndpoint(configuredString(process.env.C64U_HOST));
+  const parsedEnvHost = parseEndpoint(configuredString(useU2 ? process.env.U2_HOST ?? process.env.C64U_HOST : process.env.C64U_HOST));
   const parsedBaseOverrides = [
-    parseEndpoint(normaliseBaseUrl(c64u?.baseUrl)),
+    parseEndpoint(normaliseBaseUrl(hardware?.baseUrl)),
     parseEndpoint(normaliseBaseUrl(rawConfig?.baseUrl)),
   ];
 
@@ -82,9 +86,9 @@ export function loadConfig(): C64BridgeConfig {
   ];
 
   const portCandidates = [
-    configuredPort(process.env.C64U_PORT),
+    configuredPort(useU2 ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT),
     parsedEnvHost.port,
-    configuredPort(c64u?.port),
+    configuredPort(hardware?.port),
     parsedC64uHost.port,
     parsedC64uHostname.port,
     configuredPort(rawConfig?.c64_port),
@@ -104,8 +108,8 @@ export function loadConfig(): C64BridgeConfig {
     baseUrl,
     c64_port: port,
     networkPassword: firstDefined(
-      configuredString(process.env.C64U_PASSWORD),
-      configuredString(c64u?.networkPassword),
+      configuredString(useU2 ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD),
+      configuredString(hardware?.networkPassword),
       configuredString(rawConfig?.networkPassword),
     ),
     vicePrewarm: firstDefined(

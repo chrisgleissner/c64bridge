@@ -67,6 +67,32 @@ test("loadConfig defaults port when omitted", (t) => {
   });
 });
 
+test("loadConfig selects the U2 endpoint when C64_MODE=u2", (t) => {
+  const originalEnv = process.env.C64BRIDGE_CONFIG;
+  const originalMode = process.env.C64_MODE;
+  const { dir, file } = writeTempConfig({
+    c64u: { host: "c64u.local", port: 80 },
+    u2: { host: "u2.local", port: 8080, networkPassword: "u2-secret" },
+  });
+  process.env.C64BRIDGE_CONFIG = file;
+  process.env.C64_MODE = "u2";
+  __resetConfigCacheForTests();
+
+  const config = loadConfig();
+  assert.equal(config.c64_host, "u2.local:8080");
+  assert.equal(config.baseUrl, "http://u2.local:8080");
+  assert.equal(config.networkPassword, "u2-secret");
+
+  t.after(() => {
+    __resetConfigCacheForTests();
+    if (originalEnv === undefined) delete process.env.C64BRIDGE_CONFIG;
+    else process.env.C64BRIDGE_CONFIG = originalEnv;
+    if (originalMode === undefined) delete process.env.C64_MODE;
+    else process.env.C64_MODE = originalMode;
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 test("baseUrl entries provide fallback host/port but cannot override", (t) => {
   const originalEnv = process.env.C64BRIDGE_CONFIG;
   const { dir, file } = writeTempConfig({

@@ -106,7 +106,7 @@ export const programModule = defineToolModule({
     "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on c64u.",
     "For a quick visible confirmation on VICE and/or C64U, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps.",
   ],
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   tools: [
     {
       name: "c64_program",
@@ -117,7 +117,7 @@ export const programModule = defineToolModule({
         variants: programOperations.map((operation) => operation.schema),
       }),
       tags: ["programs", "execution", "grouped"],
-      operationPlatforms: { load_prg: ["c64u"], run_crt: ["c64u"], bundle_run: ["c64u"] },
+      operationPlatforms: { load_prg: ["c64u", "u2"], run_crt: ["c64u", "u2"], bundle_run: ["c64u", "u2"] },
       operationToolNames: {
         load_prg: "load_prg",
         run_crt: "run_crt",

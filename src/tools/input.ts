@@ -434,7 +434,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
 export const inputModule = defineToolModule({
   domain: "input",
   summary: "Keyboard input plus native Ultimate REST keyboard and joystick control.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap", "c64://memory/map", "c64://io/cia/spec"],
   prompts: [],
   defaultTags: ["input"],

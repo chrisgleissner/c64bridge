@@ -14,7 +14,7 @@ import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 
-export type DeviceType = "c64u" | "vice";
+export type DeviceType = "c64u" | "u2" | "vice";
 
 export interface RunResult {
   success: boolean;
@@ -50,6 +50,7 @@ export interface C64Facade {
   pause(): Promise<RunResult>;
   resume(): Promise<RunResult>;
   poweroff(): Promise<RunResult>;
+  powerCycle(): Promise<RunResult>;
   menuButton(): Promise<RunResult>;
   readMenuScreen(): Promise<Uint8Array>;
   getInputState(): Promise<MachineInputState>;
@@ -101,7 +102,7 @@ export interface ViceConfig {
   args?: string | string[];
   prewarm?: boolean | string | number;
 }
-export interface C64BridgeConfigFile { c64u?: C64uConfig; vice?: ViceConfig }
+export interface C64BridgeConfigFile { c64u?: C64uConfig; u2?: C64uConfig; vice?: ViceConfig }
 
 interface ViceLaunchResolutionOptions {
   envBinary?: string;
@@ -197,10 +198,13 @@ function readConfigFile(): C64BridgeConfigFile | null {
         if (!merged.c64u && json?.c64u && typeof json.c64u === "object" && !Array.isArray(json.c64u)) {
           merged.c64u = json.c64u as C64uConfig;
         }
+        if (!merged.u2 && json?.u2 && typeof json.u2 === "object" && !Array.isArray(json.u2)) {
+          merged.u2 = json.u2 as C64uConfig;
+        }
         if (!merged.vice && json?.vice && typeof json.vice === "object" && !Array.isArray(json.vice)) {
           merged.vice = json.vice as ViceConfig;
         }
-        if (merged.c64u && merged.vice) {
+        if ((merged.c64u || merged.u2) && merged.vice) {
           break;
         }
       }
@@ -210,14 +214,15 @@ function readConfigFile(): C64BridgeConfigFile | null {
 }
 
 class C64uBackend implements C64Facade {
-  readonly type = "c64u" as const;
+  readonly type: "c64u" | "u2";
   private readonly baseUrl: string;
   private readonly networkPassword?: string;
   private readonly api: Api<unknown>;
 
-  constructor(config: C64uConfig) {
-    const envHost = configuredString(process.env.C64U_HOST);
-    const envPort = configuredPort(process.env.C64U_PORT);
+  constructor(config: C64uConfig, type: "c64u" | "u2" = "c64u") {
+    this.type = type;
+    const envHost = configuredString(type === "u2" ? process.env.U2_HOST ?? process.env.C64U_HOST : process.env.C64U_HOST);
+    const envPort = configuredPort(type === "u2" ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT);
     const configBaseUrl = normaliseBaseUrl(config.baseUrl);
     const parsedConfigBaseUrl = configBaseUrl ? parseEndpoint(configBaseUrl) : {};
     const baseUrl = envHost !== undefined || envPort !== undefined
@@ -237,7 +242,7 @@ class C64uBackend implements C64Facade {
       : resolveBaseUrl(config);
     this.baseUrl = baseUrl;
     this.networkPassword = firstDefined(
-      configuredString(process.env.C64U_PASSWORD),
+      configuredString(type === "u2" ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD),
       configuredString(config.networkPassword),
     );
     const http = createLoggingHttpClient({
@@ -246,6 +251,12 @@ class C64uBackend implements C64Facade {
       headers: buildC64uHeaders(this.networkPassword),
     });
     this.api = new Api(http);
+  }
+
+  private requireC64u(feature: string): void {
+    if (this.type === "u2") {
+      throw unsupported(`${feature} is unavailable on U2-family cartridges`);
+    }
   }
 
   getBaseUrl(): string { return this.baseUrl; }
@@ -324,7 +335,8 @@ class C64uBackend implements C64Facade {
   async reboot(): Promise<RunResult> { const res = await this.api.v1.machineRebootUpdate(":reboot"); return { success: true, details: res.data }; }
   async pause(): Promise<RunResult> { const res = await this.api.v1.machinePauseUpdate(":pause"); return { success: true, details: res.data }; }
   async resume(): Promise<RunResult> { const res = await this.api.v1.machineResumeUpdate(":resume"); return { success: true, details: res.data }; }
-  async poweroff(): Promise<RunResult> { const res = await this.api.v1.machinePoweroffUpdate(":poweroff"); return { success: true, details: res.data }; }
+  async poweroff(): Promise<RunResult> { this.requireC64u("poweroff"); const res = await this.api.v1.machinePoweroffUpdate(":poweroff"); return { success: true, details: res.data }; }
+  async powerCycle(): Promise<RunResult> { this.requireC64u("powerCycle"); throw unsupported("powerCycle must be coordinated by C64Client"); }
   async menuButton(): Promise<RunResult> { const res = await this.api.v1.machineMenuButtonUpdate(":menu_button"); return { success: true, details: res.data }; }
   async readMenuScreen(): Promise<Uint8Array> {
     const response = await this.api.v1.machineMenuScreenList(
@@ -335,15 +347,17 @@ class C64uBackend implements C64Facade {
     return body instanceof ArrayBuffer ? new Uint8Array(body) : extractBytes(body);
   }
   async getInputState(): Promise<MachineInputState> {
+    this.requireC64u("getInputState");
     const response = await this.api.v1.machineInputList(":input");
     return response.data;
   }
   async sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState> {
+    this.requireC64u("sendInputEvents");
     const response = await this.api.v1.machineInputCreate(":input", batch as InputBatch);
     return response.data;
   }
-  async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> { const res = await this.api.v1.machineDebugregList(":debugreg"); return { success: true, value: (res.data as any).value, details: res.data }; }
-  async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> { const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value }); return { success: true, value: (res.data as any).value, details: res.data }; }
+  async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> { this.requireC64u("debugregRead"); const res = await this.api.v1.machineDebugregList(":debugreg"); return { success: true, value: (res.data as any).value, details: res.data }; }
+  async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> { this.requireC64u("debugregWrite"); const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value }); return { success: true, value: (res.data as any).value, details: res.data }; }
   async version(): Promise<unknown> { const res = await this.api.v1.versionList(); return res.data; }
   async info(): Promise<unknown> { const res = await this.api.v1.infoList(); return res.data; }
   async drivesList(): Promise<unknown> { const res = await this.api.v1.drivesList(); return res.data; }
@@ -354,8 +368,8 @@ class C64uBackend implements C64Facade {
   async driveOff(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOffUpdate(d, ":off"); return { success: true, details: res.data }; }
   async driveSetMode(d: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> { const res = await this.api.v1.drivesSetModeUpdate(d, ":set_mode", { mode }); return { success: true, details: res.data }; }
   async driveLoadRom(d: string, romPath: string): Promise<RunResult> { const res = await this.api.v1.drivesLoadRomUpdate(d, ":load_rom", { file: romPath }); return { success: true, details: res.data }; }
-  async streamStart(s: "video" | "audio" | "debug", ip: string): Promise<RunResult> { const res = await this.api.v1.streamsStartUpdate(s, ":start", { ip }); return { success: true, details: res.data }; }
-  async streamStop(s: "video" | "audio" | "debug"): Promise<RunResult> { const res = await this.api.v1.streamsStopUpdate(s, ":stop"); return { success: true, details: res.data }; }
+  async streamStart(s: "video" | "audio" | "debug", ip: string): Promise<RunResult> { this.requireC64u("streamStart"); const res = await this.api.v1.streamsStartUpdate(s, ":start", { ip }); return { success: true, details: res.data }; }
+  async streamStop(s: "video" | "audio" | "debug"): Promise<RunResult> { this.requireC64u("streamStop"); const res = await this.api.v1.streamsStopUpdate(s, ":stop"); return { success: true, details: res.data }; }
   async configsList(): Promise<unknown> { const res = await this.api.v1.configsList(); return res.data; }
   async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(cat, item) : await this.api.v1.configsDetail(cat); return res.data; }
   async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(cat, item, { value }); return { success: true, details: res.data }; }
@@ -744,6 +758,7 @@ export class ViceBackend implements C64Facade {
       return { success: false, details };
     }
   }
+  async powerCycle(): Promise<RunResult> { return this.nuclearReset(); }
   async nuclearReset(): Promise<RunResult> {
     const poweroffResult = await this.poweroff();
     if (!poweroffResult.success) {
@@ -1077,8 +1092,7 @@ export interface FacadeOptions {
 
 export interface AllFacadesResult {
   primary: FacadeSelection;
-  secondary: C64Facade | null;
-  secondaryType: DeviceType | null;
+  facades: ReadonlyMap<DeviceType, C64Facade>;
 }
 
 export async function createFacade(logger?: { info: (...a: any[]) => void }, options?: FacadeOptions): Promise<FacadeSelection> {
@@ -1094,12 +1108,18 @@ export async function createFacade(logger?: { info: (...a: any[]) => void }, opt
   const cfg = readConfigFile();
   const envMode = (process.env.C64_MODE || "").toLowerCase().trim();
   const hasC64u = Boolean(cfg?.c64u);
+  const hasU2 = Boolean(cfg?.u2);
   const hasVice = Boolean(cfg?.vice);
 
   if (envMode === "c64u") {
     const backend = new C64uBackend(cfg?.c64u ?? {});
     logger?.info?.("Active backend: c64u (from env override)");
     return { facade: backend, selected: "c64u", reason: "env override", details: { baseUrl: backend.getBaseUrl?.() } };
+  }
+  if (envMode === "u2") {
+    const backend = new C64uBackend(cfg?.u2 ?? {}, "u2");
+    logger?.info?.("Active backend: u2 (from env override)");
+    return { facade: backend, selected: "u2", reason: "env override", details: { baseUrl: backend.getBaseUrl?.() } };
   }
   if (envMode === "vice") {
     const backend = new ViceBackend(cfg?.vice ?? {});
@@ -1108,23 +1128,22 @@ export async function createFacade(logger?: { info: (...a: any[]) => void }, opt
     return { facade: backend, selected: "vice", reason: "env override", details: { host: endpoint.host, port: endpoint.port } };
   }
 
-  if (hasC64u && !hasVice) {
+  if (hasC64u) {
     const backend = new C64uBackend(cfg!.c64u!);
     logger?.info?.("Active backend: c64u (from config)");
-    return { facade: backend, selected: "c64u", reason: "config only", details: { baseUrl: backend.getBaseUrl?.() } };
+    return { facade: backend, selected: "c64u", reason: hasVice ? "both defined (prefer c64u)" : "config only", details: { baseUrl: backend.getBaseUrl?.() } };
   }
-  if (!hasC64u && hasVice) {
+  if (hasU2) {
+    const backend = new C64uBackend(cfg!.u2!, "u2");
+    logger?.info?.("Active backend: u2 (from config)");
+    return { facade: backend, selected: "u2", reason: "config only", details: { baseUrl: backend.getBaseUrl?.() } };
+  }
+  if (hasVice) {
     const backend = new ViceBackend(cfg!.vice!);
     logger?.info?.("Active backend: vice (from config)");
     const endpoint = backend.getEndpoint();
     return { facade: backend, selected: "vice", reason: "config only", details: { host: endpoint.host, port: endpoint.port } };
   }
-  if (hasC64u && hasVice) {
-    const backend = new C64uBackend(cfg!.c64u!);
-    logger?.info?.("Active backend: c64u (both defined; default preference)");
-    return { facade: backend, selected: "c64u", reason: "both defined (prefer c64u)", details: { baseUrl: backend.getBaseUrl?.() } };
-  }
-
   // No configuration
   const probeBase = resolveBaseUrl({});
   try {
@@ -1147,36 +1166,26 @@ export async function createAllFacades(
 ): Promise<AllFacadesResult> {
   const primary = await createFacade(logger);
   const config = readConfigFile();
-  const secondaryType = primary.selected === "c64u" ? "vice" : "c64u";
-
-  if (secondaryType === "c64u" && shouldProvisionSecondaryC64u(config, options)) {
-    const secondaryConfig: C64uConfig = {
+  const facades = new Map<DeviceType, C64Facade>([[primary.selected, primary.facade]]);
+  if (config?.c64u && primary.selected !== "c64u") {
+    facades.set("c64u", new C64uBackend(config.c64u));
+  }
+  if (config?.u2 && primary.selected !== "u2") {
+    facades.set("u2", new C64uBackend(config.u2, "u2"));
+  }
+  if (config?.vice && primary.selected !== "vice") {
+    facades.set("vice", new ViceBackend(config.vice));
+  }
+  if (!facades.has("c64u") && !config?.u2 && shouldProvisionSecondaryC64u(config, options) && primary.selected !== "u2") {
+    facades.set("c64u", new C64uBackend({
       ...(config?.c64u ?? {}),
       ...(!config?.c64u?.baseUrl && options?.preferredC64uBaseUrl ? { baseUrl: options.preferredC64uBaseUrl } : {}),
       ...(!config?.c64u?.networkPassword && options?.preferredC64uNetworkPassword
         ? { networkPassword: options.preferredC64uNetworkPassword }
         : {}),
-    };
-    return {
-      primary,
-      secondary: new C64uBackend(secondaryConfig),
-      secondaryType,
-    };
+    }));
   }
-
-  if (secondaryType === "vice" && config?.vice) {
-    return {
-      primary,
-      secondary: new ViceBackend(config.vice),
-      secondaryType,
-    };
-  }
-
-  return {
-    primary,
-    secondary: null,
-    secondaryType: null,
-  };
+  return { primary, facades };
 }
 
 function shouldProvisionSecondaryC64u(config: C64BridgeConfigFile | null, options?: FacadeOptions): boolean {

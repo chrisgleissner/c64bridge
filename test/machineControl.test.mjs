@@ -14,6 +14,7 @@ function createMockClient(overrides = {}) {
     async pause() { return { success: true, details: { message: "paused" } }; },
     async resume() { return { success: true, details: { message: "resumed" } }; },
     async poweroff() { return { success: true, details: { message: "powered off" } }; },
+    async powerCycle() { return { success: true, details: { strategy: "tool_menu" } }; },
     async menuButton() { return { success: true, details: { message: "menu toggled" } }; },
     async readMenuScreen() { return Uint8Array.from([0x41, 0x01, 0x42, 0x02]); },
     ...overrides,
@@ -31,6 +32,14 @@ testC64uOnly("read_menu_screen returns the firmware matrix without guessing its 
   assert.equal(res.structuredContent?.data.encoding, "base64");
   assert.equal(res.structuredContent?.data.byteLength, 4);
   assert.equal(res.structuredContent?.data.matrix, "QQFCAg==");
+});
+
+test("power_cycle delegates to the platform-aware client flow", async () => {
+  const res = await machineControlModule.invoke("power_cycle", {}, {
+    client: createMockClient(), logger: createLogger(),
+  });
+  assert.equal(res.metadata?.success, true);
+  assert.equal(res.metadata?.details?.strategy, "tool_menu");
 });
 
 async function runWithPlatform(target, fn) {

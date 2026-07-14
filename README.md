@@ -324,9 +324,19 @@ If VICE is installed outside the usual search paths, add `VICE_BINARY` and, if R
 
 ### Runtime Backend Switching
 
-When both `c64u` and `vice` are configured, C64 Bridge starts with one active backend and keeps the other available for runtime switching.
+U2, U2+, and U2+L are configured through a distinct `u2` profile. Their REST API is the firmware-defined subset of the C64U/U64 API, not a guessed hardware variant:
 
-- `C64_MODE` chooses the initial backend: `c64u` or `vice`
+```json
+{
+  "u2": { "host": "u2", "port": 80, "networkPassword": "secret" }
+}
+```
+
+Set `C64_MODE=u2` to select it initially. U2-family cartridges support shared REST controls (including configuration and menu-screen reads), but not `machine:input`, debug-register access, firmware streaming, or power-off. `c64_system` `power_cycle` therefore uses REST reboot on U2-family devices.
+
+When any combination of `c64u`, `u2`, and `vice` is configured, C64 Bridge starts with one active backend and keeps the others available for runtime switching.
+
+- `C64_MODE` chooses the initial backend: `c64u`, `u2`, or `vice`
 - `c64_select_backend` switches backends without restarting the MCP server
 - `c64://platform/status` reports the active backend and the full configured backend set
 - In prompts, say things like `use vice`, `vice: run this program`, `use c64u`, or `run this on the real machine`
@@ -415,7 +425,7 @@ You can add `env` entries in `.vscode/mcp.json` to select a config file, overrid
 
 - `C64BRIDGE_CONFIG` points to a specific config file
 - `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD` override the C64 Ultimate connection without editing config files
-- `C64_MODE` forces the initial backend to `c64u` or `vice`
+- `C64_MODE` forces the initial backend to `c64u`, `u2`, or `vice`; `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override the selected U2 profile.
 - `LOG_LEVEL=debug` enables verbose logging
 
 For VICE-specific overrides such as `VICE_ARGS=-minimized`, `VICE_VISIBLE=false`, or custom VICE paths, use the patterns in [Backend Configuration: VICE](#backend-configuration-vice).
@@ -493,7 +503,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 
 | Variable | Default | JSON Config Key | Description |
 | --- | --- | --- | --- |
-| `C64_MODE` | c64u | — | Select active backend (c64u for Ultimate hardware, vice for emulator) |
+| `C64_MODE` | c64u | — | Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator) |
 | `C64_TASK_STATE_FILE` | auto | — | Override the path used to persist MCP background-task state |
 | `C64BRIDGE_CONFIG` | ~/.c64bridge.json | config path | Path to configuration JSON |
 | `C64BRIDGE_DIAGNOSTICS_DIR` | ~/.c64bridge/diagnostics | — | Override the directory where persistent MCP diagnostics files are written |
@@ -502,6 +512,9 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64BRIDGE_POLL_MAX_MS` | 2000 | — | Maximum time to poll for program-output validation before timing out in normal runtime mode |
 | `C64BRIDGE_POLL_STABILIZE_MS` | 100 | — | Extra settle time after a successful poll match before considering output stable |
 | `LOG_LEVEL` | info | — | Logger verbosity (debug, info, warn, error) |
+| `U2_HOST` |  | — | Override the U2/U2+/U2+L host name or IP address when C64_MODE=u2 |
+| `U2_PASSWORD` |  | — | Override the U2-family network password sent as X-Password when C64_MODE=u2 |
+| `U2_PORT` |  | — | Override the U2-family REST port when C64_MODE=u2 |
 
 #### C64 Ultimate
 
@@ -832,7 +845,7 @@ Grouped entry point for BASIC and assembly RAG lookups.
 
 #### c64_select_backend
 
-Switch the active backend between C64U hardware and the VICE emulator at runtime.
+Switch the active backend between C64U/U64 hardware, U2-family cartridges, and the VICE emulator at runtime.
 
 | Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -878,6 +891,7 @@ Grouped entry point for power, reset, menu, and background task control.
 | `menu` | Toggle the Ultimate menu button for navigation. | — | — | — | ✅ |  |
 | `pause` | Pause the machine until resumed. | — | — | — | ✅ |  |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | — | ✅ | ✅ |
+| `power_cycle` | Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state. | — | — | — | ✅ | ✅ |
 | `poweroff` | Request a controlled shutdown via the Ultimate firmware. | — | — | — | ✅ | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix. | — | — | — | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | — | — | ✅ | ✅ |

@@ -118,3 +118,42 @@ test("writeMemoryRaw delegates to facade.writeMemory", async () => {
   assert.ok(write);
   assert.deepEqual(Array.from(write.bytes), [0xDE, 0xAD]);
 });
+
+test("powerCycle verifies every C64U Tool Menu transition before selecting Power Cycle", async () => {
+  const inputs = [];
+  const screens = [
+    Buffer.from("MAIN MENU"),
+    Buffer.from("TOOL MENU"),
+    Buffer.from("TOOL MENU  POWER CYCLE"),
+    Buffer.from("TOOL MENU  POWER CYCLE  1"),
+    Buffer.from("TOOL MENU  POWER CYCLE  2"),
+    Buffer.from("TOOL MENU  POWER CYCLE  3"),
+    Buffer.from("TOOL MENU  POWER CYCLE  4"),
+  ];
+  const facade = {
+    ...createTrackingFacade(),
+    async menuButton() { return { success: true }; },
+    async readMenuScreen() { return Uint8Array.from(screens.shift()); },
+    async sendInputEvents(batch) { inputs.push(batch); return { keyboard: { inputs: [] }, joysticks: [] }; },
+  };
+  const client = makeClient(facade);
+  const result = await client.powerCycle();
+
+  assert.equal(result.success, true);
+  assert.deepEqual(inputs.map(({ events }) => events[0].inputs), [
+    ["f1"], ["return"], ["cursor_up_down"], ["cursor_up_down"], ["cursor_up_down"], ["cursor_up_down"], ["return"],
+  ]);
+  assert.equal(result.details.strategy, "tool_menu");
+});
+
+test("powerCycle uses reboot for U2-family cartridges", async () => {
+  const facade = {
+    ...createTrackingFacade(),
+    type: "u2",
+    async reboot() { return { success: true, details: { rebooted: true } }; },
+  };
+  const client = makeClient(facade);
+  const result = await client.powerCycle();
+  assert.equal(result.success, true);
+  assert.equal(result.details.strategy, "reboot");
+});

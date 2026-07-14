@@ -816,7 +816,7 @@ export const programRunnersModule = defineToolModule({
         "Invoke right after you generate BASIC source so it runs on the C64 without extra user steps.",
         "Ensure the program includes line numbers and uppercase keywords before calling the tool.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeUploadRunBasic(args, ctx);
       },
@@ -841,7 +841,7 @@ export const programRunnersModule = defineToolModule({
         "Use when the user requests to run new 6502 code; surface any assembler diagnostics in your reply.",
         "Mention the entry routine or important addresses after execution so the user can continue debugging.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeUploadRunAsm(args, ctx);
       },
@@ -865,7 +865,7 @@ export const programRunnersModule = defineToolModule({
         "Stage PRG files without running when the user wants to inspect memory first.",
         "Confirm the Ultimate filesystem path (e.g. //USB0/demo.prg) is accessible before invoking.",
       ],
-      supportedPlatforms: ["c64u"] as const,
+      supportedPlatforms: ["c64u", "u2"] as const,
       async execute(args, ctx) {
         return executeLoadPrg(args, ctx);
       },
@@ -881,7 +881,7 @@ export const programRunnersModule = defineToolModule({
         "Call when the user provides a PRG path and expects immediate execution without compiling.",
         "Mention that firmware issues a RUN so the user knows the machine state changed.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       prerequisites: ["drives_list"],
       examples: [
         {
@@ -913,7 +913,7 @@ export const programRunnersModule = defineToolModule({
           arguments: { path: "//USB0/game.crt" },
         },
       ],
-      supportedPlatforms: ["c64u"] as const,
+      supportedPlatforms: ["c64u", "u2"] as const,
       async execute(args, ctx) {
         try {
           const parsed = crtFileArgsSchema.parse(args ?? {});

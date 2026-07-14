@@ -44,6 +44,15 @@ test("getPlatformStatus returns vice status when set", () => {
   assert.ok(!status.limitedFeatures.includes("no-drive-management"));
 });
 
+test("getPlatformStatus reports U2-family REST limitations", () => {
+  setPlatform("u2");
+  const status = getPlatformStatus();
+  assert.equal(status.id, "u2");
+  assert.ok(status.features.includes("cartridge-execution"));
+  assert.ok(status.limitedFeatures.includes("no-machine-input"));
+  assert.ok(status.limitedFeatures.includes("no-streaming"));
+});
+
 // --- setPlatform ---
 
 test("setPlatform changes platform to vice", () => {
@@ -93,6 +102,7 @@ test("isPlatformSupported returns false when platform is not in list", () => {
 test("describePlatformCapabilities handles empty tools list", () => {
   const desc = describePlatformCapabilities([]);
   assert.ok(desc.platforms.c64u);
+  assert.ok(desc.platforms.u2);
   assert.ok(desc.platforms.vice);
   assert.equal(desc.platforms.c64u.tools.length, 0);
   assert.equal(desc.platforms.vice.tools.length, 0);
@@ -151,13 +161,15 @@ test("describePlatformCapabilities sorts tool lists", () => {
 
 test("getAllPlatformStatuses returns all platforms", () => {
   const statuses = getAllPlatformStatuses();
-  assert.equal(statuses.length, 2);
+  assert.equal(statuses.length, 3);
   
   const c64u = statuses.find(s => s.id === "c64u");
   const vice = statuses.find(s => s.id === "vice");
+  const u2 = statuses.find(s => s.id === "u2");
   
   assert.ok(c64u);
   assert.ok(vice);
+  assert.ok(u2);
   assert.ok(c64u.features.includes("ultimate-rest-api"));
   assert.ok(vice.features.includes("software-emulation"));
 });

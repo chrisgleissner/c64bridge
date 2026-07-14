@@ -57,7 +57,7 @@ interface BatchResult {
 export const batchModuleGroup = defineToolModule({
   domain: "batch",
   summary: "Execute multiple tool calls in a single MCP request for reduced round-trip overhead.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: [],
   prompts: [],
   defaultTags: ["batch", "orchestration"],

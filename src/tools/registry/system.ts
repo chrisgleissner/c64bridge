@@ -65,6 +65,15 @@ const systemOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
   {
+    op: "power_cycle",
+    schema: extendSchemaWithOp(
+      "power_cycle",
+      ensureDescriptor(machineDescriptorIndex, "power_cycle").inputSchema,
+      { description: "Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "power_cycle", rawArgs, ctx),
+  },
+  {
     op: "menu",
     schema: extendSchemaWithOp(
       "menu",
@@ -134,7 +143,7 @@ const systemOperationHandlers = createOperationHandlers(systemOperations);
 export const systemModuleGroup = defineToolModule({
   domain: "system",
   summary: "Grouped machine control and background task orchestration.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap"],
   prompts: ["memory-debug"],
   defaultTags: ["system", "control"],
@@ -152,7 +161,7 @@ export const systemModuleGroup = defineToolModule({
         variants: systemOperations.map((operation) => operation.schema),
       }),
       tags: ["system", "control", "grouped"],
-      operationPlatforms: { pause: ["c64u"], resume: ["c64u"], menu: ["c64u"], read_menu_screen: ["c64u"] },
+      operationPlatforms: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
       operationToolNames: { pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },
       examples: [
         {

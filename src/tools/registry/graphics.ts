@@ -255,7 +255,7 @@ export const graphicsModuleGroup = defineToolModule({
     "Use render helpers for PETSCII text, PETSCII art, sprites, and bitmaps; clarify whether PETSCII art executed or stayed a dry run.",
     "Mention sprite positions/colours so follow-up memory inspection stays grounded.",
   ],
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   tools: [
     {
       name: "c64_graphics",

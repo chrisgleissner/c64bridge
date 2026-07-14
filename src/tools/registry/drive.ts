@@ -69,7 +69,7 @@ const driveOperationHandlers = createOperationHandlers(driveOperations);
 export const driveModuleGroup = defineToolModule({
   domain: "drive",
   summary: "Grouped drive power, reset, ROM, and mode helpers.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap"],
   defaultTags: ["drive", "hardware"],
   workflowHints: [
@@ -86,7 +86,7 @@ export const driveModuleGroup = defineToolModule({
         variants: driveOperations.map((operation) => operation.schema),
       }),
       tags: ["drive", "hardware", "grouped"],
-      operationPlatforms: { load_rom: ["c64u"] },
+      operationPlatforms: { load_rom: ["c64u", "u2"] },
       operationToolNames: { load_rom: "drive_load_rom" },
       examples: [
         {

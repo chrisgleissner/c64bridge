@@ -804,17 +804,21 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "load_prg": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "run_crt": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "bundle_run": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -1591,6 +1595,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -2816,6 +2821,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
@@ -2823,13 +2829,16 @@
             "c64u"
           ],
           "play_sid_file": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "play_mod_file": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "pipeline": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "analyze": [
             "c64u"
@@ -2855,6 +2864,7 @@
               "reset",
               "reboot",
               "poweroff",
+              "power_cycle",
               "menu",
               "read_menu_screen",
               "start_task",
@@ -2936,7 +2946,7 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen: Read the active Ultimate menu's raw character and colour matrix. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- power_cycle: Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen: Read the active Ultimate menu's raw character and colour matrix. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -3026,6 +3036,25 @@
               "properties": {
                 "op": {
                   "const": "poweroff"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "power_cycle",
+            "description": "Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state.",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state.",
+              "properties": {
+                "op": {
+                  "const": "power_cycle"
                 }
               },
               "additionalProperties": false,
@@ -3305,20 +3334,25 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "pause": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "resume": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "menu": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "read_menu_screen": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -3326,7 +3360,7 @@
     {
       "name": "c64_select_backend",
       "title": "Changes the active backend without restarting the MCP server and reports resulting tool availability.",
-      "description": "Switch the active backend between C64U hardware and the VICE emulator at runtime.",
+      "description": "Switch the active backend between C64U/U64 hardware, U2-family cartridges, and the VICE emulator at runtime.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3341,6 +3375,7 @@
             "type": "string",
             "enum": [
               "c64u",
+              "u2",
               "vice"
             ],
             "description": "Backend to activate for subsequent tool calls."
@@ -3371,6 +3406,7 @@
                   "type": "string",
                   "enum": [
                     "c64u",
+                    "u2",
                     "vice"
                   ],
                   "description": "Backend to activate for subsequent tool calls."
@@ -3415,6 +3451,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -4144,6 +4181,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -4308,6 +4346,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -4899,17 +4938,21 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "file_info": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "create_image": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "find_and_run": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -5151,11 +5194,13 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "load_rom": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -6273,17 +6318,21 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "load_flash": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "save_flash": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "reset_defaults": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "read_debugreg": [
             "c64u"
@@ -6292,7 +6341,8 @@
             "c64u"
           ],
           "shuffle": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -8720,6 +8770,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
@@ -8865,6 +8916,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }

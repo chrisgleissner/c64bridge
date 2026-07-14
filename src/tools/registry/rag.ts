@@ -49,7 +49,7 @@ export const ragModuleGroup = defineToolModule({
     "Use BASIC retrieval before synthesising new BASIC code and mention primary resources in responses.",
     "For assembly, note registers or addresses surfaced so the user can inspect them further.",
   ],
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   tools: [
     {
       name: "c64_rag",

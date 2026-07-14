@@ -451,7 +451,7 @@ export const audioModule = defineToolModule({
   ],
   prompts: ["sid-music"],
   defaultTags: ["sid", "audio"],
-  supportedPlatforms: ["c64u", "vice"] as const,
+  supportedPlatforms: ["c64u", "u2", "vice"] as const,
   workflowHints: [
     "Reach for SID helpers when the user talks about sound design, playback quality, or stuck notes.",
     "After changing playback state, suggest verify-by-ear steps such as analyze_audio so the user gets concrete feedback.",

@@ -17,17 +17,25 @@ On startup the server probes connectivity (REST + zero-page read) and announces 
 
 The server resolves config in this order: `C64BRIDGE_CONFIG` → `./.c64bridge.json` → `~/.c64bridge.json` → defaults (`host=c64u`, `port=80`).
 
-Example:
+Example C64U/U64 configuration:
 
 ```json
 { "c64u": { "host": "c64u", "port": 80, "networkPassword": "secret" } }
 ```
 
+U2, U2+, and U2+L use the `u2` profile, which is a firmware-defined subset of the C64U/U64 API:
+
+```json
+{ "u2": { "host": "u2", "port": 80, "networkPassword": "secret" } }
+```
+
+Use `C64_MODE=u2` to select that profile. U2-family cartridges support the shared REST operations, including configuration and `machine:menu_screen`, but not `machine:input`, debug-register access, power-off, or streaming.
+
 When Ultimate firmware network protection is enabled, `networkPassword` is sent as the `X-Password` header on every REST request.
 
 ### Runtime Backend Switching
 
-When both `c64u` and `vice` are configured, the server can keep both backends live at the same time.
+When any combination of `c64u`, `u2`, and `vice` is configured, the server can keep the configured backends live at the same time.
 Use `c64_select_backend` to switch the active backend without restarting the MCP server.
 The `c64://platform/status` resource always reports the currently active backend and the configured backend set.
 State the desired backend directly in the prompt when you want to pin execution, for example: `use vice`, `vice: load this PRG`, `use c64u`, or `run this on hardware`.
@@ -84,7 +92,7 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 - Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`)
 - Fast demo workflow: `c64_program` (`cross_platform_greeting`) for one-call greetings on VICE and/or C64U with screenshot capture and verification
 - Screen & memory: `c64_memory` (`read`, `write`, `read_screen`, `wait_for_text`)
-- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `menu`, tasks)
+- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks)
 - Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`)
 - Drives & files: `c64_disk`, `c64_drive`
 - SID / music: `c64_sound` (`play_preset`, playback, generate, analyze)
@@ -98,6 +106,7 @@ Tools and parameters are listed dynamically via ListTools.
 Change C64U/U64/U2 configuration through `c64_config` REST operations; do not navigate configuration menus with injected keyboard input.
 `c64_input` `key` is PETSCII/KERNAL-queue input, while `keyboard` sends physical key combinations through Ultimate REST input.
 Keyboard menu navigation is reserved for device features with no REST equivalent, for example the machine code monitor, visual SID editor, or Tool Menu.
+`power_cycle` is the deliberate Tool Menu exception on C64U/U64: it reads `machine:menu_screen` after every navigation step and stops rather than blindly selecting an unverified item. It uses REST reboot on U2-family cartridges and a fresh VICE start on VICE.
 
 ## Skill Routing
 

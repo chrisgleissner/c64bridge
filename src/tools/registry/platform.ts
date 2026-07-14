@@ -69,7 +69,7 @@ const selectBackendSchema = operationSchema("select", {
   properties: {
     backend: {
       type: "string",
-      enum: ["c64u", "vice"],
+      enum: ["c64u", "u2", "vice"],
       description: "Backend to activate for subsequent tool calls.",
     },
   },
@@ -98,14 +98,16 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
     ctx.setPlatform(backend);
 
     const { availableTools, unavailableTools } = describeTargetPlatform(backend);
-    const switchBackTarget = backend === "c64u" ? "vice" : "c64u";
+    const switchBackTarget = availableBackends.find((candidate) => candidate !== backend);
     const data = {
       success: true,
       activeBackend: backend,
       configuredBackends: availableBackends,
       availableTools,
       unavailableTools,
-      usageHint: `Use c64_select_backend again with backend: "${switchBackTarget}" to switch back.`,
+      usageHint: switchBackTarget
+        ? `Use c64_select_backend again with backend: "${switchBackTarget}" to switch back.`
+        : "No other backend is configured.",
     };
     return jsonResult(data, { success: true });
   },
@@ -114,7 +116,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
 export const platformModuleGroup = defineToolModule({
   domain: "platform",
   summary: "Runtime backend selection and platform-status coordination.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://platform/status", "c64://guide/bootstrap"],
   prompts: [],
   defaultTags: ["platform", "backend", "grouped"],
@@ -124,7 +126,7 @@ export const platformModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_select_backend",
-      description: "Switch the active backend between C64U hardware and the VICE emulator at runtime.",
+      description: "Switch the active backend between C64U/U64 hardware, U2-family cartridges, and the VICE emulator at runtime.",
       summary: "Changes the active backend without restarting the MCP server and reports resulting tool availability.",
       inputSchema: discriminatedUnionSchema({
         description: "Runtime backend selection operations.",

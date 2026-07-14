@@ -39,6 +39,7 @@ const rebootArgsSchema = createNoArgsSchema("No arguments required to reboot the
 const pauseArgsSchema = createNoArgsSchema("No arguments required to pause the machine.");
 const resumeArgsSchema = createNoArgsSchema("No arguments required to resume the machine after a pause.");
 const poweroffArgsSchema = createNoArgsSchema("No arguments required to power off the machine.");
+const powerCycleArgsSchema = createNoArgsSchema("No arguments required to power cycle the active system.");
 const menuButtonArgsSchema = createNoArgsSchema("No arguments required to toggle the Ultimate menu button.");
 const readMenuScreenArgsSchema = createNoArgsSchema("No arguments required to read the active Ultimate menu screen matrix.");
 
@@ -66,7 +67,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Use when the user wants a quick restart without losing power; mention that memory contents may persist.",
       ],
-      supportedPlatforms: ["c64u", "vice"],
+      supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
           resetArgsSchema.parse(args ?? {});
@@ -106,7 +107,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Choose reboot when configuration changed or hardware is stuck; warn that it will interrupt any running program.",
       ],
-      supportedPlatforms: ["c64u", "vice"],
+      supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
           rebootArgsSchema.parse(args ?? {});
@@ -146,7 +147,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Pause when the user needs a stable memory snapshot; remind them to resume to continue execution.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           pauseArgsSchema.parse(args ?? {});
@@ -186,7 +187,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Call after a pause or diagnostic halt and confirm the machine is running again.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           resumeArgsSchema.parse(args ?? {});
@@ -254,6 +255,39 @@ export const machineControlModule = defineToolModule({
       },
     },
     {
+      name: "power_cycle",
+      description: "Return the active system to a fresh state: C64U/U64 uses verified Tool Menu navigation, U2-family reboots through REST, and managed VICE restarts.",
+      summary: "Performs the platform-appropriate full power-cycle equivalent and reports the strategy used.",
+      inputSchema: powerCycleArgsSchema.jsonSchema,
+      tags: ["power", "reboot", "fresh-start"],
+      prerequisites: [],
+      examples: [
+        { name: "Fresh start", description: "Power cycle the active system", arguments: {} },
+      ],
+      workflowHints: [
+        "Use only when the user explicitly requests a fresh start or power cycle; it interrupts active work.",
+        "On C64U/U64, verify Tool Menu navigation through machine:menu_screen before selecting Power Cycle.",
+      ],
+      supportedPlatforms: ["c64u", "u2", "vice"],
+      async execute(args, ctx) {
+        try {
+          powerCycleArgsSchema.parse(args ?? {});
+          ctx.logger.info("Power cycling active backend");
+          const result = await ctx.client.powerCycle();
+          if (!result.success) {
+            throw new ToolExecutionError("Power cycle did not complete", {
+              details: normaliseFailure(result.details),
+            });
+          }
+          const details = toRecord(result.details) ?? {};
+          return textResult("Power-cycle request completed.", { success: true, details });
+        } catch (error) {
+          if (error instanceof ToolError) return toolErrorResult(error);
+          return unknownErrorResult(error);
+        }
+      },
+    },
+    {
       name: "menu_button",
       description: "Toggle the Ultimate 64 menu button.",
       summary: "Simulates the on-device menu button for navigation or exit.",
@@ -266,7 +300,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Use when the user needs to open or close the Ultimate menu; suggest following up with drive operations if relevant.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           menuButtonArgsSchema.parse(args ?? {});
@@ -307,7 +341,7 @@ export const machineControlModule = defineToolModule({
         "Call after opening the Ultimate menu. A 404 means no firmware menu screen is currently active.",
         "The firmware returns an opaque character-and-colour matrix, preserved as base64 without guessing a layout.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           readMenuScreenArgsSchema.parse(args ?? {});

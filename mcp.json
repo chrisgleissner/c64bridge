@@ -37,7 +37,7 @@
       "default": "~/.c64bridge.json"
     },
     "C64_MODE": {
-      "description": "Select active backend (c64u for Ultimate hardware, vice for emulator)",
+      "description": "Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator)",
       "default": "c64u"
     },
     "C64U_HOST": {
@@ -50,6 +50,18 @@
     },
     "C64U_PASSWORD": {
       "description": "Override the C64 Ultimate network password sent as X-Password",
+      "default": ""
+    },
+    "U2_HOST": {
+      "description": "Override the U2/U2+/U2+L host name or IP address when C64_MODE=u2",
+      "default": ""
+    },
+    "U2_PORT": {
+      "description": "Override the U2-family REST port when C64_MODE=u2",
+      "default": ""
+    },
+    "U2_PASSWORD": {
+      "description": "Override the U2-family network password sent as X-Password when C64_MODE=u2",
       "default": ""
     },
     "C64BRIDGE_DIAGNOSTICS_DIR": {

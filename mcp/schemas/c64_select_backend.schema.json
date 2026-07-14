@@ -12,6 +12,7 @@
       "type": "string",
       "enum": [
         "c64u",
+        "u2",
         "vice"
       ],
       "description": "Backend to activate for subsequent tool calls."
@@ -42,6 +43,7 @@
             "type": "string",
             "enum": [
               "c64u",
+              "u2",
               "vice"
             ],
             "description": "Backend to activate for subsequent tool calls."

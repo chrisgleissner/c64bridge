@@ -677,7 +677,7 @@ export const graphicsModule = defineToolModule({
         "Use when the user supplies sprite bytes or asks to preview graphics quickly; describe resulting coordinates and colours.",
         "Remind the user that sprites live in banked memory so further tweaks may require write_memory calls.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeGenerateSprite(args, ctx);
       },
@@ -694,7 +694,7 @@ export const graphicsModule = defineToolModule({
         "Use when the user wants to display an external image on screen rather than generate PETSCII art.",
         "Call out the selected bitmap and screen RAM addresses so follow-up memory inspection or raster work stays grounded.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeGenerateBitmap(args, ctx);
       },
@@ -719,7 +719,7 @@ export const graphicsModule = defineToolModule({
         "Call after generating PETSCII text or when the user wants border/background colour changes applied.",
         "Echo the colour indices and mention CLEAR + PRINT so the user knows what ran.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeRenderPetscii(args, ctx);
       },
@@ -745,7 +745,7 @@ export const graphicsModule = defineToolModule({
         "Response includes petsciiCodes array and glyphs for character-level inspection.",
         "Provide follow-up suggestions like saving the PRG or capturing the screen after rendering.",
       ],
-      supportedPlatforms: ["c64u", "vice"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeCreatePetscii(args, ctx);
       },
