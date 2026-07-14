@@ -133,6 +133,7 @@ test("powerCycle verifies every C64U Tool Menu transition before selecting Power
   const facade = {
     ...createTrackingFacade(),
     async menuButton() { return { success: true }; },
+    async getInputState() { return { keyboard: { inputs: [] }, joysticks: [] }; },
     async readMenuScreen() { return Uint8Array.from(screens.shift()); },
     async sendInputEvents(batch) { inputs.push(batch); return { keyboard: { inputs: [] }, joysticks: [] }; },
   };
