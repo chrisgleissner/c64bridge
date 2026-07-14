@@ -571,7 +571,7 @@ function renderPlatformStatusMarkdown(client: C64Client): string {
 
 async function logConnectivity(client: C64Client, baseUrl: string): Promise<void> {
   const backendType = await client.getBackendType();
-  if (backendType !== "c64u") {
+  if (backendType === "vice") {
     writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, reason: "vice_backend" });
     console.error("Skipping direct REST connectivity probe because active backend is VICE");
     try {

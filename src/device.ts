@@ -1096,17 +1096,18 @@ export interface AllFacadesResult {
 }
 
 export async function createFacade(logger?: { info: (...a: any[]) => void }, options?: FacadeOptions): Promise<FacadeSelection> {
+  const envMode = (process.env.C64_MODE || "").toLowerCase().trim();
   // Caller-forced preference: use c64u with provided base URL (used by tests and server wiring)
   if (options?.preferredC64uBaseUrl) {
+    const type = envMode === "u2" ? "u2" : "c64u";
     const backend = new C64uBackend({
       baseUrl: options.preferredC64uBaseUrl,
       networkPassword: options.preferredC64uNetworkPassword,
-    });
-    logger?.info?.("Active backend: c64u (forced by caller)");
-    return { facade: backend, selected: "c64u", reason: "forced by caller", details: { baseUrl: options.preferredC64uBaseUrl } };
+    }, type);
+    logger?.info?.(`Active backend: ${type} (forced by caller)`);
+    return { facade: backend, selected: type, reason: "forced by caller", details: { baseUrl: options.preferredC64uBaseUrl } };
   }
   const cfg = readConfigFile();
-  const envMode = (process.env.C64_MODE || "").toLowerCase().trim();
   const hasC64u = Boolean(cfg?.c64u);
   const hasU2 = Boolean(cfg?.u2);
   const hasVice = Boolean(cfg?.vice);
@@ -1164,7 +1165,12 @@ export async function createAllFacades(
   logger?: { info: (...a: any[]) => void },
   options?: FacadeOptions,
 ): Promise<AllFacadesResult> {
-  const primary = await createFacade(logger);
+  // C64U/VICE preserve config-file selection semantics. U2 needs the
+  // caller-provided endpoint because it is selected through C64_MODE=u2.
+  const primary = await createFacade(
+    logger,
+    process.env.C64_MODE?.toLowerCase().trim() === "u2" ? options : undefined,
+  );
   const config = readConfigFile();
   const facades = new Map<DeviceType, C64Facade>([[primary.selected, primary.facade]]);
   if (config?.c64u && primary.selected !== "c64u") {

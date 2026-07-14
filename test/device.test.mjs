@@ -768,6 +768,22 @@ test("device: createFacade with env overrides", async (t) => {
     assert.equal(reason, "env override");
     assert.equal(facade.type, "c64u");
   });
+
+  await t.test("C64_MODE=u2 preserves the preferred U2 endpoint", async () => {
+    const oldMode = process.env.C64_MODE;
+    process.env.C64_MODE = "u2";
+    t.after(() => {
+      if (oldMode !== undefined) process.env.C64_MODE = oldMode;
+      else delete process.env.C64_MODE;
+    });
+
+    const { facade, selected } = await createFacade(undefined, {
+      preferredC64uBaseUrl: "http://u2.example.test",
+    });
+    assert.equal(selected, "u2");
+    assert.equal(facade.type, "u2");
+    assert.equal(facade.getBaseUrl(), "http://u2.example.test");
+  });
 });
 
 test("device: C64uBackend env overrides", async (t) => {

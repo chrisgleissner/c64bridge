@@ -27,6 +27,7 @@ type ManifestEnvEntry = {
 type EnvCategory =
   | "Server Runtime"
   | "C64 Ultimate"
+  | "U2-family"
   | "VICE Runtime"
   | "VICE Audio Capture"
   | "SID Playback"
@@ -55,6 +56,9 @@ function classifyEnvVariable(name: string): EnvCategory {
   if (name.startsWith("C64U_")) {
     return "C64 Ultimate";
   }
+  if (name.startsWith("U2_")) {
+    return "U2-family";
+  }
   if (name.startsWith("VICE_") || name === "FORCE_XVFB" || name === "DISABLE_XVFB") {
     if (name === "VICE_MODE" || name === "VICE_LIMIT_CYCLES" || name === "VICE_RUN_TIMEOUT_MS") {
       return "VICE Audio Capture";
@@ -79,6 +83,9 @@ function resolveJsonConfigKey(name: string): string {
     C64U_HOST: "c64u.host",
     C64U_PORT: "c64u.port",
     C64U_PASSWORD: "c64u.networkPassword",
+    U2_HOST: "u2.host",
+    U2_PORT: "u2.port",
+    U2_PASSWORD: "u2.networkPassword",
     VICE_BINARY: "vice.exe",
     VICE_DIRECTORY: "vice.directory",
     VICE_HOST: "vice.host",
@@ -104,6 +111,7 @@ export function renderEnvironmentSection(envEntries: Readonly<Record<string, Man
   const orderedCategories: readonly EnvCategory[] = [
     "Server Runtime",
     "C64 Ultimate",
+    "U2-family",
     "VICE Runtime",
     "VICE Audio Capture",
     "SID Playback",
@@ -393,11 +401,12 @@ export function renderToolsSection(modules: readonly ToolModuleDescriptor[] = de
               escapeCell(formatInputs(operation.optional, operation.properties)),
               operation.notes.length ? escapeCell(operation.notes.join(", ")) : "—",
               effectivePlatforms.includes("c64u") ? "✅" : "",
+              effectivePlatforms.includes("u2") ? "✅" : "",
               effectivePlatforms.includes("vice") ? "✅" : "",
             ];
           });
 
-        lines.push(renderTable(["Operation", "Description", "Required Inputs", "Optional Inputs", "Notes", "C64U", "VICE"], operationRows));
+        lines.push(renderTable(["Operation", "Description", "Required Inputs", "Optional Inputs", "Notes", "C64U", "U2", "VICE"], operationRows));
       }
 
       lines.push("");
