@@ -91,7 +91,7 @@
   "required": [
     "op"
   ],
-  "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- power_cycle: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (C64U 1.2.0+ or U64 3.15+); U2-family reboots through REST. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (C64U 1.2.0+ or U64/U2 3.15+). Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
+  "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- power_cycle: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -191,12 +191,12 @@
     },
     {
       "op": "power_cycle",
-      "description": "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (C64U 1.2.0+ or U64 3.15+); U2-family reboots through REST.",
+      "description": "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST.",
       "required": [],
       "optional": [],
       "inputSchema": {
         "type": "object",
-        "description": "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (C64U 1.2.0+ or U64 3.15+); U2-family reboots through REST.",
+        "description": "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST.",
         "properties": {
           "op": {
             "const": "power_cycle"
@@ -229,12 +229,12 @@
     },
     {
       "op": "read_menu_screen",
-      "description": "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (C64U 1.2.0+ or U64/U2 3.15+).",
+      "description": "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+).",
       "required": [],
       "optional": [],
       "inputSchema": {
         "type": "object",
-        "description": "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (C64U 1.2.0+ or U64/U2 3.15+).",
+        "description": "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+).",
         "properties": {
           "op": {
             "const": "read_menu_screen"

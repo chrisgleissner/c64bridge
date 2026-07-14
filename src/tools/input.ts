@@ -209,7 +209,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input (C64U 1.2.0+ or U64 3.15+); VICE writes CIA1 registers.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
@@ -245,7 +245,7 @@ export const joystickArgsSchema = objectSchema({
 });
 
 export const keyboardArgsSchema = objectSchema({
-  description: "Send physical C64 keyboard matrix events through machine:input (C64U 1.2.0+ or U64 3.15+).",
+  description: "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
   properties: {
     op: literalSchema("keyboard"),
     inputs: arraySchema(stringSchema({ description: "Physical keyboard input.", enum: KEYBOARD_INPUTS }), {
@@ -260,14 +260,14 @@ export const keyboardArgsSchema = objectSchema({
 });
 
 const releaseAllArgsSchema = objectSchema({
-  description: "Release every key and joystick control injected through machine:input (C64U 1.2.0+ or U64 3.15+).",
+  description: "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
   properties: { op: literalSchema("release_all") },
   required: ["op"],
   additionalProperties: false,
 });
 
 const inputStateArgsSchema = objectSchema({
-  description: "Read the keys and joystick controls held through machine:input (C64U 1.2.0+ or U64 3.15+).",
+  description: "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
   properties: { op: literalSchema("state") },
   required: ["op"],
   additionalProperties: false,
@@ -441,9 +441,9 @@ export const inputModule = defineToolModule({
   workflowHints: [
     "Use write_text with {RETURN} tokens to automate BASIC entry; use key for one PETSCII/KERNAL queue key. Neither is for navigating Ultimate firmware menus.",
     "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
-    "Use keyboard for physical C64 key combinations (including modifiers) on machine:input, and release_all to recover from interrupted holds. It requires C64U 1.2.0+ or U64 3.15+.",
+    "Use keyboard for physical C64 key combinations (including modifiers) on machine:input, and release_all to recover from interrupted holds. It requires a C64U firmware version that provides the endpoint, or U64 3.15+.",
     "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.",
-    "Joystick uses machine:input on C64U 1.2.0+ or U64 3.15+; VICE supports up/down/left/right/fire through its monitor.",
+    "Joystick uses machine:input on a C64U firmware version that provides the endpoint or U64 3.15+; VICE supports up/down/left/right/fire through its monitor.",
   ],
   tools: [
     {
