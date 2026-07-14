@@ -104,7 +104,7 @@ export const programModule = defineToolModule({
   workflowHints: [
     "Choose BASIC or assembly uploaders based on the language you just generated for the user.",
     "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on hardware.",
-    "For a quick visible confirmation on VICE or C64U/U64, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps.",
+    "For a quick visible confirmation on VICE, C64U/U64, or U2-family hardware, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps.",
   ],
   supportedPlatforms: ["c64u", "u2", "vice"],
   tools: [
