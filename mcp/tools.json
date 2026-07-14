@@ -8774,6 +8774,10 @@
           "vice"
         ],
         "operationPlatforms": {
+          "joystick": [
+            "c64u",
+            "vice"
+          ],
           "keyboard": [
             "c64u"
           ],

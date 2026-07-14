@@ -461,7 +461,7 @@ export const inputModule = defineToolModule({
           inputStateArgsSchema.jsonSchema,
         ],
       }),
-      operationPlatforms: { keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"] },
+      operationPlatforms: { joystick: ["c64u", "vice"], keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"] },
       tags: ["input", "keyboard", "joystick"],
       examples: [
         {
