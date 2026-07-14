@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/chrisgleissner/c64bridge",
-  "version": "0.9.3",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "c64bridge",
-      "version": "0.9.3",
+      "version": "1.0.0",
       "transport": {
         "type": "stdio"
       },

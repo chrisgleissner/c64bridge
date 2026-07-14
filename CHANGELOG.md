@@ -2,6 +2,22 @@
 
 
 
+
+## 1.0.0 - 2026-07-14
+
+### Bug Fixes
+
+- skip publication when release exists, use curl to detect GitHub release, normalize repo URL in prepare-release (44f58332)
+- skip publication when release already exists; add re-validation dispatch (e30d7fa8)
+
+### Tests
+
+- support native input probe in power cycle fixture (2c124bd1)
+
+### Chores
+
+- prepare release 0.9.3 (fd7c9952)
+
 ## 0.9.3 - 2026-07-12
 
 ### Highlights
