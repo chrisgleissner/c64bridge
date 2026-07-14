@@ -262,7 +262,7 @@
         "required": [
           "op"
         ],
-        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: symbolsFile.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. Required inputs: path. Optional inputs: symbolsFile.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
+        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: symbolsFile.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. Required inputs: path. Optional inputs: symbolsFile.\n- run_crt: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -304,7 +304,7 @@
           },
           {
             "op": "run_prg",
-            "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
+            "description": "Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE.",
             "required": [
               "path"
             ],
@@ -313,7 +313,7 @@
             ],
             "inputSchema": {
               "type": "object",
-              "description": "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE.",
+              "description": "Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE.",
               "properties": {
                 "path": {
                   "type": "string",
@@ -799,22 +799,26 @@
         ],
         "workflowHints": [
           "Choose BASIC or assembly uploaders based on the language you just generated for the user.",
-          "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on c64u.",
-          "For a quick visible confirmation on VICE and/or C64U, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps."
+          "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on hardware.",
+          "For a quick visible confirmation on VICE, C64U/U64, or U2-family hardware, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps."
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "load_prg": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "run_crt": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "bundle_run": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -1003,7 +1007,7 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -1197,7 +1201,7 @@
           },
           {
             "op": "disassemble",
-            "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
+            "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE.",
             "required": [
               "address"
             ],
@@ -1207,7 +1211,7 @@
             ],
             "inputSchema": {
               "type": "object",
-              "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE.",
+              "description": "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE.",
               "properties": {
                 "address": {
                   "type": "string",
@@ -1591,6 +1595,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -2816,6 +2821,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
@@ -2823,13 +2829,16 @@
             "c64u"
           ],
           "play_sid_file": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "play_mod_file": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "pipeline": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "analyze": [
             "c64u"
@@ -2855,7 +2864,9 @@
               "reset",
               "reboot",
               "poweroff",
+              "power_cycle",
               "menu",
+              "read_menu_screen",
               "start_task",
               "stop_task",
               "stop_all_tasks",
@@ -2935,7 +2946,7 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- power_cycle: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -3034,6 +3045,25 @@
             }
           },
           {
+            "op": "power_cycle",
+            "description": "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST.",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST.",
+              "properties": {
+                "op": {
+                  "const": "power_cycle"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
             "op": "menu",
             "description": "Toggle the Ultimate menu button for navigation.",
             "required": [],
@@ -3044,6 +3074,25 @@
               "properties": {
                 "op": {
                   "const": "menu"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "read_menu_screen",
+            "description": "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+).",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+).",
+              "properties": {
+                "op": {
+                  "const": "read_menu_screen"
                 }
               },
               "additionalProperties": false,
@@ -3285,17 +3334,25 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "pause": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "resume": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "menu": [
-            "c64u"
+            "c64u",
+            "u2"
+          ],
+          "read_menu_screen": [
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -3303,7 +3360,7 @@
     {
       "name": "c64_select_backend",
       "title": "Changes the active backend without restarting the MCP server and reports resulting tool availability.",
-      "description": "Switch the active backend between C64U hardware and the VICE emulator at runtime.",
+      "description": "Switch the active backend between C64U/U64 hardware, U2-family cartridges, and the VICE emulator at runtime.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3318,6 +3375,7 @@
             "type": "string",
             "enum": [
               "c64u",
+              "u2",
               "vice"
             ],
             "description": "Backend to activate for subsequent tool calls."
@@ -3348,6 +3406,7 @@
                   "type": "string",
                   "enum": [
                     "c64u",
+                    "u2",
                     "vice"
                   ],
                   "description": "Backend to activate for subsequent tool calls."
@@ -3392,6 +3451,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -3631,7 +3691,7 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. Required inputs: none.",
+        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. Required inputs: none.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -4026,12 +4086,12 @@
           },
           {
             "op": "get_display_state",
-            "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+            "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical.",
             "required": [],
             "optional": [],
             "inputSchema": {
               "type": "object",
-              "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+              "description": "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical.",
               "properties": {
                 "op": {
                   "const": "get_display_state"
@@ -4121,6 +4181,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -4285,6 +4346,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }
@@ -4876,17 +4938,21 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "file_info": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "create_image": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "find_and_run": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -5128,11 +5194,13 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "load_rom": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -6250,17 +6318,21 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "load_flash": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "save_flash": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "reset_defaults": [
-            "c64u"
+            "c64u",
+            "u2"
           ],
           "read_debugreg": [
             "c64u"
@@ -6269,7 +6341,8 @@
             "c64u"
           ],
           "shuffle": [
-            "c64u"
+            "c64u",
+            "u2"
           ]
         }
       }
@@ -8121,8 +8194,8 @@
     },
     {
       "name": "c64_input",
-      "title": "Types text, taps keys, and simulates joystick movements.",
-      "description": "Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).",
+      "title": "Types text, sends physical key combinations, and controls joysticks.",
+      "description": "Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -8131,7 +8204,10 @@
             "enum": [
               "write_text",
               "key",
-              "joystick"
+              "joystick",
+              "keyboard",
+              "release_all",
+              "state"
             ],
             "description": "Selects the operation."
           },
@@ -8194,7 +8270,9 @@
                 "down",
                 "left",
                 "right",
-                "fire"
+                "fire",
+                "fire2",
+                "fire3"
               ]
             },
             "minItems": 0
@@ -8207,12 +8285,98 @@
               "release",
               "tap"
             ]
+          },
+          "inputs": {
+            "type": "array",
+            "description": "One or more keys to transition together (for example left_shift + a).",
+            "items": {
+              "type": "string",
+              "description": "Physical keyboard input.",
+              "enum": [
+                "inst_del",
+                "return",
+                "cursor_left_right",
+                "f7",
+                "f1",
+                "f3",
+                "f5",
+                "cursor_up_down",
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j",
+                "k",
+                "l",
+                "m",
+                "n",
+                "o",
+                "p",
+                "q",
+                "r",
+                "s",
+                "t",
+                "u",
+                "v",
+                "w",
+                "x",
+                "y",
+                "z",
+                "left_shift",
+                "right_shift",
+                "plus",
+                "minus",
+                "period",
+                "colon",
+                "at",
+                "comma",
+                "pound",
+                "star",
+                "semicolon",
+                "clr_home",
+                "equals",
+                "arrow_up",
+                "slash",
+                "arrow_left",
+                "ctrl",
+                "space",
+                "commodore",
+                "run_stop",
+                "restore"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 8
+          },
+          "transition": {
+            "type": "string",
+            "description": "press holds, release frees, tap presses and releases.",
+            "enum": [
+              "press",
+              "release",
+              "tap"
+            ]
           }
         },
         "required": [
           "op"
         ],
-        "description": "Input operations: write_text, key, joystick.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input by writing directly to CIA1 Port A/B registers. Required inputs: port, controls, action. Optional inputs: durationMs.",
+        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -8308,7 +8472,7 @@
           },
           {
             "op": "joystick",
-            "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+            "description": "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
             "required": [
               "port",
               "controls",
@@ -8319,7 +8483,7 @@
             ],
             "inputSchema": {
               "type": "object",
-              "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+              "description": "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
               "properties": {
                 "op": {
                   "const": "joystick"
@@ -8341,7 +8505,9 @@
                       "down",
                       "left",
                       "right",
-                      "fire"
+                      "fire",
+                      "fire2",
+                      "fire3"
                     ]
                   },
                   "minItems": 0
@@ -8374,12 +8540,160 @@
               ],
               "additionalProperties": false
             }
+          },
+          {
+            "op": "keyboard",
+            "description": "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+            "required": [
+              "inputs",
+              "transition"
+            ],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+              "properties": {
+                "op": {
+                  "const": "keyboard"
+                },
+                "inputs": {
+                  "type": "array",
+                  "description": "One or more keys to transition together (for example left_shift + a).",
+                  "items": {
+                    "type": "string",
+                    "description": "Physical keyboard input.",
+                    "enum": [
+                      "inst_del",
+                      "return",
+                      "cursor_left_right",
+                      "f7",
+                      "f1",
+                      "f3",
+                      "f5",
+                      "cursor_up_down",
+                      "0",
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                      "5",
+                      "6",
+                      "7",
+                      "8",
+                      "9",
+                      "a",
+                      "b",
+                      "c",
+                      "d",
+                      "e",
+                      "f",
+                      "g",
+                      "h",
+                      "i",
+                      "j",
+                      "k",
+                      "l",
+                      "m",
+                      "n",
+                      "o",
+                      "p",
+                      "q",
+                      "r",
+                      "s",
+                      "t",
+                      "u",
+                      "v",
+                      "w",
+                      "x",
+                      "y",
+                      "z",
+                      "left_shift",
+                      "right_shift",
+                      "plus",
+                      "minus",
+                      "period",
+                      "colon",
+                      "at",
+                      "comma",
+                      "pound",
+                      "star",
+                      "semicolon",
+                      "clr_home",
+                      "equals",
+                      "arrow_up",
+                      "slash",
+                      "arrow_left",
+                      "ctrl",
+                      "space",
+                      "commodore",
+                      "run_stop",
+                      "restore"
+                    ]
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                },
+                "transition": {
+                  "type": "string",
+                  "description": "press holds, release frees, tap presses and releases.",
+                  "enum": [
+                    "press",
+                    "release",
+                    "tap"
+                  ]
+                }
+              },
+              "required": [
+                "op",
+                "inputs",
+                "transition"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "release_all",
+            "description": "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+              "properties": {
+                "op": {
+                  "const": "release_all"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "state",
+            "description": "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+              "properties": {
+                "op": {
+                  "const": "state"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
           }
         ]
       },
       "_meta": {
         "domain": "input",
-        "summary": "Types text, taps keys, and simulates joystick movements.",
+        "summary": "Types text, sends physical key combinations, and controls joysticks.",
         "lifecycle": "request-response",
         "resources": [
           "c64://guide/bootstrap",
@@ -8418,6 +8732,18 @@
             }
           },
           {
+            "name": "Type an uppercase A",
+            "description": "Tap a physical key chord through Ultimate REST input",
+            "arguments": {
+              "op": "keyboard",
+              "inputs": [
+                "left_shift",
+                "a"
+              ],
+              "transition": "tap"
+            }
+          },
+          {
             "name": "Press fire on port 1",
             "description": "Hold fire button on joystick port 1",
             "arguments": {
@@ -8436,17 +8762,31 @@
           "joystick"
         ],
         "workflowHints": [
-          "Use write_text with {RETURN} tokens to automate BASIC entry; prefer key for individual control keys.",
+          "Use write_text with {RETURN} tokens to automate BASIC entry; use key for one PETSCII/KERNAL queue key. Neither is for navigating Ultimate firmware menus.",
           "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
-          "Joystick tap is suitable for one-shot moves; use press/release pairs for timed holds. Joystick is VICE-only."
+          "Use keyboard for physical C64 key combinations (including modifiers) on machine:input, and release_all to recover from interrupted holds. It requires a C64U firmware version that provides the endpoint, or U64 3.15+.",
+          "Before native input, read c64://platform/status. If machine:input is unavailable or unknown, use key or write_text for ordinary C64 input instead of attempting physical matrix events.",
+          "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.",
+          "Joystick uses machine:input on a C64U firmware version that provides the endpoint or U64 3.15+; VICE supports up/down/left/right/fire through its monitor."
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ],
         "operationPlatforms": {
           "joystick": [
+            "c64u",
             "vice"
+          ],
+          "keyboard": [
+            "c64u"
+          ],
+          "release_all": [
+            "c64u"
+          ],
+          "state": [
+            "c64u"
           ]
         }
       }
@@ -8581,6 +8921,7 @@
         ],
         "platforms": [
           "c64u",
+          "u2",
           "vice"
         ]
       }

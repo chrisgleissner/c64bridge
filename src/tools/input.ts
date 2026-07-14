@@ -14,12 +14,26 @@ import {
   optionalSchema,
   stringSchema,
 } from "./schema.js";
-import { textResult } from "./responses.js";
+import { jsonResult, textResult } from "./responses.js";
 import {
   ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+
+function isMissingNativeInputEndpoint(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "response" in error
+    && (error as { response?: { status?: unknown } }).response?.status === 404;
+}
+
+function nativeInputUnavailableResult(operation: string) {
+  return textResult(
+    `Native physical input is unavailable on this firmware, so ${operation} was not sent. Use c64://platform/status before choosing native input; use key or write_text for ordinary C64 input.`,
+    { success: false, code: "native_input_unavailable", fallback: "key_or_write_text" },
+  );
+}
 
 // ---------------------------------------------------------------------------
 // PETSCII token expansion table
@@ -118,6 +132,15 @@ const JOYSTICK_BIT: Record<string, number> = {
   fire: 4,
 };
 
+const KEYBOARD_INPUTS = [
+  "inst_del", "return", "cursor_left_right", "f7", "f1", "f3", "f5", "cursor_up_down",
+  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+  "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  "left_shift", "right_shift", "plus", "minus", "period", "colon", "at", "comma", "pound", "star", "semicolon", "clr_home", "equals", "arrow_up", "slash", "arrow_left", "ctrl", "space", "commodore", "run_stop", "restore",
+] as const;
+const JOYSTICK_INPUTS = ["up", "down", "left", "right", "fire", "fire2", "fire3"] as const;
+const INPUT_TRANSITIONS = ["press", "release", "tap"] as const;
+
 function joystickByte(controls: readonly string[]): number {
   let mask = 0xff;
   for (const ctrl of controls) {
@@ -141,6 +164,9 @@ interface InputOperationMap extends OperationMap {
     readonly action: "press" | "release" | "tap";
     readonly durationMs?: number;
   };
+  readonly keyboard: { readonly inputs: readonly string[]; readonly transition: "press" | "release" | "tap" };
+  readonly release_all: Record<string, never>;
+  readonly state: Record<string, never>;
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +223,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
@@ -209,7 +235,7 @@ export const joystickArgsSchema = objectSchema({
     controls: arraySchema(
       stringSchema({
         description: "Control to activate.",
-        enum: ["up", "down", "left", "right", "fire"],
+        enum: JOYSTICK_INPUTS,
       }),
       {
         description: "List of controls to activate simultaneously.",
@@ -229,6 +255,35 @@ export const joystickArgsSchema = objectSchema({
     })),
   },
   required: ["op", "port", "controls", "action"],
+  additionalProperties: false,
+});
+
+export const keyboardArgsSchema = objectSchema({
+  description: "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  properties: {
+    op: literalSchema("keyboard"),
+    inputs: arraySchema(stringSchema({ description: "Physical keyboard input.", enum: KEYBOARD_INPUTS }), {
+      description: "One or more keys to transition together (for example left_shift + a).",
+      minItems: 1,
+      maxItems: 8,
+    }),
+    transition: stringSchema({ description: "press holds, release frees, tap presses and releases.", enum: INPUT_TRANSITIONS }),
+  },
+  required: ["op", "inputs", "transition"],
+  additionalProperties: false,
+});
+
+const releaseAllArgsSchema = objectSchema({
+  description: "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  properties: { op: literalSchema("release_all") },
+  required: ["op"],
+  additionalProperties: false,
+});
+
+const inputStateArgsSchema = objectSchema({
+  description: "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  properties: { op: literalSchema("state") },
+  required: ["op"],
   additionalProperties: false,
 });
 
@@ -297,10 +352,28 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
     try {
       const parsed = joystickArgsSchema.parse(args);
       const port = parsed.port as 1 | 2;
-      const addr = JOYSTICK_PORT_ADDRESS[port];
       const durationMs = parsed.durationMs ?? 80;
       const pressedByte = joystickByte(parsed.controls);
       const releasedByte = 0xff;
+      const platform = await ctx.client.getActiveBackendType();
+
+      if (platform === "c64u") {
+        if (parsed.controls.length === 0 && parsed.action === "release") {
+          const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
+          return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, action: "release_all", state });
+        }
+        const state = await ctx.client.sendInputEvents({
+          events: [{ kind: "joystick", port, inputs: [...parsed.controls], transition: parsed.action as "press" | "release" | "tap" }],
+        });
+        return textResult(`Joystick port ${port} ${parsed.action}: ${parsed.controls.join(", ")}.`, {
+          success: true, port, action: parsed.action, controls: parsed.controls, state,
+        });
+      }
+
+      const addr = JOYSTICK_PORT_ADDRESS[port];
+      if (parsed.controls.some((control) => !(control in JOYSTICK_BIT))) {
+        throw new ToolValidationError("VICE joystick supports up, down, left, right, and fire only.", { path: "$.controls" });
+      }
 
       if (parsed.action === "release") {
         await ctx.client.viceMemSet(addr, Uint8Array.of(releasedByte));
@@ -328,6 +401,46 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       );
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the joystick event");
+      return unknownErrorResult(error);
+    }
+  },
+
+  keyboard: async (args, ctx) => {
+    try {
+      const parsed = keyboardArgsSchema.parse(args);
+      const state = await ctx.client.sendInputEvents({
+        events: [{ kind: "keyboard", inputs: [...parsed.inputs], transition: parsed.transition as "press" | "release" | "tap" }],
+      });
+      return textResult(`Keyboard ${parsed.transition}: ${parsed.inputs.join(", ")}.`, {
+        success: true, inputs: parsed.inputs, transition: parsed.transition, state,
+      });
+    } catch (error) {
+      if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the keyboard event");
+      return unknownErrorResult(error);
+    }
+  },
+
+  release_all: async (args, ctx) => {
+    try {
+      releaseAllArgsSchema.parse(args);
+      const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
+      return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, state });
+    } catch (error) {
+      if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the release request");
+      return unknownErrorResult(error);
+    }
+  },
+
+  state: async (args, ctx) => {
+    try {
+      inputStateArgsSchema.parse(args);
+      return jsonResult(await ctx.client.getInputState());
+    } catch (error) {
+      if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the input-state query");
       return unknownErrorResult(error);
     }
   },
@@ -338,30 +451,36 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
 // ---------------------------------------------------------------------------
 export const inputModule = defineToolModule({
   domain: "input",
-  summary: "Cross-platform keyboard input plus VICE-only joystick simulation.",
-  supportedPlatforms: ["c64u", "vice"],
+  summary: "Keyboard input plus native Ultimate REST keyboard and joystick control.",
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap", "c64://memory/map", "c64://io/cia/spec"],
   prompts: [],
   defaultTags: ["input"],
   workflowHints: [
-    "Use write_text with {RETURN} tokens to automate BASIC entry; prefer key for individual control keys.",
+    "Use write_text with {RETURN} tokens to automate BASIC entry; use key for one PETSCII/KERNAL queue key. Neither is for navigating Ultimate firmware menus.",
     "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
-    "Joystick tap is suitable for one-shot moves; use press/release pairs for timed holds. Joystick is VICE-only.",
+    "Use keyboard for physical C64 key combinations (including modifiers) on machine:input, and release_all to recover from interrupted holds. It requires a C64U firmware version that provides the endpoint, or U64 3.15+.",
+    "Before native input, read c64://platform/status. If machine:input is unavailable or unknown, use key or write_text for ordinary C64 input instead of attempting physical matrix events.",
+    "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.",
+    "Joystick uses machine:input on a C64U firmware version that provides the endpoint or U64 3.15+; VICE supports up/down/left/right/fire through its monitor.",
   ],
   tools: [
     {
       name: "c64_input",
-      description: "Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).",
-      summary: "Types text, taps keys, and simulates joystick movements.",
+      description: "Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.",
+      summary: "Types text, sends physical key combinations, and controls joysticks.",
       inputSchema: discriminatedUnionSchema({
-        description: "Input operations: write_text, key, joystick.",
+        description: "Input operations: write_text, key, keyboard, joystick, release_all, state.",
         variants: [
           writeTextArgsSchema.jsonSchema,
           keyArgsSchema.jsonSchema,
           joystickArgsSchema.jsonSchema,
+          keyboardArgsSchema.jsonSchema,
+          releaseAllArgsSchema.jsonSchema,
+          inputStateArgsSchema.jsonSchema,
         ],
       }),
-      operationPlatforms: { joystick: ["vice"] },
+      operationPlatforms: { joystick: ["c64u", "vice"], keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"] },
       tags: ["input", "keyboard", "joystick"],
       examples: [
         {
@@ -378,6 +497,11 @@ export const inputModule = defineToolModule({
           name: "Tap joystick right",
           description: "Brief rightward tap on joystick port 2",
           arguments: { op: "joystick", port: 2, controls: ["right"], action: "tap", durationMs: 80 },
+        },
+        {
+          name: "Type an uppercase A",
+          description: "Tap a physical key chord through Ultimate REST input",
+          arguments: { op: "keyboard", inputs: ["left_shift", "a"], transition: "tap" },
         },
         {
           name: "Press fire on port 1",

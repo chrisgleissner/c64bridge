@@ -9,43 +9,91 @@
  * ---------------------------------------------------------------
  */
 
-export interface ErrorResponse {
+export interface ErrorList {
   errors: string[];
 }
 
-export type VersionResponse = ErrorResponse & {
+export type VersionResponse = ErrorList & {
+  /** @example "0.1" */
   version: string;
 };
 
-export type InfoResponse = ErrorResponse & {
-  product?: string;
-  firmware_version?: string;
-  fpga_version?: string;
-  /** Present on Ultimate 64 devices. */
+export type InfoResponse = ErrorList & {
+  /** @example "Ultimate 64 Elite" */
+  product: string;
+  /** @example "3.15 alpha" */
+  firmware_version: string;
+  /** @example "122" */
+  fpga_version: string;
+  /**
+   * Present on Ultimate 64-class firmware builds.
+   * @example "1.4B"
+   */
   core_version?: string;
-  hostname?: string;
+  hostname: string;
   unique_id?: string;
 };
 
-export type ConfigListResponse = ErrorResponse & {
-  categories?: string[];
+export type ConfigCategoriesResponse = ErrorList & {
+  categories: string[];
 };
 
-export type ConfigCategoryResponse = ErrorResponse & Record<string, object>;
+export type ConfigValue = string | number;
 
-export type ConfigItemResponse = ErrorResponse & Record<string, object>;
+export interface ConfigItemDetail {
+  current: ConfigValue;
+  values?: string[];
+  presets?: string[];
+  min?: number;
+  max?: number;
+  format?: string;
+  default?: ConfigValue;
+  [key: string]: any;
+}
 
-export type MemoryReadJson = ErrorResponse & {
-  /** Base64 encoded bytes. */
-  data?: string | number[];
+export type ConfigCategoryResponse = ErrorList & Record<string, Record<string, ConfigValue | ConfigItemDetail>>;
+
+/** @example {"Drive A Settings":{"Drive":"Enabled","Drive Bus ID":8}} */
+export type ConfigBatchUpdate = Record<string, Record<string, ConfigValue>>;
+
+export type ConfigStoreListResponse = ErrorList & {
+  loaded?: string[];
+  written?: string[];
+  reset?: string[];
 };
 
-export type MemoryDebugResponse = ErrorResponse & {
-  /** Hex string read from $D7FF. */
-  value: string;
+export type ActionResponse = ErrorList & Record<string, any>;
+
+export interface DriveInfo {
+  enabled?: boolean;
+  bus_id?: number;
+  type?: string;
+  rom?: string;
+  image_file?: string;
+  image_path?: string;
+  last_error?: string;
+  partitions?: {
+    id?: number;
+    path?: string;
+  }[];
+  [key: string]: any;
+}
+
+export type DriveListResponse = ErrorList & {
+  drives: Record<string, DriveInfo>[];
 };
 
-export type InputStateResponse = ErrorResponse & {
+export type FileInfoResponse = ErrorList & {
+  files: {
+    path?: string;
+    filename?: string;
+    size?: number;
+    extension?: string;
+    [key: string]: any;
+  };
+};
+
+export type InputStateResponse = ErrorList & {
   keyboard: {
     inputs: KeyboardInput[];
   };
@@ -172,39 +220,6 @@ export enum JoystickInput {
   Fire3 = "fire3",
 }
 
-export type DriveListResponse = ErrorResponse & {
-  drives?: Record<
-    string,
-    {
-      enabled?: boolean;
-      bus_id?: number;
-      type?: string;
-      rom?: string;
-      image_file?: string;
-      image_path?: string;
-      last_error?: string;
-      partitions?: {
-        id?: number;
-        path?: string;
-      }[];
-    }
-  >[];
-};
-
-export type FileInfoResponse = ErrorResponse & {
-  files?: {
-    path?: string;
-    filename?: string;
-    size?: number;
-    extension?: string;
-    [key: string]: any;
-  };
-};
-
-export type MachineActionResponse = ErrorResponse;
-
-export type RunnerActionResponse = ErrorResponse;
-
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, HeadersDefaults, ResponseType } from "axios";
 
 export type QueryParamsType = Record<string | number, any>;
@@ -249,7 +264,7 @@ export class HttpClient<SecurityDataType = unknown> {
   private format?: ResponseType;
 
   constructor({ securityWorker, secure, format, ...axiosConfig }: ApiConfig<SecurityDataType> = {}) {
-    this.instance = axios.create({ ...axiosConfig, baseURL: axiosConfig.baseURL || "http://c64u" });
+    this.instance = axios.create({ ...axiosConfig, baseURL: axiosConfig.baseURL || "http://u64" });
     this.secure = secure;
     this.format = format;
     this.securityWorker = securityWorker;
@@ -336,17 +351,20 @@ export class HttpClient<SecurityDataType = unknown> {
 }
 
 /**
- * @title Ultimate 64 REST API
- * @version 1.0.0
- * @baseUrl http://c64u
+ * @title Ultimate 64 Elite REST API
+ * @version 3.15-alpha
+ * @baseUrl http://u64
  *
- * This OpenAPI document captures the public HTTP interface described in the
- * official Ultimate 64 REST API documentation at
- * https://1541u-documentation.readthedocs.io/en/latest/api/api_calls.html.
- * Responses always include an `errors` array unless noted. When a network
- * password is configured, clients must supply the `X-Password` header on every
- * request. Example payloads were captured against a local Ultimate 64 Elite
- * reachable as `http://c64u` running firmware 3.12a.
+ * Source-derived OpenAPI description for the HTTP API implemented in
+ * `/software/api` of the 1541ultimate firmware tree.
+ *
+ * The firmware exposes a single `v1` API version. JSON responses include an
+ * `errors` array. Binary endpoints return `application/octet-stream` on
+ * success and JSON with `errors` when the request cannot be completed.
+ *
+ * If a network password is configured on the device, every API request must
+ * include the `X-Password` header. If no network password is configured, the
+ * same endpoints are available without the header.
  */
 export class Api<SecurityDataType extends unknown> {
   http: HttpClient<SecurityDataType>;
@@ -357,15 +375,39 @@ export class Api<SecurityDataType extends unknown> {
 
   v1 = {
     /**
-     * @description Returns the firmware-defined REST API semantic version.
+     * No description
      *
-     * @name VersionList
-     * @summary Get API version
+     * @tags System
+     * @name GetHelp
+     * @summary Return minimal HTML help for a command.
+     * @request GET:/v1/help
+     * @secure
+     */
+    getHelp: (
+      query: {
+        command: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<string, ErrorList>({
+        path: `/v1/help`,
+        method: "GET",
+        query: query,
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags System
+     * @name GetApiVersion
+     * @summary Get REST API version.
      * @request GET:/v1/version
      * @secure
      */
-    versionList: (params: RequestParams = {}) =>
-      this.http.request<VersionResponse, any>({
+    getApiVersion: (params: RequestParams = {}) =>
+      this.http.request<VersionResponse, ErrorList>({
         path: `/v1/version`,
         method: "GET",
         secure: true,
@@ -374,15 +416,16 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * @description Returns hardware metadata (product, firmware version, FPGA/core versions, hostname). Available on Ultimate firmware 3.12 and newer. On earlier releases the endpoint responds with HTTP 404.
+     * No description
      *
-     * @name InfoList
-     * @summary Get device information
+     * @tags System
+     * @name GetDeviceInfo
+     * @summary Get device identity and firmware versions.
      * @request GET:/v1/info
      * @secure
      */
-    infoList: (params: RequestParams = {}) =>
-      this.http.request<InfoResponse, any>({
+    getDeviceInfo: (params: RequestParams = {}) =>
+      this.http.request<InfoResponse, ErrorList>({
         path: `/v1/info`,
         method: "GET",
         secure: true,
@@ -393,240 +436,285 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name RunnersSidplayUpdate
-     * @summary Play SID from filesystem
+     * @tags Runners
+     * @name PlaySidFromFile
+     * @summary Play a SID file already present on the device filesystem.
      * @request PUT:/v1/runners:sidplay
      * @secure
      */
-    runnersSidplayUpdate: (
+    playSidFromFile: (
       sidplay: string,
       query: {
+        /** Absolute or device-relative file path. */
         file: string;
-        /** @min 0 */
+        /**
+         * @min 0
+         * @default 0
+         */
         songnr?: number;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<RunnerActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${sidplay}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersSidplayCreate
-     * @summary Play uploaded SID
+     * @tags Runners
+     * @name PlayUploadedSid
+     * @summary Upload and play a SID file.
      * @request POST:/v1/runners:sidplay
      * @secure
      */
-    runnersSidplayCreate: (
+    playUploadedSid: (
       sidplay: string,
       data: {
-        /** @format binary */
-        sid: File;
-        /** @format binary */
-        songlengths?: File;
+        /**
+         * First file is the SID; optional second file is SID song-length data.
+         * @maxItems 2
+         * @minItems 1
+         */
+        file: File[];
       },
       query?: {
-        /** @min 0 */
+        /**
+         * @min 0
+         * @default 0
+         */
         songnr?: number;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<RunnerActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${sidplay}`,
         method: "POST",
         query: query,
         body: data,
         secure: true,
-        type: ContentType.FormData,
-        format: "json",
         ...params,
       }),
 
     /**
-     * No description
+     * @description Requires the FPGA sampler capability.
      *
-     * @name RunnersModplayUpdate
-     * @summary Play MOD from filesystem
+     * @tags Runners
+     * @name PlayModFromFile
+     * @summary Play a MOD file from the device filesystem.
      * @request PUT:/v1/runners:modplay
      * @secure
      */
-    runnersModplayUpdate: (
+    playModFromFile: (
       modplay: string,
       query: {
+        /** Absolute or device-relative file path. */
         file: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<RunnerActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${modplay}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
-     * No description
+     * @description Requires the FPGA sampler capability.
      *
-     * @name RunnersModplayCreate
-     * @summary Play uploaded MOD
+     * @tags Runners
+     * @name PlayUploadedMod
+     * @summary Upload and play a MOD file.
      * @request POST:/v1/runners:modplay
      * @secure
      */
-    runnersModplayCreate: (modplay: string, data: File, params: RequestParams = {}) =>
-      this.http.request<RunnerActionResponse, any>({
+    playUploadedMod: (
+      modplay: string,
+      data: {
+        /** @format binary */
+        file: File;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${modplay}`,
         method: "POST",
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersLoadPrgUpdate
-     * @summary Load PRG from filesystem
+     * @tags Runners
+     * @name LoadPrgFromFile
+     * @summary Load a PRG from the device filesystem without starting it.
      * @request PUT:/v1/runners:load_prg
      * @secure
      */
-    runnersLoadPrgUpdate: (
+    loadPrgFromFile: (
       loadPrg: string,
       query: {
+        /** Absolute or device-relative file path. */
         file: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<RunnerActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${loadPrg}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersLoadPrgCreate
-     * @summary Load uploaded PRG
+     * @tags Runners
+     * @name LoadUploadedPrg
+     * @summary Upload a PRG and load it without starting it.
      * @request POST:/v1/runners:load_prg
      * @secure
      */
-    runnersLoadPrgCreate: (loadPrg: string, data: File, params: RequestParams = {}) =>
-      this.http.request<RunnerActionResponse, any>({
+    loadUploadedPrg: (
+      loadPrg: string,
+      data: {
+        /** @format binary */
+        file: File;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${loadPrg}`,
         method: "POST",
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersRunPrgUpdate
-     * @summary Run PRG from filesystem
+     * @tags Runners
+     * @name RunPrgFromFile
+     * @summary Load and run a PRG from the device filesystem.
      * @request PUT:/v1/runners:run_prg
      * @secure
      */
-    runnersRunPrgUpdate: (
+    runPrgFromFile: (
       runPrg: string,
       query: {
+        /** Absolute or device-relative file path. */
         file: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<RunnerActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${runPrg}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersRunPrgCreate
-     * @summary Run uploaded PRG
+     * @tags Runners
+     * @name RunUploadedPrg
+     * @summary Upload, load, and run a PRG.
      * @request POST:/v1/runners:run_prg
      * @secure
      */
-    runnersRunPrgCreate: (runPrg: string, data: File, params: RequestParams = {}) =>
-      this.http.request<RunnerActionResponse, any>({
+    runUploadedPrg: (
+      runPrg: string,
+      data: {
+        /** @format binary */
+        file: File;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${runPrg}`,
         method: "POST",
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersRunCrtUpdate
-     * @summary Run cartridge from filesystem
+     * @tags Runners
+     * @name RunCrtFromFile
+     * @summary Load and start a CRT cartridge image from the device filesystem.
      * @request PUT:/v1/runners:run_crt
      * @secure
      */
-    runnersRunCrtUpdate: (
+    runCrtFromFile: (
       runCrt: string,
       query: {
+        /** Absolute or device-relative file path. */
         file: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<RunnerActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${runCrt}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name RunnersRunCrtCreate
-     * @summary Run uploaded cartridge
+     * @tags Runners
+     * @name RunUploadedCrt
+     * @summary Upload, load, and start a CRT cartridge image.
      * @request POST:/v1/runners:run_crt
      * @secure
      */
-    runnersRunCrtCreate: (runCrt: string, data: File, params: RequestParams = {}) =>
-      this.http.request<RunnerActionResponse, any>({
+    runUploadedCrt: (
+      runCrt: string,
+      data: {
+        /** @format binary */
+        file: File;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/runners${runCrt}`,
         method: "POST",
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
-     * @description Enumerates top-level configuration pages as displayed in the Ultimate menu. Supports wildcard queries via URL encoding.
+     * No description
      *
-     * @name ConfigsList
-     * @summary List configuration categories
+     * @tags Configuration
+     * @name ListConfigCategories
+     * @summary List configuration categories.
      * @request GET:/v1/configs
      * @secure
      */
-    configsList: (params: RequestParams = {}) =>
-      this.http.request<ConfigListResponse, any>({
+    listConfigCategories: (params: RequestParams = {}) =>
+      this.http.request<ConfigCategoriesResponse, ErrorList>({
         path: `/v1/configs`,
         method: "GET",
         secure: true,
@@ -635,34 +723,35 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description Use single-item `PUT` for interactive writes; batch POST buffers the body on-device.
      *
-     * @name ConfigsCreate
-     * @summary Batch update configuration
+     * @tags Configuration
+     * @name BatchUpdateConfig
+     * @summary Apply a JSON batch of configuration values.
      * @request POST:/v1/configs
      * @secure
      */
-    configsCreate: (data: Record<string, object>, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    batchUpdateConfig: (data: ConfigBatchUpdate, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/configs`,
         method: "POST",
         body: data,
         secure: true,
         type: ContentType.Json,
-        format: "json",
         ...params,
       }),
 
     /**
-     * @description Returns all items inside the specified category. Wildcards may match multiple categories; each appears as an object property in the response.
+     * No description
      *
-     * @name ConfigsDetail
-     * @summary Inspect category
+     * @tags Configuration
+     * @name GetConfigCategory
+     * @summary Get matching configuration categories and their current values.
      * @request GET:/v1/configs/{category}
      * @secure
      */
-    configsDetail: (category: string, params: RequestParams = {}) =>
-      this.http.request<ConfigCategoryResponse, any>({
+    getConfigCategory: (category: string, params: RequestParams = {}) =>
+      this.http.request<ConfigCategoryResponse, ErrorList>({
         path: `/v1/configs/${category}`,
         method: "GET",
         secure: true,
@@ -673,15 +762,14 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name ConfigsDetail2
-     * @summary Inspect configuration item
+     * @tags Configuration
+     * @name GetConfigItem
+     * @summary Get detailed metadata for matching configuration items.
      * @request GET:/v1/configs/{category}/{item}
-     * @originalName configsDetail
-     * @duplicate
      * @secure
      */
-    configsDetail2: (category: string, item: string, params: RequestParams = {}) =>
-      this.http.request<ConfigItemResponse, any>({
+    getConfigItem: (category: string, item: string, params: RequestParams = {}) =>
+      this.http.request<ConfigCategoryResponse, ErrorList>({
         path: `/v1/configs/${category}/${item}`,
         method: "GET",
         secure: true,
@@ -692,12 +780,13 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name ConfigsUpdate
-     * @summary Update configuration item
+     * @tags Configuration
+     * @name UpdateConfigItem
+     * @summary Update one configuration item using the `value` query parameter.
      * @request PUT:/v1/configs/{category}/{item}
      * @secure
      */
-    configsUpdate: (
+    updateConfigItem: (
       category: string,
       item: string,
       query: {
@@ -705,26 +794,60 @@ export class Api<SecurityDataType extends unknown> {
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/configs/${category}/${item}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name ConfigsLoadFromFlashUpdate
-     * @summary Load configuration from flash
+     * @tags Configuration
+     * @name UpdateConfigItemByPath
+     * @summary Update one configuration item using the third path segment as the value.
+     * @request PUT:/v1/configs/{category}/{item}/{setting}
+     * @secure
+     */
+    updateConfigItemByPath: (category: string, item: string, setting: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
+        path: `/v1/configs/${category}/${item}/${setting}`,
+        method: "PUT",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Configuration
+     * @name LoadAllConfigsFromFlash
+     * @summary Reload all configuration stores from flash.
      * @request PUT:/v1/configs:load_from_flash
      * @secure
      */
-    configsLoadFromFlashUpdate: (loadFromFlash: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    loadAllConfigsFromFlash: (loadFromFlash: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/configs${loadFromFlash}`,
+        method: "PUT",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Configuration
+     * @name LoadConfigCategoryFromFlash
+     * @summary Reload matching configuration stores from flash.
+     * @request PUT:/v1/configs/{category}:load_from_flash
+     * @secure
+     */
+    loadConfigCategoryFromFlash: (category: string, loadFromFlash: string, params: RequestParams = {}) =>
+      this.http.request<ConfigStoreListResponse, ErrorList>({
+        path: `/v1/configs/${category}${loadFromFlash}`,
         method: "PUT",
         secure: true,
         format: "json",
@@ -734,13 +857,14 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name ConfigsSaveToFlashUpdate
-     * @summary Save configuration to flash
+     * @tags Configuration
+     * @name SaveAllConfigsToFlash
+     * @summary Save stale configuration stores to flash.
      * @request PUT:/v1/configs:save_to_flash
      * @secure
      */
-    configsSaveToFlashUpdate: (saveToFlash: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    saveAllConfigsToFlash: (saveToFlash: string, params: RequestParams = {}) =>
+      this.http.request<ConfigStoreListResponse, ErrorList>({
         path: `/v1/configs${saveToFlash}`,
         method: "PUT",
         secure: true,
@@ -751,16 +875,52 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name ConfigsResetToDefaultUpdate
-     * @summary Reset configuration to defaults
+     * @tags Configuration
+     * @name SaveConfigCategoryToFlash
+     * @summary Save matching stale configuration stores to flash.
+     * @request PUT:/v1/configs/{category}:save_to_flash
+     * @secure
+     */
+    saveConfigCategoryToFlash: (category: string, saveToFlash: string, params: RequestParams = {}) =>
+      this.http.request<ConfigStoreListResponse, ErrorList>({
+        path: `/v1/configs/${category}${saveToFlash}`,
+        method: "PUT",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Configuration
+     * @name ResetAllConfigsToDefault
+     * @summary Reset all configuration stores to firmware defaults.
      * @request PUT:/v1/configs:reset_to_default
      * @secure
      */
-    configsResetToDefaultUpdate: (resetToDefault: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    resetAllConfigsToDefault: (resetToDefault: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/configs${resetToDefault}`,
         method: "PUT",
         secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Configuration
+     * @name ResetConfigCategoryToDefault
+     * @summary Reset matching configuration stores to firmware defaults.
+     * @request PUT:/v1/configs/{category}:reset_to_default
+     * @secure
+     */
+    resetConfigCategoryToDefault: (category: string, resetToDefault: string, params: RequestParams = {}) =>
+      this.http.request<ConfigStoreListResponse, ErrorList>({
+        path: `/v1/configs/${category}${resetToDefault}`,
+        method: "PUT",
+        secure: true,
         format: "json",
         ...params,
       }),
@@ -768,199 +928,214 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name MachineResetUpdate
-     * @summary Soft reset machine
+     * @tags Machine
+     * @name ResetMachine
+     * @summary Reset the C64.
      * @request PUT:/v1/machine:reset
      * @secure
      */
-    machineResetUpdate: (reset: string, params: RequestParams = {}) =>
-      this.http.request<MachineActionResponse, any>({
+    resetMachine: (reset: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${reset}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachineRebootUpdate
-     * @summary Reboot machine
+     * @tags Machine
+     * @name RebootMachine
+     * @summary Reboot the C64.
      * @request PUT:/v1/machine:reboot
      * @secure
      */
-    machineRebootUpdate: (reboot: string, params: RequestParams = {}) =>
-      this.http.request<MachineActionResponse, any>({
+    rebootMachine: (reboot: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${reboot}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachinePauseUpdate
-     * @summary Pause machine via DMA
+     * @tags Machine
+     * @name PauseMachine
+     * @summary Pause the machine using DMA.
      * @request PUT:/v1/machine:pause
      * @secure
      */
-    machinePauseUpdate: (pause: string, params: RequestParams = {}) =>
-      this.http.request<MachineActionResponse, any>({
+    pauseMachine: (pause: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${pause}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachineResumeUpdate
-     * @summary Resume machine from pause
+     * @tags Machine
+     * @name ResumeMachine
+     * @summary Resume a paused machine.
      * @request PUT:/v1/machine:resume
      * @secure
      */
-    machineResumeUpdate: (resume: string, params: RequestParams = {}) =>
-      this.http.request<MachineActionResponse, any>({
+    resumeMachine: (resume: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${resume}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachinePoweroffUpdate
-     * @summary Power off machine
+     * @tags Machine
+     * @name PowerOffMachine
+     * @summary Request machine power off.
      * @request PUT:/v1/machine:poweroff
      * @secure
      */
-    machinePoweroffUpdate: (poweroff: string, params: RequestParams = {}) =>
-      this.http.request<MachineActionResponse, any>({
+    powerOffMachine: (poweroff: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${poweroff}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachineMenuButtonUpdate
-     * @summary Toggle Ultimate menu button
+     * @tags Machine
+     * @name PressMenuButton
+     * @summary Press the Ultimate menu button.
      * @request PUT:/v1/machine:menu_button
      * @secure
      */
-    machineMenuButtonUpdate: (menuButton: string, params: RequestParams = {}) =>
-      this.http.request<MachineActionResponse, any>({
+    pressMenuButton: (menuButton: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${menuButton}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachineWritememUpdate
-     * @summary Write memory via query data
+     * @tags Machine
+     * @name WriteMemoryHex
+     * @summary Write up to 128 bytes of C64 memory from a hex string.
      * @request PUT:/v1/machine:writemem
      * @secure
      */
-    machineWritememUpdate: (
+    writeMemoryHex: (
       writemem: string,
       query: {
-        /** Hexadecimal start address. */
+        /**
+         * C64 address in hexadecimal.
+         * @pattern ^(0x)?[0-9A-Fa-f]{1,4}$
+         */
         address: string;
-        /** Hex string representing bytes (≤ 128 bytes). */
+        /** @pattern ^([0-9A-Fa-f]{2}){1,128}$ */
         data: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<MachineActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${writemem}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name MachineWritememCreate
-     * @summary Write memory via binary payload
+     * @tags Machine
+     * @name WriteMemoryUpload
+     * @summary Write C64 memory from an uploaded binary payload.
      * @request POST:/v1/machine:writemem
      * @secure
      */
-    machineWritememCreate: (
+    writeMemoryUpload: (
       writemem: string,
       query: {
-        /** Hexadecimal start address. */
+        /**
+         * C64 address in hexadecimal.
+         * @pattern ^(0x)?[0-9A-Fa-f]{1,4}$
+         */
         address: string;
       },
-      data: File,
+      data: {
+        /** @format binary */
+        file: File;
+      },
       params: RequestParams = {},
     ) =>
-      this.http.request<MachineActionResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/machine${writemem}`,
         method: "POST",
         query: query,
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
-     * @description Performs a DMA read at the requested address. Firmware returns either a JSON wrapper or raw bytes. Use `length` to limit the transfer (default 256 bytes).
+     * No description
      *
-     * @name MachineReadmemList
-     * @summary Read memory
+     * @tags Machine
+     * @name ReadMemory
+     * @summary Read C64 memory as raw bytes.
      * @request GET:/v1/machine:readmem
      * @secure
      */
-    machineReadmemList: (
+    readMemory: (
       readmem: string,
       query: {
-        /** Hexadecimal start address. */
+        /**
+         * C64 address in hexadecimal.
+         * @pattern ^(0x)?[0-9A-Fa-f]{1,4}$
+         */
         address: string;
         /**
-         * @min 1
-         * @max 4096
+         * @min 0
+         * @max 65536
+         * @default 256
          */
         length?: number;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<MemoryReadJson, any>({
+      this.http.request<File, ErrorList>({
         path: `/v1/machine${readmem}`,
         method: "GET",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
-     * @description Returns raw character and colour matrix bytes, or 404 when no Ultimate menu is active.
+     * @description Returns 404 JSON when no active menu screen matrix is available.
      *
-     * @name MachineMenuScreenList
-     * @summary Read the active Ultimate menu screen matrix
+     * @tags Machine
+     * @name ReadMenuScreen
+     * @summary Read the active Ultimate menu screen matrix as raw bytes.
      * @request GET:/v1/machine:menu_screen
      * @secure
      */
-    machineMenuScreenList: (menuScreen: string, params: RequestParams = {}) =>
-      this.http.request<File, ErrorResponse>({
+    readMenuScreen: (menuScreen: string, params: RequestParams = {}) =>
+      this.http.request<File, ErrorList>({
         path: `/v1/machine${menuScreen}`,
         method: "GET",
         secure: true,
@@ -970,13 +1145,73 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name MachineInputList
-     * @summary Read REST-injected keyboard and joystick state
+     * @tags Machine
+     * @name ReadDebugRegister
+     * @summary Read the Ultimate 64 debug register.
+     * @request GET:/v1/machine:debugreg
+     * @secure
+     */
+    readDebugRegister: (debugreg: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
+        path: `/v1/machine${debugreg}`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Machine
+     * @name WriteDebugRegister
+     * @summary Write the Ultimate 64 debug register.
+     * @request PUT:/v1/machine:debugreg
+     * @secure
+     */
+    writeDebugRegister: (
+      debugreg: string,
+      query: {
+        /** @pattern ^(0x)?[0-9A-Fa-f]{1,2}$ */
+        value: string;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<ActionResponse, ErrorList>({
+        path: `/v1/machine${debugreg}`,
+        method: "PUT",
+        query: query,
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Machine
+     * @name MeasureCartridgeBus
+     * @summary Capture cartridge-bus timing as a VCD file.
+     * @request GET:/v1/machine:measure
+     * @secure
+     */
+    measureCartridgeBus: (measure: string, params: RequestParams = {}) =>
+      this.http.request<File, ErrorList>({
+        path: `/v1/machine${measure}`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Input
+     * @name GetInputState
+     * @summary Read REST-injected keyboard and joystick state.
      * @request GET:/v1/machine:input
      * @secure
      */
-    machineInputList: (input: string, params: RequestParams = {}) =>
-      this.http.request<InputStateResponse, any>({
+    getInputState: (input: string, params: RequestParams = {}) =>
+      this.http.request<InputStateResponse, ErrorList>({
         path: `/v1/machine${input}`,
         method: "GET",
         secure: true,
@@ -987,13 +1222,14 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name MachineInputCreate
-     * @summary Apply keyboard and joystick input events
+     * @tags Input
+     * @name SendInputEvents
+     * @summary Apply keyboard and joystick input events.
      * @request POST:/v1/machine:input
      * @secure
      */
-    machineInputCreate: (input: string, data: InputBatch, params: RequestParams = {}) =>
-      this.http.request<InputStateResponse, any>({
+    sendInputEvents: (input: string, data: InputBatch, params: RequestParams = {}) =>
+      this.http.request<InputStateResponse, ErrorList>({
         path: `/v1/machine${input}`,
         method: "POST",
         body: data,
@@ -1006,55 +1242,14 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name MachineDebugregList
-     * @summary Read debug register
-     * @request GET:/v1/machine:debugreg
-     * @secure
-     */
-    machineDebugregList: (debugreg: string, params: RequestParams = {}) =>
-      this.http.request<MemoryDebugResponse, any>({
-        path: `/v1/machine${debugreg}`,
-        method: "GET",
-        secure: true,
-        format: "json",
-        ...params,
-      }),
-
-    /**
-     * No description
-     *
-     * @name MachineDebugregUpdate
-     * @summary Write debug register
-     * @request PUT:/v1/machine:debugreg
-     * @secure
-     */
-    machineDebugregUpdate: (
-      debugreg: string,
-      query: {
-        /** Hexadecimal value to write. */
-        value: string;
-      },
-      params: RequestParams = {},
-    ) =>
-      this.http.request<MemoryDebugResponse, any>({
-        path: `/v1/machine${debugreg}`,
-        method: "PUT",
-        query: query,
-        secure: true,
-        format: "json",
-        ...params,
-      }),
-
-    /**
-     * @description Returns current Ultimate-managed drives, images, and service devices (SoftIEC, printer emulation).
-     *
-     * @name DrivesList
-     * @summary List internal drives
+     * @tags Drives
+     * @name ListDrives
+     * @summary List internal drives and IEC service devices.
      * @request GET:/v1/drives
      * @secure
      */
-    drivesList: (params: RequestParams = {}) =>
-      this.http.request<DriveListResponse, any>({
+    listDrives: (params: RequestParams = {}) =>
+      this.http.request<DriveListResponse, ErrorList>({
         path: `/v1/drives`,
         method: "GET",
         secure: true,
@@ -1065,13 +1260,14 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name DrivesMountUpdate
-     * @summary Mount disk image from filesystem
+     * @tags Drives
+     * @name MountDiskImage
+     * @summary Mount a disk image from the device filesystem.
      * @request PUT:/v1/drives/{drive}:mount
      * @secure
      */
-    drivesMountUpdate: (
-      drive: string,
+    mountDiskImage: (
+      drive: "a" | "b",
       mount: string,
       query: {
         image: string;
@@ -1080,232 +1276,263 @@ export class Api<SecurityDataType extends unknown> {
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${mount}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesMountCreate
-     * @summary Mount uploaded disk image
+     * @tags Drives
+     * @name MountUploadedDiskImage
+     * @summary Upload and mount a disk image.
      * @request POST:/v1/drives/{drive}:mount
      * @secure
      */
-    drivesMountCreate: (
-      drive: string,
+    mountUploadedDiskImage: (
+      drive: "a" | "b",
       mount: string,
-      data: File,
+      data: {
+        /** @format binary */
+        file: File;
+      },
       query?: {
         type?: "d64" | "g64" | "d71" | "g71" | "d81";
         mode?: "readwrite" | "readonly" | "unlinked";
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${mount}`,
         method: "POST",
         query: query,
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesResetUpdate
-     * @summary Reset drive
+     * @tags Drives
+     * @name ResetDrive
+     * @summary Reset a drive.
      * @request PUT:/v1/drives/{drive}:reset
      * @secure
      */
-    drivesResetUpdate: (drive: string, reset: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    resetDrive: (drive: "a" | "b", reset: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${reset}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesRemoveUpdate
-     * @summary Remove mounted image
+     * @tags Drives
+     * @name RemoveMountedImage
+     * @summary Remove the mounted image from a drive.
      * @request PUT:/v1/drives/{drive}:remove
      * @secure
      */
-    drivesRemoveUpdate: (drive: string, remove: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    removeMountedImage: (drive: "a" | "b", remove: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${remove}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesOnUpdate
-     * @summary Power on drive
+     * @tags Drives
+     * @name PowerOnDrive
+     * @summary Power on a drive.
      * @request PUT:/v1/drives/{drive}:on
      * @secure
      */
-    drivesOnUpdate: (drive: string, on: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    powerOnDrive: (drive: "a" | "b", on: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${on}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesOffUpdate
-     * @summary Power off drive
+     * @tags Drives
+     * @name PowerOffDrive
+     * @summary Power off a drive.
      * @request PUT:/v1/drives/{drive}:off
      * @secure
      */
-    drivesOffUpdate: (drive: string, off: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    powerOffDrive: (drive: "a" | "b", off: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${off}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesLoadRomUpdate
-     * @summary Load ROM from filesystem
+     * @tags Drives
+     * @name UnlinkMountedImage
+     * @summary Unlink the mounted image from host storage.
+     * @request PUT:/v1/drives/{drive}:unlink
+     * @secure
+     */
+    unlinkMountedImage: (drive: "a" | "b", unlink: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
+        path: `/v1/drives/${drive}${unlink}`,
+        method: "PUT",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @tags Drives
+     * @name LoadDriveRomFromFile
+     * @summary Load a drive ROM from the device filesystem.
      * @request PUT:/v1/drives/{drive}:load_rom
      * @secure
      */
-    drivesLoadRomUpdate: (
-      drive: string,
+    loadDriveRomFromFile: (
+      drive: "a" | "b",
       loadRom: string,
       query: {
+        /** Absolute or device-relative file path. */
         file: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${loadRom}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesLoadRomCreate
-     * @summary Load ROM from upload
+     * @tags Drives
+     * @name LoadUploadedDriveRom
+     * @summary Upload and load a drive ROM.
      * @request POST:/v1/drives/{drive}:load_rom
      * @secure
      */
-    drivesLoadRomCreate: (drive: string, loadRom: string, data: File, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    loadUploadedDriveRom: (
+      drive: "a" | "b",
+      loadRom: string,
+      data: {
+        /** @format binary */
+        file: File;
+      },
+      params: RequestParams = {},
+    ) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${loadRom}`,
         method: "POST",
         body: data,
         secure: true,
-        format: "json",
+        type: ContentType.FormData,
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name DrivesSetModeUpdate
-     * @summary Set drive mode
+     * @tags Drives
+     * @name SetDriveMode
+     * @summary Set drive emulation mode.
      * @request PUT:/v1/drives/{drive}:set_mode
      * @secure
      */
-    drivesSetModeUpdate: (
-      drive: string,
+    setDriveMode: (
+      drive: "a" | "b",
       setMode: string,
       query: {
         mode: "1541" | "1571" | "1581";
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/drives/${drive}${setMode}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name StreamsStartUpdate
-     * @summary Start data stream
+     * @tags Streams
+     * @name StartDataStream
+     * @summary Start a data stream.
      * @request PUT:/v1/streams/{stream}:start
      * @secure
      */
-    streamsStartUpdate: (
+    startDataStream: (
       stream: "video" | "audio" | "debug",
       start: string,
       query: {
-        /** Target IP address with optional port (ip[:port]). */
+        /** Destination IPv4 address, optionally with port. */
         ip: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/streams/${stream}${start}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name StreamsStopUpdate
-     * @summary Stop data stream
+     * @tags Streams
+     * @name StopDataStream
+     * @summary Stop a data stream.
      * @request PUT:/v1/streams/{stream}:stop
      * @secure
      */
-    streamsStopUpdate: (stream: "video" | "audio" | "debug", stop: string, params: RequestParams = {}) =>
-      this.http.request<ErrorResponse, any>({
+    stopDataStream: (stream: "video" | "audio" | "debug", stop: string, params: RequestParams = {}) =>
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/streams/${stream}${stop}`,
         method: "PUT",
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name FilesInfoDetail
-     * @summary Inspect file metadata
+     * @tags Files
+     * @name GetFileInfo
+     * @summary Get metadata for a device filesystem path.
      * @request GET:/v1/files/{path}:info
      * @secure
      */
-    filesInfoDetail: (path: string, info: string, params: RequestParams = {}) =>
-      this.http.request<FileInfoResponse, any>({
+    getFileInfo: (path: string, info: string, params: RequestParams = {}) =>
+      this.http.request<FileInfoResponse, ErrorList>({
         path: `/v1/files/${path}${info}`,
         method: "GET",
         secure: true,
@@ -1316,38 +1543,44 @@ export class Api<SecurityDataType extends unknown> {
     /**
      * No description
      *
-     * @name FilesCreateD64Update
-     * @summary Create D64 image
+     * @tags Files
+     * @name CreateD64
+     * @summary Create and format a D64 image.
      * @request PUT:/v1/files/{path}:create_d64
      * @secure
      */
-    filesCreateD64Update: (
+    createD64: (
       path: string,
       createD64: string,
       query?: {
-        tracks?: 35 | 40;
+        /**
+         * @min 35
+         * @max 41
+         * @default 35
+         */
+        tracks?: number;
         diskname?: string;
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/files/${path}${createD64}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name FilesCreateD71Update
-     * @summary Create D71 image
+     * @tags Files
+     * @name CreateD71
+     * @summary Create and format a D71 image.
      * @request PUT:/v1/files/{path}:create_d71
      * @secure
      */
-    filesCreateD71Update: (
+    createD71: (
       path: string,
       createD71: string,
       query?: {
@@ -1355,24 +1588,24 @@ export class Api<SecurityDataType extends unknown> {
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/files/${path}${createD71}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name FilesCreateD81Update
-     * @summary Create D81 image
+     * @tags Files
+     * @name CreateD81
+     * @summary Create and format a D81 image.
      * @request PUT:/v1/files/{path}:create_d81
      * @secure
      */
-    filesCreateD81Update: (
+    createD81: (
       path: string,
       createD81: string,
       query?: {
@@ -1380,24 +1613,24 @@ export class Api<SecurityDataType extends unknown> {
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/files/${path}${createD81}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
 
     /**
      * No description
      *
-     * @name FilesCreateDnpUpdate
-     * @summary Create DNP image
+     * @tags Files
+     * @name CreateDnp
+     * @summary Create and format a DNP image.
      * @request PUT:/v1/files/{path}:create_dnp
      * @secure
      */
-    filesCreateDnpUpdate: (
+    createDnp: (
       path: string,
       createDnp: string,
       query: {
@@ -1410,12 +1643,11 @@ export class Api<SecurityDataType extends unknown> {
       },
       params: RequestParams = {},
     ) =>
-      this.http.request<ErrorResponse, any>({
+      this.http.request<ActionResponse, ErrorList>({
         path: `/v1/files/${path}${createDnp}`,
         method: "PUT",
         query: query,
         secure: true,
-        format: "json",
         ...params,
       }),
   };

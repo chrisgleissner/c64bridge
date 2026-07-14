@@ -1,36 +1,41 @@
 openapi: 3.1.0
 info:
-  title: Ultimate 64 Elite REST API
-  version: 3.15-alpha
-  summary: REST API exposed by the Ultimate 64 Elite 3.15 alpha firmware.
+  title: Ultimate-II REST API
+  version: 3.15 alpha
+  summary: REST API exposed by the Ultimate-II 3.14a firmware.
   description: |
     Source-derived OpenAPI description for the HTTP API implemented in
-    `/software/api` of the 1541ultimate firmware tree.
+    `/software/api` of the 1541ultimate firmware tree and linked into the
+    `target/u2/riscv/ultimate` firmware target.
 
-    The firmware exposes a single `v1` API version. JSON responses include an
-    `errors` array. Binary endpoints return `application/octet-stream` on
-    success and JSON with `errors` when the request cannot be completed.
+    The U2 target links the shared `routes`, `files`, `drives`, `runners`,
+    `configs`, and `machine` route modules. It does not link `route_streams`;
+    keyboard/joystick injection, debug registers, and power-off are also omitted
+    because the firmware source gates or rejects those operations on non-U64
+    targets.
+
+    JSON responses include an `errors` array. Binary endpoints return
+    `application/octet-stream` on success and JSON with `errors` when the request
+    cannot be completed.
 
     If a network password is configured on the device, every API request must
     include the `X-Password` header. If no network password is configured, the
     same endpoints are available without the header.
 servers:
-  - url: http://u64
-    description: Ultimate 64 Elite on the local network
+  - url: http://u2
+    description: Ultimate-II on the local network
   - url: http://{host}
     description: Custom Ultimate host or IP address
     variables:
       host:
-        default: u64
+        default: u2
 tags:
   - name: System
   - name: Runners
   - name: Configuration
   - name: Machine
   - name: Drives
-  - name: Streams
   - name: Files
-  - name: Input
 security:
   - NetworkPassword: []
   - {}
@@ -160,13 +165,13 @@ components:
           properties:
             product:
               type: string
-              example: Ultimate 64 Elite
+              example: Ultimate-II
             firmware_version:
               type: string
               example: 3.15 alpha
             fpga_version:
               type: string
-              example: "122"
+              example: U2
             core_version:
               type: string
               description: Present on Ultimate 64-class firmware builds.
@@ -311,160 +316,6 @@ components:
                 extension:
                   type: string
               additionalProperties: true
-    InputStateResponse:
-      allOf:
-        - $ref: "#/components/schemas/ErrorList"
-        - type: object
-          required: [keyboard, joysticks]
-          properties:
-            keyboard:
-              type: object
-              required: [inputs]
-              properties:
-                inputs:
-                  type: array
-                  items:
-                    $ref: "#/components/schemas/KeyboardInput"
-            joysticks:
-              type: array
-              items:
-                type: object
-                required: [port, inputs]
-                properties:
-                  port:
-                    type: integer
-                    enum: [1, 2]
-                  inputs:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/JoystickInput"
-    InputBatch:
-      type: object
-      required: [events]
-      properties:
-        events:
-          type: array
-          minItems: 1
-          maxItems: 64
-          items:
-            oneOf:
-              - $ref: "#/components/schemas/KeyboardEvent"
-              - $ref: "#/components/schemas/JoystickEvent"
-              - $ref: "#/components/schemas/ReleaseAllEvent"
-    KeyboardEvent:
-      type: object
-      required: [kind, inputs, transition]
-      properties:
-        kind:
-          const: keyboard
-        inputs:
-          type: array
-          minItems: 1
-          maxItems: 8
-          items:
-            $ref: "#/components/schemas/KeyboardInput"
-        transition:
-          $ref: "#/components/schemas/InputTransition"
-      additionalProperties: false
-    JoystickEvent:
-      type: object
-      required: [kind, port, inputs, transition]
-      properties:
-        kind:
-          const: joystick
-        port:
-          type: integer
-          enum: [1, 2]
-        inputs:
-          type: array
-          minItems: 1
-          maxItems: 7
-          items:
-            $ref: "#/components/schemas/JoystickInput"
-        transition:
-          $ref: "#/components/schemas/InputTransition"
-      additionalProperties: false
-    ReleaseAllEvent:
-      type: object
-      required: [kind]
-      properties:
-        kind:
-          const: release_all
-      additionalProperties: false
-    InputTransition:
-      type: string
-      enum: [press, release, tap]
-    KeyboardInput:
-      type: string
-      enum:
-        - inst_del
-        - return
-        - cursor_left_right
-        - f7
-        - f1
-        - f3
-        - f5
-        - cursor_up_down
-        - "0"
-        - "1"
-        - "2"
-        - "3"
-        - "4"
-        - "5"
-        - "6"
-        - "7"
-        - "8"
-        - "9"
-        - a
-        - b
-        - c
-        - d
-        - e
-        - f
-        - g
-        - h
-        - i
-        - j
-        - k
-        - l
-        - m
-        - n
-        - o
-        - p
-        - q
-        - r
-        - s
-        - t
-        - u
-        - v
-        - w
-        - x
-        - y
-        - z
-        - left_shift
-        - right_shift
-        - plus
-        - minus
-        - period
-        - colon
-        - at
-        - comma
-        - pound
-        - star
-        - semicolon
-        - clr_home
-        - equals
-        - arrow_up
-        - slash
-        - arrow_left
-        - ctrl
-        - space
-        - commodore
-        - run_stop
-        - restore
-    JoystickInput:
-      type: string
-      enum: [up, down, left, right, fire, fire2, fire3]
   requestBodies:
     BinaryUpload:
       required: true
@@ -967,16 +818,6 @@ paths:
           $ref: "#/components/responses/JsonOk"
         "403":
           $ref: "#/components/responses/Forbidden"
-  /v1/machine:poweroff:
-    put:
-      tags: [Machine]
-      operationId: powerOffMachine
-      summary: Request machine power off.
-      responses:
-        "200":
-          $ref: "#/components/responses/JsonOk"
-        "403":
-          $ref: "#/components/responses/Forbidden"
   /v1/machine:menu_button:
     put:
       tags: [Machine]
@@ -1066,34 +907,6 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
-  /v1/machine:debugreg:
-    get:
-      tags: [Machine]
-      operationId: readDebugRegister
-      summary: Read the Ultimate 64 debug register.
-      responses:
-        "200":
-          $ref: "#/components/responses/JsonOk"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-    put:
-      tags: [Machine]
-      operationId: writeDebugRegister
-      summary: Write the Ultimate 64 debug register.
-      parameters:
-        - name: value
-          in: query
-          required: true
-          schema:
-            type: string
-            pattern: "^(0x)?[0-9A-Fa-f]{1,2}$"
-      responses:
-        "200":
-          $ref: "#/components/responses/JsonOk"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
   /v1/machine:measure:
     get:
       tags: [Machine]
@@ -1109,49 +922,6 @@ paths:
                 format: binary
         "403":
           $ref: "#/components/responses/Forbidden"
-        "501":
-          $ref: "#/components/responses/NotImplemented"
-  /v1/machine:input:
-    get:
-      tags: [Input]
-      operationId: getInputState
-      summary: Read REST-injected keyboard and joystick state.
-      responses:
-        "200":
-          description: Current input state.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/InputStateResponse"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "501":
-          $ref: "#/components/responses/NotImplemented"
-    post:
-      tags: [Input]
-      operationId: sendInputEvents
-      summary: Apply keyboard and joystick input events.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/InputBatch"
-      responses:
-        "200":
-          description: Updated input state.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/InputStateResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "412":
-          $ref: "#/components/responses/PreconditionFailed"
-        "500":
-          $ref: "#/components/responses/ServerError"
         "501":
           $ref: "#/components/responses/NotImplemented"
   /v1/drives:
@@ -1336,50 +1106,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
-  /v1/streams/{stream}:start:
-    put:
-      tags: [Streams]
-      operationId: startDataStream
-      summary: Start a data stream.
-      parameters:
-        - name: stream
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [video, audio, debug]
-        - name: ip
-          in: query
-          required: true
-          schema:
-            type: string
-          description: Destination IPv4 address, optionally with port.
-      responses:
-        "200":
-          $ref: "#/components/responses/JsonOk"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-  /v1/streams/{stream}:stop:
-    put:
-      tags: [Streams]
-      operationId: stopDataStream
-      summary: Stop a data stream.
-      parameters:
-        - name: stream
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [video, audio, debug]
-      responses:
-        "200":
-          $ref: "#/components/responses/JsonOk"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /v1/files/{path}:info:
     get:
       tags: [Files]

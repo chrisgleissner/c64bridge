@@ -11,9 +11,17 @@ import { createSocket, type Socket } from "node:dgram";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrg } from "./tools/translation/assembler.js";
-import { screenCodesToAscii } from "./petscii.js";
+import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
-import { C64Facade, createAllFacades, createFacade, type DeviceType, ViceBackend } from "./device.js";
+import {
+  C64Facade,
+  createAllFacades,
+  createFacade,
+  type DeviceType,
+  type MachineInputBatch,
+  type MachineInputState,
+  ViceBackend,
+} from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
@@ -57,6 +65,14 @@ export interface C64ClientOptions {
   forceC64uFacade?: boolean;
 }
 
+export type NativeEndpointAvailability = "available" | "unavailable" | "unknown";
+
+export interface NativeEndpointCapabilities {
+  readonly machineInput: NativeEndpointAvailability;
+  /** Menu-screen support cannot be probed without an active Ultimate menu. */
+  readonly machineMenuScreen: NativeEndpointAvailability;
+}
+
 export interface FrameCaptureResult {
   readonly backend: "c64u" | "vice";
   readonly frames: readonly CapturedFrame[];
@@ -68,6 +84,20 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+}
+
+function menuMatrixIncludes(matrix: Uint8Array, expected: string): boolean {
+  // Firmware supplies the character matrix followed by its colour matrix. The
+  // documented wire format is raw bytes, so only inspect the first 40×25
+  // character cells when that complete layout is present.
+  const characters = matrix.length >= 2_000 ? matrix.subarray(0, 1_000) : matrix;
+  const normalizedExpected = expected.replace(/\s+/g, " ").toUpperCase();
+  return [screenCodesToAscii(characters), petsciiToAscii(characters)]
+    .some((text) => text.replace(/\s+/g, " ").toUpperCase().includes(normalizedExpected));
+}
+
+function isMissingEndpoint(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
 }
 
 interface C64uVideoCaptureSession {
@@ -164,6 +194,7 @@ export class C64Client {
   private readonly warmupPromises = new Map<DeviceType, Promise<boolean>>();
   private readonly greetingDd00Cache = new Map<DeviceType, number>();
   private readonly greetingDd00Warmups = new Map<DeviceType, Promise<number>>();
+  private readonly machineInputCapabilityProbes = new Map<DeviceType, Promise<NativeEndpointAvailability>>();
   private c64uVideoCaptureSession: C64uVideoCaptureSession | null = null;
   private readonly initPromise: Promise<void>;
   private activeType: DeviceType = "c64u";
@@ -190,13 +221,15 @@ export class C64Client {
       preferredC64uNetworkPassword: options.networkPassword,
     });
     this.facadePromise = allFacadesPromise.then(({ primary }) => primary.facade);
-    this.initPromise = allFacadesPromise.then(({ primary, secondary, secondaryType }) => {
+    this.initPromise = allFacadesPromise.then(({ primary, facades }) => {
       const primaryPromise = Promise.resolve(primary.facade);
       this.activeType = primary.selected;
       this.facadePromise = primaryPromise;
       this.allFacades.set(primary.selected, primaryPromise);
-      if (secondary && secondaryType) {
-        this.allFacades.set(secondaryType, Promise.resolve(secondary));
+      for (const [type, facade] of facades) {
+        if (type !== primary.selected) {
+          this.allFacades.set(type, Promise.resolve(facade));
+        }
       }
     });
   }
@@ -216,6 +249,30 @@ export class C64Client {
   async getActiveBackendType(): Promise<DeviceType> {
     await this.initPromise;
     return this.activeType;
+  }
+
+  /**
+   * Discover native endpoint availability without changing machine state.
+   * `machine:input` has a safe GET probe; `machine:menu_screen` is only
+   * distinguishable from an inactive menu once a menu is visible.
+   */
+  async getNativeEndpointCapabilities(): Promise<NativeEndpointCapabilities> {
+    const facade = await this.facadePromise;
+    if (facade.type === "vice") {
+      return { machineInput: "unavailable", machineMenuScreen: "unavailable" };
+    }
+    if (facade.type === "u2") {
+      return { machineInput: "unavailable", machineMenuScreen: "unknown" };
+    }
+
+    let probe = this.machineInputCapabilityProbes.get(facade.type);
+    if (!probe) {
+      probe = facade.getInputState()
+        .then(() => "available" as const)
+        .catch((error) => isMissingEndpoint(error) ? "unavailable" as const : "unknown" as const);
+      this.machineInputCapabilityProbes.set(facade.type, probe);
+    }
+    return { machineInput: await probe, machineMenuScreen: "unknown" };
   }
 
   getAvailableBackends(): DeviceType[] {
@@ -903,6 +960,93 @@ export class C64Client {
     try { const facade = await this.facadePromise; return await facade.poweroff(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
+  /**
+   * Start from a clean machine state. C64U/U64 firmware exposes this only in
+   * the Tool Menu; U2-family firmware uses its equivalent REST reboot and
+   * VICE is restarted when it is managed by c64bridge.
+   */
+  async powerCycle(): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      if (facade.type === "u2") {
+        const result = await facade.reboot();
+        return { ...result, details: { strategy: "reboot", result: result.details } };
+      }
+      if (facade.type === "vice") {
+        const result = await facade.powerCycle();
+        return { ...result, details: { strategy: "fresh_start", result: result.details } };
+      }
+
+      const endpoints = await this.getNativeEndpointCapabilities();
+      if (endpoints.machineInput !== "available") {
+        return {
+          success: false,
+          details: {
+            code: "native_input_unavailable",
+            message: "C64U/U64 Power Cycle requires machine:input and machine:menu_screen, which this firmware does not currently expose.",
+            fallback: "Use c64_system reboot if a firmware reboot is acceptable, or power cycle from the device itself.",
+          },
+        };
+      }
+
+      const menuResult = await facade.menuButton();
+      if (!menuResult.success) {
+        throw new Error("Unable to open the Ultimate menu for power cycling");
+      }
+      const initial = await this.readVerifiedMenuScreen(facade, "open Ultimate menu");
+      await this.requirePowerCycleInput(facade, ["f1"]);
+      await this.readVerifiedMenuScreen(facade, "open Tool Menu", "TOOL MENU", initial);
+      await this.requirePowerCycleInput(facade, ["return"]);
+      let current = await this.readVerifiedMenuScreen(facade, "enter Tool Menu", "POWER CYCLE");
+      for (let index = 0; index < 4; index += 1) {
+        await this.requirePowerCycleInput(facade, ["cursor_up_down"]);
+        current = await this.readVerifiedMenuScreen(
+          facade,
+          `move to Power Cycle (${index + 1}/4)`,
+          "POWER CYCLE",
+          current,
+        );
+      }
+      await this.requirePowerCycleInput(facade, ["return"]);
+      return { success: true, details: { strategy: "tool_menu", verifiedMenu: "Tool Menu", selectedItem: "Power Cycle" } };
+    } catch (error) {
+      if (isMissingEndpoint(error)) {
+        return {
+          success: false,
+          details: {
+            code: "native_menu_screen_unavailable",
+            message: "C64U/U64 Power Cycle could not verify Tool Menu navigation because machine:menu_screen is unavailable.",
+            fallback: "Use c64_system reboot if a firmware reboot is acceptable, or power cycle from the device itself.",
+          },
+        };
+      }
+      return { success: false, details: this.normaliseError(error) };
+    }
+  }
+
+  private async requirePowerCycleInput(facade: C64Facade, inputs: readonly string[]): Promise<void> {
+    await facade.sendInputEvents({ events: [{ kind: "keyboard", inputs, transition: "tap" }] });
+  }
+
+  private async readVerifiedMenuScreen(
+    facade: C64Facade,
+    phase: string,
+    requiredText?: string,
+    previous?: Uint8Array,
+  ): Promise<Uint8Array> {
+    const matrix = await facade.readMenuScreen();
+    if (matrix.length === 0) {
+      throw new Error(`Unable to ${phase}: machine:menu_screen returned an empty matrix`);
+    }
+    if (previous && Buffer.compare(Buffer.from(previous), Buffer.from(matrix)) === 0) {
+      throw new Error(`Unable to ${phase}: machine:menu_screen did not change after menu input`);
+    }
+    if (requiredText && !menuMatrixIncludes(matrix, requiredText)) {
+      throw new Error(`Unable to ${phase}: machine:menu_screen did not contain '${requiredText}'`);
+    }
+    return matrix;
+  }
+
   async menuButton(): Promise<RunBasicResult> {
     try {
       if (await this.shouldUseC64uMockBypass()) {
@@ -911,6 +1055,21 @@ export class C64Client {
       }
       const facade = await this.facadePromise; return await facade.menuButton();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  async readMenuScreen(): Promise<Uint8Array> {
+    const facade = await this.facadePromise;
+    return facade.readMenuScreen();
+  }
+
+  async getInputState(): Promise<MachineInputState> {
+    const facade = await this.facadePromise;
+    return facade.getInputState();
+  }
+
+  async sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState> {
+    const facade = await this.facadePromise;
+    return facade.sendInputEvents(batch);
   }
 
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> {

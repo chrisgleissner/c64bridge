@@ -27,6 +27,7 @@ type ManifestEnvEntry = {
 type EnvCategory =
   | "Server Runtime"
   | "C64 Ultimate"
+  | "U2-family"
   | "VICE Runtime"
   | "VICE Audio Capture"
   | "SID Playback"
@@ -55,6 +56,9 @@ function classifyEnvVariable(name: string): EnvCategory {
   if (name.startsWith("C64U_")) {
     return "C64 Ultimate";
   }
+  if (name.startsWith("U2_")) {
+    return "U2-family";
+  }
   if (name.startsWith("VICE_") || name === "FORCE_XVFB" || name === "DISABLE_XVFB") {
     if (name === "VICE_MODE" || name === "VICE_LIMIT_CYCLES" || name === "VICE_RUN_TIMEOUT_MS") {
       return "VICE Audio Capture";
@@ -79,6 +83,9 @@ function resolveJsonConfigKey(name: string): string {
     C64U_HOST: "c64u.host",
     C64U_PORT: "c64u.port",
     C64U_PASSWORD: "c64u.networkPassword",
+    U2_HOST: "u2.host",
+    U2_PORT: "u2.port",
+    U2_PASSWORD: "u2.networkPassword",
     VICE_BINARY: "vice.exe",
     VICE_DIRECTORY: "vice.directory",
     VICE_HOST: "vice.host",
@@ -104,6 +111,7 @@ export function renderEnvironmentSection(envEntries: Readonly<Record<string, Man
   const orderedCategories: readonly EnvCategory[] = [
     "Server Runtime",
     "C64 Ultimate",
+    "U2-family",
     "VICE Runtime",
     "VICE Audio Capture",
     "SID Playback",
@@ -145,7 +153,6 @@ type GroupedOperation = {
   readonly required: readonly string[];
   readonly optional: readonly string[];
   readonly properties: Readonly<Record<string, JsonSchema | undefined>>;
-  readonly notes: readonly string[];
 };
 
 type GroupedToolInfo = {
@@ -166,6 +173,11 @@ function toTableValue(values: readonly string[]): string {
     return "—";
   }
   return values.join(", ");
+}
+
+function withVerificationNote(description: string, properties: Readonly<Record<string, JsonSchema | undefined>>): string {
+  const supportsVerification = Object.keys(properties).some((name) => name.toLowerCase().startsWith("verify"));
+  return supportsVerification ? `${description} Supports verification.` : description;
 }
 
 function formatInputName(name: string, schema?: JsonSchema): string {
@@ -229,21 +241,12 @@ function collectFromOperationMetadata(schema: JsonSchema): readonly GroupedOpera
       ? entry.optional.filter((name): name is string => typeof name === "string" && name !== "op")
       : Object.keys(properties).filter((name) => name !== "op" && !requiredProps.includes(name));
 
-    const notes: string[] = [];
-    const hasVerificationProperty = Object.keys(properties).some((name) =>
-      name.toLowerCase().startsWith("verify"),
-    );
-    if (hasVerificationProperty) {
-      notes.push("supports verify");
-    }
-
     operations.push({
       op: opName,
-      description: getString(entry.description, `Operation ${opName}`),
+      description: withVerificationNote(getString(entry.description, `Operation ${opName}`), properties),
       required: requiredProps,
       optional: optionalProps,
       properties,
-      notes,
     });
   }
 
@@ -282,21 +285,12 @@ function collectFromVariantList(variants: readonly JsonSchema[]): readonly Group
     const description = getString(typedVariant.description, getString(opSchema?.description, `Operation ${opName}`));
     const requiredProps = ((typedVariant.required as readonly string[] | undefined) ?? []).filter((name) => name !== "op");
 
-    const notes: string[] = [];
-    const hasVerificationProperty = Object.keys(properties).some((name) =>
-      name.toLowerCase().startsWith("verify"),
-    );
-    if (hasVerificationProperty) {
-      notes.push("supports verify");
-    }
-
     operations.push({
       op: opName,
-      description,
+      description: withVerificationNote(description, properties),
       required: requiredProps,
       optional: Object.keys(properties).filter((name) => name !== "op" && !requiredProps.includes(name)),
       properties,
-      notes,
     });
   }
 
@@ -321,18 +315,12 @@ function collectFromFlattenedSchema(schema: JsonSchema): readonly GroupedOperati
   }
 
   const descriptionMap = parseOperationDescriptions(getString(schema.description));
-  const hasVerificationProperty = Object.keys(properties).some((name) =>
-    name !== "op" && name.toLowerCase().startsWith("verify"),
-  );
-  const notes = hasVerificationProperty ? ["supports verify"] : [];
-
   return opNames.map((opName) => ({
     op: opName,
-    description: descriptionMap.get(opName) ?? `Operation ${opName}`,
+    description: withVerificationNote(descriptionMap.get(opName) ?? `Operation ${opName}`, properties),
     required: [] as readonly string[],
     optional: Object.keys(properties).filter((name) => name !== "op"),
     properties,
-    notes,
   }));
 }
 
@@ -391,13 +379,13 @@ export function renderToolsSection(modules: readonly ToolModuleDescriptor[] = de
               escapeCell(operation.description),
               escapeCell(formatInputs(operation.required, operation.properties)),
               escapeCell(formatInputs(operation.optional, operation.properties)),
-              operation.notes.length ? escapeCell(operation.notes.join(", ")) : "—",
               effectivePlatforms.includes("c64u") ? "✅" : "",
+              effectivePlatforms.includes("u2") ? "✅" : "",
               effectivePlatforms.includes("vice") ? "✅" : "",
             ];
           });
 
-        lines.push(renderTable(["Operation", "Description", "Required Inputs", "Optional Inputs", "Notes", "C64U", "VICE"], operationRows));
+        lines.push(renderTable(["Operation", "Description", "Required Inputs", "Optional Inputs", "C64U", "U2", "VICE"], operationRows));
       }
 
       lines.push("");

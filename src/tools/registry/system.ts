@@ -65,6 +65,15 @@ const systemOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
   {
+    op: "power_cycle",
+    schema: extendSchemaWithOp(
+      "power_cycle",
+      ensureDescriptor(machineDescriptorIndex, "power_cycle").inputSchema,
+      { description: "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "power_cycle", rawArgs, ctx),
+  },
+  {
     op: "menu",
     schema: extendSchemaWithOp(
       "menu",
@@ -72,6 +81,15 @@ const systemOperations: GroupedOperationConfig[] = [
       { description: "Toggle the Ultimate menu button for navigation." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "menu_button", rawArgs, ctx),
+  },
+  {
+    op: "read_menu_screen",
+    schema: extendSchemaWithOp(
+      "read_menu_screen",
+      ensureDescriptor(machineDescriptorIndex, "read_menu_screen").inputSchema,
+      { description: "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+)." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "read_menu_screen", rawArgs, ctx),
   },
   {
     op: "start_task",
@@ -125,7 +143,7 @@ const systemOperationHandlers = createOperationHandlers(systemOperations);
 export const systemModuleGroup = defineToolModule({
   domain: "system",
   summary: "Grouped machine control and background task orchestration.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap"],
   prompts: ["memory-debug"],
   defaultTags: ["system", "control"],
@@ -143,8 +161,8 @@ export const systemModuleGroup = defineToolModule({
         variants: systemOperations.map((operation) => operation.schema),
       }),
       tags: ["system", "control", "grouped"],
-      operationPlatforms: { pause: ["c64u"], resume: ["c64u"], menu: ["c64u"] },
-      operationToolNames: { pause: "pause", resume: "resume", menu: "menu_button" },
+      operationPlatforms: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
+      operationToolNames: { pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },
       examples: [
         {
           name: "Soft reset",

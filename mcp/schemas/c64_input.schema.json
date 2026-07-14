@@ -6,7 +6,10 @@
       "enum": [
         "write_text",
         "key",
-        "joystick"
+        "joystick",
+        "keyboard",
+        "release_all",
+        "state"
       ],
       "description": "Selects the operation."
     },
@@ -69,7 +72,9 @@
           "down",
           "left",
           "right",
-          "fire"
+          "fire",
+          "fire2",
+          "fire3"
         ]
       },
       "minItems": 0
@@ -82,12 +87,98 @@
         "release",
         "tap"
       ]
+    },
+    "inputs": {
+      "type": "array",
+      "description": "One or more keys to transition together (for example left_shift + a).",
+      "items": {
+        "type": "string",
+        "description": "Physical keyboard input.",
+        "enum": [
+          "inst_del",
+          "return",
+          "cursor_left_right",
+          "f7",
+          "f1",
+          "f3",
+          "f5",
+          "cursor_up_down",
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g",
+          "h",
+          "i",
+          "j",
+          "k",
+          "l",
+          "m",
+          "n",
+          "o",
+          "p",
+          "q",
+          "r",
+          "s",
+          "t",
+          "u",
+          "v",
+          "w",
+          "x",
+          "y",
+          "z",
+          "left_shift",
+          "right_shift",
+          "plus",
+          "minus",
+          "period",
+          "colon",
+          "at",
+          "comma",
+          "pound",
+          "star",
+          "semicolon",
+          "clr_home",
+          "equals",
+          "arrow_up",
+          "slash",
+          "arrow_left",
+          "ctrl",
+          "space",
+          "commodore",
+          "run_stop",
+          "restore"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 8
+    },
+    "transition": {
+      "type": "string",
+      "description": "press holds, release frees, tap presses and releases.",
+      "enum": [
+        "press",
+        "release",
+        "tap"
+      ]
     }
   },
   "required": [
     "op"
   ],
-  "description": "Input operations: write_text, key, joystick.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input by writing directly to CIA1 Port A/B registers. Required inputs: port, controls, action. Optional inputs: durationMs.",
+  "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -183,7 +274,7 @@
     },
     {
       "op": "joystick",
-      "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+      "description": "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
       "required": [
         "port",
         "controls",
@@ -194,7 +285,7 @@
       ],
       "inputSchema": {
         "type": "object",
-        "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+        "description": "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
         "properties": {
           "op": {
             "const": "joystick"
@@ -216,7 +307,9 @@
                 "down",
                 "left",
                 "right",
-                "fire"
+                "fire",
+                "fire2",
+                "fire3"
               ]
             },
             "minItems": 0
@@ -246,6 +339,154 @@
           "port",
           "controls",
           "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "keyboard",
+      "description": "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+      "required": [
+        "inputs",
+        "transition"
+      ],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+        "properties": {
+          "op": {
+            "const": "keyboard"
+          },
+          "inputs": {
+            "type": "array",
+            "description": "One or more keys to transition together (for example left_shift + a).",
+            "items": {
+              "type": "string",
+              "description": "Physical keyboard input.",
+              "enum": [
+                "inst_del",
+                "return",
+                "cursor_left_right",
+                "f7",
+                "f1",
+                "f3",
+                "f5",
+                "cursor_up_down",
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j",
+                "k",
+                "l",
+                "m",
+                "n",
+                "o",
+                "p",
+                "q",
+                "r",
+                "s",
+                "t",
+                "u",
+                "v",
+                "w",
+                "x",
+                "y",
+                "z",
+                "left_shift",
+                "right_shift",
+                "plus",
+                "minus",
+                "period",
+                "colon",
+                "at",
+                "comma",
+                "pound",
+                "star",
+                "semicolon",
+                "clr_home",
+                "equals",
+                "arrow_up",
+                "slash",
+                "arrow_left",
+                "ctrl",
+                "space",
+                "commodore",
+                "run_stop",
+                "restore"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 8
+          },
+          "transition": {
+            "type": "string",
+            "description": "press holds, release frees, tap presses and releases.",
+            "enum": [
+              "press",
+              "release",
+              "tap"
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "inputs",
+          "transition"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "release_all",
+      "description": "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+      "required": [],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+        "properties": {
+          "op": {
+            "const": "release_all"
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "op": "state",
+      "description": "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+      "required": [],
+      "optional": [],
+      "inputSchema": {
+        "type": "object",
+        "description": "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+        "properties": {
+          "op": {
+            "const": "state"
+          }
+        },
+        "required": [
+          "op"
         ],
         "additionalProperties": false
       }

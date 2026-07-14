@@ -69,7 +69,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "disassemble",
       disassembleArgsSchema.jsonSchema,
-      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE." },
+      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE." },
     ),
     handler: groupedMemoryHandlers.disassemble,
   },
@@ -125,7 +125,7 @@ const memoryOperationHandlers = createOperationHandlers(memoryOperations);
 export const memoryModuleGroup = defineToolModule({
   domain: "memory",
   summary: "Grouped memory, screen, and polling operations.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap", "c64://basic/spec", "c64://assembly/6510-spec"],
   prompts: ["memory-debug", "basic-program", "assembly-program"],
   defaultTags: ["memory", "debug"],

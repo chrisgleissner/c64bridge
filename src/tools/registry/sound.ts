@@ -226,7 +226,7 @@ const soundOperationHandlers = createOperationHandlers(soundOperations);
 export const soundModuleGroup = defineToolModule({
   domain: "audio",
   summary: "Grouped SID control, playback, composition, and analysis operations.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://sound/sid/spec", "c64://sound/sidwave/spec", "c64://sound/sid/file-format"],
   prompts: ["sid-music"],
   defaultTags: ["sid", "audio"],
@@ -246,9 +246,9 @@ export const soundModuleGroup = defineToolModule({
       tags: ["sid", "audio", "grouped"],
       operationPlatforms: {
         capture_samples: ["c64u"],
-        play_sid_file: ["c64u"],
-        play_mod_file: ["c64u"],
-        pipeline: ["c64u"],
+        play_sid_file: ["c64u", "u2"],
+        play_mod_file: ["c64u", "u2"],
+        pipeline: ["c64u", "u2"],
         analyze: ["c64u"],
         record_analyze: ["c64u"],
       },

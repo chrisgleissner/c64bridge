@@ -1,6 +1,7 @@
 import { defineToolModule } from "./types.js";
 import { objectSchema } from "./schema.js";
-import { textResult } from "./responses.js";
+import { jsonResult, textResult } from "./responses.js";
+import { Buffer } from "node:buffer";
 import {
   ToolError,
   ToolExecutionError,
@@ -33,12 +34,21 @@ function normaliseFailure(details: unknown): Record<string, unknown> | undefined
   return { value: details };
 }
 
+function isMissingMenuScreenEndpoint(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "response" in error
+    && (error as { response?: { status?: unknown } }).response?.status === 404;
+}
+
 const resetArgsSchema = createNoArgsSchema("No arguments required to reset the C64.");
 const rebootArgsSchema = createNoArgsSchema("No arguments required to reboot the C64 firmware.");
 const pauseArgsSchema = createNoArgsSchema("No arguments required to pause the machine.");
 const resumeArgsSchema = createNoArgsSchema("No arguments required to resume the machine after a pause.");
 const poweroffArgsSchema = createNoArgsSchema("No arguments required to power off the machine.");
+const powerCycleArgsSchema = createNoArgsSchema("No arguments required to power cycle the active system.");
 const menuButtonArgsSchema = createNoArgsSchema("No arguments required to toggle the Ultimate menu button.");
+const readMenuScreenArgsSchema = createNoArgsSchema("No arguments required to read the active Ultimate menu screen matrix.");
 
 export const machineControlModule = defineToolModule({
   domain: "machine",
@@ -64,7 +74,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Use when the user wants a quick restart without losing power; mention that memory contents may persist.",
       ],
-      supportedPlatforms: ["c64u", "vice"],
+      supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
           resetArgsSchema.parse(args ?? {});
@@ -104,7 +114,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Choose reboot when configuration changed or hardware is stuck; warn that it will interrupt any running program.",
       ],
-      supportedPlatforms: ["c64u", "vice"],
+      supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
           rebootArgsSchema.parse(args ?? {});
@@ -144,7 +154,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Pause when the user needs a stable memory snapshot; remind them to resume to continue execution.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           pauseArgsSchema.parse(args ?? {});
@@ -184,7 +194,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Call after a pause or diagnostic halt and confirm the machine is running again.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           resumeArgsSchema.parse(args ?? {});
@@ -252,6 +262,39 @@ export const machineControlModule = defineToolModule({
       },
     },
     {
+      name: "power_cycle",
+      description: "Return the active system to a fresh state: C64U/U64 uses verified Tool Menu navigation, U2-family reboots through REST, and managed VICE restarts.",
+      summary: "Performs the platform-appropriate full power-cycle equivalent and reports the strategy used.",
+      inputSchema: powerCycleArgsSchema.jsonSchema,
+      tags: ["power", "reboot", "fresh-start"],
+      prerequisites: [],
+      examples: [
+        { name: "Fresh start", description: "Power cycle the active system", arguments: {} },
+      ],
+      workflowHints: [
+        "Use only when the user explicitly requests a fresh start or power cycle; it interrupts active work.",
+        "On C64U/U64, verify Tool Menu navigation through machine:menu_screen before selecting Power Cycle.",
+      ],
+      supportedPlatforms: ["c64u", "u2", "vice"],
+      async execute(args, ctx) {
+        try {
+          powerCycleArgsSchema.parse(args ?? {});
+          ctx.logger.info("Power cycling active backend");
+          const result = await ctx.client.powerCycle();
+          if (!result.success) {
+            throw new ToolExecutionError("Power cycle did not complete", {
+              details: normaliseFailure(result.details),
+            });
+          }
+          const details = toRecord(result.details) ?? {};
+          return textResult("Power-cycle request completed.", { success: true, details });
+        } catch (error) {
+          if (error instanceof ToolError) return toolErrorResult(error);
+          return unknownErrorResult(error);
+        }
+      },
+    },
+    {
       name: "menu_button",
       description: "Toggle the Ultimate 64 menu button.",
       summary: "Simulates the on-device menu button for navigation or exit.",
@@ -264,7 +307,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Use when the user needs to open or close the Ultimate menu; suggest following up with drive operations if relevant.",
       ],
-      supportedPlatforms: ["c64u"],
+      supportedPlatforms: ["c64u", "u2"],
       async execute(args, ctx) {
         try {
           menuButtonArgsSchema.parse(args ?? {});
@@ -286,6 +329,42 @@ export const machineControlModule = defineToolModule({
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
+          }
+          return unknownErrorResult(error);
+        }
+      },
+    },
+    {
+      name: "read_menu_screen",
+      description: "Read the raw character and colour matrix for the currently visible Ultimate menu screen.",
+      summary: "Returns the firmware-defined menu matrix bytes, including text and colour information.",
+      inputSchema: readMenuScreenArgsSchema.jsonSchema,
+      tags: ["menu", "screen", "diagnostic"],
+      prerequisites: ["menu_button"],
+      examples: [
+        { name: "Inspect active menu", description: "Read the currently visible Ultimate menu", arguments: {} },
+      ],
+      workflowHints: [
+        "Read c64://platform/status first. Call after opening the Ultimate menu; if the endpoint is unavailable or no menu is active, the tool returns fallback guidance instead of a transport error.",
+        "The firmware returns an opaque character-and-colour matrix, preserved as base64 without guessing a layout.",
+      ],
+      supportedPlatforms: ["c64u", "u2"],
+      async execute(args, ctx) {
+        try {
+          readMenuScreenArgsSchema.parse(args ?? {});
+          const bytes = await ctx.client.readMenuScreen();
+          return jsonResult({
+            encoding: "base64",
+            byteLength: bytes.length,
+            matrix: Buffer.from(bytes).toString("base64"),
+          });
+        } catch (error) {
+          if (error instanceof ToolError) return toolErrorResult(error);
+          if (isMissingMenuScreenEndpoint(error)) {
+            return textResult(
+              "No menu matrix is available. Open the Ultimate menu and retry; if it remains unavailable, this firmware does not provide machine:menu_screen. Use REST configuration instead of menu navigation where possible.",
+              { success: false, code: "native_menu_screen_unavailable", fallback: "rest_configuration_or_manual_menu" },
+            );
           }
           return unknownErrorResult(error);
         }

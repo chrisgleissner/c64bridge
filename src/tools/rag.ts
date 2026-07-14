@@ -204,7 +204,7 @@ export const ragModule = defineToolModule({
   ],
   prompts: ["basic-program", "assembly-program"],
   defaultTags: ["rag", "search"],
-  supportedPlatforms: ["c64u", "vice"] as const,
+  supportedPlatforms: ["c64u", "u2", "vice"] as const,
   workflowHints: [
     "Call RAG tools when the user needs references or examples before generating new code.",
     "Summarise the number of refs returned and suggest follow-up actions like reading specific docs.",

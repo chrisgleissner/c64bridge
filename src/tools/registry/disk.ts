@@ -344,7 +344,7 @@ const diskOperationHandlers = createOperationHandlers(diskOperations);
 export const diskModuleGroup = defineToolModule({
   domain: "storage",
   summary: "Grouped disk image management, mounting, and discovery tools.",
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   resources: ["c64://guide/bootstrap"],
   prompts: ["drive-management"],
   defaultTags: ["storage", "drive"],
@@ -362,7 +362,7 @@ export const diskModuleGroup = defineToolModule({
         variants: diskOperations.map((operation) => operation.schema),
       }),
       tags: ["storage", "drive", "grouped"],
-      operationPlatforms: { file_info: ["c64u"], create_image: ["c64u"], find_and_run: ["c64u"] },
+      operationPlatforms: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
       operationToolNames: {
         file_info: "file_info",
         create_image: "create_image",

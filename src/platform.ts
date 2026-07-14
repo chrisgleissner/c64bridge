@@ -1,6 +1,6 @@
 import type { ToolDescriptor } from "./tools/types.js";
 
-export type PlatformId = "c64u" | "vice";
+export type PlatformId = "c64u" | "u2" | "vice";
 
 export interface PlatformStatus {
   readonly id: PlatformId;
@@ -20,6 +20,10 @@ const PLATFORM_FEATURES: Record<PlatformId, { features: readonly string[]; limit
     ],
     limited: [],
   },
+  u2: {
+    features: ["ultimate-rest-api", "cartridge-execution", "sid-control", "drive-management", "printer-integration"],
+    limited: ["no-machine-input", "no-debugreg", "no-poweroff", "no-streaming"],
+  },
   vice: {
     features: [
       "software-emulation",
@@ -34,7 +38,7 @@ const PLATFORM_FEATURES: Record<PlatformId, { features: readonly string[]; limit
   },
 };
 
-let currentPlatform: PlatformId = process.env.C64_MODE === "vice" ? "vice" : "c64u";
+let currentPlatform: PlatformId = process.env.C64_MODE === "vice" ? "vice" : process.env.C64_MODE === "u2" ? "u2" : "c64u";
 
 export function getPlatformStatus(): PlatformStatus {
   const spec = PLATFORM_FEATURES[currentPlatform];
@@ -66,12 +70,13 @@ export function isPlatformSupported(
 export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
   const map: Record<PlatformId, { available: string[]; unsupported: string[] }> = {
     c64u: { available: [], unsupported: [] },
+    u2: { available: [], unsupported: [] },
     vice: { available: [], unsupported: [] },
   };
 
   for (const tool of tools) {
     const supported = tool.metadata.platforms ?? ["c64u"];
-    for (const id of ["c64u", "vice"] as const) {
+    for (const id of ["c64u", "u2", "vice"] as const) {
       if (supported.includes(id)) {
         map[id].available.push(tool.name);
       } else {
@@ -87,6 +92,12 @@ export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
         limited_features: PLATFORM_FEATURES.c64u.limited,
         tools: map.c64u.available.sort(),
         unsupported_tools: map.c64u.unsupported.sort(),
+      },
+      u2: {
+        features: PLATFORM_FEATURES.u2.features,
+        limited_features: PLATFORM_FEATURES.u2.limited,
+        tools: map.u2.available.sort(),
+        unsupported_tools: map.u2.unsupported.sort(),
       },
       vice: {
         features: PLATFORM_FEATURES.vice.features,

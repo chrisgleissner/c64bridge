@@ -112,6 +112,8 @@ function createInitialState() {
     lastConfigAction: null,
   menuToggleCount: 0,
   lastMenuTarget: null,
+    menuScreen: Buffer.from([0x41, 0x01, 0x42, 0x02]),
+    inputState: { keyboard: { inputs: [] }, joysticks: [{ port: 1, inputs: [] }, { port: 2, inputs: [] }] },
     streams: {
       video: { active: false, target: null, packetsSent: 0 },
       audio: { active: false, target: null, packetsSent: 0 },
@@ -328,6 +330,44 @@ export async function startMockC64Server(options = {}) {
       const target = req.headers["x-target"] ?? null;
       state.lastMenuTarget = target;
       sendJson(res, { result: "menu", target });
+      return;
+    }
+
+    if (method === "GET" && url === "/v1/machine:menu_screen") {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.end(state.menuScreen);
+      return;
+    }
+
+    if (method === "GET" && url === "/v1/machine:input") {
+      sendJson(res, state.inputState);
+      return;
+    }
+
+    if (method === "POST" && url === "/v1/machine:input") {
+      const batch = await readJson(req);
+      for (const event of batch.events ?? []) {
+        if (event.kind === "release_all") {
+          state.inputState.keyboard.inputs = [];
+          state.inputState.joysticks.forEach((joystick) => { joystick.inputs = []; });
+          continue;
+        }
+        const target = event.kind === "keyboard"
+          ? state.inputState.keyboard
+          : state.inputState.joysticks.find((joystick) => joystick.port === event.port);
+        if (!target) continue;
+        const inputs = new Set(target.inputs);
+        for (const input of event.inputs ?? []) {
+          if (event.transition === "release") inputs.delete(input);
+          else if (event.transition === "press") inputs.add(input);
+          else if (event.transition === "tap") {
+            inputs.add(input);
+            inputs.delete(input);
+          }
+        }
+        target.inputs = [...inputs];
+      }
+      sendJson(res, state.inputState);
       return;
     }
 

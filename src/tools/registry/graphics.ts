@@ -110,7 +110,7 @@ function parseVicState(d011: number, d016: number, d018: number, dd00: number, d
 }
 
 const getDisplayStateArgsSchema = objectSchema({
-  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical.",
+  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical.",
   properties: {
     op: literalSchema("get_display_state"),
   },
@@ -255,7 +255,7 @@ export const graphicsModuleGroup = defineToolModule({
     "Use render helpers for PETSCII text, PETSCII art, sprites, and bitmaps; clarify whether PETSCII art executed or stayed a dry run.",
     "Mention sprite positions/colours so follow-up memory inspection stays grounded.",
   ],
-  supportedPlatforms: ["c64u", "vice"],
+  supportedPlatforms: ["c64u", "u2", "vice"],
   tools: [
     {
       name: "c64_graphics",
