@@ -768,12 +768,15 @@ Grouped entry point for frame capture and graphics rendering workflows.
 
 #### c64_input
 
-Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).
+Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 | Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `joystick` | Simulate joystick input by writing directly to CIA1 Port A/B registers. | `port`, `controls`, `action` | `durationMs=80` | — |  | ✅ |
+| `joystick` | Simulate joystick input by writing directly to CIA1 Port A/B registers. | `port`, `controls`, `action` | `durationMs=80` | — | ✅ | ✅ |
 | `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | — | ✅ | ✅ |
+| `keyboard` | Send physical C64 keyboard matrix events through Ultimate REST input. | `inputs`, `transition` | — | — | ✅ |  |
+| `release_all` | Release every key and joystick control injected through Ultimate REST input. | — | — | — | ✅ |  |
+| `state` | Read the keys and joystick controls currently held through Ultimate REST input. | — | — | — | ✅ |  |
 | `write_text` | Send a text string to the keyboard buffer, with PETSCII token expansion. | `text` | `delayMs=0` | — | ✅ | ✅ |
 
 #### c64_memory
@@ -876,6 +879,7 @@ Grouped entry point for power, reset, menu, and background task control.
 | `pause` | Pause the machine until resumed. | — | — | — | ✅ |  |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | — | ✅ | ✅ |
 | `poweroff` | Request a controlled shutdown via the Ultimate firmware. | — | — | — | ✅ | ✅ |
+| `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix. | — | — | — | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | — | — | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | — | — | ✅ | ✅ |
 | `resume` | Resume CPU execution after a pause. | — | — | — | ✅ |  |

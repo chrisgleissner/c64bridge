@@ -74,6 +74,15 @@ const systemOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "menu_button", rawArgs, ctx),
   },
   {
+    op: "read_menu_screen",
+    schema: extendSchemaWithOp(
+      "read_menu_screen",
+      ensureDescriptor(machineDescriptorIndex, "read_menu_screen").inputSchema,
+      { description: "Read the active Ultimate menu's raw character and colour matrix." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "read_menu_screen", rawArgs, ctx),
+  },
+  {
     op: "start_task",
     schema: extendSchemaWithOp(
       "start_task",
@@ -143,8 +152,8 @@ export const systemModuleGroup = defineToolModule({
         variants: systemOperations.map((operation) => operation.schema),
       }),
       tags: ["system", "control", "grouped"],
-      operationPlatforms: { pause: ["c64u"], resume: ["c64u"], menu: ["c64u"] },
-      operationToolNames: { pause: "pause", resume: "resume", menu: "menu_button" },
+      operationPlatforms: { pause: ["c64u"], resume: ["c64u"], menu: ["c64u"], read_menu_screen: ["c64u"] },
+      operationToolNames: { pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },
       examples: [
         {
           name: "Soft reset",

@@ -45,6 +45,133 @@ export type MemoryDebugResponse = ErrorResponse & {
   value: string;
 };
 
+export type InputStateResponse = ErrorResponse & {
+  keyboard: {
+    inputs: KeyboardInput[];
+  };
+  joysticks: {
+    port: 1 | 2;
+    inputs: JoystickInput[];
+  }[];
+};
+
+export interface InputBatch {
+  /**
+   * @maxItems 64
+   * @minItems 1
+   */
+  events: (KeyboardEvent | JoystickEvent | ReleaseAllEvent)[];
+}
+
+export interface KeyboardEvent {
+  kind: any;
+  /**
+   * @maxItems 8
+   * @minItems 1
+   */
+  inputs: KeyboardInput[];
+  transition: InputTransition;
+}
+
+export interface JoystickEvent {
+  kind: any;
+  port: 1 | 2;
+  /**
+   * @maxItems 7
+   * @minItems 1
+   */
+  inputs: JoystickInput[];
+  transition: InputTransition;
+}
+
+export interface ReleaseAllEvent {
+  kind: any;
+}
+
+export enum InputTransition {
+  Press = "press",
+  Release = "release",
+  Tap = "tap",
+}
+
+export enum KeyboardInput {
+  InstDel = "inst_del",
+  Return = "return",
+  CursorLeftRight = "cursor_left_right",
+  F7 = "f7",
+  F1 = "f1",
+  F3 = "f3",
+  F5 = "f5",
+  CursorUpDown = "cursor_up_down",
+  Value0 = "0",
+  Value1 = "1",
+  Value2 = "2",
+  Value3 = "3",
+  Value4 = "4",
+  Value5 = "5",
+  Value6 = "6",
+  Value7 = "7",
+  Value8 = "8",
+  Value9 = "9",
+  A = "a",
+  B = "b",
+  C = "c",
+  D = "d",
+  E = "e",
+  F = "f",
+  G = "g",
+  H = "h",
+  I = "i",
+  J = "j",
+  K = "k",
+  L = "l",
+  M = "m",
+  N = "n",
+  O = "o",
+  P = "p",
+  Q = "q",
+  R = "r",
+  S = "s",
+  T = "t",
+  U = "u",
+  V = "v",
+  W = "w",
+  X = "x",
+  Y = "y",
+  Z = "z",
+  LeftShift = "left_shift",
+  RightShift = "right_shift",
+  Plus = "plus",
+  Minus = "minus",
+  Period = "period",
+  Colon = "colon",
+  At = "at",
+  Comma = "comma",
+  Pound = "pound",
+  Star = "star",
+  Semicolon = "semicolon",
+  ClrHome = "clr_home",
+  Equals = "equals",
+  ArrowUp = "arrow_up",
+  Slash = "slash",
+  ArrowLeft = "arrow_left",
+  Ctrl = "ctrl",
+  Space = "space",
+  Commodore = "commodore",
+  RunStop = "run_stop",
+  Restore = "restore",
+}
+
+export enum JoystickInput {
+  Up = "up",
+  Down = "down",
+  Left = "left",
+  Right = "right",
+  Fire = "fire",
+  Fire2 = "fire2",
+  Fire3 = "fire3",
+}
+
 export type DriveListResponse = ErrorResponse & {
   drives?: Record<
     string,
@@ -65,7 +192,13 @@ export type DriveListResponse = ErrorResponse & {
 };
 
 export type FileInfoResponse = ErrorResponse & {
-  info?: Record<string, any>;
+  files?: {
+    path?: string;
+    filename?: string;
+    size?: number;
+    extension?: string;
+    [key: string]: any;
+  };
 };
 
 export type MachineActionResponse = ErrorResponse;
@@ -208,9 +341,12 @@ export class HttpClient<SecurityDataType = unknown> {
  * @baseUrl http://c64u
  *
  * This OpenAPI document captures the public HTTP interface described in the
- * official Ultimate 64 REST API documentation. Responses always include an
- * `errors` array unless noted. When a network password is configured, clients
- * must supply the `X-Password` header on every request.
+ * official Ultimate 64 REST API documentation at
+ * https://1541u-documentation.readthedocs.io/en/latest/api/api_calls.html.
+ * Responses always include an `errors` array unless noted. When a network
+ * password is configured, clients must supply the `X-Password` header on every
+ * request. Example payloads were captured against a local Ultimate 64 Elite
+ * reachable as `http://c64u` running firmware 3.12a.
  */
 export class Api<SecurityDataType extends unknown> {
   http: HttpClient<SecurityDataType>;
@@ -221,7 +357,7 @@ export class Api<SecurityDataType extends unknown> {
 
   v1 = {
     /**
-     * No description
+     * @description Returns the firmware-defined REST API semantic version.
      *
      * @name VersionList
      * @summary Get API version
@@ -238,7 +374,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description Returns hardware metadata (product, firmware version, FPGA/core versions, hostname). Available on Ultimate firmware 3.12 and newer. On earlier releases the endpoint responds with HTTP 404.
      *
      * @name InfoList
      * @summary Get device information
@@ -482,7 +618,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description Enumerates top-level configuration pages as displayed in the Ultimate menu. Supports wildcard queries via URL encoding.
      *
      * @name ConfigsList
      * @summary List configuration categories
@@ -518,7 +654,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description Returns all items inside the specified category. Wildcards may match multiple categories; each appears as an object property in the response.
      *
      * @name ConfigsDetail
      * @summary Inspect category
@@ -786,7 +922,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description Performs a DMA read at the requested address. Firmware returns either a JSON wrapper or raw bytes. Use `length` to limit the transfer (default 256 bytes).
      *
      * @name MachineReadmemList
      * @summary Read memory
@@ -811,6 +947,58 @@ export class Api<SecurityDataType extends unknown> {
         method: "GET",
         query: query,
         secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * @description Returns raw character and colour matrix bytes, or 404 when no Ultimate menu is active.
+     *
+     * @name MachineMenuScreenList
+     * @summary Read the active Ultimate menu screen matrix
+     * @request GET:/v1/machine:menu_screen
+     * @secure
+     */
+    machineMenuScreenList: (menuScreen: string, params: RequestParams = {}) =>
+      this.http.request<File, ErrorResponse>({
+        path: `/v1/machine${menuScreen}`,
+        method: "GET",
+        secure: true,
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @name MachineInputList
+     * @summary Read REST-injected keyboard and joystick state
+     * @request GET:/v1/machine:input
+     * @secure
+     */
+    machineInputList: (input: string, params: RequestParams = {}) =>
+      this.http.request<InputStateResponse, any>({
+        path: `/v1/machine${input}`,
+        method: "GET",
+        secure: true,
+        format: "json",
+        ...params,
+      }),
+
+    /**
+     * No description
+     *
+     * @name MachineInputCreate
+     * @summary Apply keyboard and joystick input events
+     * @request POST:/v1/machine:input
+     * @secure
+     */
+    machineInputCreate: (input: string, data: InputBatch, params: RequestParams = {}) =>
+      this.http.request<InputStateResponse, any>({
+        path: `/v1/machine${input}`,
+        method: "POST",
+        body: data,
+        secure: true,
+        type: ContentType.Json,
         format: "json",
         ...params,
       }),
@@ -858,7 +1046,7 @@ export class Api<SecurityDataType extends unknown> {
       }),
 
     /**
-     * No description
+     * @description Returns current Ultimate-managed drives, images, and service devices (SoftIEC, printer emulation).
      *
      * @name DrivesList
      * @summary List internal drives

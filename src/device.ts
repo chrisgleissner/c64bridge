@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Api } from "../generated/c64/index.js";
+import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
@@ -19,6 +20,15 @@ export interface RunResult {
   success: boolean;
   details?: unknown;
 }
+
+export type MachineInputBatch = {
+  readonly events: readonly (
+    | { readonly kind: "keyboard"; readonly inputs: readonly string[]; readonly transition: "press" | "release" | "tap" }
+    | { readonly kind: "joystick"; readonly port: 1 | 2; readonly inputs: readonly string[]; readonly transition: "press" | "release" | "tap" }
+    | { readonly kind: "release_all" }
+  )[];
+};
+export type MachineInputState = InputStateResponse;
 
 export interface C64Facade {
   readonly type: DeviceType;
@@ -41,6 +51,9 @@ export interface C64Facade {
   resume(): Promise<RunResult>;
   poweroff(): Promise<RunResult>;
   menuButton(): Promise<RunResult>;
+  readMenuScreen(): Promise<Uint8Array>;
+  getInputState(): Promise<MachineInputState>;
+  sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState>;
   debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }>;
   debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }>;
   version(): Promise<unknown>;
@@ -313,6 +326,22 @@ class C64uBackend implements C64Facade {
   async resume(): Promise<RunResult> { const res = await this.api.v1.machineResumeUpdate(":resume"); return { success: true, details: res.data }; }
   async poweroff(): Promise<RunResult> { const res = await this.api.v1.machinePoweroffUpdate(":poweroff"); return { success: true, details: res.data }; }
   async menuButton(): Promise<RunResult> { const res = await this.api.v1.machineMenuButtonUpdate(":menu_button"); return { success: true, details: res.data }; }
+  async readMenuScreen(): Promise<Uint8Array> {
+    const response = await this.api.v1.machineMenuScreenList(
+      ":menu_screen",
+      { format: "arraybuffer", headers: { Accept: "application/octet-stream" } as any },
+    );
+    const body = response.data as unknown;
+    return body instanceof ArrayBuffer ? new Uint8Array(body) : extractBytes(body);
+  }
+  async getInputState(): Promise<MachineInputState> {
+    const response = await this.api.v1.machineInputList(":input");
+    return response.data;
+  }
+  async sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState> {
+    const response = await this.api.v1.machineInputCreate(":input", batch as InputBatch);
+    return response.data;
+  }
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> { const res = await this.api.v1.machineDebugregList(":debugreg"); return { success: true, value: (res.data as any).value, details: res.data }; }
   async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> { const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value }); return { success: true, value: (res.data as any).value, details: res.data }; }
   async version(): Promise<unknown> { const res = await this.api.v1.versionList(); return res.data; }
@@ -741,6 +770,9 @@ export class ViceBackend implements C64Facade {
   }
 
   async menuButton(): Promise<RunResult> { throw unsupported("menuButton"); }
+  async readMenuScreen(): Promise<Uint8Array> { throw unsupported("readMenuScreen"); }
+  async getInputState(): Promise<MachineInputState> { throw unsupported("getInputState"); }
+  async sendInputEvents(_batch: MachineInputBatch): Promise<MachineInputState> { throw unsupported("sendInputEvents"); }
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> { throw unsupported("debugregRead"); }
   async debugregWrite(_v: string): Promise<{ success: boolean; value?: string; details?: unknown }> { throw unsupported("debugregWrite"); }
   async version(): Promise<unknown> { return { emulator: "vice", host: this.host, port: this.port }; }

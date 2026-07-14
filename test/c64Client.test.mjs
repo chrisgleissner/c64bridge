@@ -319,6 +319,19 @@ test("C64Client against mock server", async (t) => {
     assert.equal(read.value?.toUpperCase(), "AB");
   });
 
+  await t.test("menu matrix and REST input endpoints work", async () => {
+    const matrix = await client.readMenuScreen();
+    assert.deepEqual(Array.from(matrix), [0x41, 0x01, 0x42, 0x02]);
+    const pressed = await client.sendInputEvents({
+      events: [{ kind: "keyboard", inputs: ["left_shift", "a"], transition: "press" }],
+    });
+    assert.deepEqual(pressed.keyboard.inputs, ["left_shift", "a"]);
+    const state = await client.getInputState();
+    assert.deepEqual(state.keyboard.inputs, ["left_shift", "a"]);
+    const released = await client.sendInputEvents({ events: [{ kind: "release_all" }] });
+    assert.deepEqual(released.keyboard.inputs, []);
+  });
+
   await t.test("symbol address 'screen' resolves for readMemory", async () => {
     const result = await client.readMemory("screen", "1");
     assert.equal(result.success, true);

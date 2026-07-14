@@ -2856,6 +2856,7 @@
               "reboot",
               "poweroff",
               "menu",
+              "read_menu_screen",
               "start_task",
               "stop_task",
               "stop_all_tasks",
@@ -2935,7 +2936,7 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause: Pause the machine until resumed. Required inputs: none.\n- resume: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff: Request a controlled shutdown via the Ultimate firmware. Required inputs: none.\n- menu: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen: Read the active Ultimate menu's raw character and colour matrix. Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -3044,6 +3045,25 @@
               "properties": {
                 "op": {
                   "const": "menu"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "op"
+              ]
+            }
+          },
+          {
+            "op": "read_menu_screen",
+            "description": "Read the active Ultimate menu's raw character and colour matrix.",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read the active Ultimate menu's raw character and colour matrix.",
+              "properties": {
+                "op": {
+                  "const": "read_menu_screen"
                 }
               },
               "additionalProperties": false,
@@ -3295,6 +3315,9 @@
             "c64u"
           ],
           "menu": [
+            "c64u"
+          ],
+          "read_menu_screen": [
             "c64u"
           ]
         }
@@ -8121,8 +8144,8 @@
     },
     {
       "name": "c64_input",
-      "title": "Types text, taps keys, and simulates joystick movements.",
-      "description": "Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).",
+      "title": "Types text, sends physical key combinations, and controls joysticks.",
+      "description": "Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -8131,7 +8154,10 @@
             "enum": [
               "write_text",
               "key",
-              "joystick"
+              "joystick",
+              "keyboard",
+              "release_all",
+              "state"
             ],
             "description": "Selects the operation."
           },
@@ -8194,7 +8220,9 @@
                 "down",
                 "left",
                 "right",
-                "fire"
+                "fire",
+                "fire2",
+                "fire3"
               ]
             },
             "minItems": 0
@@ -8207,12 +8235,98 @@
               "release",
               "tap"
             ]
+          },
+          "inputs": {
+            "type": "array",
+            "description": "One or more keys to transition together (for example left_shift + a).",
+            "items": {
+              "type": "string",
+              "description": "Physical keyboard input.",
+              "enum": [
+                "inst_del",
+                "return",
+                "cursor_left_right",
+                "f7",
+                "f1",
+                "f3",
+                "f5",
+                "cursor_up_down",
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "g",
+                "h",
+                "i",
+                "j",
+                "k",
+                "l",
+                "m",
+                "n",
+                "o",
+                "p",
+                "q",
+                "r",
+                "s",
+                "t",
+                "u",
+                "v",
+                "w",
+                "x",
+                "y",
+                "z",
+                "left_shift",
+                "right_shift",
+                "plus",
+                "minus",
+                "period",
+                "colon",
+                "at",
+                "comma",
+                "pound",
+                "star",
+                "semicolon",
+                "clr_home",
+                "equals",
+                "arrow_up",
+                "slash",
+                "arrow_left",
+                "ctrl",
+                "space",
+                "commodore",
+                "run_stop",
+                "restore"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 8
+          },
+          "transition": {
+            "type": "string",
+            "description": "press holds, release frees, tap presses and releases.",
+            "enum": [
+              "press",
+              "release",
+              "tap"
+            ]
           }
         },
         "required": [
           "op"
         ],
-        "description": "Input operations: write_text, key, joystick.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input by writing directly to CIA1 Port A/B registers. Required inputs: port, controls, action. Optional inputs: durationMs.",
+        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input by writing directly to CIA1 Port A/B registers. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through Ultimate REST input. Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through Ultimate REST input. Required inputs: none.\n- state: Read the keys and joystick controls currently held through Ultimate REST input. Required inputs: none.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -8341,7 +8455,9 @@
                       "down",
                       "left",
                       "right",
-                      "fire"
+                      "fire",
+                      "fire2",
+                      "fire3"
                     ]
                   },
                   "minItems": 0
@@ -8374,12 +8490,160 @@
               ],
               "additionalProperties": false
             }
+          },
+          {
+            "op": "keyboard",
+            "description": "Send physical C64 keyboard matrix events through Ultimate REST input.",
+            "required": [
+              "inputs",
+              "transition"
+            ],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Send physical C64 keyboard matrix events through Ultimate REST input.",
+              "properties": {
+                "op": {
+                  "const": "keyboard"
+                },
+                "inputs": {
+                  "type": "array",
+                  "description": "One or more keys to transition together (for example left_shift + a).",
+                  "items": {
+                    "type": "string",
+                    "description": "Physical keyboard input.",
+                    "enum": [
+                      "inst_del",
+                      "return",
+                      "cursor_left_right",
+                      "f7",
+                      "f1",
+                      "f3",
+                      "f5",
+                      "cursor_up_down",
+                      "0",
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                      "5",
+                      "6",
+                      "7",
+                      "8",
+                      "9",
+                      "a",
+                      "b",
+                      "c",
+                      "d",
+                      "e",
+                      "f",
+                      "g",
+                      "h",
+                      "i",
+                      "j",
+                      "k",
+                      "l",
+                      "m",
+                      "n",
+                      "o",
+                      "p",
+                      "q",
+                      "r",
+                      "s",
+                      "t",
+                      "u",
+                      "v",
+                      "w",
+                      "x",
+                      "y",
+                      "z",
+                      "left_shift",
+                      "right_shift",
+                      "plus",
+                      "minus",
+                      "period",
+                      "colon",
+                      "at",
+                      "comma",
+                      "pound",
+                      "star",
+                      "semicolon",
+                      "clr_home",
+                      "equals",
+                      "arrow_up",
+                      "slash",
+                      "arrow_left",
+                      "ctrl",
+                      "space",
+                      "commodore",
+                      "run_stop",
+                      "restore"
+                    ]
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                },
+                "transition": {
+                  "type": "string",
+                  "description": "press holds, release frees, tap presses and releases.",
+                  "enum": [
+                    "press",
+                    "release",
+                    "tap"
+                  ]
+                }
+              },
+              "required": [
+                "op",
+                "inputs",
+                "transition"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "release_all",
+            "description": "Release every key and joystick control injected through Ultimate REST input.",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Release every key and joystick control injected through Ultimate REST input.",
+              "properties": {
+                "op": {
+                  "const": "release_all"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
+          },
+          {
+            "op": "state",
+            "description": "Read the keys and joystick controls currently held through Ultimate REST input.",
+            "required": [],
+            "optional": [],
+            "inputSchema": {
+              "type": "object",
+              "description": "Read the keys and joystick controls currently held through Ultimate REST input.",
+              "properties": {
+                "op": {
+                  "const": "state"
+                }
+              },
+              "required": [
+                "op"
+              ],
+              "additionalProperties": false
+            }
           }
         ]
       },
       "_meta": {
         "domain": "input",
-        "summary": "Types text, taps keys, and simulates joystick movements.",
+        "summary": "Types text, sends physical key combinations, and controls joysticks.",
         "lifecycle": "request-response",
         "resources": [
           "c64://guide/bootstrap",
@@ -8418,6 +8682,18 @@
             }
           },
           {
+            "name": "Type an uppercase A",
+            "description": "Tap a physical key chord through Ultimate REST input",
+            "arguments": {
+              "op": "keyboard",
+              "inputs": [
+                "left_shift",
+                "a"
+              ],
+              "transition": "tap"
+            }
+          },
+          {
             "name": "Press fire on port 1",
             "description": "Hold fire button on joystick port 1",
             "arguments": {
@@ -8438,15 +8714,22 @@
         "workflowHints": [
           "Use write_text with {RETURN} tokens to automate BASIC entry; prefer key for individual control keys.",
           "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
-          "Joystick tap is suitable for one-shot moves; use press/release pairs for timed holds. Joystick is VICE-only."
+          "Use keyboard for physical-key combinations (including modifiers) and release_all to recover from interrupted holds on Ultimate hardware.",
+          "Joystick uses native REST input on Ultimate hardware; VICE supports up/down/left/right/fire through its monitor."
         ],
         "platforms": [
           "c64u",
           "vice"
         ],
         "operationPlatforms": {
-          "joystick": [
-            "vice"
+          "keyboard": [
+            "c64u"
+          ],
+          "release_all": [
+            "c64u"
+          ],
+          "state": [
+            "c64u"
           ]
         }
       }

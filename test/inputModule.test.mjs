@@ -2,7 +2,6 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { toolRegistry } from "../src/tools/registry/index.js";
-import { ToolUnsupportedPlatformError } from "../src/tools/errors.js";
 import { setPlatform, getPlatformStatus } from "../src/platform.js";
 
 const noopLogger = {
@@ -12,6 +11,7 @@ const noopLogger = {
 function createInputContext({ platformId = "c64u", recorder } = {}) {
   const writes = [];
   const reads = [];
+  const inputBatches = [];
   let ndx = 0;
   const memory = new Map();
 
@@ -39,6 +39,13 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
     async getActiveBackendType() {
       return platformId;
     },
+    async sendInputEvents(batch) {
+      inputBatches.push(batch);
+      return { errors: [], keyboard: { inputs: [] }, joysticks: [] };
+    },
+    async getInputState() {
+      return { errors: [], keyboard: { inputs: ["left_shift"] }, joysticks: [{ port: 2, inputs: ["fire2"] }] };
+    },
   };
 
   const ctx = {
@@ -49,7 +56,7 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
     setPlatform,
   };
 
-  return { ctx, writes, reads, memory, ndxRef: () => ndx };
+  return { ctx, writes, reads, memory, inputBatches, ndxRef: () => ndx };
 }
 
 test("c64_input is registered as a grouped tool with both backends", () => {
@@ -58,12 +65,13 @@ test("c64_input is registered as a grouped tool with both backends", () => {
   const platforms = tool.metadata?.platforms ?? [];
   assert.ok(platforms.includes("c64u"), "c64_input must be C64U-capable");
   assert.ok(platforms.includes("vice"), "c64_input must be VICE-capable");
-  // Joystick must remain VICE-only via operationPlatforms metadata.
+  // Native REST-only operations are clearly marked for discovery.
   const opPlatforms = tool.metadata?.operationPlatforms ?? {};
-  assert.ok(opPlatforms.joystick && opPlatforms.joystick.includes("vice") && !opPlatforms.joystick.includes("c64u"), "joystick must be VICE-only");
+  assert.deepEqual(opPlatforms.keyboard, ["c64u"]);
+  assert.deepEqual(opPlatforms.release_all, ["c64u"]);
   assert.equal(tool.inputSchema.oneOf, undefined, "schema must be flattened for MCP client compatibility");
   assert.equal(tool.inputSchema.discriminator, undefined, "schema must not use top-level discriminator metadata");
-  assert.deepEqual(tool.inputSchema.properties.op.enum, ["write_text", "key", "joystick"]);
+  assert.deepEqual(tool.inputSchema.properties.op.enum, ["write_text", "key", "joystick", "keyboard", "release_all", "state"]);
   assert.ok(Array.isArray(tool.inputSchema["x-c64bridge-operations"]));
   assert.ok(tool.metadata.resources.includes("c64://memory/map"));
   assert.ok(!tool.metadata.resources.some((uri) => uri.startsWith("c64://specs/")));
@@ -140,14 +148,13 @@ test("c64_input.key accepts single printable characters and reports duration met
   assert.deepEqual(Array.from(inject.bytes), [65]);
 });
 
-test("c64_input.joystick rejects on c64u and works on vice", async () => {
-  const c64uCtx = createInputContext({ platformId: "c64u" }).ctx;
-  await assert.rejects(
-    () => toolRegistry.invoke("c64_input", {
-      op: "joystick", port: 2, controls: ["right"], action: "press",
-    }, c64uCtx),
-    (error) => error instanceof ToolUnsupportedPlatformError,
-  );
+test("c64_input.joystick uses native REST input on c64u and VICE memory on vice", async () => {
+  const { ctx: c64uCtx, inputBatches } = createInputContext({ platformId: "c64u" });
+  const c64uResult = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 2, controls: ["right", "fire2"], action: "press",
+  }, c64uCtx);
+  assert.equal(c64uResult.isError, undefined);
+  assert.deepEqual(inputBatches, [{ events: [{ kind: "joystick", port: 2, inputs: ["right", "fire2"], transition: "press" }] }]);
 
   const { ctx: viceCtx, writes } = createInputContext({ platformId: "vice" });
   const result = await toolRegistry.invoke("c64_input", {
@@ -157,6 +164,23 @@ test("c64_input.joystick rejects on c64u and works on vice", async () => {
   const memSet = writes.find((w) => w.kind === "vice_mem_set");
   assert.ok(memSet, "joystick press must perform a memory write");
   assert.equal(memSet.address, 0xDC00);
+});
+
+test("c64_input keyboard, release_all, and state expose Ultimate REST input", async () => {
+  const { ctx, inputBatches } = createInputContext({ platformId: "c64u" });
+  const keyboard = await toolRegistry.invoke("c64_input", {
+    op: "keyboard", inputs: ["left_shift", "a"], transition: "tap",
+  }, ctx);
+  assert.equal(keyboard.isError, undefined);
+  const release = await toolRegistry.invoke("c64_input", { op: "release_all" }, ctx);
+  assert.equal(release.isError, undefined);
+  const state = await toolRegistry.invoke("c64_input", { op: "state" }, ctx);
+  assert.equal(state.isError, undefined);
+  assert.deepEqual(inputBatches, [
+    { events: [{ kind: "keyboard", inputs: ["left_shift", "a"], transition: "tap" }] },
+    { events: [{ kind: "release_all" }] },
+  ]);
+  assert.deepEqual(state.structuredContent?.data.keyboard.inputs, ["left_shift"]);
 });
 
 test("c64_input.joystick supports release and tap actions on vice", async () => {

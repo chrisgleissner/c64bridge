@@ -13,7 +13,15 @@ import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrg } from "./tools/translation/assembler.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
-import { C64Facade, createAllFacades, createFacade, type DeviceType, ViceBackend } from "./device.js";
+import {
+  C64Facade,
+  createAllFacades,
+  createFacade,
+  type DeviceType,
+  type MachineInputBatch,
+  type MachineInputState,
+  ViceBackend,
+} from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
@@ -911,6 +919,21 @@ export class C64Client {
       }
       const facade = await this.facadePromise; return await facade.menuButton();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  async readMenuScreen(): Promise<Uint8Array> {
+    const facade = await this.facadePromise;
+    return facade.readMenuScreen();
+  }
+
+  async getInputState(): Promise<MachineInputState> {
+    const facade = await this.facadePromise;
+    return facade.getInputState();
+  }
+
+  async sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState> {
+    const facade = await this.facadePromise;
+    return facade.sendInputEvents(batch);
   }
 
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> {

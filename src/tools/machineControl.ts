@@ -1,6 +1,8 @@
 import { defineToolModule } from "./types.js";
 import { objectSchema } from "./schema.js";
 import { textResult } from "./responses.js";
+import { jsonResult } from "./responses.js";
+import { Buffer } from "node:buffer";
 import {
   ToolError,
   ToolExecutionError,
@@ -39,6 +41,7 @@ const pauseArgsSchema = createNoArgsSchema("No arguments required to pause the m
 const resumeArgsSchema = createNoArgsSchema("No arguments required to resume the machine after a pause.");
 const poweroffArgsSchema = createNoArgsSchema("No arguments required to power off the machine.");
 const menuButtonArgsSchema = createNoArgsSchema("No arguments required to toggle the Ultimate menu button.");
+const readMenuScreenArgsSchema = createNoArgsSchema("No arguments required to read the active Ultimate menu screen matrix.");
 
 export const machineControlModule = defineToolModule({
   domain: "machine",
@@ -287,6 +290,36 @@ export const machineControlModule = defineToolModule({
           if (error instanceof ToolError) {
             return toolErrorResult(error);
           }
+          return unknownErrorResult(error);
+        }
+      },
+    },
+    {
+      name: "read_menu_screen",
+      description: "Read the raw character and colour matrix for the currently visible Ultimate menu screen.",
+      summary: "Returns the firmware-defined menu matrix bytes, including text and colour information.",
+      inputSchema: readMenuScreenArgsSchema.jsonSchema,
+      tags: ["menu", "screen", "diagnostic"],
+      prerequisites: ["menu_button"],
+      examples: [
+        { name: "Inspect active menu", description: "Read the currently visible Ultimate menu", arguments: {} },
+      ],
+      workflowHints: [
+        "Call after opening the Ultimate menu. A 404 means no firmware menu screen is currently active.",
+        "The firmware returns an opaque character-and-colour matrix, preserved as base64 without guessing a layout.",
+      ],
+      supportedPlatforms: ["c64u"],
+      async execute(args, ctx) {
+        try {
+          readMenuScreenArgsSchema.parse(args ?? {});
+          const bytes = await ctx.client.readMenuScreen();
+          return jsonResult({
+            encoding: "base64",
+            byteLength: bytes.length,
+            matrix: Buffer.from(bytes).toString("base64"),
+          });
+        } catch (error) {
+          if (error instanceof ToolError) return toolErrorResult(error);
           return unknownErrorResult(error);
         }
       },

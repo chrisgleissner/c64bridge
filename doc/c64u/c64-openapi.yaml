@@ -103,6 +103,95 @@ components:
             value:
               type: string
               description: Hex string read from $D7FF.
+    InputStateResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          required: [keyboard, joysticks]
+          properties:
+            keyboard:
+              type: object
+              required: [inputs]
+              properties:
+                inputs:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/KeyboardInput'
+            joysticks:
+              type: array
+              items:
+                type: object
+                required: [port, inputs]
+                properties:
+                  port:
+                    type: integer
+                    enum: [1, 2]
+                  inputs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JoystickInput'
+    InputBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/KeyboardEvent'
+              - $ref: '#/components/schemas/JoystickEvent'
+              - $ref: '#/components/schemas/ReleaseAllEvent'
+    KeyboardEvent:
+      type: object
+      required: [kind, inputs, transition]
+      properties:
+        kind:
+          const: keyboard
+        inputs:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/KeyboardInput'
+        transition:
+          $ref: '#/components/schemas/InputTransition'
+      additionalProperties: false
+    JoystickEvent:
+      type: object
+      required: [kind, port, inputs, transition]
+      properties:
+        kind:
+          const: joystick
+        port:
+          type: integer
+          enum: [1, 2]
+        inputs:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/JoystickInput'
+        transition:
+          $ref: '#/components/schemas/InputTransition'
+      additionalProperties: false
+    ReleaseAllEvent:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          const: release_all
+      additionalProperties: false
+    InputTransition:
+      type: string
+      enum: [press, release, tap]
+    KeyboardInput:
+      type: string
+      enum: [inst_del, return, cursor_left_right, f7, f1, f3, f5, cursor_up_down, "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z, left_shift, right_shift, plus, minus, period, colon, at, comma, pound, star, semicolon, clr_home, equals, arrow_up, slash, arrow_left, ctrl, space, commodore, run_stop, restore]
+    JoystickInput:
+      type: string
+      enum: [up, down, left, right, fire, fire2, fire3]
     DriveListResponse:
       allOf:
         - $ref: '#/components/schemas/ErrorResponse'
@@ -691,6 +780,49 @@ paths:
                   summary: Raw bytes for $D020-$D021
                   value: !!binary |
                     /vY=
+  /v1/machine:menu_screen:
+    get:
+      summary: Read the active Ultimate menu screen matrix
+      description: Returns raw character and colour matrix bytes, or 404 when no Ultimate menu is active.
+      responses:
+        '200':
+          description: Active menu screen matrix bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No active menu screen matrix
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/machine:input:
+    get:
+      summary: Read REST-injected keyboard and joystick state
+      responses:
+        '200':
+          description: Current input state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InputStateResponse'
+    post:
+      summary: Apply keyboard and joystick input events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InputBatch'
+      responses:
+        '200':
+          description: Updated input state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InputStateResponse'
   /v1/machine:debugreg:
     get:
       summary: Read debug register

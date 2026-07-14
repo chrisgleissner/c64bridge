@@ -14,7 +14,7 @@ import {
   optionalSchema,
   stringSchema,
 } from "./schema.js";
-import { textResult } from "./responses.js";
+import { jsonResult, textResult } from "./responses.js";
 import {
   ToolValidationError,
   toolErrorResult,
@@ -118,6 +118,15 @@ const JOYSTICK_BIT: Record<string, number> = {
   fire: 4,
 };
 
+const KEYBOARD_INPUTS = [
+  "inst_del", "return", "cursor_left_right", "f7", "f1", "f3", "f5", "cursor_up_down",
+  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+  "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+  "left_shift", "right_shift", "plus", "minus", "period", "colon", "at", "comma", "pound", "star", "semicolon", "clr_home", "equals", "arrow_up", "slash", "arrow_left", "ctrl", "space", "commodore", "run_stop", "restore",
+] as const;
+const JOYSTICK_INPUTS = ["up", "down", "left", "right", "fire", "fire2", "fire3"] as const;
+const INPUT_TRANSITIONS = ["press", "release", "tap"] as const;
+
 function joystickByte(controls: readonly string[]): number {
   let mask = 0xff;
   for (const ctrl of controls) {
@@ -141,6 +150,9 @@ interface InputOperationMap extends OperationMap {
     readonly action: "press" | "release" | "tap";
     readonly durationMs?: number;
   };
+  readonly keyboard: { readonly inputs: readonly string[]; readonly transition: "press" | "release" | "tap" };
+  readonly release_all: Record<string, never>;
+  readonly state: Record<string, never>;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +221,7 @@ export const joystickArgsSchema = objectSchema({
     controls: arraySchema(
       stringSchema({
         description: "Control to activate.",
-        enum: ["up", "down", "left", "right", "fire"],
+        enum: JOYSTICK_INPUTS,
       }),
       {
         description: "List of controls to activate simultaneously.",
@@ -229,6 +241,35 @@ export const joystickArgsSchema = objectSchema({
     })),
   },
   required: ["op", "port", "controls", "action"],
+  additionalProperties: false,
+});
+
+export const keyboardArgsSchema = objectSchema({
+  description: "Send physical C64 keyboard matrix events through Ultimate REST input.",
+  properties: {
+    op: literalSchema("keyboard"),
+    inputs: arraySchema(stringSchema({ description: "Physical keyboard input.", enum: KEYBOARD_INPUTS }), {
+      description: "One or more keys to transition together (for example left_shift + a).",
+      minItems: 1,
+      maxItems: 8,
+    }),
+    transition: stringSchema({ description: "press holds, release frees, tap presses and releases.", enum: INPUT_TRANSITIONS }),
+  },
+  required: ["op", "inputs", "transition"],
+  additionalProperties: false,
+});
+
+const releaseAllArgsSchema = objectSchema({
+  description: "Release every key and joystick control injected through Ultimate REST input.",
+  properties: { op: literalSchema("release_all") },
+  required: ["op"],
+  additionalProperties: false,
+});
+
+const inputStateArgsSchema = objectSchema({
+  description: "Read the keys and joystick controls currently held through Ultimate REST input.",
+  properties: { op: literalSchema("state") },
+  required: ["op"],
   additionalProperties: false,
 });
 
@@ -297,10 +338,24 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
     try {
       const parsed = joystickArgsSchema.parse(args);
       const port = parsed.port as 1 | 2;
-      const addr = JOYSTICK_PORT_ADDRESS[port];
       const durationMs = parsed.durationMs ?? 80;
       const pressedByte = joystickByte(parsed.controls);
       const releasedByte = 0xff;
+      const platform = await ctx.client.getActiveBackendType();
+
+      if (platform === "c64u") {
+        const state = await ctx.client.sendInputEvents({
+          events: [{ kind: "joystick", port, inputs: [...parsed.controls], transition: parsed.action as "press" | "release" | "tap" }],
+        });
+        return textResult(`Joystick port ${port} ${parsed.action}: ${parsed.controls.join(", ")}.`, {
+          success: true, port, action: parsed.action, controls: parsed.controls, state,
+        });
+      }
+
+      const addr = JOYSTICK_PORT_ADDRESS[port];
+      if (parsed.controls.some((control) => !(control in JOYSTICK_BIT))) {
+        throw new ToolValidationError("VICE joystick supports up, down, left, right, and fire only.", { path: "$.controls" });
+      }
 
       if (parsed.action === "release") {
         await ctx.client.viceMemSet(addr, Uint8Array.of(releasedByte));
@@ -331,6 +386,42 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       return unknownErrorResult(error);
     }
   },
+
+  keyboard: async (args, ctx) => {
+    try {
+      const parsed = keyboardArgsSchema.parse(args);
+      const state = await ctx.client.sendInputEvents({
+        events: [{ kind: "keyboard", inputs: [...parsed.inputs], transition: parsed.transition as "press" | "release" | "tap" }],
+      });
+      return textResult(`Keyboard ${parsed.transition}: ${parsed.inputs.join(", ")}.`, {
+        success: true, inputs: parsed.inputs, transition: parsed.transition, state,
+      });
+    } catch (error) {
+      if (error instanceof ToolValidationError) return toolErrorResult(error);
+      return unknownErrorResult(error);
+    }
+  },
+
+  release_all: async (args, ctx) => {
+    try {
+      releaseAllArgsSchema.parse(args);
+      const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
+      return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, state });
+    } catch (error) {
+      if (error instanceof ToolValidationError) return toolErrorResult(error);
+      return unknownErrorResult(error);
+    }
+  },
+
+  state: async (args, ctx) => {
+    try {
+      inputStateArgsSchema.parse(args);
+      return jsonResult(await ctx.client.getInputState());
+    } catch (error) {
+      if (error instanceof ToolValidationError) return toolErrorResult(error);
+      return unknownErrorResult(error);
+    }
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -338,7 +429,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
 // ---------------------------------------------------------------------------
 export const inputModule = defineToolModule({
   domain: "input",
-  summary: "Cross-platform keyboard input plus VICE-only joystick simulation.",
+  summary: "Keyboard input plus native Ultimate REST keyboard and joystick control.",
   supportedPlatforms: ["c64u", "vice"],
   resources: ["c64://guide/bootstrap", "c64://memory/map", "c64://io/cia/spec"],
   prompts: [],
@@ -346,22 +437,26 @@ export const inputModule = defineToolModule({
   workflowHints: [
     "Use write_text with {RETURN} tokens to automate BASIC entry; prefer key for individual control keys.",
     "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
-    "Joystick tap is suitable for one-shot moves; use press/release pairs for timed holds. Joystick is VICE-only.",
+    "Use keyboard for physical-key combinations (including modifiers) and release_all to recover from interrupted holds on Ultimate hardware.",
+    "Joystick uses native REST input on Ultimate hardware; VICE supports up/down/left/right/fire through its monitor.",
   ],
   tools: [
     {
       name: "c64_input",
-      description: "Keyboard buffer injection (cross-platform) and joystick simulation (VICE only).",
-      summary: "Types text, taps keys, and simulates joystick movements.",
+      description: "Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.",
+      summary: "Types text, sends physical key combinations, and controls joysticks.",
       inputSchema: discriminatedUnionSchema({
-        description: "Input operations: write_text, key, joystick.",
+        description: "Input operations: write_text, key, keyboard, joystick, release_all, state.",
         variants: [
           writeTextArgsSchema.jsonSchema,
           keyArgsSchema.jsonSchema,
           joystickArgsSchema.jsonSchema,
+          keyboardArgsSchema.jsonSchema,
+          releaseAllArgsSchema.jsonSchema,
+          inputStateArgsSchema.jsonSchema,
         ],
       }),
-      operationPlatforms: { joystick: ["vice"] },
+      operationPlatforms: { keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"] },
       tags: ["input", "keyboard", "joystick"],
       examples: [
         {
@@ -378,6 +473,11 @@ export const inputModule = defineToolModule({
           name: "Tap joystick right",
           description: "Brief rightward tap on joystick port 2",
           arguments: { op: "joystick", port: 2, controls: ["right"], action: "tap", durationMs: 80 },
+        },
+        {
+          name: "Type an uppercase A",
+          description: "Tap a physical key chord through Ultimate REST input",
+          arguments: { op: "keyboard", inputs: ["left_shift", "a"], transition: "tap" },
         },
         {
           name: "Press fire on port 1",
