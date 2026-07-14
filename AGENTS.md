@@ -93,6 +93,12 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 
 Tools and parameters are listed dynamically via ListTools.
 
+### Configuration and menu navigation
+
+Change C64U/U64/U2 configuration through `c64_config` REST operations; do not navigate configuration menus with injected keyboard input.
+`c64_input` `key` is PETSCII/KERNAL-queue input, while `keyboard` sends physical key combinations through Ultimate REST input.
+Keyboard menu navigation is reserved for device features with no REST equivalent, for example the machine-code monitor, visual SID editor, or Tool Menu.
+
 ## Skill Routing
 
 | Intent | Skill |
