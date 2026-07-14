@@ -18,7 +18,7 @@ Your AI Command Bridge for the Commodore 64.
 
 C64 Bridge is an MCP server for controlling and working with a Commodore 64 from an AI client.
 
-It lets you run programs, read and write memory, render graphics, and play sound on a [C64 Ultimate](https://www.commodore.net/), [Ultimate 64](https://ultimate64.com/), or U2-family cartridge. You can also switch to a [VICE](https://vice-emu.sourceforge.io/) emulator session, so one MCP conversation can span hardware and emulation.
+It lets you run programs, read and write memory, render graphics, and play sound on a [C64 Ultimate](https://www.commodore.net/), [Ultimate 64](https://ultimate64.com/), or [U2](https://1541u-documentation.readthedocs.io/en/latest/quick_guide.html)-family cartridge. You can also switch to a [VICE](https://vice-emu.sourceforge.io/) emulator session, so one MCP conversation can span hardware and emulation.
 
 It is built on the official TypeScript `@modelcontextprotocol/sdk` and supports both `stdio` for local AI integration and an optional HTTP bridge for manual inspection.
 
