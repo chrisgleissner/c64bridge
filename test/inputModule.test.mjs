@@ -166,6 +166,15 @@ test("c64_input.joystick uses native REST input on c64u and VICE memory on vice"
   assert.equal(memSet.address, 0xDC00);
 });
 
+test("c64_input.joystick maps an empty C64U release to the REST release_all event", async () => {
+  const { ctx, inputBatches } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 1, controls: [], action: "release",
+  }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(inputBatches, [{ events: [{ kind: "release_all" }] }]);
+});
+
 test("c64_input keyboard, release_all, and state expose Ultimate REST input", async () => {
   const { ctx, inputBatches } = createInputContext({ platformId: "c64u" });
   const keyboard = await toolRegistry.invoke("c64_input", {

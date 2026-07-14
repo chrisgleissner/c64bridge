@@ -328,6 +328,10 @@ test("C64Client against mock server", async (t) => {
     assert.deepEqual(pressed.keyboard.inputs, ["left_shift", "a"]);
     const state = await client.getInputState();
     assert.deepEqual(state.keyboard.inputs, ["left_shift", "a"]);
+    const tapped = await client.sendInputEvents({
+      events: [{ kind: "joystick", port: 2, inputs: ["fire"], transition: "tap" }],
+    });
+    assert.deepEqual(tapped.joysticks.find((joystick) => joystick.port === 2)?.inputs, []);
     const released = await client.sendInputEvents({ events: [{ kind: "release_all" }] });
     assert.deepEqual(released.keyboard.inputs, []);
   });

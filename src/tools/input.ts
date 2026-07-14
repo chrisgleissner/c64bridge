@@ -344,6 +344,10 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const platform = await ctx.client.getActiveBackendType();
 
       if (platform === "c64u") {
+        if (parsed.controls.length === 0 && parsed.action === "release") {
+          const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
+          return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, action: "release_all", state });
+        }
         const state = await ctx.client.sendInputEvents({
           events: [{ kind: "joystick", port, inputs: [...parsed.controls], transition: parsed.action as "press" | "release" | "tap" }],
         });

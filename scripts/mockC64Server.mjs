@@ -360,6 +360,10 @@ export async function startMockC64Server(options = {}) {
         for (const input of event.inputs ?? []) {
           if (event.transition === "release") inputs.delete(input);
           else if (event.transition === "press") inputs.add(input);
+          else if (event.transition === "tap") {
+            inputs.add(input);
+            inputs.delete(input);
+          }
         }
         target.inputs = [...inputs];
       }

@@ -1,7 +1,6 @@
 import { defineToolModule } from "./types.js";
 import { objectSchema } from "./schema.js";
-import { textResult } from "./responses.js";
-import { jsonResult } from "./responses.js";
+import { jsonResult, textResult } from "./responses.js";
 import { Buffer } from "node:buffer";
 import {
   ToolError,

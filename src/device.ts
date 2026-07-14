@@ -329,7 +329,7 @@ class C64uBackend implements C64Facade {
   async readMenuScreen(): Promise<Uint8Array> {
     const response = await this.api.v1.machineMenuScreenList(
       ":menu_screen",
-      { format: "arraybuffer", headers: { Accept: "application/octet-stream" } as any },
+      { format: "arraybuffer", headers: { Accept: "application/octet-stream" } },
     );
     const body = response.data as unknown;
     return body instanceof ArrayBuffer ? new Uint8Array(body) : extractBytes(body);
