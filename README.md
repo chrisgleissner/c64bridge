@@ -244,7 +244,9 @@ Use this for a C64 Ultimate or Ultimate 64:
 
 ### Firmware Requirements for Native Input and Menu Screens
 
-The following operations require recently added Ultimate REST endpoints. C64 Bridge reports the firmware error if the endpoint is absent.
+The following operations require recently added Ultimate REST endpoints. C64 Bridge detects or explains unavailable endpoints without exposing a raw firmware error.
+
+Before choosing an endpoint-dependent operation, read `c64://platform/status`. It probes `machine:input` safely and reports whether it is available. When native input is unavailable, use `key` or `write_text` for ordinary C64 input instead of physical matrix events. `machine:menu_screen` can only be confirmed after an Ultimate menu is visible; its tool returns fallback guidance rather than a transport error when no matrix can be read.
 
 - `c64_input` `keyboard`, `release_all`, and `state`, plus hardware `joystick`, use `machine:input`. They require a C64U firmware version that provides this endpoint, or U64 firmware 3.15 or later. `machine:input` is not available on U2-family cartridges.
 - `c64_system` `read_menu_screen` uses `machine:menu_screen`; it requires a C64U firmware version that provides this endpoint, or U64/U2 firmware 3.15 or later.

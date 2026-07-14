@@ -205,7 +205,7 @@ async function main() {
             {
               uri: PLATFORM_RESOURCE_URI,
               mimeType: "text/markdown",
-              text: renderPlatformStatusMarkdown(client),
+              text: await renderPlatformStatusMarkdown(client),
             },
           ],
         };
@@ -520,10 +520,11 @@ function createPlatformResourceDescriptor() {
   };
 }
 
-function renderPlatformStatusMarkdown(client: C64Client): string {
+async function renderPlatformStatusMarkdown(client: C64Client): Promise<string> {
   const status = getPlatformStatus();
   const availableBackends = client.getAvailableBackends();
   const capabilities = describePlatformCapabilities(toolRegistry.list());
+  const nativeEndpoints = await client.getNativeEndpointCapabilities();
 
   const lines: string[] = [
     "# MCP Platform Status",
@@ -540,6 +541,13 @@ function renderPlatformStatusMarkdown(client: C64Client): string {
     status.limitedFeatures.length > 0
       ? ["## Limited or Unavailable Features", "", ...status.limitedFeatures.map((feature) => `- ${feature}`)].join("\n")
       : "",
+    "## Native REST Endpoint Availability",
+    "",
+    `- \`machine:input\`: **${nativeEndpoints.machineInput}**`,
+    `- \`machine:menu_screen\`: **${nativeEndpoints.machineMenuScreen}** (it can only be confirmed while an Ultimate menu is visible)`,
+    "",
+    "Use physical-input, menu-screen, and C64U/U64 Tool Menu power-cycle operations only when the required endpoint is available. Prefer `key` or `write_text` for ordinary C64 input when `machine:input` is unavailable.",
+    "",
     "## Tool Compatibility",
     "",
   ].filter(Boolean);

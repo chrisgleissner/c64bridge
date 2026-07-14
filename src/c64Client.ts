@@ -65,6 +65,14 @@ export interface C64ClientOptions {
   forceC64uFacade?: boolean;
 }
 
+export type NativeEndpointAvailability = "available" | "unavailable" | "unknown";
+
+export interface NativeEndpointCapabilities {
+  readonly machineInput: NativeEndpointAvailability;
+  /** Menu-screen support cannot be probed without an active Ultimate menu. */
+  readonly machineMenuScreen: NativeEndpointAvailability;
+}
+
 export interface FrameCaptureResult {
   readonly backend: "c64u" | "vice";
   readonly frames: readonly CapturedFrame[];
@@ -86,6 +94,10 @@ function menuMatrixIncludes(matrix: Uint8Array, expected: string): boolean {
   const normalizedExpected = expected.replace(/\s+/g, " ").toUpperCase();
   return [screenCodesToAscii(characters), petsciiToAscii(characters)]
     .some((text) => text.replace(/\s+/g, " ").toUpperCase().includes(normalizedExpected));
+}
+
+function isMissingEndpoint(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
 }
 
 interface C64uVideoCaptureSession {
@@ -182,6 +194,7 @@ export class C64Client {
   private readonly warmupPromises = new Map<DeviceType, Promise<boolean>>();
   private readonly greetingDd00Cache = new Map<DeviceType, number>();
   private readonly greetingDd00Warmups = new Map<DeviceType, Promise<number>>();
+  private readonly machineInputCapabilityProbes = new Map<DeviceType, Promise<NativeEndpointAvailability>>();
   private c64uVideoCaptureSession: C64uVideoCaptureSession | null = null;
   private readonly initPromise: Promise<void>;
   private activeType: DeviceType = "c64u";
@@ -236,6 +249,30 @@ export class C64Client {
   async getActiveBackendType(): Promise<DeviceType> {
     await this.initPromise;
     return this.activeType;
+  }
+
+  /**
+   * Discover native endpoint availability without changing machine state.
+   * `machine:input` has a safe GET probe; `machine:menu_screen` is only
+   * distinguishable from an inactive menu once a menu is visible.
+   */
+  async getNativeEndpointCapabilities(): Promise<NativeEndpointCapabilities> {
+    const facade = await this.facadePromise;
+    if (facade.type === "vice") {
+      return { machineInput: "unavailable", machineMenuScreen: "unavailable" };
+    }
+    if (facade.type === "u2") {
+      return { machineInput: "unavailable", machineMenuScreen: "unknown" };
+    }
+
+    let probe = this.machineInputCapabilityProbes.get(facade.type);
+    if (!probe) {
+      probe = facade.getInputState()
+        .then(() => "available" as const)
+        .catch((error) => isMissingEndpoint(error) ? "unavailable" as const : "unknown" as const);
+      this.machineInputCapabilityProbes.set(facade.type, probe);
+    }
+    return { machineInput: await probe, machineMenuScreen: "unknown" };
   }
 
   getAvailableBackends(): DeviceType[] {
@@ -940,6 +977,18 @@ export class C64Client {
         return { ...result, details: { strategy: "fresh_start", result: result.details } };
       }
 
+      const endpoints = await this.getNativeEndpointCapabilities();
+      if (endpoints.machineInput !== "available") {
+        return {
+          success: false,
+          details: {
+            code: "native_input_unavailable",
+            message: "C64U/U64 Power Cycle requires machine:input and machine:menu_screen, which this firmware does not currently expose.",
+            fallback: "Use c64_system reboot if a firmware reboot is acceptable, or power cycle from the device itself.",
+          },
+        };
+      }
+
       const menuResult = await facade.menuButton();
       if (!menuResult.success) {
         throw new Error("Unable to open the Ultimate menu for power cycling");
@@ -961,6 +1010,16 @@ export class C64Client {
       await this.requirePowerCycleInput(facade, ["return"]);
       return { success: true, details: { strategy: "tool_menu", verifiedMenu: "Tool Menu", selectedItem: "Power Cycle" } };
     } catch (error) {
+      if (isMissingEndpoint(error)) {
+        return {
+          success: false,
+          details: {
+            code: "native_menu_screen_unavailable",
+            message: "C64U/U64 Power Cycle could not verify Tool Menu navigation because machine:menu_screen is unavailable.",
+            fallback: "Use c64_system reboot if a firmware reboot is acceptable, or power cycle from the device itself.",
+          },
+        };
+      }
       return { success: false, details: this.normaliseError(error) };
     }
   }

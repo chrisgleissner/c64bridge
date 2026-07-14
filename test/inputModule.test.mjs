@@ -40,10 +40,16 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
       return platformId;
     },
     async sendInputEvents(batch) {
+      if (recorder?.nativeInputUnavailable) {
+        throw { response: { status: 404 } };
+      }
       inputBatches.push(batch);
       return { errors: [], keyboard: { inputs: [] }, joysticks: [] };
     },
     async getInputState() {
+      if (recorder?.nativeInputUnavailable) {
+        throw { response: { status: 404 } };
+      }
       return { errors: [], keyboard: { inputs: ["left_shift"] }, joysticks: [{ port: 2, inputs: ["fire2"] }] };
     },
   };
@@ -190,6 +196,17 @@ test("c64_input keyboard, release_all, and state expose Ultimate REST input", as
     { events: [{ kind: "release_all" }] },
   ]);
   assert.deepEqual(state.structuredContent?.data.keyboard.inputs, ["left_shift"]);
+});
+
+test("c64_input gives fallback guidance when native input is absent", async () => {
+  const { ctx } = createInputContext({ recorder: { nativeInputUnavailable: true } });
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "keyboard", inputs: ["f1"], transition: "tap",
+  }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.equal(result.metadata?.success, false);
+  assert.equal(result.metadata?.code, "native_input_unavailable");
+  assert.equal(result.metadata?.fallback, "key_or_write_text");
 });
 
 test("c64_input.joystick supports release and tap actions on vice", async () => {

@@ -34,6 +34,17 @@ testC64uOnly("read_menu_screen returns the firmware matrix without guessing its 
   assert.equal(res.structuredContent?.data.matrix, "QQFCAg==");
 });
 
+testC64uOnly("read_menu_screen returns fallback guidance when no matrix endpoint is available", async () => {
+  const ctx = {
+    client: createMockClient({ async readMenuScreen() { throw { response: { status: 404 } }; } }),
+    logger: createLogger(),
+  };
+  const res = await machineControlModule.invoke("read_menu_screen", {}, ctx);
+  assert.equal(res.isError, undefined);
+  assert.equal(res.metadata?.success, false);
+  assert.equal(res.metadata?.code, "native_menu_screen_unavailable");
+});
+
 test("power_cycle delegates to the platform-aware client flow", async () => {
   const res = await machineControlModule.invoke("power_cycle", {}, {
     client: createMockClient(), logger: createLogger(),

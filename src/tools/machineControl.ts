@@ -34,6 +34,13 @@ function normaliseFailure(details: unknown): Record<string, unknown> | undefined
   return { value: details };
 }
 
+function isMissingMenuScreenEndpoint(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "response" in error
+    && (error as { response?: { status?: unknown } }).response?.status === 404;
+}
+
 const resetArgsSchema = createNoArgsSchema("No arguments required to reset the C64.");
 const rebootArgsSchema = createNoArgsSchema("No arguments required to reboot the C64 firmware.");
 const pauseArgsSchema = createNoArgsSchema("No arguments required to pause the machine.");
@@ -338,7 +345,7 @@ export const machineControlModule = defineToolModule({
         { name: "Inspect active menu", description: "Read the currently visible Ultimate menu", arguments: {} },
       ],
       workflowHints: [
-        "Call after opening the Ultimate menu. A 404 means no firmware menu screen is currently active.",
+        "Read c64://platform/status first. Call after opening the Ultimate menu; if the endpoint is unavailable or no menu is active, the tool returns fallback guidance instead of a transport error.",
         "The firmware returns an opaque character-and-colour matrix, preserved as base64 without guessing a layout.",
       ],
       supportedPlatforms: ["c64u", "u2"],
@@ -353,6 +360,12 @@ export const machineControlModule = defineToolModule({
           });
         } catch (error) {
           if (error instanceof ToolError) return toolErrorResult(error);
+          if (isMissingMenuScreenEndpoint(error)) {
+            return textResult(
+              "No menu matrix is available. Open the Ultimate menu and retry; if it remains unavailable, this firmware does not provide machine:menu_screen. Use REST configuration instead of menu navigation where possible.",
+              { success: false, code: "native_menu_screen_unavailable", fallback: "rest_configuration_or_manual_menu" },
+            );
+          }
           return unknownErrorResult(error);
         }
       },

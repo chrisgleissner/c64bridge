@@ -21,6 +21,20 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 
+function isMissingNativeInputEndpoint(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "response" in error
+    && (error as { response?: { status?: unknown } }).response?.status === 404;
+}
+
+function nativeInputUnavailableResult(operation: string) {
+  return textResult(
+    `Native physical input is unavailable on this firmware, so ${operation} was not sent. Use c64://platform/status before choosing native input; use key or write_text for ordinary C64 input.`,
+    { success: false, code: "native_input_unavailable", fallback: "key_or_write_text" },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // PETSCII token expansion table
 // Maps {TOKEN} placeholders to PETSCII/control-byte values that are queued via
@@ -387,6 +401,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       );
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the joystick event");
       return unknownErrorResult(error);
     }
   },
@@ -402,6 +417,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       });
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the keyboard event");
       return unknownErrorResult(error);
     }
   },
@@ -413,6 +429,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, state });
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the release request");
       return unknownErrorResult(error);
     }
   },
@@ -423,6 +440,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       return jsonResult(await ctx.client.getInputState());
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
+      if (isMissingNativeInputEndpoint(error)) return nativeInputUnavailableResult("the input-state query");
       return unknownErrorResult(error);
     }
   },
@@ -442,6 +460,7 @@ export const inputModule = defineToolModule({
     "Use write_text with {RETURN} tokens to automate BASIC entry; use key for one PETSCII/KERNAL queue key. Neither is for navigating Ultimate firmware menus.",
     "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
     "Use keyboard for physical C64 key combinations (including modifiers) on machine:input, and release_all to recover from interrupted holds. It requires a C64U firmware version that provides the endpoint, or U64 3.15+.",
+    "Before native input, read c64://platform/status. If machine:input is unavailable or unknown, use key or write_text for ordinary C64 input instead of attempting physical matrix events.",
     "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.",
     "Joystick uses machine:input on a C64U firmware version that provides the endpoint or U64 3.15+; VICE supports up/down/left/right/fire through its monitor.",
   ],

@@ -38,6 +38,7 @@ When Ultimate firmware network protection is enabled, `networkPassword` is sent 
 When any combination of `c64u`, `u2`, and `vice` is configured, the server can keep the configured backends live at the same time.
 Use `c64_select_backend` to switch the active backend without restarting the MCP server.
 The `c64://platform/status` resource always reports the currently active backend and the configured backend set.
+Before using physical `machine:input`, `machine:menu_screen`, or C64U/U64 `power_cycle`, read it for native endpoint availability. If `machine:input` is unavailable or unknown, use `key` or `write_text` for ordinary C64 input; do not attempt physical matrix injection. `machine:menu_screen` is only confirmed while an Ultimate menu is visible.
 State the desired backend directly in the prompt when you want to pin execution, for example: `use vice`, `vice: load this PRG`, `use c64u`, or `run this on hardware`.
 When using the VS Code `C64` agent, keep the backend request in the same prompt so tool routing can call `c64_select_backend` before backend-specific operations.
 
