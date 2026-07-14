@@ -33,7 +33,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "run_prg",
       ensureDescriptor(programDescriptorIndex, "run_prg").inputSchema,
-      { description: "Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE." },
+      { description: "Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "run_prg", rawArgs, ctx),
   },
@@ -103,8 +103,8 @@ export const programModule = defineToolModule({
   defaultTags: ["programs", "execution"],
   workflowHints: [
     "Choose BASIC or assembly uploaders based on the language you just generated for the user.",
-    "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on c64u.",
-    "For a quick visible confirmation on VICE and/or C64U, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps.",
+    "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on hardware.",
+    "For a quick visible confirmation on VICE or C64U/U64, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps.",
   ],
   supportedPlatforms: ["c64u", "u2", "vice"],
   tools: [

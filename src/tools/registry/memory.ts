@@ -69,7 +69,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "disassemble",
       disassembleArgsSchema.jsonSchema,
-      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE." },
+      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE." },
     ),
     handler: groupedMemoryHandlers.disassemble,
   },

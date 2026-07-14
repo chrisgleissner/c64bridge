@@ -600,7 +600,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 claude mcp add c64bridge -- npx -y c64bridge@latest
 ```
 
-Use `--scope user` to make it available across all your projects, or `--scope project` to write a `.mcp.json` next to the current repo. Backend selection (`c64u` vs `vice`), host, port, and password come from the same files documented in [Configuration](#configuration); per-shell overrides come from the variables in [Runtime Environment Variable Reference](#runtime-environment-variable-reference).
+Use `--scope user` to make it available across all your projects, or `--scope project` to write a `.mcp.json` next to the current repo. Backend selection (`c64u`, `u2`, or `vice`), host, port, and password come from the same files documented in [Configuration](#configuration); per-shell overrides come from the variables in [Runtime Environment Variable Reference](#runtime-environment-variable-reference).
 
 **Project-scoped discovery** — this repository ships a checked-in [.mcp.json](./.mcp.json) that points Claude Code at the local source via `node scripts/start.mjs`. When you open the repo with `claude` (CLI or VS Code plugin), Claude Code prompts to enable the project-scoped server on first run. Approve it once and the `c64_*` tools become discoverable in that workspace.
 
@@ -787,7 +787,7 @@ Grouped entry point for frame capture and graphics rendering workflows.
 | Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=true`, `encoding="base64"` | — | ✅ | ✅ | ✅ |
-| `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. Works on C64U and VICE; both backends are read through shared memory primitives so the response shape is identical. | — | — | — | ✅ | ✅ | ✅ |
+| `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. | — | — | — | ✅ | ✅ | ✅ |
 | `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | — | ✅ | ✅ | ✅ |
 | `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | — | ✅ | ✅ | ✅ |
 | `render_petscii_text` | Display PETSCII text with optional border and background colours. | `text` | `borderColor`, `backgroundColor` | — | ✅ | ✅ | ✅ |
@@ -814,7 +814,7 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | `maxDiffs=10` | — | ✅ | ✅ | ✅ |
 | `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | — | — | ✅ | ✅ | ✅ |
-| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on both C64U and VICE. | `address` | `length=64`, `instructionCount` | — | ✅ | ✅ | ✅ |
+| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. | `address` | `length=64`, `instructionCount` | — | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | — | ✅ | ✅ | ✅ |
 | `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256` | — | ✅ | ✅ | ✅ |
 | `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | — | ✅ | ✅ | ✅ |
@@ -844,7 +844,7 @@ Grouped entry point for program upload, execution, and batch workflows.
 | `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. | — | `platforms=["vice","c64u"]`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | supports verify | ✅ | ✅ | ✅ |
 | `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | — | ✅ | ✅ |  |
 | `run_crt` | Mount and run a CRT cartridge image. | `path` | — | — | ✅ | ✅ |  |
-| `run_prg` | Load and execute a PRG from Ultimate-visible storage on c64u or a host-local path on VICE. | `path` | `symbolsFile` | — | ✅ | ✅ | ✅ |
+| `run_prg` | Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. | `path` | `symbolsFile` | — | ✅ | ✅ | ✅ |
 | `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. | `program` | `verify=false` | supports verify | ✅ | ✅ | ✅ |
 | `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. | `program` | `verify=false` | supports verify | ✅ | ✅ | ✅ |
 
