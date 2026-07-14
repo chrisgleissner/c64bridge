@@ -69,7 +69,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "power_cycle",
       ensureDescriptor(machineDescriptorIndex, "power_cycle").inputSchema,
-      { description: "Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state." },
+      { description: "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (C64U 1.2.0+ or U64 3.15+); U2-family reboots through REST." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "power_cycle", rawArgs, ctx),
   },
@@ -87,7 +87,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "read_menu_screen",
       ensureDescriptor(machineDescriptorIndex, "read_menu_screen").inputSchema,
-      { description: "Read the active Ultimate menu's raw character and colour matrix." },
+      { description: "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (C64U 1.2.0+ or U64/U2 3.15+)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "read_menu_screen", rawArgs, ctx),
   },

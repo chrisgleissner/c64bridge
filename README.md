@@ -242,6 +242,14 @@ Use this for a C64 Ultimate or Ultimate 64:
 - `networkPassword` is only needed when you enabled a password in the C64 Ultimate network settings.
 - `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD` override the configured host, port, and network password.
 
+### Firmware Requirements for Native Input and Menu Screens
+
+The following operations require recently added Ultimate REST endpoints. C64 Bridge reports the firmware error if the endpoint is absent.
+
+- `c64_input` `keyboard`, `release_all`, and `state`, plus hardware `joystick`, use `machine:input`. They require C64U firmware 1.2.0 or later, or U64 firmware 3.15 or later. `machine:input` is not available on U2-family cartridges.
+- `c64_system` `read_menu_screen` uses `machine:menu_screen`; it requires C64U firmware 1.2.0 or later, or U64/U2 firmware 3.15 or later.
+- On C64U/U64, `c64_system` `power_cycle` verifies Tool Menu navigation with `machine:menu_screen`, so it has the same firmware requirement. U2-family `power_cycle` uses REST reboot instead.
+
 ### Backend Configuration: U2-family
 
 Use this profile for U2, U2+, and U2+L cartridges:
@@ -256,7 +264,7 @@ Use this profile for U2, U2+, and U2+L cartridges:
 }
 ```
 
-Set `C64_MODE=u2` to make this the initial backend. `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override this profile. U2-family firmware exposes the shared REST subset; it does not provide machine input, debug-register access, power-off, or streaming.
+Set `C64_MODE=u2` to make this the initial backend. `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override this profile. U2-family firmware exposes the shared REST subset; it does not provide machine input, debug-register access, power-off, or streaming. `read_menu_screen` requires U2 firmware 3.15 or later.
 
 ### Backend Configuration: VICE
 
@@ -799,11 +807,11 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 | Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `joystick` | Simulate joystick input by writing directly to CIA1 Port A/B registers. | `port`, `controls`, `action` | `durationMs=80` | — | ✅ |  | ✅ |
+| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input (C64U 1.2.0+ or U64 3.15+); VICE writes CIA1 registers. | `port`, `controls`, `action` | `durationMs=80` | — | ✅ |  | ✅ |
 | `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | — | ✅ | ✅ | ✅ |
-| `keyboard` | Send physical C64 keyboard matrix events through Ultimate REST input. | `inputs`, `transition` | — | — | ✅ |  |  |
-| `release_all` | Release every key and joystick control injected through Ultimate REST input. | — | — | — | ✅ |  |  |
-| `state` | Read the keys and joystick controls currently held through Ultimate REST input. | — | — | — | ✅ |  |  |
+| `keyboard` | Send physical C64 keyboard matrix events through machine:input (C64U 1.2.0+ or U64 3.15+). | `inputs`, `transition` | — | — | ✅ |  |  |
+| `release_all` | Release every key and joystick control injected through machine:input (C64U 1.2.0+ or U64 3.15+). | — | — | — | ✅ |  |  |
+| `state` | Read the keys and joystick controls held through machine:input (C64U 1.2.0+ or U64 3.15+). | — | — | — | ✅ |  |  |
 | `write_text` | Send a text string to the keyboard buffer, with PETSCII token expansion. | `text` | `delayMs=0` | — | ✅ | ✅ | ✅ |
 
 #### c64_memory
@@ -905,9 +913,9 @@ Grouped entry point for power, reset, menu, and background task control.
 | `menu` | Toggle the Ultimate menu button for navigation. | — | — | — | ✅ | ✅ |  |
 | `pause` | Pause the machine until resumed. | — | — | — | ✅ | ✅ |  |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | — | ✅ | ✅ | ✅ |
-| `power_cycle` | Return the active C64U/U64, U2-family cartridge, or VICE backend to a fresh state. | — | — | — | ✅ | ✅ | ✅ |
+| `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (C64U 1.2.0+ or U64 3.15+); U2-family reboots through REST. | — | — | — | ✅ | ✅ | ✅ |
 | `poweroff` | Request a controlled shutdown via the Ultimate firmware. | — | — | — | ✅ | ✅ | ✅ |
-| `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix. | — | — | — | ✅ | ✅ |  |
+| `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (C64U 1.2.0+ or U64/U2 3.15+). | — | — | — | ✅ | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | — | — | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | — | — | ✅ | ✅ | ✅ |
 | `resume` | Resume CPU execution after a pause. | — | — | — | ✅ | ✅ |  |

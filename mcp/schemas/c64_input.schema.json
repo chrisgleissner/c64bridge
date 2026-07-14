@@ -178,7 +178,7 @@
   "required": [
     "op"
   ],
-  "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input by writing directly to CIA1 Port A/B registers. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through Ultimate REST input. Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through Ultimate REST input. Required inputs: none.\n- state: Read the keys and joystick controls currently held through Ultimate REST input. Required inputs: none.",
+  "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input. On C64U/U64 this uses machine:input (C64U 1.2.0+ or U64 3.15+); VICE writes CIA1 registers. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through machine:input (C64U 1.2.0+ or U64 3.15+). Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through machine:input (C64U 1.2.0+ or U64 3.15+). Required inputs: none.\n- state: Read the keys and joystick controls held through machine:input (C64U 1.2.0+ or U64 3.15+). Required inputs: none.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -274,7 +274,7 @@
     },
     {
       "op": "joystick",
-      "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+      "description": "Simulate joystick input. On C64U/U64 this uses machine:input (C64U 1.2.0+ or U64 3.15+); VICE writes CIA1 registers.",
       "required": [
         "port",
         "controls",
@@ -285,7 +285,7 @@
       ],
       "inputSchema": {
         "type": "object",
-        "description": "Simulate joystick input by writing directly to CIA1 Port A/B registers.",
+        "description": "Simulate joystick input. On C64U/U64 this uses machine:input (C64U 1.2.0+ or U64 3.15+); VICE writes CIA1 registers.",
         "properties": {
           "op": {
             "const": "joystick"
@@ -345,7 +345,7 @@
     },
     {
       "op": "keyboard",
-      "description": "Send physical C64 keyboard matrix events through Ultimate REST input.",
+      "description": "Send physical C64 keyboard matrix events through machine:input (C64U 1.2.0+ or U64 3.15+).",
       "required": [
         "inputs",
         "transition"
@@ -353,7 +353,7 @@
       "optional": [],
       "inputSchema": {
         "type": "object",
-        "description": "Send physical C64 keyboard matrix events through Ultimate REST input.",
+        "description": "Send physical C64 keyboard matrix events through machine:input (C64U 1.2.0+ or U64 3.15+).",
         "properties": {
           "op": {
             "const": "keyboard"
@@ -455,12 +455,12 @@
     },
     {
       "op": "release_all",
-      "description": "Release every key and joystick control injected through Ultimate REST input.",
+      "description": "Release every key and joystick control injected through machine:input (C64U 1.2.0+ or U64 3.15+).",
       "required": [],
       "optional": [],
       "inputSchema": {
         "type": "object",
-        "description": "Release every key and joystick control injected through Ultimate REST input.",
+        "description": "Release every key and joystick control injected through machine:input (C64U 1.2.0+ or U64 3.15+).",
         "properties": {
           "op": {
             "const": "release_all"
@@ -474,12 +474,12 @@
     },
     {
       "op": "state",
-      "description": "Read the keys and joystick controls currently held through Ultimate REST input.",
+      "description": "Read the keys and joystick controls held through machine:input (C64U 1.2.0+ or U64 3.15+).",
       "required": [],
       "optional": [],
       "inputSchema": {
         "type": "object",
-        "description": "Read the keys and joystick controls currently held through Ultimate REST input.",
+        "description": "Read the keys and joystick controls held through machine:input (C64U 1.2.0+ or U64 3.15+).",
         "properties": {
           "op": {
             "const": "state"
