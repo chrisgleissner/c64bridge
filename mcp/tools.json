@@ -8715,7 +8715,7 @@
           "Use write_text with {RETURN} tokens to automate BASIC entry; use key for one PETSCII/KERNAL queue key. Neither is for navigating Ultimate firmware menus.",
           "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
           "Use keyboard for physical C64 key combinations (including modifiers) on Ultimate REST input, and release_all to recover from interrupted holds.",
-          "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine-code monitor, visual SID editor, or Tool Menu.",
+          "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.",
           "Joystick uses native REST input on Ultimate hardware; VICE supports up/down/left/right/fire through its monitor."
         ],
         "platforms": [
