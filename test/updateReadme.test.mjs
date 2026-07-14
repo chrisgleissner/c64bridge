@@ -59,13 +59,13 @@ describe("update-readme grouped operations", () => {
     expect(output).toContain("#### c64_program");
     expect(output).toContain("### Resources");
     expect(output).toContain("### Prompts");
-    expect(output).toContain("| Operation | Description | Required Inputs | Optional Inputs | Notes | C64U | U2 | VICE |");
+    expect(output).toContain("| Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |");
     expect(output).toContain("`address` + `length` means start address plus byte count");
     expect(environment).toContain("| Variable | Default | JSON Config Key | Description |");
     expect(environment).toContain("VICE_DIRECTORY");
   });
 
-  it("renders custom grouped tools with platform overrides, verify notes, and empty tools", () => {
+  it("renders custom grouped tools with platform overrides, verification details, and empty tools", () => {
     const output = renderToolsSection([
       {
         tools: [
@@ -111,8 +111,8 @@ describe("update-readme grouped operations", () => {
     ]).join("\n");
 
     expect(output).toContain("#### c64_custom");
-    expect(output).toContain("| `upload` | Uploads and verifies memory. | `payload` | `verifyWrite` | supports verify | ✅ |  |  |");
-    expect(output).toContain("| `probe` | Operation probe | — | — | — |  |  | ✅ |");
+    expect(output).toContain("| `upload` | Uploads and verifies memory. Supports verification. | `payload` | `verifyWrite` | ✅ |  |  |");
+    expect(output).toContain("| `probe` | Operation probe | — | — |  |  | ✅ |");
     expect(output).toContain("#### c64_empty");
     expect(output).toContain("_No operations defined._");
   });
@@ -151,8 +151,8 @@ describe("update-readme grouped operations", () => {
     ]).join("\n");
 
     expect(output).toContain("#### c64_flattened");
-    expect(output).toContain("| `upload` | Upload bytes into memory. | — | `payload`, `verifyWrite` | supports verify | ✅ |  |  |");
-    expect(output).toContain("| `probe` | Probe emulator state. | — | `payload`, `verifyWrite` | supports verify | ✅ |  | ✅ |");
+    expect(output).toContain("| `upload` | Upload bytes into memory. Supports verification. | — | `payload`, `verifyWrite` | ✅ |  |  |");
+    expect(output).toContain("| `probe` | Probe emulator state. Supports verification. | — | `payload`, `verifyWrite` | ✅ |  | ✅ |");
   });
 
   it("renders required inputs from flattened grouped schema metadata", () => {
@@ -213,8 +213,8 @@ describe("update-readme grouped operations", () => {
       },
     ]).join("\n");
 
-    expect(output).toContain("| `upload` | Upload bytes into memory. | `payload` | `verifyWrite` | supports verify | ✅ |  | ✅ |");
-    expect(output).toContain("| `probe` | Probe emulator state. | — | — | — | ✅ |  | ✅ |");
+    expect(output).toContain("| `upload` | Upload bytes into memory. Supports verification. | `payload` | `verifyWrite` | ✅ |  | ✅ |");
+    expect(output).toContain("| `probe` | Probe emulator state. | — | — | ✅ |  | ✅ |");
   });
 
   it("escapes tables and updates the generated README section", async () => {
