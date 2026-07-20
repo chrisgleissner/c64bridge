@@ -94,6 +94,7 @@ function createInitialState() {
     reboots: 0,
   poweroffs: 0,
     memory: new Uint8Array(0x10000),
+    heartbeat: null,
     lastWrite: null,
     writeLog: [],
     lastRequest: null,
@@ -162,18 +163,79 @@ function toScreenCode(char) {
 }
 
 const KERNAL_KEYBOARD_NDX_ADDRESS = 0x00c6;
+const KERNAL_KEYBOARD_BUFFER_ADDRESS = 0x0277;
+
+const SYS_COMMAND_PATTERN = /SYS\s*\d+/i;
+const HEARTBEAT_ADDRESS = 0x0400; // Screen-RAM byte the ASM liveness poller watches.
+const HEARTBEAT_GRANULARITY_MS = 10; // Well below the poll interval so consecutive liveness reads always differ.
+const HEARTBEAT_DURATION_MS = 1000; // How long a SYS-triggered program keeps "running".
 
 /**
  * Nothing in this mock runs 6502 code to drain the KERNAL keyboard buffer
  * itself, so a client polling NDX ($00C6) waiting for it to return to zero
  * would otherwise hang forever. Simulate the KERNAL's IRQ-driven drain with
  * a short delay so injectKeyboardQueue's poll loop behaves realistically.
+ *
+ * When the queued text looks like a typed `SYSnnnnn` command (the trigger
+ * upload_run_asm uses to enter an assembled program), also record a
+ * time-computed "alive" window (consumed by readMemoryWithHeartbeat). This
+ * mock never executes 6502 code, so a liveness poller watching screen RAM
+ * would otherwise see no progression. Recording a descriptor rather than
+ * mutating memory from a background timer is deliberate: nothing advances
+ * asynchronously, so an unrelated later test that merely shares this server
+ * instance can never observe a stray screen-RAM mutation.
  */
 function simulateKeyboardDrain(state, address) {
   if (address !== KERNAL_KEYBOARD_NDX_ADDRESS) return;
+  const pending = state.memory[KERNAL_KEYBOARD_NDX_ADDRESS] ?? 0;
+  const queued = pending > 0
+    ? Uint8Array.from(state.memory.subarray(KERNAL_KEYBOARD_BUFFER_ADDRESS, KERNAL_KEYBOARD_BUFFER_ADDRESS + pending))
+    : null;
   setTimeout(() => {
     state.memory[KERNAL_KEYBOARD_NDX_ADDRESS] = 0;
+    if (!queued) return;
+    const text = Buffer.from(queued).toString("ascii");
+    if (!SYS_COMMAND_PATTERN.test(text)) return;
+    state.heartbeat = {
+      address: HEARTBEAT_ADDRESS,
+      startedAt: Date.now(),
+      durationMs: HEARTBEAT_DURATION_MS,
+      baseValue: state.memory[HEARTBEAT_ADDRESS] ?? 0,
+    };
   }, 5);
+}
+
+/**
+ * Serve a screen-RAM read, overlaying a synthetic, monotonically advancing
+ * byte at the heartbeat address while a SYS-triggered "alive" window is open.
+ * The overlay is a pure function of elapsed time applied only to the returned
+ * copy, so it never mutates stored memory and never advances on its own.
+ */
+function readMemoryWithHeartbeat(state, address, length) {
+  const bytes = state.memory.slice(address, address + length);
+  const heartbeat = state.heartbeat;
+  if (!heartbeat) return bytes;
+  const elapsed = Date.now() - heartbeat.startedAt;
+  if (elapsed < 0 || elapsed >= heartbeat.durationMs) return bytes;
+  const offset = heartbeat.address - address;
+  if (offset < 0 || offset >= bytes.length) return bytes;
+  const ticks = Math.floor(elapsed / HEARTBEAT_GRANULARITY_MS);
+  bytes[offset] = (heartbeat.baseValue + ticks) & 0xff;
+  return bytes;
+}
+
+/**
+ * Any explicit write covering the heartbeat address means a client has taken
+ * over screen RAM, so end the simulated "alive" window and let the real stored
+ * bytes show through again. This keeps a lingering heartbeat from corrupting a
+ * later writeMemory/readMemory round-trip in a shared-server test.
+ */
+function cancelHeartbeatOnWrite(state, address, length) {
+  const heartbeat = state.heartbeat;
+  if (!heartbeat) return;
+  if (address <= heartbeat.address && heartbeat.address < address + length) {
+    state.heartbeat = null;
+  }
 }
 
 function seedReadyPrompt(state) {
@@ -534,7 +596,7 @@ export async function startMockC64Server(options = {}) {
       const lengthValue = routeUrl.searchParams.get("length") ?? "256";
       const address = parseNumeric(addressValue);
       const length = Math.max(0, parseNumeric(lengthValue, 10));
-      const bytes = state.memory.slice(address, address + length);
+      const bytes = readMemoryWithHeartbeat(state, address, length);
 
       const accept = String(req.headers["accept"] || "");
       if (accept.includes("application/octet-stream")) {
@@ -569,6 +631,7 @@ export async function startMockC64Server(options = {}) {
       state.memory.set(bytes, address);
       state.lastWrite = { address, bytes };
       state.writeLog.push({ address, bytes: Buffer.from(bytes) });
+      cancelHeartbeatOnWrite(state, address, bytes.length);
       simulateKeyboardDrain(state, address);
 
       sendJson(res, { result: "wrote", address, length: bytes.length });
@@ -589,6 +652,7 @@ export async function startMockC64Server(options = {}) {
       state.memory.set(bytes, address);
       state.lastWrite = { address, bytes };
       state.writeLog.push({ address, bytes: Buffer.from(bytes) });
+      cancelHeartbeatOnWrite(state, address, bytes.length);
       simulateKeyboardDrain(state, address);
 
       sendJson(res, { result: "wrote", address, length: bytes.length });

@@ -3,6 +3,10 @@ import { asciiToScreenCodes } from "./readiness.js";
 
 const SCREEN_BASE = 0x0400;
 const SCREEN_SIZE = 40 * 25;
+const KEYBOARD_BUFFER = 0x0277; // KERNAL keyboard buffer base ($0277), where a typed SYS command lands.
+const SYS_COMMAND_PATTERN = /SYS\s*\d+/i; // upload_run_asm enters an assembled program via a typed SYSnnnnn.
+const HEARTBEAT_GRANULARITY_MS = 10; // Well below the poll interval so consecutive liveness reads always differ.
+const HEARTBEAT_DURATION_MS = 1000; // How long a SYS-triggered program keeps "running".
 
 interface MockCheckpoint {
   id: number;
@@ -62,6 +66,7 @@ export class ViceMockServer {
   private server: net.Server | null = null;
   private memory = new Uint8Array(0x10000);
   private helloReady = false;
+  private heartbeat: { startedAt: number; baseValue: number } | null = null;
   private checkpoints = new Map<number, MockCheckpoint>();
   private nextCheckpointId = 1;
   private readonly registerMetadata = buildDefaultRegisterMetadata();
@@ -223,6 +228,7 @@ export class ViceMockServer {
         for (let i = 0; i < length; i += 1) {
           payload[2 + i] = this.memory[(start + i) & 0xffff];
         }
+        this.applyHeartbeatOverlay(start, length, payload);
         return buildResponse(cmd, reqId, payload);
       }
       case 0x02: { // mem set
@@ -234,7 +240,9 @@ export class ViceMockServer {
         }
         if (start <= SCREEN_BASE && end >= SCREEN_BASE) {
           this.helloReady = false;
+          this.heartbeat = null; // A client writing screen RAM has taken over; end any simulated run.
         }
+        this.maybeStartAsmHeartbeat(start, end, payload);
         const KEYBOARD_NDX = 0x00c6; // This mock runs no real 6502 code, so simulate the KERNAL IRQ draining $00C6 shortly after each write.
         if (start <= KEYBOARD_NDX && end >= KEYBOARD_NDX) {
           setTimeout(() => { this.memory[KEYBOARD_NDX] = 0; }, 5).unref();
@@ -451,6 +459,7 @@ export class ViceMockServer {
     this.memory[0x2F] = 0x03; this.memory[0x30] = 0x08;
     this.memory[0x31] = 0x03; this.memory[0x32] = 0x08;
     this.helloReady = false;
+    this.heartbeat = null;
     this.checkpoints.clear();
     this.nextCheckpointId = 1;
     this.registerValues.clear();
@@ -470,6 +479,23 @@ export class ViceMockServer {
     const hello = asciiToScreenCodes("HELLO");
     hello.copy(Buffer.from(this.memory.buffer, offset, hello.length));
     this.helloReady = true;
+  }
+
+  private maybeStartAsmHeartbeat(start: number, end: number, payload: Buffer): void { // upload_run_asm enters via a typed SYS in the keyboard buffer; this mock runs no 6502 code, so record a time-computed "alive" window (a descriptor, never a background timer, so nothing leaks into a shared-server test).
+    if (start > KEYBOARD_BUFFER || end < KEYBOARD_BUFFER) return; // Only a write covering the KERNAL keyboard buffer can be a typed SYS trigger.
+    if (!SYS_COMMAND_PATTERN.test(payload.toString("ascii"))) return;
+    this.heartbeat = { startedAt: Date.now(), baseValue: this.memory[SCREEN_BASE]! };
+  }
+
+  private applyHeartbeatOverlay(start: number, length: number, payload: Buffer): void { // Overlay a synthetic, time-advancing byte at the screen base while a SYS "alive" window is open: a pure function of elapsed time applied only to the response, so stored memory never mutates on its own.
+    const heartbeat = this.heartbeat;
+    if (!heartbeat) return;
+    const elapsed = Date.now() - heartbeat.startedAt;
+    if (elapsed < 0 || elapsed >= HEARTBEAT_DURATION_MS) return;
+    const offset = SCREEN_BASE - start;
+    if (offset < 0 || offset >= length) return;
+    const ticks = Math.floor(elapsed / HEARTBEAT_GRANULARITY_MS);
+    payload[2 + offset] = (heartbeat.baseValue + ticks) & 0xff;
   }
 }
 

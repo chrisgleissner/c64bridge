@@ -176,20 +176,20 @@ async function pollBasicOutcome(
         };
       }
       
-      // If we detected RUN and no error yet, continue polling
-      if (runDetected) {
-        // Continue polling for a bit to catch any delayed errors
-        // but if we've been polling for a while without errors, consider it successful
-      }
     } catch (error) {
       logger.debug("Failed to read screen during BASIC polling", { error, pollCount });
     }
-    
     await delay(config.intervalMs);
   }
-  
+  if (!runDetected) { // Neither "RUN" nor an error ever appeared for the whole window. On working backends the firmware's own LOAD/RUN echo shows this text, so its total absence means execution never started despite the reported success (HARD01-011/036).
+    logger.debug("BASIC polling completed without ever observing RUN or an error", { pollCount, elapsed: Date.now() - startTime });
+    return {
+      status: "error",
+      type: "BASIC",
+      message: "No execution activity detected: the firmware reported success, but the program does not appear to have run.",
+    };
+  }
   logger.debug("BASIC polling completed without errors", { pollCount, elapsed: Date.now() - startTime });
-  
   return {
     status: "ok",
     type: "BASIC",
@@ -241,15 +241,9 @@ async function pollAsmOutcome(
     await delay(config.intervalMs);
   }
   
-  // If RUN never appeared, assume instant execution (success)
-  if (!runDetected) {
-    logger.debug("RUN never detected, assuming instant execution");
-    return {
-      status: "ok",
-      type: "ASM",
-    };
+  if (!runDetected) { // Fall through to the liveness check rather than assuming success. Skipping it here used to report false success for any run that never types anything visible, e.g. a firmware run_prg that silently no-ops instead of running the PRG (HARD01-036).
+    logger.debug("RUN never detected; falling through to hardware liveness check instead of assuming success");
   }
-  
   let previousSignature: number | null = null; // Only stable RAM: reading I/O can ack CIA interrupts on Ultimate, and raster/timer values aren't evidence of liveness.
   let alive = false;
   

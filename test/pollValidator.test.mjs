@@ -313,38 +313,73 @@ test("pollForProgramOutcome handles screen read failures gracefully", async () =
   assert.equal(result.type, "BASIC");
 });
 
-test("pollForProgramOutcome BASIC returns ok if RUN not detected", async () => {
+test("HARD01-036 pollForProgramOutcome BASIC reports an error instead of blind success when RUN is never detected", async () => {
+  // Regression test for a real hardware finding: a firmware run_prg call can
+  // report success (HARD01-011: empty errors[]) while silently never
+  // executing the uploaded program. The screen never advances past its
+  // pre-run state in that case, so "RUN"/"ERROR" text never appears.
   const client = {
     async readScreen() {
       return "READY.\n";
     },
   };
-  
+
   const result = await pollForProgramOutcome(
     "BASIC",
     client,
     createLogger(),
     { maxMs: 50, intervalMs: 10, stabilizeMs: 0 },
   );
-  
-  assert.equal(result.status, "ok");
+
+  assert.equal(result.status, "error");
   assert.equal(result.type, "BASIC");
+  assert.match(result.message, /does not appear to have run/i);
 });
 
-test("pollForProgramOutcome ASM returns ok if RUN not detected", async () => {
+test("HARD01-036 pollForProgramOutcome ASM reports crashed instead of blind success when RUN is never detected", async () => {
+  // Regression test mirroring the BASIC case above: previously, never
+  // observing RUN/ERROR text short-circuited straight to a false "ok"
+  // without ever running the hardware liveness check.
   const client = {
     async readScreen() {
       return "READY.\n";
     },
   };
-  
+
   const result = await pollForProgramOutcome(
     "ASM",
     client,
     createLogger(),
     { maxMs: 50, intervalMs: 10, stabilizeMs: 0 },
   );
-  
+
+  assert.equal(result.status, "crashed");
+  assert.equal(result.type, "ASM");
+  assert.equal(result.reason, "no program-visible screen progression within window");
+});
+
+test("HARD01-036 pollForProgramOutcome ASM still detects real liveness even when RUN text never appears", async () => {
+  // The corresponding positive case: if RUN/ERROR text never shows up but
+  // screen RAM genuinely changes (e.g. a firmware-native run that doesn't
+  // echo anything to the screen), the liveness check must still catch it.
+  let memoryCallCount = 0;
+  const client = {
+    async readScreen() {
+      return "READY.\n";
+    },
+    async readMemoryRaw(_address, length) {
+      memoryCallCount++;
+      return new Uint8Array(length).fill(memoryCallCount <= 1 ? 0 : 1);
+    },
+  };
+
+  const result = await pollForProgramOutcome(
+    "ASM",
+    client,
+    createLogger(),
+    { maxMs: 100, intervalMs: 10, stabilizeMs: 0 },
+  );
+
   assert.equal(result.status, "ok");
   assert.equal(result.type, "ASM");
 });

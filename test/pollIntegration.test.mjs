@@ -157,29 +157,38 @@ test("ASM polling respects environment variables", async () => {
   }
 });
 
-test("ASM program that executes instantly without RUN showing is ok", async () => {
+test("HARD01-036 ASM program with no RUN echo is ok only when screen RAM genuinely progresses", async () => {
+  // Previously this asserted a blind "ok" whenever RUN never appeared, which
+  // is exactly the false-success the HARD01-036 fix removes: a firmware that
+  // reports success but never runs the program produces no RUN echo either.
+  // The truthful scenario this now covers is a native run_prg path that never
+  // echoes RUN yet demonstrably progresses screen RAM, which the liveness
+  // check must observe before it may report success.
   const restoreStabilize = withPollStabilize(0);
+  let memoryCallCount = 0;
   const ctx = {
     client: {
       async uploadAndRunAsm(program) {
         return { success: true };
       },
       async readScreen() {
-        // Program executed so fast RUN never showed
-        return "READY.\n";
+        return "READY.\n"; // RUN text never appears on this execution path.
+      },
+      async readMemoryRaw(_address, length) {
+        memoryCallCount++;
+        return new Uint8Array(length).fill(memoryCallCount <= 1 ? 0 : 1); // Real, observable progression.
       },
     },
     logger: createLogger(),
   };
-  
+
   try {
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
-      { program: ".org $0801\nrts" }, // Instant return
+      { program: ".org $0801\nrts" },
       ctx,
     );
-    
-    // Should be considered ok (instant execution)
+
     assert.equal(result.isError, undefined);
   } finally {
     restoreStabilize();
