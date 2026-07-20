@@ -549,7 +549,7 @@ export async function renderPlatformStatusMarkdown(client: C64Client): Promise<s
   const nativeEndpoints = await Promise.race([
     client.getNativeEndpointCapabilities(),
     new Promise<Awaited<ReturnType<C64Client["getNativeEndpointCapabilities"]>>>((resolve) => {
-      setTimeout(() => resolve({ machineInput: "unknown", machineMenuScreen: "unknown" }), 750);
+      setTimeout(() => resolve({ machineInput: "unknown", machineMenuScreen: "unknown" }), 750).unref();
     }),
   ]);
 

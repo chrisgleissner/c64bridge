@@ -405,13 +405,10 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     }
   };
 
-  const stopSync = (): void => {
+  const stopSync = (): void => { // Runs from signal handlers: no later tick to observe SIGTERM, so go straight to SIGKILL.
     for (const process of [child, xvfb]) {
       if (!process || process.exitCode !== null || process.signalCode !== null) continue;
-      try { process.kill("SIGTERM"); } catch {}
-      if (process.exitCode === null && process.signalCode === null) {
-        try { process.kill("SIGKILL"); } catch {}
-      }
+      try { process.kill("SIGKILL"); } catch {}
     }
   };
 

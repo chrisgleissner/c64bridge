@@ -215,6 +215,9 @@ export class ViceClient {
     if (!this.socket || this.socket.destroyed) {
       return Promise.reject(new Error("VICE monitor socket is not connected"));
     }
+    if (this.nextReqId === 0xffffffff) { // Reserved for unsolicited events (see onData above); skip it on wraparound.
+      this.nextReqId = 0;
+    }
     const reqId = this.nextReqId++ >>> 0;
     const payload = body ?? Buffer.alloc(0);
     const header = Buffer.alloc(11);

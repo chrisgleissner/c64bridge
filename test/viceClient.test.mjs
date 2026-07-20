@@ -349,3 +349,45 @@ test("ViceClient rejects pending requests on socket errors and close is defensiv
     closingClient.close();
   });
 });
+
+test("ViceClient skips the reserved 0xFFFFFFFF reqId on wraparound instead of colliding with unsolicited events", async (t) => {
+  const requests = [];
+  const server = net.createServer((socket) => {
+    let buffer = Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 11) {
+        const bodyLen = buffer.readUInt32LE(2);
+        const total = 11 + bodyLen;
+        if (buffer.length < total) return;
+        const packet = buffer.subarray(0, total);
+        buffer = buffer.subarray(total);
+        const request = parseRequest(packet);
+        requests.push(request);
+        socket.write(buildResponse(request.reqId, request.cmd));
+      }
+    });
+  });
+
+  t.after(async () => {
+    await closeServer(server);
+  });
+
+  const port = await listen(server);
+  const client = new ViceClient();
+  t.after(() => {
+    client.close();
+  });
+
+  await client.connect(port);
+  client.nextReqId = 0xffffffff;
+
+  await client.resetSoft();
+  await client.resetHard();
+
+  assert.equal(requests.length, 2);
+  // The first request must not be issued with the reserved unsolicited-event
+  // marker; it wraps to 0 instead, and the following request picks up at 1.
+  assert.equal(requests[0].reqId, 0x00000000);
+  assert.equal(requests[1].reqId, 0x00000001);
+});

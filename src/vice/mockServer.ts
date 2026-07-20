@@ -235,13 +235,9 @@ export class ViceMockServer {
         if (start <= SCREEN_BASE && end >= SCREEN_BASE) {
           this.helloReady = false;
         }
-        // This mock does not run real 6502 code, so nothing else drains the
-        // KERNAL keyboard buffer's pending-count byte ($00C6/NDX). Simulate
-        // the KERNAL IRQ consuming it shortly after each write, mirroring
-        // real VICE/hardware behaviour closely enough for deterministic tests.
-        const KEYBOARD_NDX = 0x00c6;
+        const KEYBOARD_NDX = 0x00c6; // This mock runs no real 6502 code, so simulate the KERNAL IRQ draining $00C6 shortly after each write.
         if (start <= KEYBOARD_NDX && end >= KEYBOARD_NDX) {
-          setTimeout(() => { this.memory[KEYBOARD_NDX] = 0; }, 5);
+          setTimeout(() => { this.memory[KEYBOARD_NDX] = 0; }, 5).unref();
         }
         return buildResponse(cmd, reqId);
       }

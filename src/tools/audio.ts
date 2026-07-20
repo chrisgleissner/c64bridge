@@ -530,9 +530,7 @@ export const audioModule = defineToolModule({
           const parsed = sidResetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting SID", { mode: parsed.hard ? "hard" : "soft" });
 
-          // A reset is the documented way to stop a generated arpeggio; without
-          // this, the detached loop would keep writing notes after the reset.
-          cancelGeneratedSidPlayback();
+          cancelGeneratedSidPlayback(); // Reset is the documented way to stop a generated arpeggio.
           const result = await ctx.client.sidReset(parsed.hard);
           if (!result.success) {
             throw new ToolExecutionError("C64 firmware reported failure while resetting SID", {
@@ -689,9 +687,7 @@ export const audioModule = defineToolModule({
 
           ctx.logger.info("Silencing all SID voices", { verify });
 
-          // Stop any generated arpeggio; otherwise its remaining notes would
-          // resume writing right after this silences the chip.
-          cancelGeneratedSidPlayback();
+          cancelGeneratedSidPlayback(); // Otherwise its remaining notes would resume writing right after this silences the chip.
           const result = await ctx.client.sidSilenceAll();
           if (!result.success) {
             throw new ToolExecutionError("C64 firmware reported failure while silencing SID", {
@@ -899,16 +895,10 @@ export const audioModule = defineToolModule({
             waveform: parsed.waveform,
           });
 
-          // Replace any prior generated arpeggio; it is explicitly scheduled
-          // work, never a detached operation that may retarget a later backend.
-          cancelGeneratedSidPlayback();
+          cancelGeneratedSidPlayback(); // Replace any prior generated arpeggio rather than letting two run at once.
           const controller = new AbortController();
           generatedPlaybacks.add(controller);
-          // Pin the facade once at creation: even if c64_select_backend runs
-          // while this loop is still stepping through notes, every remaining
-          // note must keep targeting the backend that was active when this
-          // arpeggio was scheduled (HARD01-030).
-          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined);
+          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined); // Pin once so a later select_backend can't retarget notes mid-arpeggio (HARD01-030).
           void (async () => {
             try {
               const pinnedFacade = await pinnedFacadePromise;
@@ -928,8 +918,7 @@ export const audioModule = defineToolModule({
                   release: 0,
                 }, pinnedFacade);
                 const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                // Clear GATE between notes so every note retriggers ADSR.
-                await sleep(Math.max(1, Math.min(20, Math.floor(durationMs / 8))));
+                await sleep(Math.max(1, Math.min(20, Math.floor(durationMs / 8)))); // Clear GATE between notes so every note retriggers ADSR.
                 await ctx.client.sidNoteOff(1, pinnedFacade);
                 if (!controller.signal.aborted) await sleep(Math.max(0, durationMs - Math.max(1, Math.min(20, Math.floor(durationMs / 8)))));
               }

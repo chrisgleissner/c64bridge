@@ -119,9 +119,7 @@ function concatBuffers(...buffers: Uint8Array[]): Uint8Array {
  * Looks for patterns like "?SYNTAX ERROR" or "SYNTAX ERROR IN 120".
  */
 function extractBasicError(screen: string): { message?: string; line?: number } | null {
-  // A BASIC runtime error is printed with a leading question mark. Ordinary
-  // program output such as "0 ERRORS FOUND" must never be treated as one.
-  const errorMatch = /(?:^|\n)\s*\?([A-Z\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen);
+  const errorMatch = /(?:^|\n)\s*\?([A-Z\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match.
   
   if (errorMatch) {
     const errorType = errorMatch[1]?.trim().replace(/\s+/g, " ");
@@ -252,10 +250,7 @@ async function pollAsmOutcome(
     };
   }
   
-  // Only inspect side-effect-free stable RAM. Reading I/O on Ultimate can
-  // acknowledge CIA interrupts, and raster/timer values are not evidence the
-  // uploaded program is alive.
-  let previousSignature: number | null = null;
+  let previousSignature: number | null = null; // Only stable RAM: reading I/O can ack CIA interrupts on Ultimate, and raster/timer values aren't evidence of liveness.
   let alive = false;
   
   const pollDeadline = Date.now() + config.maxMs;

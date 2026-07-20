@@ -296,10 +296,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       });
     }
 
-    // Pin the facade for this entire pause/read/write/read/resume sequence.
-    // A concurrent c64_select_backend must not retarget a step already
-    // underway (HARD01-016).
-    const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
+    const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined; // Pin for this whole pause/read/write/resume sequence so a concurrent select_backend can't retarget it (HARD01-016).
     const canPause = supportsMachinePause(ctx);
     let paused = false;
     try {
@@ -411,9 +408,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
         verificationMetadata.preReadMismatches = preMismatches;
       }
 
-      // Resume before exposing a verified success. A failed resume leaves the
-      // machine paused, so it is a recoverable operation failure, not a log.
-      if (paused) {
+      if (paused) { // A failed resume here leaves the machine paused: a recoverable operation failure, not a log.
         const resumeResult = await ctx.client.resume(pinnedFacade);
         if (!resumeResult.success) {
           throw new ToolExecutionError("Write completed but the machine could not be resumed", {
@@ -427,7 +422,6 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
         }
         paused = false;
       }
-
       return textResult(`Wrote ${resolvedLength ?? "the provided"} bytes starting at ${resolvedAddress} (verified).`, {
         success: true,
         address: resolvedAddress,

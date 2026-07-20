@@ -750,34 +750,45 @@ test("device: createFacade merges backend sections across config candidates", as
     },
   );
 
-  await withConfigScenario(
-    {
-      repoConfig: {},
-      // A deliberately impossible path: it must never match whatever the
-      // real environment's default-resolved VICE binary happens to be
-      // (e.g. some environments install it at exactly /usr/bin/x64sc).
-      homeConfig: { vice: { exe: "/nonexistent/c64bridge-test-fixture/x64sc" } },
-    },
-    async () => {
-      // HARD01-005: an empty (but present) cwd config file wins outright and
-      // stops the precedence chain, so home's `vice` section must never be
-      // consulted. With no resolved backend config at all, createFacade()
-      // falls through to its live-reachability probe of the default c64u
-      // host, whose outcome is environment-dependent (this sandbox has a
-      // real reachable "c64u" host on its network; a CI runner typically
-      // does not) — so assert the fallback mechanism fired rather than one
-      // specific probe outcome.
-      const { facade, selected, reason } = await createFacade();
-      assert.match(reason, /fallback/);
-      assert.ok(selected === "c64u" || selected === "vice", `unexpected backend: ${selected}`);
-      assert.equal(facade.type, selected);
-      if (selected === "vice") {
-        // The real assertion this scenario exists for: home's vice section
-        // must not have leaked in via merging.
-        assert.notEqual(facade.exe, "/nonexistent/c64bridge-test-fixture/x64sc");
-      }
-    },
-  );
+  // A real, uniquely-named fixture file: unlike a nonexistent path, this
+  // actually exists, so resolveViceBinary()'s findBinary() would return it
+  // verbatim if home's config leaked through — the assertion below can
+  // therefore actually fail on a real leak. A per-run mkdtemp path can never
+  // coincidentally match whatever the environment's default-resolved VICE
+  // binary happens to be (unlike a fixed path such as /usr/bin/x64sc, which
+  // some environments install VICE at).
+  const leakFixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-leak-fixture-"));
+  const leakFixtureExe = path.join(leakFixtureDir, "x64sc");
+  fs.writeFileSync(leakFixtureExe, "", { mode: 0o755 });
+  try {
+    await withConfigScenario(
+      {
+        repoConfig: {},
+        homeConfig: { vice: { exe: leakFixtureExe } },
+      },
+      async () => {
+        // HARD01-005: an empty (but present) cwd config file wins outright and
+        // stops the precedence chain, so home's `vice` section must never be
+        // consulted. With no resolved backend config at all, createFacade()
+        // falls through to its live-reachability probe of the default c64u
+        // host, whose outcome is environment-dependent (this sandbox has a
+        // real reachable "c64u" host on its network; a CI runner typically
+        // does not) — so assert the fallback mechanism fired rather than one
+        // specific probe outcome.
+        const { facade, selected, reason } = await createFacade();
+        assert.match(reason, /fallback/);
+        assert.ok(selected === "c64u" || selected === "vice", `unexpected backend: ${selected}`);
+        assert.equal(facade.type, selected);
+        if (selected === "vice") {
+          // The real assertion this scenario exists for: home's vice section
+          // must not have leaked in via merging.
+          assert.notEqual(facade.exe, leakFixtureExe);
+        }
+      },
+    );
+  } finally {
+    fs.rmSync(leakFixtureDir, { recursive: true, force: true });
+  }
 
   // HARD01-005: config resolution is single-source-of-truth, not a merge
   // across candidate files. The winning file (cwd here) must carry every

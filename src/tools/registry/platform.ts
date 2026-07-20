@@ -95,10 +95,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
       };
     }
 
-    // A generated arpeggio is pinned to the facade it started on, but a
-    // switch is still the documented cue to stop it rather than let it keep
-    // playing to a backend the caller no longer intends to drive.
-    cancelGeneratedSidPlayback();
+    cancelGeneratedSidPlayback(); // A backend switch is the documented cue to stop it rather than let it keep playing on the old backend.
     ctx.client.switchBackend(backend);
     ctx.setPlatform(backend);
 
