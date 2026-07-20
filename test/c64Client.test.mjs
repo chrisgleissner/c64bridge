@@ -19,7 +19,6 @@ import { startViceMockServer } from "../src/vice/mockServer.js";
 
 const SCREEN_BASE = "$0400";
 const SAFE_RAM_BASE = "$C000";
-const REPO_CONFIG_PATH = path.resolve(".c64bridge.json");
 
 function asciiToHexBytes(text) {
   return Buffer.from(text, "ascii").toString("hex").toUpperCase();
@@ -63,16 +62,21 @@ async function withConfigScenario({
   const envConfigPath = path.join(tempRoot, "env.json");
   const homeDir = path.join(tempRoot, "home");
   const homeConfigPath = path.join(homeDir, ".c64bridge.json");
-  const hadRepoConfig = fs.existsSync(REPO_CONFIG_PATH);
-  const originalRepoConfig = hadRepoConfig ? fs.readFileSync(REPO_CONFIG_PATH, "utf8") : null;
+  // Use an isolated cwd rather than the real repo root: loadConfig() resolves
+  // its "cwd config" candidate from process.cwd() fresh on every call, and
+  // several test files exercise this same scenario concurrently (each in its
+  // own process). Writing to the literal repo-root .c64bridge.json would
+  // race across those processes on the same real file.
+  const cwdDir = path.join(tempRoot, "cwd");
+  const cwdConfigPath = path.join(cwdDir, ".c64bridge.json");
+  const previousCwd = process.cwd();
 
   fs.mkdirSync(homeDir, { recursive: true });
+  fs.mkdirSync(cwdDir, { recursive: true });
 
   try {
-    if (repoConfig === null) {
-      fs.rmSync(REPO_CONFIG_PATH, { force: true });
-    } else if (repoConfig !== undefined) {
-      fs.writeFileSync(REPO_CONFIG_PATH, JSON.stringify(repoConfig), "utf8");
+    if (repoConfig !== null && repoConfig !== undefined) {
+      fs.writeFileSync(cwdConfigPath, JSON.stringify(repoConfig), "utf8");
     }
 
     if (homeConfig !== undefined) {
@@ -87,18 +91,15 @@ async function withConfigScenario({
       fs.writeFileSync(envConfigPath, JSON.stringify(envConfig), "utf8");
     }
 
+    process.chdir(cwdDir);
     return await withEnv({
       HOME: homeDir,
       C64BRIDGE_CONFIG: envConfig !== undefined ? envConfigPath : undefined,
       C64_MODE: mode ?? undefined,
     }, fn);
   } finally {
+    process.chdir(previousCwd);
     fs.rmSync(tempRoot, { recursive: true, force: true });
-    if (hadRepoConfig) {
-      fs.writeFileSync(REPO_CONFIG_PATH, originalRepoConfig, "utf8");
-    } else {
-      fs.rmSync(REPO_CONFIG_PATH, { force: true });
-    }
   }
 }
 

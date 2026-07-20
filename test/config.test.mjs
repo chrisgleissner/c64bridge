@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync, unlinkSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "#test/runner";
@@ -215,18 +215,22 @@ test("loadConfig lets C64U env vars override config and defaults", (t) => {
 });
 
 test("loadConfig prefers repo config over home config when env is unset", (t) => {
+  // Isolated cwd rather than the real repo root: several test files exercise
+  // this same "repo/cwd config" scenario concurrently (each in its own
+  // process), and writing to the literal repo-root .c64bridge.json would
+  // race across those processes on the same real file.
   const originalEnv = process.env.C64BRIDGE_CONFIG;
   const originalHome = process.env.HOME;
-  const repoConfigPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", ".c64bridge.json");
-  const repoConfigExisted = existsSync(repoConfigPath);
-  const repoConfigContents = repoConfigExisted ? readFileSync(repoConfigPath, "utf8") : null;
+  const originalCwd = process.cwd();
+  const cwdDir = mkdtempSync(path.join(tmpdir(), "c64-cwd-"));
   const homeDir = mkdtempSync(path.join(tmpdir(), "c64-home-"));
 
   writeFileSync(path.join(homeDir, ".c64bridge.json"), JSON.stringify({ c64u: { host: "home.example" } }, null, 2), "utf8");
-  writeFileSync(repoConfigPath, JSON.stringify({ c64u: { host: "repo.example" } }, null, 2), "utf8");
+  writeFileSync(path.join(cwdDir, ".c64bridge.json"), JSON.stringify({ c64u: { host: "repo.example" } }, null, 2), "utf8");
 
   delete process.env.C64BRIDGE_CONFIG;
   process.env.HOME = homeDir;
+  process.chdir(cwdDir);
   __resetConfigCacheForTests();
 
   const config = loadConfig();
@@ -235,6 +239,7 @@ test("loadConfig prefers repo config over home config when env is unset", (t) =>
 
   t.after(() => {
     __resetConfigCacheForTests();
+    process.chdir(originalCwd);
     if (originalEnv === undefined) {
       delete process.env.C64BRIDGE_CONFIG;
     } else {
@@ -245,11 +250,7 @@ test("loadConfig prefers repo config over home config when env is unset", (t) =>
     } else {
       process.env.HOME = originalHome;
     }
-    if (repoConfigExisted && repoConfigContents !== null) {
-      writeFileSync(repoConfigPath, repoConfigContents, "utf8");
-    } else if (existsSync(repoConfigPath)) {
-      unlinkSync(repoConfigPath);
-    }
+    rmSync(cwdDir, { recursive: true, force: true });
     rmSync(homeDir, { recursive: true, force: true });
   });
 });
@@ -257,15 +258,12 @@ test("loadConfig prefers repo config over home config when env is unset", (t) =>
 test("loadConfig falls back to defaults when no config candidates exist", (t) => {
   const originalEnv = process.env.C64BRIDGE_CONFIG;
   const originalHome = process.env.HOME;
-  const repoConfigPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", ".c64bridge.json");
-  const repoConfigExisted = existsSync(repoConfigPath);
-  const repoConfigContents = repoConfigExisted ? readFileSync(repoConfigPath, "utf8") : null;
+  const originalCwd = process.cwd();
+  const cwdDir = mkdtempSync(path.join(tmpdir(), "c64-cwd-empty-"));
 
   delete process.env.C64BRIDGE_CONFIG;
   delete process.env.HOME;
-  if (repoConfigExisted) {
-    unlinkSync(repoConfigPath);
-  }
+  process.chdir(cwdDir);
   __resetConfigCacheForTests();
 
   const config = loadConfig();
@@ -277,6 +275,7 @@ test("loadConfig falls back to defaults when no config candidates exist", (t) =>
 
   t.after(() => {
     __resetConfigCacheForTests();
+    process.chdir(originalCwd);
     if (originalEnv === undefined) {
       delete process.env.C64BRIDGE_CONFIG;
     } else {
@@ -287,9 +286,7 @@ test("loadConfig falls back to defaults when no config candidates exist", (t) =>
     } else {
       process.env.HOME = originalHome;
     }
-    if (repoConfigExisted && repoConfigContents !== null) {
-      writeFileSync(repoConfigPath, repoConfigContents, "utf8");
-    }
+    rmSync(cwdDir, { recursive: true, force: true });
   });
 });
 

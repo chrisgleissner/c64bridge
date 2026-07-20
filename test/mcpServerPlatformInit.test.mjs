@@ -85,8 +85,6 @@ async function withServerConfigOnce(config, env, fn) {
   const configPath = path.join(tempRoot, "c64bridge.json");
   const diagnosticsDir = path.join(tempRoot, "diagnostics");
   const homeDir = path.join(tempRoot, "home");
-  const hadRepoConfig = fs.existsSync(REPO_CONFIG_PATH);
-  const originalRepoConfig = hadRepoConfig ? fs.readFileSync(REPO_CONFIG_PATH, "utf8") : null;
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   fs.mkdirSync(homeDir, { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(config), "utf8");
@@ -99,7 +97,10 @@ async function withServerConfigOnce(config, env, fn) {
   process.prependListener("uncaughtException", swallowSocketReset);
 
   try {
-    fs.rmSync(REPO_CONFIG_PATH, { force: true });
+    // C64BRIDGE_CONFIG (highest precedence) always pins the spawned server
+    // to this scenario's isolated config file, so the real repo-root
+    // .c64bridge.json is never consulted and must not be touched here:
+    // other test files exercise that same real file concurrently.
     const connection = await createConnectedClient({
       env: {
         C64BRIDGE_CONFIG: configPath,
@@ -124,11 +125,6 @@ async function withServerConfigOnce(config, env, fn) {
   } finally {
     await delay(50);
     process.removeListener("uncaughtException", swallowSocketReset);
-    if (hadRepoConfig) {
-      fs.writeFileSync(REPO_CONFIG_PATH, originalRepoConfig, "utf8");
-    } else {
-      fs.rmSync(REPO_CONFIG_PATH, { force: true });
-    }
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 }
