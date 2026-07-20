@@ -3,6 +3,27 @@
 
 
 
+
+## 1.0.1 - 2026-07-20
+
+### Bug Fixes
+
+- make program-run polling truthful instead of assuming blind success (c0f5b00e)
+- address Kilo Code review findings and raise patch coverage above 94% (ad93c5d6)
+- restore C64BRIDGE_SKIP_AUTO_START after dynamic import instead of leaving it set process-wide (417ec892)
+- use an impossible fixture path so the vice-leak check can't coincidentally pass (ec3b9660)
+- make the 'no resolved config' createFacade test independent of real network reachability (59cf5d69)
+- stop config-scenario tests from racing on the shared repo-root config file (87226bb0)
+- harden C64 Bridge against 35 review findings (HARD01-001..035) (cfb7e4a8)
+
+### Documentation
+
+- add hardening 01-fable handover to the review trail (8b6cdef4)
+
+### Chores
+
+- prepare release 1.0.0 (cd435c85)
+
 ## 1.0.0 - 2026-07-14
 
 ### Bug Fixes
