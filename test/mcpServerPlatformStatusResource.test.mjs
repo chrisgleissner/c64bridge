@@ -4,9 +4,15 @@ import assert from "#test/assert";
 // mcp-server.ts auto-starts a live server on import unless opted out (it is
 // always imported as a side effect by src/index.ts in real deployments, so
 // it cannot gate on "am I the entrypoint"). A plain top-level `import` would
-// run before this opt-out could be set, so load it dynamically instead.
+// run before this opt-out could be set, so load it dynamically instead. The
+// override must be restored immediately: every test file in this repo's Bun
+// runs share one process, and leaving this set would silently disable
+// auto-start for every server spawned by unrelated test files afterward.
+const previousSkipAutoStart = process.env.C64BRIDGE_SKIP_AUTO_START;
 process.env.C64BRIDGE_SKIP_AUTO_START = "1";
 const { renderPlatformStatusMarkdown } = await import("../src/mcp-server.js");
+if (previousSkipAutoStart === undefined) delete process.env.C64BRIDGE_SKIP_AUTO_START;
+else process.env.C64BRIDGE_SKIP_AUTO_START = previousSkipAutoStart;
 
 function createFakeClient(overrides = {}) {
   return {

@@ -15,9 +15,15 @@ const tsLoader = "tsx/esm";
 // mcp-server.ts auto-starts a live server on import unless opted out (it is
 // always imported as a side effect by src/index.ts in real deployments, so
 // it cannot gate on "am I the entrypoint"). A plain top-level `import`
-// would run before this opt-out could be set, so load it dynamically.
+// would run before this opt-out could be set, so load it dynamically. The
+// override must be restored immediately: every test file in this repo's Bun
+// runs share one process, and leaving this set would silently disable
+// auto-start for every server spawned by unrelated test files afterward.
+const previousSkipAutoStart = process.env.C64BRIDGE_SKIP_AUTO_START;
 process.env.C64BRIDGE_SKIP_AUTO_START = "1";
 const { parseCliOptions } = await import("../src/mcp-server.js");
+if (previousSkipAutoStart === undefined) delete process.env.C64BRIDGE_SKIP_AUTO_START;
+else process.env.C64BRIDGE_SKIP_AUTO_START = previousSkipAutoStart;
 
 test("HARD01-001 parseCliOptions honours --http and its optional port", () => {
   assert.deepEqual(parseCliOptions([]), { mode: "stdio" });
@@ -78,6 +84,31 @@ async function waitFor(predicate, { timeoutMs = 10_000, intervalMs = 50 } = {}) 
   throw new Error("condition not met before timeout");
 }
 
+// Bun's test runner executes every file in one shared process, so a spawned
+// child that outlives its own test can still be shutting down while later
+// files start their own servers. Wait for a real exit (escalating to
+// SIGKILL) rather than firing SIGTERM and moving on.
+async function stopChild(child, timeoutMs = 5_000) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  await new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    child.once("exit", done);
+    child.kill("SIGTERM");
+    setTimeout(() => {
+      if (settled) return;
+      try { child.kill("SIGKILL"); } catch {}
+      setTimeout(done, 200);
+    }, timeoutMs);
+  });
+}
+
 test("HARD01-001 --http <port> opens a real HTTP MCP listener; default invocation stays on stdio", async (t) => {
   const mock = await startMockC64Server();
   t.after(async () => { await mock.close(); });
@@ -97,7 +128,7 @@ test("HARD01-001 --http <port> opens a real HTTP MCP listener; default invocatio
   };
 
   const { child, getStderr } = spawnServer(["--http", String(port)], env);
-  t.after(() => { if (!child.killed) child.kill("SIGTERM"); });
+  t.after(() => stopChild(child));
 
   try {
     await waitFor(() => getStderr().includes("running on HTTP"), { timeoutMs: 15_000 });
@@ -121,6 +152,6 @@ test("HARD01-001 --http <port> opens a real HTTP MCP listener; default invocatio
     // listener at all (any HTTP status), not the specific status code.
     assert.ok(typeof response.status === "number" && response.status > 0);
   } finally {
-    child.kill("SIGTERM");
+    await stopChild(child);
   }
 });
