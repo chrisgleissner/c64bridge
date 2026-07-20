@@ -202,6 +202,48 @@ test("ViceClient integrates with the VICE mock server for debugger and resource 
   assert.equal(checkpoints.length, 0);
 });
 
+test("HARD01-015 checkpointCreate honours explicit operation flags exactly, without silently adding execute", async (t) => {
+  const session = await createViceSession();
+  t.after(async () => {
+    await session.close();
+  });
+
+  // A store-only watchpoint must not also trap on execute.
+  const storeOnly = await session.client.checkpointCreate({
+    start: 0x1000,
+    end: 0x1000,
+    operations: { store: true },
+  });
+  assert.equal(storeOnly.operations.store, true);
+  assert.equal(storeOnly.operations.load, false);
+  assert.equal(storeOnly.operations.execute, false);
+
+  // A load-only watchpoint likewise must not trap on execute.
+  const loadOnly = await session.client.checkpointCreate({
+    start: 0x1100,
+    end: 0x1100,
+    operations: { load: true },
+  });
+  assert.equal(loadOnly.operations.load, true);
+  assert.equal(loadOnly.operations.execute, false);
+
+  // No operations object at all still defaults to a plain execute breakpoint.
+  const defaulted = await session.client.checkpointCreate({ start: 0x1200, end: 0x1200 });
+  assert.equal(defaulted.operations.execute, true);
+  assert.equal(defaulted.operations.load, false);
+  assert.equal(defaulted.operations.store, false);
+
+  // An explicit combination is honoured exactly, including execute:false.
+  const explicit = await session.client.checkpointCreate({
+    start: 0x1300,
+    end: 0x1300,
+    operations: { load: true, store: true, execute: false },
+  });
+  assert.equal(explicit.operations.load, true);
+  assert.equal(explicit.operations.store, true);
+  assert.equal(explicit.operations.execute, false);
+});
+
 test("ViceClient validates error cases against the VICE mock server", async (t) => {
   const session = await createViceSession();
   t.after(async () => {
@@ -629,6 +671,45 @@ test("startViceProcess starts and stops a monitor process without Xvfb", async (
     await waitForPort(handle.host, handle.port, 500);
     await handle.stop();
     assert.ok(handle.process.signalCode !== null || handle.process.exitCode !== null);
+  } finally {
+    if (previousDisplay === undefined) {
+      delete process.env.DISPLAY;
+    } else {
+      process.env.DISPLAY = previousDisplay;
+    }
+  }
+});
+
+test("HARD01-013 stopSync synchronously terminates the managed VICE process, for use from a process 'exit' handler", async (t) => {
+  const fakeVice = createFakeViceBinary(t, "listen");
+  const previousDisplay = process.env.DISPLAY;
+  process.env.DISPLAY = ":1";
+
+  try {
+    const handle = await startViceProcess({
+      binary: fakeVice,
+      host: "127.0.0.1",
+      port: 6521,
+      visible: true,
+      warp: false,
+    });
+    t.after(async () => {
+      await handle.stop().catch(() => {});
+    });
+
+    await waitForPort(handle.host, handle.port, 500);
+    assert.equal(handle.process.exitCode, null);
+    assert.equal(handle.process.signalCode, null);
+
+    // stopSync must be safe to call from a synchronous 'exit' handler: no
+    // awaited work, just an immediate best-effort kill.
+    handle.stopSync();
+
+    await waitForExit(handle.process, 2_000);
+    assert.ok(handle.process.signalCode !== null || handle.process.exitCode !== null);
+
+    // Calling it again on an already-exited child must not throw.
+    assert.doesNotThrow(() => handle.stopSync());
   } finally {
     if (previousDisplay === undefined) {
       delete process.env.DISPLAY;

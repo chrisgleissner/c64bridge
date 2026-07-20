@@ -30,6 +30,13 @@ test("knowledge helpers expose stable symbols and memory regions", () => {
   assert.ok(memoryMap.some((entry) => entry.name === "sid_registers"));
 });
 
+test("HARD01-032 the BASIC spec's documented SID frequency formula matches the 24-bit phase accumulator, not the old 2^16 formula", () => {
+  const spec = getBasicV2Spec();
+  assert.match(spec, /freq_value = round\(\(frequency_Hz.*16777216.*clock_rate\)/);
+  assert.equal(spec.includes("× 65536"), false);
+  assert.equal(spec.includes("x 65536"), false);
+});
+
 test("knowledge search returns BASIC, ASM, and VIC-II sections", () => {
   const basicSpec = getBasicV2Spec();
   assert.match(basicSpec, /Commodore BASIC v2/i);

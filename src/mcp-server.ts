@@ -57,7 +57,7 @@ function createPromptRegistryGetter() {
   };
 }
 
-function parseCliOptions(argv: string[]): CliOptions {
+export function parseCliOptions(argv: string[]): CliOptions {
   const httpIndex = argv.indexOf("--http");
   if (httpIndex === -1) {
     return { mode: "stdio" };
@@ -489,14 +489,34 @@ async function main() {
     }
   });
 
-  // Connect via stdio
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  writeDiagnosticEvent("mcp_transport_connected", { mode: "stdio" });
+  const cli = parseCliOptions(process.argv.slice(2));
+  if (cli.mode === "http") {
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await server.connect(transport);
+    const port = cli.port ?? 3000;
+    const httpServer = createServer((request, response) => {
+      if (request.url?.split("?")[0] !== "/mcp") {
+        response.statusCode = 404;
+        response.end("Not found");
+        return;
+      }
+      void transport.handleRequest(request, response).catch((error) => {
+        if (!response.headersSent) response.statusCode = 500;
+        response.end(error instanceof Error ? error.message : "MCP transport error");
+      });
+    });
+    await new Promise<void>((resolve, reject) => httpServer.listen(port, "127.0.0.1", resolve).once("error", reject));
+    writeDiagnosticEvent("mcp_transport_connected", { mode: "http", port });
+    console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
+  } else {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    writeDiagnosticEvent("mcp_transport_connected", { mode: "stdio" });
+    console.error("c64bridge MCP server running on stdio");
+  }
 
   await logConnectivity(client, baseUrl);
   
-  console.error("c64bridge MCP server running on stdio");
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
   });
@@ -520,11 +540,18 @@ function createPlatformResourceDescriptor() {
   };
 }
 
-async function renderPlatformStatusMarkdown(client: C64Client): Promise<string> {
+export async function renderPlatformStatusMarkdown(client: C64Client): Promise<string> {
   const status = getPlatformStatus();
   const availableBackends = client.getAvailableBackends();
   const capabilities = describePlatformCapabilities(toolRegistry.list());
-  const nativeEndpoints = await client.getNativeEndpointCapabilities();
+  // Resource reads must remain responsive while an Ultimate boots or is
+  // unreachable. The probe itself remains retryable (unknown is not cached).
+  const nativeEndpoints = await Promise.race([
+    client.getNativeEndpointCapabilities(),
+    new Promise<Awaited<ReturnType<C64Client["getNativeEndpointCapabilities"]>>>((resolve) => {
+      setTimeout(() => resolve({ machineInput: "unknown", machineMenuScreen: "unknown" }), 750);
+    }),
+  ]);
 
   const lines: string[] = [
     "# MCP Platform Status",
@@ -691,11 +718,21 @@ function toPromptMessage(segment: PromptSegment): {
   };
 }
 
-main().catch((error) => {
-  writeDiagnosticEvent("server_fatal", {
-    diagnosticsFile: getDiagnosticsSessionInfo()?.filePath,
-    error,
+// The documented entrypoint (src/index.ts / dist/index.js, per package.json
+// "main"/"bin") always imports this module as a side effect rather than
+// invoking it as the process's own script, so process.argv[1] never points
+// here — an entrypoint-identity check would wrongly skip startup in every
+// real deployment. Test code that only needs a pure export (e.g.
+// parseCliOptions, renderPlatformStatusMarkdown) sets this opt-out instead,
+// mirroring the existing C64BRIDGE_START_SKIP_AUTO_LAUNCH convention in
+// scripts/start.mjs.
+if (process.env.C64BRIDGE_SKIP_AUTO_START !== "1") {
+  main().catch((error) => {
+    writeDiagnosticEvent("server_fatal", {
+      diagnosticsFile: getDiagnosticsSessionInfo()?.filePath,
+      error,
+    });
+    console.error("Fatal error in MCP server:", error);
+    process.exit(1);
   });
-  console.error("Fatal error in MCP server:", error);
-  process.exit(1);
-});
+}

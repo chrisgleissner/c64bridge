@@ -245,7 +245,47 @@ test("pollForProgramOutcome ASM detects crash when no screen change", async () =
   
   assert.equal(result.status, "crashed");
   assert.equal(result.type, "ASM");
-  assert.equal(result.reason, "no VIC/CIA/TI/screen progression within window");
+  assert.equal(result.reason, "no program-visible screen progression within window");
+});
+
+test("HARD01-019/HARD01-020 ASM polling only ever reads screen RAM, never VIC/CIA I/O, and a stable signature is reported crashed", async () => {
+  const memoryReads = [];
+  const client = {
+    async readScreen() {
+      return "RUN\nSYS 2061\n";
+    },
+    async readMemoryRaw(address, length) {
+      memoryReads.push({ address, length });
+      // A perfectly stable buffer: if the poller were still reading
+      // free-running VIC/CIA registers, a real machine would never produce
+      // this, so "crashed" here proves the signature is screen-only.
+      return new Uint8Array(length);
+    },
+  };
+
+  const result = await pollForProgramOutcome(
+    "ASM",
+    client,
+    createLogger(),
+    { maxMs: 80, intervalMs: 10, stabilizeMs: 0 },
+  );
+
+  assert.equal(result.status, "crashed");
+  assert.equal(result.type, "ASM");
+  assert.ok(memoryReads.length > 0, "expected at least one poll read");
+
+  // No poll may ever have touched the I/O page (VIC/SID/CIA1/CIA2), and in
+  // particular never the CIA interrupt-control registers, whose reads have
+  // hardware side effects (they acknowledge pending IRQs on real hardware).
+  const CIA1_ICR = 0xDC0D;
+  const CIA2_ICR = 0xDD0D;
+  for (const read of memoryReads) {
+    const end = read.address + read.length - 1;
+    const overlapsIo = read.address <= 0xDFFF && end >= 0xD000;
+    assert.equal(overlapsIo, false, `poll must not read the I/O page: ${JSON.stringify(read)}`);
+    assert.ok(!(read.address <= CIA1_ICR && end >= CIA1_ICR));
+    assert.ok(!(read.address <= CIA2_ICR && end >= CIA2_ICR));
+  }
 });
 
 test("pollForProgramOutcome handles screen read failures gracefully", async () => {
@@ -384,11 +424,37 @@ test("loadPollConfig uses production defaults outside test mode", () => {
   else process.env.NODE_ENV = previousEnv;
 });
 
-test("pollForProgramOutcome BASIC falls back to UNKNOWN ERROR when only ERROR is visible", async () => {
+test("HARD01-021 pollForProgramOutcome BASIC treats '0 ERRORS FOUND' output as success, not a false failure", async () => {
   const screens = [
     "READY.\n",
     "RUN\n",
-    "ERROR\nREADY.\n",
+    "0 ERRORS FOUND\nREADY.\n",
+  ];
+
+  const client = {
+    async readScreen() {
+      const screen = screens.shift();
+      if (!screen) return "0 ERRORS FOUND\nREADY.\n";
+      return screen;
+    },
+  };
+
+  const result = await pollForProgramOutcome(
+    "BASIC",
+    client,
+    createLogger(),
+    { maxMs: 200, intervalMs: 20, stabilizeMs: 0 },
+  );
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.type, "BASIC");
+});
+
+test("HARD01-021 pollForProgramOutcome BASIC detects a canonical '?SYNTAX ERROR IN 20' as a real failure", async () => {
+  const screens = [
+    "READY.\n",
+    "RUN\n",
+    "?SYNTAX  ERROR IN 20\nREADY.\n",
   ];
 
   const client = {
@@ -408,8 +474,8 @@ test("pollForProgramOutcome BASIC falls back to UNKNOWN ERROR when only ERROR is
 
   assert.equal(result.status, "error");
   assert.equal(result.type, "BASIC");
-  assert.equal(result.message, "UNKNOWN ERROR");
-  assert.equal(result.line, undefined);
+  assert.equal(result.message, "SYNTAX");
+  assert.equal(result.line, 20);
 });
 
 test("pollForProgramOutcome ASM tolerates screen read failures before RUN and then detects activity", async () => {
@@ -459,7 +525,7 @@ test("pollForProgramOutcome ASM treats repeated memory read failures as crashed"
 
   assert.equal(result.status, "crashed");
   assert.equal(result.type, "ASM");
-  assert.equal(result.reason, "no VIC/CIA/TI/screen progression within window");
+  assert.equal(result.reason, "no program-visible screen progression within window");
 });
 
 test("pollForProgramOutcome ASM treats jiffy clock progress as activity even when other signatures stay stable", async () => {

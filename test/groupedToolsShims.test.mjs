@@ -163,6 +163,47 @@ test("c64_program c64u-only grouped operations reject on vice", async () => {
   }
 });
 
+test("HARD01-034 c64_printer is available on u2 (matching the advertised printer-integration feature), not just c64u", async () => {
+  const stubClient = {
+    async printTextOnPrinterAndRun() {
+      return { success: true, details: { basic: "10 OPEN1,4\n20 PRINT#1,\"HELLO\"\n30 CLOSE1" } };
+    },
+  };
+  const ctx = {
+    client: stubClient,
+    rag: {},
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    platform: { id: "u2", features: [], limitedFeatures: [] },
+    setPlatform,
+  };
+
+  const result = await toolRegistry.invoke("c64_printer", { op: "print_text", text: "HELLO" }, ctx);
+  assert.equal(result.isError, undefined);
+});
+
+test("c64_printer remains unavailable on vice (no printer hardware)", async () => {
+  const ctx = {
+    client: {
+      async printTextOnPrinterAndRun() {
+        throw new Error("should not execute on unsupported platform");
+      },
+    },
+    rag: {},
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    platform: { id: "vice", features: [], limitedFeatures: [] },
+    setPlatform,
+  };
+
+  await assert.rejects(
+    () => toolRegistry.invoke("c64_printer", { op: "print_text", text: "HELLO" }, ctx),
+    (error) => {
+      assert.ok(error instanceof ToolUnsupportedPlatformError);
+      assert.equal(error.platform, "vice");
+      return true;
+    },
+  );
+});
+
 test("c64_program upload_run_basic uses shared BASIC handler", async () => {
   const uploads = [];
   let screenReads = 0;

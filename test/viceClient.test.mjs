@@ -148,6 +148,94 @@ test("ViceClient encodes requests and decodes protocol responses", async (t) => 
   assert.equal(requests[7].body.subarray(1).toString("ascii"), "RUN\r");
 });
 
+test("HARD01-014 joyportSet sends BM command 0xA2 with port and active-low value encoded per spec", async (t) => {
+  const requests = [];
+  const server = net.createServer((socket) => {
+    let buffer = Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 11) {
+        const bodyLen = buffer.readUInt32LE(2);
+        const total = 11 + bodyLen;
+        if (buffer.length < total) return;
+        const packet = buffer.subarray(0, total);
+        buffer = buffer.subarray(total);
+        const request = parseRequest(packet);
+        requests.push(request);
+        socket.write(buildResponse(request.reqId, request.cmd, Buffer.alloc(0)));
+      }
+    });
+  });
+  t.after(async () => { await closeServer(server); });
+
+  const port = await listen(server);
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(port);
+
+  await client.joyportSet(2, 0xF7); // port 2, right pressed (active-low bit cleared)
+  await client.joyportSet(1, 0xFF); // port 1, released
+
+  assert.deepEqual(requests.map((r) => r.cmd), [0xA2, 0xA2]);
+  assert.equal(requests[0].body.readUInt16LE(0), 2);
+  assert.equal(requests[0].body.readUInt16LE(2), 0xF7);
+  assert.equal(requests[1].body.readUInt16LE(0), 1);
+  assert.equal(requests[1].body.readUInt16LE(2), 0xFF);
+});
+
+test("HARD01-012 a request that never gets a response times out, releases the pending queue, and a later request succeeds after reconnect", async (t) => {
+  let respond = false;
+  const server = net.createServer((socket) => {
+    let buffer = Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 11) {
+        const bodyLen = buffer.readUInt32LE(2);
+        const total = 11 + bodyLen;
+        if (buffer.length < total) return;
+        const packet = buffer.subarray(0, total);
+        buffer = buffer.subarray(total);
+        if (!respond) {
+          // Simulate a lost/never-answered frame: accept the command, never reply.
+          continue;
+        }
+        const request = parseRequest(packet);
+        socket.write(buildResponse(request.reqId, request.cmd, Buffer.alloc(0)));
+      }
+    });
+  });
+
+  t.after(async () => {
+    await closeServer(server);
+  });
+
+  const port = await listen(server);
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(port);
+
+  const start = Date.now();
+  await assert.rejects(
+    // Bypass the public wrappers' long production default so the test stays
+    // fast and deterministic; `send` is TS-private only, not runtime-hidden.
+    () => client.send(0x85, undefined, { timeoutMs: 100 }),
+    /timed out/,
+  );
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed >= 90, `expected the request to wait roughly the timeout, got ${elapsed}ms`);
+  assert.equal(client.pending.size, 0, "the timed-out request must be removed from the pending map");
+
+  // The timeout destroys the unhealthy socket. Production always constructs
+  // a fresh ViceClient per connection (see ViceBackend.withClient); match
+  // that here rather than reusing the client whose old socket's async
+  // teardown could otherwise race a new pending request.
+  respond = true;
+  const reconnected = new ViceClient();
+  t.after(() => reconnected.close());
+  await reconnected.connect(port);
+  await reconnected.info();
+});
+
 test("ViceClient re-syncs partial frames and ignores unsolicited events", () => {
   const client = new ViceClient();
   let resolvedFrame = null;

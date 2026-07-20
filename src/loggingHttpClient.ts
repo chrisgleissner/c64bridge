@@ -11,6 +11,18 @@ type RequestMeta = {
   body?: unknown;
 };
 
+/** Headers are useful in diagnostics, but credentials must never leave the
+ * transport layer.  Axios normalises some keys and preserves others, so do a
+ * case-insensitive pass instead of relying on one spelling. */
+function redactHeaders(headers: AxiosRequestConfig["headers"] | undefined): AxiosRequestConfig["headers"] | undefined {
+  if (!headers) return headers;
+  const sensitive = /^(x-password|authorization|proxy-authorization|cookie|set-cookie|x-api-key)$/i;
+  return Object.fromEntries(Object.entries(headers as Record<string, unknown>).map(([key, value]) => [
+    key,
+    sensitive.test(key) ? "***" : value,
+  ])) as AxiosRequestConfig["headers"];
+}
+
 export function createLoggingHttpClient<SecurityDataType = unknown>(
   config?: ApiConfig<SecurityDataType>,
   logger: PrefixedLogger = loggerFor("c64u"),
@@ -25,7 +37,7 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
       startedAt: Date.now(),
       method,
       path,
-      headers: request.headers ? { ...request.headers } : undefined,
+      headers: redactHeaders(request.headers),
       params: request.params ? { ...request.params } : undefined,
       body: request.data,
     };
@@ -65,7 +77,7 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
     });
     logger.debug(`response ${method} ${path}`, {
       status: response.status,
-      headers: response.headers ?? {},
+      headers: redactHeaders(response.headers),
       body: formatPayloadForDebug(response.data),
     });
   }
@@ -97,7 +109,7 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
     });
     logger.debug(`error ${method} ${path}`, {
       status,
-      headers: response?.headers ?? {},
+      headers: redactHeaders(response?.headers),
       body: response ? formatPayloadForDebug(response.data) : null,
       message,
     });

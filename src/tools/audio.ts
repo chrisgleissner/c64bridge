@@ -24,6 +24,12 @@ const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 const DEFAULT_SILENCE_VERIFY_DURATION_SECONDS = 1.5;
 const DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD = 0.02;
 const DEFAULT_SILENCE_VERIFY_WAIT_MS = 150;
+const generatedPlaybacks = new Set<AbortController>();
+
+export function cancelGeneratedSidPlayback(): void {
+  for (const controller of generatedPlaybacks) controller.abort();
+  generatedPlaybacks.clear();
+}
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -524,6 +530,9 @@ export const audioModule = defineToolModule({
           const parsed = sidResetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting SID", { mode: parsed.hard ? "hard" : "soft" });
 
+          // A reset is the documented way to stop a generated arpeggio; without
+          // this, the detached loop would keep writing notes after the reset.
+          cancelGeneratedSidPlayback();
           const result = await ctx.client.sidReset(parsed.hard);
           if (!result.success) {
             throw new ToolExecutionError("C64 firmware reported failure while resetting SID", {
@@ -680,6 +689,9 @@ export const audioModule = defineToolModule({
 
           ctx.logger.info("Silencing all SID voices", { verify });
 
+          // Stop any generated arpeggio; otherwise its remaining notes would
+          // resume writing right after this silences the chip.
+          cancelGeneratedSidPlayback();
           const result = await ctx.client.sidSilenceAll();
           if (!result.success) {
             throw new ToolExecutionError("C64 firmware reported failure while silencing SID", {
@@ -887,10 +899,22 @@ export const audioModule = defineToolModule({
             waveform: parsed.waveform,
           });
 
+          // Replace any prior generated arpeggio; it is explicitly scheduled
+          // work, never a detached operation that may retarget a later backend.
+          cancelGeneratedSidPlayback();
+          const controller = new AbortController();
+          generatedPlaybacks.add(controller);
+          // Pin the facade once at creation: even if c64_select_backend runs
+          // while this loop is still stepping through notes, every remaining
+          // note must keep targeting the backend that was active when this
+          // arpeggio was scheduled (HARD01-030).
+          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined);
           void (async () => {
             try {
-              await ctx.client.sidSetVolume(8);
+              const pinnedFacade = await pinnedFacadePromise;
+              await ctx.client.sidSetVolume(8, pinnedFacade);
               for (let i = 0; i < parsed.steps; i += 1) {
+                if (controller.signal.aborted) break;
                 const iv = intervals[i % intervals.length]!;
                 const note = transposeNote(parsed.root, iv);
                 await ctx.client.sidNoteOn({
@@ -902,18 +926,23 @@ export const audioModule = defineToolModule({
                   decay: 7,
                   sustain: 15,
                   release: 0,
-                });
+                }, pinnedFacade);
                 const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                await sleep(durationMs);
+                // Clear GATE between notes so every note retriggers ADSR.
+                await sleep(Math.max(1, Math.min(20, Math.floor(durationMs / 8))));
+                await ctx.client.sidNoteOff(1, pinnedFacade);
+                if (!controller.signal.aborted) await sleep(Math.max(0, durationMs - Math.max(1, Math.min(20, Math.floor(durationMs / 8)))));
               }
-              await ctx.client.sidNoteOff(1);
+              await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {
               const message = playbackError instanceof Error ? playbackError.message : String(playbackError);
               ctx.logger.warn("music_generate playback failed", { error: message });
+            } finally {
+              generatedPlaybacks.delete(controller);
             }
           })();
 
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root}.`, {
+          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root}. Playback is running and will be replaced by the next generated sequence.`, {
             success: true,
             root: parsed.root,
             intervals,

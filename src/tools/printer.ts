@@ -294,6 +294,7 @@ function validateEpsonDensity(args: EpsonBitmapArgs): void {
 
 export const printerModule = defineToolModule({
   domain: "printer",
+  supportedPlatforms: ["c64u", "u2"],
   summary: "Printer workflow helpers for Commodore MPS and Epson FX devices, including prompt templates.",
   resources: [
     "c64://printer/spec",

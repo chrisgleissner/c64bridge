@@ -906,7 +906,7 @@ test("upload_run_asm verify true annotates metadata", async () => {
 
   try {
     let screenCall = 0;
-    let lowMemCall = 0;
+    let screenRamCall = 0;
     const ctx = {
       client: {
         async uploadAndRunAsm() {
@@ -917,13 +917,10 @@ test("upload_run_asm verify true annotates metadata", async () => {
           return screenCall === 1 ? "RUN\n" : "READY.\n";
         },
         async readMemoryRaw(address, length) {
-          if (address === 0xD000) {
-            return new Uint8Array(length);
-          }
-          if (address === 0x0000) {
+          if (address === 0x0400) {
             const buffer = new Uint8Array(length);
-            buffer[0xA0] = lowMemCall & 0xff;
-            lowMemCall += 1;
+            buffer[0] = screenRamCall & 0xff;
+            screenRamCall += 1;
             return buffer;
           }
           throw new Error(`unexpected address ${address}`);
@@ -978,7 +975,7 @@ test("upload_run_asm reports crashed programs when verification detects no progr
           return "RUN\n";
         },
         async readMemoryRaw(address, length) {
-          if (address === 0xD000 || address === 0x0000) {
+          if (address === 0x0400) {
             return new Uint8Array(length);
           }
           throw new Error(`unexpected address ${address}`);
@@ -995,7 +992,7 @@ test("upload_run_asm reports crashed programs when verification detects no progr
 
     assert.equal(result.isError, true);
     assert.equal(result.metadata.error.kind, "execution");
-    assert.equal(result.metadata.error.details.reason, "no VIC/CIA/TI/screen progression within window");
+    assert.equal(result.metadata.error.details.reason, "no program-visible screen progression within window");
   } finally {
     if (originalMax === undefined) delete process.env.C64BRIDGE_POLL_MAX_MS;
     else process.env.C64BRIDGE_POLL_MAX_MS = originalMax;

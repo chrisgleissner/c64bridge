@@ -32,6 +32,9 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
       const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
       writes.push({ kind: "vice_mem_set", address, bytes: Uint8Array.from(buf) });
     },
+    async viceJoyportSet(port, activeLowMask) {
+      writes.push({ kind: "vice_joyport_set", port, activeLowMask });
+    },
     async readMemoryRaw(address, length) {
       reads.push({ address, length });
       return new Uint8Array(length);
@@ -154,7 +157,7 @@ test("c64_input.key accepts single printable characters and reports duration met
   assert.deepEqual(Array.from(inject.bytes), [65]);
 });
 
-test("c64_input.joystick uses native REST input on c64u and VICE memory on vice", async () => {
+test("HARD01-014 c64_input.joystick uses native REST input on c64u and Joyport Set on vice", async () => {
   const { ctx: c64uCtx, inputBatches } = createInputContext({ platformId: "c64u" });
   const c64uResult = await toolRegistry.invoke("c64_input", {
     op: "joystick", port: 2, controls: ["right", "fire2"], action: "press",
@@ -167,9 +170,7 @@ test("c64_input.joystick uses native REST input on c64u and VICE memory on vice"
     op: "joystick", port: 2, controls: ["right"], action: "press",
   }, viceCtx);
   assert.equal(result.isError, undefined);
-  const memSet = writes.find((w) => w.kind === "vice_mem_set");
-  assert.ok(memSet, "joystick press must perform a memory write");
-  assert.equal(memSet.address, 0xDC00);
+  assert.deepEqual(writes.find((w) => w.kind === "vice_joyport_set"), { kind: "vice_joyport_set", port: 2, activeLowMask: 0xF7 });
 });
 
 test("c64_input.joystick maps an empty C64U release to the REST release_all event", async () => {
@@ -220,13 +221,13 @@ test("c64_input.joystick supports release and tap actions on vice", async () => 
 
   assert.equal(releaseResult.isError, undefined);
   assert.equal(tapResult.isError, undefined);
-  const viceWrites = writes.filter((w) => w.kind === "vice_mem_set");
+  const viceWrites = writes.filter((w) => w.kind === "vice_joyport_set");
   assert.deepEqual(
-    viceWrites.map((entry) => ({ address: entry.address, bytes: Array.from(entry.bytes) })),
+    viceWrites.map((entry) => ({ port: entry.port, activeLowMask: entry.activeLowMask })),
     [
-      { address: 0xDC01, bytes: [0xFF] },
-      { address: 0xDC00, bytes: [0xEE] },
-      { address: 0xDC00, bytes: [0xFF] },
+      { port: 1, activeLowMask: 0xFF },
+      { port: 2, activeLowMask: 0xEE },
+      { port: 2, activeLowMask: 0xFF },
     ],
   );
 });

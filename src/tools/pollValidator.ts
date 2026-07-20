@@ -119,15 +119,9 @@ function concatBuffers(...buffers: Uint8Array[]): Uint8Array {
  * Looks for patterns like "?SYNTAX ERROR" or "SYNTAX ERROR IN 120".
  */
 function extractBasicError(screen: string): { message?: string; line?: number } | null {
-  const upperScreen = screen.toUpperCase();
-  
-  // Check if ERROR appears on screen
-  if (!upperScreen.includes("ERROR")) {
-    return null;
-  }
-  
-  // Try to match "?ERROR_TYPE ERROR" or "ERROR_TYPE ERROR IN LINE"
-  const errorMatch = /\?([A-Z\s]+)\s+ERROR(?:\s+IN\s+(\d+))?/i.exec(screen);
+  // A BASIC runtime error is printed with a leading question mark. Ordinary
+  // program output such as "0 ERRORS FOUND" must never be treated as one.
+  const errorMatch = /(?:^|\n)\s*\?([A-Z\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen);
   
   if (errorMatch) {
     const errorType = errorMatch[1]?.trim().replace(/\s+/g, " ");
@@ -140,8 +134,7 @@ function extractBasicError(screen: string): { message?: string; line?: number } 
     };
   }
   
-  // Fallback: just "ERROR" appears
-  return { message: "UNKNOWN ERROR" };
+  return null;
 }
 
 /**
@@ -259,9 +252,10 @@ async function pollAsmOutcome(
     };
   }
   
-  // Now poll hardware regions to detect activity
-  let prevIoSignature: number | null = null;
-  let prevJiffyClock: Uint8Array | null = null;
+  // Only inspect side-effect-free stable RAM. Reading I/O on Ultimate can
+  // acknowledge CIA interrupts, and raster/timer values are not evidence the
+  // uploaded program is alive.
+  let previousSignature: number | null = null;
   let alive = false;
   
   const pollDeadline = Date.now() + config.maxMs;
@@ -270,26 +264,12 @@ async function pollAsmOutcome(
     pollCount++;
     
     try {
-      // Read I/O regions in optimized batches as per comment #3466803675
-      // All of $D000-$DFFF in a single call (covers VIC-II, SID, CIA1, CIA2)
-      const ioRegions = await client.readMemoryRaw(0xD000, 0x1000); // $D000-$DFFF
-      
-      // Read low memory through screen RAM in a single call: $0000-$07E7
-      // This covers zero page, stack, jiffy clock ($00A0-$00A2), and screen memory
-      const lowMemAndScreen = await client.readMemoryRaw(0x0000, 0x7E8); // $0000-$07E7
-      
-      // Extract jiffy clock for separate comparison (at offset $00A0 in the buffer)
-      const jiffyClock = lowMemAndScreen.slice(0xA0, 0xA3);
-      
-      // Exclude the jiffy clock from the broad signature so it can be tracked separately.
-      const lowMemSignatureBuffer = lowMemAndScreen.slice();
-      lowMemSignatureBuffer.fill(0, 0xA0, 0xA3);
-      const combinedBuffer = concatBuffers(ioRegions, lowMemSignatureBuffer);
-      const ioSignature = computeCrc32(combinedBuffer);
+      const screenRam = await client.readMemoryRaw(0x0400, 0x03e8);
+      const signature = computeCrc32(screenRam);
       
       // Check for any activity
-      if (prevIoSignature !== null && ioSignature !== prevIoSignature) {
-        logger.debug("Hardware or screen activity detected", { 
+      if (previousSignature !== null && signature !== previousSignature) {
+        logger.debug("Program-visible screen activity detected", {
           pollCount, 
           elapsed: Date.now() - startTime,
           signatureChanged: true
@@ -298,18 +278,7 @@ async function pollAsmOutcome(
         break;
       }
       
-      if (prevJiffyClock !== null && !buffersEqual(jiffyClock, prevJiffyClock)) {
-        logger.debug("Jiffy clock advanced", { 
-          pollCount, 
-          elapsed: Date.now() - startTime,
-          clockChanged: true
-        });
-        alive = true;
-        break;
-      }
-      
-      prevIoSignature = ioSignature;
-      prevJiffyClock = jiffyClock;
+      previousSignature = signature;
       
     } catch (error) {
       logger.debug("Failed to read memory during ASM polling", { error, pollCount });
@@ -331,7 +300,7 @@ async function pollAsmOutcome(
   return {
     status: "crashed",
     type: "ASM",
-    reason: "no VIC/CIA/TI/screen progression within window",
+    reason: "no program-visible screen progression within window",
   };
 }
 

@@ -83,7 +83,12 @@ function sendJson(res, payload = {}, statusCode = 200) {
 function createInitialState() {
   return {
     networkPassword: null,
+    forcedErrors: null,
+    forcedErrorsUrlMatch: null,
+    hangOnMachineInputProbe: false,
     lastPrg: null,
+    lastLoadedPrg: null,
+    loadCount: 0,
     runCount: 0,
     resets: 0,
     reboots: 0,
@@ -154,6 +159,21 @@ const SCREEN_CODE_LOOKUP = (() => {
 
 function toScreenCode(char) {
   return SCREEN_CODE_LOOKUP.get(char) ?? SCREEN_CODE_LOOKUP.get(" ") ?? 0x20;
+}
+
+const KERNAL_KEYBOARD_NDX_ADDRESS = 0x00c6;
+
+/**
+ * Nothing in this mock runs 6502 code to drain the KERNAL keyboard buffer
+ * itself, so a client polling NDX ($00C6) waiting for it to return to zero
+ * would otherwise hang forever. Simulate the KERNAL's IRQ-driven drain with
+ * a short delay so injectKeyboardQueue's poll loop behaves realistically.
+ */
+function simulateKeyboardDrain(state, address) {
+  if (address !== KERNAL_KEYBOARD_NDX_ADDRESS) return;
+  setTimeout(() => {
+    state.memory[KERNAL_KEYBOARD_NDX_ADDRESS] = 0;
+  }, 5);
 }
 
 function seedReadyPrompt(state) {
@@ -275,6 +295,20 @@ export async function startMockC64Server(options = {}) {
       return;
     }
 
+    // Test hook: simulate real firmware soft-failures, which answer HTTP 200
+    // with a non-empty `errors` array rather than a non-2xx status. Consumed
+    // once so a single forced failure does not leak into later requests.
+    if (state.forcedErrors && (!state.forcedErrorsUrlMatch || url.includes(state.forcedErrorsUrlMatch))) {
+      const errors = state.forcedErrors;
+      state.forcedErrors = null;
+      state.forcedErrorsUrlMatch = null;
+      // Drain any request body so an unread upload cannot corrupt a reused
+      // keep-alive connection's framing.
+      for await (const _chunk of req) { /* discard */ }
+      sendJson(res, { result: "error", errors });
+      return;
+    }
+
     if (method === "GET" && (url === "/" || url.startsWith("/?"))) {
       sendJson(res, { status: "ok", host: "mock" });
       return;
@@ -297,7 +331,10 @@ export async function startMockC64Server(options = {}) {
           enabled: driveState.power !== "off",
           power: driveState.power,
           mode: driveState.mode,
-          image: driveState.mountedImage,
+          // Mirror the real firmware's DriveInfo shape (image_path is a
+          // plain string), not the internal mount-params object.
+          image_path: driveState.mountedImage?.image ?? null,
+          type: driveState.mountedImage?.type ?? driveState.mode ?? null,
         };
       }
       sendJson(res, { drives });
@@ -340,6 +377,11 @@ export async function startMockC64Server(options = {}) {
     }
 
     if (method === "GET" && url === "/v1/machine:input") {
+      if (state.hangOnMachineInputProbe) {
+        // Test hook: never respond, to prove a caller cannot be blocked on
+        // this probe (HARD01-031). Deliberately does not call res.end().
+        return;
+      }
       sendJson(res, state.inputState);
       return;
     }
@@ -393,6 +435,27 @@ export async function startMockC64Server(options = {}) {
       const prg = Buffer.concat(chunks);
       state.lastPrg = prg;
       state.runCount += 1;
+
+      sendJson(res, { result: "ok", bytes: prg.length });
+      return;
+    }
+
+    if (method === "POST" && url === "/v1/runners:load_prg") {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+
+      const prg = Buffer.concat(chunks);
+      state.lastLoadedPrg = prg;
+      state.loadCount += 1;
+
+      // Mirror real firmware: place the PRG body at its embedded load
+      // address without starting it (no RUN, no BASIC pointer changes).
+      if (prg.length >= 2) {
+        const loadAddress = prg.readUInt16LE(0);
+        state.memory.set(prg.subarray(2), loadAddress);
+      }
 
       sendJson(res, { result: "ok", bytes: prg.length });
       return;
@@ -506,6 +569,7 @@ export async function startMockC64Server(options = {}) {
       state.memory.set(bytes, address);
       state.lastWrite = { address, bytes };
       state.writeLog.push({ address, bytes: Buffer.from(bytes) });
+      simulateKeyboardDrain(state, address);
 
       sendJson(res, { result: "wrote", address, length: bytes.length });
       return;
@@ -525,6 +589,7 @@ export async function startMockC64Server(options = {}) {
       state.memory.set(bytes, address);
       state.lastWrite = { address, bytes };
       state.writeLog.push({ address, bytes: Buffer.from(bytes) });
+      simulateKeyboardDrain(state, address);
 
       sendJson(res, { result: "wrote", address, length: bytes.length });
       return;

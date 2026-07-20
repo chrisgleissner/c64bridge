@@ -638,11 +638,23 @@ test("device: createFacade with config file", async (t) => {
         assert.equal(debugRead.success, true);
         assert.equal(debugRead.value?.toUpperCase(), "CD");
 
-        const drives = await facade.drivesList();
-        assert.ok(drives && typeof drives === "object");
+        // HARD01-023: the c64u facade must normalise the firmware's
+        // `{ drives: { <id>: info } }` shape into a documented array contract
+        // consumers (drive_mount_and_verify) can rely on across backends.
+        const drivesBefore = await facade.drivesList();
+        assert.ok(Array.isArray(drivesBefore));
+        assert.ok(drivesBefore.every((entry) => "id" in entry && "power" in entry && "image" in entry && "type" in entry));
+
         assert.equal((await facade.driveOn("8")).success, true);
         assert.equal((await facade.driveSetMode("8", "1571")).success, true);
         assert.equal((await facade.driveMount("8", "/tmp/disk.d64", { type: "d64", mode: "readonly" })).success, true);
+
+        const drivesAfterMount = await facade.drivesList();
+        const drive8 = drivesAfterMount.find((entry) => entry.id === "8");
+        assert.ok(drive8, "normalised drives list must include the mounted drive");
+        assert.equal(drive8.power, "on");
+        assert.equal(drive8.image, "/tmp/disk.d64");
+
         assert.equal((await facade.driveLoadRom("8", "/tmp/1541.rom")).success, true);
         assert.equal((await facade.driveReset("8")).success, true);
         assert.equal((await facade.driveRemove("8")).success, true);
@@ -660,6 +672,15 @@ test("device: createFacade with config file", async (t) => {
 
         const fileInfo = await facade.filesInfo("/tmp/demo.prg");
         assert.ok(fileInfo && typeof fileInfo === "object");
+
+        // HARD01-010: nested device paths must keep their `/` separators as
+        // real path separators on the wire, only percent-encoding the
+        // reserved characters within each segment (never encoding `/` as
+        // `%2F`, which the double-encode bug used to do).
+        await facade.filesInfo("/Usb0/demos/new file.d64");
+        assert.match(mock.state.lastRequest.url, /\/v1\/files\/\/Usb0\/demos\/new%20file\.d64:info$/);
+        assert.equal(mock.state.lastRequest.url.includes("%2F"), false);
+
         assert.equal((await facade.filesCreateD64("/tmp/demo.d64", { tracks: 35, diskname: "DEMO" })).success, true);
         assert.equal((await facade.filesCreateD71("/tmp/demo.d71", { diskname: "DEMO71" })).success, true);
         assert.equal((await facade.filesCreateD81("/tmp/demo.d81", { diskname: "DEMO81" })).success, true);
@@ -669,6 +690,46 @@ test("device: createFacade with config file", async (t) => {
         assert.equal((await facade.streamStop("video")).success, true);
 
         assert.equal(mock.state.lastRequest.headers["x-password"], "open-sesame");
+      },
+    );
+  });
+
+  await t.test("HARD01-011 a 200 response carrying a non-empty errors array is treated as failure, not success", async () => {
+    const mock = await startMockC64Server();
+    t.after(async () => {
+      await mock.close();
+    });
+
+    await withConfigScenario(
+      {
+        envConfig: { c64u: { baseUrl: mock.baseUrl } },
+        repoConfig: null,
+        homeConfig: null,
+      },
+      async () => {
+        const { facade } = await createFacade();
+
+        mock.state.forcedErrors = ["Cannot open file"];
+        mock.state.forcedErrorsUrlMatch = "run_prg";
+        const runResult = await facade.runPrg(Buffer.from([0x01, 0x08, 0x00, 0x00]));
+        assert.equal(runResult.success, false);
+        assert.deepEqual(runResult.details.errors, ["Cannot open file"]);
+
+        mock.state.forcedErrors = ["Drive not found"];
+        mock.state.forcedErrorsUrlMatch = "drives/8:mount";
+        const mountResult = await facade.driveMount("8", "/Usb0/demo.d64");
+        assert.equal(mountResult.success, false);
+        assert.deepEqual(mountResult.details.errors, ["Drive not found"]);
+
+        mock.state.forcedErrors = ["Unknown category"];
+        mock.state.forcedErrorsUrlMatch = "/v1/configs/";
+        const configResult = await facade.configSet("bogus", "item", "1");
+        assert.equal(configResult.success, false);
+        assert.deepEqual(configResult.details.errors, ["Unknown category"]);
+
+        // Absence of `errors` (or an empty array) remains a compatible success.
+        const okResult = await facade.runPrg(Buffer.from([0x01, 0x08, 0x00, 0x00]));
+        assert.equal(okResult.success, true);
       },
     );
   });
@@ -695,16 +756,20 @@ test("device: createFacade merges backend sections across config candidates", as
     },
     async () => {
       const { facade, selected, reason } = await createFacade();
-      assert.equal(selected, "vice");
-      assert.equal(reason, "config only");
-      assert.equal(facade.type, "vice");
+      assert.equal(selected, "c64u");
+      assert.match(reason, /fallback/);
+      assert.equal(facade.type, "c64u");
     },
   );
 
+  // HARD01-005: config resolution is single-source-of-truth, not a merge
+  // across candidate files. The winning file (cwd here) must carry every
+  // section a scenario depends on; a section only present in a
+  // lower-precedence file (home) is not consulted.
   await withConfigScenario(
     {
-      repoConfig: { c64u: { host: "repo.local", port: 8081 } },
-      homeConfig: { vice: { host: "127.0.0.1", port: 6509 } },
+      repoConfig: { c64u: { host: "repo.local", port: 8081 }, vice: { host: "127.0.0.1", port: 6509 } },
+      homeConfig: null,
       mode: "vice",
     },
     async () => {
@@ -716,9 +781,11 @@ test("device: createFacade merges backend sections across config candidates", as
     },
   );
 
+  // HARD01-005: the winning envConfig file must carry both sections itself;
+  // a `vice` section only present in repo/home config is not merged in.
   await withConfigScenario(
     {
-      envConfig: { c64u: { host: "env.local", port: 8082 } },
+      envConfig: { c64u: { host: "env.local", port: 8082 }, vice: { exe: "/usr/bin/x64sc" } },
       repoConfig: { c64u: { host: "repo.local", port: 8081 }, vice: { exe: "/usr/bin/x64sc" } },
       homeConfig: { vice: { host: "127.0.0.1", port: 6510 } },
     },
@@ -1057,6 +1124,9 @@ test("device: ViceBackend unit branches", async () => {
         if (name === "Drive11Image") return { type: "string", value: "disk11.d64" };
         if (name === "Drive11Type") return { type: "int", value: 2 };
         if (name === "WarpMode") return { type: "int", value: 1 };
+        if (name === "MachineVideoStandard") return { type: "string", value: "PAL" };
+        if (name === "DriveLabel") return { type: "string", value: "1541" };
+        if (name === "BadSetting") return { type: "string", value: "" };
         throw new Error(`unexpected resource ${name}`);
       },
       async resourceSet(name, value) {
@@ -1093,6 +1163,19 @@ test("device: ViceBackend unit branches", async () => {
     assert.equal(runResult.success, true);
     await assert.rejects(() => backend.runPrg(Buffer.from([0x01])), /PRG data too short/);
 
+    // HARD01-018: runPrg (genuine BASIC/PRG launch) sets BASIC pointers and
+    // types RUN; loadPrg (machine-code entry path) must do neither.
+    assert.ok(calls.some((c) => c[0] === "memSet" && c[1] === 0x002B), "runPrg must set BASIC pointers");
+    assert.ok(calls.some((c) => c[0] === "keyboardFeed" && c[1] === "RUN\r"), "runPrg must type RUN");
+
+    const callsBeforeLoadPrg = calls.length;
+    const loadResult = await backend.loadPrg(Buffer.from([0x00, 0xC0, 0xA9, 0x07, 0x8D, 0x20, 0xD0, 0x60]));
+    assert.equal(loadResult.success, true);
+    const loadPrgCalls = calls.slice(callsBeforeLoadPrg);
+    assert.ok(!loadPrgCalls.some((c) => c[0] === "memSet" && c[1] === 0x002B), "loadPrg must not touch BASIC pointers");
+    assert.ok(!loadPrgCalls.some((c) => c[0] === "keyboardFeed" && c[1] === "RUN\r"), "loadPrg must not type RUN");
+    assert.ok(loadPrgCalls.some((c) => c[0] === "memSet" && c[1] === 0xC000), "loadPrg must place the code at its origin");
+
     const resetResult = await backend.reset();
     const rebootResult = await backend.reboot();
     assert.equal(resetResult.success, true);
@@ -1117,6 +1200,16 @@ test("device: ViceBackend unit branches", async () => {
     await assert.rejects(() => backend.configGet("VICE"), /configGet without item name/);
     assert.equal((await backend.configSet("VICE", "WarpMode", "0")).details.value, 0);
     assert.equal((await backend.configSet("VICE", "MachineVideoStandard", "PAL")).details.value, "PAL");
+
+    // HARD01-035: a string resource whose value happens to be all digits
+    // ("1541") must not be coerced to the integer 1541 merely because it
+    // looks numeric; the resource's declared type governs the payload.
+    const labelResult = await backend.configSet("VICE", "DriveLabel", "1541");
+    assert.equal(labelResult.details.value, "1541");
+    assert.equal(typeof labelResult.details.value, "string");
+    const labelSetCall = calls.find((c) => c[0] === "resourceSet" && c[1] === "DriveLabel");
+    assert.equal(typeof labelSetCall[2], "string");
+    assert.equal(labelSetCall[2], "1541");
 
     const batch = await backend.configBatchUpdate({
       VICE: { WarpMode: "1", BadSetting: "oops" },
@@ -1162,6 +1255,36 @@ test("device: ViceBackend unit branches", async () => {
     };
     assert.equal(await backend.ping(), true);
     assert.equal(pingAttempts, 2);
+  });
+});
+
+test("HARD01-026 ViceBackend.reset reports failure with readiness diagnostics when BASIC never reaches READY", async () => {
+  await withEnv({
+    VICE_TEST_TARGET: "mock",
+    VICE_HOST: "127.0.0.1",
+    VICE_PORT: "6511",
+    C64BRIDGE_VICE_RESET_TIMEOUT_MS: "80",
+  }, async () => {
+    const backend = new ViceBackend({ host: "localhost", port: "6502" });
+    const fakeClient = {
+      async info() {},
+      async memGet() {
+        // Pointers never settle at $0801: reset must not report success.
+        return Buffer.alloc(8);
+      },
+      async memSet() {},
+      async reset() {},
+      async keyboardFeed() {},
+      async exitMonitor() {},
+      close() {},
+    };
+    backend.withClient = async (fn) => fn(fakeClient);
+
+    const result = await backend.reset();
+    assert.equal(result.success, false);
+    assert.equal(result.details.readiness.pointersOk, false);
+    assert.equal(result.details.readiness.promptOk, false);
+    assert.match(result.details.message, /BASIC READY was not observed/);
   });
 });
 

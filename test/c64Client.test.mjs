@@ -11,6 +11,7 @@ import {
   buildCommodoreBitmapBasicProgram,
   buildEpsonBitmapBasicProgram,
   buildCommodoreDllBasicProgram,
+  buildPetsciiScreenBasic,
 } from "../src/c64Client.js";
 import { basicToPrg } from "../src/tools/translation/basicTokenizer.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
@@ -202,9 +203,18 @@ test("C64Client against mock server", async (t) => {
     assert.deepEqual(Array.from(mock.state.lastPrg), Array.from(expectedPrg));
   });
 
-  await t.test("buildPrinterBasicProgram splits long lines and escapes quotes", () => {
+  await t.test("HARD01-007 buildPrinterBasicProgram uses CHR$(34) for quotes", () => {
     const src = buildPrinterBasicProgram({ text: 'A"B' });
-    assert.ok(src.includes('PRINT#1,"A""B"'));
+    assert.ok(src.includes('PRINT#1,"A";CHR$(34);"B"'));
+    assert.equal(src.includes('""B'), false);
+  });
+
+  await t.test("HARD01-008 buildPetsciiScreenBasic actually waits for a key instead of falling through to READY.", () => {
+    const src = buildPetsciiScreenBasic({ text: "HELLO" });
+    // The wait line must branch back to itself while no key is pending, and
+    // only fall through (to END) once a key has actually been pressed.
+    assert.match(src, /30 GETA\$:IFA\$=""THEN30/);
+    assert.equal(/30 GETA\$:IFA\$<>""THEN/.test(src), false, "must not use the old non-blocking condition");
   });
 
   await t.test("Commodore BIM builder sets bit7 and emits DATA lines", () => {
@@ -372,11 +382,23 @@ test("C64Client against mock server", async (t) => {
     assert.equal(mock.state.lastWrite.bytes[0], 0x00);
   });
 
+  await t.test("HARD01-032 A4 (440Hz) on PAL resolves to the literal SID register value $1D45 (7493), not the old 2^16 formula", async () => {
+    const client = new C64Client(mock.baseUrl);
+    await client.sidNoteOn({ voice: 1, note: "A4", waveform: "tri", attack: 1, decay: 7, sustain: 15, release: 0, system: "PAL" });
+    assert.equal(mock.state.lastWrite.address, 0xd400);
+    const lo = mock.state.lastWrite.bytes[0];
+    const hi = mock.state.lastWrite.bytes[1];
+    // 24-bit phase accumulator: round(440 * 2^24 / 985248) = 7493 = $1D45.
+    assert.equal(lo, 0x45);
+    assert.equal(hi, 0x1d);
+    assert.equal((hi << 8) | lo, 7493);
+  });
+
   await t.test("SID frequency bytes are correct for PAL vs NTSC", async () => {
     const client = new C64Client(mock.baseUrl);
     function expectFreqBytes(hz, system) {
       const phi2 = system === "PAL" ? 985_248 : 1_022_727;
-      const value = Math.round((hz * 65536) / phi2) & 0xffff;
+      const value = Math.round((hz * 16777216) / phi2) & 0xffff;
       const lo = value & 0xff;
       const hi = (value >> 8) & 0xff;
       return { lo, hi };
@@ -428,6 +450,38 @@ test("C64Client against mock server", async (t) => {
     const result = await client.runPrg(prg);
     assert.equal(result.success, true);
     assert.equal(mock.state.runCount, before + 1);
+  });
+
+  await t.test("HARD01-018 uploadAndRunAsm loads the assembled PRG without running it and enters via a typed SYS to the real entry point", async () => {
+    const before = mock.state.loadCount;
+    // The tool's own published example.
+    const result = await client.uploadAndRunAsm(".org $0801\nstart: lda #$01\n sta $0400\n rts");
+    assert.equal(result.success, true);
+    assert.equal(result.details.entryAddress, 0x0801);
+
+    // Loaded (not LOAD+RUN): the firmware :load_prg endpoint was used, not
+    // :run_prg, and the code landed at its own address in emulated memory.
+    assert.equal(mock.state.loadCount, before + 1);
+    assert.equal(mock.state.memory[0x0801], 0xa9); // LDA #imm opcode
+    assert.equal(mock.state.memory[0x0802], 0x01);
+
+    // Entered via a typed SYS to the real entry point, never a bare RUN.
+    const sysWrite = mock.state.writeLog.slice().reverse().find((entry) => entry.address === 0x0277);
+    assert.ok(sysWrite, "expected a write to the KERNAL keyboard buffer");
+    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2049\r");
+  });
+
+  await t.test("HARD01-018 uploadAndRunAsm keeps a non-$0801 origin intact instead of corrupting BASIC pointers", async () => {
+    const before = mock.state.loadCount;
+    const result = await client.uploadAndRunAsm(".org $C000\nstart: lda #$07\n sta $D020\n rts");
+    assert.equal(result.success, true);
+    assert.equal(result.details.entryAddress, 0xC000);
+    assert.equal(mock.state.loadCount, before + 1);
+    assert.equal(mock.state.memory[0xC000], 0xa9);
+
+    const sysWrite = mock.state.writeLog.slice().reverse().find((entry) => entry.address === 0x0277);
+    assert.ok(sysWrite, "expected a write to the KERNAL keyboard buffer");
+    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS49152\r");
   });
 
   await t.test("reset returns success", async () => {
@@ -668,8 +722,8 @@ test("C64Client backend selection and switching", async (t) => {
 
     await withConfigScenario(
       {
-        repoConfig: { c64u: { baseUrl: c64u.baseUrl } },
-        homeConfig: { vice: { host: "127.0.0.1", port: vice.port } },
+        repoConfig: { c64u: { baseUrl: c64u.baseUrl }, vice: { host: "127.0.0.1", port: vice.port } },
+        homeConfig: null,
         mode: "vice",
       },
       async () => {
@@ -708,6 +762,48 @@ test("C64Client backend selection and switching", async (t) => {
     );
   });
 
+  await t.test("HARD01-016 a pinned facade keeps write/read on the original backend across a mid-flight switchBackend", async () => {
+    const c64u = await startMockC64Server();
+    const vice = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+    t.after(async () => {
+      await Promise.all([c64u.close(), vice.stop()]);
+    });
+
+    await withConfigScenario(
+      {
+        repoConfig: { c64u: { baseUrl: c64u.baseUrl }, vice: { host: "127.0.0.1", port: vice.port } },
+        homeConfig: null,
+        mode: "vice",
+      },
+      async () => {
+        const client = new C64Client("http://unused.local", { forceC64uFacade: false });
+        assert.equal(await client.getActiveBackendType(), "vice");
+
+        const pinnedFacade = await client.pinFacade();
+
+        // A concurrent select_backend call must not affect steps already
+        // holding a pinned facade snapshot.
+        client.switchBackend("c64u");
+        assert.equal(await client.getActiveBackendType(), "c64u");
+
+        const writeResult = await client.writeMemory("$C000", "$AA", pinnedFacade);
+        assert.equal(writeResult.success, true);
+
+        const readResult = await client.readMemory("$C000", "1", pinnedFacade);
+        assert.equal(readResult.success, true);
+        assert.equal(readResult.data, "$AA");
+
+        // The c64u mock must never have seen any of the pinned operations.
+        assert.ok(!c64u.state.lastRequest);
+
+        // A fresh, unpinned call now correctly targets the switched-to backend.
+        const c64uInfo = await client.info();
+        assert.ok(c64uInfo && typeof c64uInfo === "object");
+        assert.match(c64u.state.lastRequest?.url ?? "", /\/v1\/info$/);
+      },
+    );
+  });
+
   await t.test("vice backend stays lazy until a vice-routed request needs it", async () => {
     const c64u = await startMockC64Server();
     const vice = await startViceMockServer({ host: "127.0.0.1", port: 0 });
@@ -717,8 +813,8 @@ test("C64Client backend selection and switching", async (t) => {
 
     await withConfigScenario(
       {
-        repoConfig: { c64u: { baseUrl: c64u.baseUrl } },
-        homeConfig: { vice: { host: "127.0.0.1", port: vice.port } },
+        repoConfig: { c64u: { baseUrl: c64u.baseUrl }, vice: { host: "127.0.0.1", port: vice.port } },
+        homeConfig: null,
         mode: "c64u",
       },
       async () => {

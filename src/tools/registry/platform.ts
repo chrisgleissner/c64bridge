@@ -1,4 +1,5 @@
 import { describePlatformCapabilities, type PlatformId } from "../../platform.js";
+import { cancelGeneratedSidPlayback } from "../audio.js";
 import { debugModuleGroup as debugModule } from "../debug.js";
 import { viceModuleGroup as viceModule } from "../vice.js";
 import { jsonResult } from "../responses.js";
@@ -94,6 +95,10 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
       };
     }
 
+    // A generated arpeggio is pinned to the facade it started on, but a
+    // switch is still the documented cue to stop it rather than let it keep
+    // playing to a backend the caller no longer intends to drive.
+    cancelGeneratedSidPlayback();
     ctx.client.switchBackend(backend);
     ctx.setPlatform(backend);
 

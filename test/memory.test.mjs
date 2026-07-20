@@ -35,6 +35,7 @@ function createMockClient(overrides = {}) {
     },
     async pause() { return { success: true }; },
     async resume() { return { success: true }; },
+    async pinFacade() { return { type: "mock" }; },
     ...overrides,
   };
 }
@@ -424,6 +425,55 @@ testC64uOnly("write verifies written bytes when verify flag is set", async () =>
   assert.ok(events.includes("resume"));
 });
 
+testC64uOnly("HARD01-016 write-verify pins the facade so a concurrent backend switch cannot retarget an in-flight step", async () => {
+  const events = [];
+  let activeFacadeType = "vice";
+  const viceFacade = { type: "vice" };
+  const c64uFacade = { type: "c64u" };
+
+  const ctx = {
+    client: createMockClient({
+      async pinFacade() {
+        return activeFacadeType === "vice" ? viceFacade : c64uFacade;
+      },
+      async pause(facade) {
+        events.push({ op: "pause", facade: facade?.type });
+        // Simulate a concurrent c64_select_backend firing between steps.
+        activeFacadeType = "c64u";
+        return { success: true };
+      },
+      readCount: 0,
+      async readMemory(address, length, facade) {
+        this.readCount += 1;
+        events.push({ op: `read-${this.readCount}`, facade: facade?.type });
+        return {
+          success: true,
+          data: this.readCount === 1 ? "$0000" : "$AABB",
+          details: { address: "0400", length: Number(length) },
+        };
+      },
+      async writeMemory(address, bytes, facade) {
+        events.push({ op: "write", facade: facade?.type });
+        return { success: true, details: { address: "0400", length: 2 } };
+      },
+      async resume(facade) {
+        events.push({ op: "resume", facade: facade?.type });
+        return { success: true };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AABB", verify: true }, ctx);
+
+  assert.equal(res.metadata?.success, true);
+  assert.equal(res.metadata?.verified, true);
+  // Every step must use the facade pinned at the start of the invocation
+  // (vice), never the one made active by the mid-flight switch (c64u).
+  assert.ok(events.every((event) => event.facade === "vice"), JSON.stringify(events));
+  assert.deepEqual(events.map((event) => event.op), ["pause", "read-1", "write", "read-2", "resume"]);
+});
+
 testC64uOnly("write aborts when expected bytes mismatch and abortOnMismatch is true", async () => {
   const events = [];
   const ctx = {
@@ -567,6 +617,36 @@ testC64uOnly("write verification fails when pause fails", async () => {
 
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
+});
+
+testC64uOnly("HARD01-017 a successful write-verify that cannot resume the machine reports failure, not a clean success", async () => {
+  const ctx = {
+    client: createMockClient({
+      readCount: 0,
+      async pause() { return { success: true }; },
+      async resume() { return { success: false, details: "firmware timeout" }; },
+      async readMemory(_address, length) {
+        this.readCount += 1;
+        if (this.readCount === 1) {
+          return { success: true, data: "$0000", details: { address: "0400", length: Number(length) } };
+        }
+        return { success: true, data: "$AABB", details: { address: "0400", length: Number(length) } };
+      },
+      async writeMemory() {
+        return { success: true, details: { address: "0400", length: 2 } };
+      },
+    }),
+    logger: createLogger(),
+  };
+
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AABB", verify: true }, ctx);
+
+  // The write itself was verified successfully, but the machine could not
+  // be resumed: this must surface as an actionable failure, not success.
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+  assert.equal(res.metadata?.error?.details?.machinePaused, true);
+  assert.ok(String(res.metadata?.error?.details?.recovery ?? "").includes("resume"));
 });
 
 testC64uOnly("write verification handles malformed firmware reads and writeback failures", async () => {

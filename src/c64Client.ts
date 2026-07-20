@@ -65,6 +65,22 @@ export interface C64ClientOptions {
   forceC64uFacade?: boolean;
 }
 
+/** Raised when the KERNAL keyboard buffer did not drain before another chunk
+ * could safely be queued. Callers must report this as partial delivery. */
+export class KeyboardQueueDrainTimeoutError extends Error {
+  readonly delivered: number;
+  readonly requested: number;
+  readonly timeoutMs: number;
+
+  constructor(delivered: number, requested: number, timeoutMs: number) {
+    super(`Keyboard queue did not drain after ${timeoutMs}ms; delivered ${delivered} of ${requested} byte(s). Resume the machine and retry the remaining input.`);
+    this.name = "KeyboardQueueDrainTimeoutError";
+    this.delivered = delivered;
+    this.requested = requested;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export type NativeEndpointAvailability = "available" | "unavailable" | "unknown";
 
 export interface NativeEndpointCapabilities {
@@ -94,6 +110,34 @@ function menuMatrixIncludes(matrix: Uint8Array, expected: string): boolean {
   const normalizedExpected = expected.replace(/\s+/g, " ").toUpperCase();
   return [screenCodesToAscii(characters), petsciiToAscii(characters)]
     .some((text) => text.replace(/\s+/g, " ").toUpperCase().includes(normalizedExpected));
+}
+
+function selectedMenuRow(matrix: Uint8Array): number | null {
+  // The firmware contract exposes a 40x25 character matrix followed by its
+  // colour matrix. A selected menu row is rendered with one uniform colour
+  // distinct from the normal rows. Reject malformed/ambiguous matrices.
+  if (matrix.length < 2_000) return null;
+  const colours = matrix.subarray(1_000, 2_000);
+  const rows: number[] = [];
+  for (let row = 0; row < 25; row += 1) {
+    const cells = colours.subarray(row * 40, row * 40 + 40);
+    if (cells.length === 40 && cells.every((value) => value === cells[0])) rows.push(row);
+  }
+  if (rows.length === 0) return null;
+  const normal = new Map<number, number>();
+  for (const row of rows) normal.set(colours[row * 40]!, (normal.get(colours[row * 40]!) ?? 0) + 1);
+  const [colour, count] = [...normal.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+  if (colour === undefined || count === undefined) return null;
+  const selected = rows.filter((row) => colours[row * 40] !== colour);
+  return selected.length === 1 ? selected[0]! : null;
+}
+
+function selectedMenuRowIncludes(matrix: Uint8Array, expected: string): boolean {
+  const row = selectedMenuRow(matrix);
+  if (row === null) return false;
+  const text = [screenCodesToAscii(matrix.subarray(row * 40, row * 40 + 40)), petsciiToAscii(matrix.subarray(row * 40, row * 40 + 40))]
+    .map((value) => value.replace(/\s+/g, " ").toUpperCase());
+  return text.some((value) => value.includes(expected.replace(/\s+/g, " ").toUpperCase()));
 }
 
 function isMissingEndpoint(error: unknown): boolean {
@@ -246,6 +290,16 @@ export class C64Client {
     return this.getActiveBackendType();
   }
 
+  /**
+   * Snapshot the facade currently active for this invocation. A multi-step
+   * flow (pause/read/write/resume, or repeated polling) must resolve the
+   * facade once and reuse that same instance for every step, so a concurrent
+   * `switchBackend` cannot retarget an operation already underway.
+   */
+  async pinFacade(): Promise<C64Facade> {
+    return this.facadePromise;
+  }
+
   async getActiveBackendType(): Promise<DeviceType> {
     await this.initPromise;
     return this.activeType;
@@ -271,6 +325,13 @@ export class C64Client {
         .then(() => "available" as const)
         .catch((error) => isMissingEndpoint(error) ? "unavailable" as const : "unknown" as const);
       this.machineInputCapabilityProbes.set(facade.type, probe);
+      // A transport error is not a capability result. Keep confirmed states,
+      // but make a later resource read retry rather than poisoning the cache.
+      void probe.then((result) => {
+        if (result === "unknown" && this.machineInputCapabilityProbes.get(facade.type) === probe) {
+          this.machineInputCapabilityProbes.delete(facade.type);
+        }
+      });
     }
     return { machineInput: await probe, machineMenuScreen: "unknown" };
   }
@@ -621,9 +682,36 @@ export class C64Client {
     }
   }
 
+  /**
+   * Assemble, load, and execute a pure machine-code program. Loading a PRG
+   * with LOAD+RUN (the generic path used by {@link runPrg}) is only correct
+   * for tokenized BASIC text: RUN misinterprets raw 6510 opcodes as BASIC
+   * tokens, and setting BASIC's TXTTAB/VARTAB/ARYTAB/STREND to the code
+   * range corrupts the workspace. Instead this loads the assembled bytes
+   * without running them, then types `SYS <entry>` to transfer control
+   * directly to the first assembled instruction, whatever its address.
+   */
   async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
-    const prg = assemblyToPrg(program);
-    return this.runPrg(prg);
+    try {
+      const prg = assemblyToPrg(program);
+      if (prg.length < 2) {
+        return { success: false, details: { message: "Assembled program produced no output" } };
+      }
+      const entryAddress = prg.readUInt16LE(0);
+      const facade = await this.facadePromise;
+      const loadResult = await facade.loadPrg(prg);
+      if (!loadResult.success) {
+        return { success: false, details: loadResult.details };
+      }
+      const sysCommand = Buffer.from(`SYS${entryAddress}\r`, "ascii");
+      const injectResult = await this.injectKeyboardQueue(sysCommand, { pinnedFacade: facade });
+      return {
+        success: true,
+        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered },
+      };
+    } catch (error) {
+      return { success: false, details: this.normaliseError(error) };
+    }
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
@@ -740,14 +828,14 @@ export class C64Client {
     }
   }
 
-  async readMemory(addressInput: string, lengthInput: string): Promise<MemoryReadResult> {
+  async readMemory(addressInput: string, lengthInput: string, pinnedFacade?: C64Facade): Promise<MemoryReadResult> {
     try {
       const resolved = resolveAddressSymbol(addressInput);
       const address = resolved ?? this.parseNumeric(addressInput);
       const length = this.parseNumeric(lengthInput);
       validateMemoryRange(address, length);
 
-      const rawBytes = await this.readMemoryRaw(address, length);
+      const rawBytes = await this.readMemoryRaw(address, length, pinnedFacade);
       const bytes = rawBytes.slice(0, length);
 
       return {
@@ -766,7 +854,7 @@ export class C64Client {
     }
   }
 
-  async writeMemory(addressInput: string, bytesInput: string): Promise<RunBasicResult> {
+  async writeMemory(addressInput: string, bytesInput: string, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
       const resolved = resolveAddressSymbol(addressInput);
       const address = resolved ?? this.parseNumeric(addressInput);
@@ -776,7 +864,7 @@ export class C64Client {
       // Prefer PUT with hex data for up to 128 bytes; fall back to POST binary for larger writes
       const addrStr = this.formatAddress(address);
       try {
-        const facade = await this.facadePromise;
+        const facade = pinnedFacade ?? await this.facadePromise;
         await facade.writeMemory(address, dataBuffer);
         return {
           success: true,
@@ -826,10 +914,10 @@ export class C64Client {
 
   // --- SID/Music helpers ---
 
-  async sidSetVolume(volume: number): Promise<RunBasicResult> {
+  async sidSetVolume(volume: number, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     const clamped = Math.max(0, Math.min(15, Math.floor(volume)));
     const byte = Buffer.from([clamped]);
-    return this.writeMemory("$D418", this.bytesToHex(byte));
+    return this.writeMemory("$D418", this.bytesToHex(byte), pinnedFacade);
   }
 
   async sidReset(hard = false): Promise<RunBasicResult> {
@@ -864,7 +952,7 @@ export class C64Client {
     decay?: number; // 0..15
     sustain?: number; // 0..15
     release?: number; // 0..15
-  }): Promise<RunBasicResult> {
+  }, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     const voice = options.voice ?? 1;
     if (voice < 1 || voice > 3) {
       return { success: false, details: { message: "Voice must be 1..3" } };
@@ -897,7 +985,7 @@ export class C64Client {
     const base = 0xd400 + (voice - 1) * 7;
     const bytes = Buffer.from([freqLo, freqHi, pwLo, pwHi, ctrl, ad, sr]);
     try {
-      const facade = await this.facadePromise;
+      const facade = pinnedFacade ?? await this.facadePromise;
       await facade.writeMemory(base, bytes);
       return { success: true };
     } catch (error) {
@@ -905,13 +993,13 @@ export class C64Client {
     }
   }
 
-  async sidNoteOff(voice: 1 | 2 | 3): Promise<RunBasicResult> {
+  async sidNoteOff(voice: 1 | 2 | 3, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     if (voice < 1 || voice > 3) {
       return { success: false, details: { message: "Voice must be 1..3" } };
     }
     const ctrlAddr = 0xd400 + (voice - 1) * 7 + 4;
     try {
-      const facade = await this.facadePromise;
+      const facade = pinnedFacade ?? await this.facadePromise;
       await facade.writeMemory(ctrlAddr, Buffer.from([0x00]));
       return { success: true };
     } catch (error) {
@@ -935,24 +1023,24 @@ export class C64Client {
     return facade.info();
   }
 
-  async pause(): Promise<RunBasicResult> {
+  async pause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
+      if (!pinnedFacade && await this.shouldUseC64uMockBypass()) {
         const res = await this.api.v1.machinePauseUpdate(":pause");
         return { success: true, details: res.data };
       }
-      const facade = await this.facadePromise;
+      const facade = pinnedFacade ?? await this.facadePromise;
       return await facade.pause();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async resume(): Promise<RunBasicResult> {
+  async resume(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
+      if (!pinnedFacade && await this.shouldUseC64uMockBypass()) {
         const res = await this.api.v1.machineResumeUpdate(":resume");
         return { success: true, details: res.data };
       }
-      const facade = await this.facadePromise; return await facade.resume();
+      const facade = pinnedFacade ?? await this.facadePromise; return await facade.resume();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
@@ -966,8 +1054,12 @@ export class C64Client {
    * VICE is restarted when it is managed by c64bridge.
    */
   async powerCycle(): Promise<RunBasicResult> {
+    let menuOpened = false;
+    let cleanup: RunBasicResult | undefined;
+    let pinnedFacade: C64Facade | undefined;
     try {
       const facade = await this.facadePromise;
+      pinnedFacade = facade;
       if (facade.type === "u2") {
         const result = await facade.reboot();
         return { ...result, details: { strategy: "reboot", result: result.details } };
@@ -993,6 +1085,7 @@ export class C64Client {
       if (!menuResult.success) {
         throw new Error("Unable to open the Ultimate menu for power cycling");
       }
+      menuOpened = true;
       const initial = await this.readVerifiedMenuScreen(facade, "open Ultimate menu");
       await this.requirePowerCycleInput(facade, ["f1"]);
       await this.readVerifiedMenuScreen(facade, "open Tool Menu", "TOOL MENU", initial);
@@ -1007,9 +1100,15 @@ export class C64Client {
           current,
         );
       }
+      if (!selectedMenuRowIncludes(current, "POWER CYCLE")) {
+        throw new Error("Unable to verify that POWER CYCLE is the selected Tool Menu item; final RETURN was not sent.");
+      }
       await this.requirePowerCycleInput(facade, ["return"]);
       return { success: true, details: { strategy: "tool_menu", verifiedMenu: "Tool Menu", selectedItem: "Power Cycle" } };
     } catch (error) {
+      if (menuOpened) {
+        try { cleanup = await pinnedFacade?.menuButton() ?? { success: false, details: "No facade available for menu cleanup" }; } catch (cleanupError) { cleanup = { success: false, details: this.normaliseError(cleanupError) }; }
+      }
       if (isMissingEndpoint(error)) {
         return {
           success: false,
@@ -1020,7 +1119,7 @@ export class C64Client {
           },
         };
       }
-      return { success: false, details: this.normaliseError(error) };
+      return { success: false, details: { error: this.normaliseError(error), cleanup: cleanup ?? { success: false, details: "menu cleanup was not attempted" } } };
     }
   }
 
@@ -1837,10 +1936,10 @@ export class C64Client {
    * raw binary bytes or JSON with a base64 payload.
    * Public to allow advanced polling and monitoring use cases.
    */
-  async readMemoryRaw(address: number, length: number): Promise<Uint8Array> {
+  async readMemoryRaw(address: number, length: number, pinnedFacade?: C64Facade): Promise<Uint8Array> {
     validateMemoryRange(address, length);
     try {
-      const facade = await this.facadePromise;
+      const facade = pinnedFacade ?? await this.facadePromise;
       return await facade.readMemory(address, length);
     } catch (facadeError) {
       if (!(facadeError instanceof Error) || (facadeError as any).code !== "UNSUPPORTED") {
@@ -1873,11 +1972,11 @@ export class C64Client {
    * Public so tools that need to drive cross-platform machine state (e.g.
    * keyboard-buffer injection) can avoid backend-specific paths.
    */
-  async writeMemoryRaw(address: number, bytes: Uint8Array | Buffer): Promise<void> {
+  async writeMemoryRaw(address: number, bytes: Uint8Array | Buffer, pinnedFacade?: C64Facade): Promise<void> {
     if (!Number.isInteger(address) || address < 0 || address > 0xffff) {
       throw new Error("Address must be within 0x0000 - 0xFFFF");
     }
-    const facade = await this.facadePromise;
+    const facade = pinnedFacade ?? await this.facadePromise;
     const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
     validateMemoryRange(address, buf.length);
     await facade.writeMemory(address, buf);
@@ -1903,22 +2002,24 @@ export class C64Client {
       readonly chunkSize?: number;
       readonly drainPollMs?: number;
       readonly drainTimeoutMs?: number;
+      readonly pinnedFacade?: C64Facade;
     },
-  ): Promise<void> {
+  ): Promise<{ delivered: number }> {
     const data = Buffer.isBuffer(bytes)
       ? bytes
       : Buffer.from(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes));
     if (data.length === 0) {
-      return;
+      return { delivered: 0 };
     }
     const chunkSize = Math.max(1, Math.min(10, options?.chunkSize ?? 10));
     const pollMs = Math.max(1, options?.drainPollMs ?? 8);
     const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
 
-    const facade = await this.facadePromise;
+    const facade = options?.pinnedFacade ?? await this.facadePromise;
     const KEYD = 0x0277; // KERNAL keyboard buffer base
     const NDX = 0x00C6;  // pending byte count
 
+    let delivered = 0;
     for (let offset = 0; offset < data.length; offset += chunkSize) {
       const slice = data.subarray(offset, Math.min(data.length, offset + chunkSize));
       // Write the bytes into the queue first so KERNAL never reads a stale
@@ -1926,18 +2027,24 @@ export class C64Client {
       await facade.writeMemory(KEYD, Buffer.from(slice));
       await facade.writeMemory(NDX, Buffer.from([slice.length]));
 
-      // Drain: wait for KERNAL to consume the queue. If the machine is paused
-      // or otherwise not running, give up after the timeout and continue —
-      // higher layers can decide whether that is a failure for their context.
+      // Drain before another write.  Overwriting a non-empty KERNAL queue loses
+      // user input, so a timeout is an explicit partial-delivery failure.
       const drainStart = Date.now();
+      let drained = false;
       while (Date.now() - drainStart < totalTimeoutMs) {
         const ndx = await facade.readMemory(NDX, 1);
         if ((ndx[0] ?? 0) === 0) {
+          drained = true;
           break;
         }
         await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
       }
+      delivered += slice.length;
+      if (!drained) {
+        throw new KeyboardQueueDrainTimeoutError(delivered, data.length, totalTimeoutMs);
+      }
     }
+    return { delivered };
   }
 
     async viceExitMonitor(): Promise<void> {
@@ -1951,6 +2058,10 @@ export class C64Client {
     async viceMemSet(address: number, bytes: Uint8Array | Buffer): Promise<void> {
       const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
       await this.withViceMonitor((client) => client.memSet(address, buf));
+    }
+
+    async viceJoyportSet(port: 1 | 2, activeLowMask: number): Promise<void> {
+      await this.withViceMonitor((client) => client.joyportSet(port, activeLowMask));
     }
 
     async viceMemGet(address: number, length: number): Promise<Buffer> {
@@ -2189,7 +2300,7 @@ export class C64Client {
 
   private hzToSidFrequency(hz: number, system: "PAL" | "NTSC" = "PAL"): number {
     const phi2 = system === "PAL" ? 985_248 : 1_022_727;
-    const value = Math.round((hz * 65536) / phi2);
+    const value = Math.round((hz * 16_777_216) / phi2);
     // Clamp to 16-bit
     return Math.max(0, Math.min(0xffff, value));
   }
@@ -2404,7 +2515,7 @@ function buildSingleSpriteProgram(opts: {
   return assemblyToPrg(source, { fileName: "sprite_gen.asm", loadAddress: 0x0801 });
 }
 
-function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; backgroundColor?: number }): string {
+export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; backgroundColor?: number }): string {
   const border = toByte(opts.borderColor ?? 6); // default blue-ish
   const bg = toByte(opts.backgroundColor ?? 0); // default black
   // Clear screen, set colours, print text starting at 1,1
@@ -2413,7 +2524,7 @@ function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; bac
   const program = [
     `10 POKE 53280,${border}:POKE 53281,${bg}:PRINT CHR$(147)`,
     `20 PRINT "${sanitized}"`,
-    `30 GETA$:IFA$<>""THENEND:REM wait for key then end`,
+    `30 GETA$:IFA$=""THEN30:END:REM wait for key then end`,
   ].join("\n");
   return program;
 }
@@ -2447,11 +2558,11 @@ export function buildPrinterBasicProgram(opts: {
       ln += 10;
       continue;
     }
-    const chunks = chunkString(logical, 60);
+    const chunks = chunkString(logical, 45);
     for (let i = 0; i < chunks.length; i += 1) {
-      const chunk = escapeBasicQuotes(chunks[i]);
+      const chunk = basicStringExpression(chunks[i]);
       const tail = i < chunks.length - 1 ? ";" : ""; // avoid CR between chunks within the same logical line
-      lines.push(`${ln} PRINT#1,"${chunk}"${tail}`);
+      lines.push(`${ln} PRINT#1,${chunk}${tail}`);
       ln += 10;
     }
   }
@@ -2479,9 +2590,10 @@ function chunkString(input: string, maxLen: number): string[] {
   return parts;
 }
 
-function escapeBasicQuotes(input: string): string {
-  // In Commodore BASIC, embed a double quote by doubling it
-  return input.replace(/"/g, '""');
+function basicStringExpression(input: string): string {
+  // BASIC V2 has no doubled-quote escaping. Splice literal quote characters
+  // through CHR$(34), including leading/trailing/consecutive quote cases.
+  return input.split('"').map((part) => `"${part}"`).join(";CHR$(34);");
 }
 
 export function buildCommodoreBitmapBasicProgram(opts: {

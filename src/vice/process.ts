@@ -21,6 +21,7 @@ export interface ViceProcessHandle {
   readonly port: number;
   readonly process: ChildProcess;
   stop(): Promise<void>;
+  stopSync(): void;
 }
 
 const DEFAULT_DISPLAY = ":99";
@@ -404,11 +405,21 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     }
   };
 
+  const stopSync = (): void => {
+    for (const process of [child, xvfb]) {
+      if (!process || process.exitCode !== null || process.signalCode !== null) continue;
+      try { process.kill("SIGTERM"); } catch {}
+      if (process.exitCode === null && process.signalCode === null) {
+        try { process.kill("SIGKILL"); } catch {}
+      }
+    }
+  };
+
   child.once("exit", async () => {
     await terminateProcess(xvfb, "SIGTERM", 0);
   });
 
-  return { host: options.host, port: options.port, process: child, stop };
+  return { host: options.host, port: options.port, process: child, stop, stopSync };
 }
 
 function isIgnorableSocketDirError(error: unknown): boolean {

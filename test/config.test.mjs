@@ -363,7 +363,40 @@ test("loadConfig supports VICE prewarming via config and env override", (t) => {
   });
 });
 
-test("loadConfig rethrows invalid JSON from configured path", (t) => {
+test("HARD01-006 a project-cwd .c64bridge.json is honoured from a foreign (installed-package-style) working directory", (t) => {
+  const originalEnv = process.env.C64BRIDGE_CONFIG;
+  const originalHome = process.env.HOME;
+  const originalCwd = process.cwd();
+
+  // Simulate the documented npm-installed layout: the server's own module
+  // lives under node_modules, but the project (cwd) has its own config.
+  const projectDir = mkdtempSync(path.join(tmpdir(), "c64-project-cwd-"));
+  const homeDir = mkdtempSync(path.join(tmpdir(), "c64-home-cwd-"));
+  writeFileSync(path.join(projectDir, ".c64bridge.json"), JSON.stringify({ c64u: { host: "project.example" } }, null, 2), "utf8");
+  writeFileSync(path.join(homeDir, ".c64bridge.json"), JSON.stringify({ c64u: { host: "home.example" } }, null, 2), "utf8");
+
+  delete process.env.C64BRIDGE_CONFIG;
+  process.env.HOME = homeDir;
+  process.chdir(projectDir);
+  __resetConfigCacheForTests();
+
+  try {
+    const config = loadConfig();
+    assert.equal(config.c64_host, "project.example");
+    assert.equal(config.baseUrl, "http://project.example");
+  } finally {
+    process.chdir(originalCwd);
+    __resetConfigCacheForTests();
+    if (originalEnv === undefined) delete process.env.C64BRIDGE_CONFIG;
+    else process.env.C64BRIDGE_CONFIG = originalEnv;
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(homeDir, { recursive: true, force: true });
+  }
+});
+
+test("HARD01-027 loadConfig warns and falls back from invalid JSON", (t) => {
   const originalEnv = process.env.C64BRIDGE_CONFIG;
   const { dir, file } = writeTempConfig({ c64u: { host: "placeholder" } });
   writeFileSync(file, "{ invalid json\n", "utf8");
@@ -371,7 +404,7 @@ test("loadConfig rethrows invalid JSON from configured path", (t) => {
   process.env.C64BRIDGE_CONFIG = file;
   __resetConfigCacheForTests();
 
-  assert.throws(() => loadConfig(), /Unexpected token|Expected property name|JSON/);
+  assert.doesNotThrow(() => loadConfig());
 
   t.after(() => {
     __resetConfigCacheForTests();

@@ -5,7 +5,6 @@
 import axios from "axios";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
@@ -13,6 +12,7 @@ import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
+import { loadConfig } from "./config.js";
 
 export type DeviceType = "c64u" | "u2" | "vice";
 
@@ -35,6 +35,8 @@ export interface C64Facade {
   ping(): Promise<boolean>;
   // Program runners
   runPrg(prg: Uint8Array | Buffer): Promise<RunResult>;
+  /** Load PRG bytes into memory without starting them. */
+  loadPrg(prg: Uint8Array | Buffer): Promise<RunResult>;
   loadPrgFile(path: string): Promise<RunResult>;
   runPrgFile(path: string): Promise<RunResult>;
   runCrtFile(path: string): Promise<RunResult>;
@@ -177,40 +179,12 @@ function coalesceMemoryWriteBlocks(
 }
 
 function readConfigFile(): C64BridgeConfigFile | null {
-  const envPath = process.env.C64BRIDGE_CONFIG;
-  const candidates: string[] = [];
-  if (envPath) candidates.push(envPath);
-  // Repo root
-  try {
-    const here = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", ".c64bridge.json");
-    candidates.push(here);
-  } catch {}
-  const home = process.env.HOME || os.homedir();
-  if (home) candidates.push(path.join(home, ".c64bridge.json"));
-  let foundCandidate = false;
-  const merged: C64BridgeConfigFile = {};
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) {
-        foundCandidate = true;
-        const text = fs.readFileSync(p, "utf8");
-        const json = JSON.parse(text);
-        if (!merged.c64u && json?.c64u && typeof json.c64u === "object" && !Array.isArray(json.c64u)) {
-          merged.c64u = json.c64u as C64uConfig;
-        }
-        if (!merged.u2 && json?.u2 && typeof json.u2 === "object" && !Array.isArray(json.u2)) {
-          merged.u2 = json.u2 as C64uConfig;
-        }
-        if (!merged.vice && json?.vice && typeof json.vice === "object" && !Array.isArray(json.vice)) {
-          merged.vice = json.vice as ViceConfig;
-        }
-        if ((merged.c64u || merged.u2) && merged.vice) {
-          break;
-        }
-      }
-    } catch {}
-  }
-  return foundCandidate ? merged : null;
+  const sections = loadConfig().backendConfig;
+  return Object.keys(sections).length === 0 ? null : {
+    c64u: sections.c64u as C64uConfig | undefined,
+    u2: sections.u2 as C64uConfig | undefined,
+    vice: sections.vice as ViceConfig | undefined,
+  };
 }
 
 class C64uBackend implements C64Facade {
@@ -261,6 +235,15 @@ class C64uBackend implements C64Facade {
 
   getBaseUrl(): string { return this.baseUrl; }
 
+  private actionResult(data: unknown): RunResult {
+    const errors = data && typeof data === "object" && Array.isArray((data as { errors?: unknown }).errors)
+      ? (data as { errors: unknown[] }).errors.filter((error) => error !== undefined && error !== null && String(error).trim() !== "")
+      : [];
+    return errors.length > 0
+      ? { success: false, details: { response: data, errors: errors.map(String) } }
+      : { success: true, details: data };
+  }
+
   async ping(): Promise<boolean> {
     try {
       const res = await axios.get(this.baseUrl, {
@@ -274,29 +257,34 @@ class C64uBackend implements C64Facade {
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
     const payload = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
     const res = await this.api.v1.runnersRunPrgCreate(":run_prg", payload as any, { headers: { "Content-Type": "application/octet-stream" } });
-    return { success: true, details: res.data };
+    return this.actionResult(res.data);
+  }
+  async loadPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
+    const payload = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
+    const res = await this.api.v1.runnersLoadPrgCreate(":load_prg", payload as any, { headers: { "Content-Type": "application/octet-stream" } });
+    return this.actionResult(res.data);
   }
   async loadPrgFile(pathStr: string): Promise<RunResult> {
     const res = await this.api.v1.runnersLoadPrgUpdate(":load_prg", { file: pathStr });
-    return { success: true, details: res.data };
+    return this.actionResult(res.data);
   }
   async runPrgFile(pathStr: string): Promise<RunResult> {
     const res = await this.api.v1.runnersRunPrgUpdate(":run_prg", { file: pathStr });
-    return { success: true, details: res.data };
+    return this.actionResult(res.data);
   }
   async runCrtFile(pathStr: string): Promise<RunResult> {
     const res = await this.api.v1.runnersRunCrtUpdate(":run_crt", { file: pathStr });
-    return { success: true, details: res.data };
+    return this.actionResult(res.data);
   }
   async sidplayFile(pathStr: string, songnr?: number): Promise<RunResult> {
     const res = await this.api.v1.runnersSidplayUpdate(":sidplay", { file: pathStr, songnr });
-    return { success: true, details: res.data };
+    return this.actionResult(res.data);
   }
   async sidplayAttachment(sid: Uint8Array | Buffer, options?: { songnr?: number; songlengths?: Uint8Array | Buffer }): Promise<RunResult> {
     const form: any = { sid: Buffer.isBuffer(sid) ? sid : Buffer.from(sid) };
     if (options?.songlengths) form.songlengths = Buffer.isBuffer(options.songlengths) ? options.songlengths : Buffer.from(options.songlengths);
     const res = await this.api.v1.runnersSidplayCreate(":sidplay", form as any, options?.songnr !== undefined ? { songnr: options.songnr } : undefined);
-    return { success: true, details: res.data };
+    return this.actionResult(res.data);
   }
   async readMemory(address: number, length: number): Promise<Uint8Array> {
     const addrStr = address.toString(16).toUpperCase().padStart(4, "0");
@@ -331,13 +319,13 @@ class C64uBackend implements C64Facade {
     const mergedBlocks = coalesceMemoryWriteBlocks(blocks);
     await Promise.all(mergedBlocks.map(({ address, bytes }) => this.writeMemory(address, bytes)));
   }
-  async reset(): Promise<RunResult> { const res = await this.api.v1.machineResetUpdate(":reset"); return { success: true, details: res.data }; }
-  async reboot(): Promise<RunResult> { const res = await this.api.v1.machineRebootUpdate(":reboot"); return { success: true, details: res.data }; }
-  async pause(): Promise<RunResult> { const res = await this.api.v1.machinePauseUpdate(":pause"); return { success: true, details: res.data }; }
-  async resume(): Promise<RunResult> { const res = await this.api.v1.machineResumeUpdate(":resume"); return { success: true, details: res.data }; }
-  async poweroff(): Promise<RunResult> { this.requireC64u("poweroff"); const res = await this.api.v1.machinePoweroffUpdate(":poweroff"); return { success: true, details: res.data }; }
+  async reset(): Promise<RunResult> { const res = await this.api.v1.machineResetUpdate(":reset"); return this.actionResult(res.data); }
+  async reboot(): Promise<RunResult> { const res = await this.api.v1.machineRebootUpdate(":reboot"); return this.actionResult(res.data); }
+  async pause(): Promise<RunResult> { const res = await this.api.v1.machinePauseUpdate(":pause"); return this.actionResult(res.data); }
+  async resume(): Promise<RunResult> { const res = await this.api.v1.machineResumeUpdate(":resume"); return this.actionResult(res.data); }
+  async poweroff(): Promise<RunResult> { this.requireC64u("poweroff"); const res = await this.api.v1.machinePoweroffUpdate(":poweroff"); return this.actionResult(res.data); }
   async powerCycle(): Promise<RunResult> { this.requireC64u("powerCycle"); throw unsupported("powerCycle must be coordinated by C64Client"); }
-  async menuButton(): Promise<RunResult> { const res = await this.api.v1.machineMenuButtonUpdate(":menu_button"); return { success: true, details: res.data }; }
+  async menuButton(): Promise<RunResult> { const res = await this.api.v1.machineMenuButtonUpdate(":menu_button"); return this.actionResult(res.data); }
   async readMenuScreen(): Promise<Uint8Array> {
     const response = await this.api.v1.machineMenuScreenList(
       ":menu_screen",
@@ -360,29 +348,42 @@ class C64uBackend implements C64Facade {
   async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> { this.requireC64u("debugregWrite"); const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value }); return { success: true, value: (res.data as any).value, details: res.data }; }
   async version(): Promise<unknown> { const res = await this.api.v1.versionList(); return res.data; }
   async info(): Promise<unknown> { const res = await this.api.v1.infoList(); return res.data; }
-  async drivesList(): Promise<unknown> { const res = await this.api.v1.drivesList(); return res.data; }
-  async driveMount(d: string, img: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> { const res = await this.api.v1.drivesMountUpdate(d, ":mount", { image: img, type: options?.type, mode: options?.mode }); return { success: true, details: res.data }; }
-  async driveRemove(d: string): Promise<RunResult> { const res = await this.api.v1.drivesRemoveUpdate(d, ":remove"); return { success: true, details: res.data }; }
-  async driveReset(d: string): Promise<RunResult> { const res = await this.api.v1.drivesResetUpdate(d, ":reset"); return { success: true, details: res.data }; }
-  async driveOn(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOnUpdate(d, ":on"); return { success: true, details: res.data }; }
-  async driveOff(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOffUpdate(d, ":off"); return { success: true, details: res.data }; }
-  async driveSetMode(d: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> { const res = await this.api.v1.drivesSetModeUpdate(d, ":set_mode", { mode }); return { success: true, details: res.data }; }
-  async driveLoadRom(d: string, romPath: string): Promise<RunResult> { const res = await this.api.v1.drivesLoadRomUpdate(d, ":load_rom", { file: romPath }); return { success: true, details: res.data }; }
-  async streamStart(s: "video" | "audio" | "debug", ip: string): Promise<RunResult> { this.requireC64u("streamStart"); const res = await this.api.v1.streamsStartUpdate(s, ":start", { ip }); return { success: true, details: res.data }; }
-  async streamStop(s: "video" | "audio" | "debug"): Promise<RunResult> { this.requireC64u("streamStop"); const res = await this.api.v1.streamsStopUpdate(s, ":stop"); return { success: true, details: res.data }; }
+  async drivesList(): Promise<unknown> {
+    const res = await this.api.v1.drivesList();
+    const raw = res.data as { drives?: Array<Record<string, Record<string, unknown>>> | Record<string, Record<string, unknown>> };
+    const entries = Array.isArray(raw.drives)
+      ? raw.drives
+      : raw.drives && typeof raw.drives === "object" ? [raw.drives] : [];
+    return entries.flatMap((entry) => Object.entries(entry).map(([id, info]) => ({
+      id,
+      power: info.enabled === true || info.enabled === "on" || info.power === "on" ? "on" : "off",
+      image: (info.image_path ?? info.image_file ?? info.image ?? null) as string | null,
+      type: info.type ?? null,
+      raw: info,
+    })));
+  }
+  async driveMount(d: string, img: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> { const res = await this.api.v1.drivesMountUpdate(d, ":mount", { image: img, type: options?.type, mode: options?.mode }); return this.actionResult(res.data); }
+  async driveRemove(d: string): Promise<RunResult> { const res = await this.api.v1.drivesRemoveUpdate(d, ":remove"); return this.actionResult(res.data); }
+  async driveReset(d: string): Promise<RunResult> { const res = await this.api.v1.drivesResetUpdate(d, ":reset"); return this.actionResult(res.data); }
+  async driveOn(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOnUpdate(d, ":on"); return this.actionResult(res.data); }
+  async driveOff(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOffUpdate(d, ":off"); return this.actionResult(res.data); }
+  async driveSetMode(d: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> { const res = await this.api.v1.drivesSetModeUpdate(d, ":set_mode", { mode }); return this.actionResult(res.data); }
+  async driveLoadRom(d: string, romPath: string): Promise<RunResult> { const res = await this.api.v1.drivesLoadRomUpdate(d, ":load_rom", { file: romPath }); return this.actionResult(res.data); }
+  async streamStart(s: "video" | "audio" | "debug", ip: string): Promise<RunResult> { this.requireC64u("streamStart"); const res = await this.api.v1.streamsStartUpdate(s, ":start", { ip }); return this.actionResult(res.data); }
+  async streamStop(s: "video" | "audio" | "debug"): Promise<RunResult> { this.requireC64u("streamStop"); const res = await this.api.v1.streamsStopUpdate(s, ":stop"); return this.actionResult(res.data); }
   async configsList(): Promise<unknown> { const res = await this.api.v1.configsList(); return res.data; }
   async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(cat, item) : await this.api.v1.configsDetail(cat); return res.data; }
-  async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(cat, item, { value }); return { success: true, details: res.data }; }
-  async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return { success: true, details: res.data }; }
-  async configLoadFromFlash(): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(":load_from_flash"); return { success: true, details: res.data }; }
-  async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return { success: true, details: res.data }; }
-  async configResetToDefault(): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(":reset_to_default"); return { success: true, details: res.data }; }
-  async filesInfo(p: string): Promise<unknown> { const res = await this.api.v1.filesInfoDetail(encodeURIComponent(p), ":info"); return res.data; }
-  async filesCreateD64(p: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeURIComponent(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return { success: true, details: res.data }; }
-  async filesCreateD71(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD71Update(encodeURIComponent(p), ":create_d71", { diskname: options?.diskname }); return { success: true, details: res.data }; }
-  async filesCreateD81(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD81Update(encodeURIComponent(p), ":create_d81", { diskname: options?.diskname }); return { success: true, details: res.data }; }
-  async filesCreateDnp(p: string, tracks: number, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateDnpUpdate(encodeURIComponent(p), ":create_dnp", { tracks, diskname: options?.diskname }); return { success: true, details: res.data }; }
-  async modplayFile(pathStr: string): Promise<RunResult> { const res = await (this.api as any).v1.runnersModplayUpdate(":modplay", { file: pathStr }); return { success: true, details: res.data }; }
+  async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(cat, item, { value }); return this.actionResult(res.data); }
+  async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return this.actionResult(res.data); }
+  async configLoadFromFlash(): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(":load_from_flash"); return this.actionResult(res.data); }
+  async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return this.actionResult(res.data); }
+  async configResetToDefault(): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(":reset_to_default"); return this.actionResult(res.data); }
+  async filesInfo(p: string): Promise<unknown> { const res = await this.api.v1.filesInfoDetail(encodeDevicePath(p), ":info"); return res.data; }
+  async filesCreateD64(p: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
+  async filesCreateD71(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD71Update(encodeDevicePath(p), ":create_d71", { diskname: options?.diskname }); return this.actionResult(res.data); }
+  async filesCreateD81(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD81Update(encodeDevicePath(p), ":create_d81", { diskname: options?.diskname }); return this.actionResult(res.data); }
+  async filesCreateDnp(p: string, tracks: number, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateDnpUpdate(encodeDevicePath(p), ":create_dnp", { tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
+  async modplayFile(pathStr: string): Promise<RunResult> { const res = await (this.api as any).v1.runnersModplayUpdate(":modplay", { file: pathStr }); return this.actionResult(res.data); }
 }
 
 export class ViceBackend implements C64Facade {
@@ -554,13 +555,19 @@ export class ViceBackend implements C64Facade {
       return;
     }
     ViceBackend.cleanupRegistered = true;
-    /* c8 ignore next 5 -- global process exit hooks are not practical to exercise in the unit test process */
-    process.once("exit", () => {
+    const cleanupSync = () => {
       for (const [, handle] of ViceBackend.supervisors) {
-        handle.stop().catch(() => {});
+        handle.stopSync();
       }
       ViceBackend.supervisors.clear();
-    });
+    };
+    process.once("exit", cleanupSync);
+    for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+      process.once(signal, () => {
+        cleanupSync();
+        process.exit(signal === "SIGINT" ? 130 : 143);
+      });
+    }
   }
 
   private async withClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
@@ -622,7 +629,18 @@ export class ViceBackend implements C64Facade {
     return false;
   }
 
-  private async injectPrg(buffer: Buffer): Promise<void> {
+  /**
+   * Reset, wait for a usable BASIC prompt, and load PRG bytes into memory.
+   * `finish` decides what happens next: a genuine BASIC PRG needs its
+   * pointers set and RUN typed, but machine code must never receive either
+   * — RUN would misinterpret raw opcodes as tokenized BASIC text, and
+   * rewriting TXTTAB/VARTAB/ARYTAB/STREND corrupts the BASIC workspace for
+   * an origin that isn't BASIC program text at all.
+   */
+  private async loadPrgAndFinish(
+    buffer: Buffer,
+    finish: (client: ViceClient, loadAddress: number, programEnd: number) => Promise<void>,
+  ): Promise<void> {
     if (buffer.length < 2) throw new Error("PRG data too short");
     const loadAddress = buffer.readUInt16LE(0);
     const body = buffer.subarray(2);
@@ -630,7 +648,13 @@ export class ViceBackend implements C64Facade {
       await client.reset();
       await waitForBasicReady(client, { timeoutMs: 10_000, ensurePrompt: true });
       if (body.length > 0) await client.memSet(loadAddress, body);
-      const programEnd = loadAddress + body.length;
+      await finish(client, loadAddress, loadAddress + body.length);
+      await client.exitMonitor();
+    });
+  }
+
+  private async injectPrg(buffer: Buffer): Promise<void> {
+    await this.loadPrgAndFinish(buffer, async (client, loadAddress, programEnd) => {
       const ptrs = Buffer.alloc(8);
       ptrs.writeUInt16LE(loadAddress, 0);
       ptrs.writeUInt16LE(programEnd, 2);
@@ -638,13 +662,20 @@ export class ViceBackend implements C64Facade {
       ptrs.writeUInt16LE(programEnd, 6);
       await client.memSet(0x002B, ptrs);
       await client.keyboardFeed("RUN\r");
-      await client.exitMonitor();
     });
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
     const buffer = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
     await this.injectPrg(buffer);
+    return { success: true };
+  }
+
+  /** Load PRG bytes without starting them — the caller decides how to enter
+   * the code (e.g. a subsequent typed `SYS <entry>` for machine code). */
+  async loadPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
+    const buffer = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
+    await this.loadPrgAndFinish(buffer, async () => {});
     return { success: true };
   }
 
@@ -695,21 +726,28 @@ export class ViceBackend implements C64Facade {
   }
 
   async reset(): Promise<RunResult> {
+    let readiness: Awaited<ReturnType<typeof waitForBasicReady>> | undefined;
+    // Overridable only for deterministic tests of the readiness-failure path;
+    // production always uses the 20s default.
+    const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
     await this.withClient(async (client) => {
       await client.reset();
       const opts = this.debugEnabled
         ? {
-            timeoutMs: 20_000,
+            timeoutMs: resetReadinessTimeoutMs,
             ensurePrompt: true,
             onPointersSample: (p: { tx: number; va: number; ar: number; st: number }) => {
               console.error("[vice-backend] BASIC pointers", p);
             },
           }
-        : { timeoutMs: 20_000, ensurePrompt: true };
-      const readiness = await waitForBasicReady(client, opts);
+        : { timeoutMs: resetReadinessTimeoutMs, ensurePrompt: true };
+      readiness = await waitForBasicReady(client, opts);
       if (this.debugEnabled) console.error("[vice-backend] waitForBasicReady result", readiness);
     });
-    return { success: true };
+    const ready = Boolean(readiness?.pointersOk && readiness?.promptOk);
+    return ready
+      ? { success: true, details: readiness }
+      : { success: false, details: { readiness, message: "VICE reset completed but BASIC READY was not observed. Reset again or inspect the emulator monitor." } };
   }
 
   async reboot(): Promise<RunResult> { return this.reset(); }
@@ -906,9 +944,11 @@ export class ViceBackend implements C64Facade {
   }
 
   async configSet(_category: string, item: string, value: string): Promise<RunResult> {
-    const numValue = Number(value);
-    const parsed: string | number = !isNaN(numValue) && value.trim() !== "" ? numValue : value;
+    let parsed: string | number = value;
     await this.withClient(async (client) => {
+      const current = await client.resourceGet(item);
+      parsed = current.type === "int" ? Number(value) : value;
+      if (current.type === "int" && !Number.isFinite(parsed)) throw new Error(`VICE resource '${item}' requires an integer value`);
       await client.resourceSet(item, parsed);
     });
     return { success: true, details: { item, value: parsed } };
@@ -921,8 +961,9 @@ export class ViceBackend implements C64Facade {
         for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
           try {
             const str = String(value ?? "");
-            const numValue = Number(str);
-            const parsed: string | number = !isNaN(numValue) && str.trim() !== "" ? numValue : str;
+            const current = await client.resourceGet(item);
+            const parsed: string | number = current.type === "int" ? Number(str) : str;
+            if (current.type === "int" && !Number.isFinite(parsed)) throw new Error(`VICE resource '${item}' requires an integer value`);
             await client.resourceSet(item, parsed);
             results.push({ item: `${category}/${item}`, success: true });
           } catch (err) {
@@ -948,6 +989,12 @@ export class ViceBackend implements C64Facade {
 }
 
 function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend in phase one`); (err as any).code = "UNSUPPORTED"; return err; }
+
+/** Ultimate file APIs treat slash as a path separator. Encode each name once,
+ * preserving leading and nested separators for firmware routing. */
+function encodeDevicePath(value: string): string {
+  return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
 
 function parseDriveNumber(drive: string): number {
   const match = /\d+/.exec(drive);

@@ -202,7 +202,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
     await withSharedMcpClient(async (ctx) => {
       const { mockServer } = ctx;
       const program = `\n      .org $0801\nstart:\n      lda #$01\n      sta $0400\n      rts\n    `;
-      const runCountBefore = mockServer.state.runCount;
+      const loadCountBefore = mockServer.state.loadCount;
 
       const { result, supported } = await callTool(ctx, "c64_program", {
         op: "upload_run_asm",
@@ -219,16 +219,18 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.match(textContent.text, /Assembly program assembled/i);
 
       assert.ok(result.metadata?.success, "metadata should flag success");
-      assert.equal(result.metadata?.details?.result ?? "ok", "ok");
       if (ctx.platform === "vice") {
-        assert.equal(mockServer.state.runCount, runCountBefore, "vice mode must not assemble-run via the C64U mock");
+        assert.equal(mockServer.state.loadCount, loadCountBefore, "vice mode must not load via the C64U mock");
         assert.equal(result.structuredContent?.data?.kind, "upload_run_asm");
         assert.equal(result.structuredContent?.data?.format, "prg");
         return;
       }
 
-      assert.equal(mockServer.state.runCount, runCountBefore + 1, "mock server should execute program once");
-      assert.ok(mockServer.state.lastPrg, "mock server should receive PRG payload");
+      // HARD01-018: assembled machine code is loaded (not LOAD+RUN) and
+      // entered via a typed SYS to its own entry point.
+      assert.equal(mockServer.state.loadCount, loadCountBefore + 1, "mock server should load the assembled program once");
+      assert.ok(mockServer.state.lastLoadedPrg, "mock server should receive the loaded PRG payload");
+      assert.equal(mockServer.state.memory[0x0801], 0xa9, "assembled LDA opcode should land at its own address");
     });
   });
 

@@ -809,7 +809,7 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
+| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
 | `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
 | `keyboard` | Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). | `inputs`, `transition` | — | ✅ |  |  |
 | `release_all` | Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). | — | — | ✅ |  |  |
@@ -839,9 +839,9 @@ Grouped entry point for Commodore and Epson printing helpers.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `define_chars` | Define custom printer characters (Commodore DLL mode). | `firstChar`, `chars` | `secondaryAddress` | ✅ |  |  |
-| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | `printer="commodore"`, `columns` | `repeats`, `useSubRepeat`, `secondaryAddress`, `ensureMsb=true`, `mode`, `density`, `timesPerLine` | ✅ |  |  |
-| `print_text` | Generate BASIC that prints text to device 4. | `text` | `target="commodore"`, `secondaryAddress`, `formFeed=false` | ✅ |  |  |
+| `define_chars` | Define custom printer characters (Commodore DLL mode). | `firstChar`, `chars` | `secondaryAddress` | ✅ | ✅ |  |
+| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | `printer="commodore"`, `columns` | `repeats`, `useSubRepeat`, `secondaryAddress`, `ensureMsb=true`, `mode`, `density`, `timesPerLine` | ✅ | ✅ |  |
+| `print_text` | Generate BASIC that prints text to device 4. | `text` | `target="commodore"`, `secondaryAddress`, `formFeed=false` | ✅ | ✅ |  |
 
 #### c64_program
 

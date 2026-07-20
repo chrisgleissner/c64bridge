@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { compileSidwaveToPrg, compileSidwaveToSid } from "../src/sidwaveCompiler.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, hzToSidFrequency } from "../src/sidwaveCompiler.js";
 import { parseSidwave } from "../src/sidwave.js";
 import { runSidToWav, SidplayExecutionError } from "../src/sidplayRunner.js";
 import os from "node:os";
@@ -39,6 +39,14 @@ timeline:
     bars: 8
     layers: { v1: A, v2: B, v3: C }
 `;
+
+test("HARD01-032 sidwaveCompiler's hzToSidFrequency uses the SID's 24-bit phase accumulator", () => {
+  // round(440 * 2^24 / 985248) = 7493 = $1D45 (PAL A4).
+  assert.equal(hzToSidFrequency(440, "PAL"), 7493);
+  // NTSC uses a different clock (1022727 Hz) but the same 2^24 divisor.
+  assert.equal(hzToSidFrequency(440, "NTSC"), Math.round((440 * 16_777_216) / 1_022_727));
+  assert.notEqual(hzToSidFrequency(440, "PAL"), Math.round((440 * 65_536) / 985_248));
+});
 
 test("SIDWAVE: compile to PRG and SID", () => {
   const doc = parseSidwave(EXAMPLE);

@@ -57,7 +57,7 @@
     },
     "port": {
       "type": "integer",
-      "description": "Joystick port (1 = $DC01, 2 = $DC00).",
+      "description": "Joystick port (1 or 2).",
       "minimum": 1,
       "maximum": 2
     },
@@ -178,7 +178,7 @@
   "required": [
     "op"
   ],
-  "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
+  "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick: Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -274,7 +274,7 @@
     },
     {
       "op": "joystick",
-      "description": "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
+      "description": "Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set.",
       "required": [
         "port",
         "controls",
@@ -285,14 +285,14 @@
       ],
       "inputSchema": {
         "type": "object",
-        "description": "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
+        "description": "Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set.",
         "properties": {
           "op": {
             "const": "joystick"
           },
           "port": {
             "type": "integer",
-            "description": "Joystick port (1 = $DC01, 2 = $DC00).",
+            "description": "Joystick port (1 or 2).",
             "minimum": 1,
             "maximum": 2
           },

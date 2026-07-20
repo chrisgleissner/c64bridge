@@ -45,6 +45,39 @@ function createCtx(client, setPlatformCalls, platform = "c64u") {
   };
 }
 
+test("HARD01-030 c64_select_backend cancels an in-flight music_generate arpeggio", async () => {
+  const noteOnCalls = [];
+  const setPlatformCalls = [];
+  const client = createSwitchClient(["c64u", "vice"], "vice");
+  client.pinFacade = async () => ({ type: "vice" });
+  client.sidSetVolume = async () => ({ success: true });
+  client.sidNoteOn = async (payload) => { noteOnCalls.push(payload.note); return { success: true }; };
+  client.sidNoteOff = async () => ({ success: true });
+
+  const scheduleResult = await toolRegistry.invoke(
+    "c64_sound",
+    { op: "generate", root: "C4", pattern: "0,4,7,12,16", steps: 5, tempoMs: 40 },
+    createCtx(client, setPlatformCalls, "vice"),
+  );
+  assert.equal(scheduleResult.isError, undefined);
+
+  // Let one or two notes play, then switch backends mid-arpeggio.
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  const callsBeforeSwitch = noteOnCalls.length;
+  assert.ok(callsBeforeSwitch >= 1, "expected at least one note before the switch");
+
+  await toolRegistry.invoke(
+    "c64_select_backend",
+    { op: "select", backend: "c64u" },
+    createCtx(client, setPlatformCalls, "vice"),
+  );
+
+  // Wait past the arpeggio's full natural duration; cancellation must have
+  // stopped further notes rather than letting them keep playing.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.equal(noteOnCalls.length, callsBeforeSwitch);
+});
+
 test("c64_select_backend switches to an available backend and updates platform state", async () => {
   const client = createSwitchClient(["c64u", "vice"], "c64u");
   const setPlatformCalls = [];

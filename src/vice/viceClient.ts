@@ -79,11 +79,13 @@ interface PendingRequest {
   resolve: (frame: Buffer) => void;
   reject: (err: unknown) => void;
   onFrame?: (type: number, frame: Buffer) => void;
+  timer?: NodeJS.Timeout;
 }
 
 interface SendOptions {
   readonly responseType?: number;
   readonly onFrame?: (type: number, frame: Buffer) => void;
+  readonly timeoutMs?: number;
 }
 
 export class ViceClient {
@@ -140,6 +142,7 @@ export class ViceClient {
 
   private rejectAllPending(reason: unknown): void {
     for (const [, pending] of this.pending) {
+      if (pending.timer) clearTimeout(pending.timer);
       try {
         pending.reject(reason);
       } catch {}
@@ -153,7 +156,7 @@ export class ViceClient {
     // Frame: [0]=0x02, [1]=0x02, [2..5]=len, [6]=respType, [7]=err, [8..11]=reqId, [12..]=body
     while (this.buffer.length >= 12) {
       if (this.buffer[0] !== 0x02 || this.buffer[1] !== 0x02) {
-        const idx = this.buffer.indexOf(0x02, 1);
+        const idx = this.buffer.indexOf(Buffer.from([0x02, 0x02]), 1);
         this.buffer = idx === -1 ? Buffer.alloc(0) : this.buffer.subarray(idx);
         continue;
       }
@@ -179,6 +182,7 @@ export class ViceClient {
       }
 
       if (err !== 0x00) {
+        if (pending.timer) clearTimeout(pending.timer);
         pending.reject(new Error(`BM error 0x${err.toString(16)}`));
         this.pending.delete(reqId);
         continue;
@@ -189,6 +193,7 @@ export class ViceClient {
           try {
             pending.onFrame(responseType, frame);
           } catch (error) {
+            if (pending.timer) clearTimeout(pending.timer);
             pending.reject(error);
             this.pending.delete(reqId);
           }
@@ -201,6 +206,7 @@ export class ViceClient {
       }
 
       pending.resolve(frame);
+      if (pending.timer) clearTimeout(pending.timer);
       this.pending.delete(reqId);
     }
   }
@@ -209,7 +215,7 @@ export class ViceClient {
     if (!this.socket || this.socket.destroyed) {
       return Promise.reject(new Error("VICE monitor socket is not connected"));
     }
-    const reqId = this.nextReqId++;
+    const reqId = this.nextReqId++ >>> 0;
     const payload = body ?? Buffer.alloc(0);
     const header = Buffer.alloc(11);
     header[0] = 0x02; // STX
@@ -221,12 +227,19 @@ export class ViceClient {
     const expectedCmd = options?.responseType ?? cmd;
 
     const promise = new Promise<Buffer>((resolve, reject) => {
-      this.pending.set(reqId, {
+      const pending: PendingRequest = {
         cmd: expectedCmd,
         resolve,
         reject,
         onFrame: options?.onFrame,
-      });
+      };
+      const timeoutMs = options?.timeoutMs ?? (cmd === 0x84 ? 30_000 : 10_000);
+      pending.timer = setTimeout(() => {
+        if (!this.pending.delete(reqId)) return;
+        reject(new Error(`VICE monitor request 0x${cmd.toString(16)} timed out after ${timeoutMs}ms`));
+        this.socket?.destroy();
+      }, timeoutMs);
+      this.pending.set(reqId, pending);
     });
 
     this.socket.write(packet);
@@ -277,6 +290,14 @@ export class ViceClient {
     await this.send(0x72, body);
   }
 
+  /** Set the VICE joyport's active-low control byte (BM command 0xA2). */
+  async joyportSet(port: 1 | 2, activeLowMask: number): Promise<void> {
+    const body = Buffer.alloc(4);
+    body.writeUInt16LE(port, 0);
+    body.writeUInt16LE(activeLowMask & 0xff, 2);
+    await this.send(0xA2, body);
+  }
+
   async checkpointGet(id: number): Promise<ViceCheckpoint> {
     const body = Buffer.alloc(4);
     body.writeUInt32LE(id >>> 0, 0);
@@ -289,8 +310,11 @@ export class ViceClient {
     const end = (options.end ?? options.start) & 0xffff;
     const stop = options.stopOnHit !== false;
     const enabled = options.enabled !== false;
-    const ops = options.operations ?? { execute: true };
-    const mask = (ops.load ? 0x01 : 0) | (ops.store ? 0x02 : 0) | (ops.execute === false ? 0 : 0x04);
+    const ops = options.operations;
+    const hasExplicitOperation = ops && (ops.load !== undefined || ops.store !== undefined || ops.execute !== undefined);
+    const mask = hasExplicitOperation
+      ? ((ops?.load ? 0x01 : 0) | (ops?.store ? 0x02 : 0) | (ops?.execute ? 0x04 : 0))
+      : 0x04;
     const temporary = options.temporary === true;
     const memspace = options.memspace ?? 0;
     const hasMemspace = options.memspace !== undefined;

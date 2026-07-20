@@ -7,11 +7,13 @@ process.env.C64_TEST_TARGET = "stub";
 
 const writes = [];
 let lastPrg = null;
+let lastLoadedPrg = null;
 
 const stubFacade = {
   type: "c64u",
   async ping() { return true; },
   async runPrg(prg) { lastPrg = prg; return { success: true, details: { prgLength: prg?.length ?? 0 } }; },
+  async loadPrg(prg) { lastLoadedPrg = prg; return { success: true, details: { prgLength: prg?.length ?? 0 } }; },
   async loadPrgFile() { return { success: true }; },
   async runPrgFile() { return { success: true }; },
   async runCrtFile() { return { success: true }; },
@@ -82,6 +84,14 @@ test("C64Client MCP tool coverage", async (t) => {
 
     const asm = await client.uploadAndRunAsm("*=$0801\nBRK");
     expectSuccess(asm, "upload_run_asm");
+    // HARD01-018: the assembled code must be loaded (not LOAD+RUN, which
+    // would misinterpret the opcodes as BASIC text) and entered via a typed
+    // SYS to the entry point rather than a bare RUN.
+    assert.ok(lastLoadedPrg instanceof Uint8Array, "PRG bytes loaded without running");
+    assert.equal(asm.details.entryAddress, 0x0801);
+    const sysBytes = writes.find((w) => w.address === 0x0277)?.bytes;
+    assert.ok(sysBytes, "SYS command written to the KERNAL keyboard buffer");
+    assert.equal(Buffer.from(sysBytes).toString("ascii"), "SYS2049\r");
 
     expectSuccess(await client.loadPrgFile("//disk/demo.prg"), "load_prg");
     expectSuccess(await client.runPrgFile("//disk/demo.prg"), "run_prg");

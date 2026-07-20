@@ -97,7 +97,7 @@ describe("meta/background state loading", () => {
     expect(stored).toEqual({ tasks: [] });
   });
 
-  test("start_background_task rejects a duplicate running task loaded from disk", async () => {
+  test("HARD01-022 a task persisted as 'running' is downgraded to 'stopped' on reload, not left as a zombie", async () => {
     const { file, dir } = tmpPath("background-duplicate", "tasks.json");
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(file, JSON.stringify({
@@ -115,7 +115,7 @@ describe("meta/background state loading", () => {
           updatedAt: "2025-03-08T10:00:05.000Z",
           stoppedAt: null,
           lastError: null,
-          nextRunAt: null,
+          nextRunAt: "2025-03-08T10:00:20.000Z",
           folder: path.join("tasks", "background", "0012_dup"),
         },
       ],
@@ -123,16 +123,28 @@ describe("meta/background state loading", () => {
 
     process.env.C64_TASK_STATE_FILE = file;
     const { tools } = await loadBackgroundTools("duplicate");
+    const listTool = toolByName(tools, "list_background_tasks");
     const startTool = toolByName(tools, "start_background_task");
+    const stopTool = toolByName(tools, "stop_background_task");
 
+    // The persisted "running" status must not survive reload: no timer exists
+    // for it, so reporting it as running would be a false health signal.
+    const listed = await listTool.execute({}, { client: {}, logger: createLogger() });
+    const reloaded = listed.structuredContent?.data?.tasks?.find((t) => t.name === "dup");
+    expect(reloaded?.status).toBe("stopped");
+    expect(reloaded?.nextRunAt).toBeFalsy();
+    expect(String(reloaded?.lastError ?? "")).toContain("restart");
+
+    // Because the reloaded task is honestly "stopped", starting a new task
+    // under the same name must now succeed rather than be rejected.
     const result = await startTool.execute(
       { name: "dup", operation: "read", intervalMs: 5, maxIterations: 1 },
       { client: {}, logger: createLogger() },
     );
+    expect(result.isError).toBeUndefined();
+    expect(result.metadata?.success).toBe(true);
 
-    expect(result.isError).toBe(true);
-    expect(result.metadata?.error?.kind).toBe("validation");
-    expect(String(result.metadata?.error?.message ?? result.content?.[0]?.text ?? "")).toContain("already running");
+    await stopTool.execute({ name: "dup" }, { client: {}, logger: createLogger() });
   });
 
   test("start_background_task supports read_memory alias with default arguments", async () => {
