@@ -756,10 +756,23 @@ test("device: createFacade merges backend sections across config candidates", as
       homeConfig: { vice: { exe: "/usr/bin/x64sc" } },
     },
     async () => {
+      // HARD01-005: an empty (but present) cwd config file wins outright and
+      // stops the precedence chain, so home's `vice` section must never be
+      // consulted. With no resolved backend config at all, createFacade()
+      // falls through to its live-reachability probe of the default c64u
+      // host, whose outcome is environment-dependent (this sandbox has a
+      // real reachable "c64u" host on its network; a CI runner typically
+      // does not) — so assert the fallback mechanism fired rather than one
+      // specific probe outcome.
       const { facade, selected, reason } = await createFacade();
-      assert.equal(selected, "c64u");
       assert.match(reason, /fallback/);
-      assert.equal(facade.type, "c64u");
+      assert.ok(selected === "c64u" || selected === "vice", `unexpected backend: ${selected}`);
+      assert.equal(facade.type, selected);
+      if (selected === "vice") {
+        // The real assertion this scenario exists for: home's vice section
+        // (exe: "/usr/bin/x64sc") must not have leaked in via merging.
+        assert.notEqual(facade.exe, "/usr/bin/x64sc");
+      }
     },
   );
 
