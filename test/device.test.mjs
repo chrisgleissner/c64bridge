@@ -753,7 +753,10 @@ test("device: createFacade merges backend sections across config candidates", as
   await withConfigScenario(
     {
       repoConfig: {},
-      homeConfig: { vice: { exe: "/usr/bin/x64sc" } },
+      // A deliberately impossible path: it must never match whatever the
+      // real environment's default-resolved VICE binary happens to be
+      // (e.g. some environments install it at exactly /usr/bin/x64sc).
+      homeConfig: { vice: { exe: "/nonexistent/c64bridge-test-fixture/x64sc" } },
     },
     async () => {
       // HARD01-005: an empty (but present) cwd config file wins outright and
@@ -770,8 +773,8 @@ test("device: createFacade merges backend sections across config candidates", as
       assert.equal(facade.type, selected);
       if (selected === "vice") {
         // The real assertion this scenario exists for: home's vice section
-        // (exe: "/usr/bin/x64sc") must not have leaked in via merging.
-        assert.notEqual(facade.exe, "/usr/bin/x64sc");
+        // must not have leaked in via merging.
+        assert.notEqual(facade.exe, "/nonexistent/c64bridge-test-fixture/x64sc");
       }
     },
   );
