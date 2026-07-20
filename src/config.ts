@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
+import os from "node:os";
 import { fileURLToPath } from "url";
 
 export interface C64BridgeConfig {
@@ -8,6 +9,13 @@ export interface C64BridgeConfig {
   c64_port: number;
   networkPassword?: string;
   vicePrewarm: boolean;
+  /** Parsed selected config document, retained so all facade construction uses
+   * the exact same authoritative source and precedence decision. */
+  backendConfig: {
+    c64u?: Record<string, unknown>;
+    u2?: Record<string, unknown>;
+    vice?: Record<string, unknown>;
+  };
 }
 
 const DEFAULT_HOST = "c64u";
@@ -18,19 +26,17 @@ const DEFAULT_CONFIG: C64BridgeConfig = {
   baseUrl: buildBaseUrl(DEFAULT_HOST, DEFAULT_PORT),
   c64_port: DEFAULT_PORT,
   vicePrewarm: false,
+  backendConfig: {},
 };
 
-let cachedConfig: C64BridgeConfig | null = null;
-
 export function loadConfig(): C64BridgeConfig {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
-
   const configPath = process.env.C64BRIDGE_CONFIG;
-  const repoConfigPath = join(dirname(fileURLToPath(import.meta.url)), "..", ".c64bridge.json");
-  const homeConfigPath = process.env.HOME ? `${process.env.HOME}/.c64bridge.json` : null;
-  const candidatePaths = [configPath, repoConfigPath, homeConfigPath];
+  const cwdConfigPath = join(process.cwd(), ".c64bridge.json");
+  const homeConfigPath = join(os.homedir(), ".c64bridge.json");
+  // Legacy package-adjacent config is deliberately last: it is useful for
+  // source checkouts but must never override a project or user config.
+  const legacyPackageConfigPath = join(dirname(fileURLToPath(import.meta.url)), "..", ".c64bridge.json");
+  const candidatePaths = [configPath, cwdConfigPath, homeConfigPath, legacyPackageConfigPath];
 
   let rawConfig: any;
   for (const candidatePath of candidatePaths) {
@@ -43,7 +49,9 @@ export function loadConfig(): C64BridgeConfig {
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
+        // Deliberately omit file contents/credentials. Configuration mistakes
+        // should not prevent the MCP server from exposing a recoverable path.
+        console.error(`[c64bridge] ignoring configuration '${candidatePath}': ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
@@ -117,9 +125,13 @@ export function loadConfig(): C64BridgeConfig {
       configuredBoolean(vice?.prewarm),
       configuredBoolean(rawConfig?.vicePrewarm),
     ) ?? false,
+    backendConfig: {
+      ...(rawConfig?.c64u && typeof rawConfig.c64u === "object" && !Array.isArray(rawConfig.c64u) ? { c64u: rawConfig.c64u } : {}),
+      ...(rawConfig?.u2 && typeof rawConfig.u2 === "object" && !Array.isArray(rawConfig.u2) ? { u2: rawConfig.u2 } : {}),
+      ...(rawConfig?.vice && typeof rawConfig.vice === "object" && !Array.isArray(rawConfig.vice) ? { vice: rawConfig.vice } : {}),
+    },
   };
 
-  cachedConfig = config;
   return config;
 }
 
@@ -206,5 +218,6 @@ function formatHost(host: string): string {
 }
 
 export function __resetConfigCacheForTests(): void {
-  cachedConfig = null;
+  // Kept as a no-op compatibility hook: config is intentionally reloaded for
+  // each construction so startup and facade creation cannot disagree.
 }

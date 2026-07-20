@@ -169,6 +169,7 @@ function invokePrintTool(toolName: string, rawArgs: Record<string, unknown>, ctx
 
 export const printerModuleGroup = defineToolModule({
   domain: "printer",
+  supportedPlatforms: ["c64u", "u2"],
   summary: "Grouped printer text, bitmap, and character definition helpers.",
   resources: ["c64://guide/bootstrap"],
   defaultTags: ["printer", "device"],

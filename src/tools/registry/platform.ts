@@ -1,4 +1,5 @@
 import { describePlatformCapabilities, type PlatformId } from "../../platform.js";
+import { cancelGeneratedSidPlayback } from "../audio.js";
 import { debugModuleGroup as debugModule } from "../debug.js";
 import { viceModuleGroup as viceModule } from "../vice.js";
 import { jsonResult } from "../responses.js";
@@ -94,6 +95,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
       };
     }
 
+    cancelGeneratedSidPlayback(); // A backend switch is the documented cue to stop it rather than let it keep playing on the old backend.
     ctx.client.switchBackend(backend);
     ctx.setPlatform(backend);
 

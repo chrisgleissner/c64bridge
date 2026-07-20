@@ -5,19 +5,22 @@ GPL-2.0-only
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { EmbeddingIndexFile, EmbeddingRecord, RagLanguage } from "./types.js";
 import fsSync from "node:fs";
 import { EmbeddingModel } from "./embeddings.js";
 
-const BASIC_DIR = path.resolve("data/basic/examples");
-const ASM_DIR = path.resolve("data/assembly/examples");
-const EXTERNAL_DIR = path.resolve("external");
-const DOC_ROOT = path.resolve("doc");
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const ASSET_ROOT = process.env.C64BRIDGE_ASSET_ROOT ? path.resolve(process.env.C64BRIDGE_ASSET_ROOT) : PACKAGE_ROOT;
+const BASIC_DIR = path.join(ASSET_ROOT, "data/basic/examples");
+const ASM_DIR = path.join(ASSET_ROOT, "data/assembly/examples");
+const EXTERNAL_DIR = path.join(ASSET_ROOT, "external");
+const DOC_ROOT = path.join(ASSET_ROOT, "doc");
 const DOC_EXCLUDE_DIRS = new Set(["plans"]);
-const CONTEXT_DIR = path.resolve("data/context");
+const CONTEXT_DIR = path.join(ASSET_ROOT, "data/context");
 const BOOTSTRAP_PATH = path.join(CONTEXT_DIR, "bootstrap.md");
-const AGENTS_PATH = path.resolve("AGENTS.md");
-const PROMPTS_DIR = path.resolve(".github/prompts");
+const AGENTS_PATH = path.join(ASSET_ROOT, "AGENTS.md");
+const PROMPTS_DIR = path.join(ASSET_ROOT, ".github/prompts");
 const CHAT_PATH = path.join(CONTEXT_DIR, "chat.md");
 // RAG_DOC_FILES env var can add extra specific files, comma-separated
 const ENV_DOC_FILES = (process.env.RAG_DOC_FILES ?? "")
@@ -40,7 +43,7 @@ function shouldExcludeDocFile(file: string): boolean {
 }
 
 function resolveEmbeddingsDir(override?: string): string {
-  return path.resolve(override ?? process.env.RAG_EMBEDDINGS_DIR ?? "data");
+  return path.resolve(override ?? process.env.RAG_EMBEDDINGS_DIR ?? path.join(ASSET_ROOT, "data"));
 }
 
 function embeddingIndexPaths(dir: string) {

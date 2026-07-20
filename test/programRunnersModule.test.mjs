@@ -553,7 +553,10 @@ test("upload_run_basic verify true annotates metadata", async () => {
         },
         async readScreen() {
           screenReads += 1;
-          return "READY.\n";
+          // First read is the immediate post-run screen check in
+          // executeUploadRunBasic; the poll loop's first read then observes
+          // the firmware's own RUN echo, matching real backend behavior.
+          return screenReads === 1 ? "READY.\n" : "RUN\n";
         },
       },
       logger: createLogger(),
@@ -633,13 +636,21 @@ test("upload_run_basic verify tolerates repeated screen read failures", async ()
   process.env.C64BRIDGE_POLL_INTERVAL_MS = "1";
 
   try {
+    let readCalls = 0;
     const ctx = {
       client: {
         async uploadAndRunBasic() {
           return { success: true };
         },
         async readScreen() {
-          throw new Error("screen transport offline");
+          readCalls += 1;
+          // Transient failures (e.g. a momentary transport hiccup) must not
+          // be mistaken for "nothing executed" — the poller should keep
+          // retrying and still observe RUN once reads start succeeding.
+          if (readCalls <= 3) {
+            throw new Error("screen transport offline");
+          }
+          return "RUN\n";
         },
       },
       logger: createLogger(),
@@ -870,11 +881,19 @@ test("upload_run_asm handles firmware failure", async () => {
 
 test("upload_run_asm returns structured content on success", async () => {
   const calls = [];
+  let screenRamCall = 0;
   const ctx = {
     client: {
       async uploadAndRunAsm(program) {
         calls.push(program);
         return { success: true, details: { ok: true } };
+      },
+      async readScreen() {
+        return "RUN\n";
+      },
+      async readMemoryRaw(_address, length) {
+        screenRamCall += 1;
+        return new Uint8Array(length).fill(screenRamCall <= 1 ? 0 : 1);
       },
     },
     logger: createLogger(),
@@ -906,7 +925,7 @@ test("upload_run_asm verify true annotates metadata", async () => {
 
   try {
     let screenCall = 0;
-    let lowMemCall = 0;
+    let screenRamCall = 0;
     const ctx = {
       client: {
         async uploadAndRunAsm() {
@@ -917,13 +936,10 @@ test("upload_run_asm verify true annotates metadata", async () => {
           return screenCall === 1 ? "RUN\n" : "READY.\n";
         },
         async readMemoryRaw(address, length) {
-          if (address === 0xD000) {
-            return new Uint8Array(length);
-          }
-          if (address === 0x0000) {
+          if (address === 0x0400) {
             const buffer = new Uint8Array(length);
-            buffer[0xA0] = lowMemCall & 0xff;
-            lowMemCall += 1;
+            buffer[0] = screenRamCall & 0xff;
+            screenRamCall += 1;
             return buffer;
           }
           throw new Error(`unexpected address ${address}`);
@@ -978,7 +994,7 @@ test("upload_run_asm reports crashed programs when verification detects no progr
           return "RUN\n";
         },
         async readMemoryRaw(address, length) {
-          if (address === 0xD000 || address === 0x0000) {
+          if (address === 0x0400) {
             return new Uint8Array(length);
           }
           throw new Error(`unexpected address ${address}`);
@@ -995,7 +1011,7 @@ test("upload_run_asm reports crashed programs when verification detects no progr
 
     assert.equal(result.isError, true);
     assert.equal(result.metadata.error.kind, "execution");
-    assert.equal(result.metadata.error.details.reason, "no VIC/CIA/TI/screen progression within window");
+    assert.equal(result.metadata.error.details.reason, "no program-visible screen progression within window");
   } finally {
     if (originalMax === undefined) delete process.env.C64BRIDGE_POLL_MAX_MS;
     else process.env.C64BRIDGE_POLL_MAX_MS = originalMax;
@@ -1004,20 +1020,33 @@ test("upload_run_asm reports crashed programs when verification detects no progr
   }
 });
 
-test("upload_run_asm verify treats repeated screen read failures as instant execution", async () => {
+test("upload_run_asm verify tolerates transient screen read failures and still verifies via liveness", async () => {
   const originalMax = process.env.C64BRIDGE_POLL_MAX_MS;
   const originalInterval = process.env.C64BRIDGE_POLL_INTERVAL_MS;
-  process.env.C64BRIDGE_POLL_MAX_MS = "20";
+  process.env.C64BRIDGE_POLL_MAX_MS = "60";
   process.env.C64BRIDGE_POLL_INTERVAL_MS = "1";
 
   try {
+    let readScreenCalls = 0;
+    let screenRamCall = 0;
     const ctx = {
       client: {
         async uploadAndRunAsm() {
           return { success: true };
         },
         async readScreen() {
-          throw new Error("monitor unavailable");
+          readScreenCalls += 1;
+          // A momentary monitor hiccup must not be mistaken for "nothing
+          // executed" — the poller should keep retrying and still confirm
+          // real liveness once reads start succeeding.
+          if (readScreenCalls <= 3) {
+            throw new Error("monitor unavailable");
+          }
+          return "RUN\n";
+        },
+        async readMemoryRaw(_address, length) {
+          screenRamCall += 1;
+          return new Uint8Array(length).fill(screenRamCall <= 1 ? 0 : 1);
         },
       },
       logger: createLogger(),

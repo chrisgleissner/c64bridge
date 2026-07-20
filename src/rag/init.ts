@@ -5,24 +5,27 @@ GPL-2.0-only
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { LocalMiniHashEmbedding } from "./embeddings.js";
 import { buildAllIndexes, loadIndexes } from "./indexer.js";
 import { LocalRagRetriever } from "./retriever.js";
 import { LoggingRagRetriever } from "./loggingRetriever.js";
 import type { RagRetriever } from "./types.js";
-const EXTERNAL_DIR = path.resolve("external");
-const BASIC_DATA_DIR = path.resolve("data/basic/examples");
-const ASM_DATA_DIR = path.resolve("data/assembly/examples");
-const DOC_DIR = path.resolve("doc");
-const CONTEXT_DIR = path.resolve("data/context");
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const assetRoot = process.env.C64BRIDGE_ASSET_ROOT ? path.resolve(process.env.C64BRIDGE_ASSET_ROOT) : PACKAGE_ROOT;
+const EXTERNAL_DIR = path.join(assetRoot, "external");
+const BASIC_DATA_DIR = path.join(assetRoot, "data/basic/examples");
+const ASM_DATA_DIR = path.join(assetRoot, "data/assembly/examples");
+const DOC_DIR = path.join(assetRoot, "doc");
+const CONTEXT_DIR = path.join(assetRoot, "data/context");
 const BOOTSTRAP_PATH = path.join(CONTEXT_DIR, "bootstrap.md");
-const AGENTS_PATH = path.resolve("AGENTS.md");
-const PROMPTS_DIR = path.resolve(".github/prompts");
+const AGENTS_PATH = path.join(assetRoot, "AGENTS.md");
+const PROMPTS_DIR = path.join(assetRoot, ".github/prompts");
 const CHAT_PATH = path.join(CONTEXT_DIR, "chat.md");
 
 function resolveEmbeddingsDir(): string {
-  return path.resolve(process.env.RAG_EMBEDDINGS_DIR ?? "data");
+  return path.resolve(process.env.RAG_EMBEDDINGS_DIR ?? path.join(assetRoot, "data"));
 }
 
 function embeddingIndexPaths() {

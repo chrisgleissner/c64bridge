@@ -116,13 +116,9 @@ function expandPetsciiTokens(text: string): string {
 
 // ---------------------------------------------------------------------------
 // Joystick helpers
-// Port 2 → CIA1 Port A ($DC00), Port 1 → CIA1 Port B ($DC01)
-// Bits 0-4: Up / Down / Left / Right / Fire, active LOW (0 = pressed)
+// Bits 0-4: Up / Down / Left / Right / Fire, active LOW (0 = pressed).
+// VICE must use Binary Monitor Joyport Set; CIA register writes are not input.
 // ---------------------------------------------------------------------------
-const JOYSTICK_PORT_ADDRESS: Record<1 | 2, number> = {
-  1: 0xDC01,
-  2: 0xDC00,
-};
 
 const JOYSTICK_BIT: Record<string, number> = {
   up: 0,
@@ -223,11 +219,11 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input (a C64U firmware version that provides it, or U64 3.15+); VICE writes CIA1 registers.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
-      description: "Joystick port (1 = $DC01, 2 = $DC00).",
+    description: "Joystick port (1 or 2).",
       integer: true,
       minimum: 1,
       maximum: 2,
@@ -370,19 +366,18 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
         });
       }
 
-      const addr = JOYSTICK_PORT_ADDRESS[port];
       if (parsed.controls.some((control) => !(control in JOYSTICK_BIT))) {
         throw new ToolValidationError("VICE joystick supports up, down, left, right, and fire only.", { path: "$.controls" });
       }
 
       if (parsed.action === "release") {
-        await ctx.client.viceMemSet(addr, Uint8Array.of(releasedByte));
-        ctx.logger.info("Released joystick", { port, address: `$${addr.toString(16).toUpperCase()}` });
+        await ctx.client.viceJoyportSet(port, releasedByte);
+        ctx.logger.info("Released joystick", { port });
         return textResult(`Joystick port ${port} released.`, { success: true, port, action: "release" });
       }
 
       if (parsed.action === "press") {
-        await ctx.client.viceMemSet(addr, Uint8Array.of(pressedByte));
+        await ctx.client.viceJoyportSet(port, pressedByte);
         ctx.logger.info("Pressed joystick", { port, controls: parsed.controls, byte: pressedByte });
         return textResult(
           `Joystick port ${port} pressed: ${parsed.controls.join(", ") || "none"}.`,
@@ -391,9 +386,9 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       }
 
       // tap: press → wait → release
-      await ctx.client.viceMemSet(addr, Uint8Array.of(pressedByte));
+      await ctx.client.viceJoyportSet(port, pressedByte);
       await new Promise<void>((res) => setTimeout(res, durationMs));
-      await ctx.client.viceMemSet(addr, Uint8Array.of(releasedByte));
+      await ctx.client.viceJoyportSet(port, releasedByte);
       ctx.logger.info("Tapped joystick", { port, controls: parsed.controls, durationMs });
       return textResult(
         `Joystick port ${port} tapped: ${parsed.controls.join(", ") || "none"} for ${durationMs}ms.`,

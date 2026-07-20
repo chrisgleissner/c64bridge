@@ -217,6 +217,40 @@ test("background tasks persist task errors and reuse ids when restarted", async 
   }
 });
 
+test("HARD01-028 a background iteration that resolves {success:false} is recorded as a failure, not counted as healthy", async () => {
+  const { file, dir } = tmpPath("background-resolved-failure", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    const ctx = {
+      client: {
+        async readMemory() {
+          // Resolved (not thrown) failure, as C64Client methods normally
+          // report device-reported errors.
+          return { success: false, details: "device unreachable" };
+        },
+      },
+      logger: createLogger(),
+    };
+
+    const started = await metaModule.invoke("start_background_task", {
+      name: "resolved-failure",
+      operation: "read",
+      intervalMs: 5,
+      maxIterations: 1,
+    }, ctx);
+    assert.equal(started.metadata?.success, true);
+
+    const task = await waitForTaskCompletion(metaModule, "resolved-failure", ctx);
+    assert.equal(task?.status, "error");
+    assert.ok(String(task?.lastError ?? "").includes("device unreachable"));
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
+
 test("background tasks stop active timers and support write_memory alias defaults", async () => {
   const { file, dir } = tmpPath("background5", "tasks.json");
   await fs.mkdir(dir, { recursive: true });

@@ -13,7 +13,9 @@ import type { OpcodeAddressingMode } from "./opcodeInventory.js";
 export interface AssembleOptions {
   /**
    * Optional default load address used when no ORG or `* =` directive appears.
-   * Defaults to $0801 so that the output PRG can be run with SYS 2061.
+   * Defaults to $0801 (the conventional BASIC-adjacent origin for standalone
+   * machine code). The PRG's first two bytes double as its entry point;
+   * callers run it via a typed `SYS <entry>`, not `RUN`.
    */
   loadAddress?: number;
   /**

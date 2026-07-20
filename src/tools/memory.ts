@@ -296,11 +296,12 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       });
     }
 
+    const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined; // Pin for this whole pause/read/write/resume sequence so a concurrent select_backend can't retarget it (HARD01-016).
     const canPause = supportsMachinePause(ctx);
     let paused = false;
     try {
       if (canPause) {
-        const pauseResult = await ctx.client.pause();
+        const pauseResult = await ctx.client.pause(pinnedFacade);
         if (!pauseResult.success) {
           throw new ToolExecutionError("C64 firmware reported failure while pausing", {
             details: normaliseFailure(pauseResult.details),
@@ -313,7 +314,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       const maskBytes = maskInfo?.bytes;
       const readLength = Math.max(1, Math.max(writeInfo.bytes.length, expectedBytes.length));
 
-      const preRead = await ctx.client.readMemory(parsed.address, String(readLength));
+      const preRead = await ctx.client.readMemory(parsed.address, String(readLength), pinnedFacade);
       if (!preRead.success) {
         throw new ToolExecutionError("C64 firmware reported failure while reading memory", {
           details: normaliseFailure(preRead.details),
@@ -346,14 +347,14 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
         }
       }
 
-      const writeResult = await ctx.client.writeMemory(parsed.address, writeInfo.canonical);
+      const writeResult = await ctx.client.writeMemory(parsed.address, writeInfo.canonical, pinnedFacade);
       if (!writeResult.success) {
         throw new ToolExecutionError("C64 firmware reported failure while writing memory", {
           details: normaliseFailure(writeResult.details),
         });
       }
 
-      const postRead = await ctx.client.readMemory(parsed.address, String(Math.max(1, writeInfo.bytes.length)));
+      const postRead = await ctx.client.readMemory(parsed.address, String(Math.max(1, writeInfo.bytes.length)), pinnedFacade);
       if (!postRead.success) {
         throw new ToolExecutionError("C64 firmware reported failure while reading back memory", {
           details: normaliseFailure(postRead.details),
@@ -407,6 +408,20 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
         verificationMetadata.preReadMismatches = preMismatches;
       }
 
+      if (paused) { // A failed resume here leaves the machine paused: a recoverable operation failure, not a log.
+        const resumeResult = await ctx.client.resume(pinnedFacade);
+        if (!resumeResult.success) {
+          throw new ToolExecutionError("Write completed but the machine could not be resumed", {
+            details: {
+              machinePaused: true,
+              resume: normaliseFailure(resumeResult.details),
+              recovery: "Call c64_system with op 'resume' before further machine operations.",
+              verification: verificationMetadata,
+            },
+          });
+        }
+        paused = false;
+      }
       return textResult(`Wrote ${resolvedLength ?? "the provided"} bytes starting at ${resolvedAddress} (verified).`, {
         success: true,
         address: resolvedAddress,
@@ -420,7 +435,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     } finally {
       if (paused) {
         try {
-          const resumeResult = await ctx.client.resume();
+          const resumeResult = await ctx.client.resume(pinnedFacade);
           if (!resumeResult.success) {
             ctx.logger.warn("C64 resume reported failure after write", {
               details: normaliseFailure(resumeResult.details),

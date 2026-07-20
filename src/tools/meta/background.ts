@@ -134,6 +134,13 @@ async function ensureTasksLoaded(): Promise<void> {
     if (parsed && Array.isArray(parsed.tasks)) {
       for (const pt of parsed.tasks as PersistedTask[]) {
         const t = fromPersistedTask(pt);
+        if (t.status === "running") {
+          t.status = "stopped";
+          t.stoppedAt = new Date();
+          t.updatedAt = new Date();
+          t.lastError = "Interrupted by MCP server restart; start the task again to resume monitoring.";
+          t.nextRunAt = null;
+        }
         TASKS.set(t.name, t);
       }
     }
@@ -232,7 +239,10 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
   task._timer = setTimeout(async () => {
     if (task.status !== "running") return;
     try {
-      await runOperation(task.operation, task.args, ctx);
+      const result = await runOperation(task.operation, task.args, ctx);
+      if (result && typeof result === "object" && "success" in result && (result as { success?: unknown }).success === false) {
+        throw new Error(`Operation returned failure: ${JSON.stringify((result as { details?: unknown }).details ?? result)}`);
+      }
       task.iterations += 1;
       task.updatedAt = new Date();
       if (task.maxIterations && task.iterations >= task.maxIterations) {

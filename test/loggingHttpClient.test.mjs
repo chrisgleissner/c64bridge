@@ -130,6 +130,50 @@ test("response interceptor logs with debug enabled", () => {
   assert.ok(debugLogs.some(log => log.includes("response")));
 });
 
+test("HARD01-024 the request interceptor redacts X-Password (case-insensitively) before it ever reaches metadata/logs", () => {
+  const logger = createMockLogger();
+  const client = createLoggingHttpClient({ baseURL: "http://localhost" }, logger);
+
+  const requestConfig = {
+    method: "put",
+    url: "/v1/machine:reset",
+    headers: { "X-Password": "super-secret", Accept: "application/json" },
+  };
+
+  const intercepted = client.instance.interceptors.request.handlers[0].fulfilled(requestConfig);
+  assert.equal(intercepted.__c64Meta.headers["X-Password"], "***");
+  assert.equal(intercepted.__c64Meta.headers.Accept, "application/json");
+  assert.equal(JSON.stringify(intercepted.__c64Meta).includes("super-secret"), false);
+});
+
+test("HARD01-024 debug response/error logging never emits the raw X-Password value", () => {
+  const logger = createDebugLogger();
+  const client = createLoggingHttpClient({ baseURL: "http://localhost" }, logger);
+
+  // Route through the real request interceptor first, exactly as axios
+  // would, so __c64Meta.headers reflects genuine redacted production state
+  // rather than a hand-crafted (and therefore unrealistic) test double.
+  const requestConfig = client.instance.interceptors.request.handlers[0].fulfilled({
+    method: "get",
+    url: "/v1/info",
+    headers: { "x-password": "super-secret" },
+  });
+
+  const response = {
+    status: 200,
+    data: { ok: true },
+    config: requestConfig,
+    headers: { "x-password": "super-secret", "content-type": "application/json" },
+  };
+
+  client.instance.interceptors.response.handlers[0].fulfilled(response);
+
+  const allDebugLogs = logger.logs.debug.map((entry) => JSON.stringify(entry));
+  assert.ok(allDebugLogs.every((entry) => !entry.includes("super-secret")));
+  const responseLog = logger.logs.debug.find((entry) => entry[0].includes("response"));
+  assert.equal(responseLog[1].headers["x-password"], "***");
+});
+
 test("response interceptor handles missing metadata", () => {
   const logger = createMockLogger();
   const client = createLoggingHttpClient({ baseURL: "http://localhost" }, logger);

@@ -82,11 +82,13 @@ test("music_generate builds timeline and triggers SID sequence", async () => {
   assert.equal(result.metadata.steps, 2);
   assert.equal(result.metadata.timeline.length, 2);
 
-  await new Promise((resolve) => setTimeout(resolve, 120));
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   assert.equal(volumeCalls.length, 1);
   assert.equal(noteCalls.length, 2);
-  assert.equal(noteOffCount, 1);
+  // HARD01-033: the gate is cleared between every note (steps) plus a final
+  // release, so envelope articulation retriggers for each note.
+  assert.equal(noteOffCount, 3);
   assert.deepEqual(noteCalls.map((call) => call.note), ["C4", "E4"]);
 });
 
@@ -123,7 +125,10 @@ test("music_generate defaults to triangle waveform and best-practice ADSR", asyn
   assert.equal(call.decay, 7);
   assert.equal(call.sustain, 15);
   assert.equal(call.release, 0);
-  assert.equal(noteOffCount, 1);
+  // HARD01-033: one gate-clear before the (non-existent) next note never
+  // happens for a single-step run, but the trailing release still fires,
+  // plus the loop's own gate-clear for its one note.
+  assert.equal(noteOffCount, 2);
 });
 
 test("music_generate expression preset uses varied durations and reports preset", async () => {
@@ -171,6 +176,50 @@ test("music_generate survives playback error and logs", async () => {
   assert.equal(result.isError, undefined);
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(noteOnCalls, 1);
+});
+
+test("HARD01-030 music_generate pins its facade so a mid-playback backend switch cannot retarget later notes", async () => {
+  const events = [];
+  let activeFacadeType = "vice";
+  const viceFacade = { type: "vice" };
+  const c64uFacade = { type: "c64u" };
+
+  const ctx = {
+    client: {
+      async pinFacade() {
+        return activeFacadeType === "vice" ? viceFacade : c64uFacade;
+      },
+      async sidSetVolume(volume, facade) {
+        events.push({ op: "volume", facade: facade?.type });
+        return { success: true };
+      },
+      async sidNoteOn(payload, facade) {
+        events.push({ op: `note-on-${payload.note}`, facade: facade?.type });
+        // Simulate a concurrent c64_select_backend firing mid-arpeggio.
+        activeFacadeType = "c64u";
+        return { success: true };
+      },
+      async sidNoteOff(voice, facade) {
+        events.push({ op: "note-off", facade: facade?.type });
+        return { success: true };
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const result = await audioModule.invoke(
+    "music_generate",
+    { root: "C4", pattern: "0,4", steps: 2, tempoMs: 20, waveform: "tri" },
+    ctx,
+  );
+  assert.equal(result.isError, undefined);
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  // Every write must have used the facade pinned when the arpeggio started
+  // (vice), never the one made active by the mid-flight switch (c64u).
+  assert.ok(events.length > 0);
+  assert.ok(events.every((event) => event.facade === "vice"), JSON.stringify(events));
 });
 
 test("music_compile_and_play compiles SIDWAVE to PRG and runs on C64", async () => {

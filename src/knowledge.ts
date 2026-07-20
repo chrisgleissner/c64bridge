@@ -97,7 +97,7 @@ Key SID Registers (decimal addresses):
 **PAL vs NTSC Clock Differences:**
 - PAL: 985,248 Hz SID clock
 - NTSC: 1,022,727 Hz SID clock
-- Formula: freq_value = (frequency_Hz × 65536) / clock_rate
+- Formula: freq_value = round((frequency_Hz × 16777216) / clock_rate) (SID has a 24-bit phase accumulator)
 
 **Complete SID Frequency Lookup Table (All Notes, Multiple Octaves):**
 

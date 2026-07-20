@@ -24,6 +24,12 @@ const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 const DEFAULT_SILENCE_VERIFY_DURATION_SECONDS = 1.5;
 const DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD = 0.02;
 const DEFAULT_SILENCE_VERIFY_WAIT_MS = 150;
+const generatedPlaybacks = new Set<AbortController>();
+
+export function cancelGeneratedSidPlayback(): void {
+  for (const controller of generatedPlaybacks) controller.abort();
+  generatedPlaybacks.clear();
+}
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -524,6 +530,7 @@ export const audioModule = defineToolModule({
           const parsed = sidResetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting SID", { mode: parsed.hard ? "hard" : "soft" });
 
+          cancelGeneratedSidPlayback(); // Reset is the documented way to stop a generated arpeggio.
           const result = await ctx.client.sidReset(parsed.hard);
           if (!result.success) {
             throw new ToolExecutionError("C64 firmware reported failure while resetting SID", {
@@ -680,6 +687,7 @@ export const audioModule = defineToolModule({
 
           ctx.logger.info("Silencing all SID voices", { verify });
 
+          cancelGeneratedSidPlayback(); // Otherwise its remaining notes would resume writing right after this silences the chip.
           const result = await ctx.client.sidSilenceAll();
           if (!result.success) {
             throw new ToolExecutionError("C64 firmware reported failure while silencing SID", {
@@ -887,10 +895,16 @@ export const audioModule = defineToolModule({
             waveform: parsed.waveform,
           });
 
+          cancelGeneratedSidPlayback(); // Replace any prior generated arpeggio rather than letting two run at once.
+          const controller = new AbortController();
+          generatedPlaybacks.add(controller);
+          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined); // Pin once so a later select_backend can't retarget notes mid-arpeggio (HARD01-030).
           void (async () => {
             try {
-              await ctx.client.sidSetVolume(8);
+              const pinnedFacade = await pinnedFacadePromise;
+              await ctx.client.sidSetVolume(8, pinnedFacade);
               for (let i = 0; i < parsed.steps; i += 1) {
+                if (controller.signal.aborted) break;
                 const iv = intervals[i % intervals.length]!;
                 const note = transposeNote(parsed.root, iv);
                 await ctx.client.sidNoteOn({
@@ -902,18 +916,22 @@ export const audioModule = defineToolModule({
                   decay: 7,
                   sustain: 15,
                   release: 0,
-                });
+                }, pinnedFacade);
                 const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                await sleep(durationMs);
+                await sleep(Math.max(1, Math.min(20, Math.floor(durationMs / 8)))); // Clear GATE between notes so every note retriggers ADSR.
+                await ctx.client.sidNoteOff(1, pinnedFacade);
+                if (!controller.signal.aborted) await sleep(Math.max(0, durationMs - Math.max(1, Math.min(20, Math.floor(durationMs / 8)))));
               }
-              await ctx.client.sidNoteOff(1);
+              await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {
               const message = playbackError instanceof Error ? playbackError.message : String(playbackError);
               ctx.logger.warn("music_generate playback failed", { error: message });
+            } finally {
+              generatedPlaybacks.delete(controller);
             }
           })();
 
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root}.`, {
+          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root}. Playback is running and will be replaced by the next generated sequence.`, {
             success: true,
             root: parsed.root,
             intervals,

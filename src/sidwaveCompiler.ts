@@ -187,9 +187,9 @@ export function compileSidwaveToSid(doc: ParsedSidwave, prg: Buffer, options?: {
   return { sid: Buffer.concat([header, body]) };
 }
 
-function hzToSidFrequency(hz: number, system: SystemMode): number {
+export function hzToSidFrequency(hz: number, system: SystemMode): number {
   const phi2 = system === "PAL" ? 985_248 : 1_022_727;
-  const value = Math.round((hz * 65536) / phi2);
+  const value = Math.round((hz * 16_777_216) / phi2);
   return Math.max(0, Math.min(0xffff, value));
 }
 
