@@ -4,6 +4,17 @@
 
 
 
+
+## 1.0.2 - 2026-08-07
+
+### Bug Fixes
+
+- resolve open Dependabot dependency alerts (f72973ec)
+
+### Chores
+
+- prepare release 1.0.1 (3eafecc5)
+
 ## 1.0.1 - 2026-07-20
 
 ### Bug Fixes
