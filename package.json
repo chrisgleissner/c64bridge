@@ -68,10 +68,10 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "axios": "^1.18.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "axios": "^1.19.0",
     "date-fns": "^4.4.0",
-    "fastify": "^5.10.0",
+    "fastify": "^5.11.2",
     "jimp": "^1.6.1",
     "meyda": "^5.6.3",
     "octokit": "^5.0.5",
@@ -84,7 +84,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.5",
-    "tsx": "^4.23.0",
+    "tsx": "^4.23.11",
     "typescript": "^6.0.3"
   },
   "files": [
