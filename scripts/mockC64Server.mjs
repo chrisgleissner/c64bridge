@@ -44,6 +44,9 @@ function createDefaultConfigs() {
     Video: {
       Mode: "PAL",
     },
+    "U64 Specific Settings": {
+      "System Mode": "PAL",
+    },
   };
 }
 
@@ -127,6 +130,14 @@ function createInitialState() {
     },
     lastStreamAction: null,
     streamActionLog: [],
+    // Number of upcoming stream:start requests answered like firmware with an empty ARP entry.
+    streamHostResolveFailures: 0,
+    // When set, the audio emitter stops after this many packets to imitate UDP packet loss.
+    audioPacketLimit: null,
+    audioSignal: null,
+    streamStartResponseDelayMs: 0,
+    // Unlike the one-shot failure counter, this gate stays closed until a test's ping stub primes it.
+    streamNeighborReady: true,
   };
 }
 
@@ -329,7 +340,10 @@ export async function startMockC64Server(options = {}) {
     }
 
     const sendAudioPacket = () => {
-      const packet = buildMockAudioPacket(runtime.sequence, runtime.sampleIndex);
+      if (state.audioPacketLimit !== null && state.streams.audio.packetsSent >= state.audioPacketLimit) {
+        return;
+      }
+      const packet = buildMockAudioPacket(runtime.sequence, runtime.sampleIndex, state.audioSignal);
       runtime.sequence = (runtime.sequence + 1) & 0xffff;
       runtime.sampleIndex += 192;
       socket.send(packet, port, host);
@@ -713,7 +727,7 @@ export async function startMockC64Server(options = {}) {
 
     if (url.startsWith("/v1/configs/")) {
       const routeUrl = new URL(url, "http://mock.local");
-      const segments = routeUrl.pathname.split("/").filter(Boolean).slice(2); // remove v1 + configs
+      const segments = routeUrl.pathname.split("/").filter(Boolean).slice(2).map((segment) => decodeURIComponent(segment)); // remove v1 + configs
 
       if (segments.length === 1) {
         const [category] = segments;
@@ -730,7 +744,8 @@ export async function startMockC64Server(options = {}) {
         if (method === "GET") {
           const categoryData = state.configs[category] ?? {};
           const value = categoryData[item];
-          sendJson(res, { value });
+          // Firmware nests the item as { "<category>": { "<item>": { current } } }; `value` is kept for older callers.
+          sendJson(res, { value, [category]: { [item]: { current: value } } });
           return;
         }
 
@@ -762,10 +777,20 @@ export async function startMockC64Server(options = {}) {
         if (action === "start" && method === "PUT") {
           const body = await readJson(req);
           const target = routeUrl.searchParams.get("ip") ?? routeUrl.searchParams.get("target") ?? body?.ip ?? body?.target ?? null;
+          const neighborReady = typeof state.streamNeighborReady === "function" ? state.streamNeighborReady(target) : state.streamNeighborReady;
+          if (!neighborReady || state.streamHostResolveFailures > 0) {
+            if (state.streamHostResolveFailures > 0) state.streamHostResolveFailures -= 1;
+            state.streamActionLog.push({ action: "start-rejected", stream, target });
+            sendJson(res, { errors: ["Network Host Resolve Error"] }, 404);
+            return;
+          }
           state.streams[stream] = { active: true, target, packetsSent: 0 };
           state.lastStreamAction = { action: "start", stream, target };
           state.streamActionLog.push({ action: "start", stream, target });
           startStreamEmitter(stream, target);
+          if (state.streamStartResponseDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, state.streamStartResponseDelayMs));
+          }
           sendJson(res, { result: "started", stream, target });
           return;
         }
@@ -994,15 +1019,17 @@ function buildMockVideoFramePackets(frameNumber, sequenceStart) {
   return packets;
 }
 
-function buildMockAudioPacket(sequence, sampleIndex) {
+function buildMockAudioPacket(sequence, sampleIndex, signal = null) {
   const header = Buffer.alloc(2);
   header.writeUInt16LE(sequence & 0xffff, 0);
 
   const payload = Buffer.alloc(768);
   for (let index = 0; index < 192; index += 1) {
     const phase = ((sampleIndex + index) % 256) - 128;
-    const left = phase * 128;
-    const right = -left;
+    // Both channels carry the same sawtooth plus a different constant offset, like the real stream.
+    const wave = signal ? Math.sin(2 * Math.PI * signal.frequency * (sampleIndex + index) / signal.sampleRate) : phase * 128;
+    const left = signal ? Math.round(wave * signal.amplitude + signal.leftOffset) : wave + 8000;
+    const right = signal ? Math.round(wave * signal.amplitude * signal.rightGain + signal.rightOffset) : wave + 5000;
     payload.writeInt16LE(left, index * 4);
     payload.writeInt16LE(right, index * 4 + 2);
   }

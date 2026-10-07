@@ -26,7 +26,7 @@ export interface VoiceAnalysis {
 export interface AnalysisResult {
   sidwave: number;
   analysis: {
-    source: "microphone";
+    source: "microphone" | "ultimate-stream";
     durationSeconds: number;
     voices: VoiceAnalysis[];
     global_metrics: {
@@ -38,11 +38,16 @@ export interface AnalysisResult {
   };
 }
 
-export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
-  const duration = Math.max(0.5, Math.min(120, Number(params.durationSeconds || 0)));
+export function normalizeAudioDuration(durationSeconds: number): number {
+  const duration = Number(durationSeconds);
   if (!Number.isFinite(duration)) {
     throw new Error("durationSeconds must be a number");
   }
+  return Math.max(0.5, Math.min(120, duration));
+}
+
+export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
+  const duration = normalizeAudioDuration(params.durationSeconds);
 
   // Capture PCM from default microphone using naudiodon (PortAudio)
   const sampleRate = 44100;
@@ -95,8 +100,54 @@ export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Pro
   const pcm16 = Buffer.concat(chunks);
   const float32 = convertInt16ToFloat32(pcm16);
 
-  const analysis = await analyzePcm(float32, sampleRate, params.expectedSidwave);
+  const analysis = await analyzePcm(float32, sampleRate, "microphone", params.expectedSidwave);
   return analysis;
+}
+
+/**
+ * Analyzes interleaved 16-bit stereo PCM captured from the Ultimate audio stream.
+ *
+ * The stream carries a large constant offset per channel even when silent
+ * (for example left 26900, right 20000). The mean of each channel is removed
+ * before analysis; otherwise the RMS measures the offset instead of the audio level.
+ * Analyze channel energy separately, since a mono mix can cancel opposite-phase
+ * audio and falsely verify silence. Pitch and level follow the louder channel in each window.
+ */
+export async function analyzeStereoStream(
+  interleaved: Int16Array,
+  sampleRate: number,
+  expectedSidwave?: unknown,
+): Promise<AnalysisResult> {
+  const [left, right] = stereoToCenteredChannels(interleaved);
+  return analyzePcm(left, sampleRate, "ultimate-stream", expectedSidwave, right);
+}
+
+function stereoToCenteredChannels(interleaved: Int16Array): [Float32Array, Float32Array] {
+  const frames = Math.floor(interleaved.length / 2);
+  const left = new Float32Array(frames);
+  const right = new Float32Array(frames);
+  if (frames === 0) {
+    return [left, right];
+  }
+  let leftSum = 0;
+  let rightSum = 0;
+  for (let i = 0; i < frames; i += 1) {
+    leftSum += interleaved[i * 2]!;
+    rightSum += interleaved[i * 2 + 1]!;
+  }
+  const leftMean = leftSum / frames;
+  const rightMean = rightSum / frames;
+  for (let i = 0; i < frames; i += 1) {
+    left[i] = (interleaved[i * 2]! - leftMean) / 32768;
+    right[i] = (interleaved[i * 2 + 1]! - rightMean) / 32768;
+  }
+  return [left, right];
+}
+
+export function stereoToCenteredMono(interleaved: Int16Array): Float32Array {
+  const [left, right] = stereoToCenteredChannels(interleaved);
+  for (let i = 0; i < left.length; i += 1) left[i] = (left[i]! + right[i]!) / 2;
+  return left;
 }
 
 function convertInt16ToFloat32(buf: Buffer): Float32Array {
@@ -109,7 +160,13 @@ function convertInt16ToFloat32(buf: Buffer): Float32Array {
   return out;
 }
 
-async function analyzePcm(signal: Float32Array, sampleRate: number, expectedSidwave?: unknown): Promise<AnalysisResult> {
+async function analyzePcm(
+  signal: Float32Array,
+  sampleRate: number,
+  source: AnalysisResult["analysis"]["source"],
+  expectedSidwave?: unknown,
+  secondChannel?: Float32Array,
+): Promise<AnalysisResult> {
   let Pitchfinder: AnyFn;
   let Meyda: AnyFn | null = null;
   try {
@@ -133,13 +190,27 @@ async function analyzePcm(signal: Float32Array, sampleRate: number, expectedSidw
   const frames: Array<{ t0: number; t1: number; freq: number | null; rms: number }> = [];
 
   for (let i = 0; i + windowSize <= signal.length; i += hopSize) {
-    const win = signal.subarray(i, i + windowSize);
-    const rms = computeRms(win, Meyda, sampleRate, windowSize);
+    let win = signal.subarray(i, i + windowSize);
+    let rms = computeRms(win, Meyda, sampleRate, windowSize);
+    if (secondChannel) {
+      const otherWin = secondChannel.subarray(i, i + windowSize);
+      const otherRms = computeRms(otherWin, Meyda, sampleRate, windowSize);
+      if (otherRms > rms) {
+        rms = otherRms;
+        win = otherWin;
+      }
+    }
     const minRms = 0.01; // simple noise gate
     let freq: number | null = null;
     if (rms >= minRms) {
       try {
-        const f = yin(win);
+        // pitchfinder's YIN seeds its difference sum with 1, making low-level
+        // normalized PCM produce spurious ultrasonic pitches. Normalize only
+        // the detector input; RMS and the noise gate retain the original level.
+        let peak = 0;
+        for (const value of win) peak = Math.max(peak, Math.abs(value));
+        const pitchInput = peak > 0 ? Float32Array.from(win, (value) => value / peak) : win;
+        const f = yin(pitchInput);
         if (Number.isFinite(f) && f > 20 && f < 8000) freq = f;
       } catch {}
     }
@@ -229,7 +300,7 @@ async function analyzePcm(signal: Float32Array, sampleRate: number, expectedSidw
   return {
     sidwave: 1.0,
     analysis: {
-      source: "microphone",
+      source,
       durationSeconds: signal.length / sampleRate,
       voices,
       global_metrics: {
@@ -248,7 +319,7 @@ export async function analyzePcmForTest(
   sampleRate: number,
   expectedSidwave?: unknown,
 ): Promise<AnalysisResult> {
-  return analyzePcm(signal, sampleRate, expectedSidwave);
+  return analyzePcm(signal, sampleRate, "microphone", expectedSidwave);
 }
 
 function groupSegments(
@@ -348,9 +419,17 @@ function noteNameToMidiSafe(note: string): number | undefined {
 function computeRms(win: Float32Array, Meyda: AnyFn | null, sampleRate: number, bufferSize: number): number {
   try {
     if (Meyda && typeof Meyda.extract === "function") {
-      const features = Meyda.extract(["rms"], win, { sampleRate, bufferSize });
-      const val = Number(features?.rms ?? 0);
-      if (Number.isFinite(val)) return val;
+      // Rectangular windows give plain sample RMS. Restore Meyda's shared setting
+      // synchronously so other consumers retain their window configuration.
+      const previousWindow = Meyda.windowingFunction;
+      try {
+        Meyda.windowingFunction = "rect";
+        const features = Meyda.extract(["rms"], win, { sampleRate, bufferSize });
+        const val = Number(features?.rms ?? 0);
+        if (Number.isFinite(val)) return val;
+      } finally {
+        Meyda.windowingFunction = previousWindow;
+      }
     }
   } catch {}
   // fallback

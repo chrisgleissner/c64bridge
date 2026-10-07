@@ -4,8 +4,10 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { C64Client } from "../src/c64Client.js";
+import { C64Client, audioSampleRateForSystemMode, isLocalAddress, pingableHost, readSystemMode, streamTargetHost } from "../src/c64Client.js";
 import { ViceBackend } from "../src/device.js";
+import { audioModule } from "../src/tools/audio.js";
+import { streamingModule } from "../src/tools/streaming.js";
 import {
   buildPrinterBasicProgram,
   buildCommodoreBitmapBasicProgram,
@@ -190,6 +192,296 @@ test("C64Client against mock server", async (t) => {
     assert.equal(result.sampleRateHz, 47982.8869047619);
     assert.equal(mock.state.streams.audio.active, false);
     assert.ok(mock.state.streams.audio.packetsSent >= 2);
+  });
+
+  await t.test("captureSamples pings the device and retries once after Network Host Resolve Error", async () => {
+    const primedHosts = [];
+    const priming = new C64Client(mock.baseUrl);
+    priming.primeDeviceNeighborCache = async (host) => {
+      primedHosts.push(host);
+    };
+    const rejectedBefore = mock.state.streamActionLog.filter((entry) => entry.action === "start-rejected").length;
+    mock.state.streamHostResolveFailures = 1;
+
+    const result = await priming.captureSamples({ count: 256 });
+
+    assert.equal(result.samplePairs, 256);
+    assert.deepEqual(primedHosts, ["127.0.0.1"]);
+    assert.equal(mock.state.streamActionLog.filter((entry) => entry.action === "start-rejected").length - rejectedBefore, 1);
+    assert.equal(mock.state.streams.audio.active, false);
+  });
+
+  await t.test("captureSamples reports the host resolve error when the retry fails too", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    mock.state.streamHostResolveFailures = 2;
+
+    await assert.rejects(
+      () => priming.captureSamples({ count: 256 }),
+      /could not resolve stream target .*Network Host Resolve Error.*after pinging/,
+    );
+    assert.equal(primeCalls, 1);
+    mock.state.streamHostResolveFailures = 0;
+  });
+
+  await t.test("streamStart does not ping or retry for other failures", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    const result = await priming.streamStart("audio", "127.0.0.1:19999");
+    assert.equal(result.success, true);
+    assert.equal(primeCalls, 0);
+    await priming.streamStop("audio");
+  });
+
+  await t.test("recordAndAnalyzeAudio analyzes the Ultimate audio stream on c64u", async () => {
+    const result = await client.recordAndAnalyzeAudio({ durationSeconds: 0.5 });
+
+    assert.equal(result.analysis.source, "ultimate-stream");
+    assert.ok(result.analysis.durationSeconds >= 0.5);
+    assert.ok(result.analysis.global_metrics.max_rms > 0);
+    assert.equal(mock.state.streams.audio.active, false);
+  });
+
+  await t.test("recordAndAnalyzeAudio analyzes the packets that arrived when the stream falls short", async () => {
+    mock.state.audioPacketLimit = 40;
+    try {
+      const result = await client.recordAndAnalyzeAudio({ durationSeconds: 0.5 });
+
+      assert.equal(result.analysis.source, "ultimate-stream");
+      assert.ok(result.analysis.durationSeconds > 0.1 && result.analysis.durationSeconds < 0.3);
+      assert.equal(mock.state.streams.audio.active, false);
+    } finally {
+      mock.state.audioPacketLimit = null;
+    }
+  });
+
+  await t.test("streamStart does not ping or retry when the target is not an address of this host", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    const requestsBefore = mock.state.streamActionLog.filter((entry) => entry.action === "start-rejected").length;
+    mock.state.streamHostResolveFailures = 5;
+    try {
+      const result = await priming.streamStart("audio", "192.0.2.77:11010");
+      assert.equal(result.success, false);
+      assert.match(JSON.stringify(result.details), /Network Host Resolve Error/);
+      assert.equal(primeCalls, 0);
+      assert.equal(mock.state.streamActionLog.filter((entry) => entry.action === "start-rejected").length - requestsBefore, 1);
+    } finally {
+      mock.state.streamHostResolveFailures = 0;
+    }
+  });
+
+  await t.test("stream start handles failures returned as results and non-resolve failures on the retry", async () => {
+    const resolveFailure = { success: false, details: { response: {}, errors: ["Network Host Resolve Error"] } };
+    const build = (responses) => {
+      const stub = new C64Client(mock.baseUrl);
+      const calls = [];
+      let primeCalls = 0;
+      stub.primeDeviceNeighborCache = async () => {
+        primeCalls += 1;
+      };
+      stub.facadePromise = Promise.resolve({
+        type: "c64u",
+        streamStart: async (stream, target) => {
+          calls.push([stream, target]);
+          const next = responses.shift();
+          if (next instanceof Error) {
+            throw next;
+          }
+          return next;
+        },
+      });
+      return { stub, calls, primeCalls: () => primeCalls };
+    };
+
+    const recovered = build([resolveFailure, { success: true, details: {} }]);
+    assert.equal((await recovered.stub.streamStart("audio", "127.0.0.1:9")).success, true);
+    assert.equal(recovered.calls.length, 2);
+    assert.equal(recovered.primeCalls(), 1);
+
+    const foreign = build([resolveFailure]);
+    assert.equal(await foreign.stub.streamStart("audio", "192.0.2.77:9").then((r) => r.success), false);
+    assert.equal(foreign.calls.length, 1);
+    assert.equal(foreign.primeCalls(), 0);
+
+    const otherResult = build([resolveFailure, { success: false, details: { errors: ["busy"] } }]);
+    const busy = await otherResult.stub.streamStart("audio", "127.0.0.1:9");
+    assert.deepEqual(busy.details, { errors: ["busy"] });
+
+    const otherError = build([resolveFailure, new Error("socket hang up")]);
+    const failed = await otherError.stub.streamStart("audio", "127.0.0.1:9");
+    assert.equal(failed.success, false);
+    assert.equal(failed.details.message, "socket hang up");
+
+    const resultFormExhausted = build([resolveFailure, resolveFailure]);
+    const exhausted = await resultFormExhausted.stub.streamStart("audio", "127.0.0.1:9");
+    assert.match(exhausted.details.message, /could not resolve stream target 127\.0\.0\.1:9/);
+  });
+
+  await t.test("streamTargetHost and isLocalAddress parse targets and recognise local addresses", () => {
+    assert.equal(streamTargetHost("192.168.1.5:11001"), "192.168.1.5");
+    assert.equal(streamTargetHost("[fe80::1]:11001"), "fe80::1");
+    assert.equal(streamTargetHost("pc.local:9"), "pc.local");
+    assert.equal(streamTargetHost("192.168.1.5"), "192.168.1.5");
+    assert.equal(streamTargetHost("fe80::1"), "fe80::1");
+    assert.equal(streamTargetHost(":9"), null);
+    assert.equal(streamTargetHost(""), null);
+    assert.equal(isLocalAddress("127.0.0.1"), true);
+    assert.equal(isLocalAddress("192.0.2.77"), false);
+    assert.equal(isLocalAddress("not-an-address"), false);
+  });
+
+  await t.test("captureFrames pings the device and retries once after Network Host Resolve Error", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    const primedHosts = [];
+    priming.primeDeviceNeighborCache = async (host) => {
+      primedHosts.push(host);
+    };
+    mock.state.streamHostResolveFailures = 1;
+
+    const result = await priming.captureFrames({ count: 1 });
+
+    assert.equal(result.frames.length, 1);
+    assert.deepEqual(primedHosts, ["127.0.0.1"]);
+    assert.equal(mock.state.streams.video.active, false);
+  });
+
+  await t.test("a reused video capture session retries the stream start after Network Host Resolve Error", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    mock.state.streamHostResolveFailures = 1;
+    try {
+      const result = await priming.captureFrames({ count: 1, reuseSession: true, keepAliveMs: 1_000 });
+      assert.equal(result.frames.length, 1);
+      assert.equal(primeCalls, 1);
+    } finally {
+      await priming.releaseVideoCapture();
+    }
+    assert.equal(mock.state.streams.video.active, false);
+  });
+
+  await t.test("stream_start tool retries after Network Host Resolve Error and reports a repeated failure with its reason", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    const ctx = { client: priming, logger: { info() {} } };
+
+    mock.state.streamHostResolveFailures = 1;
+    const recovered = await streamingModule.invoke("stream_start", { stream: "audio", target: "127.0.0.1:19001" }, ctx);
+    assert.equal(recovered.isError, undefined);
+    assert.equal(primeCalls, 1);
+    await priming.streamStop("audio");
+
+    mock.state.streamHostResolveFailures = 2;
+    const failed = await streamingModule.invoke("stream_start", { stream: "audio", target: "127.0.0.1:19001" }, ctx);
+    assert.equal(failed.isError, true);
+    assert.match(failed.content[0].text, /could not resolve stream target 127\.0\.0\.1:19001.*Network Host Resolve Error/);
+    assert.equal(primeCalls, 2);
+    mock.state.streamHostResolveFailures = 0;
+  });
+
+  await t.test("record_and_analyze_audio tool analyzes the Ultimate stream through the client on c64u", async () => {
+    const result = await audioModule.invoke(
+      "record_and_analyze_audio",
+      { durationSeconds: 1 },
+      { client, logger: { info() {}, debug() {}, warn() {} } },
+    );
+
+    assert.equal(result.isError, undefined);
+    assert.equal(result.metadata.globalMetrics.max_rms > 0, true);
+    assert.equal(mock.state.streams.audio.active, false);
+  });
+
+  await t.test("primeDeviceNeighborCache runs ping against the device host and ignores a missing ping binary", async (st) => {
+    if (process.platform === "win32") {
+      st.skip("uses a POSIX ping stub");
+      return;
+    }
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-ping-"));
+    const argsFile = path.join(dir, "args.txt");
+    const stub = path.join(dir, "ping");
+    fs.writeFileSync(stub, `#!/bin/sh\necho "$@" > "${argsFile}"\nexit 1\n`, { mode: 0o755 });
+    const originalPath = process.env.PATH;
+    try {
+      process.env.PATH = dir;
+      await client.primeDeviceNeighborCache("192.168.1.13");
+      assert.match(fs.readFileSync(argsFile, "utf8"), /(^|\s)192\.168\.1\.13\s*$/);
+
+      fs.rmSync(argsFile);
+      await client.primeDeviceNeighborCache("-f");
+      assert.equal(fs.existsSync(argsFile), false, "option-like hosts must not reach ping");
+
+      fs.rmSync(stub);
+      await client.primeDeviceNeighborCache("192.168.1.13");
+    } finally {
+      process.env.PATH = originalPath;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  await t.test("readSystemMode reads the nested firmware response and the bare value form", () => {
+    assert.equal(
+      readSystemMode({ "U64 Specific Settings": { "System Mode": { current: "NTSC", values: ["PAL", "NTSC"], default: "NTSC" } }, errors: [] }),
+      "NTSC",
+    );
+    assert.equal(readSystemMode({ value: "PAL" }), "PAL");
+    assert.equal(readSystemMode("PAL-60"), "PAL-60");
+    assert.equal(readSystemMode({ errors: [] }), null);
+    assert.equal(readSystemMode(undefined), null);
+  });
+
+  await t.test("audioSampleRateForSystemMode follows the machine clock of each System Mode", () => {
+    for (const mode of ["NTSC", "PAL-60", "PAL-60/L", "ntsc"]) {
+      assert.equal(audioSampleRateForSystemMode(mode), 47940.3408482143, mode);
+    }
+    for (const mode of ["PAL", "NTSC-50", "NTSC-50/L", null]) {
+      assert.equal(audioSampleRateForSystemMode(mode), 47982.8869047619, String(mode));
+    }
+  });
+
+  await t.test("captureSamples reports the sample rate of the configured System Mode", async () => {
+    mock.state.configs["U64 Specific Settings"]["System Mode"] = "NTSC";
+    try {
+      const result = await client.captureSamples({ count: 256 });
+      assert.equal(result.sampleRateHz, 47940.3408482143);
+    } finally {
+      mock.state.configs["U64 Specific Settings"]["System Mode"] = "PAL";
+    }
+  });
+
+  await t.test("recordAndAnalyzeAudio fails instead of analyzing when too few packets arrive", async () => {
+    mock.state.audioPacketLimit = 2;
+    try {
+      await assert.rejects(() => client.recordAndAnalyzeAudio({ durationSeconds: 0.5 }), /Timed out/);
+      assert.equal(mock.state.streams.audio.active, false);
+    } finally {
+      mock.state.audioPacketLimit = null;
+    }
+  });
+
+  await t.test("pingableHost accepts hostnames and addresses and rejects option-like values", () => {
+    assert.equal(pingableHost("c64u"), "c64u");
+    assert.equal(pingableHost("192.168.1.13"), "192.168.1.13");
+    assert.equal(pingableHost("[fe80::1]"), "fe80::1");
+    assert.equal(pingableHost("u64.example.com"), "u64.example.com");
+    assert.equal(pingableHost("-f"), null);
+    assert.equal(pingableHost("--help"), null);
+    assert.equal(pingableHost("host name"), null);
+    assert.equal(pingableHost(""), null);
   });
 
   await t.test("printTextOnPrinterAndRun generates Commodore BASIC and runs it", async () => {
@@ -740,6 +1032,19 @@ test("C64Client backend selection and switching", async (t) => {
         const viceFrames = await client.captureFrames({ count: 1 });
         assert.equal(viceFrames.backend, "vice");
         assert.equal(viceFrames.frames.length, 1);
+
+        const streamLogBefore = c64u.state.streamActionLog.length;
+        // No audio stream exists on VICE, so this takes the microphone path. It may fail without an audio backend.
+        const viceRecording = await client.recordAndAnalyzeAudio({ durationSeconds: 0.5 }).then(
+          (value) => value,
+          (error) => error,
+        );
+        assert.equal(c64u.state.streamActionLog.length, streamLogBefore, "VICE analysis must not start a C64U stream");
+        if (viceRecording instanceof Error) {
+          assert.match(viceRecording.message, /Audio backend not available/);
+        } else {
+          assert.equal(viceRecording.analysis.source, "microphone");
+        }
 
         const viceInfo = await client.info();
         assert.equal(viceInfo?.emulator, "vice");

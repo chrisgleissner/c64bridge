@@ -775,3 +775,33 @@ test("music_compile_and_play rejects empty sidwave strings", async () => {
   assert.equal(result.isError, true);
   assert.ok(String(result.content[0].text).includes("must not be empty"));
 });
+
+test("record_and_analyze_audio analyzes through the client instead of the host microphone", async () => {
+  const calls = [];
+  const res = await audioModule.invoke(
+    "record_and_analyze_audio",
+    { durationSeconds: 1.5 },
+    {
+      client: {
+        recordAndAnalyzeAudio: async (options) => {
+          calls.push(options);
+          return {
+            sidwave: 1,
+            analysis: {
+              source: "ultimate-stream",
+              durationSeconds: 1.5,
+              voices: [],
+              global_metrics: { average_rms: 0.1, max_rms: 0.12 },
+            },
+          };
+        },
+      },
+      logger: createLogger(),
+    },
+  );
+
+  assert.equal(res.isError, undefined);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].durationSeconds, 1.5);
+  assert.equal(res.metadata.globalMetrics.max_rms, 0.12);
+});

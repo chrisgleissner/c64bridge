@@ -286,7 +286,7 @@ const musicCompileArgsSchema = objectSchema({
 });
 
 const recordAndAnalyzeArgsSchema = objectSchema({
-  description: "Record audio from the default input and analyze SID playback characteristics.",
+  description: "Record audio and analyze SID playback characteristics. On the c64u backend the audio comes from the Ultimate audio stream; on other backends it is recorded from the host default input device (microphone).",
   properties: {
     durationSeconds: numberSchema({
       description: "Capture duration in seconds (0.5 - 30).",
@@ -1039,7 +1039,7 @@ export const audioModule = defineToolModule({
     },
     {
       name: "record_and_analyze_audio",
-      description: "Record audio from the default input device and analyze SID playback characteristics.",
+      description: "Record audio and analyze SID playback characteristics. On the c64u backend the audio comes from the Ultimate audio stream; on other backends it is recorded from the host default input device (microphone).",
       summary: "Captures PCM data, extracts notes, tempo, and deviation metrics for SID verification workflows.",
       inputSchema: recordAndAnalyzeArgsSchema.jsonSchema,
       relatedResources: ["c64://sound/sid/spec", "c64://sound/sid/file-format"],
@@ -1058,7 +1058,8 @@ export const audioModule = defineToolModule({
           const parsed = recordAndAnalyzeArgsSchema.parse(args ?? {});
           ctx.logger.info("Recording audio for analysis", { durationSeconds: parsed.durationSeconds });
 
-          const result = await recordAndAnalyzeAudio({
+          const analyzer = resolveAnalyzer(ctx);
+          const result = await analyzer({
             durationSeconds: parsed.durationSeconds,
             expectedSidwave: normaliseSidwaveInput(parsed.expectedSidwave),
           });

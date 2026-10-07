@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { analyzePcmForTest } from "../src/audio/record_and_analyze_audio.js";
+import { analyzePcmForTest, analyzeStereoStream, stereoToCenteredMono } from "../src/audio/record_and_analyze_audio.js";
 
 function genSine(freq, seconds, sampleRate) {
   const length = Math.floor(seconds * sampleRate);
@@ -216,4 +216,115 @@ test("handles invalid note names in expected sidwave", async () => {
   };
   const res = await analyzePcmForTest(a4, SR, expectedSidwave);
   assert.ok(res.analysis.voices.length > 0);
+});
+
+function interleave(left, right) {
+  const out = new Int16Array(left.length * 2);
+  for (let i = 0; i < left.length; i += 1) {
+    out[i * 2] = left[i];
+    out[i * 2 + 1] = right[i];
+  }
+  return out;
+}
+
+test("stereoToCenteredMono removes the constant offset of each channel", () => {
+  const frames = 4800;
+  const left = new Int16Array(frames).fill(26900);
+  const right = new Int16Array(frames).fill(20000);
+  const mono = stereoToCenteredMono(interleave(left, right));
+
+  assert.equal(mono.length, frames);
+  for (const value of mono) {
+    assert.ok(Math.abs(value) < 1e-6);
+  }
+});
+
+test("analyzeStereoStream reports silence for an idle stream with a large offset", async () => {
+  const frames = 48_000;
+  const left = new Int16Array(frames).map((_, i) => 26900 + (i % 3) - 1);
+  const right = new Int16Array(frames).map((_, i) => 20000 + (i % 2));
+  const result = await analyzeStereoStream(interleave(left, right), 47983);
+
+  assert.equal(result.analysis.source, "ultimate-stream");
+  assert.ok(result.analysis.global_metrics.max_rms < 0.001);
+});
+
+test("analyzeStereoStream measures the signal level and pitch above the offset", async () => {
+  const sampleRate = 47983;
+  const sine = genSine(440, 1, sampleRate);
+  const left = Int16Array.from(sine, (v) => Math.round(v * 8000 + 20000));
+  const right = Int16Array.from(sine, (v) => Math.round(v * 8000 + 15000));
+  const result = await analyzeStereoStream(interleave(left, right), sampleRate);
+
+  // Plain RMS of a sine with amplitude 8000 (the offsets of 20000 / 15000 must not contribute).
+  const expectedRms = 8000 / 32768 / Math.SQRT2;
+  const { average_rms: averageRms } = result.analysis.global_metrics;
+  assert.ok(Math.abs(averageRms - expectedRms) < 0.002, `average RMS ${averageRms}, expected ${expectedRms}`);
+  const note = result.analysis.voices[0].detected_notes.find((n) => n.note);
+  assert.equal(note?.note, "A4");
+});
+
+test("analyzePcmForTest reports the plain RMS of the samples, not a windowed RMS", async () => {
+  const result = await analyzePcmForTest(genSine(440, 1, SR).map((x) => x * 0.5), SR);
+  const expectedRms = 0.5 / Math.SQRT2;
+  assert.ok(Math.abs(result.analysis.global_metrics.average_rms - expectedRms) < 0.002);
+  assert.ok(Math.abs(result.analysis.global_metrics.max_rms - expectedRms) < 0.002);
+});
+
+test("stereoToCenteredMono returns an empty signal for empty input and ignores a trailing odd value", () => {
+  assert.equal(stereoToCenteredMono(new Int16Array(0)).length, 0);
+  assert.equal(stereoToCenteredMono(new Int16Array([5, 5, 7])).length, 1);
+});
+
+test("Ultimate stereo analysis detects opposite-phase and single-channel audio without reporting silence", async () => {
+  const sampleRate = 47983;
+  const sine = genSine(440, 0.5, sampleRate);
+  for (const rightGain of [-1, 0]) {
+    const left = Int16Array.from(sine, (v) => Math.round(8000 * v + 20000));
+    const right = Int16Array.from(sine, (v) => Math.round(8000 * rightGain * v + 15000));
+    const result = await analyzeStereoStream(interleave(left, right), sampleRate);
+    const expected = 8000 / 32768 / Math.SQRT2;
+    assert.ok(Math.abs(result.analysis.global_metrics.average_rms - expected) < 0.002);
+    assert.equal(result.analysis.voices[0].detected_notes.find((n) => n.note)?.note, "A4");
+  }
+});
+
+test("Ultimate analysis follows audio moving between stereo channels", async () => {
+  const sampleRate = 47983;
+  const left = new Int16Array(sampleRate).fill(20000);
+  const right = new Int16Array(sampleRate).fill(15000);
+  for (let i = 0; i < sampleRate; i += 1) {
+    const first = i < sampleRate / 2;
+    const value = Math.round(8000 * Math.sin(2 * Math.PI * (first ? 440 : 523.25) * i / sampleRate));
+    if (first) left[i] += value;
+    else right[i] += value;
+  }
+  const result = await analyzeStereoStream(interleave(left, right), sampleRate);
+  const notes = result.analysis.voices[0].detected_notes.filter((n) => n.note).map((n) => n.note);
+  assert.ok(notes.includes("A4"));
+  assert.ok(notes.includes("C5"));
+  assert.ok(result.analysis.global_metrics.average_rms > 0.16);
+});
+
+test("PCM analysis leaves Meyda's global window configuration unchanged", async () => {
+  const { default: Meyda } = await import("meyda");
+  const original = Meyda.windowingFunction;
+  try {
+    Meyda.windowingFunction = "hamming";
+    const result = await analyzePcmForTest(genSine(440, 0.2, SR), SR);
+    assert.ok(Math.abs(result.analysis.global_metrics.average_rms - 1 / Math.SQRT2) < 0.002);
+    assert.equal(Meyda.windowingFunction, "hamming");
+  } finally {
+    Meyda.windowingFunction = original;
+  }
+});
+
+test("pitch detection remains accurate at quiet but audible levels without changing RMS", async () => {
+  for (const amplitude of [0.02, 0.05, 0.12]) {
+    const result = await analyzePcmForTest(genSine(440, 0.2, SR).map((v) => v * amplitude), SR);
+    const note = result.analysis.voices[0].detected_notes.find((n) => n.note);
+    assert.equal(note?.note, "A4");
+    assert.ok(Math.abs(note.frequency - 440) < 0.5);
+    assert.ok(Math.abs(result.analysis.global_metrics.average_rms - amplitude / Math.SQRT2) < 0.001);
+  }
 });
