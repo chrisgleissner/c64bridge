@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import YAML from 'yaml';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { validateReleaseMetadata } from '../../scripts/validate-release.mjs';
 
 function fixture() {
@@ -103,6 +105,67 @@ test('release workflow publishes only the unchanged artifact tested from its exa
   assert.ok(index('Verify prepared release tag') < index('Build project'));
   assert.ok(index('Validate exact packed artifact before publishing') < index('Publish validated artifact to npm'));
   assert.ok(index('Validate MCP Registry manifest') < index('Publish validated artifact to npm'));
-  assert.match(steps[index('Wait for npm package visibility')].run, /PUBLISHED_INTEGRITY.*EXPECTED_INTEGRITY/);
+  const visibility = steps[index('Wait for npm package visibility')].run;
+  assert.match(visibility, /PUBLISHED_INTEGRITY.*EXPECTED_INTEGRITY/);
+  assert.match(visibility, /seq 1 120/);
+  assert.match(visibility, /npm pack.*PACKAGE_VERSION/);
+  assert.match(visibility, /createHash\('sha512'\)/);
+  assert.match(visibility, /assert\.deepEqual\(archive, readFileSync\(process\.env\.RELEASE_TARBALL\)\)/);
+  assert.ok(!visibility.includes('npm publish'));
+  const packageCheck = YAML.parse(fs.readFileSync('.github/workflows/package-check.yaml', 'utf8'));
+  const pack = packageCheck.jobs.verify.steps.find((step) => step.name === 'Pack package').run;
+  assert.match(pack, /seq 1 120/);
+  assert.match(pack, /if DOWNLOADED_TARBALL=\$\(npm pack/);
+  assert.ok(!pack.includes('npm publish'));
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
+});
+
+test('actual release polling waits through metadata and archive 404s and rejects corrupt archives or timeouts', () => {
+  const release = YAML.parse(fs.readFileSync('.github/workflows/release.yaml', 'utf8'));
+  const visibility = release.jobs.release.steps.find((step) => step.name === 'Wait for npm package visibility').run;
+  const check = YAML.parse(fs.readFileSync('.github/workflows/package-check.yaml', 'utf8'));
+  const pack = check.jobs.verify.steps.find((step) => step.name === 'Pack package').run;
+  for (const [script, mode, success] of [[visibility, 'transient', true], [visibility, 'corrupt', false], [visibility, 'missing', false], [pack, 'transient', true], [pack, 'missing', false]]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-availability-'));
+    try {
+      const archive = Buffer.from('the previously tested immutable release archive');
+      fs.writeFileSync(path.join(dir, 'artifact.tgz'), archive);
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(path.join(bin, 'npm'), `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+const root = process.env.RUNNER_TEMP;
+fs.appendFileSync(path.join(root, 'calls'), args.join(' ') + '\\n');
+const counter = (key) => { const file = path.join(root, key); const n = fs.existsSync(file) ? Number(fs.readFileSync(file)) + 1 : 1; fs.writeFileSync(file, String(n)); return n; };
+if (args[0] === 'view') {
+  if (args.includes('dist.integrity')) console.log(process.env.EXPECTED_INTEGRITY);
+  else { if (counter('metadata') === 1 && process.env.TEST_MODE === 'transient') process.exit(1); console.log('1.2.3'); }
+} else if (args[0] === 'pack') {
+  const attempt = counter('downloads');
+  if (process.env.TEST_MODE === 'missing' || (process.env.TEST_MODE === 'transient' && attempt === 1)) { console.error('404: archive not available yet'); process.exit(1); }
+  const index = args.indexOf('--pack-destination');
+  const destination = index >= 0 ? args[index + 1] : root;
+  const filename = 'c64bridge-1.2.3.tgz';
+  const bytes = process.env.TEST_MODE === 'corrupt' ? Buffer.from('wrong archive') : fs.readFileSync(path.join(root, 'artifact.tgz'));
+  fs.writeFileSync(path.join(destination, filename), bytes);
+  console.log(args.includes('--json') ? JSON.stringify([{ filename }]) : filename);
+} else { console.error('Unexpected npm mutation: ' + args.join(' ')); process.exit(99); }
+`, { mode: 0o755 });
+      // Bound retries without delaying tests; execute the workflow's real shell.
+      fs.writeFileSync(path.join(bin, 'seq'), '#!/bin/sh\nprintf "1\\n2\\n3\\n"\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(bin, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
+        cwd: dir, encoding: 'utf8', timeout: 10000,
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: dir, PACKAGE_VERSION: '1.2.3', PACKAGE_SOURCE: 'npm', RELEASE_TARBALL: path.join(dir, 'artifact.tgz'), GITHUB_OUTPUT: path.join(dir, 'output'), EXPECTED_INTEGRITY: `sha512-${createHash('sha512').update(archive).digest('base64')}`, TEST_MODE: mode },
+      });
+      assert.equal(result.status === 0, success, result.stderr);
+      assert.ok(!fs.readFileSync(path.join(dir, 'calls'), 'utf8').includes('publish'));
+      if (success) assert.equal(fs.readFileSync(path.join(dir, 'downloads'), 'utf8'), '2');
+      if (mode === 'missing') assert.match(result.stderr, /unavailable|Timed out/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
 });

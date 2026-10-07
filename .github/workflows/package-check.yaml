@@ -64,7 +64,18 @@ jobs:
             if [ -n "${PACKAGE_VERSION}" ]; then
               PKG="${PKG}@${PACKAGE_VERSION}"
             fi
-            TARBALL=$(npm pack "$PKG" --silent)
+            # npm's publish-time scan and cached 404s can delay the archive even
+            # after version metadata is visible. Retry downloads, never publish.
+            TARBALL=""
+            for attempt in $(seq 1 120); do
+              if DOWNLOADED_TARBALL=$(npm pack "$PKG" --silent); then
+                TARBALL="$DOWNLOADED_TARBALL"
+                break
+              fi
+              echo "Waiting for $PKG archive (attempt ${attempt}/120)" >&2
+              sleep 10
+            done
+            test -n "$TARBALL" || { echo "Package archive remains unavailable" >&2; exit 1; }
           fi
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
 

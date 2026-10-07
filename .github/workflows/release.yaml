@@ -435,8 +435,12 @@ jobs:
         env:
           PACKAGE_VERSION: ${{ steps.state.outputs.version }}
           EXPECTED_INTEGRITY: ${{ steps.artifact.outputs.integrity }}
+          RELEASE_TARBALL: ${{ steps.artifact.outputs.filename }}
         run: |
-          for attempt in $(seq 1 30); do
+          # npm scans new versions before making them installable. Metadata can
+          # appear before the archive, and a CDN may cache an earlier 404.
+          mkdir -p "$RUNNER_TEMP/npm-release-download"
+          for attempt in $(seq 1 120); do
             if PUBLISHED_VERSION=$(npm view "c64bridge@${PACKAGE_VERSION}" version --json 2>/dev/null | tr -d '"'); then
               :
             else
@@ -445,14 +449,32 @@ jobs:
             if [ "$PUBLISHED_VERSION" = "$PACKAGE_VERSION" ]; then
               PUBLISHED_INTEGRITY=$(npm view "c64bridge@${PACKAGE_VERSION}" dist.integrity)
               test "$PUBLISHED_INTEGRITY" = "$EXPECTED_INTEGRITY" || { echo "Published artifact integrity mismatch"; exit 1; }
-              echo "c64bridge@${PACKAGE_VERSION} is visible on npm with the validated artifact integrity"
-              exit 0
+              if npm pack "c64bridge@${PACKAGE_VERSION}" --ignore-scripts --json \
+                --pack-destination "$RUNNER_TEMP/npm-release-download" \
+                > "$RUNNER_TEMP/npm-release-download/pack.json" \
+                2> "$RUNNER_TEMP/npm-release-download/pack.log"; then
+                node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const directory = `${process.env.RUNNER_TEMP}/npm-release-download`;
+          const [pack] = JSON.parse(readFileSync(`${directory}/pack.json`, 'utf8'));
+          assert.equal(pack.filename, `c64bridge-${process.env.PACKAGE_VERSION}.tgz`);
+          const archive = readFileSync(`${directory}/${pack.filename}`);
+          const integrity = `sha512-${createHash('sha512').update(archive).digest('base64')}`;
+          assert.equal(integrity, process.env.EXPECTED_INTEGRITY);
+          assert.deepEqual(archive, readFileSync(process.env.RELEASE_TARBALL));
+          NODE
+                echo "c64bridge@${PACKAGE_VERSION} is downloadable from npm and matches the tested archive byte for byte"
+                exit 0
+              fi
             fi
-            echo "Waiting for c64bridge@${PACKAGE_VERSION} to appear on npm (attempt ${attempt}/30)"
+            echo "Waiting for c64bridge@${PACKAGE_VERSION} to be downloadable from npm (attempt ${attempt}/120)"
             sleep 10
           done
 
-          echo "Timed out waiting for c64bridge@${PACKAGE_VERSION} to appear on npm" >&2
+          cat "$RUNNER_TEMP/npm-release-download/pack.log" >&2 || true
+          echo "Timed out waiting for c64bridge@${PACKAGE_VERSION} to become installable; check npm scan/approval status before retrying publication" >&2
           exit 1
 
       - name: Authenticate to MCP Registry
