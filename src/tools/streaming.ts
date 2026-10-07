@@ -44,6 +44,11 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
+function withFailureReason(message: string, details: unknown): string {
+  const reason = toRecord(details)?.message;
+  return typeof reason === "string" && reason.length > 0 ? `${message}: ${reason}` : message;
+}
+
 export const streamingModule = defineToolModule({
   domain: "streaming",
   summary: "Long-running or streaming workflows such as audio capture or SID playback monitoring.",
@@ -84,7 +89,7 @@ export const streamingModule = defineToolModule({
 
           const result = await ctx.client.streamStart(parsed.stream as StreamKind, parsed.target);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting stream", {
+            throw new ToolExecutionError(withFailureReason("C64 firmware reported failure while starting stream", result.details), {
               details: toRecord(result.details),
             });
           }
@@ -125,7 +130,7 @@ export const streamingModule = defineToolModule({
 
           const result = await ctx.client.streamStop(parsed.stream as StreamKind);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while stopping stream", {
+            throw new ToolExecutionError(withFailureReason("C64 firmware reported failure while stopping stream", result.details), {
               details: toRecord(result.details),
             });
           }

@@ -44,6 +44,9 @@ function createDefaultConfigs() {
     Video: {
       Mode: "PAL",
     },
+    "U64 Specific Settings": {
+      "System Mode": "PAL",
+    },
   };
 }
 
@@ -129,6 +132,8 @@ function createInitialState() {
     streamActionLog: [],
     // Number of upcoming stream:start requests answered like firmware with an empty ARP entry.
     streamHostResolveFailures: 0,
+    // When set, the audio emitter stops after this many packets to imitate UDP packet loss.
+    audioPacketLimit: null,
   };
 }
 
@@ -331,6 +336,9 @@ export async function startMockC64Server(options = {}) {
     }
 
     const sendAudioPacket = () => {
+      if (state.audioPacketLimit !== null && state.streams.audio.packetsSent >= state.audioPacketLimit) {
+        return;
+      }
       const packet = buildMockAudioPacket(runtime.sequence, runtime.sampleIndex);
       runtime.sequence = (runtime.sequence + 1) & 0xffff;
       runtime.sampleIndex += 192;
@@ -715,7 +723,7 @@ export async function startMockC64Server(options = {}) {
 
     if (url.startsWith("/v1/configs/")) {
       const routeUrl = new URL(url, "http://mock.local");
-      const segments = routeUrl.pathname.split("/").filter(Boolean).slice(2); // remove v1 + configs
+      const segments = routeUrl.pathname.split("/").filter(Boolean).slice(2).map((segment) => decodeURIComponent(segment)); // remove v1 + configs
 
       if (segments.length === 1) {
         const [category] = segments;
@@ -732,7 +740,8 @@ export async function startMockC64Server(options = {}) {
         if (method === "GET") {
           const categoryData = state.configs[category] ?? {};
           const value = categoryData[item];
-          sendJson(res, { value });
+          // Firmware nests the item as { "<category>": { "<item>": { current } } }; `value` is kept for older callers.
+          sendJson(res, { value, [category]: { [item]: { current: value } } });
           return;
         }
 

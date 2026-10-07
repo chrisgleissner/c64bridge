@@ -164,6 +164,11 @@ async function analyzePcm(
     // meyda exports default in recent versions
     const m = await import("meyda");
     Meyda = (m as any).default ?? m;
+    // Meyda windows the signal with a Hann window by default, which makes RMS read about 0.61 times
+    // the true level. A rectangular window gives the plain RMS of the samples.
+    if (Meyda && typeof Meyda === "object") {
+      Meyda.windowingFunction = "rect";
+    }
   } catch (e) {
     // Optional: fall back to manual RMS if meyda is unavailable in environment
     Meyda = null;

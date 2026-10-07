@@ -112,3 +112,27 @@ if (isVice) {
       );
     }));
 }
+
+testC64uOnly("stream_start includes the failure reason in the error text when the client provides one", async () => {
+  const ctx = createCtx();
+  ctx.client.streamStart = async () => ({ success: false, details: { message: "could not resolve target" } });
+
+  const result = await streamingModule.invoke(
+    "stream_start",
+    { stream: "audio", target: "127.0.0.1:9000" },
+    ctx,
+  );
+
+  assert.equal(result.isError, true);
+  assert.ok(result.content[0].text.includes("firmware reported failure while starting stream: could not resolve target"));
+});
+
+testC64uOnly("stream_stop includes the failure reason in the error text when the client provides one", async () => {
+  const ctx = createCtx();
+  ctx.client.streamStop = async () => ({ success: false, details: { message: "no active stream" } });
+
+  const result = await streamingModule.invoke("stream_stop", { stream: "audio" }, ctx);
+
+  assert.equal(result.isError, true);
+  assert.ok(result.content[0].text.includes("firmware reported failure while stopping stream: no active stream"));
+});

@@ -9,6 +9,7 @@ See <https://www.gnu.org/licenses/> for details.
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { createSocket, type Socket } from "node:dgram";
+import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrg } from "./tools/translation/assembler.js";
@@ -109,6 +110,33 @@ export interface SampleCaptureResult {
   readonly samples: Int16Array;
 }
 
+const C64U_SYSTEM_MODE_CATEGORY = "U64 Specific Settings";
+const C64U_SYSTEM_MODE_ITEM = "System Mode";
+// System Mode values that run the machine clock at the NTSC frequency
+// (VIDEO_FMT_NTSC_FREQ in the firmware colour timings); the other values use the PAL clock.
+const NTSC_CLOCK_SYSTEM_MODES = new Set(["NTSC", "PAL-60", "PAL-60/L"]);
+
+/**
+ * Reads the current System Mode from a config response. The firmware answers
+ * `{ "<category>": { "<item>": { "current": "PAL", ... } } }`; a bare `{ value }` is also accepted.
+ */
+export function readSystemMode(response: unknown): string | null {
+  const record = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  const category = record(record(response)?.[C64U_SYSTEM_MODE_CATEGORY]);
+  const node = category?.[C64U_SYSTEM_MODE_ITEM] ?? response;
+  const raw = typeof node === "string" ? node : record(node)?.current ?? record(node)?.value;
+  return typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
+}
+
+export function audioSampleRateForSystemMode(mode: string | null): number {
+  return mode !== null && NTSC_CLOCK_SYSTEM_MODES.has(mode.toUpperCase())
+    ? C64U_NTSC_AUDIO_SAMPLE_RATE
+    : C64U_PAL_AUDIO_SAMPLE_RATE;
+}
+
+// A partial capture must still hold one analysis window (2048 stereo frames).
+const MIN_PARTIAL_AUDIO_VALUES = 2048 * 2;
 const STREAM_HOST_RESOLVE_ERROR = "Network Host Resolve Error";
 const NEIGHBOR_PRIME_TIMEOUT_MS = 4_000;
 
@@ -127,6 +155,37 @@ function isStreamHostResolveFailure(failure: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/** Hostnames come from configuration; accept only plain host or address characters so they cannot act as ping options. */
+export function pingableHost(hostname: string): string | null {
+  const host = hostname.replace(/^\[(.*)\]$/, "$1");
+  return /^[A-Za-z0-9][A-Za-z0-9._:%-]*$/.test(host) ? host : null;
+}
+
+/** True when `host` is an address of one of this machine's network interfaces. */
+export function isLocalAddress(host: string): boolean {
+  const wanted = host.replace(/^\[(.*)\]$/, "$1").toLowerCase();
+  return Object.values(networkInterfaces()).some((entries) =>
+    (entries ?? []).some((entry) => entry.address.toLowerCase() === wanted),
+  );
+}
+
+/** Host part of a `host:port` stream target, or null when it cannot be split. */
+export function streamTargetHost(target: string): string | null {
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(target);
+  if (bracketed) {
+    return bracketed[1]!;
+  }
+  const colon = target.indexOf(":");
+  if (colon === -1) {
+    return target.length > 0 ? target : null;
+  }
+  // Exactly one colon separates host and port; several colons are a bare IPv6 address.
+  if (colon !== target.lastIndexOf(":")) {
+    return target;
+  }
+  return colon > 0 ? target.slice(0, colon) : null;
 }
 
 function neighborPrimeArgs(host: string): string[] {
@@ -1338,6 +1397,7 @@ export class C64Client {
     const capture = await this.captureC64uAudioSamples(facade, samplePairs, {
       timeoutMs: Math.ceil(durationSeconds * 1_500) + 2_000,
       sampleRateHz,
+      acceptPartial: true,
     });
     return analyzeStereoStream(capture.samples, capture.sampleRateHz, params.expectedSidwave);
   }
@@ -1722,7 +1782,7 @@ export class C64Client {
   private async captureC64uAudioSamples(
     facade: C64Facade,
     samplePairs: number,
-    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number },
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
   ): Promise<SampleCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
     const bindAddress = await this.resolveLocalCaptureAddress(host);
@@ -1740,6 +1800,11 @@ export class C64Client {
       await new Promise<void>((resolve, reject) => {
         const timeoutMs = options?.timeoutMs ?? Math.max(1_000, Math.ceil(samplePairs / 192) * 500);
         const timer = setTimeout(() => {
+          // UDP drops packets, so a count-based capture can fall short. Analysis accepts what arrived.
+          if (options?.acceptPartial && collectedValues >= MIN_PARTIAL_AUDIO_VALUES) {
+            resolve();
+            return;
+          }
           reject(new Error(`Timed out after ${timeoutMs}ms while capturing ${samplePairs} audio sample pair(s)`));
         }, timeoutMs);
 
@@ -1764,7 +1829,8 @@ export class C64Client {
         });
       });
 
-      const samples = new Int16Array(samplePairs * 2);
+      const capturedPairs = Math.min(samplePairs, Math.floor(collectedValues / 2));
+      const samples = new Int16Array(capturedPairs * 2);
       let offset = 0;
       for (const chunk of chunks) {
         const remaining = samples.length - offset;
@@ -1779,7 +1845,7 @@ export class C64Client {
         backend: "c64u",
         channels: 2,
         sampleRateHz: options?.sampleRateHz ?? await this.getC64uAudioSampleRate(facade),
-        samplePairs,
+        samplePairs: capturedPairs,
         samples,
       };
     } finally {
@@ -1797,12 +1863,8 @@ export class C64Client {
 
   private async getC64uAudioSampleRate(facade: C64Facade): Promise<number> {
     try {
-      const response = await facade.configGet("Video", "Mode");
-      const raw = (response as { value?: unknown })?.value ?? response;
-      const mode = typeof raw === "string" ? raw.trim().toUpperCase() : "";
-      if (mode.includes("NTSC")) {
-        return C64U_NTSC_AUDIO_SAMPLE_RATE;
-      }
+      const response = await facade.configGet(C64U_SYSTEM_MODE_CATEGORY, C64U_SYSTEM_MODE_ITEM);
+      return audioSampleRateForSystemMode(readSystemMode(response));
     } catch {
       // Fall back to PAL below.
     }
@@ -1859,15 +1921,29 @@ export class C64Client {
     stream: "video" | "audio" | "debug",
     target: string,
   ): Promise<RunBasicResult> {
+    let firstResult: RunBasicResult | undefined;
+    let firstError: unknown;
     try {
       const result = await facade.streamStart(stream, target);
       if (result.success || !isStreamHostResolveFailure(result.details)) {
         return result;
       }
+      firstResult = result;
     } catch (error) {
       if (!isStreamHostResolveFailure(error)) {
         throw error;
       }
+      firstError = error;
+    }
+
+    // A ping from this host only helps when the stream target is this host: the device then has to
+    // address the echo reply to it and learns its address. Any other target stays unresolvable.
+    const targetHost = streamTargetHost(target);
+    if (targetHost === null || !isLocalAddress(targetHost)) {
+      if (firstResult) {
+        return firstResult;
+      }
+      throw firstError;
     }
 
     const host = new URL(this.baseUrl).hostname;
@@ -1886,15 +1962,20 @@ export class C64Client {
     }
     throw new Error(
       `The Ultimate at ${host} could not resolve stream target ${target} (${STREAM_HOST_RESOLVE_ERROR}) even after pinging it from this host. ` +
-        "Ping the device from this host and retry, or use a multicast target.",
+        "Check that this host is on the same network as the device, or use a multicast target.",
     );
   }
 
   /** Best effort: ping failure (missing binary, blocked ICMP) is ignored and the caller retries anyway. */
   private async primeDeviceNeighborCache(host: string): Promise<void> {
+    const pingHost = pingableHost(host);
+    if (!pingHost) {
+      writeDiagnosticEvent("stream_start_ping_failed", { host, message: "host is not a plain hostname or address" });
+      return;
+    }
     await new Promise<void>((resolve) => {
       try {
-        execFile("ping", neighborPrimeArgs(host), { timeout: NEIGHBOR_PRIME_TIMEOUT_MS, windowsHide: true }, (error) => {
+        execFile("ping", neighborPrimeArgs(pingHost), { timeout: NEIGHBOR_PRIME_TIMEOUT_MS, windowsHide: true }, (error) => {
           if (error) {
             writeDiagnosticEvent("stream_start_ping_failed", { host, message: error.message });
           }

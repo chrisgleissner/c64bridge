@@ -256,9 +256,17 @@ test("analyzeStereoStream measures the signal level and pitch above the offset",
   const right = Int16Array.from(sine, (v) => Math.round(v * 8000 + 15000));
   const result = await analyzeStereoStream(interleave(left, right), sampleRate);
 
-  // The offsets (20000 / 15000) alone would give an RMS above 0.5; a level in this range proves they were removed.
+  // Plain RMS of a sine with amplitude 8000 (the offsets of 20000 / 15000 must not contribute).
+  const expectedRms = 8000 / 32768 / Math.SQRT2;
   const { average_rms: averageRms } = result.analysis.global_metrics;
-  assert.ok(averageRms > 0.05 && averageRms < 0.2, `unexpected average RMS ${averageRms}`);
+  assert.ok(Math.abs(averageRms - expectedRms) < 0.002, `average RMS ${averageRms}, expected ${expectedRms}`);
   const note = result.analysis.voices[0].detected_notes.find((n) => n.note);
   assert.equal(note?.note, "A4");
+});
+
+test("analyzePcmForTest reports the plain RMS of the samples, not a windowed RMS", async () => {
+  const result = await analyzePcmForTest(genSine(440, 1, SR).map((x) => x * 0.5), SR);
+  const expectedRms = 0.5 / Math.SQRT2;
+  assert.ok(Math.abs(result.analysis.global_metrics.average_rms - expectedRms) < 0.002);
+  assert.ok(Math.abs(result.analysis.global_metrics.max_rms - expectedRms) < 0.002);
 });
