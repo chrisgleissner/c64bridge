@@ -134,6 +134,10 @@ function createInitialState() {
     streamHostResolveFailures: 0,
     // When set, the audio emitter stops after this many packets to imitate UDP packet loss.
     audioPacketLimit: null,
+    audioSignal: null,
+    streamStartResponseDelayMs: 0,
+    // Unlike the one-shot failure counter, this gate stays closed until a test's ping stub primes it.
+    streamNeighborReady: true,
   };
 }
 
@@ -339,7 +343,7 @@ export async function startMockC64Server(options = {}) {
       if (state.audioPacketLimit !== null && state.streams.audio.packetsSent >= state.audioPacketLimit) {
         return;
       }
-      const packet = buildMockAudioPacket(runtime.sequence, runtime.sampleIndex);
+      const packet = buildMockAudioPacket(runtime.sequence, runtime.sampleIndex, state.audioSignal);
       runtime.sequence = (runtime.sequence + 1) & 0xffff;
       runtime.sampleIndex += 192;
       socket.send(packet, port, host);
@@ -773,8 +777,9 @@ export async function startMockC64Server(options = {}) {
         if (action === "start" && method === "PUT") {
           const body = await readJson(req);
           const target = routeUrl.searchParams.get("ip") ?? routeUrl.searchParams.get("target") ?? body?.ip ?? body?.target ?? null;
-          if (state.streamHostResolveFailures > 0) {
-            state.streamHostResolveFailures -= 1;
+          const neighborReady = typeof state.streamNeighborReady === "function" ? state.streamNeighborReady(target) : state.streamNeighborReady;
+          if (!neighborReady || state.streamHostResolveFailures > 0) {
+            if (state.streamHostResolveFailures > 0) state.streamHostResolveFailures -= 1;
             state.streamActionLog.push({ action: "start-rejected", stream, target });
             sendJson(res, { errors: ["Network Host Resolve Error"] }, 404);
             return;
@@ -783,6 +788,9 @@ export async function startMockC64Server(options = {}) {
           state.lastStreamAction = { action: "start", stream, target };
           state.streamActionLog.push({ action: "start", stream, target });
           startStreamEmitter(stream, target);
+          if (state.streamStartResponseDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, state.streamStartResponseDelayMs));
+          }
           sendJson(res, { result: "started", stream, target });
           return;
         }
@@ -1011,7 +1019,7 @@ function buildMockVideoFramePackets(frameNumber, sequenceStart) {
   return packets;
 }
 
-function buildMockAudioPacket(sequence, sampleIndex) {
+function buildMockAudioPacket(sequence, sampleIndex, signal = null) {
   const header = Buffer.alloc(2);
   header.writeUInt16LE(sequence & 0xffff, 0);
 
@@ -1019,8 +1027,9 @@ function buildMockAudioPacket(sequence, sampleIndex) {
   for (let index = 0; index < 192; index += 1) {
     const phase = ((sampleIndex + index) % 256) - 128;
     // Both channels carry the same sawtooth plus a different constant offset, like the real stream.
-    const left = phase * 128 + 8000;
-    const right = phase * 128 + 5000;
+    const wave = signal ? Math.sin(2 * Math.PI * signal.frequency * (sampleIndex + index) / signal.sampleRate) : phase * 128;
+    const left = signal ? Math.round(wave * signal.amplitude + signal.leftOffset) : wave + 8000;
+    const right = signal ? Math.round(wave * signal.amplitude * signal.rightGain + signal.rightOffset) : wave + 5000;
     payload.writeInt16LE(left, index * 4);
     payload.writeInt16LE(right, index * 4 + 2);
   }

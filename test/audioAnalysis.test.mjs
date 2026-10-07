@@ -275,3 +275,56 @@ test("stereoToCenteredMono returns an empty signal for empty input and ignores a
   assert.equal(stereoToCenteredMono(new Int16Array(0)).length, 0);
   assert.equal(stereoToCenteredMono(new Int16Array([5, 5, 7])).length, 1);
 });
+
+test("Ultimate stereo analysis detects opposite-phase and single-channel audio without reporting silence", async () => {
+  const sampleRate = 47983;
+  const sine = genSine(440, 0.5, sampleRate);
+  for (const rightGain of [-1, 0]) {
+    const left = Int16Array.from(sine, (v) => Math.round(8000 * v + 20000));
+    const right = Int16Array.from(sine, (v) => Math.round(8000 * rightGain * v + 15000));
+    const result = await analyzeStereoStream(interleave(left, right), sampleRate);
+    const expected = 8000 / 32768 / Math.SQRT2;
+    assert.ok(Math.abs(result.analysis.global_metrics.average_rms - expected) < 0.002);
+    assert.equal(result.analysis.voices[0].detected_notes.find((n) => n.note)?.note, "A4");
+  }
+});
+
+test("Ultimate analysis follows audio moving between stereo channels", async () => {
+  const sampleRate = 47983;
+  const left = new Int16Array(sampleRate).fill(20000);
+  const right = new Int16Array(sampleRate).fill(15000);
+  for (let i = 0; i < sampleRate; i += 1) {
+    const first = i < sampleRate / 2;
+    const value = Math.round(8000 * Math.sin(2 * Math.PI * (first ? 440 : 523.25) * i / sampleRate));
+    if (first) left[i] += value;
+    else right[i] += value;
+  }
+  const result = await analyzeStereoStream(interleave(left, right), sampleRate);
+  const notes = result.analysis.voices[0].detected_notes.filter((n) => n.note).map((n) => n.note);
+  assert.ok(notes.includes("A4"));
+  assert.ok(notes.includes("C5"));
+  assert.ok(result.analysis.global_metrics.average_rms > 0.16);
+});
+
+test("PCM analysis leaves Meyda's global window configuration unchanged", async () => {
+  const { default: Meyda } = await import("meyda");
+  const original = Meyda.windowingFunction;
+  try {
+    Meyda.windowingFunction = "hamming";
+    const result = await analyzePcmForTest(genSine(440, 0.2, SR), SR);
+    assert.ok(Math.abs(result.analysis.global_metrics.average_rms - 1 / Math.SQRT2) < 0.002);
+    assert.equal(Meyda.windowingFunction, "hamming");
+  } finally {
+    Meyda.windowingFunction = original;
+  }
+});
+
+test("pitch detection remains accurate at quiet but audible levels without changing RMS", async () => {
+  for (const amplitude of [0.02, 0.05, 0.12]) {
+    const result = await analyzePcmForTest(genSine(440, 0.2, SR).map((v) => v * amplitude), SR);
+    const note = result.analysis.voices[0].detected_notes.find((n) => n.note);
+    assert.equal(note?.note, "A4");
+    assert.ok(Math.abs(note.frequency - 440) < 0.5);
+    assert.ok(Math.abs(result.analysis.global_metrics.average_rms - amplitude / Math.SQRT2) < 0.001);
+  }
+});

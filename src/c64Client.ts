@@ -29,6 +29,7 @@ import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
 import {
   analyzeStereoStream,
+  normalizeAudioDuration,
   recordAndAnalyzeAudio,
   type AnalysisResult,
   type RecordAndAnalyzeParams,
@@ -1386,7 +1387,7 @@ export class C64Client {
    * device audio stream; other backends have no stream, so the host microphone is used.
    */
   async recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
-    const durationSeconds = Math.max(0.5, Math.min(120, Number(params.durationSeconds || 0)));
+    const durationSeconds = normalizeAudioDuration(params.durationSeconds);
     const facade = await this.facadePromise;
     if (facade.type !== "c64u") {
       return recordAndAnalyzeAudio(params);
@@ -1789,17 +1790,47 @@ export class C64Client {
     const socket = createSocket("udp4");
     const chunks: Int16Array[] = [];
     let collectedValues = 0;
-    let stopError: Error | null = null;
+    const neededValues = samplePairs * 2;
+    let captureError: Error | null = null;
+    let captureSettled = false;
+    let notifyCapture: () => void = () => {};
+    let socketBound = false;
+    let streamAttempted = false;
+    let failed = false;
+
+    // The firmware can emit UDP before its REST response reaches us. Listen
+    // before starting, and cap collection even while start/config/stop requests are pending.
+    const onMessage = (msg: Buffer) => {
+      if (captureSettled || captureError || collectedValues >= neededValues) return;
+      try {
+        const packet = parseAudioPacket(msg);
+        if (packet.samples.length % 2 !== 0) throw new Error("Audio packet contains an incomplete stereo sample pair");
+        const samples = packet.samples.subarray(0, neededValues - collectedValues);
+        chunks.push(samples);
+        collectedValues += samples.length;
+      } catch (error) {
+        captureError = error instanceof Error ? error : new Error(String(error));
+      }
+      notifyCapture();
+    };
+    const onError = (error: Error) => {
+      captureError = error;
+      notifyCapture();
+    };
+    socket.on("message", onMessage);
+    socket.on("error", onError);
 
     try {
       await this.bindCaptureSocket(socket, bindAddress);
+      socketBound = true;
       const target = this.socketEndpoint(socket, bindAddress);
+      streamAttempted = true;
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "audio", target), "start audio stream");
 
-      const neededValues = samplePairs * 2;
       await new Promise<void>((resolve, reject) => {
         const timeoutMs = options?.timeoutMs ?? Math.max(1_000, Math.ceil(samplePairs / 192) * 500);
         const timer = setTimeout(() => {
+          captureSettled = true;
           // UDP drops packets, so a count-based capture can fall short. Analysis accepts what arrived.
           if (options?.acceptPartial && collectedValues >= MIN_PARTIAL_AUDIO_VALUES) {
             resolve();
@@ -1808,25 +1839,16 @@ export class C64Client {
           reject(new Error(`Timed out after ${timeoutMs}ms while capturing ${samplePairs} audio sample pair(s)`));
         }, timeoutMs);
 
-        socket.on("message", (msg) => {
-          try {
-            const packet = parseAudioPacket(Buffer.from(msg));
-            chunks.push(packet.samples);
-            collectedValues += packet.samples.length;
-            if (collectedValues >= neededValues) {
-              clearTimeout(timer);
-              resolve();
-            }
-          } catch (error) {
+        notifyCapture = () => {
+          if (captureSettled) return;
+          if (captureError || collectedValues >= neededValues) {
+            captureSettled = true;
             clearTimeout(timer);
-            reject(error);
+            if (captureError) reject(captureError);
+            else resolve();
           }
-        });
-
-        socket.once("error", (error) => {
-          clearTimeout(timer);
-          reject(error);
-        });
+        };
+        notifyCapture();
       });
 
       const capturedPairs = Math.min(samplePairs, Math.floor(collectedValues / 2));
@@ -1848,15 +1870,20 @@ export class C64Client {
         samplePairs: capturedPairs,
         samples,
       };
+    } catch (error) {
+      failed = true;
+      throw error;
     } finally {
+      captureSettled = true;
+      notifyCapture = () => {};
+      socket.off("message", onMessage);
+      if (socketBound) socket.close();
       try {
-        await this.ensureStreamSuccess(await facade.streamStop("audio"), "stop audio stream");
+        if (streamAttempted) await this.ensureStreamSuccess(await facade.streamStop("audio"), "stop audio stream");
       } catch (error) {
-        stopError = error instanceof Error ? error : new Error(String(error));
-      }
-      socket.close();
-      if (stopError) {
-        throw stopError;
+        // Preserve the capture/start error, while still reporting cleanup diagnostics.
+        if (!failed) throw error;
+        writeDiagnosticEvent("audio_capture_stop_failed", { error: this.normaliseError(error) });
       }
     }
   }

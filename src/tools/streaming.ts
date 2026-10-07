@@ -45,7 +45,12 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
 }
 
 function withFailureReason(message: string, details: unknown): string {
-  const reason = toRecord(details)?.message;
+  const record = toRecord(details);
+  const body = toRecord(record?.data) ?? toRecord(record?.response) ?? record;
+  const errors = body?.errors;
+  const reason = Array.isArray(errors) && errors.length > 0
+    ? errors.map(String).join("; ")
+    : record?.message ?? record?.reason ?? (typeof details === "string" ? details : undefined);
   return typeof reason === "string" && reason.length > 0 ? `${message}: ${reason}` : message;
 }
 
