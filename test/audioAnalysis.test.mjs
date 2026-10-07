@@ -270,3 +270,8 @@ test("analyzePcmForTest reports the plain RMS of the samples, not a windowed RMS
   assert.ok(Math.abs(result.analysis.global_metrics.average_rms - expectedRms) < 0.002);
   assert.ok(Math.abs(result.analysis.global_metrics.max_rms - expectedRms) < 0.002);
 });
+
+test("stereoToCenteredMono returns an empty signal for empty input and ignores a trailing odd value", () => {
+  assert.equal(stereoToCenteredMono(new Int16Array(0)).length, 0);
+  assert.equal(stereoToCenteredMono(new Int16Array([5, 5, 7])).length, 1);
+});

@@ -1974,20 +1974,12 @@ export class C64Client {
       return;
     }
     await new Promise<void>((resolve) => {
-      try {
-        execFile("ping", neighborPrimeArgs(pingHost), { timeout: NEIGHBOR_PRIME_TIMEOUT_MS, windowsHide: true }, (error) => {
-          if (error) {
-            writeDiagnosticEvent("stream_start_ping_failed", { host, message: error.message });
-          }
-          resolve();
-        });
-      } catch (error) {
-        writeDiagnosticEvent("stream_start_ping_failed", {
-          host,
-          message: error instanceof Error ? error.message : String(error),
-        });
+      execFile("ping", neighborPrimeArgs(pingHost), { timeout: NEIGHBOR_PRIME_TIMEOUT_MS, windowsHide: true }, (error) => {
+        if (error) {
+          writeDiagnosticEvent("stream_start_ping_failed", { host, message: error.message });
+        }
         resolve();
-      }
+      });
     });
   }
 

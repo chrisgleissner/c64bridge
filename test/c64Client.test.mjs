@@ -280,6 +280,53 @@ test("C64Client against mock server", async (t) => {
     }
   });
 
+  await t.test("stream start handles failures returned as results and non-resolve failures on the retry", async () => {
+    const resolveFailure = { success: false, details: { response: {}, errors: ["Network Host Resolve Error"] } };
+    const build = (responses) => {
+      const stub = new C64Client(mock.baseUrl);
+      const calls = [];
+      let primeCalls = 0;
+      stub.primeDeviceNeighborCache = async () => {
+        primeCalls += 1;
+      };
+      stub.facadePromise = Promise.resolve({
+        type: "c64u",
+        streamStart: async (stream, target) => {
+          calls.push([stream, target]);
+          const next = responses.shift();
+          if (next instanceof Error) {
+            throw next;
+          }
+          return next;
+        },
+      });
+      return { stub, calls, primeCalls: () => primeCalls };
+    };
+
+    const recovered = build([resolveFailure, { success: true, details: {} }]);
+    assert.equal((await recovered.stub.streamStart("audio", "127.0.0.1:9")).success, true);
+    assert.equal(recovered.calls.length, 2);
+    assert.equal(recovered.primeCalls(), 1);
+
+    const foreign = build([resolveFailure]);
+    assert.equal(await foreign.stub.streamStart("audio", "192.0.2.77:9").then((r) => r.success), false);
+    assert.equal(foreign.calls.length, 1);
+    assert.equal(foreign.primeCalls(), 0);
+
+    const otherResult = build([resolveFailure, { success: false, details: { errors: ["busy"] } }]);
+    const busy = await otherResult.stub.streamStart("audio", "127.0.0.1:9");
+    assert.deepEqual(busy.details, { errors: ["busy"] });
+
+    const otherError = build([resolveFailure, new Error("socket hang up")]);
+    const failed = await otherError.stub.streamStart("audio", "127.0.0.1:9");
+    assert.equal(failed.success, false);
+    assert.equal(failed.details.message, "socket hang up");
+
+    const resultFormExhausted = build([resolveFailure, resolveFailure]);
+    const exhausted = await resultFormExhausted.stub.streamStart("audio", "127.0.0.1:9");
+    assert.match(exhausted.details.message, /could not resolve stream target 127\.0\.0\.1:9/);
+  });
+
   await t.test("streamTargetHost and isLocalAddress parse targets and recognise local addresses", () => {
     assert.equal(streamTargetHost("192.168.1.5:11001"), "192.168.1.5");
     assert.equal(streamTargetHost("[fe80::1]:11001"), "fe80::1");
