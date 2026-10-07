@@ -1,5 +1,14 @@
 # Changelog
 
+
+## 1.0.4 - 2026-10-07
+
+### Bug Fixes
+
+- align grouped tool platform gates and metadata with backend support across C64U/U64, U2/U2+/U2+L, and VICE, rejecting unsupported operations before device I/O (769075b)
+- enable audio analysis (`record_analyze`, `analyze`) on VICE and U2 through the host audio input (06d1e12)
+- wait for scanned npm archives before release verification (12686c3)
+
 ## 1.0.3 - 2026-10-07
 
 ### Bug Fixes
