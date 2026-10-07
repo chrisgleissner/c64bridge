@@ -68,6 +68,7 @@ const extractOperationHandlers = createOperationHandlers(extractOperations);
 
 export const extractModule = defineToolModule({
   domain: "extract",
+  supportedPlatforms: ["c64u", "u2", "vice"],
   summary: "Grouped extraction helpers for sprites, charsets, memory dumps, and diagnostics.",
   resources: ["c64://guide/bootstrap", "c64://basic/spec", "c64://assembly/6510-spec"],
   defaultTags: ["extract", "diagnostics"],
@@ -85,6 +86,8 @@ export const extractModule = defineToolModule({
         variants: extractOperations.map((operation) => operation.schema),
       }),
       tags: ["extract", "diagnostics", "grouped"],
+      operationPlatforms: { fs_stats: ["c64u", "u2"] },
+      operationToolNames: { fs_stats: "filesystem_stats_by_extension" },
       examples: [
         {
           name: "Dump RAM to file",

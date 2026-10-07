@@ -15,9 +15,12 @@ import {
   ToolError,
   ToolExecutionError,
   ToolValidationError,
+  ToolUnsupportedPlatformError,
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+
+import { getPlatformStatus } from "../platform.js";
 
 const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 
@@ -273,7 +276,7 @@ const musicCompileArgsSchema = objectSchema({
       enum: ["yaml", "json"],
     })),
     output: optionalSchema(stringSchema({
-      description: "Playback target format.",
+      description: "Playback target format. PRG works on all backends; SID playback requires C64U/U64 or U2 (SID export with dryRun works everywhere).",
       enum: ["prg", "sid"],
       default: "prg",
     }), "prg"),
@@ -974,6 +977,10 @@ export const audioModule = defineToolModule({
           }
 
           const outputFormat = parsed.output ?? "prg";
+          const platform = ctx.platform?.id ?? getPlatformStatus().id;
+          if (outputFormat === "sid" && !parsed.dryRun && platform === "vice") {
+            throw new ToolUnsupportedPlatformError("sidplay_attachment (use output: prg or dryRun: true on VICE)", platform, ["c64u", "u2"]);
+          }
 
           ctx.logger.info("Compiling SIDWAVE composition", {
             output: outputFormat,

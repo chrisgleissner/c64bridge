@@ -223,7 +223,7 @@
         "string",
         "null"
       ],
-      "description": "Playback target format.",
+      "description": "Playback target format. PRG works on all backends; SID playback requires C64U/U64 or U2 (SID export with dryRun works everywhere).",
       "enum": [
         "prg",
         "sid"
@@ -249,7 +249,8 @@
         "minLength": 1,
         "enum": [
           "vice",
-          "c64u"
+          "c64u",
+          "u2"
         ]
       }
     },
@@ -815,7 +816,7 @@
               "string",
               "null"
             ],
-            "description": "Playback target format.",
+            "description": "Playback target format. PRG works on all backends; SID playback requires C64U/U64 or U2 (SID export with dryRun works everywhere).",
             "enum": [
               "prg",
               "sid"
@@ -876,7 +877,8 @@
               "minLength": 1,
               "enum": [
                 "vice",
-                "c64u"
+                "c64u",
+                "u2"
               ]
             }
           },
@@ -885,7 +887,7 @@
               "boolean",
               "null"
             ],
-            "description": "Capture and analyze audio on supported backends after playback starts.",
+            "description": "Capture and analyze audio after playback starts: native streaming on C64U/U64, host audio input on U2/VICE (PortAudio required).",
             "default": true
           },
           "analysisDurationSeconds": {
@@ -969,7 +971,7 @@
               "string",
               "null"
             ],
-            "description": "Playback artifact format.",
+            "description": "Playback artifact format. PRG works on all backends; SID attachment playback requires C64U/U64 or U2.",
             "enum": [
               "prg",
               "sid"

@@ -2,7 +2,8 @@
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { captureConfigSnapshot, validateSnapshotCategories } from "./configInventory.js";
@@ -13,7 +14,7 @@ const configSnapshotAndRestoreArgsSchema = objectSchema({
   properties: {
     action: stringSchema({ description: "One of: snapshot|restore|diff", enum: ["snapshot", "restore", "diff"] }),
     path: stringSchema({ description: "Snapshot file path", minLength: 1 }),
-    applyToFlash: optionalSchema(booleanSchema({ description: "Save configuration to flash after restore", default: false }), false),
+    applyToFlash: optionalSchema(booleanSchema({ description: "Save configuration to flash after restore (C64U/U64 and U2 only)", default: false }), false),
   },
   required: ["action", "path"],
   additionalProperties: false,
@@ -30,10 +31,14 @@ export const tools: ToolDefinition[] = [
       try {
         const parsed = configSnapshotAndRestoreArgsSchema.parse(args ?? {});
         const action = parsed.action as string;
+        const platform = ctx.platform?.id ?? getPlatformStatus().id;
+        if (action === "restore" && parsed.applyToFlash && platform === "vice") {
+          throw new ToolUnsupportedPlatformError("config_save_to_flash", platform, ["c64u", "u2"]);
+        }
         const path = resolvePath(String(parsed.path));
-        await fs.mkdir(dirname(path), { recursive: true });
 
         if (action === "snapshot") {
+          await fs.mkdir(dirname(path), { recursive: true });
           const [version, info, snapshotData] = await Promise.all([
             (ctx.client as any).version(),
             (ctx.client as any).info(),
@@ -71,7 +76,10 @@ export const tools: ToolDefinition[] = [
             throw new ToolExecutionError("Batch update failed", { details: normalizeErrorDetails(result.details) });
           }
           if (parsed.applyToFlash) {
-            await (ctx.client as any).configSaveToFlash();
+            const saved = await (ctx.client as any).configSaveToFlash();
+            if (!saved.success) {
+              throw new ToolExecutionError("Configuration restored, but saving to flash failed", { details: normalizeErrorDetails(saved.details) });
+            }
           }
           return jsonResult({ restored: true, categories: Object.keys(payload).length }, { success: true });
         }

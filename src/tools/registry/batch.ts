@@ -140,10 +140,12 @@ export const batchModuleGroup = defineToolModule({
             try {
               const toolResult = await toolRegistry.invoke(toolName, args, {
                 ...ctx,
-                platform: getPlatformStatus(),
+                platform: typeof ctx.client.getActiveBackendType === "function"
+                  ? { ...(ctx.platform ?? getPlatformStatus()), id: await ctx.client.getActiveBackendType() }
+                  : ctx.platform ?? getPlatformStatus(),
               });
               const elapsedMs = Date.now() - cmdStart;
-              const isError = toolResult.isError === true;
+              const isError = toolResult.isError === true || toolResult.metadata?.success === false;
               const text = toolResult.content.map((c) => c.text).join("\n");
               const resultPayload = toolResult.structuredContent?.data ?? text;
               if (isError) {

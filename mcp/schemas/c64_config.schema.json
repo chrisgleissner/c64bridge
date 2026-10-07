@@ -53,7 +53,7 @@
         "boolean",
         "null"
       ],
-      "description": "When true, save the restored configuration to flash immediately.",
+      "description": "When true, save the restored configuration to flash immediately (C64U/U64 and U2 only).",
       "default": false
     },
     "root": {
@@ -452,7 +452,7 @@
               "boolean",
               "null"
             ],
-            "description": "When true, save the restored configuration to flash immediately.",
+            "description": "When true, save the restored configuration to flash immediately (C64U/U64 and U2 only).",
             "default": false
           },
           "op": {

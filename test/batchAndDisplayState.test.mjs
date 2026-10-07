@@ -131,6 +131,7 @@ test("c64_batch refreshes platform context after backend switches", async () => 
       getAvailableBackends() {
         return ["c64u", "vice"];
       },
+      async getActiveBackendType() { return getPlatformStatus().id; },
       switchBackend(target) {
         setPlatform(target);
       },

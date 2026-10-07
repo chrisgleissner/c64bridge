@@ -8,6 +8,7 @@ import { createLogger, tmpPath } from "./helpers.mjs";
 test("bundle_run_artifacts captures screen and memory", async () => {
   const { dir } = tmpPath("artifacts", "bundle");
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async readScreen() { return "CAPTURED SCREEN"; },
       async readMemory() { return { success: true, data: "$AABBCC" }; },
@@ -35,6 +36,7 @@ test("bundle_run_artifacts captures screen and memory", async () => {
 test("bundle_run_artifacts works with minimal options", async () => {
   const { dir } = tmpPath("artifacts", "minimal");
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async readScreen() { return "SCREEN"; },
       async debugregRead() { return { value: "0000" }; },
@@ -55,6 +57,7 @@ test("bundle_run_artifacts works with minimal options", async () => {
 test("bundle_run_artifacts handles errors gracefully", async () => {
   const { dir } = tmpPath("artifacts", "error");
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async readScreen() { throw new Error("screen read failed"); },
     },
@@ -73,6 +76,7 @@ test("bundle_run_artifacts handles errors gracefully", async () => {
 test("HARD01-029 bundle_run_artifacts rejects a traversal runId and creates nothing outside outputPath", async () => {
   const { dir } = tmpPath("artifacts", "traversal");
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async readScreen() { return "SCREEN"; },
       async debugregRead() { return { value: "0000" }; },
@@ -96,6 +100,7 @@ test("HARD01-029 bundle_run_artifacts rejects a traversal runId and creates noth
 test("HARD01-029 bundle_run_artifacts rejects an absolute-path and sibling-prefix-escaping runId", async () => {
   const { dir } = tmpPath("artifacts", "traversal-abs");
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async readScreen() { return "SCREEN"; },
     },

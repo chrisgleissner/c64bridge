@@ -197,6 +197,7 @@ async function waitForPattern(
 
 test("ViceBackend nuclearReset propagates poweroff failures", async () => {
   const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  backend.manageProcess = true;
   backend.poweroff = async () => ({ success: false, details: { message: "quit failed" } });
   backend.ensureProcess = async () => {
     throw new Error("should not restart after failed poweroff");
@@ -1225,7 +1226,7 @@ test("device: ViceBackend unit branches", async () => {
 
     const configValue = await backend.configGet("VICE", "WarpMode");
     assert.deepEqual(configValue, { category: "VICE", item: "WarpMode", value: 1, type: "int" });
-    await assert.rejects(() => backend.configGet("VICE"), /configGet without item name/);
+    await assert.rejects(() => backend.configGet("Unknown"), /Unknown VICE configuration category/);
     assert.equal((await backend.configSet("VICE", "WarpMode", "0")).details.value, 0);
     assert.equal((await backend.configSet("VICE", "MachineVideoStandard", "PAL")).details.value, "PAL");
 

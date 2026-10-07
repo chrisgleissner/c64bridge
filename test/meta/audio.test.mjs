@@ -436,7 +436,8 @@ describe("meta/audio", () => {
     expect(result.metadata.legacyAliasUsed).toBe(true);
     expect(result.structuredContent.data.title).toBe("Für Elise");
     expect(result.structuredContent.data.results).toHaveLength(2);
-    expect(result.structuredContent.data.results[0].verification.mode).toBe("playback-launch");
+    expect(result.structuredContent.data.results[0].verification.mode).toBe("audio-analysis");
+    expect(ctx.client.recordAndAnalyzeAudio).toHaveBeenCalledTimes(2);
     expect(result.structuredContent.data.results[1].verification.mode).toBe("audio-analysis");
     expect(result.structuredContent.data.results[1].verification.voices[0].detected_notes[0].note).toBe("E5");
     expect(ctx.client.runPrg).toHaveBeenCalledTimes(2);

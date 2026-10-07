@@ -259,6 +259,7 @@ export const graphicsModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_graphics",
+      operationPlatforms: { capture_frame: ["c64u", "vice"] },
       description: "Grouped entry point for frame capture and graphics rendering workflows.",
       summary: "Captures frames, renders PETSCII text or art, previews sprites, and displays bitmap images from one tool.",
       inputSchema: discriminatedUnionSchema({

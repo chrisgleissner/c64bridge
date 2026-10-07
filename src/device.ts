@@ -798,10 +798,6 @@ export class ViceBackend implements C64Facade {
   }
   async powerCycle(): Promise<RunResult> { return this.nuclearReset(); }
   async nuclearReset(): Promise<RunResult> {
-    const poweroffResult = await this.poweroff();
-    if (!poweroffResult.success) {
-      return poweroffResult;
-    }
     if (!this.manageProcess) {
       return {
         success: false,
@@ -810,6 +806,10 @@ export class ViceBackend implements C64Facade {
           message: "VICE nuclear reset requires a managed process; unmanaged instances can only be powered off.",
         },
       };
+    }
+    const poweroffResult = await this.poweroff();
+    if (!poweroffResult.success) {
+      return poweroffResult;
     }
     try {
       await this.ensureProcess();
@@ -863,7 +863,10 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  async driveMount(drive: string, imagePath: string): Promise<RunResult> {
+  async driveMount(drive: string, imagePath: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> {
+    if (options?.type !== undefined || options?.mode !== undefined) {
+      throw unsupported("driveMount type/mode overrides; omit these options on VICE");
+    }
     const n = parseDriveNumber(drive);
     await this.withClient(async (client) => {
       await client.resourceSet(`Drive${n}CPUEnabled`, 1);
@@ -936,7 +939,17 @@ export class ViceBackend implements C64Facade {
   }
 
   async configGet(_category: string, item?: string): Promise<unknown> {
-    if (!item) throw unsupported("configGet without item name");
+    if (!item) {
+      if (_category !== "VICE") throw new Error(`Unknown VICE configuration category '${_category}'`);
+      const inventory = await this.configsList() as { categories: Array<{ items: string[] }> };
+      return this.withClient(async (client) => {
+        const values: Record<string, string | number> = {};
+        for (const name of inventory.categories[0]!.items) {
+          values[name] = (await client.resourceGet(name)).value;
+        }
+        return values;
+      });
+    }
     return await this.withClient(async (client) => {
       const res = await client.resourceGet(item as string);
       return { category: _category, item, value: res.value, type: res.type };
@@ -947,8 +960,7 @@ export class ViceBackend implements C64Facade {
     let parsed: string | number = value;
     await this.withClient(async (client) => {
       const current = await client.resourceGet(item);
-      parsed = current.type === "int" ? Number(value) : value;
-      if (current.type === "int" && !Number.isFinite(parsed)) throw new Error(`VICE resource '${item}' requires an integer value`);
+      parsed = parseViceConfigValue(value, current.type, item);
       await client.resourceSet(item, parsed);
     });
     return { success: true, details: { item, value: parsed } };
@@ -960,10 +972,8 @@ export class ViceBackend implements C64Facade {
       for (const [category, items] of Object.entries(payload)) {
         for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
           try {
-            const str = String(value ?? "");
             const current = await client.resourceGet(item);
-            const parsed: string | number = current.type === "int" ? Number(str) : str;
-            if (current.type === "int" && !Number.isFinite(parsed)) throw new Error(`VICE resource '${item}' requires an integer value`);
+            const parsed = parseViceConfigValue(value, current.type, item);
             await client.resourceSet(item, parsed);
             results.push({ item: `${category}/${item}`, success: true });
           } catch (err) {
@@ -986,6 +996,16 @@ export class ViceBackend implements C64Facade {
   private supervisorKey(): string {
     return `${this.host}:${this.port}`;
   }
+}
+
+function parseViceConfigValue(value: unknown, type: string, item: string): string | number {
+  if (type !== "int") return String(value ?? "");
+  const parsed = value === true || value === "true" ? 1
+    : value === false || value === "false" ? 0 : Number(value);
+  if (!Number.isInteger(parsed) || parsed < -0x80000000 || parsed > 0x7fffffff) {
+    throw new Error(`VICE resource '${item}' requires a 32-bit integer value`);
+  }
+  return parsed;
 }
 
 function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend in phase one`); (err as any).code = "UNSUPPORTED"; return err; }

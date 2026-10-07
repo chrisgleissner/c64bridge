@@ -117,7 +117,7 @@ export const programModule = defineToolModule({
         variants: programOperations.map((operation) => operation.schema),
       }),
       tags: ["programs", "execution", "grouped"],
-      operationPlatforms: { load_prg: ["c64u", "u2"], run_crt: ["c64u", "u2"], bundle_run: ["c64u", "u2"] },
+      operationPlatforms: { load_prg: ["c64u", "u2"], run_crt: ["c64u", "u2"] },
       operationToolNames: {
         load_prg: "load_prg",
         run_crt: "run_crt",

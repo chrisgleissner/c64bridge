@@ -149,7 +149,6 @@ test("c64_program c64u-only grouped operations reject on vice", async () => {
   for (const [args, expectedTool] of [
     [{ op: "load_prg", path: "//USB0/demo.prg" }, "load_prg"],
     [{ op: "run_crt", path: "//USB0/demo.crt" }, "run_crt"],
-    [{ op: "bundle_run", runId: "demo", outputPath: "/tmp/demo" }, "bundle_run_artifacts"],
   ]) {
     await assert.rejects(
       () => toolRegistry.invoke("c64_program", args, ctx),
@@ -959,7 +958,6 @@ test("c64_sound c64u-only grouped operations reject on vice", async () => {
     [{ op: "capture_samples" }, "capture_samples"],
     [{ op: "play_sid_file", path: "//USB0/demo.sid" }, "sidplay_file"],
     [{ op: "play_mod_file", path: "//USB0/demo.mod" }, "modplay_file"],
-    [{ op: "pipeline", source: "A4 q" }, "music_compile_play_analyze"],
   ]) {
     await assert.rejects(
       () => toolRegistry.invoke("c64_sound", args, ctx),
