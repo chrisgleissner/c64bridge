@@ -1,9 +1,14 @@
 # Changelog
 
+## 1.0.3 - 2026-10-07
 
+### Bug Fixes
 
-
-
+- retry audio and video stream startup after firmware host resolve errors (dc89bdd)
+- analyze the Ultimate audio stream with per-channel offset removal and reliable stereo level and pitch detection (b88b2d6)
+- read the firmware System Mode for accurate audio sample rates and report plain sample RMS (9860e51)
+- update vulnerable runtime dependencies and synchronize npm and Bun lockfiles (f957831)
+- require consistent release metadata and publish the exact tested npm archive from its prepared tag (814c3ed)
 
 ## 1.0.2 - 2026-08-07
 
