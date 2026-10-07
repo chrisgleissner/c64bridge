@@ -247,20 +247,29 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.equal(listResult.metadata?.success, true, "list_drives operation should succeed");
       assert.ok(listResult.metadata?.drives, "drives_list should include drive metadata");
 
+      if (ctx.platform === "vice") {
+        // VICE auto-detects the image type; explicit overrides must be rejected, not ignored.
+        const { result: overrideResult } = await callTool(ctx, "c64_disk", {
+          op: "mount",
+          drive: "drive8",
+          image: "/tmp/demo.d64",
+          type: "d64",
+          attachmentMode: "readwrite",
+        });
+        assert.notEqual(overrideResult.metadata?.success, true, "VICE mount type/mode override should be rejected");
+      }
+
       const { result: mountResult } = await callTool(ctx, "c64_disk", {
         op: "mount",
         drive: "drive8",
         image: "/tmp/demo.d64",
-        type: "d64",
-        attachmentMode: "readwrite",
+        ...(ctx.platform === "vice" ? {} : { type: "d64", attachmentMode: "readwrite" }),
       });
 
       assert.equal(mountResult.metadata?.success, true, "mount operation should succeed");
       if (ctx.platform === "vice") {
         assert.equal(mountResult.metadata?.drive, "drive8");
         assert.equal(mountResult.metadata?.image, "/tmp/demo.d64");
-        assert.equal(mountResult.metadata?.mode, "readwrite");
-        assert.equal(mountResult.metadata?.type, "d64");
       } else {
       assert.equal(mockServer.state.lastDriveOperation?.action, "mount");
       assert.deepEqual(mockServer.state.drives.drive8.mountedImage, {

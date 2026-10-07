@@ -149,7 +149,6 @@ test("c64_program c64u-only grouped operations reject on vice", async () => {
   for (const [args, expectedTool] of [
     [{ op: "load_prg", path: "//USB0/demo.prg" }, "load_prg"],
     [{ op: "run_crt", path: "//USB0/demo.crt" }, "run_crt"],
-    [{ op: "bundle_run", runId: "demo", outputPath: "/tmp/demo" }, "bundle_run_artifacts"],
   ]) {
     await assert.rejects(
       () => toolRegistry.invoke("c64_program", args, ctx),
@@ -959,9 +958,6 @@ test("c64_sound c64u-only grouped operations reject on vice", async () => {
     [{ op: "capture_samples" }, "capture_samples"],
     [{ op: "play_sid_file", path: "//USB0/demo.sid" }, "sidplay_file"],
     [{ op: "play_mod_file", path: "//USB0/demo.mod" }, "modplay_file"],
-    [{ op: "pipeline", source: "A4 q" }, "music_compile_play_analyze"],
-    [{ op: "analyze", request: { durationSeconds: 1 } }, "analyze_audio"],
-    [{ op: "record_analyze", durationSeconds: 1 }, "record_and_analyze_audio"],
   ]) {
     await assert.rejects(
       () => toolRegistry.invoke("c64_sound", args, ctx),
@@ -972,6 +968,44 @@ test("c64_sound c64u-only grouped operations reject on vice", async () => {
         return true;
       },
     );
+  }
+});
+
+test("c64_sound recording and analysis advertise and dispatch on every microphone-capable backend", async () => {
+  const descriptor = toolRegistry.list().find((tool) => tool.name === "c64_sound");
+  const generated = JSON.parse(fs.readFileSync(new URL("../mcp/tools.json", import.meta.url), "utf8")).tools.find((tool) => tool.name === "c64_sound");
+  for (const op of ["record_analyze", "analyze"]) {
+    assert.deepEqual(descriptor.metadata.operationPlatforms[op], ["c64u", "u2", "vice"]);
+    assert.deepEqual(generated._meta.operationPlatforms[op], descriptor.metadata.operationPlatforms[op]);
+    for (const platform of ["c64u", "u2", "vice"]) {
+      const calls = [];
+      const analysis = {
+        sidwave: 1,
+        analysis: { source: platform === "c64u" ? "ultimate-stream" : "microphone", durationSeconds: 0.5, voices: [], global_metrics: { average_rms: 0.1, max_rms: 0.1 } },
+      };
+      const ctx = {
+        client: { async recordAndAnalyzeAudio(options) { calls.push(options); return analysis; } },
+        rag: {}, logger: createLogger(), platform: { id: platform, features: [], limitedFeatures: [] }, setPlatform,
+      };
+      const result = await toolRegistry.invoke("c64_sound", { op, durationSeconds: 0.5, ...(op === "analyze" ? { request: "check the music" } : {}) }, ctx);
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(calls, [{ durationSeconds: 0.5, expectedSidwave: undefined }]);
+      const reported = op === "record_analyze" ? JSON.parse(result.content[0].text).analysis : result.metadata.analysis.analysis;
+      assert.equal(reported.source, analysis.analysis.source);
+    }
+  }
+});
+
+test("VICE audio capture errors are reported as dependency errors rather than unsupported operations", async () => {
+  for (const op of ["record_analyze", "analyze"]) {
+    const ctx = {
+      client: { async recordAndAnalyzeAudio() { throw new Error("Audio backend not available. Please install 'naudiodon' dependencies (PortAudio)."); } },
+      rag: {}, logger: createLogger(), platform: { id: "vice", features: [], limitedFeatures: [] }, setPlatform,
+    };
+    const result = await toolRegistry.invoke("c64_sound", { op, durationSeconds: 0.5, ...(op === "analyze" ? { request: "check the music" } : {}) }, ctx);
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /Audio backend not available/);
+    assert.ok(!result.content[0].text.includes("unsupported"));
   }
 });
 

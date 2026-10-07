@@ -1366,6 +1366,9 @@ export class C64Client {
         return this.captureViceFrames(requestedCount);
       }
 
+      if (facade.type !== "c64u") {
+        throw new Error("Video frame capture is only available on C64U/U64 and VICE; U2 has no video stream");
+      }
       return this.captureC64uVideoFrames(facade, requestedCount, {
         reuseSession: options?.reuseSession === true,
         keepAliveMs: Math.max(0, Math.trunc(options?.keepAliveMs ?? 0)),

@@ -60,7 +60,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "poweroff",
       ensureDescriptor(machineDescriptorIndex, "poweroff").inputSchema,
-      { description: "Request a controlled shutdown via the Ultimate firmware." },
+      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
@@ -161,8 +161,8 @@ export const systemModuleGroup = defineToolModule({
         variants: systemOperations.map((operation) => operation.schema),
       }),
       tags: ["system", "control", "grouped"],
-      operationPlatforms: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
-      operationToolNames: { pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },
+      operationPlatforms: { poweroff: ["c64u", "vice"], pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
+      operationToolNames: { poweroff: "poweroff", pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },
       examples: [
         {
           name: "Soft reset",

@@ -58,11 +58,11 @@ const driveMountArgsSchema = objectSchema({
     drive: driveIdentifierSchema,
     image: diskImagePathSchema,
     type: optionalSchema(stringSchema({
-      description: "Override the disk image type when auto-detection is incorrect.",
+      description: "Override the disk image type when auto-detection is incorrect (C64U/U64 and U2 only; VICE uses auto-detection).",
       enum: ["d64", "g64", "d71", "g71", "d81"],
     })),
     mode: optionalSchema(stringSchema({
-      description: "Attachment mode controlling how the firmware treats the mounted image.",
+      description: "Attachment mode controlling how the firmware treats the mounted image (C64U/U64 and U2 only).",
       enum: ["readwrite", "readonly", "unlinked"],
     })),
   },

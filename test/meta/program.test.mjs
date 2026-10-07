@@ -482,6 +482,7 @@ test("batch_run_with_assertions stops after the first failing CRT program and ig
   let prgRuns = 0;
   const readCalls = [];
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async runCrtFile() {
         crtRuns += 1;
@@ -756,4 +757,44 @@ test("cross_platform_greeting captures and analyses a 24-bit RGB frame", async (
   assert.equal(result?.verification?.screenshotCaptured, true);
   assert.ok(result?.verification?.screenshotAnalysis);
   assert.ok(result?.screenshotPath);
+});
+
+test("batch_run_with_assertions rejects CRT programs on VICE before running any program", async () => {
+  let effects = 0;
+  const ctx = {
+    platform: { id: "vice" },
+    client: {
+      async runPrgFile() { effects += 1; return { success: true }; },
+      async runCrtFile() { effects += 1; return { success: true }; },
+      async reset() { effects += 1; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [{ path: "/first.prg" }, { path: "/demo.CRT" }],
+    durationMs: 1,
+    outputPath: "test/tmp/meta/program-batch-vice-crt",
+  }, ctx);
+  assert.equal(res.metadata?.error?.code, "unsupported_platform");
+  assert.equal(effects, 0);
+});
+
+test("batch_run_with_assertions reports an unsuccessful PRG launch as a failed run", async () => {
+  const ctx = {
+    platform: { id: "vice" },
+    client: {
+      async runPrgFile() { return { success: false, details: { message: "load failed" } }; },
+      async readScreen() { return "READY."; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [{ path: "/bad.prg", assertions: [{ type: "screen_contains", pattern: "READY." }] }],
+    durationMs: 1,
+    resetDelayMs: 0,
+    outputPath: "test/tmp/meta/program-batch-prg-fail",
+  }, ctx);
+  assert.equal(res.metadata?.success, false);
+  assert.equal(res.structuredContent?.data?.summary?.passed, 0);
 });

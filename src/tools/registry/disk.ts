@@ -233,6 +233,11 @@ const diskOperations: GroupedOperationConfig[] = [
       const typedDriveMode = driveMode as DriveMode | undefined;
 
       if (verify) {
+        if (typedType || typedAttachment) {
+          throw new ToolValidationError("type and attachmentMode are not applied by the verified mount workflow; set verify to false to use them", {
+            path: typedType ? "$.type" : "$.attachmentMode",
+          });
+        }
         return metaModule.invoke("drive_mount_and_verify", {
           drive: parsed.drive,
           imagePath: parsed.image,

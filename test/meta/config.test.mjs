@@ -14,6 +14,7 @@ test("config_snapshot_and_restore snapshot and restore", async () => {
   await fs.mkdir(dir, { recursive: true });
   let batchUpdated = false;
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async version() { return { version: "1.0.0" }; },
       async info() { return { device: "u64" }; },
@@ -47,6 +48,7 @@ test("config_snapshot_and_restore diff reports changes", async () => {
   await fs.writeFile(file, JSON.stringify(snapshot, null, 2), "utf8");
 
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async configsList() { return { categories: ["Audio"] }; },
       async configGet(cat) { return cat === "Audio" ? { Volume: "11" } : {}; },

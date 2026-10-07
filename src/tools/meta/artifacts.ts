@@ -2,7 +2,8 @@
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolValidationError, ToolUnsupportedPlatformError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath, relative, sep, isAbsolute } from "node:path";
 
@@ -21,7 +22,7 @@ const bundleRunArtifactsArgsSchema = objectSchema({
       required: ["address", "length"],
       additionalProperties: false,
     }))),
-    captureDebugReg: optionalSchema(booleanSchema({ description: "Capture debugreg state", default: true }), true),
+    captureDebugReg: optionalSchema(booleanSchema({ description: "Capture Ultimate debug registers (C64U/U64 only). Defaults to true on C64U/U64 and false on U2/VICE." })),
   },
   required: ["runId", "outputPath"],
   additionalProperties: false,
@@ -50,7 +51,11 @@ export const tools: ToolDefinition[] = [
         }
         const outputPath = resolvePath(String(parsed.outputPath));
         const captureScreen = parsed.captureScreen !== false;
-        const captureDebugReg = parsed.captureDebugReg !== false;
+        const platform = ctx.platform?.id ?? getPlatformStatus().id;
+        const captureDebugReg = parsed.captureDebugReg ?? (platform === "c64u");
+        if (captureDebugReg && platform !== "c64u") {
+          throw new ToolUnsupportedPlatformError("debugreg_read", platform, ["c64u"]);
+        }
         const memoryRanges = (parsed.memoryRanges ?? []) as Array<{ address: string; length: number }>;
 
         await fs.mkdir(outputPath, { recursive: true });

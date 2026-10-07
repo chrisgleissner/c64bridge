@@ -2,7 +2,8 @@
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
 import { sleep, formatTimestampSpec } from "./util.js";
@@ -30,7 +31,7 @@ const C64_SCREENSHOT_PALETTE = [
   0xb2b2b2ff,
 ] as const;
 
-type GreetingBackend = "vice" | "c64u";
+type GreetingBackend = "vice" | "c64u" | "u2";
 
 function hasOwnProperty(value: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
@@ -72,7 +73,7 @@ function shouldUseVisibleViceGreetingFastPath(rawArgs: unknown, requestedBackend
 }
 
 function canonicalGreetingBackends(): readonly GreetingBackend[] {
-  return ["vice", "c64u"];
+  return ["vice", "c64u", "u2"];
 }
 
 function uniqueGreetingBackends(backends: readonly GreetingBackend[]): GreetingBackend[] {
@@ -283,9 +284,9 @@ const crossPlatformGreetingArgsSchema = objectSchema({
   properties: {
     platforms: optionalSchema(arraySchema(stringSchema({
       description: "Backends to target in sequence.",
-      enum: ["vice", "c64u"],
+      enum: ["vice", "c64u", "u2"],
       minLength: 1,
-    })), ["vice", "c64u"] as const),
+    }))),
     messageTemplate: optionalSchema(stringSchema({
       description: "Greeting template. Use {PLATFORM}/{BACKEND} for uppercase or {platform}/{backend} for lowercase substitution.",
       minLength: 1,
@@ -295,7 +296,7 @@ const crossPlatformGreetingArgsSchema = objectSchema({
       default: true,
     }), true),
     captureScreenshot: optionalSchema(booleanSchema({
-      description: "Capture a framebuffer screenshot and save it as a PNG per backend.",
+      description: "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips screenshots by default; explicitly requesting one on U2 fails before execution.",
       default: true,
     }), true),
     outputPath: optionalSchema(stringSchema({
@@ -376,11 +377,14 @@ export const tools: ToolDefinition[] = [
           });
         }
 
+        if ((args as Record<string, unknown>)?.captureScreenshot === true && requestedBackends.includes("u2")) {
+          throw new ToolUnsupportedPlatformError("capture_frame", "u2", ["c64u", "vice"]);
+        }
         const visibleViceFastPath = shouldUseVisibleViceGreetingFastPath(args ?? {}, requestedBackends);
         const verify = visibleViceFastPath ? false : parsed.verify !== false;
         const captureScreenshot = visibleViceFastPath ? false : parsed.captureScreenshot !== false;
         const restoreActiveBackend = parsed.restoreActiveBackend !== false;
-        const outputPath = captureScreenshot || parsed.outputPath
+        const outputPath = (captureScreenshot && requestedBackends.some((backend) => backend !== "u2")) || parsed.outputPath
           ? resolvePath(
               String(parsed.outputPath ?? joinPath(process.cwd(), "artifacts", "greetings", `run_${Date.now()}`)),
             )
@@ -399,6 +403,7 @@ export const tools: ToolDefinition[] = [
 
         try {
           for (const backend of requestedBackends) {
+            const backendCaptureScreenshot = captureScreenshot && backend !== "u2";
             const expectedText = applyGreetingTemplate(template, backend);
             const program = buildGreetingProgram(expectedText);
             const timeline: Array<Record<string, unknown>> = [];
@@ -433,7 +438,7 @@ export const tools: ToolDefinition[] = [
             });
 
             let prepareCapturePromise: Promise<void> | undefined;
-            if (captureScreenshot && backend === "c64u" && typeof client.prepareVideoCapture === "function") {
+            if (backendCaptureScreenshot && backend === "c64u" && typeof client.prepareVideoCapture === "function") {
               prepareCapturePromise = timedStep("prepare_capture", async () => {
                 await client.prepareVideoCapture?.({ keepAliveMs: Math.max(500, timeoutMs) });
                 preparedCaptureSession = true;
@@ -494,7 +499,7 @@ export const tools: ToolDefinition[] = [
             let screenshotAnalysis: Record<string, unknown> | undefined;
             let screenshotError: string | undefined;
 
-            if (captureScreenshot) {
+            if (backendCaptureScreenshot) {
               try {
                 const capture = await timedStep("capture_screenshot", () => client.captureFrames({
                   count: 1,
@@ -530,7 +535,7 @@ export const tools: ToolDefinition[] = [
 
             backendResult.verification = {
               screenContainsExpectedText: verify ? screenMatched : undefined,
-              screenshotCaptured: captureScreenshot ? !screenshotError : undefined,
+              screenshotCaptured: backendCaptureScreenshot ? !screenshotError : undefined,
               screenshotAnalysis,
             };
             if (screenshotPath) {
@@ -542,7 +547,7 @@ export const tools: ToolDefinition[] = [
 
             backendResult.success = runResult.success
               && (!verify || screenMatched)
-              && (!captureScreenshot || !screenshotError);
+              && (!backendCaptureScreenshot || !screenshotError);
             backendResult.promptToVisibleLatencyMs = timeline
               .filter((entry) => entry.ok === true && (entry.name === "switch_backend" || entry.name === "render_greeting_screen" || entry.name === "verify_screen"))
               .reduce((total, entry) => total + Number(entry.latencyMs ?? 0), 0);
@@ -729,6 +734,10 @@ export const tools: ToolDefinition[] = [
       try {
         const parsed = batchRunWithAssertionsArgsSchema.parse(args ?? {});
         const programs = parsed.programs as Array<{ path: string; assertions?: Array<{ type: string; pattern?: string; address?: string; expected?: string }> }>;
+        const platform = ctx.platform?.id ?? getPlatformStatus().id;
+        if (platform === "vice" && programs.some((program) => program.path.toLowerCase().endsWith(".crt"))) {
+          throw new ToolUnsupportedPlatformError("run_crt", platform, ["c64u", "u2"]);
+        }
         const continueOnError = parsed.continueOnError ?? false;
         const durationMs = parsed.durationMs ?? 2000;
   const resetDelayMs = parsed.resetDelayMs ?? 100;
@@ -750,9 +759,11 @@ export const tools: ToolDefinition[] = [
             // Run program
             const ext = program.path.toLowerCase().split(".").pop();
             if (ext === "prg") {
-              await (ctx.client as any).runPrgFile(program.path);
+              const run = await (ctx.client as any).runPrgFile(program.path);
+              if (!run.success) throw new ToolExecutionError("PRG playback failed", { details: run.details });
             } else if (ext === "crt") {
-              await (ctx.client as any).runCrtFile(program.path);
+              const run = await (ctx.client as any).runCrtFile(program.path);
+              if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
             }
 
             await sleep(durationMs);

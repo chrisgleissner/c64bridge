@@ -185,8 +185,7 @@
         "boolean",
         "null"
       ],
-      "description": "Capture debugreg state",
-      "default": true
+      "description": "Capture Ultimate debug registers (C64U/U64 only). Defaults to true on C64U/U64 and false on U2/VICE."
     },
     "platforms": {
       "type": [
@@ -199,13 +198,10 @@
         "minLength": 1,
         "enum": [
           "vice",
-          "c64u"
+          "c64u",
+          "u2"
         ]
-      },
-      "default": [
-        "vice",
-        "c64u"
-      ]
+      }
     },
     "messageTemplate": {
       "type": [
@@ -221,7 +217,7 @@
         "boolean",
         "null"
       ],
-      "description": "Capture a framebuffer screenshot and save it as a PNG per backend.",
+      "description": "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips screenshots by default; explicitly requesting one on U2 fails before execution.",
       "default": true
     },
     "restoreActiveBackend": {
@@ -623,8 +619,7 @@
               "boolean",
               "null"
             ],
-            "description": "Capture debugreg state",
-            "default": true
+            "description": "Capture Ultimate debug registers (C64U/U64 only). Defaults to true on C64U/U64 and false on U2/VICE."
           },
           "op": {
             "const": "bundle_run"
@@ -667,13 +662,10 @@
               "minLength": 1,
               "enum": [
                 "vice",
-                "c64u"
+                "c64u",
+                "u2"
               ]
-            },
-            "default": [
-              "vice",
-              "c64u"
-            ]
+            }
           },
           "messageTemplate": {
             "type": [
@@ -697,7 +689,7 @@
               "boolean",
               "null"
             ],
-            "description": "Capture a framebuffer screenshot and save it as a PNG per backend.",
+            "description": "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips screenshots by default; explicitly requesting one on U2 fails before execution.",
             "default": true
           },
           "outputPath": {

@@ -3,7 +3,8 @@ import { parseSidwave } from "../../sidwave.js";
 import { recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { jsonResult } from "../responses.js";
-import { ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolExecutionError, ToolUnsupportedPlatformError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { getPlatformStatus } from "../../platform.js";
 import { sleep } from "./util.js";
 import { arraySchema, booleanSchema, numberSchema, objectSchema, optionalSchema, stringSchema } from "../schema.js";
 
@@ -16,7 +17,7 @@ const DEFAULT_POST_SILENCE_WAIT_MS = 200;
 const DEFAULT_PRESET_ANALYSIS_DURATION_SECONDS = 4;
 const DEFAULT_PRESET_WAIT_MS = 400;
 
-type PresetBackend = "vice" | "c64u";
+type PresetBackend = "vice" | "c64u" | "u2";
 type MusicPresetName = "fuer_elise";
 
 interface MusicPresetDefinition {
@@ -105,7 +106,7 @@ const musicCompilePlayAnalyzeArgsSchema = objectSchema({
   properties: {
     sidwave: optionalSchema(stringSchema({ description: "SIDWAVE source in YAML or JSON format.", minLength: 1 })),
     cpg: optionalSchema(stringSchema({ description: "Legacy CPG input format.", minLength: 1 })),
-    output: optionalSchema(stringSchema({ description: "Playback artifact format.", enum: ["prg", "sid"], default: "prg" }), "prg"),
+    output: optionalSchema(stringSchema({ description: "Playback artifact format. PRG works on all backends; SID attachment playback requires C64U/U64 or U2.", enum: ["prg", "sid"], default: "prg" }), "prg"),
     waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Delay between starting playback and beginning analysis capture (milliseconds).", minimum: 0, maximum: 5000 }), DEFAULT_PLAYBACK_WAIT_MS),
     analysisDurationSeconds: optionalSchema(numberSchema({ description: "Audio capture length in seconds.", minimum: 0.5, maximum: 20 }), DEFAULT_ANALYSIS_DURATION_SECONDS),
     expectedSidwave: optionalSchema(stringSchema({ description: "Optional expected SIDWAVE used to refine analysis comparisons.", minLength: 1 })),
@@ -129,11 +130,11 @@ const musicPlayPresetArgsSchema = objectSchema({
     }), "fuer_elise"),
     platforms: optionalSchema(arraySchema(stringSchema({
       description: "Backends to target in sequence.",
-      enum: ["vice", "c64u"],
+      enum: ["vice", "c64u", "u2"],
       minLength: 1,
     }))),
     verify: optionalSchema(booleanSchema({
-      description: "Capture and analyze audio on supported backends after playback starts.",
+      description: "Capture and analyze audio after playback starts: native streaming on C64U/U64, host audio input on U2/VICE (PortAudio required).",
       default: true,
     }), true),
     analysisDurationSeconds: optionalSchema(numberSchema({
@@ -215,7 +216,7 @@ function normalizeSidwaveInput(input?: string | Record<string, unknown>): string
 }
 
 function canonicalPresetBackends(): readonly PresetBackend[] {
-  return ["vice", "c64u"];
+  return ["vice", "c64u", "u2"];
 }
 
 function uniquePresetBackends(backends: readonly PresetBackend[]): PresetBackend[] {
@@ -382,29 +383,22 @@ export const tools: ToolDefinition[] = [
 
             let verification: Record<string, unknown> | null = null;
             if (verify) {
-              if (backend === "c64u") {
-                if (waitBeforeCaptureMs > 0) {
-                  await sleep(waitBeforeCaptureMs);
-                }
-                const analysis = await analyzer({
-                  durationSeconds: analysisDurationSeconds,
-                  expectedSidwave: preset.sidwave,
-                });
-                const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
-                verification = {
-                  mode: "audio-analysis",
-                  durationSeconds: analysis.analysis?.durationSeconds ?? analysisDurationSeconds,
-                  averageRms: metrics.average,
-                  maxRms: metrics.max,
-                  voices: analysis.analysis?.voices ?? [],
-                  analysis,
-                };
-              } else {
-                verification = {
-                  mode: "playback-launch",
-                  note: "Audio analysis is only available on c64u; verified that playback launched on this backend.",
-                };
+              if (waitBeforeCaptureMs > 0) {
+                await sleep(waitBeforeCaptureMs);
               }
+              const analysis = await analyzer({
+                durationSeconds: analysisDurationSeconds,
+                expectedSidwave: preset.sidwave,
+              });
+              const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
+              verification = {
+                mode: "audio-analysis",
+                durationSeconds: analysis.analysis?.durationSeconds ?? analysisDurationSeconds,
+                averageRms: metrics.average,
+                maxRms: metrics.max,
+                voices: analysis.analysis?.voices ?? [],
+                analysis,
+              };
             }
 
             await trySilenceSid(context);
@@ -514,6 +508,10 @@ export const tools: ToolDefinition[] = [
         }
 
         const format = (parsed.output ?? "prg") as "prg" | "sid";
+        const platform = context.platform?.id ?? getPlatformStatus().id;
+        if (format === "sid" && platform === "vice") {
+          throw new ToolUnsupportedPlatformError("sidplay_attachment (use output: prg on VICE)", platform, ["c64u", "u2"]);
+        }
         const waitBeforeCaptureMs = parsed.waitBeforeCaptureMs ?? DEFAULT_PLAYBACK_WAIT_MS;
         const analysisDurationSeconds = parsed.analysisDurationSeconds ?? DEFAULT_ANALYSIS_DURATION_SECONDS;
         const verifySilenceBefore = parsed.verifySilenceBefore ?? true;

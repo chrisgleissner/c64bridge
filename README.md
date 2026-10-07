@@ -784,11 +784,11 @@ Grouped entry point for sprite/charset extraction, memory dumps, filesystem stat
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `charset` | Locate and extract 2KB character sets from RAM. | — | `address`, `scanRange="common"`, `outputPath`, `pauseDuringRead=true`, `minNonEmptyChars=32`, `minEntropy=0.3` | ✅ |  |  |
-| `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ |  |  |
-| `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ |  |  |
-| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize=512`, `pauseDuringRead=true`, `retries=1` | ✅ |  |  |
-| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=true`, `outputDir`, `pauseDuringRead=true` | ✅ |  |  |
+| `charset` | Locate and extract 2KB character sets from RAM. | — | `address`, `scanRange="common"`, `outputPath`, `pauseDuringRead=true`, `minNonEmptyChars=32`, `minEntropy=0.3` | ✅ | ✅ | ✅ |
+| `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ | ✅ | ✅ |
+| `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ | ✅ |  |
+| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize=512`, `pauseDuringRead=true`, `retries=1` | ✅ | ✅ | ✅ |
+| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=true`, `outputDir`, `pauseDuringRead=true` | ✅ | ✅ | ✅ |
 
 #### c64_graphics
 
@@ -796,7 +796,7 @@ Grouped entry point for frame capture and graphics rendering workflows.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=true`, `encoding="base64"` | ✅ | ✅ | ✅ |
+| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=true`, `encoding="base64"` | ✅ |  | ✅ |
 | `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. | — | — | ✅ | ✅ | ✅ |
 | `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | ✅ | ✅ | ✅ |
 | `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | ✅ | ✅ | ✅ |
@@ -850,8 +850,8 @@ Grouped entry point for program upload, execution, and batch workflows.
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | `continueOnError=false`, `durationMs=2000`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ | ✅ |
-| `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg=true` | ✅ | ✅ |  |
-| `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Supports verification. | — | `platforms=["vice","c64u"]`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
+| `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg` | ✅ | ✅ | ✅ |
+| `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Supports verification. | — | `platforms`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
 | `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | ✅ | ✅ |  |
 | `run_crt` | Mount and run a CRT cartridge image. | `path` | — | ✅ | ✅ |  |
 | `run_prg` | Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. | `path` | `symbolsFile` | ✅ | ✅ | ✅ |
@@ -881,17 +881,17 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | `durationSeconds`, `expectedSidwave` | ✅ |  |  |
+| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false` | ✅ | ✅ | ✅ |
 | `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system="PAL"`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
-| `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=true`, `verifySilenceAfter=true`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ |  |
+| `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=true`, `verifySilenceAfter=true`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. Supports verification. | — | `preset="fuer_elise"`, `platforms`, `verify=true`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | ✅ | ✅ |  |
-| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ |  |  |
+| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `reset` | Soft or hard reset of SID registers to clear glitches. | — | `hard=false` | ✅ | ✅ | ✅ |
 | `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | — | ✅ | ✅ | ✅ |
 | `silence_all` | Silence all SID voices with optional audio verification. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
@@ -916,7 +916,7 @@ Grouped entry point for power, reset, menu, and background task control.
 | `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ |  |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | ✅ | ✅ | ✅ |
 | `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. | — | — | ✅ | ✅ | ✅ |
-| `poweroff` | Request a controlled shutdown via the Ultimate firmware. | — | — | ✅ | ✅ | ✅ |
+| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. | — | — | ✅ |  | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). | — | — | ✅ | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | — | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | — | ✅ | ✅ | ✅ |

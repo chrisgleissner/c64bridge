@@ -59,7 +59,7 @@ const configRestoreArgsSchema = objectSchema<ConfigRestoreArgs>({
       minLength: 1,
     }),
     applyToFlash: optionalSchema(booleanSchema({
-      description: "When true, save the restored configuration to flash immediately.",
+      description: "When true, save the restored configuration to flash immediately (C64U/U64 and U2 only).",
       default: false,
     })),
   },

@@ -131,7 +131,10 @@ function normalizeSnapshotValue(value: unknown, entry: ConfigInventoryEntry): un
     value
     && typeof value === "object"
     && !Array.isArray(value)
-    && Object.keys(value as Record<string, unknown>).length === 1
+    && (Object.keys(value as Record<string, unknown>).length === 1
+      || ((value as Record<string, unknown>).category === entry.category
+        && (value as Record<string, unknown>).item === entry.item
+        && ["int", "string"].includes(String((value as Record<string, unknown>).type))))
     && Object.prototype.hasOwnProperty.call(value, "value")
   ) {
     return (value as { value: unknown }).value;
