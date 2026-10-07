@@ -3,6 +3,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createSocket } from "node:dgram";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { C64Client } from "../src/c64Client.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
@@ -204,6 +205,44 @@ c64Test("audio capture preserves the primary failure when stopping the stream al
     facade.streamStart = async () => { throw new Error("primary start failure"); };
     facade.streamStop = async () => { throw new Error("cleanup failure"); };
     await assert.rejects(() => client.captureSamples({ count: 256 }), /primary start failure/);
+  } finally {
+    await mock.close();
+  }
+});
+
+c64Test("audio capture handles malformed UDP, receive errors, and cleanup failures without losing the primary reason", async () => {
+  const mock = await startMockC64Server();
+  try {
+    for (const failure of ["incomplete stereo sample pair", "UDP receive failure", "cleanup failure"]) {
+      const client = new C64Client(mock.baseUrl);
+      const facade = await client.facadePromise;
+      let captureSocket;
+      let stopCalls = 0;
+      const bind = client.bindCaptureSocket.bind(client);
+      client.bindCaptureSocket = async (socket, address) => {
+        captureSocket = socket;
+        await bind(socket, address);
+      };
+      const sender = createSocket("udp4");
+      facade.streamStart = async (_stream, target) => {
+        if (failure === "UDP receive failure") captureSocket.emit("error", new Error(failure));
+        else {
+          const packet = Buffer.alloc(failure === "cleanup failure" ? 2 + 256 * 4 : 4);
+          const [host, port] = target.split(":");
+          await new Promise((resolve, reject) => sender.send(packet, Number(port), host, (error) => error ? reject(error) : resolve()));
+          // Ensure the UDP event arrives while the REST start is still pending.
+          await new Promise((resolve) => setTimeout(resolve, 30));
+        }
+        return { success: true };
+      };
+      facade.streamStop = async () => { stopCalls += 1; throw new Error("cleanup failure"); };
+      try {
+        await assert.rejects(() => client.captureSamples({ count: 256 }), new RegExp(failure));
+        assert.equal(stopCalls, 1);
+      } finally {
+        try { sender.close(); } catch {}
+      }
+    }
   } finally {
     await mock.close();
   }
