@@ -249,8 +249,8 @@ export const soundModuleGroup = defineToolModule({
         play_sid_file: ["c64u", "u2"],
         play_mod_file: ["c64u", "u2"],
         pipeline: ["c64u", "u2"],
-        analyze: ["c64u"],
-        record_analyze: ["c64u"],
+        analyze: ["c64u", "u2", "vice"],
+        record_analyze: ["c64u", "u2", "vice"],
       },
       operationToolNames: {
         play_sid_file: "sidplay_file",

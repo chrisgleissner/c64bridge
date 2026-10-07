@@ -881,7 +881,7 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | `durationSeconds`, `expectedSidwave` | ✅ |  |  |
+| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false` | ✅ | ✅ | ✅ |
 | `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"` | ✅ | ✅ | ✅ |
@@ -891,7 +891,7 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 | `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. Supports verification. | — | `preset="fuer_elise"`, `platforms`, `verify=true`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | ✅ | ✅ |  |
-| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ |  |  |
+| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `reset` | Soft or hard reset of SID registers to clear glitches. | — | `hard=false` | ✅ | ✅ | ✅ |
 | `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | — | ✅ | ✅ | ✅ |
 | `silence_all` | Silence all SID voices with optional audio verification. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |

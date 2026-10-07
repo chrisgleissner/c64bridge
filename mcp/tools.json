@@ -2841,10 +2841,14 @@
             "u2"
           ],
           "analyze": [
-            "c64u"
+            "c64u",
+            "u2",
+            "vice"
           ],
           "record_analyze": [
-            "c64u"
+            "c64u",
+            "u2",
+            "vice"
           ]
         }
       }

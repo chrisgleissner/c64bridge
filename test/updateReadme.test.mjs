@@ -37,6 +37,15 @@ describe("update-readme grouped operations", () => {
     expect(output).not.toContain("#####");
   });
 
+  it("advertises microphone recording and analysis on C64U, U2, and VICE", () => {
+    const output = renderToolsAsString();
+    for (const op of ["record_analyze", "analyze"]) {
+      const row = output.split("\n").find((line) => line.startsWith(`| \`${op}\` |`));
+      expect(row).toBeDefined();
+      expect(row.endsWith("| ✅ | ✅ | ✅ |")).toBe(true);
+    }
+  });
+
   it("renders summary, resources, and prompts sections", () => {
     const summary = renderSummarySection().join("\n");
     const environment = renderEnvironmentSection().join("\n");

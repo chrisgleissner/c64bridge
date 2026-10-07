@@ -2,6 +2,8 @@ import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
 import { Buffer } from "node:buffer";
 import { audioModule } from "../src/tools/audio.js";
 import { analyzePcmForTest, recordAndAnalyzeAudio } from "../src/audio/record_and_analyze_audio.js";
+import { C64Client } from "../src/c64Client.js";
+import { toolRegistry } from "../src/tools/registry/index.js";
 
 function createLogger() {
   return {
@@ -116,6 +118,29 @@ describe("audio runtime integration", () => {
     });
 
     await expect(recordAndAnalyzeAudio({ durationSeconds: 0.5 })).rejects.toThrow("Missing dependency: pitchfinder");
+  });
+
+  test("grouped VICE and U2 analysis reaches the real client microphone recorder and analyzes PCM", async () => {
+    const { instances } = installAudioRuntimeMocks({ fixedFreq: 440, rms: 0.18 });
+    for (const platform of ["vice", "u2"]) {
+      const client = Object.create(C64Client.prototype);
+      // Isolate backend I/O while exercising the real C64Client capture routing.
+      client.facadePromise = Promise.resolve({ type: platform });
+      client.captureSamples = () => { throw new Error("Microphone capture must not start an Ultimate stream"); };
+      client.captureC64uAudioSamples = client.captureSamples;
+      for (const op of ["record_analyze", "analyze"]) {
+        const result = await toolRegistry.invoke("c64_sound", { op, durationSeconds: 0.5, ...(op === "analyze" ? { request: "check the music" } : {}) }, {
+          client, rag: {}, logger: createLogger(), platform: { id: platform, features: [], limitedFeatures: [] },
+        });
+        expect(result.isError).toBeUndefined();
+        const analysis = op === "record_analyze" ? JSON.parse(result.content[0].text).analysis : result.metadata.analysis.analysis;
+        expect(analysis.source).toBe("microphone");
+        expect(analysis.voices[0].detected_notes.some((note) => note.note === "A4")).toBe(true);
+        expect(analysis.global_metrics.average_rms).toBeGreaterThan(0.1);
+      }
+    }
+    expect(instances).toHaveLength(4);
+    expect(instances.every((input) => input.quitCalled)).toBe(true);
   });
 
   test("recordAndAnalyzeAudio captures PCM and analyzes note content", async () => {
