@@ -7,6 +7,7 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
+import { execFile } from "node:child_process";
 import { createSocket, type Socket } from "node:dgram";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
@@ -25,6 +26,12 @@ import {
 import { Api, HttpClient } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
+import {
+  analyzeStereoStream,
+  recordAndAnalyzeAudio,
+  type AnalysisResult,
+  type RecordAndAnalyzeParams,
+} from "./audio/record_and_analyze_audio.js";
 import type {
   ViceClient,
   ViceCheckpoint,
@@ -100,6 +107,37 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+}
+
+const STREAM_HOST_RESOLVE_ERROR = "Network Host Resolve Error";
+const NEIGHBOR_PRIME_TIMEOUT_MS = 4_000;
+
+/**
+ * The Ultimate firmware resolves a unicast stream target through its ARP cache
+ * and answers 404 "Network Host Resolve Error" immediately when the client is
+ * not cached. Accepts both a thrown HTTP error and an unsuccessful result.
+ */
+function isStreamHostResolveFailure(failure: unknown): boolean {
+  const body = axios.isAxiosError(failure) ? failure.response?.data : failure;
+  if (body === undefined || body === null) {
+    return false;
+  }
+  try {
+    return JSON.stringify(body).includes(STREAM_HOST_RESOLVE_ERROR);
+  } catch {
+    return false;
+  }
+}
+
+function neighborPrimeArgs(host: string): string[] {
+  switch (process.platform) {
+    case "win32":
+      return ["-n", "1", "-w", "2000", host];
+    case "darwin":
+      return ["-c", "1", "-t", "2", host];
+    default:
+      return ["-c", "1", "-W", "2", host];
+  }
 }
 
 function menuMatrixIncludes(matrix: Uint8Array, expected: string): boolean {
@@ -1239,7 +1277,7 @@ export class C64Client {
   }
 
   async streamStart(stream: "video" | "audio" | "debug", ip: string): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.streamStart(stream, ip); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try { const facade = await this.facadePromise; return await this.startStreamResolvingHost(facade, stream, ip); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async streamStop(stream: "video" | "audio" | "debug"): Promise<RunBasicResult> {
@@ -1282,6 +1320,26 @@ export class C64Client {
       throw new Error("Audio sample capture is only available on C64 Ultimate");
     }
     return this.captureC64uAudioSamples(facade, requestedPairs);
+  }
+
+  /**
+   * Records and analyzes audio. On the C64 Ultimate the PCM comes from the
+   * device audio stream; other backends have no stream, so the host microphone is used.
+   */
+  async recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
+    const durationSeconds = Math.max(0.5, Math.min(120, Number(params.durationSeconds || 0)));
+    const facade = await this.facadePromise;
+    if (facade.type !== "c64u") {
+      return recordAndAnalyzeAudio(params);
+    }
+
+    const sampleRateHz = await this.getC64uAudioSampleRate(facade);
+    const samplePairs = Math.ceil(durationSeconds * sampleRateHz);
+    const capture = await this.captureC64uAudioSamples(facade, samplePairs, {
+      timeoutMs: Math.ceil(durationSeconds * 1_500) + 2_000,
+      sampleRateHz,
+    });
+    return analyzeStereoStream(capture.samples, capture.sampleRateHz, params.expectedSidwave);
   }
 
   async configsList(): Promise<unknown> {
@@ -1404,7 +1462,7 @@ export class C64Client {
     try {
       await this.bindCaptureSocket(socket, bindAddress);
       const target = this.socketEndpoint(socket, bindAddress);
-      await this.ensureStreamSuccess(await facade.streamStart("video", target), "start video stream");
+      await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "video", target), "start video stream");
 
       const frames = await new Promise<readonly CapturedFrame[]>((resolve, reject) => {
         const timeoutMs = Math.max(1_500, count * 750);
@@ -1502,7 +1560,7 @@ export class C64Client {
     });
 
     try {
-      await this.ensureStreamSuccess(await facade.streamStart("video", target), "start video stream");
+      await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "video", target), "start video stream");
     } catch (error) {
       session.closed = true;
       socket.close();
@@ -1664,6 +1722,7 @@ export class C64Client {
   private async captureC64uAudioSamples(
     facade: C64Facade,
     samplePairs: number,
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number },
   ): Promise<SampleCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
     const bindAddress = await this.resolveLocalCaptureAddress(host);
@@ -1675,11 +1734,11 @@ export class C64Client {
     try {
       await this.bindCaptureSocket(socket, bindAddress);
       const target = this.socketEndpoint(socket, bindAddress);
-      await this.ensureStreamSuccess(await facade.streamStart("audio", target), "start audio stream");
+      await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "audio", target), "start audio stream");
 
       const neededValues = samplePairs * 2;
       await new Promise<void>((resolve, reject) => {
-        const timeoutMs = Math.max(1_000, Math.ceil(samplePairs / 192) * 500);
+        const timeoutMs = options?.timeoutMs ?? Math.max(1_000, Math.ceil(samplePairs / 192) * 500);
         const timer = setTimeout(() => {
           reject(new Error(`Timed out after ${timeoutMs}ms while capturing ${samplePairs} audio sample pair(s)`));
         }, timeoutMs);
@@ -1719,7 +1778,7 @@ export class C64Client {
       return {
         backend: "c64u",
         channels: 2,
-        sampleRateHz: await this.getC64uAudioSampleRate(facade),
+        sampleRateHz: options?.sampleRateHz ?? await this.getC64uAudioSampleRate(facade),
         samplePairs,
         samples,
       };
@@ -1788,6 +1847,67 @@ export class C64Client {
       throw new Error("Unable to determine UDP capture socket endpoint");
     }
     return `${bindAddress}:${address.port}`;
+  }
+
+  /**
+   * Starts a stream. When the device answers "Network Host Resolve Error", sends
+   * one ICMP echo to the device so it has to address a reply to this host, then
+   * retries the start once.
+   */
+  private async startStreamResolvingHost(
+    facade: C64Facade,
+    stream: "video" | "audio" | "debug",
+    target: string,
+  ): Promise<RunBasicResult> {
+    try {
+      const result = await facade.streamStart(stream, target);
+      if (result.success || !isStreamHostResolveFailure(result.details)) {
+        return result;
+      }
+    } catch (error) {
+      if (!isStreamHostResolveFailure(error)) {
+        throw error;
+      }
+    }
+
+    const host = new URL(this.baseUrl).hostname;
+    writeDiagnosticEvent("stream_start_host_resolve_retry", { stream, target, host });
+    await this.primeDeviceNeighborCache(host);
+
+    try {
+      const retry = await facade.streamStart(stream, target);
+      if (retry.success || !isStreamHostResolveFailure(retry.details)) {
+        return retry;
+      }
+    } catch (error) {
+      if (!isStreamHostResolveFailure(error)) {
+        throw error;
+      }
+    }
+    throw new Error(
+      `The Ultimate at ${host} could not resolve stream target ${target} (${STREAM_HOST_RESOLVE_ERROR}) even after pinging it from this host. ` +
+        "Ping the device from this host and retry, or use a multicast target.",
+    );
+  }
+
+  /** Best effort: ping failure (missing binary, blocked ICMP) is ignored and the caller retries anyway. */
+  private async primeDeviceNeighborCache(host: string): Promise<void> {
+    await new Promise<void>((resolve) => {
+      try {
+        execFile("ping", neighborPrimeArgs(host), { timeout: NEIGHBOR_PRIME_TIMEOUT_MS, windowsHide: true }, (error) => {
+          if (error) {
+            writeDiagnosticEvent("stream_start_ping_failed", { host, message: error.message });
+          }
+          resolve();
+        });
+      } catch (error) {
+        writeDiagnosticEvent("stream_start_ping_failed", {
+          host,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        resolve();
+      }
+    });
   }
 
   private async ensureStreamSuccess(result: RunBasicResult, action: string): Promise<void> {

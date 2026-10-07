@@ -26,7 +26,7 @@ export interface VoiceAnalysis {
 export interface AnalysisResult {
   sidwave: number;
   analysis: {
-    source: "microphone";
+    source: "microphone" | "ultimate-stream";
     durationSeconds: number;
     voices: VoiceAnalysis[];
     global_metrics: {
@@ -95,8 +95,46 @@ export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Pro
   const pcm16 = Buffer.concat(chunks);
   const float32 = convertInt16ToFloat32(pcm16);
 
-  const analysis = await analyzePcm(float32, sampleRate, params.expectedSidwave);
+  const analysis = await analyzePcm(float32, sampleRate, "microphone", params.expectedSidwave);
   return analysis;
+}
+
+/**
+ * Analyzes interleaved 16-bit stereo PCM captured from the Ultimate audio stream.
+ *
+ * The stream carries a large constant offset per channel even when silent
+ * (for example left 26900, right 20000). The mean of each channel is removed
+ * before mixing to mono; otherwise the RMS measures the offset instead of the
+ * audio level.
+ */
+export async function analyzeStereoStream(
+  interleaved: Int16Array,
+  sampleRate: number,
+  expectedSidwave?: unknown,
+): Promise<AnalysisResult> {
+  return analyzePcm(stereoToCenteredMono(interleaved), sampleRate, "ultimate-stream", expectedSidwave);
+}
+
+export function stereoToCenteredMono(interleaved: Int16Array): Float32Array {
+  const frames = Math.floor(interleaved.length / 2);
+  const out = new Float32Array(frames);
+  if (frames === 0) {
+    return out;
+  }
+  let leftSum = 0;
+  let rightSum = 0;
+  for (let i = 0; i < frames; i += 1) {
+    leftSum += interleaved[i * 2]!;
+    rightSum += interleaved[i * 2 + 1]!;
+  }
+  const leftMean = leftSum / frames;
+  const rightMean = rightSum / frames;
+  for (let i = 0; i < frames; i += 1) {
+    const left = interleaved[i * 2]! - leftMean;
+    const right = interleaved[i * 2 + 1]! - rightMean;
+    out[i] = (left + right) / 2 / 32768;
+  }
+  return out;
 }
 
 function convertInt16ToFloat32(buf: Buffer): Float32Array {
@@ -109,7 +147,12 @@ function convertInt16ToFloat32(buf: Buffer): Float32Array {
   return out;
 }
 
-async function analyzePcm(signal: Float32Array, sampleRate: number, expectedSidwave?: unknown): Promise<AnalysisResult> {
+async function analyzePcm(
+  signal: Float32Array,
+  sampleRate: number,
+  source: AnalysisResult["analysis"]["source"],
+  expectedSidwave?: unknown,
+): Promise<AnalysisResult> {
   let Pitchfinder: AnyFn;
   let Meyda: AnyFn | null = null;
   try {
@@ -229,7 +272,7 @@ async function analyzePcm(signal: Float32Array, sampleRate: number, expectedSidw
   return {
     sidwave: 1.0,
     analysis: {
-      source: "microphone",
+      source,
       durationSeconds: signal.length / sampleRate,
       voices,
       global_metrics: {
@@ -248,7 +291,7 @@ export async function analyzePcmForTest(
   sampleRate: number,
   expectedSidwave?: unknown,
 ): Promise<AnalysisResult> {
-  return analyzePcm(signal, sampleRate, expectedSidwave);
+  return analyzePcm(signal, sampleRate, "microphone", expectedSidwave);
 }
 
 function groupSegments(

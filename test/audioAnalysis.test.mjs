@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { analyzePcmForTest } from "../src/audio/record_and_analyze_audio.js";
+import { analyzePcmForTest, analyzeStereoStream, stereoToCenteredMono } from "../src/audio/record_and_analyze_audio.js";
 
 function genSine(freq, seconds, sampleRate) {
   const length = Math.floor(seconds * sampleRate);
@@ -216,4 +216,49 @@ test("handles invalid note names in expected sidwave", async () => {
   };
   const res = await analyzePcmForTest(a4, SR, expectedSidwave);
   assert.ok(res.analysis.voices.length > 0);
+});
+
+function interleave(left, right) {
+  const out = new Int16Array(left.length * 2);
+  for (let i = 0; i < left.length; i += 1) {
+    out[i * 2] = left[i];
+    out[i * 2 + 1] = right[i];
+  }
+  return out;
+}
+
+test("stereoToCenteredMono removes the constant offset of each channel", () => {
+  const frames = 4800;
+  const left = new Int16Array(frames).fill(26900);
+  const right = new Int16Array(frames).fill(20000);
+  const mono = stereoToCenteredMono(interleave(left, right));
+
+  assert.equal(mono.length, frames);
+  for (const value of mono) {
+    assert.ok(Math.abs(value) < 1e-6);
+  }
+});
+
+test("analyzeStereoStream reports silence for an idle stream with a large offset", async () => {
+  const frames = 48_000;
+  const left = new Int16Array(frames).map((_, i) => 26900 + (i % 3) - 1);
+  const right = new Int16Array(frames).map((_, i) => 20000 + (i % 2));
+  const result = await analyzeStereoStream(interleave(left, right), 47983);
+
+  assert.equal(result.analysis.source, "ultimate-stream");
+  assert.ok(result.analysis.global_metrics.max_rms < 0.001);
+});
+
+test("analyzeStereoStream measures the signal level and pitch above the offset", async () => {
+  const sampleRate = 47983;
+  const sine = genSine(440, 1, sampleRate);
+  const left = Int16Array.from(sine, (v) => Math.round(v * 8000 + 20000));
+  const right = Int16Array.from(sine, (v) => Math.round(v * 8000 + 15000));
+  const result = await analyzeStereoStream(interleave(left, right), sampleRate);
+
+  // The offsets (20000 / 15000) alone would give an RMS above 0.5; a level in this range proves they were removed.
+  const { average_rms: averageRms } = result.analysis.global_metrics;
+  assert.ok(averageRms > 0.05 && averageRms < 0.2, `unexpected average RMS ${averageRms}`);
+  const note = result.analysis.voices[0].detected_notes.find((n) => n.note);
+  assert.equal(note?.note, "A4");
 });

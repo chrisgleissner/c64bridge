@@ -215,7 +215,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "record_analyze",
       ensureDescriptor(audioDescriptorIndex, "record_and_analyze_audio").inputSchema,
-      { description: "Record audio for a fixed duration and return SID analysis metrics." },
+      { description: "Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "record_and_analyze_audio", rawArgs, ctx),
   },

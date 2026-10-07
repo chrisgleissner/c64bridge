@@ -192,6 +192,60 @@ test("C64Client against mock server", async (t) => {
     assert.ok(mock.state.streams.audio.packetsSent >= 2);
   });
 
+  await t.test("captureSamples pings the device and retries once after Network Host Resolve Error", async () => {
+    const primedHosts = [];
+    const priming = new C64Client(mock.baseUrl);
+    priming.primeDeviceNeighborCache = async (host) => {
+      primedHosts.push(host);
+    };
+    const rejectedBefore = mock.state.streamActionLog.filter((entry) => entry.action === "start-rejected").length;
+    mock.state.streamHostResolveFailures = 1;
+
+    const result = await priming.captureSamples({ count: 256 });
+
+    assert.equal(result.samplePairs, 256);
+    assert.deepEqual(primedHosts, ["127.0.0.1"]);
+    assert.equal(mock.state.streamActionLog.filter((entry) => entry.action === "start-rejected").length - rejectedBefore, 1);
+    assert.equal(mock.state.streams.audio.active, false);
+  });
+
+  await t.test("captureSamples reports the host resolve error when the retry fails too", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    mock.state.streamHostResolveFailures = 2;
+
+    await assert.rejects(
+      () => priming.captureSamples({ count: 256 }),
+      /could not resolve stream target .*Network Host Resolve Error.*after pinging/,
+    );
+    assert.equal(primeCalls, 1);
+    mock.state.streamHostResolveFailures = 0;
+  });
+
+  await t.test("streamStart does not ping or retry for other failures", async () => {
+    const priming = new C64Client(mock.baseUrl);
+    let primeCalls = 0;
+    priming.primeDeviceNeighborCache = async () => {
+      primeCalls += 1;
+    };
+    const result = await priming.streamStart("audio", "127.0.0.1:19999");
+    assert.equal(result.success, true);
+    assert.equal(primeCalls, 0);
+    await priming.streamStop("audio");
+  });
+
+  await t.test("recordAndAnalyzeAudio analyzes the Ultimate audio stream on c64u", async () => {
+    const result = await client.recordAndAnalyzeAudio({ durationSeconds: 0.5 });
+
+    assert.equal(result.analysis.source, "ultimate-stream");
+    assert.ok(result.analysis.durationSeconds >= 0.5);
+    assert.ok(result.analysis.global_metrics.max_rms > 0);
+    assert.equal(mock.state.streams.audio.active, false);
+  });
+
   await t.test("printTextOnPrinterAndRun generates Commodore BASIC and runs it", async () => {
     const opts = { text: "HELLO\nWORLD", formFeed: true };
     const prevRuns = mock.state.runCount;

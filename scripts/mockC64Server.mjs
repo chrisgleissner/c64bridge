@@ -127,6 +127,8 @@ function createInitialState() {
     },
     lastStreamAction: null,
     streamActionLog: [],
+    // Number of upcoming stream:start requests answered like firmware with an empty ARP entry.
+    streamHostResolveFailures: 0,
   };
 }
 
@@ -762,6 +764,12 @@ export async function startMockC64Server(options = {}) {
         if (action === "start" && method === "PUT") {
           const body = await readJson(req);
           const target = routeUrl.searchParams.get("ip") ?? routeUrl.searchParams.get("target") ?? body?.ip ?? body?.target ?? null;
+          if (state.streamHostResolveFailures > 0) {
+            state.streamHostResolveFailures -= 1;
+            state.streamActionLog.push({ action: "start-rejected", stream, target });
+            sendJson(res, { errors: ["Network Host Resolve Error"] }, 404);
+            return;
+          }
           state.streams[stream] = { active: true, target, packetsSent: 0 };
           state.lastStreamAction = { action: "start", stream, target };
           state.streamActionLog.push({ action: "start", stream, target });
@@ -1001,8 +1009,9 @@ function buildMockAudioPacket(sequence, sampleIndex) {
   const payload = Buffer.alloc(768);
   for (let index = 0; index < 192; index += 1) {
     const phase = ((sampleIndex + index) % 256) - 128;
-    const left = phase * 128;
-    const right = -left;
+    // Both channels carry the same sawtooth plus a different constant offset, like the real stream.
+    const left = phase * 128 + 8000;
+    const right = phase * 128 + 5000;
     payload.writeInt16LE(left, index * 4);
     payload.writeInt16LE(right, index * 4 + 2);
   }
