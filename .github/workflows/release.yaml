@@ -12,6 +12,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -32,7 +36,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.version) || github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node.js for release publishing
@@ -46,13 +50,15 @@ jobs:
         id: state
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_TAG: ${{ inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.version }}"
+            TAG="$REQUESTED_TAG"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
           VERSION="${TAG#v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid stable release tag: $TAG"; exit 1; }
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -77,16 +83,18 @@ jobs:
 
           echo "Detected npm-published='${PUBLISHED}' github-release='${GITHUB_RELEASE_TAG:-<none>}'"
 
-          if [ "$PUBLISHED" = "$VERSION" ] && [ -n "$GITHUB_RELEASE_TAG" ]; then
+          # Never attempt to republish an immutable npm version, even if a prior
+          # run failed before creating its GitHub release.
+          if [ "$PUBLISHED" = "$VERSION" ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "skip_prepare=true" >> "$GITHUB_OUTPUT"
-            echo "skip_release_notes=true" >> "$GITHUB_OUTPUT"
-            echo "Re-validation mode for ${VERSION}: already published to npm and GitHub; skipping publication."
+            echo "c64bridge@${VERSION} already exists on npm; skipping publication."
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "skip_prepare=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$PUBLISHED" = "$VERSION" ] && [ -n "$GITHUB_RELEASE_TAG" ]; then
+            echo "skip_release_notes=true" >> "$GITHUB_OUTPUT"
+          else
             echo "skip_release_notes=false" >> "$GITHUB_OUTPUT"
-            echo "Fresh release of ${VERSION}: publication required."
           fi
 
       - name: Determine previous tag
@@ -168,39 +176,70 @@ jobs:
           writeFileSync(process.env.GITHUB_OUTPUT, `${outputLines.join('\n')}\n`, { flag: 'a' });
           NODE
 
+      - name: Verify prepared release tag
+        env:
+          RELEASE_VERSION: ${{ steps.state.outputs.version }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          node scripts/validate-release.mjs "$RELEASE_VERSION"
+          git diff --exit-code
+
       - name: Install dependencies
         run: npm ci
-
-      - name: Run release-prepare
-        if: ${{ steps.state.outputs.skip_prepare != 'true' }}
-        run: |
-          npm run release:prepare -- "${{ steps.state.outputs.version }}"
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Commit and push release preparation changes
-        if: ${{ steps.state.outputs.skip_prepare != 'true' }}
-        run: |
-          git add package.json package-lock.json mcp.json server.json CHANGELOG.md
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "chore: prepare release ${{ steps.state.outputs.version }}"
-            git push origin HEAD:main
-          fi
 
       - name: Build project
         run: npm run build
 
-      - name: Verify local package
-        run: npm run check:package
+      - name: Verify generated release metadata
+        env:
+          RELEASE_VERSION: ${{ steps.state.outputs.version }}
+        run: |
+          node scripts/validate-release.mjs "$RELEASE_VERSION"
+          git diff --exit-code
+
+      - name: Pack immutable release artifact
+        id: artifact
+        env:
+          RELEASE_VERSION: ${{ steps.state.outputs.version }}
+        run: |
+          npm pack --ignore-scripts --json > "$RUNNER_TEMP/release-pack.json"
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const [pack] = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/release-pack.json`, 'utf8'));
+          assert.equal(pack.name, 'c64bridge');
+          assert.equal(pack.version, process.env.RELEASE_VERSION);
+          assert.equal(pack.filename, `c64bridge-${process.env.RELEASE_VERSION}.tgz`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `filename=${pack.filename}\nintegrity=${pack.integrity}\n`);
+          NODE
+          sha256sum "c64bridge-${RELEASE_VERSION}.tgz" > "$RUNNER_TEMP/release-artifact.sha256"
+
+      - name: Validate exact packed artifact before publishing
+        env:
+          RELEASE_VERSION: ${{ steps.state.outputs.version }}
+          RELEASE_TARBALL: ${{ steps.artifact.outputs.filename }}
+        run: |
+          PACKAGE_DIR="$RUNNER_TEMP/release-package"
+          mkdir -p "$PACKAGE_DIR"
+          tar -xzf "$RELEASE_TARBALL" -C "$PACKAGE_DIR"
+          node scripts/verify-package.mjs "$PACKAGE_DIR/package"
+          (cd "$PACKAGE_DIR/package" && npm install --omit=dev && npm audit --omit=dev)
+          node scripts/validate-release-artifact.mjs "$PACKAGE_DIR/package" "$RELEASE_VERSION"
+
+      - name: Preserve validated npm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-release-${{ steps.state.outputs.version }}
+          path: ${{ steps.artifact.outputs.filename }}
+          if-no-files-found: error
 
       - name: Install mcp-publisher
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Validate MCP Registry manifest
+        run: ./mcp-publisher validate server.json
 
       - name: Extract changelog entry
         id: changelog
@@ -383,15 +422,19 @@ jobs:
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_URL missing; OIDC not available"; exit 1; }
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN missing; OIDC not available"; exit 1; }
 
-      - name: Publish to npm
+      - name: Publish validated artifact to npm
         if: ${{ steps.state.outputs.publish == 'true' }}
+        env:
+          RELEASE_TARBALL: ${{ steps.artifact.outputs.filename }}
         run: |
-          npm publish --access public
+          sha256sum --check "$RUNNER_TEMP/release-artifact.sha256"
+          npm publish "./$RELEASE_TARBALL" --ignore-scripts --access public --tag latest --provenance --registry https://registry.npmjs.org
 
       - name: Wait for npm package visibility
         if: ${{ steps.state.outputs.publish == 'true' }}
         env:
           PACKAGE_VERSION: ${{ steps.state.outputs.version }}
+          EXPECTED_INTEGRITY: ${{ steps.artifact.outputs.integrity }}
         run: |
           for attempt in $(seq 1 30); do
             if PUBLISHED_VERSION=$(npm view "c64bridge@${PACKAGE_VERSION}" version --json 2>/dev/null | tr -d '"'); then
@@ -400,7 +443,9 @@ jobs:
               PUBLISHED_VERSION=""
             fi
             if [ "$PUBLISHED_VERSION" = "$PACKAGE_VERSION" ]; then
-              echo "c64bridge@${PACKAGE_VERSION} is visible on npm"
+              PUBLISHED_INTEGRITY=$(npm view "c64bridge@${PACKAGE_VERSION}" dist.integrity)
+              test "$PUBLISHED_INTEGRITY" = "$EXPECTED_INTEGRITY" || { echo "Published artifact integrity mismatch"; exit 1; }
+              echo "c64bridge@${PACKAGE_VERSION} is visible on npm with the validated artifact integrity"
               exit 0
             fi
             echo "Waiting for c64bridge@${PACKAGE_VERSION} to appear on npm (attempt ${attempt}/30)"
@@ -409,9 +454,6 @@ jobs:
 
           echo "Timed out waiting for c64bridge@${PACKAGE_VERSION} to appear on npm" >&2
           exit 1
-
-      - name: Validate MCP Registry manifest
-        run: ./mcp-publisher validate server.json
 
       - name: Authenticate to MCP Registry
         if: ${{ steps.state.outputs.publish == 'true' }}
