@@ -98,7 +98,8 @@ type Expression =
   | { type: "unary"; op: UnaryOperator; operand: Expression }
   | { type: "binary"; op: BinaryOperator; left: Expression; right: Expression };
 
-type UnaryOperator = "-" | "+" | "!" | "~";
+// "<" and ">" select the low and high byte of their operand.
+type UnaryOperator = "-" | "+" | "!" | "~" | "<" | ">";
 type BinaryOperator =
   | "+"
   | "-"
@@ -648,9 +649,17 @@ function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Ex
   if (!token) {
     throw new Error("Unexpected end of expression");
   }
-  if (token.kind === "punct" && (token.value === "+" || token.value === "-" || token.value === "!" || token.value === "~")) {
+  // In operand position, "<" and ">" are byte selectors and "*" is the current
+  // PC; parseBinaryExpression consumes them as binary operators elsewhere.
+  if (
+    token.kind === "punct" &&
+    (token.value === "+" || token.value === "-" || token.value === "!" || token.value === "~" || token.value === "<" || token.value === ">")
+  ) {
     const operand = parseUnaryExpression(stream, terminators);
     return { type: "unary", op: token.value as UnaryOperator, operand };
+  }
+  if (token.kind === "punct" && token.value === "*") {
+    return { type: "symbol", name: "*" };
   }
   if (token.kind === "punct" && token.value === "(") {
     const expr = parseExpression(stream, new Set<string>([")"]));
@@ -787,16 +796,16 @@ class SymbolTable {
   }
 
   ensureLabel(label: string, expected: number): void {
-    const existing = this.get(label);
-    if (existing === undefined) {
-      throw new Error(`Symbol "${label}" was not defined in the first pass`);
-    }
-    if (existing !== expected) {
-      throw new Error(`Symbol "${label}" changed value between passes (expected ${formatHex(existing)}, got ${formatHex(expected)})`);
-    }
+    this.ensureUnchanged(label, expected);
     if (!label.startsWith(".")) {
       this.currentScope = label;
     }
+  }
+
+  // Constant assignments never open a local-label scope (as in ACME and
+  // 64tass), matching setAssignment in the first pass.
+  ensureAssignment(label: string, expected: number): void {
+    this.ensureUnchanged(label, expected);
   }
 
   setAssignment(label: string, value: number): void {
@@ -826,6 +835,16 @@ class SymbolTable {
     return this.globals;
   }
 
+  private ensureUnchanged(label: string, expected: number): void {
+    const existing = this.get(label);
+    if (existing === undefined) {
+      throw new Error(`Symbol "${label}" was not defined in the first pass`);
+    }
+    if (existing !== expected) {
+      throw new Error(`Symbol "${label}" changed value between passes (expected ${formatHex(existing)}, got ${formatHex(expected)})`);
+    }
+  }
+
   private ensureLocalScope(scope: string): Map<string, number> {
     if (!this.locals.has(scope)) {
       this.locals.set(scope, new Map());
@@ -839,17 +858,16 @@ class Assembler {
   private readonly memory = new Uint8Array(0x10000);
   private readonly written = new Uint8Array(0x10000);
   private pc = 0;
-  private loadAddress: number;
   private lowestWritten = MAX_ADDRESS;
   private highestWritten = 0;
 
-  constructor(private readonly lines: ParsedLine[], defaultLoadAddress: number) {
-    this.loadAddress = defaultLoadAddress;
+  constructor(private readonly lines: ParsedLine[], private readonly defaultLoadAddress: number) {
     this.symbolTable.reset();
   }
 
   runPass(pass: 0 | 1): void {
-    this.pc = 0;
+    // Code before the first org directive is assembled at the load address.
+    this.pc = this.defaultLoadAddress & 0xffff;
     if (pass === 0) {
       this.symbolTable.reset();
       this.lowestWritten = MAX_ADDRESS;
@@ -870,10 +888,12 @@ class Assembler {
   }
 
   buildPrg(): Buffer {
-    if (this.lowestWritten === MAX_ADDRESS || this.highestWritten < this.loadAddress) {
+    // The PRG spans the bytes actually emitted, so org blocks that only define
+    // labels neither move the load address nor add padding.
+    if (this.lowestWritten > this.highestWritten) {
       return Buffer.alloc(0);
     }
-    const start = Math.min(this.lowestWritten, this.loadAddress);
+    const start = this.lowestWritten;
     const end = this.highestWritten;
     const body = this.memory.subarray(start, end + 1);
     const header = Buffer.alloc(2);
@@ -920,13 +940,10 @@ class Assembler {
     }
     if (statement.isLocationCounter) {
       this.pc = value & 0xffff;
-      if (pass === 0) {
-        this.loadAddress = this.pc;
-      }
     } else if (pass === 0) {
       this.symbolTable.setAssignment(statement.target, value);
     } else {
-      this.symbolTable.ensureLabel(statement.target, value);
+      this.symbolTable.ensureAssignment(statement.target, value);
     }
   }
 
@@ -941,9 +958,6 @@ class Assembler {
           throw new AssemblyError("org directive requires a defined value", location);
         }
         this.pc = value & 0xffff;
-        if (pass === 0) {
-          this.loadAddress = this.pc;
-        }
         break;
       }
       case "byte": {
@@ -1091,6 +1105,10 @@ class Assembler {
             return value ? 0 : 1;
           case "~":
             return ~value;
+          case "<":
+            return value & 0xff;
+          case ">":
+            return (value >> 8) & 0xff;
           default:
             throw new AssemblyError("Unknown unary operator", location);
         }
@@ -1176,6 +1194,7 @@ function determineInstruction(
 ): ResolvedInstruction {
   if (statement.resolvedMode && pass === 1) {
     const value = statement.operand.kind === "none" ? undefined : resolveOperandValue(statement.operand, evaluator, pass, location);
+    assertZeroPageOperand(statement.mnemonic, statement.resolvedMode, value, location);
     const size = instructionSize(statement.resolvedMode);
     return {
       mode: statement.resolvedMode,
@@ -1271,41 +1290,64 @@ function chooseAddressingMode(
       }
 
       if (register === "X") {
-        if (available.has(AddressingMode.ZeroPageX) && value !== undefined && fitsByte(value)) {
-          return AddressingMode.ZeroPageX;
-        }
-        if (available.has(AddressingMode.AbsoluteX)) {
-          return AddressingMode.AbsoluteX;
-        }
-      } else if (register === "Y") {
-        if (available.has(AddressingMode.ZeroPageY) && value !== undefined && fitsByte(value)) {
-          return AddressingMode.ZeroPageY;
-        }
-        if (available.has(AddressingMode.AbsoluteY)) {
-          return AddressingMode.AbsoluteY;
-        }
-      } else if (register === "S") {
-        if (available.has(AddressingMode.ZeroPageS)) {
-          return AddressingMode.ZeroPageS;
-        }
-      } else {
-        if (available.has(AddressingMode.ZeroPage) && value !== undefined && fitsByte(value)) {
-          return AddressingMode.ZeroPage;
-        }
-        if (available.has(AddressingMode.Absolute)) {
-          return AddressingMode.Absolute;
-        }
+        return chooseZeroPageOrAbsolute(mnemonic, available, AddressingMode.ZeroPageX, AddressingMode.AbsoluteX, value, location);
       }
-
-      if (available.has(AddressingMode.Absolute)) {
-        return AddressingMode.Absolute;
+      if (register === "Y") {
+        return chooseZeroPageOrAbsolute(mnemonic, available, AddressingMode.ZeroPageY, AddressingMode.AbsoluteY, value, location);
       }
-      throw new AssemblyError(`Instruction ${mnemonic} cannot resolve addressing mode`, location);
+      if (register === "S") {
+        if (!available.has(AddressingMode.ZeroPageS)) {
+          throw new AssemblyError(`Instruction ${mnemonic} does not support expr,S addressing`, location);
+        }
+        return AddressingMode.ZeroPageS;
+      }
+      return chooseZeroPageOrAbsolute(mnemonic, available, AddressingMode.ZeroPage, AddressingMode.Absolute, value, location);
     }
     default:
       throw new AssemblyError("Unsupported operand kind", location);
   }
 }
+
+function chooseZeroPageOrAbsolute(
+  mnemonic: string,
+  available: Map<AddressingMode, number>,
+  zeroPageMode: AddressingMode,
+  absoluteMode: AddressingMode,
+  value: number | undefined,
+  location: SourceLocation,
+): AddressingMode {
+  const hasZeroPage = available.has(zeroPageMode);
+  const hasAbsolute = available.has(absoluteMode);
+  if (hasZeroPage && value !== undefined && fitsByte(value)) {
+    return zeroPageMode;
+  }
+  if (hasAbsolute) {
+    return absoluteMode;
+  }
+  // Without an absolute form (e.g. STX zp,Y), a forward reference must be
+  // sized as zero page; the second pass rejects values outside zero page.
+  if (hasZeroPage && value === undefined) {
+    return zeroPageMode;
+  }
+  throw new AssemblyError(`Instruction ${mnemonic} does not support ${absoluteMode} addressing`, location);
+}
+
+function assertZeroPageOperand(mnemonic: string, mode: AddressingMode, value: number | undefined, location: SourceLocation): void {
+  const absoluteMode = ZERO_PAGE_TO_ABSOLUTE_MODE.get(mode);
+  if (absoluteMode === undefined || value === undefined || fitsByte(value)) {
+    return;
+  }
+  throw new AssemblyError(
+    `Instruction ${mnemonic} does not support ${absoluteMode} addressing (operand ${formatHex(value)} is outside zero page)`,
+    location,
+  );
+}
+
+const ZERO_PAGE_TO_ABSOLUTE_MODE = new Map<AddressingMode, AddressingMode>([
+  [AddressingMode.ZeroPage, AddressingMode.Absolute],
+  [AddressingMode.ZeroPageX, AddressingMode.AbsoluteX],
+  [AddressingMode.ZeroPageY, AddressingMode.AbsoluteY],
+]);
 
 function instructionSize(mode: AddressingMode): number {
   switch (mode) {
