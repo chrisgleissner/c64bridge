@@ -205,8 +205,11 @@ export function parseNamedCharToken(source: string, startIndex: number): { value
   }
 
   // Only sane name characters; anything else is ordinary text that happens to use the delimiters.
+  // Multi-word names such as {cursor up} need braces: ":" and "<" also appear in
+  // ordinary text ("Mode: reverse on: yes"), so they only delimit single words.
   const name = source.slice(startIndex + 1, idx).trim();
-  if (!/^[A-Za-z0-9_\s-]+$/.test(name)) {
+  const namePattern = open === "{" ? /^[A-Za-z0-9_\s-]+$/ : /^[A-Za-z0-9_-]+$/;
+  if (!namePattern.test(name)) {
     return null;
   }
 

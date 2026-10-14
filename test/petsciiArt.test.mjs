@@ -118,3 +118,9 @@ test("createPetsciiArt does not add a newline after a full 40-column row", () =>
   const narrow = createPetsciiArt({ text: "HI" });
   assert.ok(narrow.program.includes("PRINT:NEXTY"));
 });
+
+test("createPetsciiArt clears quote mode after every printed character", () => {
+  // A '"' glyph turns on quote mode, in which RVS ON/OFF would be drawn instead of executed.
+  const art = createPetsciiArt({ text: "HI" });
+  assert.ok(/READC:IFC>=0THENPRINT CHR\$\(C\);:POKE212,0:GOTO\d+/.test(art.program), art.program);
+});

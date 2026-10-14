@@ -74,3 +74,9 @@ test("named PETSCII lookup ignores Object.prototype member names", () => {
   // An unknown name stays literal text instead of becoming byte 0.
   assert.equal(Buffer.from(encodeStringWithNames("{constructor}")).toString("latin1"), "{constructor}");
 });
+
+test("multi-word named codes need braces, so ordinary text with colons is kept", () => {
+  assert.deepEqual([...encodeStringWithNames("{reverse on}")], [18]);
+  assert.equal(Buffer.from(encodeStringWithNames("Mode: reverse on: yes")).toString("latin1"), "Mode: reverse on: yes");
+  assert.deepEqual([...encodeStringWithNames(":heart:")], [0x73]);
+});

@@ -394,7 +394,9 @@ function buildBasicProgram(params: {
   lines.push(`${lineNumber} FORY=0TO${Math.max(0, params.rows - 1)}`);
   lineNumber += 10;
   const readLine = lineNumber;
-  lines.push(`${readLine} READC:IFC>=0THENPRINT CHR$(C);:GOTO${readLine}`);
+  // POKE212,0 clears quote mode: after a printed '"' glyph the editor would
+  // otherwise draw the following RVS ON/OFF codes as characters.
+  lines.push(`${readLine} READC:IFC>=0THENPRINT CHR$(C);:POKE212,0:GOTO${readLine}`);
   lineNumber += 10;
   // A full 40-column row already wraps the cursor; an extra PRINT would leave a blank line.
   lines.push(params.columns >= SCREEN_COLUMNS ? `${lineNumber} NEXTY` : `${lineNumber} PRINT:NEXTY`);
