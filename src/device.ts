@@ -12,7 +12,7 @@ import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
 
 export type DeviceType = "c64u" | "u2" | "vice";
 
@@ -87,13 +87,8 @@ export interface C64Facade {
   modplayFile?(path: string): Promise<RunResult>;
 }
 
-export interface C64uConfig {
-  host?: string;
-  hostname?: string;
-  baseUrl?: string;
-  port?: number | string;
-  networkPassword?: string;
-}
+/** A resolved C64U/U2 endpoint; host/port/password precedence lives in config.ts. */
+export type C64uEndpoint = Pick<ResolvedUltimateEndpoint, "baseUrl" | "networkPassword">;
 export interface ViceConfig {
   exe?: string;
   host?: string;
@@ -104,7 +99,14 @@ export interface ViceConfig {
   args?: string | string[];
   prewarm?: boolean | string | number;
 }
-export interface C64BridgeConfigFile { c64u?: C64uConfig; u2?: C64uConfig; vice?: ViceConfig }
+interface BackendConfig {
+  /** Present when the config document configures the profile (for c64u, also legacy top-level fields). */
+  c64u?: C64uEndpoint;
+  u2?: C64uEndpoint;
+  vice?: ViceConfig;
+  /** loadConfig's endpoint per profile, including env overrides and defaults. */
+  endpoints: { c64u: C64uEndpoint; u2: C64uEndpoint };
+}
 
 interface ViceLaunchResolutionOptions {
   envBinary?: string;
@@ -128,8 +130,6 @@ interface ManagedViceProcessOptionsInput {
   extraArgs: string[];
 }
 
-const DEFAULT_C64U_HOST = "c64u";
-const DEFAULT_C64U_PORT = 80;
 const DEFAULT_VICE_HOST = "127.0.0.1";
 const DEFAULT_VICE_PORT = 6502;
 
@@ -178,13 +178,37 @@ function coalesceMemoryWriteBlocks(
   return merged;
 }
 
-function readConfigFile(): C64BridgeConfigFile | null {
-  const sections = loadConfig().backendConfig;
-  return Object.keys(sections).length === 0 ? null : {
-    c64u: sections.c64u as C64uConfig | undefined,
-    u2: sections.u2 as C64uConfig | undefined,
+/** All C64U/U2 endpoints come from loadConfig(), so the MCP server and every
+ * backend agree on host, port and password. */
+function readConfigFile(): BackendConfig {
+  const config = loadConfig();
+  const sections = config.backendConfig;
+  return {
+    c64u: sections.c64u || config.legacyUltimateEndpoint ? config.ultimate.c64u : undefined,
+    u2: sections.u2 ? config.ultimate.u2 : undefined,
     vice: sections.vice as ViceConfig | undefined,
+    endpoints: config.ultimate,
   };
+}
+
+/** Firmware drive ids (route_drives.h DriveToSubsys, matched case-insensitively). */
+const FIRMWARE_DRIVE_IDS = new Set(["a", "b", "softiec"]);
+/** GET /v1/drives reports the soft IEC drive under this name; the drive routes call it softiec. */
+const SOFT_IEC_LISTING_ID = "iec drive";
+/** Factory bus numbers of drives a and b, used when the drive listing is unavailable. */
+const DEFAULT_DRIVE_BY_BUS_ID: Record<number, string> = { 8: "a", 9: "b" };
+
+/** The firmware reports a mounted image as directory (image_path) plus file name (image_file). */
+function driveImage(info: Record<string, unknown>): string | null {
+  const file = typeof info.image_file === "string" ? info.image_file : "";
+  const dir = typeof info.image_path === "string" ? info.image_path : "";
+  if (file) return dir ? `${dir.replace(/\/+$/, "")}/${file}` : file;
+  if (dir) return dir;
+  return typeof info.image === "string" && info.image ? info.image : null;
+}
+
+function uploadFile(bytes: Uint8Array, name: string): File {
+  return new File([Uint8Array.from(bytes)], name, { type: "application/octet-stream" });
 }
 
 class C64uBackend implements C64Facade {
@@ -193,34 +217,12 @@ class C64uBackend implements C64Facade {
   private readonly networkPassword?: string;
   private readonly api: Api<unknown>;
 
-  constructor(config: C64uConfig, type: "c64u" | "u2" = "c64u") {
+  constructor(endpoint: C64uEndpoint, type: "c64u" | "u2" = "c64u") {
     this.type = type;
-    const envHost = configuredString(type === "u2" ? process.env.U2_HOST ?? process.env.C64U_HOST : process.env.C64U_HOST);
-    const envPort = configuredPort(type === "u2" ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT);
-    const configBaseUrl = normaliseBaseUrl(config.baseUrl);
-    const parsedConfigBaseUrl = configBaseUrl ? parseEndpoint(configBaseUrl) : {};
-    const baseUrl = envHost !== undefined || envPort !== undefined
-      ? buildBaseUrl(
-          firstDefined(
-            envHost,
-            configuredString(config.host),
-            configuredString(config.hostname),
-            parsedConfigBaseUrl.hostname,
-          ) ?? DEFAULT_C64U_HOST,
-          firstDefined(
-            envPort,
-            configuredPort(config.port),
-            parsedConfigBaseUrl.port,
-          ) ?? DEFAULT_C64U_PORT,
-        )
-      : resolveBaseUrl(config);
-    this.baseUrl = baseUrl;
-    this.networkPassword = firstDefined(
-      configuredString(type === "u2" ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD),
-      configuredString(config.networkPassword),
-    );
+    this.baseUrl = endpoint.baseUrl;
+    this.networkPassword = endpoint.networkPassword;
     const http = createLoggingHttpClient({
-      baseURL: baseUrl,
+      baseURL: this.baseUrl,
       timeout: 10_000,
       headers: buildC64uHeaders(this.networkPassword),
     });
@@ -281,9 +283,14 @@ class C64uBackend implements C64Facade {
     return this.actionResult(res.data);
   }
   async sidplayAttachment(sid: Uint8Array | Buffer, options?: { songnr?: number; songlengths?: Uint8Array | Buffer }): Promise<RunResult> {
-    const form: any = { sid: Buffer.isBuffer(sid) ? sid : Buffer.from(sid) };
-    if (options?.songlengths) form.songlengths = Buffer.isBuffer(options.songlengths) ? options.songlengths : Buffer.from(options.songlengths);
-    const res = await this.api.v1.runnersSidplayCreate(":sidplay", form as any, options?.songnr !== undefined ? { songnr: options.songnr } : undefined);
+    // The generated multipart builder JSON-encodes anything that is not a Blob,
+    // so the bytes must be File parts. The firmware ignores part names and
+    // takes the first file as the SID and the second as song lengths; the spec
+    // names both `file`. The temp file keeps the upload name, and its extension
+    // selects SID versus MUS playback.
+    const file = [uploadFile(sid, "upload.sid")];
+    if (options?.songlengths) file.push(uploadFile(options.songlengths, "upload.ssl"));
+    const res = await this.api.v1.runnersSidplayCreate(":sidplay", { file } as any, options?.songnr !== undefined ? { songnr: options.songnr } : undefined);
     return this.actionResult(res.data);
   }
   async readMemory(address: number, length: number): Promise<Uint8Array> {
@@ -348,32 +355,69 @@ class C64uBackend implements C64Facade {
   async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> { this.requireC64u("debugregWrite"); const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value }); return { success: true, value: (res.data as any).value, details: res.data }; }
   async version(): Promise<unknown> { const res = await this.api.v1.versionList(); return res.data; }
   async info(): Promise<unknown> { const res = await this.api.v1.infoList(); return res.data; }
-  async drivesList(): Promise<unknown> {
+  private async driveEntries(): Promise<Array<[string, Record<string, unknown>]>> {
     const res = await this.api.v1.drivesList();
     const raw = res.data as { drives?: Array<Record<string, Record<string, unknown>>> | Record<string, Record<string, unknown>> };
     const entries = Array.isArray(raw.drives)
       ? raw.drives
       : raw.drives && typeof raw.drives === "object" ? [raw.drives] : [];
-    return entries.flatMap((entry) => Object.entries(entry).map(([id, info]) => ({
+    return entries.flatMap((entry) => Object.entries(entry));
+  }
+  /**
+   * Map a drive id to the firmware's `a`, `b` or `softiec`. Bus numbers such
+   * as `drive8` or `8` are looked up by `bus_id` among drives a and b in
+   * GET /v1/drives, because a drive letter's bus number is configurable; the
+   * factory a=8, b=9 applies only when the listing is unavailable. The soft
+   * IEC drive is reachable only by name, never by bus number.
+   */
+  private async resolveDriveId(drive: string): Promise<string> {
+    const lower = drive.trim().toLowerCase();
+    if (FIRMWARE_DRIVE_IDS.has(lower)) return lower;
+    if (lower === SOFT_IEC_LISTING_ID) return "softiec";
+    const match = /^(?:drive)?\s*(\d+)$/.exec(lower);
+    if (!match) return drive;
+    const busId = Number(match[1]);
+    let listed: Array<{ id: string; busId: number }> = [];
+    try {
+      listed = (await this.driveEntries()).flatMap(([id, info]) => {
+        const listedBusId = Number(info?.bus_id);
+        return (id === "a" || id === "b") && Number.isInteger(listedBusId) ? [{ id, busId: listedBusId }] : [];
+      });
+    } catch {
+      listed = [];
+    }
+    const resolved = listed.length > 0 ? listed.find((entry) => entry.busId === busId)?.id : DEFAULT_DRIVE_BY_BUS_ID[busId];
+    if (!resolved) {
+      const known = listed.length > 0 ? listed.map((entry) => `${entry.id}=${entry.busId}`).join(", ") : "a=8, b=9";
+      throw new Error(`No drive found for '${drive}' (bus IDs: ${known})`);
+    }
+    return resolved;
+  }
+  async drivesList(): Promise<unknown> {
+    const entries = await this.driveEntries();
+    return entries.map(([id, info]) => ({
       id,
       power: info.enabled === true || info.enabled === "on" || info.power === "on" ? "on" : "off",
-      image: (info.image_path ?? info.image_file ?? info.image ?? null) as string | null,
+      image: driveImage(info),
       type: info.type ?? null,
       raw: info,
-    })));
+    }));
   }
-  async driveMount(d: string, img: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> { const res = await this.api.v1.drivesMountUpdate(d, ":mount", { image: img, type: options?.type, mode: options?.mode }); return this.actionResult(res.data); }
-  async driveRemove(d: string): Promise<RunResult> { const res = await this.api.v1.drivesRemoveUpdate(d, ":remove"); return this.actionResult(res.data); }
-  async driveReset(d: string): Promise<RunResult> { const res = await this.api.v1.drivesResetUpdate(d, ":reset"); return this.actionResult(res.data); }
-  async driveOn(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOnUpdate(d, ":on"); return this.actionResult(res.data); }
-  async driveOff(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOffUpdate(d, ":off"); return this.actionResult(res.data); }
-  async driveSetMode(d: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> { const res = await this.api.v1.drivesSetModeUpdate(d, ":set_mode", { mode }); return this.actionResult(res.data); }
-  async driveLoadRom(d: string, romPath: string): Promise<RunResult> { const res = await this.api.v1.drivesLoadRomUpdate(d, ":load_rom", { file: romPath }); return this.actionResult(res.data); }
+  async driveMount(d: string, img: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> { const res = await this.api.v1.drivesMountUpdate(await this.resolveDriveId(d), ":mount", { image: img, type: options?.type, mode: options?.mode }); return this.actionResult(res.data); }
+  async driveRemove(d: string): Promise<RunResult> { const res = await this.api.v1.drivesRemoveUpdate(await this.resolveDriveId(d), ":remove"); return this.actionResult(res.data); }
+  async driveReset(d: string): Promise<RunResult> { const res = await this.api.v1.drivesResetUpdate(await this.resolveDriveId(d), ":reset"); return this.actionResult(res.data); }
+  async driveOn(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOnUpdate(await this.resolveDriveId(d), ":on"); return this.actionResult(res.data); }
+  async driveOff(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOffUpdate(await this.resolveDriveId(d), ":off"); return this.actionResult(res.data); }
+  async driveSetMode(d: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> { const res = await this.api.v1.drivesSetModeUpdate(await this.resolveDriveId(d), ":set_mode", { mode }); return this.actionResult(res.data); }
+  async driveLoadRom(d: string, romPath: string): Promise<RunResult> { const res = await this.api.v1.drivesLoadRomUpdate(await this.resolveDriveId(d), ":load_rom", { file: romPath }); return this.actionResult(res.data); }
   async streamStart(s: "video" | "audio" | "debug", ip: string): Promise<RunResult> { this.requireC64u("streamStart"); const res = await this.api.v1.streamsStartUpdate(s, ":start", { ip }); return this.actionResult(res.data); }
   async streamStop(s: "video" | "audio" | "debug"): Promise<RunResult> { this.requireC64u("streamStop"); const res = await this.api.v1.streamsStopUpdate(s, ":stop"); return this.actionResult(res.data); }
   async configsList(): Promise<unknown> { const res = await this.api.v1.configsList(); return res.data; }
-  async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(cat, item) : await this.api.v1.configsDetail(cat); return res.data; }
-  async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(cat, item, { value }); return this.actionResult(res.data); }
+  // The generated client interpolates path parameters unencoded and the firmware
+  // splits the path on "/" before decoding, so names such as "Bus Sharing - I/O1"
+  // must be percent-encoded here.
+  async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
+  async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
   async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return this.actionResult(res.data); }
   async configLoadFromFlash(): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(":load_from_flash"); return this.actionResult(res.data); }
   async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return this.actionResult(res.data); }
@@ -1016,7 +1060,12 @@ function encodeDevicePath(value: string): string {
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }
 
+/** C64U drive letters with their factory bus numbers, so one drive id works on both backends. */
+const VICE_DRIVE_LETTERS: Record<string, number> = { a: 8, b: 9 };
+
 function parseDriveNumber(drive: string): number {
+  const letter = VICE_DRIVE_LETTERS[drive.trim().toLowerCase()];
+  if (letter !== undefined) return letter;
   const match = /\d+/.exec(drive);
   const n = match ? parseInt(match[0], 10) : NaN;
   if (isNaN(n) || n < 8 || n > 11) throw new Error(`Invalid drive specification: ${drive}`);
@@ -1167,62 +1216,62 @@ export async function createFacade(logger?: { info: (...a: any[]) => void }, opt
   // Caller-forced preference: use c64u with provided base URL (used by tests and server wiring)
   if (options?.preferredC64uBaseUrl) {
     const type = envMode === "u2" ? "u2" : "c64u";
-    const backend = new C64uBackend({
+    const backend = new C64uBackend(resolveUltimateEndpoint(type, {
       baseUrl: options.preferredC64uBaseUrl,
       networkPassword: options.preferredC64uNetworkPassword,
-    }, type);
+    }), type);
     logger?.info?.(`Active backend: ${type} (forced by caller)`);
     return { facade: backend, selected: type, reason: "forced by caller", details: { baseUrl: options.preferredC64uBaseUrl } };
   }
   const cfg = readConfigFile();
-  const hasC64u = Boolean(cfg?.c64u);
-  const hasU2 = Boolean(cfg?.u2);
-  const hasVice = Boolean(cfg?.vice);
+  const hasC64u = Boolean(cfg.c64u);
+  const hasU2 = Boolean(cfg.u2);
+  const hasVice = Boolean(cfg.vice);
 
   if (envMode === "c64u") {
-    const backend = new C64uBackend(cfg?.c64u ?? {});
+    const backend = new C64uBackend(cfg.endpoints.c64u);
     logger?.info?.("Active backend: c64u (from env override)");
     return { facade: backend, selected: "c64u", reason: "env override", details: { baseUrl: backend.getBaseUrl?.() } };
   }
   if (envMode === "u2") {
-    const backend = new C64uBackend(cfg?.u2 ?? {}, "u2");
+    const backend = new C64uBackend(cfg.endpoints.u2, "u2");
     logger?.info?.("Active backend: u2 (from env override)");
     return { facade: backend, selected: "u2", reason: "env override", details: { baseUrl: backend.getBaseUrl?.() } };
   }
   if (envMode === "vice") {
-    const backend = new ViceBackend(cfg?.vice ?? {});
+    const backend = new ViceBackend(cfg.vice ?? {});
     logger?.info?.("Active backend: vice (from env override)");
     const endpoint = backend.getEndpoint();
     return { facade: backend, selected: "vice", reason: "env override", details: { host: endpoint.host, port: endpoint.port } };
   }
 
   if (hasC64u) {
-    const backend = new C64uBackend(cfg!.c64u!);
+    const backend = new C64uBackend(cfg.c64u!);
     logger?.info?.("Active backend: c64u (from config)");
     return { facade: backend, selected: "c64u", reason: hasVice ? "both defined (prefer c64u)" : "config only", details: { baseUrl: backend.getBaseUrl?.() } };
   }
   if (hasU2) {
-    const backend = new C64uBackend(cfg!.u2!, "u2");
+    const backend = new C64uBackend(cfg.u2!, "u2");
     logger?.info?.("Active backend: u2 (from config)");
     return { facade: backend, selected: "u2", reason: "config only", details: { baseUrl: backend.getBaseUrl?.() } };
   }
   if (hasVice) {
-    const backend = new ViceBackend(cfg!.vice!);
+    const backend = new ViceBackend(cfg.vice!);
     logger?.info?.("Active backend: vice (from config)");
     const endpoint = backend.getEndpoint();
     return { facade: backend, selected: "vice", reason: "config only", details: { host: endpoint.host, port: endpoint.port } };
   }
   // No configuration
-  const probeBase = resolveBaseUrl({});
+  const probeBase = cfg.endpoints.c64u.baseUrl;
   try {
     const res = await axios.get(probeBase, { timeout: 1500 });
     if (res.status >= 200 && res.status < 500) {
-      const backend = new C64uBackend({ baseUrl: probeBase });
+      const backend = new C64uBackend(cfg.endpoints.c64u);
       logger?.info?.("Active backend: c64u (fallback – hardware reachable)");
       return { facade: backend, selected: "c64u", reason: "fallback (reachable)", details: { baseUrl: probeBase } };
     }
   } catch {}
-  const backend = new ViceBackend(cfg?.vice ?? {});
+  const backend = new ViceBackend(cfg.vice ?? {});
   logger?.info?.("Active backend: vice (fallback – hardware unavailable)");
   const endpoint = backend.getEndpoint();
   return { facade: backend, selected: "vice", reason: "fallback (hardware unavailable)", details: { host: endpoint.host, port: endpoint.port } };
@@ -1240,52 +1289,33 @@ export async function createAllFacades(
   );
   const config = readConfigFile();
   const facades = new Map<DeviceType, C64Facade>([[primary.selected, primary.facade]]);
-  if (config?.c64u && primary.selected !== "c64u") {
+  if (config.c64u && primary.selected !== "c64u") {
     facades.set("c64u", new C64uBackend(config.c64u));
   }
-  if (config?.u2 && primary.selected !== "u2") {
+  if (config.u2 && primary.selected !== "u2") {
     facades.set("u2", new C64uBackend(config.u2, "u2"));
   }
-  if (config?.vice && primary.selected !== "vice") {
+  if (config.vice && primary.selected !== "vice") {
     facades.set("vice", new ViceBackend(config.vice));
   }
-  if (!facades.has("c64u") && !config?.u2 && shouldProvisionSecondaryC64u(config, options) && primary.selected !== "u2") {
-    facades.set("c64u", new C64uBackend({
-      ...(config?.c64u ?? {}),
-      ...(!config?.c64u?.baseUrl && options?.preferredC64uBaseUrl ? { baseUrl: options.preferredC64uBaseUrl } : {}),
-      ...(!config?.c64u?.networkPassword && options?.preferredC64uNetworkPassword
-        ? { networkPassword: options.preferredC64uNetworkPassword }
-        : {}),
-    }));
+  // Reached only without a configured c64u profile, so the caller's endpoint applies.
+  if (!facades.has("c64u") && !config.u2 && shouldProvisionSecondaryC64u(config, options) && primary.selected !== "u2") {
+    facades.set("c64u", new C64uBackend(resolveUltimateEndpoint("c64u", {
+      baseUrl: options?.preferredC64uBaseUrl,
+      networkPassword: options?.preferredC64uNetworkPassword,
+    })));
   }
   return { primary, facades };
 }
 
-function shouldProvisionSecondaryC64u(config: C64BridgeConfigFile | null, options?: FacadeOptions): boolean {
+function shouldProvisionSecondaryC64u(config: BackendConfig, options?: FacadeOptions): boolean {
   return Boolean(
-    config?.c64u
+    config.c64u
     || options?.preferredC64uBaseUrl
     || configuredString(process.env.C64U_HOST)
     || configuredPort(process.env.C64U_PORT)
     || configuredString(process.env.C64U_PASSWORD),
   );
-}
-
-function resolveBaseUrl(config: C64uConfig): string {
-  const explicit = normaliseBaseUrl(config.baseUrl);
-  if (explicit) return explicit;
-
-  const hostEntries = [configuredString(config.host), configuredString(config.hostname)];
-  for (const entry of hostEntries) {
-    if (!entry) continue;
-    const parsed = parseEndpoint(entry);
-    if (parsed.hostname) {
-      const port = firstDefined(configuredPort(config.port), parsed.port) ?? DEFAULT_C64U_PORT;
-      return buildBaseUrl(parsed.hostname, port);
-    }
-  }
-
-  return buildBaseUrl(DEFAULT_C64U_HOST, DEFAULT_C64U_PORT);
 }
 
 function configuredString(value: unknown): string | undefined {
@@ -1409,44 +1439,8 @@ function configuredPort(value: unknown): number | undefined {
   return undefined;
 }
 
-function normaliseBaseUrl(value?: string): string | undefined {
-  const input = configuredString(value);
-  if (!input) return undefined;
-  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) {
-    return `http://${input}`;
-  }
-  return stripTrailingSlash(input);
-}
-
-function parseEndpoint(value: string): { hostname?: string; port?: number } {
-  try {
-    const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
-    const url = new URL(hasScheme ? value : `http://${value}`);
-    const hostname = url.hostname || undefined;
-    const port = url.port ? configuredPort(url.port) : undefined;
-    return { hostname, port };
-  } catch {
-    return {};
-  }
-}
-
-function buildBaseUrl(host: string, port: number): string {
-  const normalizedPort = Number.isInteger(port) && port > 0 ? port : DEFAULT_C64U_PORT;
-  const hostPart = formatHost(host);
-  const suffix = normalizedPort === DEFAULT_C64U_PORT ? "" : `:${normalizedPort}`;
-  return `http://${hostPart}${suffix}`;
-}
-
 function buildC64uHeaders(networkPassword?: string): Record<string, string> | undefined {
   return networkPassword ? { "X-Password": networkPassword } : undefined;
-}
-
-function formatHost(host: string): string {
-  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
-
-function stripTrailingSlash(input: string): string {
-  return input.replace(/\/+$/, "");
 }
 
 function parseArgsList(input: string): string[] {

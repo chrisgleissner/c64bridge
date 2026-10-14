@@ -651,8 +651,9 @@ test("device: createFacade with config file", async (t) => {
         assert.equal((await facade.driveSetMode("8", "1571")).success, true);
         assert.equal((await facade.driveMount("8", "/tmp/disk.d64", { type: "d64", mode: "readonly" })).success, true);
 
+        // Bus number 8 resolves to firmware drive "a" through the listing's bus_id.
         const drivesAfterMount = await facade.drivesList();
-        const drive8 = drivesAfterMount.find((entry) => entry.id === "8");
+        const drive8 = drivesAfterMount.find((entry) => entry.id === "a");
         assert.ok(drive8, "normalised drives list must include the mounted drive");
         assert.equal(drive8.power, "on");
         assert.equal(drive8.image, "/tmp/disk.d64");
@@ -718,7 +719,7 @@ test("device: createFacade with config file", async (t) => {
         assert.deepEqual(runResult.details.errors, ["Cannot open file"]);
 
         mock.state.forcedErrors = ["Drive not found"];
-        mock.state.forcedErrorsUrlMatch = "drives/8:mount";
+        mock.state.forcedErrorsUrlMatch = "drives/a:mount";
         const mountResult = await facade.driveMount("8", "/Usb0/demo.d64");
         assert.equal(mountResult.success, false);
         assert.deepEqual(mountResult.details.errors, ["Drive not found"]);
@@ -1619,7 +1620,7 @@ test("device: C64u facade exercises runner, machine, config, drive, stream, and 
     v1.runnersRunPrgUpdate = async (_route, payload) => ({ data: { result: "run_prg_file", file: payload.file } });
     v1.runnersRunCrtUpdate = async (_route, payload) => ({ data: { result: "run_crt", file: payload.file } });
     v1.runnersSidplayUpdate = async (_route, payload) => ({ data: { result: "sidplay", file: payload.file, songnr: payload.songnr } });
-    v1.runnersSidplayCreate = async (_route, form, options) => ({ data: { result: "sidplay_attachment", bytes: Buffer.from(form.sid).length, songnr: options?.songnr ?? null } });
+    v1.runnersSidplayCreate = async (_route, form, options) => ({ data: { result: "sidplay_attachment", bytes: form.file[0].size, songnr: options?.songnr ?? null } });
     v1.machineReadmemList = async () => readResponses.shift();
     v1.machineWritememUpdate = async (_route, payload) => {
       writes.push({ kind: "small", address: payload.address, data: payload.data });

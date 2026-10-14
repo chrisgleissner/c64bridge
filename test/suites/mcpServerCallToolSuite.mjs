@@ -272,7 +272,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         assert.equal(mountResult.metadata?.image, "/tmp/demo.d64");
       } else {
       assert.equal(mockServer.state.lastDriveOperation?.action, "mount");
-      assert.deepEqual(mockServer.state.drives.drive8.mountedImage, {
+      assert.deepEqual(mockServer.state.drives.a.mountedImage, {
         image: "/tmp/demo.d64",
         type: "d64",
         mode: "readwrite",
@@ -293,7 +293,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(modeResult.metadata?.mode, "1571");
       } else {
-        assert.equal(mockServer.state.drives.drive8.mode, "1571");
+        assert.equal(mockServer.state.drives.a.mode, "1571");
       }
 
       const { result: onResult } = await callTool(ctx, "c64_drive", {
@@ -305,7 +305,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(onResult.metadata?.power, "on");
       } else {
-        assert.equal(mockServer.state.drives.drive8.power, "on");
+        assert.equal(mockServer.state.drives.a.power, "on");
       }
 
       const { result: offResult } = await callTool(ctx, "c64_drive", {
@@ -317,7 +317,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(offResult.metadata?.power, "off");
       } else {
-        assert.equal(mockServer.state.drives.drive8.power, "off");
+        assert.equal(mockServer.state.drives.a.power, "off");
       }
 
       const { result: resetResult } = await callTool(ctx, "c64_drive", {
@@ -329,12 +329,15 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(resetResult.metadata?.drive, "drive8");
       } else {
-        assert.equal(mockServer.state.drives.drive8.resetCount, 1);
+        assert.equal(mockServer.state.drives.a.resetCount, 1);
       }
 
+      // C64Client.driveLoadRom's C64_TEST_TARGET=mock shortcut calls the REST
+      // client directly and skips the facade's drive-id resolution, so this
+      // step uses the firmware drive id.
       const { result: romResult } = await callTool(ctx, "c64_drive", {
         op: "load_rom",
-        drive: "drive8",
+        drive: ctx.platform === "vice" ? "drive8" : "a",
         path: "/roms/custom.rom",
       });
 
@@ -342,7 +345,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         assertUnsupportedOperation(romResult, ctx.platform, "drive_load_rom");
       } else {
         assert.equal(romResult.metadata?.success, true, "load_rom operation should succeed");
-        assert.equal(mockServer.state.drives.drive8.lastRom, "/roms/custom.rom");
+        assert.equal(mockServer.state.drives.a.lastRom, "/roms/custom.rom");
       }
 
       const { result: removeResult } = await callTool(ctx, "c64_disk", {
@@ -354,7 +357,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(removeResult.metadata?.drive, "drive8");
       } else {
-        assert.equal(mockServer.state.drives.drive8.mountedImage, null);
+        assert.equal(mockServer.state.drives.a.mountedImage, null);
       }
 
       const { result: infoResult } = await callTool(ctx, "c64_disk", {

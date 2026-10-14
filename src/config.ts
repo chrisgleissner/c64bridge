@@ -9,25 +9,40 @@ export interface C64BridgeConfig {
   c64_port: number;
   networkPassword?: string;
   vicePrewarm: boolean;
+  /** Resolved endpoint per Ultimate profile. The top-level host/port/password
+   * fields above are the profile selected by C64_MODE. */
+  ultimate: { c64u: ResolvedUltimateEndpoint; u2: ResolvedUltimateEndpoint };
+  /** True when the config document uses the legacy top-level endpoint fields
+   * (baseUrl, c64_host, c64_ip, c64_port) instead of a c64u section. */
+  legacyUltimateEndpoint: boolean;
   /** Parsed selected config document, retained so all facade construction uses
    * the exact same authoritative source and precedence decision. */
   backendConfig: {
-    c64u?: Record<string, unknown>;
-    u2?: Record<string, unknown>;
+    c64u?: UltimateSectionConfig;
+    u2?: UltimateSectionConfig;
     vice?: Record<string, unknown>;
   };
 }
 
+export interface UltimateSectionConfig {
+  host?: string;
+  hostname?: string;
+  baseUrl?: string;
+  port?: number | string;
+  networkPassword?: string;
+}
+
+export interface ResolvedUltimateEndpoint {
+  host: string;
+  port: number;
+  baseUrl: string;
+  /** Host label with the port appended when it is not 80. */
+  c64_host: string;
+  networkPassword?: string;
+}
+
 const DEFAULT_HOST = "c64u";
 const DEFAULT_PORT = 80;
-
-const DEFAULT_CONFIG: C64BridgeConfig = {
-  c64_host: DEFAULT_HOST,
-  baseUrl: buildBaseUrl(DEFAULT_HOST, DEFAULT_PORT),
-  c64_port: DEFAULT_PORT,
-  vicePrewarm: false,
-  backendConfig: {},
-};
 
 export function loadConfig(): C64BridgeConfig {
   const configPath = process.env.C64BRIDGE_CONFIG;
@@ -60,74 +75,33 @@ export function loadConfig(): C64BridgeConfig {
 
   // New schema: choose the configured Ultimate hardware profile; retain
   // c64u and legacy fields as the default when C64_MODE is not set to u2.
-  const c64u = rawConfig?.c64u as {
-    host?: string;
-    hostname?: string;
-    baseUrl?: string;
-    port?: number | string;
-    networkPassword?: string;
-  } | undefined;
-  const u2 = rawConfig?.u2 as typeof c64u;
+  const c64u = ultimateSection(rawConfig?.c64u);
+  const u2 = ultimateSection(rawConfig?.u2);
   const useU2 = process.env.C64_MODE?.trim().toLowerCase() === "u2";
-  const hardware = useU2 ? (u2 ?? c64u) : (c64u ?? u2);
+  const ultimate = {
+    c64u: resolveUltimateEndpoint("c64u", c64u ?? u2, rawConfig),
+    u2: resolveUltimateEndpoint("u2", u2 ?? c64u, rawConfig),
+  };
+  const selected = useU2 ? ultimate.u2 : ultimate.c64u;
   const vice = rawConfig?.vice as {
     prewarm?: boolean | string | number;
   } | undefined;
 
-  const parsedC64uHost = parseEndpoint(configuredString(hardware?.host));
-  const parsedC64uHostname = parseEndpoint(configuredString(hardware?.hostname));
-  const parsedLegacyHost = parseEndpoint(configuredString(rawConfig?.c64_host));
-  const parsedLegacyIp = parseEndpoint(configuredString(rawConfig?.c64_ip));
-  const parsedEnvHost = parseEndpoint(configuredString(useU2 ? process.env.U2_HOST ?? process.env.C64U_HOST : process.env.C64U_HOST));
-  const parsedBaseOverrides = [
-    parseEndpoint(normaliseBaseUrl(hardware?.baseUrl)),
-    parseEndpoint(normaliseBaseUrl(rawConfig?.baseUrl)),
-  ];
-
-  const hostCandidates = [
-    parsedEnvHost.hostname,
-    parsedC64uHost.hostname,
-    parsedC64uHostname.hostname,
-    parsedLegacyHost.hostname,
-    parsedLegacyIp.hostname,
-    ...parsedBaseOverrides.map((entry) => entry.hostname),
-  ];
-
-  const portCandidates = [
-    configuredPort(useU2 ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT),
-    parsedEnvHost.port,
-    configuredPort(hardware?.port),
-    parsedC64uHost.port,
-    parsedC64uHostname.port,
-    configuredPort(rawConfig?.c64_port),
-    parsedLegacyHost.port,
-    parsedLegacyIp.port,
-    ...parsedBaseOverrides.map((entry) => entry.port),
-  ];
-
-  const host = firstDefined(...hostCandidates) ?? DEFAULT_HOST;
-  const port = firstDefined(...portCandidates) ?? DEFAULT_PORT;
-  const baseUrl = buildBaseUrl(host, port);
-  const hostLabel = formatHost(host);
-  const hostWithPort = port === DEFAULT_PORT ? hostLabel : `${hostLabel}:${port}`;
-
   const config: C64BridgeConfig = {
-    c64_host: hostWithPort,
-    baseUrl,
-    c64_port: port,
-    networkPassword: firstDefined(
-      configuredString(useU2 ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD),
-      configuredString(hardware?.networkPassword),
-      configuredString(rawConfig?.networkPassword),
-    ),
+    c64_host: selected.c64_host,
+    baseUrl: selected.baseUrl,
+    c64_port: selected.port,
+    networkPassword: selected.networkPassword,
     vicePrewarm: firstDefined(
       configuredBoolean(process.env.VICE_PREWARM),
       configuredBoolean(vice?.prewarm),
       configuredBoolean(rawConfig?.vicePrewarm),
     ) ?? false,
+    ultimate,
+    legacyUltimateEndpoint: LEGACY_ENDPOINT_KEYS.some((key) => rawConfig?.[key] !== undefined && rawConfig?.[key] !== null),
     backendConfig: {
-      ...(rawConfig?.c64u && typeof rawConfig.c64u === "object" && !Array.isArray(rawConfig.c64u) ? { c64u: rawConfig.c64u } : {}),
-      ...(rawConfig?.u2 && typeof rawConfig.u2 === "object" && !Array.isArray(rawConfig.u2) ? { u2: rawConfig.u2 } : {}),
+      ...(c64u ? { c64u } : {}),
+      ...(u2 ? { u2 } : {}),
       ...(rawConfig?.vice && typeof rawConfig.vice === "object" && !Array.isArray(rawConfig.vice) ? { vice: rawConfig.vice } : {}),
     },
   };
@@ -135,8 +109,83 @@ export function loadConfig(): C64BridgeConfig {
   return config;
 }
 
+/** Top-level fields from the pre-profile config schema that name an endpoint. */
+const LEGACY_ENDPOINT_KEYS = ["baseUrl", "c64_host", "c64_ip", "c64_port"] as const;
+
+function ultimateSection(value: unknown): UltimateSectionConfig | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as UltimateSectionConfig : undefined;
+}
+
+/**
+ * The single host/port/password precedence for an Ultimate profile, used by
+ * loadConfig() and by every C64U/U2 backend construction:
+ * env > section host/hostname/port > legacy top-level c64_host/c64_ip/c64_port
+ * > section baseUrl > legacy top-level baseUrl > defaults. Passwords: env >
+ * section > legacy top-level networkPassword.
+ */
+export function resolveUltimateEndpoint(
+  profile: "c64u" | "u2",
+  section?: UltimateSectionConfig,
+  legacy?: Record<string, unknown>,
+): ResolvedUltimateEndpoint {
+  const envHost = profile === "u2" ? process.env.U2_HOST ?? process.env.C64U_HOST : process.env.C64U_HOST;
+  const envPort = profile === "u2" ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT;
+  const envPassword = profile === "u2" ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD;
+
+  const parsedSectionHost = parseEndpoint(configuredString(section?.host));
+  const parsedSectionHostname = parseEndpoint(configuredString(section?.hostname));
+  const parsedLegacyHost = parseEndpoint(configuredString(legacy?.c64_host));
+  const parsedLegacyIp = parseEndpoint(configuredString(legacy?.c64_ip));
+  const parsedEnvHost = parseEndpoint(configuredString(envHost));
+  const parsedBaseOverrides = [
+    parseEndpoint(normaliseBaseUrl(configuredString(section?.baseUrl))),
+    parseEndpoint(normaliseBaseUrl(configuredString(legacy?.baseUrl))),
+  ];
+
+  const hostCandidates = [
+    parsedEnvHost.hostname,
+    parsedSectionHost.hostname,
+    parsedSectionHostname.hostname,
+    parsedLegacyHost.hostname,
+    parsedLegacyIp.hostname,
+    ...parsedBaseOverrides.map((entry) => entry.hostname),
+  ];
+
+  const portCandidates = [
+    configuredPort(envPort),
+    parsedEnvHost.port,
+    configuredPort(section?.port),
+    parsedSectionHost.port,
+    parsedSectionHostname.port,
+    configuredPort(legacy?.c64_port),
+    parsedLegacyHost.port,
+    parsedLegacyIp.port,
+    ...parsedBaseOverrides.map((entry) => entry.port),
+  ];
+
+  const host = firstDefined(...hostCandidates) ?? DEFAULT_HOST;
+  const port = firstDefined(...portCandidates) ?? DEFAULT_PORT;
+  const hostLabel = formatHost(host);
+  return {
+    host,
+    port,
+    baseUrl: buildBaseUrl(host, port),
+    c64_host: port === DEFAULT_PORT ? hostLabel : `${hostLabel}:${port}`,
+    networkPassword: firstDefined(
+      nonEmptyString(envPassword),
+      nonEmptyString(section?.networkPassword),
+      nonEmptyString(legacy?.networkPassword),
+    ),
+  };
+}
+
 function configuredString(value: unknown): string | undefined {
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  const trimmed = configuredString(value);
+  return trimmed ? trimmed : undefined;
 }
 
 function configuredPort(value: unknown): number | undefined {
