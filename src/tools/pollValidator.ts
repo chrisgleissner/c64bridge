@@ -136,6 +136,19 @@ function extractBasicError(screen: string): { message?: string; line?: number } 
 }
 
 /**
+ * True when the most recent typed SYS command is followed by a READY. prompt,
+ * which is how a machine-code routine that ends with RTS hands back to BASIC.
+ */
+function returnedToBasicAfterSys(screen: string): boolean {
+  const lines = screen.split("\n").map((line) => line.trim().toUpperCase());
+  let sysLine = -1;
+  lines.forEach((line, index) => {
+    if (/^SYS\s*\d+$/.test(line)) sysLine = index;
+  });
+  return sysLine >= 0 && lines.slice(sysLine + 1).some((line) => line === "READY.");
+}
+
+/**
  * Poll for BASIC program outcome by detecting errors on screen.
  * First waits for RUN or ERROR to appear, then continues polling for errors.
  */
@@ -223,7 +236,12 @@ async function pollAsmOutcome(
       const screen = await client.readScreen();
       const upperScreen = screen.toUpperCase();
       
-      if (upperScreen.includes("RUN") || upperScreen.includes("ERROR")) {
+      if (returnedToBasicAfterSys(screen)) {
+        // The typed SYS line is followed by READY., so the routine ran and returned with RTS.
+        logger.debug("ASM program returned to BASIC", { elapsed: Date.now() - startTime });
+        return { status: "ok", type: "ASM" };
+      }
+      if (upperScreen.includes("RUN") || upperScreen.includes("SYS") || upperScreen.includes("ERROR")) {
         runDetected = true;
         logger.debug("RUN detected, starting stabilization window", {
           elapsed: Date.now() - startTime,
