@@ -52,6 +52,11 @@ const POPCOUNT = (() => {
   return table;
 })();
 
+const RVS_ON = 18;
+const RVS_OFF = 146;
+// Marks the end of a character row in the generated DATA statements.
+const ROW_END = -1;
+
 const DEFAULT_MAX_WIDTH = 320;
 const DEFAULT_MAX_HEIGHT = 200;
 
@@ -307,15 +312,20 @@ function distanceBetween(block: Uint8Array, glyph: ChargenGlyph): number {
   return score;
 }
 
+/**
+ * Match each 8x8 block to a glyph. `glyphs` has one entry per cell; `codes` is the
+ * PETSCII stream that prints them, with each run of reverse-video glyphs (screen
+ * codes $80-$FF) wrapped in RVS ON/RVS OFF. `rowCodes` holds that stream per row.
+ */
 export function bitmapToPetsciiCodes(bitmap: Bitmap): {
   codes: number[];
+  rowCodes: number[][];
   glyphs: ChargenGlyph[];
   columns: number;
   rows: number;
 } {
   const { blocks, columns, rows } = splitIntoBlocks(bitmap);
   const glyphs = getChargenGlyphs();
-  const codes: number[] = [];
   const matchedGlyphs: ChargenGlyph[] = [];
 
   for (const block of blocks) {
@@ -333,17 +343,32 @@ export function bitmapToPetsciiCodes(bitmap: Bitmap): {
       }
     }
 
-    const selected = bestMatch ?? glyphs[0]!;
-    codes.push(selected.petsciiCode);
-    matchedGlyphs.push(selected);
+    matchedGlyphs.push(bestMatch ?? glyphs[0]!);
   }
 
-  return { codes, glyphs: matchedGlyphs, columns, rows };
+  const rowCodes: number[][] = [];
+  for (let row = 0; row < rows; row += 1) {
+    const stream: number[] = [];
+    let reverse = false;
+    for (const glyph of matchedGlyphs.slice(row * columns, (row + 1) * columns)) {
+      const glyphReverse = (glyph.screenCode & 0x80) !== 0;
+      if (glyphReverse !== reverse) {
+        stream.push(glyphReverse ? RVS_ON : RVS_OFF);
+        reverse = glyphReverse;
+      }
+      stream.push(glyph.petsciiCode);
+    }
+    if (reverse) {
+      stream.push(RVS_OFF);
+    }
+    rowCodes.push(stream);
+  }
+
+  return { codes: rowCodes.flat(), rowCodes, glyphs: matchedGlyphs, columns, rows };
 }
 
 function buildBasicProgram(params: {
-  codes: number[];
-  columns: number;
+  rowCodes: number[][];
   rows: number;
   borderColor?: number;
   backgroundColor?: number;
@@ -363,20 +388,19 @@ function buildBasicProgram(params: {
     lineNumber += 10;
   }
 
+  // Rows vary in length because of the RVS ON/OFF codes, so each row's DATA ends with ROW_END.
   lines.push(`${lineNumber} FORY=0TO${Math.max(0, params.rows - 1)}`);
   lineNumber += 10;
-  lines.push(`${lineNumber} FORX=0TO${Math.max(0, params.columns - 1)}`);
+  const readLine = lineNumber;
+  lines.push(`${readLine} READC:IFC>=0THENPRINT CHR$(C);:GOTO${readLine}`);
   lineNumber += 10;
-  lines.push(`${lineNumber} READC:PRINT CHR$(C);`);
-  lineNumber += 10;
-  lines.push(`${lineNumber} NEXTX:PRINT`);
-  lineNumber += 10;
-  lines.push(`${lineNumber} NEXTY`);
+  lines.push(`${lineNumber} PRINT:NEXTY`);
   lineNumber += 10;
 
+  const data = params.rowCodes.flatMap((row) => [...row, ROW_END]);
   const chunkSize = 16;
-  for (let i = 0; i < params.codes.length; i += chunkSize) {
-    const slice = params.codes.slice(i, i + chunkSize);
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const slice = data.slice(i, i + chunkSize);
     const dataLine = slice.join(",");
     lines.push(`${lineNumber} DATA ${dataLine}`);
     lineNumber += 10;
@@ -414,8 +438,7 @@ export function createPetsciiArt(options: CreatePetsciiArtOptions): PetsciiArtRe
   const codes = converted.codes;
 
   const program = buildBasicProgram({
-    codes,
-    columns: converted.columns,
+    rowCodes: converted.rowCodes,
     rows: converted.rows,
     borderColor: options.borderColor,
     backgroundColor: options.backgroundColor,
