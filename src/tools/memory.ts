@@ -249,7 +249,9 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
       details: detailRecord,
     };
 
-    const base = textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.`, data);
+    // Many clients show only the text content, so it carries the bytes too.
+    const hexSummary = typeof result.data === "string" && result.data.length > 0 ? `\n${result.data}` : "";
+    const base = textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.${hexSummary}`, data);
     return {
       ...base,
       structuredContent: {

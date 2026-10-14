@@ -140,6 +140,8 @@ test("read succeeds with valid response", async () => {
   const res = await memoryModule.invoke("read", { address: "$0400", length: 4 }, ctx);
   assert.equal(res.content?.[0].type, "text");
   assert.ok(res.content?.[0].text.includes("Read 4 bytes starting at $0400."));
+  // The bytes are in the text content as well as in structured content.
+  assert.ok(res.content?.[0].text.includes("$AABBCCDD"), res.content?.[0].text);
   assert.equal(res.structuredContent?.type, "json");
   const data = res.structuredContent?.data;
   assert.equal(data.success, true);
