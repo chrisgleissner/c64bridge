@@ -3,6 +3,19 @@ import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { audioModule } from "../src/tools/audio.js";
 
+// music_generate schedules playback asynchronously, so tests wait for the
+// expected SID calls instead of sleeping for a fixed time (which raced the
+// playback loop under load).
+async function waitUntil(predicate, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for asynchronous playback");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 function createLogger() {
   return {
     debug() {},
@@ -82,7 +95,7 @@ test("music_generate builds timeline and triggers SID sequence", async () => {
   assert.equal(result.metadata.steps, 2);
   assert.equal(result.metadata.timeline.length, 2);
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await waitUntil(() => noteOffCount >= 3);
 
   assert.equal(volumeCalls.length, 1);
   assert.equal(noteCalls.length, 2);
@@ -90,6 +103,57 @@ test("music_generate builds timeline and triggers SID sequence", async () => {
   // release, so envelope articulation retriggers for each note.
   assert.equal(noteOffCount, 3);
   assert.deepEqual(noteCalls.map((call) => call.note), ["C4", "E4"]);
+});
+
+test("music_generate holds the gate for most of each note and clears it only briefly", async () => {
+  const events = [];
+  const ctx = {
+    client: {
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOn: async () => { events.push({ op: "on", at: Date.now() }); return { success: true }; },
+      sidNoteOff: async () => { events.push({ op: "off", at: Date.now() }); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+
+  // tempoMs 160 gives a 20 ms gate gap, so the gate should stay high for about 140 ms.
+  const result = await audioModule.invoke(
+    "music_generate",
+    { root: "C4", pattern: "0,4", steps: 2, tempoMs: 160 },
+    ctx,
+  );
+  assert.equal(result.isError, undefined);
+  await waitUntil(() => events.filter((event) => event.op === "off").length >= 3);
+
+  const [firstOn, firstOff, secondOn] = events;
+  assert.deepEqual([firstOn.op, firstOff.op, secondOn.op], ["on", "off", "on"]);
+  assert.ok(firstOff.at - firstOn.at >= 100, `gate held only ${firstOff.at - firstOn.at} ms`);
+  assert.ok(secondOn.at - firstOff.at < 100, `gate gap was ${secondOn.at - firstOff.at} ms`);
+});
+
+test("music_generate replacing a running sequence does not cut off the new note", async () => {
+  const events = [];
+  const ctx = {
+    client: {
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOn: async (payload) => { events.push({ op: `on-${payload.note}`, at: Date.now() }); return { success: true }; },
+      sidNoteOff: async () => { events.push({ op: "off", at: Date.now() }); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+
+  await audioModule.invoke("music_generate", { root: "C4", pattern: "0", steps: 1, tempoMs: 2000 }, ctx);
+  await waitUntil(() => events.some((event) => event.op === "on-C4"));
+  await audioModule.invoke("music_generate", { root: "G4", pattern: "0", steps: 1, tempoMs: 400 }, ctx);
+  await waitUntil(() => events.filter((event) => event.op === "off").length >= 3);
+
+  const ops = events.map((event) => event.op);
+  // The replaced sequence gates off once, promptly, before the new note starts.
+  assert.deepEqual(ops, ["on-C4", "off", "on-G4", "off", "off"]);
+  const newNote = events[2];
+  const firstOffAfter = events[3];
+  assert.ok(newNote.at - events[0].at < 1000, "the replaced sequence must stop well before its 2000 ms note ends");
+  assert.ok(firstOffAfter.at - newNote.at >= 300, `the new note was gated off after ${firstOffAfter.at - newNote.at} ms`);
 });
 
 test("music_generate defaults to triangle waveform and best-practice ADSR", async () => {
@@ -114,8 +178,7 @@ test("music_generate defaults to triangle waveform and best-practice ADSR", asyn
   );
 
   assert.equal(result.isError, undefined);
-  // Wait a tick for the fire-and-forget playback
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await waitUntil(() => noteOffCount >= 2);
 
   assert.equal(volumeCalls.length, 1);
   assert.equal(noteCalls.length, 1);
@@ -214,7 +277,7 @@ test("HARD01-030 music_generate pins its facade so a mid-playback backend switch
   );
   assert.equal(result.isError, undefined);
 
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await waitUntil(() => events.filter((event) => event.op === "note-off").length >= 3);
 
   // Every write must have used the facade pinned when the arpeggio started
   // (vice), never the one made active by the mid-flight switch (c64u).

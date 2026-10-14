@@ -65,6 +65,8 @@ const BITMAP_BYTE_LENGTH = 8000;
 const SCREEN_RAM_BYTE_LENGTH = 1000;
 const COLOR_RAM_BYTE_LENGTH = 1000;
 const COLOR_RAM_ADDRESS = 0xD800;
+const CHAR_ROM_SHADOW_OFFSET = 0x1000;
+const CHAR_ROM_SHADOW_LENGTH = 0x1000;
 
 const VIC_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
   [0x00, 0x00, 0x00],
@@ -163,6 +165,17 @@ export function resolveVicBitmapMemoryLayout(
   }
   if (rangesOverlap(bitmapAddress, BITMAP_BYTE_LENGTH, screenAddress, SCREEN_RAM_BYTE_LENGTH)) {
     throw new Error("Bitmap RAM and screen RAM must not overlap");
+  }
+  // In banks 0 and 2 the VIC reads the character ROM, not RAM, at bank offsets $1000-$1FFF.
+  if (bank === 0 || bank === 2) {
+    const shadowStart = bankBase + CHAR_ROM_SHADOW_OFFSET;
+    const shadowRange = `$${formatHex(shadowStart)}-$${formatHex(shadowStart + CHAR_ROM_SHADOW_LENGTH - 1)}`;
+    if (rangesOverlap(bitmapOffset, BITMAP_BYTE_LENGTH, CHAR_ROM_SHADOW_OFFSET, CHAR_ROM_SHADOW_LENGTH)) {
+      throw new Error(`Bitmap RAM must not overlap the character ROM shadow at ${shadowRange} in VIC bank ${bank}`);
+    }
+    if (rangesOverlap(screenOffset, SCREEN_RAM_BYTE_LENGTH, CHAR_ROM_SHADOW_OFFSET, CHAR_ROM_SHADOW_LENGTH)) {
+      throw new Error(`Screen RAM must not overlap the character ROM shadow at ${shadowRange} in VIC bank ${bank}`);
+    }
   }
 
   const screenNibble = ((screenOffset / 0x0400) & 0x0F) << 4;
@@ -453,6 +466,10 @@ function validateAddress(address: number, length: number, label: string): void {
   if (address + length - 1 > 0xFFFF) {
     throw new Error(`${label} range must fit within 64 KB address space`);
   }
+}
+
+function formatHex(value: number): string {
+  return value.toString(16).toUpperCase().padStart(4, "0");
 }
 
 function rangesOverlap(leftStart: number, leftLength: number, rightStart: number, rightLength: number): boolean {

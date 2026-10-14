@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { createHash } from "node:crypto";
 import { normalizeErrorDetails } from "./util.js";
+import { stripHexByteSeparators } from "../hex.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
   const platformId = ctx.platform?.id ?? ctx.client?.type;
@@ -14,9 +15,7 @@ function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type
 }
 
 function hexClean(input: string): string {
-  const trimmed = input.trim();
-  const withoutPrefix = trimmed.startsWith("$") ? trimmed.slice(1) : trimmed;
-  return withoutPrefix.replace(/[\s_]/g, "").toLowerCase();
+  return stripHexByteSeparators(input).toLowerCase();
 }
 
 function hexToBytes(input: string): Uint8Array {
@@ -37,12 +36,12 @@ function parseAddressNumeric(value: string): number {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
   }
   const lower = value.trim().toLowerCase();
-  let radix = 10;
-  let literal = lower;
-  if (lower.startsWith("$")) { radix = 16; literal = lower.slice(1); }
-  else if (lower.startsWith("0x")) { radix = 16; literal = lower.slice(2); }
-  else if (lower.startsWith("%")) { radix = 2; literal = lower.slice(1); }
-  const parsed = Number.parseInt(literal, radix);
+  // Anchored patterns: Number.parseInt alone would read "$20ZZ" as $0020.
+  let parsed = Number.NaN;
+  if (/^\$[0-9a-f]+$/.test(lower)) parsed = Number.parseInt(lower.slice(1), 16);
+  else if (/^0x[0-9a-f]+$/.test(lower)) parsed = Number.parseInt(lower.slice(2), 16);
+  else if (/^%[01]+$/.test(lower)) parsed = Number.parseInt(lower.slice(1), 2);
+  else if (/^[0-9]+$/.test(lower)) parsed = Number.parseInt(lower, 10);
   if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0 || parsed > 0xFFFF) {
     throw new ToolValidationError("Invalid address value", { path: "$.address", details: { value } });
   }

@@ -119,7 +119,7 @@ function concatBuffers(...buffers: Uint8Array[]): Uint8Array {
  * Looks for patterns like "?SYNTAX ERROR" or "SYNTAX ERROR IN 120".
  */
 function extractBasicError(screen: string): { message?: string; line?: number } | null {
-  const errorMatch = /(?:^|\n)\s*\?([A-Z\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match.
+  const errorMatch = /(?:^|\n)\s*\?([A-Z'\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match. The apostrophe covers UNDEF'D STATEMENT, REDIM'D ARRAY and CAN'T CONTINUE.
   
   if (errorMatch) {
     const errorType = errorMatch[1]?.trim().replace(/\s+/g, " ");
@@ -133,6 +133,19 @@ function extractBasicError(screen: string): { message?: string; line?: number } 
   }
   
   return null;
+}
+
+/**
+ * True when the most recent typed SYS command is followed by a READY. prompt,
+ * which is how a machine-code routine that ends with RTS hands back to BASIC.
+ */
+function returnedToBasicAfterSys(screen: string): boolean {
+  const lines = screen.split("\n").map((line) => line.trim().toUpperCase());
+  let sysLine = -1;
+  lines.forEach((line, index) => {
+    if (/^SYS\s*\d+$/.test(line)) sysLine = index;
+  });
+  return sysLine >= 0 && lines.slice(sysLine + 1).some((line) => line === "READY.");
 }
 
 /**
@@ -223,7 +236,12 @@ async function pollAsmOutcome(
       const screen = await client.readScreen();
       const upperScreen = screen.toUpperCase();
       
-      if (upperScreen.includes("RUN") || upperScreen.includes("ERROR")) {
+      if (returnedToBasicAfterSys(screen)) {
+        // The typed SYS line is followed by READY., so the routine ran and returned with RTS.
+        logger.debug("ASM program returned to BASIC", { elapsed: Date.now() - startTime });
+        return { status: "ok", type: "ASM" };
+      }
+      if (upperScreen.includes("RUN") || upperScreen.includes("SYS") || upperScreen.includes("ERROR")) {
         runDetected = true;
         logger.debug("RUN detected, starting stabilization window", {
           elapsed: Date.now() - startTime,
@@ -252,6 +270,16 @@ async function pollAsmOutcome(
   while (Date.now() < pollDeadline && !alive) {
     pollCount++;
     
+    try {
+      // A routine that works for a while before RTS shows READY. only after the first screen read.
+      if (returnedToBasicAfterSys(await client.readScreen())) {
+        logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
+        return { status: "ok", type: "ASM" };
+      }
+    } catch (error) {
+      logger.debug("Failed to read screen during ASM polling", { error, pollCount });
+    }
+
     try {
       const screenRam = await client.readMemoryRaw(0x0400, 0x03e8);
       const signature = computeCrc32(screenRam);

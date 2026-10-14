@@ -76,8 +76,6 @@ function ensureScreenCodeMap(): void {
     SCREEN_CODE_TO_ASCII.set(code, deriveGlyphChar(glyph));
   }
 
-  // Common control characters / gaps default to space to keep output tidy.
-  SCREEN_CODE_TO_ASCII.set(0x00, " ");
   screenCodeMapInitialised = true;
 }
 
@@ -168,7 +166,7 @@ const NAMED_CHARS: Record<string, number> = Object.freeze({
 
   // Graphic glyphs (commonly referenced by name)
   // Note: Exact byte shown on screen depends on mode; these are PETSCII/CHR$ values
-  "heart": 81, // widely used PETSCII code for heart glyph
+  "heart": 115, // $73 (shifted S); $51 would print the letter Q
   "up_arrow": 94,
   "uparrow": 94,
   "left_arrow": 95,
@@ -184,7 +182,8 @@ export function listNamedPetscii(): Array<{ name: string; code: number; hex: str
 
 export function lookupNamedPetscii(name: string): number | undefined {
   const key = name.trim().toLowerCase().replace(/\s+/g, "_");
-  return NAMED_CHARS[key];
+  // Own keys only, so names like "constructor" don't resolve to Object.prototype members.
+  return Object.prototype.hasOwnProperty.call(NAMED_CHARS, key) ? NAMED_CHARS[key] : undefined;
 }
 
 /**
@@ -200,16 +199,17 @@ export function parseNamedCharToken(source: string, startIndex: number): { value
   }
 
   const close = open === "{" ? "}" : open === ":" ? ":" : ">";
-  let idx = startIndex + 1;
-  let name = "";
-  while (idx < source.length && source[idx] !== close) {
-    name += source[idx]!
-      .replace(/[^A-Za-z0-9_\s-]/g, "") // restrict to sane name characters
-      .trim();
-    idx += 1;
+  const idx = source.indexOf(close, startIndex + 1);
+  if (idx < 0) {
+    return null;
   }
 
-  if (idx >= source.length || source[idx] !== close) {
+  // Only sane name characters; anything else is ordinary text that happens to use the delimiters.
+  // Multi-word names such as {cursor up} need braces: ":" and "<" also appear in
+  // ordinary text ("Mode: reverse on: yes"), so they only delimit single words.
+  const name = source.slice(startIndex + 1, idx).trim();
+  const namePattern = open === "{" ? /^[A-Za-z0-9_\s-]+$/ : /^[A-Za-z0-9_-]+$/;
+  if (!namePattern.test(name)) {
     return null;
   }
 
@@ -225,7 +225,7 @@ export function parseNamedCharToken(source: string, startIndex: number): { value
  * Encode a text containing optional named tokens into PETSCII bytes.
  * Named tokens may appear as {heart}, :heart:, or <heart>.
  */
-export function encodeStringWithNames(input: string): Uint8Array {
+export function encodeStringWithNames(input: string, options: { foldLowercase?: boolean } = {}): Uint8Array {
   const bytes: number[] = [];
   let i = 0;
   while (i < input.length) {
@@ -236,7 +236,10 @@ export function encodeStringWithNames(input: string): Uint8Array {
       continue;
     }
 
-    bytes.push(asciiToPetscii(input[i]!));
+    // ASCII a-z are PETSCII graphics characters in the default character set,
+    // so callers can fold them to the letters $41-$5A. Named codes are not folded.
+    const char = input[i]!;
+    bytes.push(asciiToPetscii(options.foldLowercase && char >= "a" && char <= "z" ? char.toUpperCase() : char));
     i += 1;
   }
   return Uint8Array.from(bytes);

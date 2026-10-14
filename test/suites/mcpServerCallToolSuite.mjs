@@ -201,7 +201,8 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
   test("c64_program upload_run_asm assembles source and runs program", async () => {
     await withSharedMcpClient(async (ctx) => {
       const { mockServer } = ctx;
-      const program = `\n      .org $0801\nstart:\n      lda #$01\n      sta $0400\n      rts\n    `;
+      // No origin: the assembler puts a 10 SYS02062 stub at $0801 and the code at $080E.
+      const program = `\nstart:\n      lda #$01\n      sta $0400\n      rts\n    `;
       const loadCountBefore = mockServer.state.loadCount;
 
       const { result, supported } = await callTool(ctx, "c64_program", {
@@ -230,7 +231,8 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       // entered via a typed SYS to its own entry point.
       assert.equal(mockServer.state.loadCount, loadCountBefore + 1, "mock server should load the assembled program once");
       assert.ok(mockServer.state.lastLoadedPrg, "mock server should receive the loaded PRG payload");
-      assert.equal(mockServer.state.memory[0x0801], 0xa9, "assembled LDA opcode should land at its own address");
+      assert.equal(mockServer.state.memory[0x0805], 0x9e, "the SYS stub should land at $0801");
+      assert.equal(mockServer.state.memory[0x080e], 0xa9, "assembled LDA opcode should land at its own address");
     });
   });
 
@@ -272,7 +274,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         assert.equal(mountResult.metadata?.image, "/tmp/demo.d64");
       } else {
       assert.equal(mockServer.state.lastDriveOperation?.action, "mount");
-      assert.deepEqual(mockServer.state.drives.drive8.mountedImage, {
+      assert.deepEqual(mockServer.state.drives.a.mountedImage, {
         image: "/tmp/demo.d64",
         type: "d64",
         mode: "readwrite",
@@ -293,7 +295,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(modeResult.metadata?.mode, "1571");
       } else {
-        assert.equal(mockServer.state.drives.drive8.mode, "1571");
+        assert.equal(mockServer.state.drives.a.mode, "1571");
       }
 
       const { result: onResult } = await callTool(ctx, "c64_drive", {
@@ -305,7 +307,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(onResult.metadata?.power, "on");
       } else {
-        assert.equal(mockServer.state.drives.drive8.power, "on");
+        assert.equal(mockServer.state.drives.a.power, "on");
       }
 
       const { result: offResult } = await callTool(ctx, "c64_drive", {
@@ -317,7 +319,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(offResult.metadata?.power, "off");
       } else {
-        assert.equal(mockServer.state.drives.drive8.power, "off");
+        assert.equal(mockServer.state.drives.a.power, "off");
       }
 
       const { result: resetResult } = await callTool(ctx, "c64_drive", {
@@ -329,9 +331,10 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(resetResult.metadata?.drive, "drive8");
       } else {
-        assert.equal(mockServer.state.drives.drive8.resetCount, 1);
+        assert.equal(mockServer.state.drives.a.resetCount, 1);
       }
 
+      // drive8 goes through the facade's bus-number resolution to firmware drive a.
       const { result: romResult } = await callTool(ctx, "c64_drive", {
         op: "load_rom",
         drive: "drive8",
@@ -342,7 +345,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         assertUnsupportedOperation(romResult, ctx.platform, "drive_load_rom");
       } else {
         assert.equal(romResult.metadata?.success, true, "load_rom operation should succeed");
-        assert.equal(mockServer.state.drives.drive8.lastRom, "/roms/custom.rom");
+        assert.equal(mockServer.state.drives.a.lastRom, "/roms/custom.rom");
       }
 
       const { result: removeResult } = await callTool(ctx, "c64_disk", {
@@ -354,7 +357,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assert.equal(removeResult.metadata?.drive, "drive8");
       } else {
-        assert.equal(mockServer.state.drives.drive8.mountedImage, null);
+        assert.equal(mockServer.state.drives.a.mountedImage, null);
       }
 
       const { result: infoResult } = await callTool(ctx, "c64_disk", {

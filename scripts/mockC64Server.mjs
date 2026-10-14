@@ -250,6 +250,14 @@ function cancelHeartbeatOnWrite(state, address, length) {
 }
 
 function seedReadyPrompt(state) {
+  // After a reset the KERNAL clears screen RAM to spaces and BASIC sets up an
+  // empty program: TXTTAB=$0801, VARTAB/ARYTAB/STREND=$0803, FRETOP/MEMSIZ=$A000
+  // (as read from an Ultimate 64 after machine:reset).
+  state.memory.fill(toScreenCode(" "), 0x0400, 0x0400 + 1000);
+  state.memory.set([0x01, 0x08, 0x03, 0x08, 0x03, 0x08, 0x03, 0x08, 0x00, 0xa0], 0x2b);
+  state.memory.set([0x00, 0xa0], 0x37);
+  state.memory.set([0x00, 0x00], 0x0801);
+
   const text = "READY.";
   const buffer = new Uint8Array(text.length + 1);
   for (let i = 0; i < text.length; i += 1) {
@@ -257,6 +265,26 @@ function seedReadyPrompt(state) {
   }
   buffer[text.length] = toScreenCode(" ");
   state.memory.set(buffer, 0x0400);
+}
+
+/**
+ * BASIC LINKPRG ($A533): walk the line chain from $0801 and rewrite each link
+ * pointer to the byte after the line's terminating zero. Stops at a zero link
+ * high byte, as the ROM does; the step limit only guards the mock.
+ */
+function relinkBasicProgram(memory) {
+  let line = 0x0801;
+  for (let steps = 0; steps < 0x10000 && line < 0xfffb; steps += 1) {
+    if (memory[line + 1] === 0) return;
+    let y = 4;
+    do {
+      y += 1;
+    } while (line + y < 0xffff && memory[line + y] !== 0);
+    const next = line + y + 1;
+    memory[line] = next & 0xff;
+    memory[line + 1] = (next >> 8) & 0xff;
+    line = next;
+  }
 }
 
 export async function startMockC64Server(options = {}) {
@@ -269,9 +297,14 @@ export async function startMockC64Server(options = {}) {
   // seed memory with READY prompt at $0400 using screen codes
   seedReadyPrompt(state);
 
+  // Firmware drive ids (route_drives.h DriveToSubsys): a and b are the
+  // emulated drives, softiec the IEC file system; anything else is rejected.
+  const FIRMWARE_DRIVE_BUS_IDS = { a: 8, b: 9, softiec: 11 };
+
   function ensureDriveState(id) {
     if (!state.drives[id]) {
       state.drives[id] = {
+        busId: FIRMWARE_DRIVE_BUS_IDS[id] ?? null,
         mountedImage: null,
         mode: "1541",
         power: "off",
@@ -282,14 +315,20 @@ export async function startMockC64Server(options = {}) {
     return state.drives[id];
   }
 
-  ensureDriveState("drive8");
+  function seedDrives() {
+    ensureDriveState("a");
+    ensureDriveState("b");
+    ensureDriveState("softiec");
+  }
+
+  seedDrives();
 
   function resetState() {
     stopAllStreams();
     const fresh = createInitialState();
     Object.assign(state, fresh);
     seedReadyPrompt(state);
-    ensureDriveState("drive8");
+    seedDrives();
   }
 
   function stopAllStreams() {
@@ -401,18 +440,32 @@ export async function startMockC64Server(options = {}) {
     }
 
     if (method === "GET" && url === "/v1/drives") {
-      const drives = {};
-      for (const [driveId, driveState] of Object.entries(state.drives)) {
-        drives[driveId] = {
-          enabled: driveState.power !== "off",
-          power: driveState.power,
-          mode: driveState.mode,
-          // Mirror the real firmware's DriveInfo shape (image_path is a
-          // plain string), not the internal mount-params object.
-          image_path: driveState.mountedImage?.image ?? null,
-          type: driveState.mountedImage?.type ?? driveState.mode ?? null,
+      // Firmware shape (route_drives.cc drive_info, IecInterface::info): a list
+      // of single-key objects. Power is `enabled`; the mounted image is split
+      // into its directory (image_path) and file name (image_file). The soft
+      // IEC drive is listed as "IEC Drive" although its route id is softiec,
+      // and the printer is listed but is not a drive.
+      const splitImage = (image) => {
+        if (!image) return { image_file: "", image_path: "" };
+        const slash = image.lastIndexOf("/");
+        return { image_file: image.slice(slash + 1), image_path: slash > 0 ? image.slice(0, slash) : "/" };
+      };
+      const drives = ["a", "b"].map((driveId) => {
+        const driveState = state.drives[driveId];
+        return {
+          [driveId]: {
+            enabled: driveState.power !== "off",
+            bus_id: driveState.busId,
+            type: driveState.mode,
+            rom: `${driveState.mode}.rom`,
+            ...splitImage(driveState.mountedImage?.image),
+          },
         };
-      }
+      });
+      drives.push(
+        { "IEC Drive": { bus_id: state.drives.softiec.busId, enabled: state.drives.softiec.power !== "off", type: "DOS emulation", last_error: "00, OK, 00, 00", partitions: [{ id: 1, path: "/Temp/" }] } },
+        { "Printer Emulation": { bus_id: 4, enabled: false } },
+      );
       sendJson(res, { drives });
       return;
     }
@@ -526,11 +579,20 @@ export async function startMockC64Server(options = {}) {
       state.lastLoadedPrg = prg;
       state.loadCount += 1;
 
-      // Mirror real firmware: place the PRG body at its embedded load
-      // address without starting it (no RUN, no BASIC pointer changes).
+      // Mirror Ultimate 64 firmware 3.15: the PRG body is placed at its
+      // embedded load address without starting it, and, as after a BASIC
+      // LOAD, VARTAB/ARYTAB/STREND are set to the end address and the BASIC
+      // program at $0801 is relinked (which rewrites raw code at $0801).
       if (prg.length >= 2) {
         const loadAddress = prg.readUInt16LE(0);
-        state.memory.set(prg.subarray(2), loadAddress);
+        const body = prg.subarray(2);
+        state.memory.set(body.subarray(0, 0x10000 - loadAddress), loadAddress);
+        const endAddress = Math.min(0xffff, loadAddress + body.length);
+        for (const pointer of [0x2d, 0x2f, 0x31]) {
+          state.memory[pointer] = endAddress & 0xff;
+          state.memory[pointer + 1] = endAddress >> 8;
+        }
+        relinkBasicProgram(state.memory);
       }
 
       sendJson(res, { result: "ok", bytes: prg.length });
@@ -564,9 +626,22 @@ export async function startMockC64Server(options = {}) {
           }
 
           const attachment = Buffer.concat(chunks);
+          // Like the firmware, a multipart upload is a list of files in part
+          // order: the SID first, optional song lengths second. A text field
+          // (for example a JSON-serialised Buffer) is not a SID upload.
+          const contentType = String(req.headers["content-type"] ?? "");
+          const files = contentType.startsWith("multipart/form-data")
+            ? [...(await new Response(attachment, { headers: { "content-type": contentType } }).formData()).values()]
+            : null;
+          if (files && (files.length === 0 || files.some((part) => typeof part === "string"))) {
+            sendJson(res, { errors: ["Upload of file failed."] }, 400);
+            return;
+          }
+          const sid = files ? Buffer.from(await files[0].arrayBuffer()) : attachment;
+          const songlengths = files?.[1] ? Buffer.from(await files[1].arrayBuffer()) : null;
           state.sidAttachmentCount += 1;
-          state.lastSidAttachment = { songnr, bytes: attachment.length };
-          sendJson(res, { result: "sidplay_attachment", bytes: attachment.length, songnr });
+          state.lastSidAttachment = { songnr, bytes: sid.length, sid, songlengths };
+          sendJson(res, { result: "sidplay_attachment", bytes: sid.length, songnr });
           return;
         }
       }
@@ -816,8 +891,12 @@ export async function startMockC64Server(options = {}) {
       if (routeUrl) {
         const match = /^\/v1\/drives\/([^:]+):(mount|remove|reset|on|off|load_rom|set_mode)$/.exec(routeUrl.pathname);
         if (match) {
-          const driveId = decodeURIComponent(match[1]);
+          const driveId = decodeURIComponent(match[1]).toLowerCase();
           const action = match[2];
+          if (!Object.hasOwn(FIRMWARE_DRIVE_BUS_IDS, driveId)) {
+            sendJson(res, { errors: [`Invalid Drive '${decodeURIComponent(match[1])}'`] }, 400);
+            return;
+          }
           const driveState = ensureDriveState(driveId);
 
           const respond = (payload) => {

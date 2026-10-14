@@ -287,6 +287,19 @@ test("merge schemas respects permissive additional properties on one side", () =
   assert.deepEqual(merged.parse({ name: "tool", extra: "ok" }), { name: "tool", enabled: true, extra: "ok" });
 });
 
+test("tool error text includes the underlying detail message", () => {
+  const error = new ToolExecutionError("C64 firmware reported failure while reading memory", {
+    details: { message: "Memory range must stay within 0x0000 - 0xFFFF" },
+  });
+  assert.equal(
+    toolErrorResult(error).content[0].text,
+    "C64 firmware reported failure while reading memory: Memory range must stay within 0x0000 - 0xFFFF",
+  );
+  // No duplicate when the summary already contains the detail, and no change without one.
+  assert.equal(toolErrorResult(new ToolExecutionError("Boom", { details: { message: "Boom" } })).content[0].text, "Boom");
+  assert.equal(toolErrorResult(new ToolExecutionError("Failed", { details: { endpoint: "/rest" } })).content[0].text, "Failed");
+});
+
 test("tool error helpers produce consistent metadata", () => {
   const error = new ToolExecutionError("Failed", { code: "E_FAIL", details: { endpoint: "/rest" } });
   const result = toolErrorResult(error);

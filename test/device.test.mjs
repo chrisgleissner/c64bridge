@@ -23,6 +23,9 @@ function debugLog(...args) {
     console.error("[device.test]", ...args);
   }
 }
+// Points the no-config fallback probe at a closed loopback port, so tests never
+// send requests to a real "c64u" host on the local network.
+const UNREACHABLE_C64U_ENV = { C64U_HOST: "127.0.0.1", C64U_PORT: "9", C64U_PASSWORD: undefined };
 const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;
@@ -651,8 +654,9 @@ test("device: createFacade with config file", async (t) => {
         assert.equal((await facade.driveSetMode("8", "1571")).success, true);
         assert.equal((await facade.driveMount("8", "/tmp/disk.d64", { type: "d64", mode: "readonly" })).success, true);
 
+        // Bus number 8 resolves to firmware drive "a" through the listing's bus_id.
         const drivesAfterMount = await facade.drivesList();
-        const drive8 = drivesAfterMount.find((entry) => entry.id === "8");
+        const drive8 = drivesAfterMount.find((entry) => entry.id === "a");
         assert.ok(drive8, "normalised drives list must include the mounted drive");
         assert.equal(drive8.power, "on");
         assert.equal(drive8.image, "/tmp/disk.d64");
@@ -718,7 +722,7 @@ test("device: createFacade with config file", async (t) => {
         assert.deepEqual(runResult.details.errors, ["Cannot open file"]);
 
         mock.state.forcedErrors = ["Drive not found"];
-        mock.state.forcedErrorsUrlMatch = "drives/8:mount";
+        mock.state.forcedErrorsUrlMatch = "drives/a:mount";
         const mountResult = await facade.driveMount("8", "/Usb0/demo.d64");
         assert.equal(mountResult.success, false);
         assert.deepEqual(mountResult.details.errors, ["Drive not found"]);
@@ -776,15 +780,17 @@ test("device: createFacade merges backend sections across config candidates", as
         // real reachable "c64u" host on its network; a CI runner typically
         // does not) — so assert the fallback mechanism fired rather than one
         // specific probe outcome.
-        const { facade, selected, reason } = await createFacade();
-        assert.match(reason, /fallback/);
-        assert.ok(selected === "c64u" || selected === "vice", `unexpected backend: ${selected}`);
-        assert.equal(facade.type, selected);
-        if (selected === "vice") {
+        // The probe is pointed at a closed loopback port so the test never
+        // contacts a real "c64u" host on the network.
+        await withEnv(UNREACHABLE_C64U_ENV, async () => {
+          const { facade, selected, reason } = await createFacade();
+          assert.match(reason, /fallback/);
+          assert.equal(selected, "vice");
+          assert.equal(facade.type, "vice");
           // The real assertion this scenario exists for: home's vice section
           // must not have leaked in via merging.
           assert.notEqual(facade.exe, leakFixtureExe);
-        }
+        });
       },
     );
   } finally {
@@ -1016,9 +1022,11 @@ test("device: createFacade fallback behavior", async (t) => {
         homeConfig: null,
       },
       async () => {
-        const { facade, selected } = await createFacade();
-        assert.ok(selected === "vice" || selected === "c64u");
-        assert.ok(facade.type === "vice" || facade.type === "c64u");
+        await withEnv(UNREACHABLE_C64U_ENV, async () => {
+          const { facade, selected } = await createFacade();
+          assert.equal(selected, "vice");
+          assert.equal(facade.type, "vice");
+        });
       },
     );
   });
@@ -1619,7 +1627,7 @@ test("device: C64u facade exercises runner, machine, config, drive, stream, and 
     v1.runnersRunPrgUpdate = async (_route, payload) => ({ data: { result: "run_prg_file", file: payload.file } });
     v1.runnersRunCrtUpdate = async (_route, payload) => ({ data: { result: "run_crt", file: payload.file } });
     v1.runnersSidplayUpdate = async (_route, payload) => ({ data: { result: "sidplay", file: payload.file, songnr: payload.songnr } });
-    v1.runnersSidplayCreate = async (_route, form, options) => ({ data: { result: "sidplay_attachment", bytes: Buffer.from(form.sid).length, songnr: options?.songnr ?? null } });
+    v1.runnersSidplayCreate = async (_route, form, options) => ({ data: { result: "sidplay_attachment", bytes: form.file[0].size, songnr: options?.songnr ?? null } });
     v1.machineReadmemList = async () => readResponses.shift();
     v1.machineWritememUpdate = async (_route, payload) => {
       writes.push({ kind: "small", address: payload.address, data: payload.data });

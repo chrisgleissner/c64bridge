@@ -131,7 +131,8 @@ test("HARD01-001 --http <port> opens a real HTTP MCP listener; default invocatio
   t.after(() => stopChild(child));
 
   try {
-    await waitFor(() => getStderr().includes("running on HTTP"), { timeoutMs: 15_000 });
+    // Startup takes about 3 s alone but more than 15 s while the full suite runs in parallel.
+    await waitFor(() => getStderr().includes("running on HTTP"), { timeoutMs: 60_000 });
 
     const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: "POST",

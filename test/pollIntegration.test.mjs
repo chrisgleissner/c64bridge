@@ -44,8 +44,9 @@ test("ASM program with screen changes is detected as ok", async () => {
       },
       async readMemoryRaw(address, length) {
         memoryCallCount++;
-        // Simulate hardware activity by changing values after first poll
-        if (memoryCallCount <= 3) {
+        // Simulate activity from the second read on; the test-mode poll window
+        // (100 ms at 30 ms intervals) only guarantees a few reads.
+        if (memoryCallCount <= 1) {
           return new Uint8Array(length).fill(0);
         }
         return new Uint8Array(length).fill(1);
@@ -190,6 +191,55 @@ test("HARD01-036 ASM program with no RUN echo is ok only when screen RAM genuine
     );
 
     assert.equal(result.isError, undefined);
+  } finally {
+    restoreStabilize();
+  }
+});
+
+test("ASM routine that returns to BASIC with RTS is ok, not crashed", async () => {
+  const restoreStabilize = withPollStabilize(0);
+  // What the Ultimate 64 shows after SYS to a routine that only sets the border and returns.
+  const screen = "READY.\nLOAD\"...LOAD/TEMP0004\",8,1\n\nSEARCHING FOR ...LOAD/TEMP0004\nLOADING\nREADY.\nSYS49152\n\nREADY.\n";
+  const ctx = {
+    client: {
+      async uploadAndRunAsm() { return { success: true }; },
+      async readScreen() { return screen; },
+      async readMemoryRaw(address, length) { return new Uint8Array(length).fill(0x20); },
+    },
+    logger: createLogger(),
+  };
+
+  try {
+    const result = await programRunnersModule.invoke(
+      "upload_run_asm",
+      { program: "* = $c000\n inc $d020\n rts" },
+      ctx,
+    );
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  } finally {
+    restoreStabilize();
+  }
+});
+
+test("ASM routine whose READY. appears after the first screen read is ok, not crashed", async () => {
+  const restoreStabilize = withPollStabilize(0);
+  let reads = 0;
+  const ctx = {
+    client: {
+      async uploadAndRunAsm() { return { success: true }; },
+      async readScreen() {
+        reads += 1;
+        // The routine is still running on the first read and has returned by the next one.
+        return reads === 1 ? "READY.\nSYS49152\n" : "READY.\nSYS49152\n\nREADY.\n";
+      },
+      async readMemoryRaw(address, length) { return new Uint8Array(length).fill(0x20); },
+    },
+    logger: createLogger(),
+  };
+
+  try {
+    const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $c000\n inc $d020\n rts" }, ctx);
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
   } finally {
     restoreStabilize();
   }

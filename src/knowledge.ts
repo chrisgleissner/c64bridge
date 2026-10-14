@@ -53,7 +53,8 @@ export function formatAddress(address: number): string {
 
 export function resolveAddressSymbol(input: string): number | undefined {
   const key = input.trim().toLowerCase().replace(/\s+/g, "_");
-  return SYMBOLS[key];
+  // Own keys only, so "constructor" or "toString" are not mistaken for symbols.
+  return Object.prototype.hasOwnProperty.call(SYMBOLS, key) ? SYMBOLS[key] : undefined;
 }
 
 export function listSymbols(): Array<{ name: string; address: number; hex: string }> {

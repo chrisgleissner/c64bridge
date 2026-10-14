@@ -224,7 +224,7 @@ export class ViceMockServer {
         const end = body.readUInt16LE(3);
         const length = Math.max(0, end - start + 1);
         const payload = Buffer.alloc(2 + length);
-        payload.writeUInt16LE(length, 0);
+        payload.writeUInt16LE(length & 0xffff, 0); // Like VICE: a full 64 KB read reports ML = 0.
         for (let i = 0; i < length; i += 1) {
           payload[2 + i] = this.memory[(start + i) & 0xffff];
         }
@@ -398,7 +398,8 @@ export class ViceMockServer {
   }
 
   private encodeDisplay(): Buffer {
-    const pixels = Buffer.alloc(64, 0);
+    const pixels = Buffer.alloc(64);
+    for (let i = 0; i < pixels.length; i += 1) pixels[i] = i & 0x0f;
     const header = Buffer.alloc(17);
     const pixelLength = Buffer.alloc(4);
     header.writeUInt32LE(13, 0);
@@ -410,7 +411,9 @@ export class ViceMockServer {
     header.writeUInt16LE(200, 14);
     header[16] = 8;
     pixelLength.writeUInt32LE(pixels.length, 0);
-    return Buffer.concat([header, pixelLength, pixels]);
+    // VICE 3.9/3.10 send a body of 4 + FL + BL bytes, which drops the last 4 pixel bytes.
+    const full = Buffer.concat([header, pixelLength, pixels]);
+    return full.subarray(0, 4 + 13 + pixels.length);
   }
 
   private applyRegisterWrites(body: Buffer): void {

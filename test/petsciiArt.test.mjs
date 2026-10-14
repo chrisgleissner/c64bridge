@@ -1,7 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { bitmapToHexRows, bitmapToPetsciiCodes, createPetsciiArt } from "../src/petsciiArt.js";
-import { findGlyphByBasicChar } from "../src/chargen.js";
+import { findGlyphByBasicChar, getChargenGlyphs } from "../src/chargen.js";
 
 test("bitmapToHexRows encodes binary rows into concatenated hex", () => {
   const width = 16;
@@ -55,4 +55,72 @@ test("createPetsciiArt recognises heart prompts via shape templates", () => {
   assert.ok(art.bitmap.width > 0);
   assert.ok(art.bitmap.height > 0);
   assert.ok(art.bitmapHex.length > 0);
+});
+
+function bitmapFromBlocks(blocks) {
+  // blocks: array of 8-byte glyph bitmaps laid out left to right in one character row.
+  const width = blocks.length * 8;
+  const pixels = new Uint8Array(width * 8);
+  blocks.forEach((rows, index) => {
+    for (let y = 0; y < 8; y += 1) {
+      for (let x = 0; x < 8; x += 1) {
+        pixels[y * width + index * 8 + x] = (rows[y] >> (7 - x)) & 1;
+      }
+    }
+  });
+  return { width, height: 8, pixels };
+}
+
+function printedScreenCodes(stream) {
+  // Replay a PETSCII PRINT stream: RVS ON (18) / RVS OFF (146) toggle bit 7 of the screen code.
+  const byPetscii = new Map();
+  for (const glyph of getChargenGlyphs()) {
+    if (glyph.screenCode < 0x80 && !byPetscii.has(glyph.petsciiCode)) byPetscii.set(glyph.petsciiCode, glyph.screenCode);
+  }
+  const cells = [];
+  let reverse = false;
+  for (const code of stream) {
+    if (code === 18) reverse = true;
+    else if (code === 146) reverse = false;
+    else cells.push(byPetscii.get(code) | (reverse ? 0x80 : 0));
+  }
+  return cells;
+}
+
+test("bitmapToPetsciiCodes wraps reverse-video glyphs in RVS ON/OFF runs", () => {
+  const solid = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+  const blank = [0, 0, 0, 0, 0, 0, 0, 0];
+  const converted = bitmapToPetsciiCodes(bitmapFromBlocks([solid, solid, blank, solid]));
+  assert.deepEqual(converted.codes, [18, 32, 32, 146, 32, 18, 32, 146]);
+  assert.equal(converted.glyphs.length, 4);
+  assert.deepEqual(printedScreenCodes(converted.codes), converted.glyphs.map((glyph) => glyph.screenCode));
+});
+
+test("createPetsciiArt prints reverse glyphs of the heart shape in reverse video", () => {
+  const art = createPetsciiArt({ prompt: "a heart" });
+  assert.ok(art.petsciiCodes.includes(18), `expected RVS ON in ${art.petsciiCodes}`);
+  assert.deepEqual(printedScreenCodes(art.petsciiCodes), art.glyphs.map((glyph) => glyph.screenCode));
+  // The program must print the RVS codes from DATA rather than a fixed cell count per row.
+  const dataValues = art.program
+    .split("\n")
+    .filter((line) => / DATA /.test(line))
+    .flatMap((line) => line.replace(/^\d+ DATA /, "").split(",").map(Number));
+  assert.deepEqual(dataValues.filter((value) => value >= 0), art.petsciiCodes);
+  assert.equal(dataValues.filter((value) => value < 0).length, art.charRows);
+});
+
+test("createPetsciiArt does not add a newline after a full 40-column row", () => {
+  const fullWidth = createPetsciiArt({ bitmap: { width: 320, height: 16, pixels: new Uint8Array(320 * 16) } });
+  assert.equal(fullWidth.charColumns, 40);
+  assert.ok(/\d+ NEXTY/.test(fullWidth.program), fullWidth.program);
+  assert.ok(!fullWidth.program.includes("PRINT:NEXTY"));
+
+  const narrow = createPetsciiArt({ text: "HI" });
+  assert.ok(narrow.program.includes("PRINT:NEXTY"));
+});
+
+test("createPetsciiArt clears quote mode after every printed character", () => {
+  // A '"' glyph turns on quote mode, in which RVS ON/OFF would be drawn instead of executed.
+  const art = createPetsciiArt({ text: "HI" });
+  assert.ok(/READC:IFC>=0THENPRINT CHR\$\(C\);:POKE212,0:GOTO\d+/.test(art.program), art.program);
 });

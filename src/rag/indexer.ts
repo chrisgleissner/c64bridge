@@ -16,7 +16,8 @@ const BASIC_DIR = path.join(ASSET_ROOT, "data/basic/examples");
 const ASM_DIR = path.join(ASSET_ROOT, "data/assembly/examples");
 const EXTERNAL_DIR = path.join(ASSET_ROOT, "external");
 const DOC_ROOT = path.join(ASSET_ROOT, "doc");
-const DOC_EXCLUDE_DIRS = new Set(["plans"]);
+// Plans and reviews are internal engineering notes, not C64 reference material.
+const DOC_EXCLUDE_DIRS = new Set(["plans", "reviews"]);
 const CONTEXT_DIR = path.join(ASSET_ROOT, "data/context");
 const BOOTSTRAP_PATH = path.join(CONTEXT_DIR, "bootstrap.md");
 const AGENTS_PATH = path.join(ASSET_ROOT, "AGENTS.md");

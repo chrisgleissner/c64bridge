@@ -12,7 +12,8 @@ import { createSocket, type Socket } from "node:dgram";
 import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
-import { assemblyToPrg } from "./tools/translation/assembler.js";
+import { assemblyToPrg, prgEntryAddress } from "./tools/translation/assembler.js";
+import { stripHexByteSeparators } from "./tools/hex.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import {
@@ -474,10 +475,6 @@ export class C64Client {
     writeDiagnosticEvent("client_switch_backend", { backend: type });
   }
 
-  private async shouldUseC64uMockBypass(): Promise<boolean> {
-    return process.env.C64_TEST_TARGET === "mock" && (await this.getBackendType()) === "c64u";
-  }
-
   private async withViceMonitor<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {
     const backend = await this.requireViceBackend();
     return backend.withMonitor(fn);
@@ -787,7 +784,8 @@ export class C64Client {
    * tokens, and setting BASIC's TXTTAB/VARTAB/ARYTAB/STREND to the code
    * range corrupts the workspace. Instead this loads the assembled bytes
    * without running them, then types `SYS <entry>` to transfer control
-   * directly to the first assembled instruction, whatever its address.
+   * to the entry point: the target of a leading SYS stub at $0801, or else
+   * the lowest assembled address.
    */
   async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
     try {
@@ -795,7 +793,16 @@ export class C64Client {
       if (prg.length < 2) {
         return { success: false, details: { message: "Assembled program produced no output" } };
       }
-      const entryAddress = prg.readUInt16LE(0);
+      const entryAddress = prgEntryAddress(prg);
+      if (entryAddress === 0x0801) {
+        // Loading makes BASIC relink $0801 as program lines, which overwrites raw code there.
+        return {
+          success: false,
+          details: {
+            message: "Machine code at $0801 is overwritten when BASIC relinks the loaded program. Omit the origin to get a BASIC SYS stub automatically, start the code with a BASIC SYS line, or assemble at another address such as $C000.",
+          },
+        };
+      }
       const facade = await this.facadePromise;
       const loadResult = await facade.loadPrg(prg);
       if (!loadResult.success) {
@@ -814,13 +821,6 @@ export class C64Client {
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const payload = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
-        const response = await this.api.v1.runnersRunPrgCreate(":run_prg", payload as any, {
-          headers: { "Content-Type": "application/octet-stream" },
-        });
-        return { success: true, details: response.data };
-      }
       const facade = await this.facadePromise;
       const res = await facade.runPrg(prg);
       return { success: res.success, details: res.details };
@@ -900,10 +900,6 @@ export class C64Client {
 
   async reset(): Promise<{ success: boolean; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const response = await this.api.v1.machineResetUpdate(":reset");
-        return { success: true, details: response.data };
-      }
       const facade = await this.facadePromise;
       const res = await facade.reset();
       return { success: res.success, details: res.details };
@@ -914,10 +910,6 @@ export class C64Client {
 
   async reboot(): Promise<{ success: boolean; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const response = await this.api.v1.machineRebootUpdate(":reboot");
-        return { success: true, details: response.data };
-      }
       const facade = await this.facadePromise;
       const res = await facade.reboot();
       return { success: res.success, details: res.details };
@@ -1056,7 +1048,8 @@ export class C64Client {
       return { success: false, details: { message: "Voice must be 1..3" } };
     }
     const system = options.system ?? "PAL";
-    const hz = options.frequencyHz ?? (options.note ? this.noteNameToHz(options.note) : 440);
+    // The tool schema documents that a note name overrides frequencyHz.
+    const hz = options.note ? this.noteNameToHz(options.note) : options.frequencyHz ?? 440;
     const freq16 = this.hzToSidFrequency(hz, system);
     const freqLo = freq16 & 0xff;
     const freqHi = (freq16 >> 8) & 0xff;
@@ -1123,10 +1116,6 @@ export class C64Client {
 
   async pause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      if (!pinnedFacade && await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machinePauseUpdate(":pause");
-        return { success: true, details: res.data };
-      }
       const facade = pinnedFacade ?? await this.facadePromise;
       return await facade.pause();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
@@ -1134,10 +1123,6 @@ export class C64Client {
 
   async resume(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      if (!pinnedFacade && await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineResumeUpdate(":resume");
-        return { success: true, details: res.data };
-      }
       const facade = pinnedFacade ?? await this.facadePromise; return await facade.resume();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
@@ -1246,10 +1231,6 @@ export class C64Client {
 
   async menuButton(): Promise<RunBasicResult> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineMenuButtonUpdate(":menu_button");
-        return { success: true, details: res.data };
-      }
       const facade = await this.facadePromise; return await facade.menuButton();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
@@ -1271,20 +1252,12 @@ export class C64Client {
 
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineDebugregList(":debugreg");
-        return { success: true, value: (res.data as any).value, details: res.data };
-      }
       const facade = await this.facadePromise; return await facade.debugregRead();
     } catch (error) { return { success: false, details: this.normaliseError(error) } as any; }
   }
 
   async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value });
-        return { success: true, value: (res.data as any).value, details: res.data };
-      }
       const facade = await this.facadePromise; return await facade.debugregWrite(value);
     } catch (error) { return { success: false, details: this.normaliseError(error) } as any; }
   }
@@ -1320,10 +1293,6 @@ export class C64Client {
   async driveLoadRom(drive: string, path: string): Promise<RunBasicResult> {
     try {
       if (!drive || !path) throw new Error("Drive and path are required");
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.drivesLoadRomUpdate(drive, ":load_rom", { file: path });
-        return { success: true, details: res.data };
-      }
       const facade = await this.facadePromise;
       const result = await facade.driveLoadRom(drive, path);
       return { success: result.success, details: result.details };
@@ -2505,8 +2474,7 @@ export class C64Client {
       throw new Error("Expected non-empty byte string");
     }
 
-    const withoutPrefix = trimmed.startsWith("$") ? trimmed.slice(1) : trimmed;
-    const cleaned = withoutPrefix.replace(/[\s_]/g, "").toLowerCase();
+    const cleaned = stripHexByteSeparators(trimmed).toLowerCase();
 
     if (cleaned.length === 0) {
       throw new Error("No hexadecimal data provided");
@@ -2781,9 +2749,12 @@ export function buildPrinterBasicProgram(opts: {
       ln += 10;
       continue;
     }
-    const chunks = chunkString(logical, 45);
+    // Chunk by the length of the expression, not the text: CHR$ splicing can make
+    // an expression up to ten times longer, and a BASIC line must stay short
+    // (the ROM's LINKPRG scans each line with an 8-bit index).
+    const chunks = chunkByExpressionLength(logical, (text) => printerTextExpression(text, target, saddr), PRINTER_EXPRESSION_MAX);
     for (let i = 0; i < chunks.length; i += 1) {
-      const chunk = basicStringExpression(chunks[i]);
+      const chunk = printerTextExpression(chunks[i], target, saddr);
       const tail = i < chunks.length - 1 ? ";" : ""; // avoid CR between chunks within the same logical line
       lines.push(`${ln} PRINT#1,${chunk}${tail}`);
       ln += 10;
@@ -2802,21 +2773,50 @@ export function buildPrinterBasicProgram(opts: {
   return lines.join("\n");
 }
 
-function chunkString(input: string, maxLen: number): string[] {
-  if (input.length <= maxLen) return [input];
+/** Longest PRINT#1 expression per BASIC line; keeps each line under the 80-character input limit. */
+const PRINTER_EXPRESSION_MAX = 64;
+
+function chunkByExpressionLength(input: string, expression: (text: string) => string, maxLen: number): string[] {
   const parts: string[] = [];
-  let i = 0;
-  while (i < input.length) {
-    parts.push(input.slice(i, i + maxLen));
-    i += maxLen;
+  let current = "";
+  for (const char of input) {
+    if (current && expression(current + char).length > maxLen) {
+      parts.push(current);
+      current = "";
+    }
+    current += char;
   }
+  if (current) parts.push(current);
   return parts;
 }
 
-function basicStringExpression(input: string): string {
-  // BASIC V2 has no doubled-quote escaping. Splice literal quote characters
-  // through CHR$(34), including leading/trailing/consecutive quote cases.
-  return input.split('"').map((part) => `"${part}"`).join(";CHR$(34);");
+/**
+ * BASIC V2 has no doubled-quote escaping, so quotes are spliced in as CHR$(34).
+ * String literals also store a-z as the PETSCII letters $41-$5A, so printer
+ * text that needs other codes is spliced in with CHR$: an Epson printer takes
+ * ASCII, so lowercase stays $61-$7A; a Commodore printer in lowercase mode
+ * (secondary address 7) prints $41-$5A as lowercase and $C1-$DA as capitals.
+ */
+function printerTextExpression(input: string, target: "commodore" | "epson", secondaryAddress?: number): string {
+  const needsChr = (char: string): number | undefined => {
+    if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
+    if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
+    return undefined;
+  };
+  const pieces: string[] = [];
+  let literal = "";
+  for (const char of input) {
+    const code = char === '"' ? 34 : needsChr(char);
+    if (code === undefined) {
+      literal += char;
+      continue;
+    }
+    if (literal) pieces.push(`"${literal}"`);
+    literal = "";
+    pieces.push(`CHR$(${code})`);
+  }
+  if (literal || pieces.length === 0) pieces.push(`"${literal}"`);
+  return pieces.join(";");
 }
 
 export function buildCommodoreBitmapBasicProgram(opts: {

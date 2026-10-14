@@ -701,16 +701,15 @@ function formatAddress(value: number): string {
 
 function parseAddress(value: string, label: string): number {
   const trimmed = value.trim();
-  let radix = 10;
-  let literal = trimmed;
-  if (trimmed.startsWith("$")) {
-    radix = 16;
-    literal = trimmed.slice(1);
-  } else if (trimmed.toLowerCase().startsWith("0x")) {
-    radix = 16;
-    literal = trimmed.slice(2);
+  // Anchored patterns: Number.parseInt alone would read "$08G0" as $0008.
+  let parsed = Number.NaN;
+  if (/^\$[0-9a-f]+$/i.test(trimmed)) {
+    parsed = Number.parseInt(trimmed.slice(1), 16);
+  } else if (/^0x[0-9a-f]+$/i.test(trimmed)) {
+    parsed = Number.parseInt(trimmed.slice(2), 16);
+  } else if (/^[0-9]+$/.test(trimmed)) {
+    parsed = Number.parseInt(trimmed, 10);
   }
-  const parsed = Number.parseInt(literal, radix);
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
     throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });
   }

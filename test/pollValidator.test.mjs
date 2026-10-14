@@ -181,6 +181,34 @@ test("pollForProgramOutcome BASIC detects TYPE MISMATCH error", async () => {
   assert.equal(result.line, 20);
 });
 
+for (const [errorText, expectedMessage] of [
+  ["?UNDEF'D STATEMENT  ERROR IN 10", "UNDEF'D STATEMENT"],
+  ["?REDIM'D ARRAY  ERROR IN 30", "REDIM'D ARRAY"],
+  ["?CAN'T CONTINUE  ERROR", "CAN'T CONTINUE"],
+  ["?UNDEF'D FUNCTION  ERROR IN 40", "UNDEF'D FUNCTION"],
+]) {
+  test(`pollForProgramOutcome BASIC detects ${expectedMessage} error containing an apostrophe`, async () => {
+    const screens = ["READY.\n", "RUN\n", `RUN\n${errorText}\nREADY.\n`];
+    const client = {
+      async readScreen() {
+        return screens.shift() ?? `RUN\n${errorText}\nREADY.\n`;
+      },
+    };
+
+    const result = await pollForProgramOutcome(
+      "BASIC",
+      client,
+      createLogger(),
+      { maxMs: 200, intervalMs: 20, stabilizeMs: 0 },
+    );
+
+    assert.equal(result.status, "error");
+    assert.equal(result.message, expectedMessage);
+    const lineMatch = /IN (\d+)$/.exec(errorText);
+    assert.equal(result.line, lineMatch ? Number(lineMatch[1]) : undefined);
+  });
+}
+
 test("pollForProgramOutcome ASM detects screen change", async () => {
   let screenCallCount = 0;
   let memoryCallCount = 0;

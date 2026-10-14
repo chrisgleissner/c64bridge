@@ -29,6 +29,8 @@ const DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD = 0.02;
 const DEFAULT_SILENCE_VERIFY_WAIT_MS = 150;
 const generatedPlaybacks = new Set<AbortController>();
 
+let lastGeneratedPlayback: Promise<void> = Promise.resolve();
+
 export function cancelGeneratedSidPlayback(): void {
   for (const controller of generatedPlaybacks) controller.abort();
   generatedPlaybacks.clear();
@@ -353,8 +355,20 @@ function transposeNote(note: string, semitones: number): string {
   return `${names[wrapped]!}${newOctave}`;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(done, ms);
+    function done(): void {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
 }
 
 function shouldAutoAnalyze(request: string): boolean {
@@ -902,8 +916,12 @@ export const audioModule = defineToolModule({
           const controller = new AbortController();
           generatedPlaybacks.add(controller);
           const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined); // Pin once so a later select_backend can't retarget notes mid-arpeggio (HARD01-030).
-          void (async () => {
+          // A replaced sequence sends its final gate-off on voice 1; waiting for it
+          // keeps that gate-off from cutting off this sequence's first note.
+          const previousPlayback = lastGeneratedPlayback;
+          lastGeneratedPlayback = (async () => {
             try {
+              await previousPlayback;
               const pinnedFacade = await pinnedFacadePromise;
               await ctx.client.sidSetVolume(8, pinnedFacade);
               for (let i = 0; i < parsed.steps; i += 1) {
@@ -921,9 +939,13 @@ export const audioModule = defineToolModule({
                   release: 0,
                 }, pinnedFacade);
                 const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                await sleep(Math.max(1, Math.min(20, Math.floor(durationMs / 8)))); // Clear GATE between notes so every note retriggers ADSR.
+                // Hold GATE for most of the note, then clear it for a short gap so the next note retriggers ADSR.
+                const gateGapMs = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
+                // Cancellation ends the sleep at once, so the final gate-off below follows promptly.
+                await sleep(Math.max(0, durationMs - gateGapMs), controller.signal);
+                if (controller.signal.aborted) break;
                 await ctx.client.sidNoteOff(1, pinnedFacade);
-                if (!controller.signal.aborted) await sleep(Math.max(0, durationMs - Math.max(1, Math.min(20, Math.floor(durationMs / 8)))));
+                await sleep(gateGapMs, controller.signal);
               }
               await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {

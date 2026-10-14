@@ -496,6 +496,32 @@ test("C64Client against mock server", async (t) => {
     assert.deepEqual(Array.from(mock.state.lastPrg), Array.from(expectedPrg));
   });
 
+  await t.test("buildPrinterBasicProgram keeps each printer's letter case", () => {
+    // Epson printers take ASCII, so lowercase must not be folded to PETSCII capitals.
+    assert.ok(buildPrinterBasicProgram({ text: "Hi", target: "epson" }).includes('PRINT#1,"H";CHR$(105)'));
+    // Commodore lowercase mode (secondary address 7) prints $C1-$DA as capitals.
+    assert.ok(buildPrinterBasicProgram({ text: "Hi", target: "commodore", secondaryAddress: 7 }).includes('PRINT#1,CHR$(200);"i"'));
+    // Commodore uppercase mode prints PETSCII letters, so the literal is unchanged.
+    assert.ok(buildPrinterBasicProgram({ text: "Hi" }).includes('PRINT#1,"Hi"'));
+    const epsonPrg = basicToPrg(buildPrinterBasicProgram({ text: "Hi", target: "epson" }));
+    // Tokenized as CHR$ ($C7) followed by "(105)".
+    assert.ok(epsonPrg.includes(Buffer.from([0xc7, 0x28, 0x31, 0x30, 0x35])));
+  });
+
+  await t.test("buildPrinterBasicProgram keeps lines short when CHR$ splicing expands the text", () => {
+    const text = "abcdefghijklmnopqrstuvwxyz".repeat(4);
+    for (const opts of [{ text, target: "epson" }, { text: text.toUpperCase(), target: "commodore", secondaryAddress: 7 }]) {
+      const source = buildPrinterBasicProgram(opts);
+      for (const line of source.split("\n")) {
+        assert.ok(line.length <= 80, `line exceeds the BASIC input limit: ${line}`);
+      }
+      // The chunks still print the whole text, joined with ";" so no CR is sent between them.
+      const printed = source.split("\n").filter((line) => line.includes("PRINT#1,")).length;
+      assert.ok(printed > 1);
+      assert.ok(basicToPrg(source).length < 4096);
+    }
+  });
+
   await t.test("HARD01-007 buildPrinterBasicProgram uses CHR$(34) for quotes", () => {
     const src = buildPrinterBasicProgram({ text: 'A"B' });
     assert.ok(src.includes('PRINT#1,"A";CHR$(34);"B"'));
@@ -687,6 +713,17 @@ test("C64Client against mock server", async (t) => {
     assert.equal((hi << 8) | lo, 7493);
   });
 
+  await t.test("sidNoteOn uses the note name when frequencyHz is also given", async () => {
+    const client = new C64Client(mock.baseUrl);
+    await client.sidNoteOn({ voice: 1, note: "A4", frequencyHz: 1000, system: "PAL" });
+    assert.equal(mock.state.lastWrite.address, 0xd400);
+    // A4 = 440 Hz = 7493 on PAL; 1000 Hz would be 17028.
+    assert.equal(mock.state.lastWrite.bytes[0] | (mock.state.lastWrite.bytes[1] << 8), 7493);
+
+    await client.sidNoteOn({ voice: 1, frequencyHz: 1000, system: "PAL" });
+    assert.equal(mock.state.lastWrite.bytes[0] | (mock.state.lastWrite.bytes[1] << 8), 17028);
+  });
+
   await t.test("SID frequency bytes are correct for PAL vs NTSC", async () => {
     const client = new C64Client(mock.baseUrl);
     function expectFreqBytes(hz, system) {
@@ -748,20 +785,30 @@ test("C64Client against mock server", async (t) => {
   await t.test("HARD01-018 uploadAndRunAsm loads the assembled PRG without running it and enters via a typed SYS to the real entry point", async () => {
     const before = mock.state.loadCount;
     // The tool's own published example.
-    const result = await client.uploadAndRunAsm(".org $0801\nstart: lda #$01\n sta $0400\n rts");
+    const result = await client.uploadAndRunAsm("start: lda #$01\n sta $0400\n rts");
     assert.equal(result.success, true);
-    assert.equal(result.details.entryAddress, 0x0801);
+    // Without an origin the code follows a 10 SYS02062 stub at $0801.
+    assert.equal(result.details.entryAddress, 0x080e);
 
     // Loaded (not LOAD+RUN): the firmware :load_prg endpoint was used, not
     // :run_prg, and the code landed at its own address in emulated memory.
     assert.equal(mock.state.loadCount, before + 1);
-    assert.equal(mock.state.memory[0x0801], 0xa9); // LDA #imm opcode
-    assert.equal(mock.state.memory[0x0802], 0x01);
+    assert.equal(mock.state.memory[0x0805], 0x9e); // SYS token in the stub
+    assert.equal(mock.state.memory[0x080e], 0xa9); // LDA #imm opcode
+    assert.equal(mock.state.memory[0x080f], 0x01);
 
     // Entered via a typed SYS to the real entry point, never a bare RUN.
     const sysWrite = mock.state.writeLog.slice().reverse().find((entry) => entry.address === 0x0277);
     assert.ok(sysWrite, "expected a write to the KERNAL keyboard buffer");
-    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2049\r");
+    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2062\r");
+  });
+
+  await t.test("uploadAndRunAsm refuses raw machine code at $0801 that BASIC would relink", async () => {
+    const before = mock.state.loadCount;
+    const result = await client.uploadAndRunAsm(".org $0801\nstart: lda #$01\n sta $0400\n rts");
+    assert.equal(result.success, false);
+    assert.match(result.details.message, /relink/);
+    assert.equal(mock.state.loadCount, before);
   });
 
   await t.test("HARD01-018 uploadAndRunAsm keeps a non-$0801 origin intact instead of corrupting BASIC pointers", async () => {

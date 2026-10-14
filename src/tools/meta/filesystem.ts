@@ -52,6 +52,27 @@ const filesystemStatsArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+/**
+ * Find a drive in drivesList() output. Ultimate firmware lists drives as a/b
+ * with a configurable bus_id, so "drive8" or "8" is matched by bus number.
+ */
+function findListedDrive(drives: any[], drive: string): any {
+  const wanted = drive.trim().toLowerCase();
+  const exact = drives.find((d) => String(d?.id ?? "").toLowerCase() === wanted);
+  if (exact) return exact;
+  // VICE lists drives as driveN; the Ultimate letters a and b default to buses 8 and 9 there.
+  const letterBus = wanted === "a" ? 8 : wanted === "b" ? 9 : undefined;
+  const bus = /^(?:drive)?\s*(\d+)$/.exec(wanted);
+  if (!bus && letterBus === undefined) return undefined;
+  const busId = letterBus ?? Number(bus![1]);
+  if (letterBus !== undefined) {
+    return drives.find((d) => String(d?.id ?? "").toLowerCase() === `drive${busId}`);
+  }
+  const onBus = drives.filter((d) => Number(d?.raw?.bus_id) === busId || String(d?.id ?? "").toLowerCase() === `drive${busId}`);
+  // Prefer the enabled drive; a disabled drive can keep the same bus_id setting.
+  return onBus.find((d) => d?.raw?.enabled !== false) ?? onBus[0];
+}
+
 interface FindRunStateEntry {
   root: string;
   pattern: string;
@@ -688,7 +709,7 @@ export const tools: ToolDefinition[] = [
           if (powerOnIfNeeded) {
             try {
               const drives = await (ctx.client as any).drivesList();
-              const targetDrive = Array.isArray(drives) ? drives.find((d: any) => d.id === drive) : null;
+              const targetDrive = Array.isArray(drives) ? findListedDrive(drives, drive) : null;
               
               if (!targetDrive) {
                 log.push({ step: "check_drive_exists", success: false, error: `Drive ${drive} not found` });
@@ -713,7 +734,17 @@ export const tools: ToolDefinition[] = [
             }
           }
 
-          // Step 2: Mount with retries
+          // Step 2: Switch the drive emulation mode. The mount's own "mode"
+          // option is the read/write attachment mode, not the drive type.
+          if (mode) {
+            const setMode = await (ctx.client as any).driveSetMode(drive, mode);
+            log.push({ step: "set_mode", success: setMode.success === true, details: setMode.details });
+            if (!setMode.success) {
+              throw new ToolExecutionError(`Failed to set drive ${drive} to ${mode} mode`, { details: setMode.details });
+            }
+          }
+
+          // Step 3: Mount with retries
           let mountSuccess = false;
           let lastMountError: unknown = null;
           let attempts = 0;
@@ -721,12 +752,7 @@ export const tools: ToolDefinition[] = [
           for (let attempt = 0; attempt <= maxRetries && !mountSuccess; attempt += 1) {
             attempts = attempt + 1;
             try {
-              const mountOptions: any = {};
-              if (mode) {
-                mountOptions.mode = mode;
-              }
-
-              const mount = await (ctx.client as any).driveMount(drive, imagePath, mountOptions);
+              const mount = await (ctx.client as any).driveMount(drive, imagePath);
               if (mount.success) {
                 mountSuccess = true;
                 log.push({ step: `mount_attempt_${attempts}`, success: true, details: mount.details });
@@ -756,7 +782,7 @@ export const tools: ToolDefinition[] = [
             });
           }
 
-          // Step 3: Reset drive if requested
+          // Step 4: Reset drive if requested
           if (resetAfterMount) {
             try {
               const reset = await (ctx.client as any).driveReset(drive);
@@ -774,12 +800,12 @@ export const tools: ToolDefinition[] = [
             }
           }
 
-          // Step 4: Verify mount
+          // Step 5: Verify mount
           let verificationResult: any = null;
           if (verifyMount) {
             try {
               const drives = await (ctx.client as any).drivesList();
-              const targetDrive = Array.isArray(drives) ? drives.find((d: any) => d.id === drive) : null;
+              const targetDrive = Array.isArray(drives) ? findListedDrive(drives, drive) : null;
               
               if (!targetDrive) {
                 log.push({ step: "verify", success: false, error: "Drive not found in list" });

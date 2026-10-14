@@ -82,16 +82,17 @@ test("C64Client MCP tool coverage", async (t) => {
     expectSuccess(basicResult, "upload_run_basic");
     assert.ok(lastPrg instanceof Uint8Array, "PRG bytes captured");
 
-    const asm = await client.uploadAndRunAsm("*=$0801\nBRK");
+    // No origin: the code follows the assembler's 10 SYS02062 stub.
+    const asm = await client.uploadAndRunAsm("BRK");
     expectSuccess(asm, "upload_run_asm");
     // HARD01-018: the assembled code must be loaded (not LOAD+RUN, which
     // would misinterpret the opcodes as BASIC text) and entered via a typed
     // SYS to the entry point rather than a bare RUN.
     assert.ok(lastLoadedPrg instanceof Uint8Array, "PRG bytes loaded without running");
-    assert.equal(asm.details.entryAddress, 0x0801);
+    assert.equal(asm.details.entryAddress, 0x080e);
     const sysBytes = writes.find((w) => w.address === 0x0277)?.bytes;
     assert.ok(sysBytes, "SYS command written to the KERNAL keyboard buffer");
-    assert.equal(Buffer.from(sysBytes).toString("ascii"), "SYS2049\r");
+    assert.equal(Buffer.from(sysBytes).toString("ascii"), "SYS2062\r");
 
     expectSuccess(await client.loadPrgFile("//disk/demo.prg"), "load_prg");
     expectSuccess(await client.runPrgFile("//disk/demo.prg"), "run_prg");
@@ -379,8 +380,9 @@ test("C64Client MCP tool coverage", async (t) => {
       assert.equal((await mockClient.pause()).success, true);
       assert.equal((await mockClient.resume()).success, true);
       assert.equal((await mockClient.menuButton()).success, true);
-      assert.equal((await mockClient.debugregRead()).value, "EF");
-      assert.equal((await mockClient.debugregWrite("CD")).value, "CD");
+      // C64_TEST_TARGET=mock no longer bypasses the backend facade.
+      assert.equal((await mockClient.debugregRead()).value, "AB");
+      assert.equal((await mockClient.debugregWrite("CD")).value, "AB");
       assert.equal((await mockClient.runPrg(Uint8Array.from([1, 2, 3]))).success, true);
     } finally {
       process.env.C64_TEST_TARGET = previousTarget;

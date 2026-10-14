@@ -739,12 +739,17 @@ test("startViceProcess resumes emulation immediately after the monitor becomes r
       fs.rmSync(trafficFile, { force: true });
     });
 
-    await delay(25);
-    const frames = fs.readFileSync(trafficFile, "utf8")
+    // The fake VICE logs traffic asynchronously, so wait for the resume (0xAA)
+    // frame instead of sleeping a fixed 25 ms, which raced under load.
+    const readFrames = () => (fs.existsSync(trafficFile) ? fs.readFileSync(trafficFile, "utf8") : "")
       .trim()
       .split("\n")
       .filter((line) => line.length > 0);
-    assert.equal(frames.some((line) => line.endsWith("aa")), true);
+    const deadline = Date.now() + 2_000;
+    while (!readFrames().some((line) => line.endsWith("aa")) && Date.now() < deadline) {
+      await delay(10);
+    }
+    assert.equal(readFrames().some((line) => line.endsWith("aa")), true);
   } finally {
     if (previousDisplay === undefined) {
       delete process.env.DISPLAY;

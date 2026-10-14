@@ -48,11 +48,13 @@ test("program runner helper parser extracts unique BASIC runtime errors", () => 
     "?TYPE   MISMATCH ERROR IN 20",
     "?BAD ERROR IN 999999",
     "ERROR IN nope",
+    "?UNDEF'D STATEMENT  ERROR IN 30",
   ].join("\r\n"));
 
   assert.deepEqual(errors, [
     { line: 10, type: "SYNTAX", raw: "?SYNTAX ERROR IN 10" },
     { line: 20, type: "TYPE MISMATCH", raw: "?TYPE   MISMATCH ERROR IN 20" },
+    { line: 30, type: "UNDEF'D STATEMENT", raw: "?UNDEF'D STATEMENT  ERROR IN 30" },
   ]);
 });
 

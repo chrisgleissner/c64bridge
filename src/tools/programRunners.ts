@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
+import { assemblyToPrgDetailed, AssemblyError, prgEntryAddress } from "./translation/assembler.js";
 import { basicToPrg } from "./translation/basicTokenizer.js";
 import {
   defineToolModule,
@@ -121,7 +121,8 @@ function parseBasicRuntimeErrors(screen: string): readonly BasicRuntimeError[] {
     }
     seen.add(lineNumber);
 
-    const typeMatch = /\?([A-Z ?]+?)\s+ERROR\s+IN/i.exec(row.toUpperCase());
+    // The apostrophe covers UNDEF'D STATEMENT, REDIM'D ARRAY and UNDEF'D FUNCTION.
+    const typeMatch = /\?([A-Z' ?]+?)\s+ERROR\s+IN/i.exec(row.toUpperCase());
     const type = typeMatch?.[1]?.trim().replace(/\s+/g, " ") || undefined;
 
     errors.push({
@@ -574,7 +575,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     // Assemble locally to expose structured metadata and capture symbols
     const asmResult = assemblyToPrgDetailed(parsed.program);
     const prg = asmResult.prg;
-    const entryAddress = prg.readUInt16LE(0);
+    const entryAddress = prgEntryAddress(prg);
     if (ctx.platform.id === "vice") {
       setViceSymbols(asmResult.symbols.entries());
     }
@@ -834,7 +835,7 @@ export const programRunnersModule = defineToolModule({
         {
           name: "Set screen char",
           description: "Write 1 to $0400 then RTS",
-          arguments: { program: ".org $0801\nstart: lda #$01\n sta $0400\n rts" },
+          arguments: { program: "start: lda #$01\n sta $0400\n rts" },
         },
       ],
       workflowHints: [

@@ -84,6 +84,40 @@ test("background tasks persist and complete iterations", async () => {
   }
 });
 
+test("background tasks reject names that would escape the task folder", async () => {
+  const { file, dir } = tmpPath("background-traversal", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    const ctx = { client: {}, logger: createLogger() };
+    for (const name of ["x/../../../../escaped", "..", "../escaped", "a\\b", ".hidden", " leading-space"]) {
+      const res = await metaModule.invoke("start_background_task", { name, operation: "unknown_op", intervalMs: 5, maxIterations: 1 }, ctx);
+      assert.equal(res.isError, true, `name ${JSON.stringify(name)} was accepted`);
+      assert.equal(res.metadata?.error?.path, "$.name");
+    }
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
+
+test("background task names may contain spaces", async () => {
+  const { file, dir } = tmpPath("background-spaces", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    const ctx = { client: {}, logger: createLogger() };
+    const res = await metaModule.invoke("start_background_task", { name: "screen poll", operation: "unknown_op", intervalMs: 5, maxIterations: 1 }, ctx);
+    assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
+    await waitForTaskCompletion(metaModule, "screen poll", ctx);
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
+
 test("background tasks handle unknown operation and stop all", async () => {
   const { file, dir } = tmpPath("background2", "tasks.json");
   await fs.mkdir(dir, { recursive: true });
@@ -271,7 +305,8 @@ test("background tasks stop active timers and support write_memory alias default
     const started = await metaModule.invoke("start_background_task", {
       name: "alias-writer",
       operation: "write_memory",
-      intervalMs: 100,
+      // Long enough that the stop below always lands before the first run, even under load.
+      intervalMs: 10_000,
       maxIterations: 5,
     }, ctx);
     assert.equal(started.metadata?.success, true);

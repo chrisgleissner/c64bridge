@@ -271,7 +271,9 @@ export class ViceClient {
     body[5] = 0; // comp space
     body.writeUInt16LE(0, 6); // bank
     const frame = await this.send(0x01, body);
-    const len = frame.readUInt16LE(12);
+    // ML is 16 bits wide, so VICE reports a full $0000-$FFFF read as 0; the body length is authoritative.
+    const declared = frame.readUInt16LE(12);
+    const len = Math.min(frame.length - 14, declared === 0 ? 0x10000 : declared);
     return frame.subarray(14, 14 + len);
   }
 
@@ -296,7 +298,7 @@ export class ViceClient {
   /** Set the VICE joyport's active-low control byte (BM command 0xA2). */
   async joyportSet(port: 1 | 2, activeLowMask: number): Promise<void> {
     const body = Buffer.alloc(4);
-    body.writeUInt16LE(port, 0);
+    body.writeUInt16LE(port - 1, 0); // VICE joyports are 0-based (JOYPORT_1 = 0, JOYPORT_2 = 1).
     body.writeUInt16LE(activeLowMask & 0xff, 2);
     await this.send(0xA2, body);
   }
@@ -573,12 +575,20 @@ export class ViceClient {
     const innerWidth = body.readUInt16LE(12);
     const innerHeight = body.readUInt16LE(14);
     const bitsPerPixel = body[16] ?? 8;
-    const pixelLength = body.readUInt32LE(17);
-    const pixelStart = 4 + infoLength;
-    if (pixelStart + pixelLength > body.length) {
+    // FL counts only the DW..BP fields; the 4-byte BL field sits between them and the pixels.
+    const pixelLengthOffset = 4 + infoLength;
+    if (body.length < pixelLengthOffset + 4) {
+      throw new Error("Display response length mismatch");
+    }
+    const pixelLength = body.readUInt32LE(pixelLengthOffset);
+    const pixelStart = pixelLengthOffset + 4;
+    const received = body.length - pixelStart;
+    // VICE 3.9/3.10 size the body as 4 + FL + BL, omitting the last 4 pixel bytes; zero-fill only that gap.
+    if (received < pixelLength - 4) {
       throw new Error("Display pixel buffer truncated");
     }
-    const pixels = Buffer.from(body.subarray(pixelStart, pixelStart + pixelLength));
+    const pixels = Buffer.alloc(pixelLength);
+    body.copy(pixels, 0, pixelStart, pixelStart + Math.min(received, pixelLength));
     return {
       debugWidth,
       debugHeight,

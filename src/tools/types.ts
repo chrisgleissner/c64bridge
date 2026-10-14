@@ -256,7 +256,8 @@ export function createOperationDispatcher<TMap extends OperationMap>(
     }
 
     const opKey = opValue as keyof TMap & string;
-    const handler = handlers[opKey];
+    // Own properties only: "constructor", "toString", etc. must not resolve to Object.prototype members.
+    const handler = hasOwnKey(handlers, opKey) ? handlers[opKey] : undefined;
 
     if (!handler) {
       throw new ToolValidationError(
@@ -419,7 +420,7 @@ function resolveSupportedPlatforms(
     return basePlatforms;
   }
 
-  const operationPlatforms = tool.operationPlatforms?.[operation];
+  const operationPlatforms = ownValue(tool.operationPlatforms, operation);
   return operationPlatforms && operationPlatforms.length > 0 ? operationPlatforms : basePlatforms;
 }
 
@@ -433,12 +434,20 @@ function resolveUnsupportedToolName(
     return toolName;
   }
 
-  const mappedName = tool.operationToolNames?.[operation];
+  const mappedName = ownValue(tool.operationToolNames, operation);
   if (mappedName) {
     return mappedName;
   }
 
-  return tool.operationPlatforms?.[operation] ? operation : toolName;
+  return ownValue(tool.operationPlatforms, operation) ? operation : toolName;
+}
+
+function hasOwnKey(record: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function ownValue<T>(record: Record<string, T> | undefined, key: string): T | undefined {
+  return record && hasOwnKey(record, key) ? record[key] : undefined;
 }
 
 function getSelectedOperation(args: unknown): string | undefined {

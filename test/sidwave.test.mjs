@@ -1,7 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { compileSidwaveToPrg, compileSidwaveToSid, hzToSidFrequency } from "../src/sidwaveCompiler.js";
-import { parseSidwave } from "../src/sidwave.js";
+import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
 import { runSidToWav, SidplayExecutionError } from "../src/sidplayRunner.js";
 import os from "node:os";
 import fs from "node:fs";
@@ -59,6 +59,56 @@ test("SIDWAVE: compile to PRG and SID", () => {
   assert.ok(sid instanceof Buffer);
   assert.equal(sid.toString("ascii", 0, 4), "PSID");
   assert.ok(sid.length >= 124 + 2, `Unexpected SID length: ${sid.length}`);
+});
+
+// The player PRG ends with seven 1-byte tables per voice (freq lo/hi, pw lo/hi, ctrl, ad, sr), each one entry per frame.
+function readFreqFrames(prg, frames) {
+  const body = prg.subarray(2);
+  const tableStart = body.length - (21 * frames);
+  assert.ok(tableStart > 0, `PRG body (${body.length} bytes) is too short for ${frames}-frame tables`);
+  return [0, 1, 2].map((voice) => {
+    const lo = tableStart + (voice * 7 * frames);
+    const hi = lo + frames;
+    return Array.from({ length: frames }, (_, frame) => (body[hi + frame] << 8) | body[lo + frame]);
+  });
+}
+
+function sidFreq(note) {
+  return hzToSidFrequency(midiToHz(noteNameToMidi(note)), "PAL");
+}
+
+test("SIDWAVE: top-level format infers bar count from the timeline and compiles note data", () => {
+  const doc = parseSidwave(EXAMPLE);
+  assert.equal(doc.song.length_bars, 8);
+  assert.equal(doc.song.tempo, 92);
+
+  // 8 bars at 92 BPM exceed the 255-frame table cap.
+  const [v1, v2, v3] = readFreqFrames(compileSidwaveToPrg(doc).prg, 255);
+  assert.ok(v1.includes(sidFreq("E3")), "voice 1 frames should contain the arpeggio note E3");
+  assert.ok(v2.includes(sidFreq("C2")), "voice 2 frames should contain the groove note C2");
+  assert.ok(v3.includes(sidFreq("C1")), "voice 3 frames should contain the groove note C1");
+});
+
+test("SIDWAVE: an explicit top-level length_bars is honoured", () => {
+  const doc = parseSidwave(EXAMPLE.replace("tempo: 92", "tempo: 92\nlength_bars: 3"));
+  assert.equal(doc.song.length_bars, 3);
+});
+
+test("SIDWAVE: arpeggio, groove and motif patterns start on their first step", () => {
+  // 120 BPM PAL: 25 frames per beat.
+  const doc = parseSidwave({
+    song: { title: "Order", tempo: 120, mode: "PAL" },
+    voices: [
+      { id: 1, waveform: "triangle", patterns: { A: { type: "arpeggio", notes: ["C4", "E4", "G4"] } } },
+      { id: 2, waveform: "triangle", patterns: { B: { groove: ["C3", "G3"] } } },
+      { id: 3, waveform: "triangle", patterns: { M: { motif: "0 4 7", length: 1 } } },
+    ],
+    timeline: [{ section: "S", bars: 2, layers: { v1: "A", v2: "B", v3: "M" } }],
+  });
+  const [v1, v2, v3] = readFreqFrames(compileSidwaveToPrg(doc).prg, 255);
+  assert.deepEqual([v1[0], v1[24], v1[25], v1[50], v1[75]], ["C4", "C4", "E4", "G4", "C4"].map(sidFreq));
+  assert.deepEqual([v2[0], v2[24], v2[25], v2[50]], ["C3", "C3", "G3", "C3"].map(sidFreq));
+  assert.deepEqual([v3[0], v3[25], v3[50], v3[75]], ["C3", "E3", "G3", "C3"].map(sidFreq));
 });
 
 function parseWavPcm16(buffer) {

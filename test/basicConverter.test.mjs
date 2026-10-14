@@ -54,11 +54,63 @@ test("basicToPrg respects strings and remarks", () => {
   assert.ok(!bytesAfterRem.includes(0x99), "Tokens must not appear after REM");
 });
 
-test("encodeStringWithNames maps {heart} to a PETSCII byte", () => {
+test("encodeStringWithNames maps {heart} to the PETSCII heart glyph", () => {
   const bytes = encodeStringWithNames("A{heart}B");
-  // Expect three bytes: 'A', heart, 'B'
-  assert.equal(bytes.length, 3);
-  // Middle byte should be a non-ASCII graphic; ensure it's not 'A' or 'B'
-  assert.notEqual(bytes[1], "A".charCodeAt(0));
-  assert.notEqual(bytes[1], "B".charCodeAt(0));
+  // PETSCII $73 (shifted S) is the heart; $51 would print the letter Q.
+  assert.deepEqual(Array.from(bytes), [0x41, 0x73, 0x42]);
+});
+
+function lineBodies(prg) {
+  // Walk the linked line list and return [lineNumber, bodyBytes] pairs.
+  const loadAddress = prg.readUInt16LE(0);
+  const lines = [];
+  let offset = 2;
+  while (prg.readUInt16LE(offset) !== 0) {
+    const next = prg.readUInt16LE(offset) - loadAddress + 2;
+    lines.push([prg.readUInt16LE(offset + 2), Array.from(prg.subarray(offset + 4, next - 1))]);
+    offset = next;
+  }
+  return lines;
+}
+
+const ascii = (text) => Array.from(text, (ch) => ch.charCodeAt(0));
+
+test("basicToPrg copies DATA items literally until the end of the statement", () => {
+  const prg = basicToPrg(`10 DATA STOP,TO,ON:PRINT "A:B"\n20 DATA "X:Y",GOTO:GOTO 10\n`);
+  const [[, first], [, second]] = lineBodies(prg);
+  // Keywords inside DATA stay as text; the statement after ':' is tokenised again.
+  assert.deepEqual(first, [0x83, ...ascii(" STOP,TO,ON:"), 0x99, ...ascii(' "A:B"')]);
+  // A ':' inside a quoted DATA item does not end the DATA statement.
+  assert.deepEqual(second, [0x83, ...ascii(' "X:Y",GOTO:'), 0x89, ...ascii(" 10")]);
+});
+
+test("basicToPrg converts ? to PRINT outside strings, REM, and DATA", () => {
+  const prg = basicToPrg(`10 ?"A?":? 1\n20 REM ?\n30 DATA ?\n`);
+  const lines = lineBodies(prg);
+  assert.deepEqual(lines[0][1], [0x99, ...ascii('"A?":'), 0x99, ...ascii(" 1")]);
+  assert.deepEqual(lines[1][1], [0x8f, ...ascii(" ?")]);
+  assert.deepEqual(lines[2][1], [0x83, ...ascii(" ?")]);
+});
+
+test("basicToPrg sorts lines and lets a later duplicate replace or delete a line", () => {
+  const prg = basicToPrg(`30 END\n10 PRINT\n20 GOTO 10\n10 STOP\n20\n`);
+  const lines = lineBodies(prg);
+  assert.deepEqual(lines, [
+    [10, [0x90]],
+    [30, [0x80]],
+  ]);
+  // Line links must point at the next line in sorted order.
+  assert.equal(prg.readUInt16LE(2), 0x0801 + 4 + 1 + 1);
+});
+
+test("basicToPrg rejects line numbers above 63999", () => {
+  assert.doesNotThrow(() => basicToPrg("63999 END"));
+  assert.throws(() => basicToPrg("64000 END"), /63999/);
+});
+
+test("basicToPrg stores lowercase string text as PETSCII letters but keeps named codes", () => {
+  const prg = basicToPrg(`10 PRINT "Hello{heart}"\n`);
+  const body = [...prg.subarray(6, prg.length - 3)];
+  // PRINT token, quote, HELLO as $48 $45 $4C $4C $4F, heart $73, quote.
+  assert.deepEqual(body, [0x99, 0x20, 0x22, 0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x73, 0x22]);
 });

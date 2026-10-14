@@ -416,6 +416,79 @@ test("drive_mount_and_verify mounts image successfully with defaults", async () 
   assert.equal(data?.verification.imageMatches, true);
 });
 
+test("drive_mount_and_verify sets the drive mode instead of passing it as the mount mode", async () => {
+  const calls = [];
+  const ctx = {
+    client: {
+      async drivesList() {
+        return [{ id: "drive8", power: "on", image: "/media/work.d81" }];
+      },
+      async driveSetMode(drive, mode) {
+        calls.push({ op: "set_mode", drive, mode });
+        return { success: true, details: { drive, mode } };
+      },
+      async driveMount(drive, image, opts) {
+        calls.push({ op: "mount", drive, image, opts });
+        return { success: true, details: { drive, image } };
+      },
+      async driveReset(drive) {
+        calls.push({ op: "reset", drive });
+        return { success: true, details: { drive } };
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("drive_mount_and_verify", {
+    drive: "drive8",
+    imagePath: "/media/work.d81",
+    mode: "1581",
+  }, ctx);
+
+  assert.equal(res.metadata?.success, true);
+  assert.deepEqual(calls.map((call) => call.op), ["set_mode", "mount", "reset"]);
+  assert.deepEqual(calls[0], { op: "set_mode", drive: "drive8", mode: "1581" });
+  assert.equal(calls[1].opts?.mode, undefined);
+});
+
+test("drive_mount_and_verify finds drive8 in an Ultimate listing that names drives a and b", async () => {
+  const calls = [];
+  // drivesList() shape on the Ultimate 64: firmware ids with the bus number in raw.bus_id.
+  // A disabled drive x on bus 8 first in the list must not be picked over the enabled drive a.
+  const listing = (image) => [
+    { id: "x", power: "off", image: null, type: "1541", raw: { enabled: false, bus_id: 8 } },
+    { id: "a", power: "on", image, type: "1541", raw: { enabled: true, bus_id: 8 } },
+    { id: "b", power: "on", image: null, type: "1571", raw: { enabled: true, bus_id: 9 } },
+  ];
+  let listCalls = 0;
+  const ctx = {
+    client: {
+      async drivesList() {
+        listCalls += 1;
+        return listing(listCalls === 1 ? null : "/Usb0/games/test.d64");
+      },
+      async driveMount(drive, image) {
+        calls.push({ op: "mount", drive, image });
+        return { success: true, details: {} };
+      },
+      async driveReset(drive) {
+        calls.push({ op: "reset", drive });
+        return { success: true, details: {} };
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("drive_mount_and_verify", {
+    drive: "drive8",
+    imagePath: "/Usb0/games/test.d64",
+  }, ctx);
+
+  assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
+  assert.equal(res.structuredContent?.data?.verification?.drive, "a");
+  assert.equal(res.structuredContent?.data?.verification?.imageMatches, true);
+});
+
 test("drive_mount_and_verify retries on mount failure", async () => {
   let mountAttempts = 0;
 

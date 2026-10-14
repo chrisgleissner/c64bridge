@@ -64,6 +64,7 @@ export interface SidwaveDocument {
   author?: string;
   tempo?: number;
   mode?: SystemMode;
+  length_bars?: number;
   global_fx?: Record<string, unknown>;
   voices?: SidwaveVoice[];
   timeline?: SidwaveTimelineSection[];
@@ -93,7 +94,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   const legacy = !!obj.song;
   const header: SidwaveSongMeta = legacy
     ? { title: obj.song?.title, tempo: obj.song?.tempo, mode: obj.song?.mode, length_bars: obj.song?.length_bars, global_fx: obj.song?.global_fx }
-    : { title: obj.title, author: obj.author, tempo: obj.tempo, mode: obj.mode, length_bars: obj as any, global_fx: obj.global_fx } as any;
+    : { title: obj.title, author: obj.author, tempo: obj.tempo, mode: obj.mode, length_bars: obj.length_bars, global_fx: obj.global_fx };
 
   const title = header.title ?? "Untitled";
   const tempo = normalizeTempo(header.tempo);

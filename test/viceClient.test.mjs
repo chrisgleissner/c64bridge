@@ -2,6 +2,7 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import net from "node:net";
 import { ViceClient } from "../src/vice/viceClient.js";
+import { startViceMockServer } from "../src/vice/mockServer.js";
 
 test("ViceClient normalizes string and typed-array data chunks", () => {
   const client = new ViceClient();
@@ -177,9 +178,11 @@ test("HARD01-014 joyportSet sends BM command 0xA2 with port and active-low value
   await client.joyportSet(1, 0xFF); // port 1, released
 
   assert.deepEqual(requests.map((r) => r.cmd), [0xA2, 0xA2]);
-  assert.equal(requests[0].body.readUInt16LE(0), 2);
+  // VICE numbers joyports from 0 (joyport.h: JOYPORT_1 = 0, JOYPORT_2 = 1), so
+  // control port 2 is sent as 1 and control port 1 as 0.
+  assert.equal(requests[0].body.readUInt16LE(0), 1);
   assert.equal(requests[0].body.readUInt16LE(2), 0xF7);
-  assert.equal(requests[1].body.readUInt16LE(0), 1);
+  assert.equal(requests[1].body.readUInt16LE(0), 0);
   assert.equal(requests[1].body.readUInt16LE(2), 0xFF);
 });
 
@@ -390,4 +393,126 @@ test("ViceClient skips the reserved 0xFFFFFFFF reqId on wraparound instead of co
   // marker; it wraps to 0 instead, and the following request picks up at 1.
   assert.equal(requests[0].reqId, 0x00000000);
   assert.equal(requests[1].reqId, 0x00000001);
+});
+
+async function startRawViceServer(t, respond) {
+  const server = net.createServer((socket) => {
+    let buffer = Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 11) {
+        const bodyLen = buffer.readUInt32LE(2);
+        const total = 11 + bodyLen;
+        if (buffer.length < total) return;
+        const request = parseRequest(buffer.subarray(0, total));
+        buffer = buffer.subarray(total);
+        socket.write(buildResponse(request.reqId, request.cmd, respond(request)));
+      }
+    });
+  });
+  t.after(async () => { await closeServer(server); });
+  const port = await listen(server);
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(port);
+  return client;
+}
+
+test("memGet returns all 65536 bytes for a full $0000-$FFFF read whose 16-bit ML field wraps to 0", async (t) => {
+  const memory = Buffer.alloc(0x10000);
+  for (let i = 0; i < memory.length; i += 1) memory[i] = (i * 7) & 0xff;
+  const client = await startRawViceServer(t, (request) => {
+    const start = request.body.readUInt16LE(1);
+    const end = request.body.readUInt16LE(3);
+    const length = end - start + 1;
+    const body = Buffer.alloc(2 + length);
+    // VICE writes the uint32 length with write_uint16, so 65536 is sent as 0.
+    body.writeUInt16LE(length & 0xffff, 0);
+    memory.copy(body, 2, start, end + 1);
+    return body;
+  });
+
+  const full = await client.memGet(0x0000, 0xffff);
+  assert.equal(full.length, 0x10000);
+  assert.ok(full.equals(memory));
+
+  const partial = await client.memGet(0x1000, 0x1003);
+  assert.deepEqual(Array.from(partial), Array.from(memory.subarray(0x1000, 0x1004)));
+});
+
+test("memGet reads the full 64 KB address space from the VICE mock server", async (t) => {
+  const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => { await server.stop(); });
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(server.port);
+
+  await client.memSet(0xfffe, Buffer.from([0x12, 0x34]));
+  const full = await client.memGet(0x0000, 0xffff);
+  assert.equal(full.length, 0x10000);
+  assert.equal(full[0xfffe], 0x12);
+  assert.equal(full[0xffff], 0x34);
+});
+
+function encodeRealViceDisplay(width, height, pixels) {
+  // Layout produced by monitor_binary_process_display_get in VICE 3.9/3.10:
+  // FL (=13) counts only the DW..BP fields, BL follows them, and the response
+  // body is sized as 4 + FL + BL, so the last 4 pixel bytes are never sent.
+  const body = Buffer.alloc(4 + 13 + 4 + pixels.length);
+  body.writeUInt32LE(13, 0);
+  body.writeUInt16LE(width, 4);
+  body.writeUInt16LE(height, 6);
+  body.writeUInt16LE(1, 8);
+  body.writeUInt16LE(1, 10);
+  body.writeUInt16LE(width - 2, 12);
+  body.writeUInt16LE(height - 2, 14);
+  body[16] = 8;
+  body.writeUInt32LE(pixels.length, 17);
+  pixels.copy(body, 21);
+  return body.subarray(0, 4 + 13 + pixels.length);
+}
+
+test("displayGet reads pixels after the BL field and tolerates the 4-byte short VICE display response", async (t) => {
+  const width = 8;
+  const height = 6;
+  const pixels = Buffer.alloc(width * height);
+  for (let i = 0; i < pixels.length; i += 1) pixels[i] = 0x10 + i;
+  const client = await startRawViceServer(t, () => encodeRealViceDisplay(width, height, pixels));
+
+  const display = await client.displayGet();
+  assert.equal(display.debugWidth, width);
+  assert.equal(display.debugHeight, height);
+  assert.equal(display.innerWidth, width - 2);
+  assert.equal(display.bitsPerPixel, 8);
+  // The buffer keeps the declared BL length so callers can still index rows;
+  // only the 4 bytes VICE never sends are zero-filled.
+  assert.equal(display.pixels.length, pixels.length);
+  assert.deepEqual(
+    Array.from(display.pixels.subarray(0, pixels.length - 4)),
+    Array.from(pixels.subarray(0, pixels.length - 4)),
+  );
+  assert.deepEqual(Array.from(display.pixels.subarray(pixels.length - 4)), [0, 0, 0, 0]);
+});
+
+test("displayGet rejects a display response missing more than the 4 bytes VICE omits", async (t) => {
+  const pixels = Buffer.alloc(48, 0x05);
+  const client = await startRawViceServer(t, () => encodeRealViceDisplay(8, 6, pixels).subarray(0, 4 + 13 + 40));
+  await assert.rejects(() => client.displayGet(), /truncated/);
+});
+
+test("displayGet decodes the VICE mock server display with the real VICE layout", async (t) => {
+  const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => { await server.stop(); });
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(server.port);
+
+  const display = await client.displayGet();
+  assert.equal(display.pixels.length, 64);
+  // The mock fills pixel i with i & 0x0f; the first byte must be pixel 0, not
+  // the low byte of the BL field.
+  assert.deepEqual(
+    Array.from(display.pixels.subarray(0, 60)),
+    Array.from({ length: 60 }, (_, i) => i & 0x0f),
+  );
 });

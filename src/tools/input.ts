@@ -93,24 +93,30 @@ const PETSCII_TOKENS: Readonly<Record<string, number>> = {
   CURSOR_RIGHT: 29,
 };
 
+// ASCII a-z are shifted graphics characters in PETSCII, so typed "print" would
+// reach BASIC as graphics and give ?SYNTAX ERROR. Literal letters are therefore
+// sent as the unshifted PETSCII letters $41-$5A; {tokens} keep their codes.
 function expandPetsciiTokens(text: string): string {
-  return text.replace(/\{([^}]+)\}/g, (_match, token: string) => {
+  return text.replace(/\{([^}]+)\}|[a-z]/g, (_match, token: string | undefined) => {
+    if (token === undefined) {
+      return _match.toUpperCase();
+    }
     const upper = token.trim().toUpperCase();
     const code = PETSCII_TOKENS[upper];
     if (code !== undefined) {
       return String.fromCharCode(code);
     }
-    // Numeric form: {$1D} or {29}
-    let num: number;
-    if (upper.startsWith("$")) {
+    // Numeric form: {$1D} or {29}. Anchored, so {12AB} is not read as {12}.
+    let num = NaN;
+    if (/^\$[0-9A-F]{1,2}$/.test(upper)) {
       num = parseInt(upper.slice(1), 16);
-    } else {
+    } else if (/^\d{1,3}$/.test(upper)) {
       num = parseInt(upper, 10);
     }
     if (!isNaN(num) && num >= 0 && num <= 255) {
       return String.fromCharCode(num);
     }
-    return _match; // leave unrecognised tokens as-is
+    return _match.toUpperCase(); // type unrecognised tokens literally
   });
 }
 
@@ -323,7 +329,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const keyByte = tokenCode !== undefined
         ? tokenCode
         : parsed.key.length === 1
-          ? parsed.key.charCodeAt(0) & 0xff
+          ? parsed.key.toUpperCase().charCodeAt(0) & 0xff
           : (() => {
               throw new ToolValidationError(`Unrecognised key: ${parsed.key}. Use a single character or a PETSCII token name.`, { path: "$.key" });
             })();
