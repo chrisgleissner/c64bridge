@@ -377,16 +377,18 @@ class C64uBackend implements C64Facade {
     const match = /^(?:drive)?\s*(\d+)$/.exec(lower);
     if (!match) return drive;
     const busId = Number(match[1]);
-    let listed: Array<{ id: string; busId: number }> = [];
+    let listed: Array<{ id: string; busId: number; enabled: boolean }> = [];
     try {
       listed = (await this.driveEntries()).flatMap(([id, info]) => {
         const listedBusId = Number(info?.bus_id);
-        return (id === "a" || id === "b") && Number.isInteger(listedBusId) ? [{ id, busId: listedBusId }] : [];
+        return (id === "a" || id === "b") && Number.isInteger(listedBusId) ? [{ id, busId: listedBusId, enabled: info?.enabled !== false }] : [];
       });
     } catch {
       listed = [];
     }
-    const resolved = listed.length > 0 ? listed.find((entry) => entry.busId === busId)?.id : DEFAULT_DRIVE_BY_BUS_ID[busId];
+    // A disabled drive keeps its bus_id setting, so prefer the enabled drive the C64 actually sees on that bus.
+    const onBus = listed.filter((entry) => entry.busId === busId);
+    const resolved = listed.length > 0 ? (onBus.find((entry) => entry.enabled) ?? onBus[0])?.id : DEFAULT_DRIVE_BY_BUS_ID[busId];
     if (!resolved) {
       const known = listed.length > 0 ? listed.map((entry) => `${entry.id}=${entry.busId}`).join(", ") : "a=8, b=9";
       throw new Error(`No drive found for '${drive}' (bus IDs: ${known})`);

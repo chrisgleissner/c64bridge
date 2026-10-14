@@ -68,7 +68,9 @@ function findListedDrive(drives: any[], drive: string): any {
   if (letterBus !== undefined) {
     return drives.find((d) => String(d?.id ?? "").toLowerCase() === `drive${busId}`);
   }
-  return drives.find((d) => Number(d?.raw?.bus_id) === busId || String(d?.id ?? "").toLowerCase() === `drive${busId}`);
+  const onBus = drives.filter((d) => Number(d?.raw?.bus_id) === busId || String(d?.id ?? "").toLowerCase() === `drive${busId}`);
+  // Prefer the enabled drive; a disabled drive can keep the same bus_id setting.
+  return onBus.find((d) => d?.raw?.enabled !== false) ?? onBus[0];
 }
 
 interface FindRunStateEntry {

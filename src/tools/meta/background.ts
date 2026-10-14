@@ -283,9 +283,9 @@ const startBackgroundTaskArgsSchema = objectSchema({
   properties: {
     // The name becomes part of the task folder path, so it must be a single safe path segment.
     name: stringSchema({
-      description: "Unique task name (letters, digits, '_', '-', '.'; must not start with '.').",
+      description: "Unique task name (letters, digits, spaces, '_', '-', '.'; must not start with '.' or a space).",
       minLength: 1,
-      pattern: /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/,
+      pattern: /^[A-Za-z0-9_][A-Za-z0-9_. -]*$/,
     }),
     operation: stringSchema({ description: "Operation name (e.g., read, read_screen)", minLength: 1 }),
     arguments: optionalSchema(objectSchema({ description: "Operation-specific arguments", properties: {}, additionalProperties: true }), {} as any),

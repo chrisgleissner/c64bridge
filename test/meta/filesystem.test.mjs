@@ -454,7 +454,9 @@ test("drive_mount_and_verify sets the drive mode instead of passing it as the mo
 test("drive_mount_and_verify finds drive8 in an Ultimate listing that names drives a and b", async () => {
   const calls = [];
   // drivesList() shape on the Ultimate 64: firmware ids with the bus number in raw.bus_id.
+  // A disabled drive x on bus 8 first in the list must not be picked over the enabled drive a.
   const listing = (image) => [
+    { id: "x", power: "off", image: null, type: "1541", raw: { enabled: false, bus_id: 8 } },
     { id: "a", power: "on", image, type: "1541", raw: { enabled: true, bus_id: 8 } },
     { id: "b", power: "on", image: null, type: "1571", raw: { enabled: true, bus_id: 9 } },
   ];

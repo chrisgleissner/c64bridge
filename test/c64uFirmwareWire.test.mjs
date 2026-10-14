@@ -190,6 +190,23 @@ test("C64U drive operations map bus-number drive IDs to the firmware drive lette
   assert.equal(driveUrls().length, before, "an unknown bus number must not be sent to the firmware");
 });
 
+test("C64U bus-number drive ids prefer the enabled drive when two drives share a bus", async (t) => {
+  // A disabled drive keeps its bus_id setting; the C64 sees only the enabled one.
+  const server = await startFirmwareWireServer({
+    drivesListing: [
+      { a: { enabled: false, bus_id: 8, type: "1541", rom: "1541.rom", image_file: "", image_path: "" } },
+      { b: { enabled: true, bus_id: 8, type: "1571", rom: "1571.rom", image_file: "", image_path: "" } },
+    ],
+  });
+  t.after(() => server.close());
+  const facade = await facadeFor(server);
+  assert.equal((await facade.driveMount("drive8", "/Usb0/demo.d64")).success, true);
+  assert.deepEqual(
+    server.requests.filter((entry) => entry.url.startsWith("/v1/drives/")).map((entry) => entry.url.split("?")[0]),
+    ["/v1/drives/b:mount"],
+  );
+});
+
 test("C64U drive bus numbers fall back to a=8 and b=9 when the drive listing is unavailable", async (t) => {
   const server = await startFirmwareWireServer({ drivesListing: "fail" });
   t.after(() => server.close());

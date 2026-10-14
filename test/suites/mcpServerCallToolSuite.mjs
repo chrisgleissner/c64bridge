@@ -334,12 +334,10 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         assert.equal(mockServer.state.drives.a.resetCount, 1);
       }
 
-      // C64Client.driveLoadRom's C64_TEST_TARGET=mock shortcut calls the REST
-      // client directly and skips the facade's drive-id resolution, so this
-      // step uses the firmware drive id.
+      // drive8 goes through the facade's bus-number resolution to firmware drive a.
       const { result: romResult } = await callTool(ctx, "c64_drive", {
         op: "load_rom",
-        drive: ctx.platform === "vice" ? "drive8" : "a",
+        drive: "drive8",
         path: "/roms/custom.rom",
       });
 
