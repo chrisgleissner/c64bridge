@@ -15,6 +15,30 @@ import { loadConfig } from "../src/config.js";
 
 const FIRMWARE_DRIVE_IDS = new Set(["a", "b", "softiec"]);
 
+// Byte-exact multipart/form-data parser. Bun's Response.formData() truncates
+// binary file parts at the first zero byte, so it cannot check SID bytes.
+function parseMultipart(request) {
+  const boundary = /boundary=([^;]+)/.exec(String(request.headers["content-type"]))?.[1];
+  assert.ok(boundary, "multipart boundary missing");
+  const delimiter = Buffer.from(`--${boundary}`);
+  const parts = [];
+  let start = request.body.indexOf(delimiter);
+  while (start >= 0) {
+    const next = request.body.indexOf(delimiter, start + delimiter.length);
+    if (next < 0) break;
+    const chunk = request.body.subarray(start + delimiter.length + 2, next - 2); // skip CRLF after the delimiter and before the next
+    const headerEnd = chunk.indexOf("\r\n\r\n");
+    const headers = chunk.subarray(0, headerEnd).toString("latin1");
+    parts.push({
+      name: /name="([^"]*)"/.exec(headers)?.[1],
+      filename: /filename="([^"]*)"/.exec(headers)?.[1],
+      body: chunk.subarray(headerEnd + 4),
+    });
+    start = next;
+  }
+  return parts;
+}
+
 async function startFirmwareWireServer({ drivesListing } = {}) {
   const requests = [];
   const server = http.createServer(async (req, res) => {
@@ -101,21 +125,19 @@ test("sidplayAttachment sends the SID and song-length bytes as multipart file pa
   assert.match(String(request.headers["content-type"]), /^multipart\/form-data; boundary=/);
   assert.equal(request.body.includes(Buffer.from("\"type\":\"Buffer\"")), false, "Buffer must not be JSON-serialised");
 
-  const form = await new Response(request.body, { headers: { "content-type": request.headers["content-type"] } }).formData();
   // OpenAPI SidUpload: repeated `file` part, SID first, optional song lengths second.
-  const parts = form.getAll("file");
+  const parts = parseMultipart(request).filter((part) => part.name === "file");
   assert.equal(parts.length, 2);
-  assert.equal(typeof parts[0], "object", "SID must be a file part, not a text field");
-  assert.deepEqual(Array.from(new Uint8Array(await parts[0].arrayBuffer())), Array.from(sid));
-  assert.deepEqual(Array.from(new Uint8Array(await parts[1].arrayBuffer())), Array.from(songlengths));
+  assert.ok(parts[0].filename, "SID must be a file part, not a text field");
+  assert.deepEqual(Array.from(parts[0].body), Array.from(sid));
+  assert.deepEqual(Array.from(parts[1].body), Array.from(songlengths));
   // The firmware names its temp file after the upload and derives MUS/STR handling from the extension.
-  assert.match(parts[0].name, /\.sid$/i);
-  assert.match(parts[1].name, /\.ssl$/i);
+  assert.match(parts[0].filename, /\.sid$/i);
+  assert.match(parts[1].filename, /\.ssl$/i);
 
   await facade.sidplayAttachment(Uint8Array.from(sid));
   const single = server.requests.filter((entry) => entry.url.startsWith("/v1/runners:sidplay")).at(-1);
-  const singleForm = await new Response(single.body, { headers: { "content-type": single.headers["content-type"] } }).formData();
-  assert.equal(singleForm.getAll("file").length, 1);
+  assert.equal(parseMultipart(single).filter((part) => part.name === "file").length, 1);
   assert.equal(new URL(single.url, "http://x").searchParams.has("songnr"), false);
 });
 
