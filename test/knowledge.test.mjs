@@ -58,3 +58,9 @@ test("knowledge search returns BASIC, ASM, and VIC-II sections", () => {
   assert.ok(vicResults.some((entry) => /Sprite System/i.test(entry.heading)));
   assert.deepEqual(searchVicIISpec("definitely-no-match"), []);
 });
+
+test("resolveAddressSymbol ignores Object.prototype member names", () => {
+  assert.equal(resolveAddressSymbol("constructor"), undefined);
+  assert.equal(resolveAddressSymbol("toString"), undefined);
+  assert.equal(resolveAddressSymbol("__proto__"), undefined);
+});

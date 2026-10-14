@@ -182,7 +182,8 @@ export function listNamedPetscii(): Array<{ name: string; code: number; hex: str
 
 export function lookupNamedPetscii(name: string): number | undefined {
   const key = name.trim().toLowerCase().replace(/\s+/g, "_");
-  return NAMED_CHARS[key];
+  // Own keys only, so names like "constructor" don't resolve to Object.prototype members.
+  return Object.prototype.hasOwnProperty.call(NAMED_CHARS, key) ? NAMED_CHARS[key] : undefined;
 }
 
 /**

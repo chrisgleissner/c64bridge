@@ -67,3 +67,10 @@ test("screenCodesToAscii does not decode block graphics $60-$7F and $E0-$FF as l
     }
   }
 });
+
+test("named PETSCII lookup ignores Object.prototype member names", () => {
+  assert.equal(lookupNamedPetscii("constructor"), undefined);
+  assert.equal(lookupNamedPetscii("toString"), undefined);
+  // An unknown name stays literal text instead of becoming byte 0.
+  assert.equal(Buffer.from(encodeStringWithNames("{constructor}")).toString("latin1"), "{constructor}");
+});
