@@ -201,6 +201,26 @@ LOOP    STA $D020
       assert.equal(asmRefs[0].uri, 'https://repo.local/asm/external.asm');
       assert.match(asmRefs[0].snippet, /LDX #\$00/);
     });
+    await t.test('excludes internal review and plan documents under doc/', async () => {
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+      await buildAllIndexes({
+        ...buildOptions,
+        docFiles: [
+          path.join(repoRoot, 'doc', 'reviews', 'vice-support-review.md'),
+          path.join(repoRoot, 'doc', 'developer.md'),
+        ],
+      });
+      const docIndexes = await loadIndexes({ embeddingsDir });
+      const origins = [
+        ...(docIndexes.basic?.records ?? []),
+        ...(docIndexes.asm?.records ?? []),
+        ...(docIndexes.mixed?.records ?? []),
+        ...(docIndexes.hardware?.records ?? []),
+        ...(docIndexes.other?.records ?? []),
+      ].map((record) => record.origin ?? record.sourcePath);
+      assert.ok(origins.some((origin) => origin.startsWith('doc/developer.md')), 'expected doc/developer.md to be indexed');
+      assert.ok(!origins.some((origin) => origin.includes('doc/reviews/')), 'doc/reviews must not be indexed');
+    });
   } finally {
     restoreEnv('RAG_EMBEDDINGS_DIR', originalEmbeddingsDir);
     await Promise.all([
