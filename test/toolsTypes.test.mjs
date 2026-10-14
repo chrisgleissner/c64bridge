@@ -551,3 +551,56 @@ test("defineToolModule falls back to global platform state when ctx omits platfo
     setPlatform(previous);
   }
 });
+
+const INHERITED_OP_NAMES = ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"];
+
+test("createOperationDispatcher rejects Object.prototype member names like an unknown op", async () => {
+  const dispatcher = createOperationDispatcher(
+    "c64_memory",
+    {
+      read: async () => ({ content: [] }),
+    },
+  );
+
+  for (const op of INHERITED_OP_NAMES) {
+    await assert.rejects(
+      () => dispatcher({ op }, stubCtx),
+      (error) => {
+        assert.ok(error instanceof ToolValidationError, `op "${op}" should raise ToolValidationError, got ${error}`);
+        assert.equal(error.path, "$.op");
+        assert.equal(error.message, `c64_memory does not support op "${op}"`);
+        return true;
+      },
+    );
+  }
+});
+
+test("defineToolModule invoke ignores Object.prototype members when resolving per-operation platforms", async () => {
+  const module = defineToolModule({
+    domain: "test",
+    summary: "test module",
+    supportedPlatforms: ["c64u", "vice"],
+    tools: [
+      {
+        name: "c64_test",
+        description: "test grouped tool",
+        operationPlatforms: { device_only: ["c64u"] },
+        operationToolNames: { device_only: "legacy_device_only" },
+        execute: createOperationDispatcher("c64_test", {
+          device_only: async () => ({ content: [{ type: "text", text: "ok" }] }),
+        }),
+      },
+    ],
+  });
+
+  for (const op of INHERITED_OP_NAMES) {
+    await assert.rejects(
+      () => module.invoke("c64_test", { op }, stubCtx),
+      (error) => {
+        assert.ok(error instanceof ToolValidationError, `op "${op}" should raise ToolValidationError, got ${error}`);
+        assert.equal(error.message, `c64_test does not support op "${op}"`);
+        return true;
+      },
+    );
+  }
+});
