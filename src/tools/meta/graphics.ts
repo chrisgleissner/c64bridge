@@ -17,12 +17,12 @@ function parseAddressNumeric(value: string): number {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
   }
   const trimmed = value.trim();
-  let literal = trimmed;
-  let radix = 10;
-  if (trimmed.startsWith("$")) { radix = 16; literal = trimmed.slice(1); }
-  else if (trimmed.startsWith("0x")) { radix = 16; literal = trimmed.slice(2); }
-  else if (trimmed.startsWith("%")) { radix = 2; literal = trimmed.slice(1); }
-  const parsed = Number.parseInt(literal, radix);
+  // Anchored patterns: Number.parseInt alone would read "$08G0" as $0008.
+  let parsed = Number.NaN;
+  if (/^\$[0-9a-f]+$/i.test(trimmed)) parsed = Number.parseInt(trimmed.slice(1), 16);
+  else if (/^0x[0-9a-f]+$/i.test(trimmed)) parsed = Number.parseInt(trimmed.slice(2), 16);
+  else if (/^%[01]+$/.test(trimmed)) parsed = Number.parseInt(trimmed.slice(1), 2);
+  else if (/^[0-9]+$/.test(trimmed)) parsed = Number.parseInt(trimmed, 10);
   if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
     throw new ToolValidationError("Invalid address value", { path: "$.address", details: { value } });
   }
