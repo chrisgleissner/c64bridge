@@ -2749,7 +2749,10 @@ export function buildPrinterBasicProgram(opts: {
       ln += 10;
       continue;
     }
-    const chunks = chunkString(logical, 45);
+    // Chunk by the length of the expression, not the text: CHR$ splicing can make
+    // an expression up to ten times longer, and a BASIC line must stay short
+    // (the ROM's LINKPRG scans each line with an 8-bit index).
+    const chunks = chunkByExpressionLength(logical, (text) => printerTextExpression(text, target, saddr), PRINTER_EXPRESSION_MAX);
     for (let i = 0; i < chunks.length; i += 1) {
       const chunk = printerTextExpression(chunks[i], target, saddr);
       const tail = i < chunks.length - 1 ? ";" : ""; // avoid CR between chunks within the same logical line
@@ -2770,14 +2773,20 @@ export function buildPrinterBasicProgram(opts: {
   return lines.join("\n");
 }
 
-function chunkString(input: string, maxLen: number): string[] {
-  if (input.length <= maxLen) return [input];
+/** Longest PRINT#1 expression per BASIC line; keeps each line under the 80-character input limit. */
+const PRINTER_EXPRESSION_MAX = 64;
+
+function chunkByExpressionLength(input: string, expression: (text: string) => string, maxLen: number): string[] {
   const parts: string[] = [];
-  let i = 0;
-  while (i < input.length) {
-    parts.push(input.slice(i, i + maxLen));
-    i += maxLen;
+  let current = "";
+  for (const char of input) {
+    if (current && expression(current + char).length > maxLen) {
+      parts.push(current);
+      current = "";
+    }
+    current += char;
   }
+  if (current) parts.push(current);
   return parts;
 }
 

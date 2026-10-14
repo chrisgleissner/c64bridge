@@ -508,6 +508,20 @@ test("C64Client against mock server", async (t) => {
     assert.ok(epsonPrg.includes(Buffer.from([0xc7, 0x28, 0x31, 0x30, 0x35])));
   });
 
+  await t.test("buildPrinterBasicProgram keeps lines short when CHR$ splicing expands the text", () => {
+    const text = "abcdefghijklmnopqrstuvwxyz".repeat(4);
+    for (const opts of [{ text, target: "epson" }, { text: text.toUpperCase(), target: "commodore", secondaryAddress: 7 }]) {
+      const source = buildPrinterBasicProgram(opts);
+      for (const line of source.split("\n")) {
+        assert.ok(line.length <= 80, `line exceeds the BASIC input limit: ${line}`);
+      }
+      // The chunks still print the whole text, joined with ";" so no CR is sent between them.
+      const printed = source.split("\n").filter((line) => line.includes("PRINT#1,")).length;
+      assert.ok(printed > 1);
+      assert.ok(basicToPrg(source).length < 4096);
+    }
+  });
+
   await t.test("HARD01-007 buildPrinterBasicProgram uses CHR$(34) for quotes", () => {
     const src = buildPrinterBasicProgram({ text: 'A"B' });
     assert.ok(src.includes('PRINT#1,"A";CHR$(34);"B"'));
