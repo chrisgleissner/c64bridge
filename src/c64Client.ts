@@ -1056,7 +1056,8 @@ export class C64Client {
       return { success: false, details: { message: "Voice must be 1..3" } };
     }
     const system = options.system ?? "PAL";
-    const hz = options.frequencyHz ?? (options.note ? this.noteNameToHz(options.note) : 440);
+    // The tool schema documents that a note name overrides frequencyHz.
+    const hz = options.note ? this.noteNameToHz(options.note) : options.frequencyHz ?? 440;
     const freq16 = this.hzToSidFrequency(hz, system);
     const freqLo = freq16 & 0xff;
     const freqHi = (freq16 >> 8) & 0xff;

@@ -687,6 +687,17 @@ test("C64Client against mock server", async (t) => {
     assert.equal((hi << 8) | lo, 7493);
   });
 
+  await t.test("sidNoteOn uses the note name when frequencyHz is also given", async () => {
+    const client = new C64Client(mock.baseUrl);
+    await client.sidNoteOn({ voice: 1, note: "A4", frequencyHz: 1000, system: "PAL" });
+    assert.equal(mock.state.lastWrite.address, 0xd400);
+    // A4 = 440 Hz = 7493 on PAL; 1000 Hz would be 17028.
+    assert.equal(mock.state.lastWrite.bytes[0] | (mock.state.lastWrite.bytes[1] << 8), 7493);
+
+    await client.sidNoteOn({ voice: 1, frequencyHz: 1000, system: "PAL" });
+    assert.equal(mock.state.lastWrite.bytes[0] | (mock.state.lastWrite.bytes[1] << 8), 17028);
+  });
+
   await t.test("SID frequency bytes are correct for PAL vs NTSC", async () => {
     const client = new C64Client(mock.baseUrl);
     function expectFreqBytes(hz, system) {
