@@ -2872,8 +2872,9 @@
           },
           "name": {
             "type": "string",
-            "description": "Unique task name",
-            "minLength": 1
+            "description": "Unique task name (letters, digits, '_', '-', '.'; must not start with '.').",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$"
           },
           "operation": {
             "type": "string",
@@ -3114,8 +3115,9 @@
               "properties": {
                 "name": {
                   "type": "string",
-                  "description": "Unique task name",
-                  "minLength": 1
+                  "description": "Unique task name (letters, digits, '_', '-', '.'; must not start with '.').",
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$"
                 },
                 "operation": {
                   "type": "string",
