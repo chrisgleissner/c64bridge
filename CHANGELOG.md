@@ -1,6 +1,66 @@
 # Changelog
 
 
+
+## 1.0.5 - 2026-10-15
+
+### Bug Fixes
+
+- split printer text by expression length so BASIC lines stay short (f4929b8)
+- clear quote mode in PETSCII art and limit multi-word names to braces (2c78e11)
+- stop a replaced music_generate sequence promptly without cutting off the next one (eb7d14c)
+- accept a READY. prompt that appears during the ASM liveness check (16c4a84)
+- point the automatic SYS stub at the first instruction (77e3a9e)
+- prefer the enabled drive for bus numbers and allow spaces in task names (e77b1fb)
+- keep legacy top-level config fields to configs without profile sections (7eb584d)
+- reject malformed numeric PETSCII tokens in write_text instead of parsing a prefix (276a062)
+- keep printer text in the printer's character set (eb45113)
+- ignore Object.prototype names when mapping VICE drive letters (7c5c800)
+- ignore Object.prototype names in named PETSCII and address symbol lookups (187e057)
+- share one hex byte parser and detect apostrophe BASIC errors in the runner (b6de728)
+- type lowercase letters as PETSCII letters in write_text and key (09df5a3)
+- include the bytes in the memory read text result (1ead15b)
+- find drive8 by bus number in drive_mount_and_verify (6f9467c)
+- match Ultimate firmware drive ids, SID uploads, config paths and config precedence (6a10c27)
+- treat a machine-code routine that returns to READY. as success (b5f8626)
+- add a SYS stub to machine code assembled at $0801 and enter through it (ac19018)
+- reject malformed addresses instead of parsing a numeric prefix (4cc04a6)
+- reject inherited object property names as grouped tool operations (68f3eb7)
+- read full 64 KB VICE memory, display pixel offset, and 0-based joystick ports (4624cdc)
+- store lowercase BASIC string text as PETSCII letters (3065c91)
+- avoid blank lines between full-width PETSCII art rows (9aaaa87)
+- print reverse-video glyphs in PETSCII art with RVS ON and RVS OFF (b9ccf79)
+- correct {heart}, multi-word named PETSCII codes, and screen code decoding (ec644ba)
+- tokenize BASIC like the ROM for DATA, ? and line ordering (31ab83b)
+- include the underlying cause in tool error text (6cac9de)
+- keep internal review documents out of the RAG index (ea35b48)
+- accept %-prefixed binary literals in the assembler (bd05706)
+- assemble at the load address, reject unsupported indexed modes, and support *, < and > in expressions (9089e28)
+- reject bitmap layouts that overlap the character ROM shadow in VIC banks 0 and 2 (8db507e)
+- compile top-level SIDWAVE songs with note data and start each pattern on its first note (e9b8dfd)
+- compare all expected bytes and fail on read errors in batch memory assertions (48fbe00)
+- switch the drive type in drive_mount_and_verify instead of sending it as the mount mode (bba777a)
+- reject background task names that would write outside the task folder (669c26f)
+- let the note name override frequencyHz in sid_note_on as documented (144abc3)
+- hold the SID gate for the note length in music_generate and clear it only between notes (da98608)
+- detect BASIC errors whose names contain an apostrophe when polling (dd549b1)
+- accept a $ prefix on each byte group in memory write hex input (64dad08)
+
+### Tests
+
+- parse multipart uploads byte-exactly in the firmware wire test (55e3b8d)
+- update coverage tests for the SYS stub and the removed mock bypass (77b16fc)
+- model the Ultimate 64 load_prg side effects and reset state in the mock (5dd6ec7)
+- assemble the upload_run_asm integration program without a raw $0801 origin (9ef9bab)
+- keep the no-config fallback probe off the network (fb8ad24)
+- wait for asynchronous events instead of fixed short timeouts in two flaky tests (02fed10)
+- remove the C64_TEST_TARGET=mock bypasses from C64Client (a3e099a)
+- wait for music_generate playback calls instead of fixed sleeps (d0c7bff)
+
+### Chores
+
+- regenerate MCP interface files (f9ab0ca)
+
 ## 1.0.4 - 2026-10-07
 
 ### Bug Fixes
