@@ -228,18 +228,18 @@ start:
     jmp start
   `;
 
-  // At the default $0801 the code follows a "10 SYS2061" stub, because BASIC
+  // At the default $0801 the code follows a "10 SYS02062" stub, because BASIC
   // relinks whatever is loaded at $0801 as program lines.
   const prg = assemblyToPrg(source);
   assert.deepEqual(
     [...prg],
     [
       0x01, 0x08,
-      0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00, // 10 SYS2061
-      0xa9, 0x01, 0x4c, 0x0d, 0x08, // $080D: LDA #1, JMP start
+      0x0c, 0x08, 0x0a, 0x00, 0x9e, 0x30, 0x32, 0x30, 0x36, 0x32, 0x00, 0x00, 0x00, // 10 SYS02062
+      0xa9, 0x01, 0x4c, 0x0e, 0x08, // $080E: LDA #1, JMP start
     ],
   );
-  assert.equal(prgEntryAddress(prg), 0x080d);
+  assert.equal(prgEntryAddress(prg), 0x080e);
   assert.deepEqual(
     [...assemblyToPrg(source, { loadAddress: 0xc000 })],
     [0x00, 0xc0, 0xa9, 0x01, 0x4c, 0x00, 0xc0],
@@ -387,4 +387,16 @@ mask = %101
     0xa2, 0x05, // LDX #%101
     0xa0, 0x03, // LDY #7 % 4
   ]);
+});
+
+test("assemblyToPrg points the automatic SYS stub at the first instruction when data comes first", () => {
+  const prg = assemblyToPrg(`
+msg: .byte 1, 2, 3
+start: lda msg
+    rts
+  `);
+  // Stub at $0801, data at $080E-$0810, first instruction at $0811 (2065).
+  assert.deepEqual([...prg.subarray(2, 15)], [0x0c, 0x08, 0x0a, 0x00, 0x9e, 0x30, 0x32, 0x30, 0x36, 0x35, 0x00, 0x00, 0x00]);
+  assert.equal(prgEntryAddress(prg), 0x0811);
+  assert.deepEqual([...prg.subarray(15)], [0x01, 0x02, 0x03, 0xad, 0x0e, 0x08, 0x60]);
 });

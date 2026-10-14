@@ -773,20 +773,20 @@ test("C64Client against mock server", async (t) => {
     // The tool's own published example.
     const result = await client.uploadAndRunAsm("start: lda #$01\n sta $0400\n rts");
     assert.equal(result.success, true);
-    // Without an origin the code follows a 10 SYS2061 stub at $0801.
-    assert.equal(result.details.entryAddress, 0x080d);
+    // Without an origin the code follows a 10 SYS02062 stub at $0801.
+    assert.equal(result.details.entryAddress, 0x080e);
 
     // Loaded (not LOAD+RUN): the firmware :load_prg endpoint was used, not
     // :run_prg, and the code landed at its own address in emulated memory.
     assert.equal(mock.state.loadCount, before + 1);
     assert.equal(mock.state.memory[0x0805], 0x9e); // SYS token in the stub
-    assert.equal(mock.state.memory[0x080d], 0xa9); // LDA #imm opcode
-    assert.equal(mock.state.memory[0x080e], 0x01);
+    assert.equal(mock.state.memory[0x080e], 0xa9); // LDA #imm opcode
+    assert.equal(mock.state.memory[0x080f], 0x01);
 
     // Entered via a typed SYS to the real entry point, never a bare RUN.
     const sysWrite = mock.state.writeLog.slice().reverse().find((entry) => entry.address === 0x0277);
     assert.ok(sysWrite, "expected a write to the KERNAL keyboard buffer");
-    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2061\r");
+    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2062\r");
   });
 
   await t.test("uploadAndRunAsm refuses raw machine code at $0801 that BASIC would relink", async () => {

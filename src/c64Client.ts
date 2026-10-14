@@ -785,7 +785,7 @@ export class C64Client {
    * range corrupts the workspace. Instead this loads the assembled bytes
    * without running them, then types `SYS <entry>` to transfer control
    * to the entry point: the target of a leading SYS stub at $0801, or else
-   * the first assembled instruction, whatever its address.
+   * the lowest assembled address.
    */
   async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
     try {
@@ -799,7 +799,7 @@ export class C64Client {
         return {
           success: false,
           details: {
-            message: "Machine code at $0801 is overwritten when BASIC relinks the loaded program. Omit the origin to get a 10 SYS2061 stub automatically, start the code with a BASIC SYS line, or assemble at another address such as $C000.",
+            message: "Machine code at $0801 is overwritten when BASIC relinks the loaded program. Omit the origin to get a BASIC SYS stub automatically, start the code with a BASIC SYS line, or assemble at another address such as $C000.",
           },
         };
       }

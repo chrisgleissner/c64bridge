@@ -201,7 +201,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
   test("c64_program upload_run_asm assembles source and runs program", async () => {
     await withSharedMcpClient(async (ctx) => {
       const { mockServer } = ctx;
-      // No origin: the assembler puts a 10 SYS2061 stub at $0801 and the code at $080D.
+      // No origin: the assembler puts a 10 SYS02062 stub at $0801 and the code at $080E.
       const program = `\nstart:\n      lda #$01\n      sta $0400\n      rts\n    `;
       const loadCountBefore = mockServer.state.loadCount;
 
@@ -232,7 +232,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.equal(mockServer.state.loadCount, loadCountBefore + 1, "mock server should load the assembled program once");
       assert.ok(mockServer.state.lastLoadedPrg, "mock server should receive the loaded PRG payload");
       assert.equal(mockServer.state.memory[0x0805], 0x9e, "the SYS stub should land at $0801");
-      assert.equal(mockServer.state.memory[0x080d], 0xa9, "assembled LDA opcode should land at its own address");
+      assert.equal(mockServer.state.memory[0x080e], 0xa9, "assembled LDA opcode should land at its own address");
     });
   });
 

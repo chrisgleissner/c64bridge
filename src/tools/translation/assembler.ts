@@ -15,7 +15,7 @@ export interface AssembleOptions {
    * Optional default load address used when no ORG or `* =` directive appears.
    * Defaults to $0801 (the conventional BASIC-adjacent origin for standalone
    * machine code). Code assembled at $0801 without an org directive gets a
-   * `10 SYS2061` BASIC stub; callers find the entry with {@link prgEntryAddress}
+   * `10 SYS` BASIC stub to its first instruction; callers find the entry with {@link prgEntryAddress}
    * and run it via a typed `SYS <entry>`, not `RUN`.
    */
   loadAddress?: number;
@@ -140,8 +140,13 @@ enum AddressingMode {
 
 const DEFAULT_LOAD_ADDRESS = 0x0801;
 const BASIC_START = 0x0801;
-// 10 SYS2061: link $080B, line 10, SYS token, "2061", end of line, end of program.
-const BASIC_SYS_STUB = [0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00];
+// "10 SYS0nnnn": link $080C, line 10, SYS token, five digits, end of line, end
+// of program. The digits are the first instruction's address; a fixed width
+// keeps the stub, and so every address after it, the same in both passes.
+function basicSysStub(target: number): number[] {
+  const digits = String(target & 0xffff).padStart(5, "0");
+  return [0x0c, 0x08, 0x0a, 0x00, 0x9e, ...[...digits].map((digit) => digit.charCodeAt(0)), 0x00, 0x00, 0x00];
+}
 
 /**
  * Address to SYS to start a PRG: the target of a leading "SYS <n>" BASIC line
@@ -906,6 +911,7 @@ class Assembler {
   private pc = 0;
   private lowestWritten = MAX_ADDRESS;
   private highestWritten = 0;
+  private firstInstructionAddress: number | undefined;
 
   constructor(private readonly lines: ParsedLine[], private readonly defaultLoadAddress: number) {
     this.symbolTable.reset();
@@ -918,12 +924,15 @@ class Assembler {
       this.symbolTable.reset();
       this.lowestWritten = MAX_ADDRESS;
       this.highestWritten = 0;
+      this.firstInstructionAddress = undefined;
     }
     // Loading a PRG at $0801 makes BASIC relink the bytes there as program
     // lines, which corrupts raw machine code. Code that starts at $0801
-    // without its own org therefore gets a "10 SYS2061" stub in front of it.
+    // without its own org therefore gets a "10 SYS" stub that jumps to the
+    // first instruction, even when data comes before it.
     if (this.pc === BASIC_START && this.emitsBeforeFirstOrg()) {
-      for (const byte of BASIC_SYS_STUB) {
+      // Pass 0 does not know the first instruction's address yet; pass 1 uses the address pass 0 recorded.
+      for (const byte of basicSysStub(pass === 1 ? this.firstInstructionAddress ?? 0 : 0)) {
         this.writeByte(byte, this.lines[0]!.location);
       }
     }
@@ -1112,6 +1121,7 @@ class Assembler {
     statement.resolvedMode = info.mode;
 
     if (pass === 0) {
+      this.firstInstructionAddress ??= this.pc;
       this.pc += info.size;
       return;
     }
