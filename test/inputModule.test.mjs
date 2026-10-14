@@ -123,7 +123,29 @@ test("c64_input.write_text expands numeric PETSCII tokens and preserves unknown 
   const inject = writes.find((w) => w.kind === "kbd_queue");
   assert.ok(inject);
   assert.deepEqual(Array.from(inject.bytes.slice(0, 3)), [65, 29, 29]);
-  assert.equal(String.fromCharCode(...inject.bytes.slice(3)), "{unknown}");
+  // Unrecognised tokens are typed literally, with letters as PETSCII $41-$5A.
+  assert.equal(String.fromCharCode(...inject.bytes.slice(3)), "{UNKNOWN}");
+});
+
+test("c64_input.write_text sends lowercase letters as PETSCII letters so BASIC accepts them", async () => {
+  // On an Ultimate 64, typing ASCII "print 1+2" produced ?SYNTAX ERROR because
+  // $61-$7A are shifted graphics characters in PETSCII.
+  const { ctx, writes } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "write_text",
+    text: "print \"hi\"{return}",
+  }, ctx);
+  assert.equal(result.isError, undefined);
+  const inject = writes.find((w) => w.kind === "kbd_queue");
+  assert.equal(String.fromCharCode(...inject.bytes), 'PRINT "HI"\r');
+});
+
+test("c64_input.key sends a lowercase letter as the PETSCII letter", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", { op: "key", key: "y" }, ctx);
+  assert.equal(result.isError, undefined);
+  const inject = writes.find((w) => w.kind === "kbd_queue");
+  assert.deepEqual(Array.from(inject.bytes), [0x59]);
 });
 
 test("c64_input.key sends single-byte injections for token names", async () => {
