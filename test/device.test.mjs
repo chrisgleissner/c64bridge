@@ -23,6 +23,9 @@ function debugLog(...args) {
     console.error("[device.test]", ...args);
   }
 }
+// Points the no-config fallback probe at a closed loopback port, so tests never
+// send requests to a real "c64u" host on the local network.
+const UNREACHABLE_C64U_ENV = { C64U_HOST: "127.0.0.1", C64U_PORT: "9", C64U_PASSWORD: undefined };
 const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;
@@ -777,15 +780,17 @@ test("device: createFacade merges backend sections across config candidates", as
         // real reachable "c64u" host on its network; a CI runner typically
         // does not) — so assert the fallback mechanism fired rather than one
         // specific probe outcome.
-        const { facade, selected, reason } = await createFacade();
-        assert.match(reason, /fallback/);
-        assert.ok(selected === "c64u" || selected === "vice", `unexpected backend: ${selected}`);
-        assert.equal(facade.type, selected);
-        if (selected === "vice") {
+        // The probe is pointed at a closed loopback port so the test never
+        // contacts a real "c64u" host on the network.
+        await withEnv(UNREACHABLE_C64U_ENV, async () => {
+          const { facade, selected, reason } = await createFacade();
+          assert.match(reason, /fallback/);
+          assert.equal(selected, "vice");
+          assert.equal(facade.type, "vice");
           // The real assertion this scenario exists for: home's vice section
           // must not have leaked in via merging.
           assert.notEqual(facade.exe, leakFixtureExe);
-        }
+        });
       },
     );
   } finally {
@@ -1017,9 +1022,11 @@ test("device: createFacade fallback behavior", async (t) => {
         homeConfig: null,
       },
       async () => {
-        const { facade, selected } = await createFacade();
-        assert.ok(selected === "vice" || selected === "c64u");
-        assert.ok(facade.type === "vice" || facade.type === "c64u");
+        await withEnv(UNREACHABLE_C64U_ENV, async () => {
+          const { facade, selected } = await createFacade();
+          assert.equal(selected, "vice");
+          assert.equal(facade.type, "vice");
+        });
       },
     );
   });
