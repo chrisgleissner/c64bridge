@@ -84,6 +84,24 @@ test("background tasks persist and complete iterations", async () => {
   }
 });
 
+test("background tasks reject names that would escape the task folder", async () => {
+  const { file, dir } = tmpPath("background-traversal", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    const ctx = { client: {}, logger: createLogger() };
+    for (const name of ["x/../../../../escaped", "..", "../escaped", "a\\b", ".hidden"]) {
+      const res = await metaModule.invoke("start_background_task", { name, operation: "unknown_op", intervalMs: 5, maxIterations: 1 }, ctx);
+      assert.equal(res.isError, true, `name ${JSON.stringify(name)} was accepted`);
+      assert.equal(res.metadata?.error?.path, "$.name");
+    }
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
+
 test("background tasks handle unknown operation and stop all", async () => {
   const { file, dir } = tmpPath("background2", "tasks.json");
   await fs.mkdir(dir, { recursive: true });

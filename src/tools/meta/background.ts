@@ -281,7 +281,12 @@ const noArgsSchema = objectSchema<Record<string, never>>({ description: "No argu
 const startBackgroundTaskArgsSchema = objectSchema({
   description: "Start a named background task that invokes a simple operation at fixed intervals.",
   properties: {
-    name: stringSchema({ description: "Unique task name", minLength: 1 }),
+    // The name becomes part of the task folder path, so it must be a single safe path segment.
+    name: stringSchema({
+      description: "Unique task name (letters, digits, '_', '-', '.'; must not start with '.').",
+      minLength: 1,
+      pattern: /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/,
+    }),
     operation: stringSchema({ description: "Operation name (e.g., read, read_screen)", minLength: 1 }),
     arguments: optionalSchema(objectSchema({ description: "Operation-specific arguments", properties: {}, additionalProperties: true }), {} as any),
     intervalMs: optionalSchema(numberSchema({ description: "Interval milliseconds", integer: true, minimum: 1, default: 1000 }), 1000),
