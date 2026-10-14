@@ -83,10 +83,22 @@ export function toolErrorResult(error: ToolError): ToolRunResult {
     ...(error.details !== undefined ? { details: error.details } : {}),
   };
 
-  const message = error.path ? `${error.message} (at ${error.path})` : error.message;
+  const located = error.path ? `${error.message} (at ${error.path})` : error.message;
+  // Clients often show only the text content, so surface the underlying cause
+  // (for example a range check or firmware error string) next to the summary.
+  const detailMessage = describeDetailMessage(error.details);
+  const message = detailMessage && !located.includes(detailMessage) ? `${located}: ${detailMessage}` : located;
 
   const base = textResult(message, { error: metadata });
   return { ...base, isError: true };
+}
+
+function describeDetailMessage(details: unknown): string | undefined {
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+  const message = (details as { message?: unknown }).message;
+  return typeof message === "string" && message.trim().length > 0 ? message.trim() : undefined;
 }
 
 export function unknownErrorResult(error: unknown): ToolRunResult {
