@@ -191,6 +191,7 @@ test("VICE drive operations accept the C64U drive letters a and b", async () => 
   await backend.driveOn("drive10");
   assert.deepEqual(resourceSets, [["Drive8CPUEnabled", 1], ["Drive9CPUEnabled", 0], ["Drive10CPUEnabled", 1]]);
   await assert.rejects(() => backend.driveOn("c"), /Invalid drive specification/);
+  await assert.rejects(() => backend.driveOn("constructor"), /Invalid drive specification/);
 });
 
 test("config category and item names containing '/' reach the firmware as single path segments", async (t) => {

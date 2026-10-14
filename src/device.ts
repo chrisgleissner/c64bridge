@@ -1064,8 +1064,8 @@ function encodeDevicePath(value: string): string {
 const VICE_DRIVE_LETTERS: Record<string, number> = { a: 8, b: 9 };
 
 function parseDriveNumber(drive: string): number {
-  const letter = VICE_DRIVE_LETTERS[drive.trim().toLowerCase()];
-  if (letter !== undefined) return letter;
+  const key = drive.trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(VICE_DRIVE_LETTERS, key)) return VICE_DRIVE_LETTERS[key]!;
   const match = /\d+/.exec(drive);
   const n = match ? parseInt(match[0], 10) : NaN;
   if (isNaN(n) || n < 8 || n > 11) throw new Error(`Invalid drive specification: ${drive}`);
