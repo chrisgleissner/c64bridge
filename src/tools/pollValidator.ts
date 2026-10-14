@@ -119,7 +119,7 @@ function concatBuffers(...buffers: Uint8Array[]): Uint8Array {
  * Looks for patterns like "?SYNTAX ERROR" or "SYNTAX ERROR IN 120".
  */
 function extractBasicError(screen: string): { message?: string; line?: number } | null {
-  const errorMatch = /(?:^|\n)\s*\?([A-Z\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match.
+  const errorMatch = /(?:^|\n)\s*\?([A-Z'\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match. The apostrophe covers UNDEF'D STATEMENT, REDIM'D ARRAY and CAN'T CONTINUE.
   
   if (errorMatch) {
     const errorType = errorMatch[1]?.trim().replace(/\s+/g, " ");
