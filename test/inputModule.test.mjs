@@ -140,6 +140,14 @@ test("c64_input.write_text sends lowercase letters as PETSCII letters so BASIC a
   assert.equal(String.fromCharCode(...inject.bytes), 'PRINT "HI"\r');
 });
 
+test("c64_input.write_text types malformed numeric tokens literally", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "{12AB}{$1G}{256}" }, ctx);
+  assert.equal(result.isError, undefined);
+  const inject = writes.find((w) => w.kind === "kbd_queue");
+  assert.equal(String.fromCharCode(...inject.bytes), "{12AB}{$1G}{256}");
+});
+
 test("c64_input.key sends a lowercase letter as the PETSCII letter", async () => {
   const { ctx, writes } = createInputContext({ platformId: "c64u" });
   const result = await toolRegistry.invoke("c64_input", { op: "key", key: "y" }, ctx);

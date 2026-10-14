@@ -106,11 +106,11 @@ function expandPetsciiTokens(text: string): string {
     if (code !== undefined) {
       return String.fromCharCode(code);
     }
-    // Numeric form: {$1D} or {29}
-    let num: number;
-    if (upper.startsWith("$")) {
+    // Numeric form: {$1D} or {29}. Anchored, so {12AB} is not read as {12}.
+    let num = NaN;
+    if (/^\$[0-9A-F]{1,2}$/.test(upper)) {
       num = parseInt(upper.slice(1), 16);
-    } else {
+    } else if (/^\d{1,3}$/.test(upper)) {
       num = parseInt(upper, 10);
     }
     if (!isNaN(num) && num >= 0 && num <= 255) {
