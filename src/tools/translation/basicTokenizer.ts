@@ -11,6 +11,10 @@ import { asciiToPetscii, encodeStringWithNames } from "../../petscii.js";
 
 const DEFAULT_START_ADDRESS = 0x0801;
 const REM_TOKEN = 0x8f;
+const DATA_TOKEN = 0x83;
+const PRINT_TOKEN = 0x99;
+// Highest line number the BASIC V2 line parser (LINGET) accepts; larger values give ?SYNTAX ERROR.
+const MAX_LINE_NUMBER = 63999;
 
 type TokenEntry = {
   text: string;
@@ -24,8 +28,9 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
   const normalizedSource = normalize(source);
   const lines = normalizedSource.split("\n");
 
-  const lineBuffers: Buffer[] = [];
-  let currentAddress = startAddress;
+  // Like typing lines into the C64, lines are kept in ascending order, a later
+  // duplicate replaces the earlier line, and a bare line number deletes it.
+  const programLines = new Map<number, Uint8Array>();
 
   for (const rawLine of lines) {
     const trimmedRight = rawLine.replace(/\s+$/u, "");
@@ -39,12 +44,23 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
     }
 
     const lineNumber = Number.parseInt(match[1], 10);
-    if (!Number.isInteger(lineNumber) || lineNumber < 0 || lineNumber > 65535) {
-      throw new Error(`Line number out of range: ${match[1]}`);
+    if (!Number.isInteger(lineNumber) || lineNumber < 0 || lineNumber > MAX_LINE_NUMBER) {
+      throw new Error(`Line number out of range: ${match[1]} (C64 BASIC accepts 0-${MAX_LINE_NUMBER})`);
     }
 
     const content = match[2] ?? "";
-    const tokenised = tokenize(content);
+    if (content === "") {
+      programLines.delete(lineNumber);
+      continue;
+    }
+    programLines.set(lineNumber, tokenize(content));
+  }
+
+  const lineBuffers: Buffer[] = [];
+  let currentAddress = startAddress;
+
+  for (const lineNumber of [...programLines.keys()].sort((a, b) => a - b)) {
+    const tokenised = programLines.get(lineNumber)!;
     const lineLength = 2 + 2 + tokenised.length + 1;
     const nextAddress = currentAddress + lineLength;
 
@@ -76,15 +92,25 @@ function tokenize(content: string): Uint8Array {
   let index = 0;
   let inString = false;
   let inRemark = false;
+  // As in the ROM CRUNCH routine, DATA items are copied literally until the
+  // next ':' outside quotes, and '?' outside strings, REM, and DATA becomes PRINT.
+  let inData = false;
 
   while (index < content.length) {
-    if (!inString && !inRemark) {
+    if (!inString && !inRemark && !inData) {
+      if (upper[index] === "?") {
+        bytes.push(PRINT_TOKEN);
+        index += 1;
+        continue;
+      }
       const token = matchToken(upper, index);
       if (token) {
         bytes.push(token.byte);
         index += token.text.length;
         if (token.byte === REM_TOKEN) {
           inRemark = true;
+        } else if (token.byte === DATA_TOKEN) {
+          inData = true;
         }
         continue;
       }
@@ -115,6 +141,9 @@ function tokenize(content: string): Uint8Array {
 
     const plainChar = (!inString && !inRemark ? upper[index]! : char) ?? char;
     bytes.push(asciiToPetscii(plainChar));
+    if (inData && !inString && plainChar === ":") {
+      inData = false;
+    }
     index += 1;
   }
 
@@ -141,7 +170,7 @@ function buildTokenTable(): TokenEntry[] {
     ["END", 0x80],
     ["FOR", 0x81],
     ["NEXT", 0x82],
-    ["DATA", 0x83],
+    ["DATA", DATA_TOKEN],
     ["INPUT#", 0x84],
     ["INPUT", 0x85],
     ["DIM", 0x86],
@@ -163,7 +192,7 @@ function buildTokenTable(): TokenEntry[] {
     ["DEF", 0x96],
     ["POKE", 0x97],
     ["PRINT#", 0x98],
-    ["PRINT", 0x99],
+    ["PRINT", PRINT_TOKEN],
     ["CONT", 0x9a],
     ["LIST", 0x9b],
     ["CLR", 0x9c],
