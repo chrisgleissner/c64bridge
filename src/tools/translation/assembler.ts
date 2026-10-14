@@ -40,7 +40,9 @@ export class AssemblyError extends Error {
 }
 
 type Token =
-  | { kind: "number"; value: number }
+  // binaryValue is set when the digits directly follow "%", so the parser can
+  // read "%1010" as a binary literal in operand position and as modulo elsewhere.
+  | { kind: "number"; value: number; binaryValue?: number }
   | { kind: "string"; value: string }
   | { kind: "symbol"; value: string }
   | { kind: "punct"; value: string };
@@ -438,6 +440,13 @@ function tokenize(line: string): Token[] {
 
     if (isDigit(char) || char === "$") {
       const { value, nextIndex } = parseNumberToken(line, index);
+      const digits = line.slice(index, nextIndex);
+      const afterPercent = tokens[tokens.length - 1]?.kind === "punct" && tokens[tokens.length - 1]?.value === "%" && line[index - 1] === "%";
+      if (afterPercent && /^[01]+$/.test(digits)) {
+        tokens.push({ kind: "number", value, binaryValue: parseInt(digits, 2) });
+        index = nextIndex;
+        continue;
+      }
       tokens.push({ kind: "number", value });
       index = nextIndex;
       continue;
@@ -660,6 +669,13 @@ function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Ex
   }
   if (token.kind === "punct" && token.value === "*") {
     return { type: "symbol", name: "*" };
+  }
+  if (token.kind === "punct" && token.value === "%") {
+    const digits = stream.peek();
+    if (digits?.kind === "number" && digits.binaryValue !== undefined) {
+      stream.consume();
+      return { type: "number", value: digits.binaryValue };
+    }
   }
   if (token.kind === "punct" && token.value === "(") {
     const expr = parseExpression(stream, new Set<string>([")"]));

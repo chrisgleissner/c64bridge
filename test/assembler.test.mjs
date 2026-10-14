@@ -345,3 +345,24 @@ msg:
     0x00, // msg
   ]);
 });
+
+test("assemblyToPrg reads %-prefixed binary literals and keeps % as modulo after a value", () => {
+  const source = `
+    * = $c000
+    lda #%00001111
+    and %10000001
+    .byte %1, %10
+mask = %101
+    ldx #mask
+    ldy #7 % 4
+  `;
+
+  assert.deepEqual([...assemblyToPrg(source)], [
+    0x00, 0xc0,
+    0xa9, 0x0f, // LDA #%00001111
+    0x25, 0x81, // AND $81
+    0x01, 0x02, // .byte %1, %10
+    0xa2, 0x05, // LDX #%101
+    0xa0, 0x03, // LDY #7 % 4
+  ]);
+});
