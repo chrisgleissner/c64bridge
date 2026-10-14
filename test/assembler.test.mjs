@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { assemblyToPrg, AssemblyError } from "../src/tools/translation/assembler.js";
+import { assemblyToPrg, AssemblyError, prgEntryAddress } from "../src/tools/translation/assembler.js";
 import { disassemble } from "../src/tools/translation/disassembler.js";
 
 test("assemblyToPrg assembles simple program with default load address", () => {
@@ -228,14 +228,36 @@ start:
     jmp start
   `;
 
+  // At the default $0801 the code follows a "10 SYS2061" stub, because BASIC
+  // relinks whatever is loaded at $0801 as program lines.
+  const prg = assemblyToPrg(source);
   assert.deepEqual(
-    [...assemblyToPrg(source)],
-    [0x01, 0x08, 0xa9, 0x01, 0x4c, 0x01, 0x08],
+    [...prg],
+    [
+      0x01, 0x08,
+      0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00, // 10 SYS2061
+      0xa9, 0x01, 0x4c, 0x0d, 0x08, // $080D: LDA #1, JMP start
+    ],
   );
+  assert.equal(prgEntryAddress(prg), 0x080d);
   assert.deepEqual(
     [...assemblyToPrg(source, { loadAddress: 0xc000 })],
     [0x00, 0xc0, 0xa9, 0x01, 0x4c, 0x00, 0xc0],
   );
+});
+
+test("assemblyToPrg adds no stub when the source sets its own origin", () => {
+  const withOrg = assemblyToPrg(`
+* = $0801
+    .byte $0b, $08, $0a, $00, $9e, $34, $30, $39, $36, $00, $00, $00
+* = $1000
+    rts
+  `);
+  assert.equal(withOrg.readUInt16LE(0), 0x0801);
+  assert.deepEqual([...withOrg.subarray(2, 14)], [0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x34, 0x30, 0x39, 0x36, 0x00, 0x00, 0x00]);
+  // The user's own stub says SYS4096.
+  assert.equal(prgEntryAddress(withOrg), 0x1000);
+  assert.equal(prgEntryAddress(assemblyToPrg("* = $c000\n rts")), 0xc000);
 });
 
 test("assemblyToPrg rejects indexed addressing modes the instruction does not support", () => {

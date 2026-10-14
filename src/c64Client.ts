@@ -12,7 +12,7 @@ import { createSocket, type Socket } from "node:dgram";
 import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
-import { assemblyToPrg } from "./tools/translation/assembler.js";
+import { assemblyToPrg, prgEntryAddress } from "./tools/translation/assembler.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import {
@@ -787,7 +787,8 @@ export class C64Client {
    * tokens, and setting BASIC's TXTTAB/VARTAB/ARYTAB/STREND to the code
    * range corrupts the workspace. Instead this loads the assembled bytes
    * without running them, then types `SYS <entry>` to transfer control
-   * directly to the first assembled instruction, whatever its address.
+   * to the entry point: the target of a leading SYS stub at $0801, or else
+   * the first assembled instruction, whatever its address.
    */
   async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
     try {
@@ -795,7 +796,16 @@ export class C64Client {
       if (prg.length < 2) {
         return { success: false, details: { message: "Assembled program produced no output" } };
       }
-      const entryAddress = prg.readUInt16LE(0);
+      const entryAddress = prgEntryAddress(prg);
+      if (entryAddress === 0x0801) {
+        // Loading makes BASIC relink $0801 as program lines, which overwrites raw code there.
+        return {
+          success: false,
+          details: {
+            message: "Machine code at $0801 is overwritten when BASIC relinks the loaded program. Omit the origin to get a 10 SYS2061 stub automatically, start the code with a BASIC SYS line, or assemble at another address such as $C000.",
+          },
+        };
+      }
       const facade = await this.facadePromise;
       const loadResult = await facade.loadPrg(prg);
       if (!loadResult.success) {

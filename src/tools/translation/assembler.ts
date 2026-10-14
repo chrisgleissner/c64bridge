@@ -14,8 +14,9 @@ export interface AssembleOptions {
   /**
    * Optional default load address used when no ORG or `* =` directive appears.
    * Defaults to $0801 (the conventional BASIC-adjacent origin for standalone
-   * machine code). The PRG's first two bytes double as its entry point;
-   * callers run it via a typed `SYS <entry>`, not `RUN`.
+   * machine code). Code assembled at $0801 without an org directive gets a
+   * `10 SYS2061` BASIC stub; callers find the entry with {@link prgEntryAddress}
+   * and run it via a typed `SYS <entry>`, not `RUN`.
    */
   loadAddress?: number;
   /**
@@ -138,6 +139,35 @@ enum AddressingMode {
 }
 
 const DEFAULT_LOAD_ADDRESS = 0x0801;
+const BASIC_START = 0x0801;
+// 10 SYS2061: link $080B, line 10, SYS token, "2061", end of line, end of program.
+const BASIC_SYS_STUB = [0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x32, 0x30, 0x36, 0x31, 0x00, 0x00, 0x00];
+
+/**
+ * Address to SYS to start a PRG: the target of a leading "SYS <n>" BASIC line
+ * when the PRG loads at $0801, otherwise the load address.
+ */
+export function prgEntryAddress(prg: Uint8Array): number {
+  const loadAddress = (prg[0] ?? 0) | ((prg[1] ?? 0) << 8);
+  if (loadAddress !== BASIC_START || prg.length < 8) {
+    return loadAddress;
+  }
+  // Skip the link pointer and line number, then expect the SYS token and digits.
+  let index = 6;
+  while (prg[index] === 0x20) index += 1;
+  if (prg[index] !== 0x9e) {
+    return loadAddress;
+  }
+  index += 1;
+  while (prg[index] === 0x20 || prg[index] === 0x28) index += 1;
+  let digits = "";
+  while (index < prg.length && prg[index]! >= 0x30 && prg[index]! <= 0x39) {
+    digits += String.fromCharCode(prg[index]!);
+    index += 1;
+  }
+  const target = Number.parseInt(digits, 10);
+  return digits.length > 0 && target <= 0xffff ? target : loadAddress;
+}
 const MAX_ADDRESS = 0xffff;
 
 const SINGLE_CHAR_TOKENS = new Set<string>([",", ":", "#", "(", ")", "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "=", "!", "~"]);
@@ -889,6 +919,14 @@ class Assembler {
       this.lowestWritten = MAX_ADDRESS;
       this.highestWritten = 0;
     }
+    // Loading a PRG at $0801 makes BASIC relink the bytes there as program
+    // lines, which corrupts raw machine code. Code that starts at $0801
+    // without its own org therefore gets a "10 SYS2061" stub in front of it.
+    if (this.pc === BASIC_START && this.emitsBeforeFirstOrg()) {
+      for (const byte of BASIC_SYS_STUB) {
+        this.writeByte(byte, this.lines[0]!.location);
+      }
+    }
 
     for (const line of this.lines) {
       try {
@@ -901,6 +939,20 @@ class Assembler {
         throw new AssemblyError(message, line.location);
       }
     }
+  }
+
+  private emitsBeforeFirstOrg(): boolean {
+    for (const line of this.lines) {
+      const statement = line.statement;
+      if (!statement) continue;
+      if (statement.kind === "instruction") return true;
+      if (statement.kind === "assignment" && statement.isLocationCounter) return false;
+      if (statement.kind === "directive") {
+        if (statement.name === "org") return false;
+        if (statement.name !== "include") return true;
+      }
+    }
+    return false;
   }
 
   buildPrg(): Buffer {

@@ -759,20 +759,30 @@ test("C64Client against mock server", async (t) => {
   await t.test("HARD01-018 uploadAndRunAsm loads the assembled PRG without running it and enters via a typed SYS to the real entry point", async () => {
     const before = mock.state.loadCount;
     // The tool's own published example.
-    const result = await client.uploadAndRunAsm(".org $0801\nstart: lda #$01\n sta $0400\n rts");
+    const result = await client.uploadAndRunAsm("start: lda #$01\n sta $0400\n rts");
     assert.equal(result.success, true);
-    assert.equal(result.details.entryAddress, 0x0801);
+    // Without an origin the code follows a 10 SYS2061 stub at $0801.
+    assert.equal(result.details.entryAddress, 0x080d);
 
     // Loaded (not LOAD+RUN): the firmware :load_prg endpoint was used, not
     // :run_prg, and the code landed at its own address in emulated memory.
     assert.equal(mock.state.loadCount, before + 1);
-    assert.equal(mock.state.memory[0x0801], 0xa9); // LDA #imm opcode
-    assert.equal(mock.state.memory[0x0802], 0x01);
+    assert.equal(mock.state.memory[0x0805], 0x9e); // SYS token in the stub
+    assert.equal(mock.state.memory[0x080d], 0xa9); // LDA #imm opcode
+    assert.equal(mock.state.memory[0x080e], 0x01);
 
     // Entered via a typed SYS to the real entry point, never a bare RUN.
     const sysWrite = mock.state.writeLog.slice().reverse().find((entry) => entry.address === 0x0277);
     assert.ok(sysWrite, "expected a write to the KERNAL keyboard buffer");
-    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2049\r");
+    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2061\r");
+  });
+
+  await t.test("uploadAndRunAsm refuses raw machine code at $0801 that BASIC would relink", async () => {
+    const before = mock.state.loadCount;
+    const result = await client.uploadAndRunAsm(".org $0801\nstart: lda #$01\n sta $0400\n rts");
+    assert.equal(result.success, false);
+    assert.match(result.details.message, /relink/);
+    assert.equal(mock.state.loadCount, before);
   });
 
   await t.test("HARD01-018 uploadAndRunAsm keeps a non-$0801 origin intact instead of corrupting BASIC pointers", async () => {
