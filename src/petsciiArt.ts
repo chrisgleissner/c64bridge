@@ -57,6 +57,7 @@ const RVS_OFF = 146;
 // Marks the end of a character row in the generated DATA statements.
 const ROW_END = -1;
 
+const SCREEN_COLUMNS = 40;
 const DEFAULT_MAX_WIDTH = 320;
 const DEFAULT_MAX_HEIGHT = 200;
 
@@ -369,6 +370,7 @@ export function bitmapToPetsciiCodes(bitmap: Bitmap): {
 
 function buildBasicProgram(params: {
   rowCodes: number[][];
+  columns: number;
   rows: number;
   borderColor?: number;
   backgroundColor?: number;
@@ -394,7 +396,8 @@ function buildBasicProgram(params: {
   const readLine = lineNumber;
   lines.push(`${readLine} READC:IFC>=0THENPRINT CHR$(C);:GOTO${readLine}`);
   lineNumber += 10;
-  lines.push(`${lineNumber} PRINT:NEXTY`);
+  // A full 40-column row already wraps the cursor; an extra PRINT would leave a blank line.
+  lines.push(params.columns >= SCREEN_COLUMNS ? `${lineNumber} NEXTY` : `${lineNumber} PRINT:NEXTY`);
   lineNumber += 10;
 
   const data = params.rowCodes.flatMap((row) => [...row, ROW_END]);
@@ -439,6 +442,7 @@ export function createPetsciiArt(options: CreatePetsciiArtOptions): PetsciiArtRe
 
   const program = buildBasicProgram({
     rowCodes: converted.rowCodes,
+    columns: converted.columns,
     rows: converted.rows,
     borderColor: options.borderColor,
     backgroundColor: options.backgroundColor,

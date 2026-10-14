@@ -108,3 +108,13 @@ test("createPetsciiArt prints reverse glyphs of the heart shape in reverse video
   assert.deepEqual(dataValues.filter((value) => value >= 0), art.petsciiCodes);
   assert.equal(dataValues.filter((value) => value < 0).length, art.charRows);
 });
+
+test("createPetsciiArt does not add a newline after a full 40-column row", () => {
+  const fullWidth = createPetsciiArt({ bitmap: { width: 320, height: 16, pixels: new Uint8Array(320 * 16) } });
+  assert.equal(fullWidth.charColumns, 40);
+  assert.ok(/\d+ NEXTY/.test(fullWidth.program), fullWidth.program);
+  assert.ok(!fullWidth.program.includes("PRINT:NEXTY"));
+
+  const narrow = createPetsciiArt({ text: "HI" });
+  assert.ok(narrow.program.includes("PRINT:NEXTY"));
+});
