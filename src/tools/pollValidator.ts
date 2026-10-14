@@ -271,6 +271,16 @@ async function pollAsmOutcome(
     pollCount++;
     
     try {
+      // A routine that works for a while before RTS shows READY. only after the first screen read.
+      if (returnedToBasicAfterSys(await client.readScreen())) {
+        logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
+        return { status: "ok", type: "ASM" };
+      }
+    } catch (error) {
+      logger.debug("Failed to read screen during ASM polling", { error, pollCount });
+    }
+
+    try {
       const screenRam = await client.readMemoryRaw(0x0400, 0x03e8);
       const signature = computeCrc32(screenRam);
       

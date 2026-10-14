@@ -220,3 +220,27 @@ test("ASM routine that returns to BASIC with RTS is ok, not crashed", async () =
     restoreStabilize();
   }
 });
+
+test("ASM routine whose READY. appears after the first screen read is ok, not crashed", async () => {
+  const restoreStabilize = withPollStabilize(0);
+  let reads = 0;
+  const ctx = {
+    client: {
+      async uploadAndRunAsm() { return { success: true }; },
+      async readScreen() {
+        reads += 1;
+        // The routine is still running on the first read and has returned by the next one.
+        return reads === 1 ? "READY.\nSYS49152\n" : "READY.\nSYS49152\n\nREADY.\n";
+      },
+      async readMemoryRaw(address, length) { return new Uint8Array(length).fill(0x20); },
+    },
+    logger: createLogger(),
+  };
+
+  try {
+    const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $c000\n inc $d020\n rts" }, ctx);
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  } finally {
+    restoreStabilize();
+  }
+});
