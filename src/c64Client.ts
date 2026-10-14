@@ -474,10 +474,6 @@ export class C64Client {
     writeDiagnosticEvent("client_switch_backend", { backend: type });
   }
 
-  private async shouldUseC64uMockBypass(): Promise<boolean> {
-    return process.env.C64_TEST_TARGET === "mock" && (await this.getBackendType()) === "c64u";
-  }
-
   private async withViceMonitor<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {
     const backend = await this.requireViceBackend();
     return backend.withMonitor(fn);
@@ -824,13 +820,6 @@ export class C64Client {
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const payload = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
-        const response = await this.api.v1.runnersRunPrgCreate(":run_prg", payload as any, {
-          headers: { "Content-Type": "application/octet-stream" },
-        });
-        return { success: true, details: response.data };
-      }
       const facade = await this.facadePromise;
       const res = await facade.runPrg(prg);
       return { success: res.success, details: res.details };
@@ -910,10 +899,6 @@ export class C64Client {
 
   async reset(): Promise<{ success: boolean; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const response = await this.api.v1.machineResetUpdate(":reset");
-        return { success: true, details: response.data };
-      }
       const facade = await this.facadePromise;
       const res = await facade.reset();
       return { success: res.success, details: res.details };
@@ -924,10 +909,6 @@ export class C64Client {
 
   async reboot(): Promise<{ success: boolean; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const response = await this.api.v1.machineRebootUpdate(":reboot");
-        return { success: true, details: response.data };
-      }
       const facade = await this.facadePromise;
       const res = await facade.reboot();
       return { success: res.success, details: res.details };
@@ -1134,10 +1115,6 @@ export class C64Client {
 
   async pause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      if (!pinnedFacade && await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machinePauseUpdate(":pause");
-        return { success: true, details: res.data };
-      }
       const facade = pinnedFacade ?? await this.facadePromise;
       return await facade.pause();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
@@ -1145,10 +1122,6 @@ export class C64Client {
 
   async resume(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      if (!pinnedFacade && await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineResumeUpdate(":resume");
-        return { success: true, details: res.data };
-      }
       const facade = pinnedFacade ?? await this.facadePromise; return await facade.resume();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
@@ -1257,10 +1230,6 @@ export class C64Client {
 
   async menuButton(): Promise<RunBasicResult> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineMenuButtonUpdate(":menu_button");
-        return { success: true, details: res.data };
-      }
       const facade = await this.facadePromise; return await facade.menuButton();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
@@ -1282,20 +1251,12 @@ export class C64Client {
 
   async debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineDebugregList(":debugreg");
-        return { success: true, value: (res.data as any).value, details: res.data };
-      }
       const facade = await this.facadePromise; return await facade.debugregRead();
     } catch (error) { return { success: false, details: this.normaliseError(error) } as any; }
   }
 
   async debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }> {
     try {
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.machineDebugregUpdate(":debugreg", { value });
-        return { success: true, value: (res.data as any).value, details: res.data };
-      }
       const facade = await this.facadePromise; return await facade.debugregWrite(value);
     } catch (error) { return { success: false, details: this.normaliseError(error) } as any; }
   }
@@ -1331,10 +1292,6 @@ export class C64Client {
   async driveLoadRom(drive: string, path: string): Promise<RunBasicResult> {
     try {
       if (!drive || !path) throw new Error("Drive and path are required");
-      if (await this.shouldUseC64uMockBypass()) {
-        const res = await this.api.v1.drivesLoadRomUpdate(drive, ":load_rom", { file: path });
-        return { success: true, details: res.data };
-      }
       const facade = await this.facadePromise;
       const result = await facade.driveLoadRom(drive, path);
       return { success: result.success, details: result.details };
