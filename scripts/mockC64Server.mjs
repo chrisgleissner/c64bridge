@@ -250,6 +250,14 @@ function cancelHeartbeatOnWrite(state, address, length) {
 }
 
 function seedReadyPrompt(state) {
+  // After a reset the KERNAL clears screen RAM to spaces and BASIC sets up an
+  // empty program: TXTTAB=$0801, VARTAB/ARYTAB/STREND=$0803, FRETOP/MEMSIZ=$A000
+  // (as read from an Ultimate 64 after machine:reset).
+  state.memory.fill(toScreenCode(" "), 0x0400, 0x0400 + 1000);
+  state.memory.set([0x01, 0x08, 0x03, 0x08, 0x03, 0x08, 0x03, 0x08, 0x00, 0xa0], 0x2b);
+  state.memory.set([0x00, 0xa0], 0x37);
+  state.memory.set([0x00, 0x00], 0x0801);
+
   const text = "READY.";
   const buffer = new Uint8Array(text.length + 1);
   for (let i = 0; i < text.length; i += 1) {
@@ -257,6 +265,26 @@ function seedReadyPrompt(state) {
   }
   buffer[text.length] = toScreenCode(" ");
   state.memory.set(buffer, 0x0400);
+}
+
+/**
+ * BASIC LINKPRG ($A533): walk the line chain from $0801 and rewrite each link
+ * pointer to the byte after the line's terminating zero. Stops at a zero link
+ * high byte, as the ROM does; the step limit only guards the mock.
+ */
+function relinkBasicProgram(memory) {
+  let line = 0x0801;
+  for (let steps = 0; steps < 0x10000 && line < 0xfffb; steps += 1) {
+    if (memory[line + 1] === 0) return;
+    let y = 4;
+    do {
+      y += 1;
+    } while (line + y < 0xffff && memory[line + y] !== 0);
+    const next = line + y + 1;
+    memory[line] = next & 0xff;
+    memory[line + 1] = (next >> 8) & 0xff;
+    line = next;
+  }
 }
 
 export async function startMockC64Server(options = {}) {
@@ -551,11 +579,20 @@ export async function startMockC64Server(options = {}) {
       state.lastLoadedPrg = prg;
       state.loadCount += 1;
 
-      // Mirror real firmware: place the PRG body at its embedded load
-      // address without starting it (no RUN, no BASIC pointer changes).
+      // Mirror Ultimate 64 firmware 3.15: the PRG body is placed at its
+      // embedded load address without starting it, and, as after a BASIC
+      // LOAD, VARTAB/ARYTAB/STREND are set to the end address and the BASIC
+      // program at $0801 is relinked (which rewrites raw code at $0801).
       if (prg.length >= 2) {
         const loadAddress = prg.readUInt16LE(0);
-        state.memory.set(prg.subarray(2), loadAddress);
+        const body = prg.subarray(2);
+        state.memory.set(body.subarray(0, 0x10000 - loadAddress), loadAddress);
+        const endAddress = Math.min(0xffff, loadAddress + body.length);
+        for (const pointer of [0x2d, 0x2f, 0x31]) {
+          state.memory[pointer] = endAddress & 0xff;
+          state.memory[pointer + 1] = endAddress >> 8;
+        }
+        relinkBasicProgram(state.memory);
       }
 
       sendJson(res, { result: "ok", bytes: prg.length });
