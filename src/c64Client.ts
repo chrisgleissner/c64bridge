@@ -2751,7 +2751,7 @@ export function buildPrinterBasicProgram(opts: {
     }
     const chunks = chunkString(logical, 45);
     for (let i = 0; i < chunks.length; i += 1) {
-      const chunk = basicStringExpression(chunks[i]);
+      const chunk = printerTextExpression(chunks[i], target, saddr);
       const tail = i < chunks.length - 1 ? ";" : ""; // avoid CR between chunks within the same logical line
       lines.push(`${ln} PRINT#1,${chunk}${tail}`);
       ln += 10;
@@ -2781,10 +2781,33 @@ function chunkString(input: string, maxLen: number): string[] {
   return parts;
 }
 
-function basicStringExpression(input: string): string {
-  // BASIC V2 has no doubled-quote escaping. Splice literal quote characters
-  // through CHR$(34), including leading/trailing/consecutive quote cases.
-  return input.split('"').map((part) => `"${part}"`).join(";CHR$(34);");
+/**
+ * BASIC V2 has no doubled-quote escaping, so quotes are spliced in as CHR$(34).
+ * String literals also store a-z as the PETSCII letters $41-$5A, so printer
+ * text that needs other codes is spliced in with CHR$: an Epson printer takes
+ * ASCII, so lowercase stays $61-$7A; a Commodore printer in lowercase mode
+ * (secondary address 7) prints $41-$5A as lowercase and $C1-$DA as capitals.
+ */
+function printerTextExpression(input: string, target: "commodore" | "epson", secondaryAddress?: number): string {
+  const needsChr = (char: string): number | undefined => {
+    if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
+    if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
+    return undefined;
+  };
+  const pieces: string[] = [];
+  let literal = "";
+  for (const char of input) {
+    const code = char === '"' ? 34 : needsChr(char);
+    if (code === undefined) {
+      literal += char;
+      continue;
+    }
+    if (literal) pieces.push(`"${literal}"`);
+    literal = "";
+    pieces.push(`CHR$(${code})`);
+  }
+  if (literal || pieces.length === 0) pieces.push(`"${literal}"`);
+  return pieces.join(";");
 }
 
 export function buildCommodoreBitmapBasicProgram(opts: {

@@ -496,6 +496,18 @@ test("C64Client against mock server", async (t) => {
     assert.deepEqual(Array.from(mock.state.lastPrg), Array.from(expectedPrg));
   });
 
+  await t.test("buildPrinterBasicProgram keeps each printer's letter case", () => {
+    // Epson printers take ASCII, so lowercase must not be folded to PETSCII capitals.
+    assert.ok(buildPrinterBasicProgram({ text: "Hi", target: "epson" }).includes('PRINT#1,"H";CHR$(105)'));
+    // Commodore lowercase mode (secondary address 7) prints $C1-$DA as capitals.
+    assert.ok(buildPrinterBasicProgram({ text: "Hi", target: "commodore", secondaryAddress: 7 }).includes('PRINT#1,CHR$(200);"i"'));
+    // Commodore uppercase mode prints PETSCII letters, so the literal is unchanged.
+    assert.ok(buildPrinterBasicProgram({ text: "Hi" }).includes('PRINT#1,"Hi"'));
+    const epsonPrg = basicToPrg(buildPrinterBasicProgram({ text: "Hi", target: "epson" }));
+    // Tokenized as CHR$ ($C7) followed by "(105)".
+    assert.ok(epsonPrg.includes(Buffer.from([0xc7, 0x28, 0x31, 0x30, 0x35])));
+  });
+
   await t.test("HARD01-007 buildPrinterBasicProgram uses CHR$(34) for quotes", () => {
     const src = buildPrinterBasicProgram({ text: 'A"B' });
     assert.ok(src.includes('PRINT#1,"A";CHR$(34);"B"'));
