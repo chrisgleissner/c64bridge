@@ -921,9 +921,11 @@ export const audioModule = defineToolModule({
                   release: 0,
                 }, pinnedFacade);
                 const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                await sleep(Math.max(1, Math.min(20, Math.floor(durationMs / 8)))); // Clear GATE between notes so every note retriggers ADSR.
+                // Hold GATE for most of the note, then clear it for a short gap so the next note retriggers ADSR.
+                const gateGapMs = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
+                await sleep(Math.max(0, durationMs - gateGapMs));
                 await ctx.client.sidNoteOff(1, pinnedFacade);
-                if (!controller.signal.aborted) await sleep(Math.max(0, durationMs - Math.max(1, Math.min(20, Math.floor(durationMs / 8)))));
+                if (!controller.signal.aborted) await sleep(gateGapMs);
               }
               await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {

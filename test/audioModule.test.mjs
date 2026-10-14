@@ -105,6 +105,32 @@ test("music_generate builds timeline and triggers SID sequence", async () => {
   assert.deepEqual(noteCalls.map((call) => call.note), ["C4", "E4"]);
 });
 
+test("music_generate holds the gate for most of each note and clears it only briefly", async () => {
+  const events = [];
+  const ctx = {
+    client: {
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOn: async () => { events.push({ op: "on", at: Date.now() }); return { success: true }; },
+      sidNoteOff: async () => { events.push({ op: "off", at: Date.now() }); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+
+  // tempoMs 160 gives a 20 ms gate gap, so the gate should stay high for about 140 ms.
+  const result = await audioModule.invoke(
+    "music_generate",
+    { root: "C4", pattern: "0,4", steps: 2, tempoMs: 160 },
+    ctx,
+  );
+  assert.equal(result.isError, undefined);
+  await waitUntil(() => events.filter((event) => event.op === "off").length >= 3);
+
+  const [firstOn, firstOff, secondOn] = events;
+  assert.deepEqual([firstOn.op, firstOff.op, secondOn.op], ["on", "off", "on"]);
+  assert.ok(firstOff.at - firstOn.at >= 100, `gate held only ${firstOff.at - firstOn.at} ms`);
+  assert.ok(secondOn.at - firstOff.at < 100, `gate gap was ${secondOn.at - firstOff.at} ms`);
+});
+
 test("music_generate defaults to triangle waveform and best-practice ADSR", async () => {
   const volumeCalls = [];
   const noteCalls = [];
