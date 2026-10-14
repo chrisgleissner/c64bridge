@@ -45,9 +45,9 @@ interface HexParseResult {
 }
 
 function cleanHex(input: string): string {
-  const trimmed = input.trim();
-  const withoutPrefix = trimmed.startsWith("$") ? trimmed.slice(1) : trimmed;
-  return withoutPrefix.replace(/[\s_]/g, "").toUpperCase();
+  // Accept a "$" prefix on the whole string or on each whitespace-separated
+  // byte group ("$01 $02"), matching what the input schema pattern allows.
+  return input.trim().replace(/(^|\s)\$/g, "$1").replace(/[\s_]/g, "").toUpperCase();
 }
 
 function parseHexInternal(value: string, path: string): HexParseResult {

@@ -42,6 +42,12 @@ test("C64Client: writeMemory validates hex string", async () => {
   const e4 = await client.writeMemory("$FFFF", "$AABB");
   assert.equal(e4.success, false);
   assert.ok(String(e4.details?.message || e4.details).toLowerCase().includes("range"));
+
+  // "$" on each byte group parses as two bytes, so the failure is the range
+  // check rather than a hex parse error.
+  const e5 = await client.writeMemory("$FFFF", "$AA $BB");
+  assert.equal(e5.success, false);
+  assert.ok(String(e5.details?.message || e5.details).toLowerCase().includes("range"));
 });
 
 test("C64Client: sid helpers validate inputs", async () => {

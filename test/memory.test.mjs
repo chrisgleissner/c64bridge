@@ -68,6 +68,17 @@ test("memory helpers normalise records, hex payloads, and address labels", () =>
   );
 });
 
+test("memory helpers accept a $ prefix on each byte group", () => {
+  // The write schema pattern allows "$" anywhere, so "$A9 $00" must parse.
+  assert.equal(__memoryHelpersForTests.parseUserHex("$A9 $00", "$.bytes").canonical, "$A900");
+  assert.equal(__memoryHelpersForTests.parseUserHex("$a9\t$00 ff", "$.bytes").canonical, "$A900FF");
+  assert.equal(__memoryHelpersForTests.parseUserHex("$AABB", "$.bytes").canonical, "$AABB");
+  assert.throws(
+    () => __memoryHelpersForTests.parseUserHex("A$90", "$.bytes"),
+    /non-hexadecimal/,
+  );
+});
+
 test("memory helpers reject malformed firmware hex payloads", () => {
   assert.throws(
     () => __memoryHelpersForTests.parseUserHex("ABC", "$.bytes"),

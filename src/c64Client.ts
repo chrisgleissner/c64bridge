@@ -2505,8 +2505,7 @@ export class C64Client {
       throw new Error("Expected non-empty byte string");
     }
 
-    const withoutPrefix = trimmed.startsWith("$") ? trimmed.slice(1) : trimmed;
-    const cleaned = withoutPrefix.replace(/[\s_]/g, "").toLowerCase();
+    const cleaned = trimmed.replace(/(^|\s)\$/g, "$1").replace(/[\s_]/g, "").toLowerCase();
 
     if (cleaned.length === 0) {
       throw new Error("No hexadecimal data provided");
