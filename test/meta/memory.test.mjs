@@ -27,6 +27,23 @@ test("verify_and_write_memory writes and verifies", async () => {
   assert.equal(resumed, true);
 });
 
+test("verify_and_write_memory accepts a $ prefix on each byte group", async () => {
+  let written = false;
+  const ctx = {
+    platform: { id: "c64u" },
+    client: {
+      async pause() { return { success: true }; },
+      async resume() { return { success: true }; },
+      async readMemory() { return { success: true, data: written ? "$AA55" : "$0000" }; },
+      async writeMemory(addr, bytes) { assert.equal(bytes, "$AA55"); written = true; return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("verify_and_write_memory", { address: "$0400", expected: "$00 $00", bytes: "$AA $55" }, ctx);
+  assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
+  assert.equal(written, true);
+});
+
 test("verify_and_write_memory aborts on pre-verify mismatch", async () => {
   let resumed = false;
   const ctx = {

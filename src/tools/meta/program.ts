@@ -11,6 +11,7 @@ import { getTasksHomeDir } from "./background.js";
 import { Jimp } from "jimp";
 import type { CapturedFrame } from "../../streamCapture.js";
 import { withDiagnosticSpan } from "../../diagnostics.js";
+import { stripHexByteSeparators } from "../hex.js";
 
 const C64_SCREENSHOT_PALETTE = [
   0x000000ff,
@@ -81,7 +82,7 @@ function uniqueGreetingBackends(backends: readonly GreetingBackend[]): GreetingB
 }
 
 function normaliseAssertionHex(value: string): string {
-  return value.trim().replace(/(^|\s)\$/g, "$1").replace(/[\s_]/g, "").toUpperCase();
+  return stripHexByteSeparators(value).toUpperCase();
 }
 
 function normaliseScreenText(screen: string): string {

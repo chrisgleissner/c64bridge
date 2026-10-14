@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { createHash } from "node:crypto";
 import { normalizeErrorDetails } from "./util.js";
+import { stripHexByteSeparators } from "../hex.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
   const platformId = ctx.platform?.id ?? ctx.client?.type;
@@ -14,9 +15,7 @@ function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type
 }
 
 function hexClean(input: string): string {
-  const trimmed = input.trim();
-  const withoutPrefix = trimmed.startsWith("$") ? trimmed.slice(1) : trimmed;
-  return withoutPrefix.replace(/[\s_]/g, "").toLowerCase();
+  return stripHexByteSeparators(input).toLowerCase();
 }
 
 function hexToBytes(input: string): Uint8Array {

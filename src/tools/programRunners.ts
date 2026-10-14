@@ -121,7 +121,8 @@ function parseBasicRuntimeErrors(screen: string): readonly BasicRuntimeError[] {
     }
     seen.add(lineNumber);
 
-    const typeMatch = /\?([A-Z ?]+?)\s+ERROR\s+IN/i.exec(row.toUpperCase());
+    // The apostrophe covers UNDEF'D STATEMENT, REDIM'D ARRAY and UNDEF'D FUNCTION.
+    const typeMatch = /\?([A-Z' ?]+?)\s+ERROR\s+IN/i.exec(row.toUpperCase());
     const type = typeMatch?.[1]?.trim().replace(/\s+/g, " ") || undefined;
 
     errors.push({

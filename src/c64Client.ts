@@ -13,6 +13,7 @@ import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrg, prgEntryAddress } from "./tools/translation/assembler.js";
+import { stripHexByteSeparators } from "./tools/hex.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import {
@@ -2473,7 +2474,7 @@ export class C64Client {
       throw new Error("Expected non-empty byte string");
     }
 
-    const cleaned = trimmed.replace(/(^|\s)\$/g, "$1").replace(/[\s_]/g, "").toLowerCase();
+    const cleaned = stripHexByteSeparators(trimmed).toLowerCase();
 
     if (cleaned.length === 0) {
       throw new Error("No hexadecimal data provided");
