@@ -76,8 +76,6 @@ function ensureScreenCodeMap(): void {
     SCREEN_CODE_TO_ASCII.set(code, deriveGlyphChar(glyph));
   }
 
-  // Common control characters / gaps default to space to keep output tidy.
-  SCREEN_CODE_TO_ASCII.set(0x00, " ");
   screenCodeMapInitialised = true;
 }
 
@@ -168,7 +166,7 @@ const NAMED_CHARS: Record<string, number> = Object.freeze({
 
   // Graphic glyphs (commonly referenced by name)
   // Note: Exact byte shown on screen depends on mode; these are PETSCII/CHR$ values
-  "heart": 81, // widely used PETSCII code for heart glyph
+  "heart": 115, // $73 (shifted S); $51 would print the letter Q
   "up_arrow": 94,
   "uparrow": 94,
   "left_arrow": 95,
@@ -200,16 +198,14 @@ export function parseNamedCharToken(source: string, startIndex: number): { value
   }
 
   const close = open === "{" ? "}" : open === ":" ? ":" : ">";
-  let idx = startIndex + 1;
-  let name = "";
-  while (idx < source.length && source[idx] !== close) {
-    name += source[idx]!
-      .replace(/[^A-Za-z0-9_\s-]/g, "") // restrict to sane name characters
-      .trim();
-    idx += 1;
+  const idx = source.indexOf(close, startIndex + 1);
+  if (idx < 0) {
+    return null;
   }
 
-  if (idx >= source.length || source[idx] !== close) {
+  // Only sane name characters; anything else is ordinary text that happens to use the delimiters.
+  const name = source.slice(startIndex + 1, idx).trim();
+  if (!/^[A-Za-z0-9_\s-]+$/.test(name)) {
     return null;
   }
 
