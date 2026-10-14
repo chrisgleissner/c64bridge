@@ -78,11 +78,20 @@ export function loadConfig(): C64BridgeConfig {
   const c64u = ultimateSection(rawConfig?.c64u);
   const u2 = ultimateSection(rawConfig?.u2);
   const useU2 = process.env.C64_MODE?.trim().toLowerCase() === "u2";
+  // Legacy top-level endpoint fields describe the single Ultimate of a
+  // pre-profile config, so they configure a backend only when the document
+  // has neither a c64u nor a u2 section. Each backend otherwise uses its own
+  // section, so one device's host, port or password never reaches the other.
+  const legacyUltimateEndpoint = !c64u && !u2 && LEGACY_ENDPOINT_KEYS.some((key) => hasLegacyValue(rawConfig?.[key]));
   const ultimate = {
-    c64u: resolveUltimateEndpoint("c64u", c64u ?? u2, rawConfig),
-    u2: resolveUltimateEndpoint("u2", u2 ?? c64u, rawConfig),
+    c64u: resolveUltimateEndpoint("c64u", c64u, c64u || !u2 ? rawConfig : undefined),
+    u2: resolveUltimateEndpoint("u2", u2 ?? c64u, u2 ? undefined : rawConfig),
   };
-  const selected = useU2 ? ultimate.u2 : ultimate.c64u;
+  // The selected profile reported by loadConfig keeps the documented fallback
+  // between sections and to the legacy fields.
+  const selected = useU2
+    ? resolveUltimateEndpoint("u2", u2 ?? c64u, rawConfig)
+    : resolveUltimateEndpoint("c64u", c64u ?? u2, rawConfig);
   const vice = rawConfig?.vice as {
     prewarm?: boolean | string | number;
   } | undefined;
@@ -98,7 +107,7 @@ export function loadConfig(): C64BridgeConfig {
       configuredBoolean(rawConfig?.vicePrewarm),
     ) ?? false,
     ultimate,
-    legacyUltimateEndpoint: LEGACY_ENDPOINT_KEYS.some((key) => rawConfig?.[key] !== undefined && rawConfig?.[key] !== null),
+    legacyUltimateEndpoint,
     backendConfig: {
       ...(c64u ? { c64u } : {}),
       ...(u2 ? { u2 } : {}),
@@ -111,6 +120,10 @@ export function loadConfig(): C64BridgeConfig {
 
 /** Top-level fields from the pre-profile config schema that name an endpoint. */
 const LEGACY_ENDPOINT_KEYS = ["baseUrl", "c64_host", "c64_ip", "c64_port"] as const;
+
+function hasLegacyValue(value: unknown): boolean {
+  return (typeof value === "string" && value.trim().length > 0) || (typeof value === "number" && Number.isFinite(value));
+}
 
 function ultimateSection(value: unknown): UltimateSectionConfig | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UltimateSectionConfig : undefined;

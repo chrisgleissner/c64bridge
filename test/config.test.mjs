@@ -413,3 +413,41 @@ test("HARD01-027 loadConfig warns and falls back from invalid JSON", (t) => {
     rmSync(dir, { recursive: true, force: true });
   });
 });
+
+test("legacy top-level fields never reach the other profile's endpoint", (t) => {
+  const originalEnv = { config: process.env.C64BRIDGE_CONFIG, mode: process.env.C64_MODE };
+  delete process.env.C64_MODE;
+  const created = [];
+  const load = (contents) => {
+    const temp = writeTempConfig(contents);
+    created.push(temp.dir);
+    process.env.C64BRIDGE_CONFIG = temp.file;
+    __resetConfigCacheForTests();
+    return loadConfig();
+  };
+  t.after(() => {
+    __resetConfigCacheForTests();
+    for (const [key, value] of [["C64BRIDGE_CONFIG", originalEnv.config], ["C64_MODE", originalEnv.mode]]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    for (const dir of created) rmSync(dir, { recursive: true, force: true });
+  });
+
+  // With a u2 section, top-level fields do not configure a c64u backend and do not alter the u2 endpoint.
+  let config = load({ c64_host: "127.0.0.1", c64_port: 8080, networkPassword: "c64pw", u2: { host: "127.0.0.2" } });
+  assert.equal(config.legacyUltimateEndpoint, false);
+  assert.equal(config.ultimate.u2.baseUrl, "http://127.0.0.2");
+  assert.equal(config.ultimate.u2.networkPassword, undefined);
+
+  // The c64u endpoint never borrows the u2 section.
+  config = load({ c64u: { host: "127.0.0.1" }, u2: { host: "127.0.0.2", port: 2222 } });
+  assert.equal(config.ultimate.c64u.baseUrl, "http://127.0.0.1");
+
+  // Empty legacy values do not count as a configured endpoint; real ones do.
+  assert.equal(load({ c64_host: "", vice: { host: "127.0.0.1" } }).legacyUltimateEndpoint, false);
+  config = load({ c64_host: "127.0.0.1", networkPassword: "pw" });
+  assert.equal(config.legacyUltimateEndpoint, true);
+  assert.equal(config.ultimate.c64u.baseUrl, "http://127.0.0.1");
+  assert.equal(config.ultimate.c64u.networkPassword, "pw");
+});
