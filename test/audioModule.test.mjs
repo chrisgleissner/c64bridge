@@ -131,6 +131,31 @@ test("music_generate holds the gate for most of each note and clears it only bri
   assert.ok(secondOn.at - firstOff.at < 100, `gate gap was ${secondOn.at - firstOff.at} ms`);
 });
 
+test("music_generate replacing a running sequence does not cut off the new note", async () => {
+  const events = [];
+  const ctx = {
+    client: {
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOn: async (payload) => { events.push({ op: `on-${payload.note}`, at: Date.now() }); return { success: true }; },
+      sidNoteOff: async () => { events.push({ op: "off", at: Date.now() }); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+
+  await audioModule.invoke("music_generate", { root: "C4", pattern: "0", steps: 1, tempoMs: 2000 }, ctx);
+  await waitUntil(() => events.some((event) => event.op === "on-C4"));
+  await audioModule.invoke("music_generate", { root: "G4", pattern: "0", steps: 1, tempoMs: 400 }, ctx);
+  await waitUntil(() => events.filter((event) => event.op === "off").length >= 3);
+
+  const ops = events.map((event) => event.op);
+  // The replaced sequence gates off once, promptly, before the new note starts.
+  assert.deepEqual(ops, ["on-C4", "off", "on-G4", "off", "off"]);
+  const newNote = events[2];
+  const firstOffAfter = events[3];
+  assert.ok(newNote.at - events[0].at < 1000, "the replaced sequence must stop well before its 2000 ms note ends");
+  assert.ok(firstOffAfter.at - newNote.at >= 300, `the new note was gated off after ${firstOffAfter.at - newNote.at} ms`);
+});
+
 test("music_generate defaults to triangle waveform and best-practice ADSR", async () => {
   const volumeCalls = [];
   const noteCalls = [];
