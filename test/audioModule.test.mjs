@@ -3,6 +3,19 @@ import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { audioModule } from "../src/tools/audio.js";
 
+// music_generate schedules playback asynchronously, so tests wait for the
+// expected SID calls instead of sleeping for a fixed time (which raced the
+// playback loop under load).
+async function waitUntil(predicate, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for asynchronous playback");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 function createLogger() {
   return {
     debug() {},
@@ -82,7 +95,7 @@ test("music_generate builds timeline and triggers SID sequence", async () => {
   assert.equal(result.metadata.steps, 2);
   assert.equal(result.metadata.timeline.length, 2);
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await waitUntil(() => noteOffCount >= 3);
 
   assert.equal(volumeCalls.length, 1);
   assert.equal(noteCalls.length, 2);
@@ -114,8 +127,7 @@ test("music_generate defaults to triangle waveform and best-practice ADSR", asyn
   );
 
   assert.equal(result.isError, undefined);
-  // Wait a tick for the fire-and-forget playback
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await waitUntil(() => noteOffCount >= 2);
 
   assert.equal(volumeCalls.length, 1);
   assert.equal(noteCalls.length, 1);
@@ -214,7 +226,7 @@ test("HARD01-030 music_generate pins its facade so a mid-playback backend switch
   );
   assert.equal(result.isError, undefined);
 
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await waitUntil(() => events.filter((event) => event.op === "note-off").length >= 3);
 
   // Every write must have used the facade pinned when the arpeggio started
   // (vice), never the one made active by the mid-flight switch (c64u).
