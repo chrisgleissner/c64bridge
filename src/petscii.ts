@@ -221,7 +221,7 @@ export function parseNamedCharToken(source: string, startIndex: number): { value
  * Encode a text containing optional named tokens into PETSCII bytes.
  * Named tokens may appear as {heart}, :heart:, or <heart>.
  */
-export function encodeStringWithNames(input: string): Uint8Array {
+export function encodeStringWithNames(input: string, options: { foldLowercase?: boolean } = {}): Uint8Array {
   const bytes: number[] = [];
   let i = 0;
   while (i < input.length) {
@@ -232,7 +232,10 @@ export function encodeStringWithNames(input: string): Uint8Array {
       continue;
     }
 
-    bytes.push(asciiToPetscii(input[i]!));
+    // ASCII a-z are PETSCII graphics characters in the default character set,
+    // so callers can fold them to the letters $41-$5A. Named codes are not folded.
+    const char = input[i]!;
+    bytes.push(asciiToPetscii(options.foldLowercase && char >= "a" && char <= "z" ? char.toUpperCase() : char));
     i += 1;
   }
   return Uint8Array.from(bytes);

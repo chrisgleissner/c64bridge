@@ -132,7 +132,9 @@ function tokenize(content: string): Uint8Array {
           end += 1;
         }
         const segment = content.slice(start, end);
-        const encoded = encodeStringWithNames(segment);
+        // Lowercase letters would print as graphics characters in the default
+        // character set, so string text is stored as the PETSCII letters.
+        const encoded = encodeStringWithNames(segment, { foldLowercase: true });
         for (const b of encoded) bytes.push(b);
         index = end; // leave closing quote to be processed next iteration
       }

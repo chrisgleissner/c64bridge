@@ -107,3 +107,10 @@ test("basicToPrg rejects line numbers above 63999", () => {
   assert.doesNotThrow(() => basicToPrg("63999 END"));
   assert.throws(() => basicToPrg("64000 END"), /63999/);
 });
+
+test("basicToPrg stores lowercase string text as PETSCII letters but keeps named codes", () => {
+  const prg = basicToPrg(`10 PRINT "Hello{heart}"\n`);
+  const body = [...prg.subarray(6, prg.length - 3)];
+  // PRINT token, quote, HELLO as $48 $45 $4C $4C $4F, heart $73, quote.
+  assert.deepEqual(body, [0x99, 0x20, 0x22, 0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x73, 0x22]);
+});
