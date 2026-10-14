@@ -451,6 +451,57 @@ test("batch_run_with_assertions validates memory_equals assertion", async () => 
   assert.equal(data.summary?.passed, 1);
 });
 
+test("batch_run_with_assertions compares every expected byte for memory_equals", async () => {
+  const readCalls = [];
+  const ctx = {
+    client: {
+      async runPrgFile() { return { success: true }; },
+      async readMemory(addr, length) {
+        readCalls.push({ addr, length });
+        return { success: true, data: "$AABB".slice(0, 1 + Number(length) * 2) };
+      },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [
+      { path: "/test.prg", assertions: [{ type: "memory_equals", address: "$C000", expected: "$AA $BB" }] },
+    ],
+    durationMs: 5,
+    resetDelayMs: 0,
+  }, ctx);
+
+  assert.equal(res.metadata?.success, true);
+  assert.equal(res.structuredContent?.data?.summary?.passed, 1);
+  assert.deepEqual(readCalls, [{ addr: "$C000", length: "2" }]);
+});
+
+test("batch_run_with_assertions does not pass memory_equals when the read fails", async () => {
+  const ctx = {
+    client: {
+      async runPrgFile() { return { success: true }; },
+      async readMemory() { return { success: false, details: { message: "read failed" } }; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [
+      { path: "/test.prg", assertions: [{ type: "memory_equals", address: "$C000", expected: "$00" }] },
+    ],
+    durationMs: 5,
+    resetDelayMs: 0,
+  }, ctx);
+
+  assert.equal(res.metadata?.success, false);
+  const data = res.structuredContent?.data ?? {};
+  assert.equal(data.summary?.passed, 0);
+  assert.equal(data.summary?.errors, 1);
+});
+
 test("batch_run_with_assertions checks sid_silent assertion", async () => {
   const ctx = {
     client: {

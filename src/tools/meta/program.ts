@@ -80,6 +80,10 @@ function uniqueGreetingBackends(backends: readonly GreetingBackend[]): GreetingB
   return backends.filter((backend, index) => backends.indexOf(backend) === index);
 }
 
+function normaliseAssertionHex(value: string): string {
+  return value.trim().replace(/(^|\s)\$/g, "$1").replace(/[\s_]/g, "").toUpperCase();
+}
+
 function normaliseScreenText(screen: string): string {
   return screen.replace(/\r\n?/g, "\n").replace(/\s+/g, " ").trim().toUpperCase();
 }
@@ -784,9 +788,17 @@ export const tools: ToolDefinition[] = [
               } else if (assertion.type === "memory_equals") {
                 const addr = assertion.address ?? "$0400";
                 const expected = assertion.expected ?? "$00";
-                const result = await (ctx.client as any).readMemory(addr, "1");
-                const actual = result.data ?? "$00";
-                const matched = actual.toLowerCase() === expected.toLowerCase();
+                // Compare every expected byte, and treat a failed read as an error rather than as $00.
+                const expectedHex = normaliseAssertionHex(expected);
+                if (expectedHex.length === 0 || expectedHex.length % 2 !== 0 || !/^[0-9A-F]+$/.test(expectedHex)) {
+                  throw new Error(`memory_equals expected value ${expected} is not a whole number of hex bytes`);
+                }
+                const result = await (ctx.client as any).readMemory(addr, String(expectedHex.length / 2));
+                if (!result.success || typeof result.data !== "string") {
+                  throw new Error(`Failed to read memory at ${addr} for memory_equals assertion`);
+                }
+                const actual = result.data;
+                const matched = normaliseAssertionHex(actual) === expectedHex;
                 assertionResults.push({
                   type: assertion.type,
                   status: matched ? "pass" : "fail",
@@ -796,7 +808,10 @@ export const tools: ToolDefinition[] = [
               } else if (assertion.type === "sid_silent") {
                 // Check SID gate bits are off (simple check)
                 const result = await (ctx.client as any).readMemory("$D404", "1");
-                const gate1 = parseInt((result.data ?? "$00").slice(1), 16) & 0x01;
+                if (!result.success || typeof result.data !== "string") {
+                  throw new Error("Failed to read SID voice 1 control register for sid_silent assertion");
+                }
+                const gate1 = parseInt(result.data.slice(1), 16) & 0x01;
                 const isSilent = gate1 === 0;
                 assertionResults.push({
                   type: assertion.type,
