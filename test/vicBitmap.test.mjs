@@ -96,6 +96,31 @@ test("resolveVicBitmapMemoryLayout rejects mismatched banks", () => {
   );
 });
 
+test("resolveVicBitmapMemoryLayout rejects screen RAM in the character ROM shadow of banks 0 and 2", () => {
+  for (const screen of [0x1000, 0x1400, 0x1800, 0x1C00]) {
+    assert.throws(() => resolveVicBitmapMemoryLayout(0x2000, screen), /character ROM/);
+    assert.throws(() => resolveVicBitmapMemoryLayout(0xA000, screen + 0x8000), /character ROM/);
+  }
+});
+
+test("resolveVicBitmapMemoryLayout rejects bitmap RAM in the character ROM shadow of banks 0 and 2", () => {
+  // A bitmap at bank offset $0000 occupies $0000-$1F3F, which covers $1000-$1FFF.
+  assert.throws(() => resolveVicBitmapMemoryLayout(0x0000, 0x2000), /character ROM/);
+  assert.throws(() => resolveVicBitmapMemoryLayout(0x8000, 0xA000), /character ROM/);
+});
+
+test("resolveVicBitmapMemoryLayout accepts common layouts outside the character ROM shadow", () => {
+  assert.equal(resolveVicBitmapMemoryLayout(0x2000, 0x0400).d018, 0x18);
+  assert.equal(resolveVicBitmapMemoryLayout(0x2000, 0x0C00).d018, 0x38);
+  assert.equal(resolveVicBitmapMemoryLayout(0xA000, 0x8400).d018, 0x18);
+  // Banks 1 and 3 have no character ROM shadow, so offsets $0000 and $1000-$1FFF are usable.
+  assert.equal(resolveVicBitmapMemoryLayout(0x6000, 0x4000).d018, 0x08);
+  assert.equal(resolveVicBitmapMemoryLayout(0x6000, 0x5C00).d018, 0x78);
+  assert.equal(resolveVicBitmapMemoryLayout(0x4000, 0x6000).d018, 0x80);
+  assert.equal(resolveVicBitmapMemoryLayout(0xE000, 0xC000).d018, 0x08);
+  assert.equal(resolveVicBitmapMemoryLayout(0xC000, 0xE000).bank, 3);
+});
+
 test("importImageAsVicBitmap reads image files and preserves source dimensions", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-vicbitmap-"));
   const filePath = path.join(dir, "sample.png");
