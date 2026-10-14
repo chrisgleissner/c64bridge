@@ -52,6 +52,25 @@ const filesystemStatsArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+/**
+ * Find a drive in drivesList() output. Ultimate firmware lists drives as a/b
+ * with a configurable bus_id, so "drive8" or "8" is matched by bus number.
+ */
+function findListedDrive(drives: any[], drive: string): any {
+  const wanted = drive.trim().toLowerCase();
+  const exact = drives.find((d) => String(d?.id ?? "").toLowerCase() === wanted);
+  if (exact) return exact;
+  // VICE lists drives as driveN; the Ultimate letters a and b default to buses 8 and 9 there.
+  const letterBus = wanted === "a" ? 8 : wanted === "b" ? 9 : undefined;
+  const bus = /^(?:drive)?\s*(\d+)$/.exec(wanted);
+  if (!bus && letterBus === undefined) return undefined;
+  const busId = letterBus ?? Number(bus![1]);
+  if (letterBus !== undefined) {
+    return drives.find((d) => String(d?.id ?? "").toLowerCase() === `drive${busId}`);
+  }
+  return drives.find((d) => Number(d?.raw?.bus_id) === busId || String(d?.id ?? "").toLowerCase() === `drive${busId}`);
+}
+
 interface FindRunStateEntry {
   root: string;
   pattern: string;
@@ -688,7 +707,7 @@ export const tools: ToolDefinition[] = [
           if (powerOnIfNeeded) {
             try {
               const drives = await (ctx.client as any).drivesList();
-              const targetDrive = Array.isArray(drives) ? drives.find((d: any) => d.id === drive) : null;
+              const targetDrive = Array.isArray(drives) ? findListedDrive(drives, drive) : null;
               
               if (!targetDrive) {
                 log.push({ step: "check_drive_exists", success: false, error: `Drive ${drive} not found` });
@@ -784,7 +803,7 @@ export const tools: ToolDefinition[] = [
           if (verifyMount) {
             try {
               const drives = await (ctx.client as any).drivesList();
-              const targetDrive = Array.isArray(drives) ? drives.find((d: any) => d.id === drive) : null;
+              const targetDrive = Array.isArray(drives) ? findListedDrive(drives, drive) : null;
               
               if (!targetDrive) {
                 log.push({ step: "verify", success: false, error: "Drive not found in list" });
