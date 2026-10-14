@@ -416,6 +416,41 @@ test("drive_mount_and_verify mounts image successfully with defaults", async () 
   assert.equal(data?.verification.imageMatches, true);
 });
 
+test("drive_mount_and_verify sets the drive mode instead of passing it as the mount mode", async () => {
+  const calls = [];
+  const ctx = {
+    client: {
+      async drivesList() {
+        return [{ id: "drive8", power: "on", image: "/media/work.d81" }];
+      },
+      async driveSetMode(drive, mode) {
+        calls.push({ op: "set_mode", drive, mode });
+        return { success: true, details: { drive, mode } };
+      },
+      async driveMount(drive, image, opts) {
+        calls.push({ op: "mount", drive, image, opts });
+        return { success: true, details: { drive, image } };
+      },
+      async driveReset(drive) {
+        calls.push({ op: "reset", drive });
+        return { success: true, details: { drive } };
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("drive_mount_and_verify", {
+    drive: "drive8",
+    imagePath: "/media/work.d81",
+    mode: "1581",
+  }, ctx);
+
+  assert.equal(res.metadata?.success, true);
+  assert.deepEqual(calls.map((call) => call.op), ["set_mode", "mount", "reset"]);
+  assert.deepEqual(calls[0], { op: "set_mode", drive: "drive8", mode: "1581" });
+  assert.equal(calls[1].opts?.mode, undefined);
+});
+
 test("drive_mount_and_verify retries on mount failure", async () => {
   let mountAttempts = 0;
 

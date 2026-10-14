@@ -713,7 +713,17 @@ export const tools: ToolDefinition[] = [
             }
           }
 
-          // Step 2: Mount with retries
+          // Step 2: Switch the drive emulation mode. The mount's own "mode"
+          // option is the read/write attachment mode, not the drive type.
+          if (mode) {
+            const setMode = await (ctx.client as any).driveSetMode(drive, mode);
+            log.push({ step: "set_mode", success: setMode.success === true, details: setMode.details });
+            if (!setMode.success) {
+              throw new ToolExecutionError(`Failed to set drive ${drive} to ${mode} mode`, { details: setMode.details });
+            }
+          }
+
+          // Step 3: Mount with retries
           let mountSuccess = false;
           let lastMountError: unknown = null;
           let attempts = 0;
@@ -721,12 +731,7 @@ export const tools: ToolDefinition[] = [
           for (let attempt = 0; attempt <= maxRetries && !mountSuccess; attempt += 1) {
             attempts = attempt + 1;
             try {
-              const mountOptions: any = {};
-              if (mode) {
-                mountOptions.mode = mode;
-              }
-
-              const mount = await (ctx.client as any).driveMount(drive, imagePath, mountOptions);
+              const mount = await (ctx.client as any).driveMount(drive, imagePath);
               if (mount.success) {
                 mountSuccess = true;
                 log.push({ step: `mount_attempt_${attempts}`, success: true, details: mount.details });
@@ -756,7 +761,7 @@ export const tools: ToolDefinition[] = [
             });
           }
 
-          // Step 3: Reset drive if requested
+          // Step 4: Reset drive if requested
           if (resetAfterMount) {
             try {
               const reset = await (ctx.client as any).driveReset(drive);
@@ -774,7 +779,7 @@ export const tools: ToolDefinition[] = [
             }
           }
 
-          // Step 4: Verify mount
+          // Step 5: Verify mount
           let verificationResult: any = null;
           if (verifyMount) {
             try {
