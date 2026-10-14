@@ -90,16 +90,14 @@ export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
       }
       if (pat.type === "arpeggio" && Array.isArray(pat.notes) && pat.notes.length) {
         const stepFrames = Math.max(1, Math.round((pat.frame_rate ? fps / pat.frame_rate : framesPerBeat)));
-        let idx = 0;
         for (let f = 0; f < totalFramesInSection; f += 1) {
-          if (f % stepFrames === 0) idx = (idx + 1) % pat.notes.length;
+          const idx = Math.floor(f / stepFrames) % pat.notes.length;
           notesForSong.push(String(pat.notes[idx]));
         }
       } else if (Array.isArray(pat.groove) && pat.groove.length) {
         const stepFrames = framesPerBeat; // one note per beat
-        let gi = 0;
         for (let f = 0; f < totalFramesInSection; f += 1) {
-          if (f % stepFrames === 0) gi = (gi + 1) % pat.groove.length;
+          const gi = Math.floor(f / stepFrames) % pat.groove.length;
           notesForSong.push(String(pat.groove[gi]));
         }
       } else if (typeof pat.motif === "string" && pat.motif.trim().length > 0) {
@@ -110,9 +108,8 @@ export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
         const lengthBeats = Math.max(1, Math.floor(pat.length ?? 1));
         const stepFrames = framesPerBeat * lengthBeats;
         const baseNote = "C3";
-        let mi = 0;
         for (let f = 0; f < totalFramesInSection; f += 1) {
-          if (f % stepFrames === 0) mi = (mi + 1) % Math.max(1, intervals.length);
+          const mi = Math.floor(f / stepFrames) % Math.max(1, intervals.length);
           const iv = intervals.length ? intervals[mi] : 0;
           notesForSong.push(transposeNote(baseNote, iv));
         }
