@@ -685,7 +685,12 @@ export async function startMockC64Server(options = {}) {
       const lengthValue = routeUrl.searchParams.get("length") ?? "256";
       const address = parseNumeric(addressValue);
       const length = Math.max(0, parseNumeric(lengthValue, 10));
-      const bytes = readMemoryWithHeartbeat(state, address, length);
+      const bytes = Uint8Array.from(readMemoryWithHeartbeat(state, address, length));
+      // SID registers $D400-$D418 are write-only; the Ultimate 64 reads them as $00.
+      for (let i = 0; i < bytes.length; i += 1) {
+        const target = address + i;
+        if (target >= 0xd400 && target <= 0xd418) bytes[i] = 0;
+      }
 
       const accept = String(req.headers["accept"] || "");
       if (accept.includes("application/octet-stream")) {

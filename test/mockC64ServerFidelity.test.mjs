@@ -49,3 +49,11 @@ test("mock C64U load_prg relinks raw machine code at $0801 like the Ultimate 64"
   assert.equal(hex(mock.state.memory, 0x0801, 13), "0e088d20d060112233445566" + "00");
   assert.equal(hex(mock.state.memory, 0x2b, 10), "01080e080e080e0800a0");
 });
+
+test("mock C64U reads the write-only SID registers as $00 like the Ultimate 64", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  await fetch(`${mock.baseUrl}/v1/machine:writemem?address=D404&data=11`, { method: "PUT" });
+  const response = await fetch(`${mock.baseUrl}/v1/machine:readmem?address=D404&length=1`, { headers: { Accept: "application/octet-stream" } });
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [0x00]);
+});
