@@ -365,6 +365,19 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
               `the slide into ${midiToNoteName(base)} would start at ${midiToNoteName(base - slideDepth)}, outside the playable range C0..${midiToNoteName(maxMidi)} on ${system}`,
             );
           }
+          if (fxRaw.vibrato) {
+            // The upward swing must fit the 16-bit frequency register, or it would clip and the vibrato become lopsided.
+            const depth = Number(fxRaw.vibrato.depth);
+            const top = base + Math.max(...offsets);
+            const peak = (midiToHz(top) * Math.pow(2, depth / 12) * 16_777_216) / CLOCK_HZ[system];
+            if (Math.round(peak) > 0xffff) {
+              const maxDepth = 12 * Math.log2((0xffff * CLOCK_HZ[system]) / 16_777_216 / midiToHz(top));
+              throw new SidwaveValidationError(
+                `${patPath}.fx.vibrato.depth`,
+                `a vibrato of ${depth} semitones on ${midiToNoteName(top)} would rise above the SID's highest frequency on ${system}; use a depth of at most ${Math.floor(maxDepth * 100) / 100} or a lower note`,
+              );
+            }
+          }
           const inst = buildInstrument(voice, fxRaw, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps);
           out.push({ start: f0, end: f1, midi: base, inst: instIndex(inst) });
         }
@@ -1167,7 +1180,9 @@ vr_tri:
   asl p0
   rol p1
   rol p2
-  clc
+  ; add round(amplitude * tri / 128): the carry holds the rounding bit
+  lda p0
+  cmp #$80
   lda f_lo
   adc p1
   sta f_lo
@@ -1188,7 +1203,9 @@ vr_vib_dn:
   asl p0
   rol p1
   rol p2
-  sec
+  ; subtract round(amplitude * tri / 128): a clear carry borrows the rounding bit
+  lda #$7F
+  cmp p0
   lda f_lo
   sbc p1
   sta f_lo
@@ -1313,7 +1330,7 @@ va_pw_min:
 va_done:
   rts
 
-;  ---- p2:p1 >>= A (A = 0..15) ----
+;  ---- p2:p1 = round(p2:p1:p0 / 2^(8 + A)) (A = 0..15) ----
 shr_p:
   sta tmp
 shr_l:
@@ -1321,9 +1338,18 @@ shr_l:
   beq shr_x
   lsr p2
   ror p1
+  ror p0
   dec tmp
   jmp shr_l
 shr_x:
+  lda p0
+  cmp #$80
+  lda p1
+  adc #0
+  sta p1
+  lda p2
+  adc #0
+  sta p2
   rts
 
 ; ---- 8x8 multiply: ma * mb -> r_hi:r_lo, using a*b = sq(a+b) - sq(|a-b|) with sq(x) = floor(x*x/4) ----

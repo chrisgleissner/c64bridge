@@ -9,6 +9,7 @@ import {
   compileSidwaveToPrg,
   compileSidwaveToSid,
   hzToSidFrequency,
+  SIDWAVE_MEMORY_END,
   sidwaveFrameRate,
   SIDWAVE_HARD_RESTART_FRAMES,
 } from "../src/sidwaveCompiler.js";
@@ -850,4 +851,85 @@ test("SIDWAVE PRG keeps BASIC usable: program and variables move behind the play
   assert.ok(large.endAddress > 0xa000, `end $${large.endAddress.toString(16)}`);
   assert.equal(large.basicFreeBytes, 0);
   assert.match(large.warnings.join(" "), /past BASIC's memory \(\$A000\).*OUT OF MEMORY/);
+});
+
+// ---------------------------------------------------------------------------
+// Final review: vibrato precision and range, size boundary, echo minimum length
+
+function vibratoCents(mode, note, depth) {
+  // 1.566 Hz is a phase step of 8 per frame, so the triangle's peaks fall exactly on frames.
+  const source = doc({
+    mode,
+    voices: `  - id: 1\n    waveform: sawtooth\n    patterns:\n      A: { groove: [${note}], length: 4, fx: { vibrato: { depth: ${depth}, rate: 1.566 } } }`,
+    timeline: `  - { bars: 1, layers: { v1: A } }`,
+  });
+  const target = sidFreq(note, mode);
+  const cents = voice(runPsid(compile(source).sid, 98).states, 0).freq.slice(0, 97).map((f) => 1200 * Math.log2(f / target));
+  return [Math.max(...cents), Math.min(...cents)];
+}
+
+test("SIDWAVE vibrato keeps its depth in the bottom octave (amplitude and offset are rounded, not truncated)", () => {
+  // At C0 one frequency unit is about 6 cents, so the best achievable swing is within ~3 cents of ±depth.
+  for (const [note, depth, tolerance] of [["C0", 1, 4], ["C0", 0.25, 4], ["C1", 1, 3], ["C#0", 3, 3]]) {
+    const [up, down] = vibratoCents("PAL", note, depth);
+    assert.ok(Math.abs(up - depth * 100) <= tolerance, `${note} depth ${depth}: peak +${up.toFixed(1)} cents`);
+    assert.ok(Math.abs(down + depth * 100) <= tolerance, `${note} depth ${depth}: trough ${down.toFixed(1)} cents`);
+  }
+});
+
+test("SIDWAVE vibrato that would rise above the SID's highest frequency is rejected", () => {
+  const one = (mode, notes, depth) => doc({
+    mode,
+    voices: `  - id: 1\n    patterns: { A: { type: arpeggio, notes: [${notes}], frame_rate: 2, fx: { vibrato: { depth: ${depth}, rate: 5 } } } }`,
+    timeline: `  - { bars: 1, layers: { v1: A } }`,
+  });
+  assert.throws(() => compile(one("PAL", "A#7", 1)), /vibrato\.depth: a vibrato of 1 semitones on A#7 would rise above the SID's highest frequency on PAL; use a depth of at most 0\.54/);
+  assert.throws(() => compile(one("NTSC", "B7", 1)), /on B7 would rise above the SID's highest frequency on NTSC; use a depth of at most 0\.19/);
+  assert.throws(() => compile(one("PAL", "C7, A#7", 1)), /on A#7 would rise above/, "the highest chord tone counts");
+  compile(one("PAL", "A#7", 0.54));
+  const [up, down] = vibratoCents("PAL", "A#7", 0.54);
+  assert.ok(Math.abs(up - 54) <= 1 && Math.abs(down + 54) <= 1, `A#7 depth 0.54: +${up.toFixed(1)} / ${down.toFixed(1)} cents`);
+});
+
+test("SIDWAVE size limit boundary: the largest song that fits ends just below $D000, one bar more is rejected", () => {
+  const song = (bars) => doc({
+    voices: `  - id: 1\n    patterns: { A: { groove: [C4, E4, G4, B4], length: 0.25 } }`,
+    timeline: `  - { bars: ${bars}, layers: { v1: A } }`,
+  });
+  const fits = (bars) => {
+    try {
+      return compile(song(bars)).compiled;
+    } catch (error) {
+      if (error instanceof SidwaveValidationError && /past the \$D000 limit/.test(error.message)) return null;
+      throw error;
+    }
+  };
+  let lo = 1;
+  let hi = 2000;
+  assert.ok(fits(lo) && !fits(hi));
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (fits(mid)) lo = mid; else hi = mid;
+  }
+  const largest = fits(lo);
+  // The installer writes three bytes behind the program, so the program must end 3 bytes before $D000.
+  const used = largest.endAddress + 3;
+  assert.ok(used <= SIDWAVE_MEMORY_END && SIDWAVE_MEMORY_END === 0xd000, `largest song uses up to $${used.toString(16)}`);
+  // One bar adds about 70 bytes, so the largest song that fits lands within 100 bytes of the limit.
+  assert.ok(used > 0xd000 - 100, `largest song uses up to $${used.toString(16)}, more than 100 bytes below $D000`);
+});
+
+test("SIDWAVE reverb echo drops echo notes shorter than 3 frames", () => {
+  // Notes at frames 0, 25, 50 and 75 of a 100-frame section; a 23-frame delay leaves the last echo only 2 frames.
+  const source = doc({
+    extra: `global_fx:\n  reverb_sim: { depth: 0.5, delay_frames: 23 }\n`,
+    voices: `  - id: 1\n    patterns: { A: { groove: [C4, D4, E4, F4] } }`,
+    timeline: `  - { bars: 1, layers: { v1: A } }`,
+  });
+  const { compiled, sid } = compile(source);
+  assert.equal(compiled.totalFrames, 100);
+  const echo = voice(runPsid(sid, 100).states, 1);
+  assert.deepEqual(gateOns(echo).map((o) => [o.frame, o.freq]), [[23, sidFreq("C4")], [48, sidFreq("D4")], [73, sidFreq("E4")]]);
+  assert.equal(echo.ctrl[97] & 1, 1, "the E4 echo sounds until frame 98");
+  for (let f = 98; f < 100; f += 1) assert.equal(echo.ctrl[f] & 1, 0, `no 2-frame echo of F4 at frame ${f}`);
 });
