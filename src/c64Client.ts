@@ -1019,7 +1019,8 @@ export class C64Client {
   async sidReset(hard = false): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade);
+      // Unhooking a running SIDWAVE player is best-effort: a failed read must not stop the SID being silenced.
+      const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade).catch(() => false);
       if (hard) {
         const span = 0x19;
         const ff = Buffer.alloc(span, 0xff);
@@ -1048,7 +1049,8 @@ export class C64Client {
   private async stopSidwaveIrqPlayer(facade: C64Facade): Promise<boolean> {
     const vector = await facade.readMemory(0x0314, 2);
     const handler = (vector[0] ?? 0) | ((vector[1] ?? 0) << 8);
-    if (handler === 0xea31) return false;
+    // A handler too close to $FFFF cannot hold the 6-byte SIDWAVE handler (and the read would cross $FFFF).
+    if (handler === 0xea31 || handler > 0xfffa) return false;
     const code = await facade.readMemory(handler, 6);
     const playVector = await facade.readMemory(SIDWAVE_PLAY_ADDRESS, 3);
     const isSidwaveHandler = code[0] === 0x20 && code[3] === 0x4c && code[4] === 0x31 && code[5] === 0xea

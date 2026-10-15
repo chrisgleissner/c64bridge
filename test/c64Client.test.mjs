@@ -713,6 +713,12 @@ test("C64Client against mock server", async (t) => {
     assert.deepEqual(result.details, { stoppedSidwavePlayer: true });
     assert.deepEqual([...mock.state.memory.subarray(0x0314, 0x0316)], [0x31, 0xea]);
 
+    // A vector near $FFFF is not read past the end of memory, and silencing still happens.
+    mock.state.memory.set([0xfd, 0xff], 0x0314);
+    const nearEnd = await client.sidSilenceAll();
+    assert.equal(nearEnd.success, true);
+    assert.equal(nearEnd.details, undefined);
+
     // Some other program's IRQ handler stays hooked, even one shaped like JSR x / JMP $EA31.
     mock.state.memory.set([0x20, 0x00, 0xc3, 0x4c, 0x31, 0xea], 0xc200);
     mock.state.memory.set([0x00, 0xc2], 0x0314);

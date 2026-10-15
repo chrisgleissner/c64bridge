@@ -685,6 +685,15 @@ export async function startMockC64Server(options = {}) {
       const lengthValue = routeUrl.searchParams.get("length") ?? "256";
       const address = parseNumeric(addressValue);
       const length = Math.max(0, parseNumeric(lengthValue, 10));
+      // Same checks as the firmware (route_machine.cc readmem).
+      if (length < 1 || length > 65536) {
+        sendJson(res, { errors: ["Invalid length"] }, 400);
+        return;
+      }
+      if (address + length > 65536) {
+        sendJson(res, { errors: ["Memory read exceeds location $FFFF"] }, 400);
+        return;
+      }
       const bytes = Uint8Array.from(readMemoryWithHeartbeat(state, address, length));
       // SID registers $D400-$D418 are write-only; the Ultimate 64 reads them as $00.
       for (let i = 0; i < bytes.length; i += 1) {

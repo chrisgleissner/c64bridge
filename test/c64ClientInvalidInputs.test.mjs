@@ -67,3 +67,16 @@ test("C64Client: sidNoteOn reports notes above the SID frequency range instead o
   assert.equal(hz.success, false);
   assert.ok(String(hz.details?.message).includes("NTSC"));
 });
+
+test("C64Client: sidSilenceAll still silences the SID when the player check cannot read memory", async () => {
+  const client = new C64Client("http://example.invalid");
+  const writes = [];
+  Reflect.set(client, "facadePromise", Promise.resolve({
+    type: "c64u",
+    async readMemory() { throw new Error("Memory read exceeds location $FFFF"); },
+    async writeMemory(address) { writes.push(address); },
+  }));
+  const result = await client.sidSilenceAll();
+  assert.equal(result.success, true);
+  assert.deepEqual(writes, [0xd404, 0xd40b, 0xd412, 0xd418]);
+});

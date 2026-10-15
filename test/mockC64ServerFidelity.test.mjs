@@ -57,3 +57,11 @@ test("mock C64U reads the write-only SID registers as $00 like the Ultimate 64",
   const response = await fetch(`${mock.baseUrl}/v1/machine:readmem?address=D404&length=1`, { headers: { Accept: "application/octet-stream" } });
   assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [0x00]);
 });
+
+test("mock C64U rejects a memory read past $FFFF like the firmware", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const response = await fetch(`${mock.baseUrl}/v1/machine:readmem?address=FFFD&length=6`);
+  assert.equal(response.status, 400);
+  assert.deepEqual((await response.json()).errors, ["Memory read exceeds location $FFFF"]);
+});
