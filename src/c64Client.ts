@@ -1055,6 +1055,15 @@ export class C64Client {
     const system = options.system ?? "PAL";
     // The tool schema documents that a note name overrides frequencyHz.
     const hz = options.note ? this.noteNameToHz(options.note) : options.frequencyHz ?? 440;
+    // The 16-bit frequency register tops out at about 3848 Hz on PAL and 3995 Hz
+    // on NTSC (B7 is already above the PAL limit); report it instead of clamping.
+    const maxHz = (0xffff * (system === "PAL" ? 985_248 : 1_022_727)) / 16_777_216;
+    if (hz > maxHz + 0.5) {
+      return {
+        success: false,
+        details: { message: `${options.note ?? `${hz} Hz`} (${hz.toFixed(1)} Hz) is above the SID's highest ${system} frequency of ${maxHz.toFixed(1)} Hz` },
+      };
+    }
     const freq16 = this.hzToSidFrequency(hz, system);
     const freqLo = freq16 & 0xff;
     const freqHi = (freq16 >> 8) & 0xff;

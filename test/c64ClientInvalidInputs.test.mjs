@@ -57,3 +57,13 @@ test("C64Client: sid helpers validate inputs", async () => {
   assert.equal(badVoice.success, false);
   assert.ok(String(badVoice.details?.message || badVoice.details).includes("Voice"));
 });
+
+test("C64Client: sidNoteOn reports notes above the SID frequency range instead of clamping", async () => {
+  const client = new C64Client("http://example.invalid");
+  const pal = await client.sidNoteOn({ voice: 1, note: "B7", system: "PAL" });
+  assert.equal(pal.success, false);
+  assert.ok(String(pal.details?.message).includes("3848"));
+  const hz = await client.sidNoteOn({ voice: 1, frequencyHz: 5000, system: "NTSC" });
+  assert.equal(hz.success, false);
+  assert.ok(String(hz.details?.message).includes("NTSC"));
+});
