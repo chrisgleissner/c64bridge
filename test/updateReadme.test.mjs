@@ -252,6 +252,8 @@ describe("update-readme grouped operations", () => {
     expect(nextReadme).toContain("### Tools");
     expect(nextReadme).toContain("#### C64 Ultimate");
     expect(nextReadme).not.toContain("stale");
+    // "$1E" in a tool description must be copied literally, not read as a "$1" capture reference.
+    expect(nextReadme).toContain("port 2 reads $1E for up");
     expect(nextReadme).not.toContain("stale env");
     expect(unchanged).toBe(false);
   });
