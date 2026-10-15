@@ -170,11 +170,9 @@ export function asciiToScreenCodes(text: string): Buffer {
   for (const ch of text) {
     if (ch >= 'A' && ch <= 'Z') out.push(ch.charCodeAt(0) - 64);
     else if (ch >= '0' && ch <= '9') out.push(0x30 + (ch.charCodeAt(0) - 48));
-    else if (ch === ' ') out.push(0x20);
-    else if (ch === '.') out.push(0x2E);
-    else if (ch === ':') out.push(0x3A);
-    else if (ch === '-') out.push(0x2D);
-    // extend as needed; ignore others
+    // Space, digits and punctuation ($20-$3F) have the same screen codes as ASCII.
+    else if (ch >= ' ' && ch <= '?') out.push(ch.charCodeAt(0));
+    // ignore others
   }
   return Buffer.from(out);
 }

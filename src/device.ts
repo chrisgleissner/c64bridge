@@ -11,6 +11,7 @@ import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
+import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
 
@@ -892,8 +893,19 @@ export class ViceBackend implements C64Facade {
   // remembered here because VICE cannot report them.
   private readonly attachedImages = new Map<number, string>();
   private readonly savedDriveTypes = new Map<number, number>();
+  private trackedStateProcessStart = 0;
+
+  /** A restarted VICE has no images attached and default drive types, so forget what was tracked before. */
+  private syncTrackedState(): void {
+    if (this.trackedStateProcessStart !== this.lastProcessStart) {
+      this.attachedImages.clear();
+      this.savedDriveTypes.clear();
+      this.trackedStateProcessStart = this.lastProcessStart;
+    }
+  }
 
   async drivesList(): Promise<unknown> {
+    this.syncTrackedState();
     return await this.withClient(async (client) => {
       const drives = [];
       for (const n of [8, 9, 10, 11]) {
@@ -923,12 +935,32 @@ export class ViceBackend implements C64Facade {
       // The Binary Monitor's only attach path is autostart, which always uses drive 8.
       throw unsupported(`driveMount on drive ${n}; VICE can attach images over the Binary Monitor only to drive 8`);
     }
+    // Autostart falls back to tape, snapshot, cartridge and PRG handling when a
+    // file is not a disk image, so only disk images are passed on.
+    if (!VICE_DISK_IMAGE_EXTENSIONS.has(path.extname(imagePath).toLowerCase())) {
+      throw new Error(`VICE can mount only disk images (${[...VICE_DISK_IMAGE_EXTENSIONS].join(", ")}): ${imagePath}`);
+    }
+    if (!fs.existsSync(imagePath)) {
+      throw new Error(`Disk image not found on the VICE host: ${imagePath}`);
+    }
+    this.syncTrackedState();
     await this.withClient(async (client) => {
       await this.ensureDriveOn(client, n);
       await client.autostart(imagePath, { run: false });
+      // Autoload power-cycles the machine after this call returns; wait until
+      // its LOAD has finished so callers do not write into a machine that is
+      // about to be reset.
+      await waitForAutoloadFinished(client, 30_000);
     });
     this.attachedImages.set(n, imagePath);
-    return { success: true, details: { drive, image: imagePath, note: "VICE attaches images through autoload, which also LOADs the first program without running it." } };
+    return {
+      success: true,
+      details: {
+        drive,
+        image: imagePath,
+        note: "VICE attaches images through autoload, which resets the machine (clearing RAM) and LOADs the first program without running it.",
+      },
+    };
   }
 
   async driveRemove(_drive: string): Promise<RunResult> {
@@ -953,6 +985,7 @@ export class ViceBackend implements C64Facade {
 
   async driveOff(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
+    this.syncTrackedState();
     await this.withClient(async (client) => {
       const current = await client.resourceGet(`Drive${n}Type`);
       const type = current.type === "int" ? current.value : Number(current.value);
@@ -1079,6 +1112,27 @@ function unsupported(name: string): Error { const err = new Error(`Operation '${
  * preserving leading and nested separators for firmware routing. */
 function encodeDevicePath(value: string): string {
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+/** Disk image types VICE's drive 8 can attach (autostart would treat anything else as tape, cartridge or PRG). */
+const VICE_DISK_IMAGE_EXTENSIONS = new Set([".d64", ".g64", ".d71", ".g71", ".d81", ".d80", ".d82", ".x64", ".p64", ".d1m", ".d2m", ".d4m"]);
+
+/** Wait until VICE's autoload has typed LOAD and BASIC is back at READY. (or reported an error). */
+async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await client.exitMonitor();
+    await delay(250);
+    const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));
+    const load = screen.lastIndexOf('LOAD"');
+    if (load >= 0) {
+      const after = screen.slice(load);
+      const error = /\?([A-Z ]+ERROR|FILE NOT FOUND|DEVICE NOT PRESENT)/.exec(after);
+      if (error) throw new Error(`VICE autoload failed: ?${error[1]}`);
+      if (after.includes("READY.")) return;
+    }
+  }
+  throw new Error("VICE autoload did not finish within the time limit");
 }
 
 /** C64U drive letters with their factory bus numbers, so one drive id works on both backends. */

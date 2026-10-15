@@ -223,7 +223,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
@@ -383,7 +383,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
         await ctx.client.viceJoystickPress(port, pressedByte);
         ctx.logger.info("Pressed joystick", { port, controls: parsed.controls, byte: pressedByte });
         return textResult(
-          `Joystick port ${port} pressed: ${parsed.controls.join(", ") || "none"}.`,
+          `Joystick port ${port} pressed: ${parsed.controls.join(", ") || "none"}.${port === 1 ? " On VICE, port 1 also shows phantom keys while held." : ""}`,
           { success: true, port, action: "press", controls: parsed.controls },
         );
       }

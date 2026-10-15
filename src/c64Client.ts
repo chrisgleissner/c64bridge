@@ -2300,17 +2300,21 @@ export class C64Client {
      * attached for the duration of the press and the previous device is
      * restored on release. The device reads bits 5-7 as low, which the
      * keyboard scan sees as extra keys, so it must not stay attached.
+     *
+     * While a press is held: on port 1 the keyboard scan sees phantom keys
+     * (for example SHIFT+C=, which toggles the character set); on port 2,
+     * $DC00 reads with bits 5-7 clear (up = $1E where a joystick gives $7E),
+     * so programs that compare the whole byte will not see the input.
      */
     async viceJoystickPress(port: 1 | 2, activeLowMask: number): Promise<void> {
       await this.withViceMonitor(async (client) => {
         const resource = `JoyPort${port}Device`;
-        if (!this.viceJoyportSavedDevice.has(port)) {
-          const current = await client.resourceGet(resource);
-          const currentId = current.type === "int" ? current.value : Number(current.value);
-          if (currentId !== VICE_JOYPORT_IO_SIMULATION) {
-            this.viceJoyportSavedDevice.set(port, currentId);
-            await client.resourceSet(resource, VICE_JOYPORT_IO_SIMULATION);
-          }
+        // Read the device every time: after a VICE restart the saved state is stale.
+        const current = await client.resourceGet(resource);
+        const currentId = current.type === "int" ? current.value : Number(current.value);
+        if (currentId !== VICE_JOYPORT_IO_SIMULATION) {
+          this.viceJoyportSavedDevice.set(port, currentId);
+          await client.resourceSet(resource, VICE_JOYPORT_IO_SIMULATION);
         }
         // Attaching the device clears its lines to 0 (everything pressed), so set them in the same monitor session.
         await client.joyportSet(port, activeLowMask);

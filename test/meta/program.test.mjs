@@ -506,6 +506,7 @@ for (const [maxRms, expectedPassed] of [[0.001, 1], [0.4, 0]]) {
   test(`batch_run_with_assertions sid_silent measures audio (peak RMS ${maxRms})`, async () => {
     const reads = [];
     const ctx = {
+      platform: { id: "c64u" },
       client: {
         async runPrgFile() { return { success: true }; },
         // SID control registers are write-only: on an Ultimate 64 $D404 reads $00
@@ -859,6 +860,7 @@ test("batch_run_with_assertions reports an unsuccessful PRG launch as a failed r
 
 test("batch_run_with_assertions reports sid_silent as an error when the audio analysis has no levels", async () => {
   const ctx = {
+    platform: { id: "c64u" },
     client: {
       async runPrgFile() { return { success: true }; },
       async recordAndAnalyzeAudio() { return { analysis: { global_metrics: {} } }; },

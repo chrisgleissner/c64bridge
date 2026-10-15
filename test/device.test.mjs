@@ -425,7 +425,11 @@ viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUI
     });
 
     await t.test("driveMount attaches image to drive 8", async () => {
-      const result = await facade.driveMount("drive8", "/tmp/test.d64");
+      // VICE attaches from the host file system, so the image must exist.
+      const imageDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-vice-basic-"));
+      const image = path.join(imageDir, "test.d64");
+      fs.writeFileSync(image, Buffer.alloc(174848));
+      const result = await facade.driveMount("drive8", image);
       assert.equal(result.success, true);
     });
 
@@ -1111,6 +1115,10 @@ test("device: ViceBackend unit branches", async () => {
   }, async () => {
     const backend = new ViceBackend({ host: "localhost", port: "6502" });
     const driveTypes = new Map([[8, 1541]]);
+    let autoloadScreen = null;
+    const imageDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-vice-mount-"));
+    const demoImage = path.join(imageDir, "demo.d64");
+    fs.writeFileSync(demoImage, Buffer.alloc(174848));
     assert.deepEqual(backend.getEndpoint(), { host: "127.0.0.1", port: 6510 });
 
     const calls = [];
@@ -1128,6 +1136,7 @@ test("device: ViceBackend unit branches", async () => {
         if (start === 0x002B) {
           return readyPointers;
         }
+        if (start === 0x0400 && autoloadScreen) return autoloadScreen;
         return start === 0x0400 ? Buffer.from(READY_PATTERN) : Buffer.from([0xAA, 0xBB, 0xCC, 0xDD]);
       },
       async memSet(address, data) {
@@ -1141,6 +1150,10 @@ test("device: ViceBackend unit branches", async () => {
       },
       async autostart(filename, options) {
         calls.push(["autostart", filename, options.run]);
+        // What VICE shows once its autoload has finished.
+        autoloadScreen = Buffer.alloc(1000, 0x20);
+        Buffer.from([0x0c, 0x0f, 0x01, 0x04, 0x22, 0x2a, 0x22, 0x2c, 0x38, 0x2c, 0x31]).copy(autoloadScreen, 0); // LOAD"*",8,1
+        Buffer.from([0x12, 0x05, 0x01, 0x04, 0x19, 0x2e]).copy(autoloadScreen, 80); // READY.
       },
       async resetDrive(unit) {
         calls.push(["resetDrive", unit]);
@@ -1222,16 +1235,19 @@ test("device: ViceBackend unit branches", async () => {
     assert.equal((await backend.driveOff("drive8")).details.power, "off");
     assert.deepEqual((await backend.drivesList())[0], { id: "drive8", power: "off", image: null, type: 0 });
     // Mounting switches the drive back on with its previous type and attaches through autoload.
-    assert.equal((await backend.driveMount("drive8", "/tmp/demo.d64")).success, true);
+    assert.equal((await backend.driveMount("drive8", demoImage)).success, true);
     assert.ok(calls.some((c) => c[0] === "resourceSet" && c[1] === "Drive8Type" && c[2] === 1541));
-    assert.ok(calls.some((c) => c[0] === "autostart" && c[1] === "/tmp/demo.d64" && c[2] === false));
+    assert.ok(calls.some((c) => c[0] === "autostart" && c[1] === demoImage && c[2] === false));
     const drives = await backend.drivesList();
-    assert.deepEqual(drives[0], { id: "drive8", power: "on", image: "/tmp/demo.d64", type: 1541 });
+    assert.deepEqual(drives[0], { id: "drive8", power: "on", image: demoImage, type: 1541 });
     assert.deepEqual(drives[1], { id: "drive9", power: "off", image: null, type: 0 });
     assert.deepEqual(drives[2], { id: "drive10", power: "off", image: null, type: 0 });
     assert.deepEqual(drives[3], { id: "drive11", power: "on", image: null, type: 1571 });
 
-    await assert.rejects(() => backend.driveMount("drive9", "/tmp/demo.d64"), /only to drive 8/);
+    await assert.rejects(() => backend.driveMount("drive9", demoImage), /only to drive 8/);
+    // Autostart would treat other files as tape, cartridge or PRG, and a missing file gave only "BM error 0x8f".
+    await assert.rejects(() => backend.driveMount("drive8", path.join(imageDir, "game.prg")), /only disk images/);
+    await assert.rejects(() => backend.driveMount("drive8", path.join(imageDir, "missing.d64")), /not found/);
     await assert.rejects(() => backend.driveRemove("drive8"), /no command to detach/);
     assert.equal((await backend.driveReset("drive9")).success, true);
     assert.ok(calls.some((c) => c[0] === "resetDrive" && c[1] === 9));

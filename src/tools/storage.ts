@@ -205,7 +205,7 @@ export const storageModule = defineToolModule({
           ctx.logger.info("Listing Ultimate drives");
 
           const details = await ctx.client.drivesList();
-          return textResult("Retrieved Ultimate drive status.", {
+          return textResult("Retrieved drive status.", {
             success: true,
             drives: details,
           });
