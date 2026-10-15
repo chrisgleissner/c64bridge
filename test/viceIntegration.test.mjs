@@ -192,10 +192,12 @@ test("ViceClient integrates with the VICE mock server for debugger and resource 
   assert.equal(display.pixels.length, 64);
 
   await session.client.resourceSet("Drive8Type", 1581);
-  await session.client.resourceSet("Drive8Image", "demo.d64");
+  await session.client.resourceSet("KernalName", "custom.bin");
   assert.deepEqual(await session.client.resourceGet("Drive8Type"), { type: "int", value: 1581 });
-  assert.deepEqual(await session.client.resourceGet("Drive8Image"), { type: "string", value: "demo.d64" });
-  assert.deepEqual(await session.client.resourceGet("MissingResource"), { type: "string", value: "" });
+  assert.deepEqual(await session.client.resourceGet("KernalName"), { type: "string", value: "custom.bin" });
+  // Like VICE, unknown resources fail instead of reading as empty or accepting writes.
+  await assert.rejects(() => session.client.resourceGet("MissingResource"), /0x1|OBJECT_MISSING|error/i);
+  await assert.rejects(() => session.client.resourceSet("Drive8Image", "demo.d64"), /0x8f|error/i);
 
   await session.client.checkpointDelete(created.id);
   checkpoints = await session.client.checkpointList();

@@ -887,19 +887,24 @@ export class ViceBackend implements C64Facade {
     return { host: this.host, port: this.port };
   }
 
+  // VICE has no "drive enabled" or "attached image" resource. A drive is off
+  // when Drive<n>Type is 0, and images attached through this backend are
+  // remembered here because VICE cannot report them.
+  private readonly attachedImages = new Map<number, string>();
+  private readonly savedDriveTypes = new Map<number, number>();
+
   async drivesList(): Promise<unknown> {
     return await this.withClient(async (client) => {
       const drives = [];
       for (const n of [8, 9, 10, 11]) {
         try {
-          const enabled = await client.resourceGet(`Drive${n}CPUEnabled`);
-          const image = await client.resourceGet(`Drive${n}Image`);
           const typeRes = await client.resourceGet(`Drive${n}Type`);
+          const type = typeRes.type === "int" ? typeRes.value : Number(typeRes.value);
           drives.push({
             id: `drive${n}`,
-            power: (typeof enabled.value === "number" ? enabled.value : 0) ? "on" : "off",
-            image: typeof image.value === "string" && image.value ? image.value : null,
-            type: typeRes.value,
+            power: type !== 0 ? "on" : "off",
+            image: this.attachedImages.get(n) ?? null,
+            type,
           });
         } catch {
           drives.push({ id: `drive${n}`, power: "off", image: null, type: 0 });
@@ -914,26 +919,26 @@ export class ViceBackend implements C64Facade {
       throw unsupported("driveMount type/mode overrides; omit these options on VICE");
     }
     const n = parseDriveNumber(drive);
+    if (n !== 8) {
+      // The Binary Monitor's only attach path is autostart, which always uses drive 8.
+      throw unsupported(`driveMount on drive ${n}; VICE can attach images over the Binary Monitor only to drive 8`);
+    }
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 1);
-      await client.resourceSet(`Drive${n}Image`, imagePath);
+      await this.ensureDriveOn(client, n);
+      await client.autostart(imagePath, { run: false });
     });
-    return { success: true, details: { drive, image: imagePath } };
+    this.attachedImages.set(n, imagePath);
+    return { success: true, details: { drive, image: imagePath, note: "VICE attaches images through autoload, which also LOADs the first program without running it." } };
   }
 
-  async driveRemove(drive: string): Promise<RunResult> {
-    const n = parseDriveNumber(drive);
-    await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}Image`, "");
-    });
-    return { success: true, details: { drive } };
+  async driveRemove(_drive: string): Promise<RunResult> {
+    throw unsupported("driveRemove; the VICE Binary Monitor has no command to detach a disk image");
   }
 
   async driveReset(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 0);
-      await client.resourceSet(`Drive${n}CPUEnabled`, 1);
+      await client.resetDrive(n as 8 | 9 | 10 | 11);
     });
     return { success: true, details: { drive } };
   }
@@ -941,7 +946,7 @@ export class ViceBackend implements C64Facade {
   async driveOn(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 1);
+      await this.ensureDriveOn(client, n);
     });
     return { success: true, details: { drive, power: "on" } };
   }
@@ -949,14 +954,27 @@ export class ViceBackend implements C64Facade {
   async driveOff(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 0);
+      const current = await client.resourceGet(`Drive${n}Type`);
+      const type = current.type === "int" ? current.value : Number(current.value);
+      if (type !== 0) this.savedDriveTypes.set(n, type);
+      await client.resourceSet(`Drive${n}Type`, 0);
     });
     return { success: true, details: { drive, power: "off" } };
   }
 
+  /** Switch a drive on by giving it a type again: the one it had before driveOff, or a 1541. */
+  private async ensureDriveOn(client: ViceClient, n: number): Promise<void> {
+    const current = await client.resourceGet(`Drive${n}Type`);
+    const type = current.type === "int" ? current.value : Number(current.value);
+    if (type === 0) {
+      await client.resourceSet(`Drive${n}Type`, this.savedDriveTypes.get(n) ?? 1541);
+    }
+  }
+
   async driveSetMode(drive: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> {
     const n = parseDriveNumber(drive);
-    const DRIVE_TYPE: Record<string, number> = { "1541": 2, "1571": 8, "1581": 11 };
+    // Drive<n>Type takes the model number itself (DRIVE_TYPE_1541 = 1541 in VICE's drive.h).
+    const DRIVE_TYPE: Record<string, number> = { "1541": 1541, "1571": 1571, "1581": 1581 };
     const typeNum = DRIVE_TYPE[mode];
     if (typeNum === undefined) throw new Error(`Unknown drive mode: ${mode}`);
     await this.withClient(async (client) => {
@@ -1054,7 +1072,7 @@ function parseViceConfigValue(value: unknown, type: string, item: string): strin
   return parsed;
 }
 
-function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend in phase one`); (err as any).code = "UNSUPPORTED"; return err; }
+function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend`); (err as any).code = "UNSUPPORTED"; return err; }
 
 /** Ultimate file APIs treat slash as a path separator. Encode each name once,
  * preserving leading and nested separators for firmware routing. */

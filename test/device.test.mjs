@@ -1113,6 +1113,7 @@ test("device: ViceBackend unit branches", async () => {
     VICE_ARGS: "--limit-cycles 42 --trace",
   }, async () => {
     const backend = new ViceBackend({ host: "localhost", port: "6502" });
+    const driveTypes = new Map([[8, 1541]]);
     assert.deepEqual(backend.getEndpoint(), { host: "127.0.0.1", port: 6510 });
 
     const calls = [];
@@ -1141,6 +1142,12 @@ test("device: ViceBackend unit branches", async () => {
       async keyboardFeed(text) {
         calls.push(["keyboardFeed", text]);
       },
+      async autostart(filename, options) {
+        calls.push(["autostart", filename, options.run]);
+      },
+      async resetDrive(unit) {
+        calls.push(["resetDrive", unit]);
+      },
       async exitMonitor() {
         calls.push(["exitMonitor"]);
       },
@@ -1150,16 +1157,11 @@ test("device: ViceBackend unit branches", async () => {
       },
       async resourceGet(name) {
         calls.push(["resourceGet", name]);
-        if (name === "Drive8CPUEnabled") return { type: "int", value: 1 };
-        if (name === "Drive8Image") return { type: "string", value: "disk8.d64" };
-        if (name === "Drive8Type") return { type: "int", value: 11 };
-        if (name === "Drive9CPUEnabled") throw new Error("missing");
-        if (name === "Drive10CPUEnabled") return { type: "int", value: 0 };
-        if (name === "Drive10Image") return { type: "string", value: "" };
-        if (name === "Drive10Type") return { type: "int", value: 8 };
-        if (name === "Drive11CPUEnabled") return { type: "int", value: 1 };
-        if (name === "Drive11Image") return { type: "string", value: "disk11.d64" };
-        if (name === "Drive11Type") return { type: "int", value: 2 };
+        // VICE has no drive-enable or image resources: Drive<n>Type 0 means the drive is off.
+        if (name === "Drive8Type") return { type: "int", value: driveTypes.get(8) };
+        if (name === "Drive9Type") throw new Error("missing");
+        if (name === "Drive10Type") return { type: "int", value: 0 };
+        if (name === "Drive11Type") return { type: "int", value: 1571 };
         if (name === "WarpMode") return { type: "int", value: 1 };
         if (name === "MachineVideoStandard") return { type: "string", value: "PAL" };
         if (name === "DriveLabel") return { type: "string", value: "1541" };
@@ -1168,6 +1170,8 @@ test("device: ViceBackend unit branches", async () => {
       },
       async resourceSet(name, value) {
         calls.push(["resourceSet", name, value]);
+        const driveType = /^Drive(\d+)Type$/.exec(name);
+        if (driveType) driveTypes.set(Number(driveType[1]), value);
         if (name === "BadSetting") {
           throw new Error("write failed");
         }
@@ -1218,18 +1222,26 @@ test("device: ViceBackend unit branches", async () => {
     assert.equal(resetResult.success, true);
     assert.equal(rebootResult.success, true);
 
-    const drives = await backend.drivesList();
-    assert.equal(drives[0].image, "disk8.d64");
-    assert.deepEqual(drives[1], { id: "drive9", power: "off", image: null, type: 0 });
-    assert.deepEqual(drives[2], { id: "drive10", power: "off", image: null, type: 8 });
-    assert.deepEqual(drives[3], { id: "drive11", power: "on", image: "disk11.d64", type: 2 });
-
-    assert.equal((await backend.driveMount("drive8", "/tmp/demo.d64")).success, true);
-    assert.equal((await backend.driveRemove("drive8")).success, true);
-    assert.equal((await backend.driveReset("drive8")).success, true);
-    assert.equal((await backend.driveOn("drive8")).details.power, "on");
     assert.equal((await backend.driveOff("drive8")).details.power, "off");
+    assert.deepEqual((await backend.drivesList())[0], { id: "drive8", power: "off", image: null, type: 0 });
+    // Mounting switches the drive back on with its previous type and attaches through autoload.
+    assert.equal((await backend.driveMount("drive8", "/tmp/demo.d64")).success, true);
+    assert.ok(calls.some((c) => c[0] === "resourceSet" && c[1] === "Drive8Type" && c[2] === 1541));
+    assert.ok(calls.some((c) => c[0] === "autostart" && c[1] === "/tmp/demo.d64" && c[2] === false));
+    const drives = await backend.drivesList();
+    assert.deepEqual(drives[0], { id: "drive8", power: "on", image: "/tmp/demo.d64", type: 1541 });
+    assert.deepEqual(drives[1], { id: "drive9", power: "off", image: null, type: 0 });
+    assert.deepEqual(drives[2], { id: "drive10", power: "off", image: null, type: 0 });
+    assert.deepEqual(drives[3], { id: "drive11", power: "on", image: null, type: 1571 });
+
+    await assert.rejects(() => backend.driveMount("drive9", "/tmp/demo.d64"), /only to drive 8/);
+    await assert.rejects(() => backend.driveRemove("drive8"), /no command to detach/);
+    assert.equal((await backend.driveReset("drive9")).success, true);
+    assert.ok(calls.some((c) => c[0] === "resetDrive" && c[1] === 9));
+    assert.equal((await backend.driveOn("drive8")).details.power, "on");
     assert.equal((await backend.driveSetMode("drive8", "1581")).details.mode, "1581");
+    // VICE's Drive<n>Type takes the model number, not an index.
+    assert.ok(calls.some((c) => c[0] === "resourceSet" && c[1] === "Drive8Type" && c[2] === 1581));
     await assert.rejects(() => backend.driveSetMode("drive8", "4041"), /Unknown drive mode/);
 
     const configValue = await backend.configGet("VICE", "WarpMode");

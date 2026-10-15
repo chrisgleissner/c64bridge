@@ -80,6 +80,7 @@ export class ViceMockServer {
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
     this.resetState();
+    this.resetResources();
   }
 
   async start(): Promise<{ port: number }> {
@@ -153,9 +154,24 @@ export class ViceMockServer {
     switch (cmd) {
       case 0x85: // info
         return buildResponse(cmd, reqId);
-      case 0xCC: // reset
-        this.resetState();
+      case 0xCC: { // reset: types 8-11 reset only that drive's CPU
+        const type = body[0] ?? 0;
+        if (type >= 8 && type <= 11) {
+          this.driveResets.push(type);
+        } else {
+          this.resetState();
+        }
         return buildResponse(cmd, reqId);
+      }
+      case 0xDD: { // autostart: attaches the image to drive 8 and loads (run=1 also runs)
+        const nameLength = body[3] ?? 0;
+        this.autostarts.push({
+          run: body[0] === 1,
+          fileIndex: body.readUInt16LE(1),
+          filename: body.subarray(4, 4 + nameLength).toString("utf8"),
+        });
+        return buildResponse(cmd, reqId);
+      }
       case 0x11: { // checkpoint get
         const id = body.readUInt32LE(0);
         const checkpoint = this.checkpoints.get(id);
@@ -289,7 +305,7 @@ export class ViceMockServer {
         const name = body.subarray(1, 1 + nameLen).toString("utf8");
         const value = this.resources.get(name);
         if (value === undefined) {
-          return buildResponse(cmd, reqId, Buffer.from([0, 0]));
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01); // VICE: OBJECT_MISSING for an unknown resource.
         }
         if (typeof value === "number") {
           const buffer = Buffer.alloc(2 + 4);
@@ -309,6 +325,9 @@ export class ViceMockServer {
         const isNumber = body[0] === 1;
         const nameLen = body[1] ?? 0;
         const name = body.subarray(2, 2 + nameLen).toString("utf8");
+        if (!this.resources.has(name)) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x8f); // VICE: CMD_FAILURE when resources_set fails.
+        }
         if (isNumber) {
           const valueLen = body[2 + nameLen] ?? 0;
           const valueBytes = body.subarray(3 + nameLen, 3 + nameLen + valueLen);
@@ -487,14 +506,30 @@ export class ViceMockServer {
     for (const meta of this.registerMetadata) {
       this.registerValues.set(meta.id, 0);
     }
+    this.joyportOutput = [0, 0];
+  }
+
+  // Resources survive a machine reset in VICE. Only resources that exist in
+  // VICE 3.10 are known; others fail the way VICE fails (see below).
+  private resetResources(): void {
     this.resources = new Map<string, number | string>([
       ["C64Model", 2],
       ["SidEngine", 1],
       ["JoyPort1Device", 1],
       ["JoyPort2Device", 1],
+      ["Drive8Type", 1541],
+      ["Drive9Type", 0],
+      ["Drive10Type", 0],
+      ["Drive11Type", 0],
+      ["VICIIDoubleSize", 0],
+      ["MachineVideoStandard", 1],
+      ["KernalName", "kernal-901227-03.bin"],
     ]);
-    this.joyportOutput = [0, 0];
   }
+
+  /** Images attached with autostart, and drive CPU resets, as observed by tests. */
+  readonly autostarts: Array<{ filename: string; run: boolean; fileIndex: number }> = [];
+  readonly driveResets: number[] = [];
 
   /** Lines a joyport device drives, as CIA1 sees them (active low); only the I/O simulation device (37) is modelled. */
   joyportLines(port: 1 | 2): number {
