@@ -133,16 +133,20 @@ timeline:
   assert.ok(firstRetrigger !== undefined, "retrigger gaps are one beat apart");
   const songStart = firstRetrigger - beat;
   const expectedOnsets = [1, 2, 3, 5, 6, 7].map((k) => songStart + k * beat);
+  // Onsets sit on whole frames (up to half a 20 ms frame from the exact beat) and the gap
+  // detector works in 128-sample windows; both the reference gap and each checked gap carry
+  // that error, so allow 30 ms (a beat is 500 ms).
+  const tolerance = 0.03 * rate;
   for (const onset of expectedOnsets) {
-    const span = spans.find(([, b]) => Math.abs(b - onset) < 0.01 * rate);
+    const span = spans.find(([, b]) => Math.abs(b - onset) < tolerance);
     assert.ok(span, `a gap ends at the note onset ${(onset / rate).toFixed(3)} s; gaps: ${JSON.stringify(spans.map(([a, b]) => [+(a / rate).toFixed(3), +(b / rate).toFixed(3)]))}`);
   }
   // The repeated G4 (entries 2 and 3) is separated by the 2-frame hard restart: a gap of about 40 ms.
-  const repeat = spans.find(([, b]) => Math.abs(b - (songStart + 3 * beat)) < 0.01 * rate);
+  const repeat = spans.find(([, b]) => Math.abs(b - (songStart + 3 * beat)) < tolerance);
   const gapMs = ((repeat[1] - repeat[0]) / rate) * 1000;
   assert.ok(gapMs > 25 && gapMs < 50, `retrigger gap ${gapMs.toFixed(1)} ms`);
   // The rest (entry 4) is silent from its start: gate off with release 0.
-  const rest = spans.find(([, b]) => Math.abs(b - (songStart + 5 * beat)) < 0.01 * rate);
+  const rest = spans.find(([, b]) => Math.abs(b - (songStart + 5 * beat)) < tolerance);
   assert.ok((rest[1] - rest[0]) / rate > 0.45, "the rest is silent for its whole beat");
   notes.forEach((note, k) => {
     if (note === "-") return;
