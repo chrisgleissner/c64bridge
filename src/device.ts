@@ -943,7 +943,7 @@ export class ViceBackend implements C64Facade {
     if (!fs.existsSync(imagePath)) {
       throw new Error(`Disk image not found on the VICE host: ${imagePath}`);
     }
-    await this.withClient(async (client) => {
+    const outcome = await this.withClient(async (client) => {
       // Sync after withClient has started VICE, or a start here would clear this mount's record.
       this.syncTrackedState();
       await this.ensureDriveOn(client, n);
@@ -952,7 +952,7 @@ export class ViceBackend implements C64Facade {
       // Autoload power-cycles the machine after this call returns; wait until
       // its LOAD has finished so callers do not write into a machine that is
       // about to be reset.
-      await waitForAutoloadFinished(client, 30_000);
+      return waitForAutoloadFinished(client, 30_000);
     });
     this.attachedImages.set(n, imagePath);
     return {
@@ -960,7 +960,10 @@ export class ViceBackend implements C64Facade {
       details: {
         drive,
         image: imagePath,
-        note: "VICE attaches images through autoload, which resets the machine (clearing RAM) and LOADs the first program without running it.",
+        loadedFirstProgram: outcome.loaded,
+        note: outcome.loaded
+          ? "VICE attaches images through autoload, which resets the machine (clearing RAM) and LOADs the first program without running it."
+          : "VICE attaches images through autoload, which resets the machine (clearing RAM); the disk has no program to load.",
       },
     };
   }
@@ -1129,11 +1132,12 @@ const AUTOLOAD_MARKER = Buffer.from([0xc6, 0x4b, 0x1d, 0x9e]);
 /**
  * Wait until VICE's autoload has reset the machine and its LOAD has finished.
  * Completion is the LOAD"/READY. text on screen, or, when the loaded program
- * covers screen RAM, BASIC's end-of-program pointer (VARTAB) having moved off
- * its reset value $0803 with an empty keyboard buffer.
+ * covers screen RAM, BASIC initialised (TXTTAB $0801) with its end-of-program
+ * pointer (VARTAB) moved off the reset value $0803 and an empty keyboard buffer.
  */
-async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<void> {
+async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<{ loaded: boolean }> {
   const deadline = Date.now() + timeoutMs;
+  let loadedEnd: number | null = null;
   while (Date.now() < deadline) {
     await client.exitMonitor();
     await delay(250);
@@ -1143,14 +1147,23 @@ async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): P
     const load = screen.lastIndexOf('LOAD"');
     if (load >= 0) {
       const after = screen.slice(load);
-      const error = /\?([A-Z ]+ERROR|FILE NOT FOUND|DEVICE NOT PRESENT)/.exec(after);
+      // An empty disk is still attached; it just has no program for the autoload to load.
+      if (/\?FILE NOT FOUND/.test(after)) return { loaded: false };
+      const error = /\?([A-Z ]+ERROR|DEVICE NOT PRESENT)/.exec(after);
       if (error) throw new Error(`VICE autoload failed: ?${error[1]}`);
-      if (after.includes("READY.")) return;
+      if (after.includes("READY.")) return { loaded: true };
     }
-    const vartab = await client.memGet(0x002d, 0x002e);
+    // TXTTAB = $0801 shows BASIC has initialised (right after the power cycle RAM
+    // holds VICE's init pattern); VARTAB off $0803 then shows the LOAD has ended.
+    const pointers = await client.memGet(0x002b, 0x002e);
     const keyboardQueue = await client.memGet(0x00c6, 0x00c6);
-    const end = (vartab[0] ?? 0) | ((vartab[1] ?? 0) << 8);
-    if (end !== 0x0803 && keyboardQueue[0] === 0) return;
+    const txttab = (pointers[0] ?? 0) | ((pointers[1] ?? 0) << 8);
+    const vartab = (pointers[2] ?? 0) | ((pointers[3] ?? 0) << 8);
+    // BASIC's cold start sets TXTTAB before VARTAB, so require the same end
+    // pointer on two consecutive polls before trusting it.
+    const candidate = txttab === 0x0801 && vartab !== 0x0803 && keyboardQueue[0] === 0 ? vartab : null;
+    if (candidate !== null && candidate === loadedEnd) return { loaded: true };
+    loadedEnd = candidate;
   }
   throw new Error("VICE autoload did not finish within the time limit");
 }

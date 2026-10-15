@@ -260,7 +260,9 @@ export const storageModule = defineToolModule({
           const finalMode = typeof details.mode === "string" ? details.mode : parsed.mode ?? null;
           const finalType = typeof details.type === "string" ? details.type : parsed.type ?? null;
 
-          return textResult(`Mounted ${parsed.image} on ${parsed.drive}.`, {
+          // Backend notes (for example VICE's autoload resetting the machine) belong in the visible text.
+          const note = typeof details.note === "string" ? ` ${details.note}` : "";
+          return textResult(`Mounted ${parsed.image} on ${parsed.drive}.${note}`, {
             success: true,
             drive: parsed.drive,
             image: parsed.image,
