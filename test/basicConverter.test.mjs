@@ -116,3 +116,13 @@ test("basicToPrg stores lowercase string text as PETSCII letters but keeps named
   // PRINT token, quote, HELLO as $48 $45 $4C $4C $4F, heart $73, quote.
   assert.deepEqual(body, [0x99, 0x20, 0x22, 0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x73, 0x22]);
 });
+
+test("basicToPrg folds only ASCII letters in REM text", () => {
+  // "ß".toUpperCase() is "SS" and "µ".toUpperCase() is outside Latin-1, so REM must not use full upper-casing.
+  const prg = basicToPrg("10 REM stra\u00dfe x\n20 REM \u00b5\n");
+  const body = [...prg];
+  const rem1 = body.indexOf(0x8f);
+  assert.deepEqual(body.slice(rem1 + 1, rem1 + 10), [0x20, 0x53, 0x54, 0x52, 0x41, 0xdf, 0x45, 0x20, 0x58]);
+  const rem2 = body.indexOf(0x8f, rem1 + 1);
+  assert.deepEqual(body.slice(rem2 + 1, rem2 + 3), [0x20, 0xb5]);
+});
