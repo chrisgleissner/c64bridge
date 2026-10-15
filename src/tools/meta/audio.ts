@@ -361,7 +361,7 @@ export const tools: ToolDefinition[] = [
         let restoreError: string | undefined;
 
         try {
-          for (const backend of requestedBackends) {
+          for (const [backendIndex, backend] of requestedBackends.entries()) {
             context.client.switchBackend(backend);
             context.setPlatform(backend);
             await trySilenceSid(context);
@@ -401,7 +401,11 @@ export const tools: ToolDefinition[] = [
               };
             }
 
-            await trySilenceSid(context);
+            // Stop this backend's playback only before moving on to the next one;
+            // the last backend keeps playing so the preset can be heard in full.
+            if (backendIndex < requestedBackends.length - 1) {
+              await trySilenceSid(context);
+            }
 
             backendResult.verification = verification;
             backendResult.success = true;
