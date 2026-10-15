@@ -242,8 +242,15 @@ export function readDiagnosticRecords(filePath: string): readonly DiagnosticReco
     return [];
   }
 
-  return text.split("\n")
-    .map((line) => JSON.parse(line) as DiagnosticRecord);
+  // The file is appended while the server runs, so a crash or a concurrent
+  // read can leave a partial last line; skip lines that are not whole records.
+  return text.split("\n").flatMap((line) => {
+    try {
+      return [JSON.parse(line) as DiagnosticRecord];
+    } catch {
+      return [];
+    }
+  });
 }
 
 export function summarizeDiagnosticsSession(

@@ -8,6 +8,7 @@ import {
   createOutputTailCapture,
   installProcessDiagnostics,
   resolveDiagnosticSessionFile,
+  readDiagnosticRecords,
   summarizeDiagnosticsSession,
   writeDiagnosticEvent,
 } from "../src/diagnostics.ts";
@@ -88,4 +89,14 @@ test("diagnostics spans and summaries capture hot paths", (t) => {
   assert.equal(summary.topSpans[0]?.name, "programs.c64_program");
   assert.equal(summary.toolCalls[0]?.name, "c64_program");
   assert.ok(Array.isArray(summary.timeline));
+});
+test("readDiagnosticRecords skips a partially written line", (t) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-diag-partial-"));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const file = path.join(tempDir, "session.ndjson");
+  fs.writeFileSync(file, '{"type":"event","name":"a"}\n{"type":"event","name":"b"}\n{"type":"ev', "utf8");
+
+  const records = readDiagnosticRecords(file);
+  assert.deepEqual(records.map((record) => record.name), ["a", "b"]);
+  assert.doesNotThrow(() => summarizeDiagnosticsSession(file));
 });
