@@ -515,7 +515,7 @@ async function main() {
     console.error("c64bridge MCP server running on stdio");
   }
 
-  await logConnectivity(client, baseUrl);
+  await logConnectivity(client, baseUrl, config.networkPassword);
   
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
@@ -604,7 +604,12 @@ export async function renderPlatformStatusMarkdown(client: C64Client): Promise<s
   return lines.join("\n");
 }
 
-async function logConnectivity(client: C64Client, baseUrl: string): Promise<void> {
+/** URL of the Ultimate's /v1/info route, keeping any path prefix of the base URL (reverse proxy). */
+export function connectivityProbeUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/v1/info`;
+}
+
+async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
   const backendType = await client.getBackendType();
   if (backendType === "vice") {
     writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, reason: "vice_backend" });
@@ -629,11 +634,15 @@ async function logConnectivity(client: C64Client, baseUrl: string): Promise<void
 
   const c64Logger = loggerFor("c64u");
   const startedAt = Date.now();
-  const infoUrl = new URL("/v1/info", baseUrl).toString();
+  const infoUrl = connectivityProbeUrl(baseUrl);
   let response: AxiosResponse | null = null;
 
   try {
-    const probeResponse = await axios.get(infoUrl, { timeout: 2000 });
+    // Send the network password like every other request, or a protected device answers 403.
+    const probeResponse = await axios.get(infoUrl, {
+      timeout: 2000,
+      ...(networkPassword ? { headers: { "X-Password": networkPassword } } : {}),
+    });
     response = probeResponse;
     const latency = Date.now() - startedAt;
     const bytes = payloadByteLength(probeResponse.data);

@@ -21,7 +21,7 @@ const tsLoader = "tsx/esm";
 // auto-start for every server spawned by unrelated test files afterward.
 const previousSkipAutoStart = process.env.C64BRIDGE_SKIP_AUTO_START;
 process.env.C64BRIDGE_SKIP_AUTO_START = "1";
-const { parseCliOptions } = await import("../src/mcp-server.js");
+const { parseCliOptions, connectivityProbeUrl } = await import("../src/mcp-server.js");
 if (previousSkipAutoStart === undefined) delete process.env.C64BRIDGE_SKIP_AUTO_START;
 else process.env.C64BRIDGE_SKIP_AUTO_START = previousSkipAutoStart;
 
@@ -155,4 +155,10 @@ test("HARD01-001 --http <port> opens a real HTTP MCP listener; default invocatio
   } finally {
     await stopChild(child);
   }
+});
+
+test("the startup connectivity probe keeps a reverse-proxy path prefix", () => {
+  assert.equal(connectivityProbeUrl("https://proxy.local/c64u"), "https://proxy.local/c64u/v1/info");
+  assert.equal(connectivityProbeUrl("https://proxy.local/c64u/"), "https://proxy.local/c64u/v1/info");
+  assert.equal(connectivityProbeUrl("http://192.0.2.1"), "http://192.0.2.1/v1/info");
 });
