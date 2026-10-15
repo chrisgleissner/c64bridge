@@ -943,9 +943,11 @@ export class ViceBackend implements C64Facade {
     if (!fs.existsSync(imagePath)) {
       throw new Error(`Disk image not found on the VICE host: ${imagePath}`);
     }
-    this.syncTrackedState();
     await this.withClient(async (client) => {
+      // Sync after withClient has started VICE, or a start here would clear this mount's record.
+      this.syncTrackedState();
       await this.ensureDriveOn(client, n);
+      await client.memSet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER);
       await client.autostart(imagePath, { run: false });
       // Autoload power-cycles the machine after this call returns; wait until
       // its LOAD has finished so callers do not write into a machine that is
@@ -1117,12 +1119,26 @@ function encodeDevicePath(value: string): string {
 /** Disk image types VICE's drive 8 can attach (autostart would treat anything else as tape, cartridge or PRG). */
 const VICE_DISK_IMAGE_EXTENSIONS = new Set([".d64", ".g64", ".d71", ".g71", ".d81", ".d80", ".d82", ".x64", ".p64", ".d1m", ".d2m", ".d4m"]);
 
-/** Wait until VICE's autoload has typed LOAD and BASIC is back at READY. (or reported an error). */
+/**
+ * Bytes written to unused RAM ($02A7-$02AA) before an autoload. The autoload's
+ * power cycle clears them, which shows that the reset has happened.
+ */
+const AUTOLOAD_MARKER_ADDRESS = 0x02a7;
+const AUTOLOAD_MARKER = Buffer.from([0xc6, 0x4b, 0x1d, 0x9e]);
+
+/**
+ * Wait until VICE's autoload has reset the machine and its LOAD has finished.
+ * Completion is the LOAD"/READY. text on screen, or, when the loaded program
+ * covers screen RAM, BASIC's end-of-program pointer (VARTAB) having moved off
+ * its reset value $0803 with an empty keyboard buffer.
+ */
 async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await client.exitMonitor();
     await delay(250);
+    const marker = await client.memGet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER_ADDRESS + AUTOLOAD_MARKER.length - 1);
+    if (Buffer.from(marker).equals(AUTOLOAD_MARKER)) continue; // not reset yet
     const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));
     const load = screen.lastIndexOf('LOAD"');
     if (load >= 0) {
@@ -1131,6 +1147,10 @@ async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): P
       if (error) throw new Error(`VICE autoload failed: ?${error[1]}`);
       if (after.includes("READY.")) return;
     }
+    const vartab = await client.memGet(0x002d, 0x002e);
+    const keyboardQueue = await client.memGet(0x00c6, 0x00c6);
+    const end = (vartab[0] ?? 0) | ((vartab[1] ?? 0) << 8);
+    if (end !== 0x0803 && keyboardQueue[0] === 0) return;
   }
   throw new Error("VICE autoload did not finish within the time limit");
 }

@@ -556,6 +556,8 @@ export class ViceMockServer {
 
   // What VICE's autoload leaves on screen after its power cycle: the typed LOAD and READY.
   private renderAutoload(run: boolean): void {
+    // The power cycle's KERNAL reset clears $0200-$03FF (RAMTAS).
+    this.memory.fill(0x00, 0x0200, 0x0400);
     this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + 1000);
     const lines = ['LOAD"*",8,1', "", "SEARCHING FOR *", "LOADING", "READY.", ...(run ? ["RUN"] : [])];
     lines.forEach((line, row) => {
