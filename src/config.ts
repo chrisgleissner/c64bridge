@@ -177,20 +177,27 @@ export function resolveUltimateEndpoint(
   ];
 
   const host = firstDefined(...hostCandidates) ?? DEFAULT_HOST;
-  // When only a baseUrl names the endpoint, keep its scheme and path (for
-  // example https://proxy/c64u); an explicit host or port builds http://host:port.
+  // When the host comes from a baseUrl, keep its scheme and path (for example
+  // https://proxy/c64u), applying only an explicit port override. An explicit
+  // host builds http://host:port as documented.
   const baseOnly = parsedBaseOverrides.find((entry) => entry.hostname !== undefined);
-  const explicitHostOrPort = firstDefined(...hostCandidates.slice(0, -parsedBaseOverrides.length)) !== undefined
-    || firstDefined(...portCandidates.slice(0, -parsedBaseOverrides.length)) !== undefined;
-  const keepBaseUrl = baseOnly?.fullUrl !== undefined && !explicitHostOrPort;
-  const defaultPort = keepBaseUrl && baseOnly!.fullUrl!.startsWith("https:") ? 443 : DEFAULT_PORT;
-  const port = firstDefined(...portCandidates) ?? defaultPort;
+  const explicitHost = firstDefined(...hostCandidates.slice(0, -parsedBaseOverrides.length));
+  const explicitPort = firstDefined(...portCandidates.slice(0, -parsedBaseOverrides.length));
+  const keepBaseUrl = baseOnly?.fullUrl !== undefined && explicitHost === undefined;
+  const schemeDefaultPort = keepBaseUrl && baseOnly!.fullUrl!.startsWith("https:") ? 443 : DEFAULT_PORT;
+  const port = firstDefined(...portCandidates) ?? schemeDefaultPort;
   const hostLabel = formatHost(host);
+  let baseUrl = buildBaseUrl(host, port);
+  if (keepBaseUrl) {
+    const url = new URL(baseOnly!.fullUrl!);
+    if (explicitPort !== undefined) url.port = String(explicitPort);
+    baseUrl = stripTrailingSlash(url.toString());
+  }
   return {
     host,
     port,
-    baseUrl: keepBaseUrl ? baseOnly!.fullUrl! : buildBaseUrl(host, port),
-    c64_host: port === DEFAULT_PORT ? hostLabel : `${hostLabel}:${port}`,
+    baseUrl,
+    c64_host: port === schemeDefaultPort ? hostLabel : `${hostLabel}:${port}`,
     networkPassword: firstDefined(
       nonEmptyString(envPassword),
       nonEmptyString(section?.networkPassword),
