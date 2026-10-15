@@ -3,6 +3,7 @@ import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { measureSidSilence } from "../audio.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
@@ -808,16 +809,14 @@ export const tools: ToolDefinition[] = [
                 if (!matched) status = "fail";
               } else if (assertion.type === "sid_silent") {
                 // Check SID gate bits are off (simple check)
-                const result = await (ctx.client as any).readMemory("$D404", "1");
-                if (!result.success || typeof result.data !== "string") {
-                  throw new Error("Failed to read SID voice 1 control register for sid_silent assertion");
-                }
-                const gate1 = parseInt(result.data.slice(1), 16) & 0x01;
-                const isSilent = gate1 === 0;
+                // SID control registers are write-only (an Ultimate 64 reads $D404 as $00
+                // whatever was written), so silence is measured from captured audio.
+                const silence = await measureSidSilence(ctx);
+                const isSilent = silence.silent;
                 assertionResults.push({
                   type: assertion.type,
                   status: isSilent ? "pass" : "fail",
-                  message: isSilent ? undefined : "SID voice 1 gate is on",
+                  message: isSilent ? undefined : `SID output is not silent (peak RMS ${silence.maxRms.toFixed(3)} > ${silence.threshold})`,
                 });
                 if (!isSilent) status = "fail";
               }

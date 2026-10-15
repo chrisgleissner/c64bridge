@@ -392,6 +392,29 @@ function resolveAnalyzer(ctx: ToolExecutionContext): AudioAnalyzer {
   return (options) => recordAndAnalyzeAudio(options);
 }
 
+/**
+ * Measure whether the SID is silent by capturing audio (the Ultimate audio
+ * stream on C64U, otherwise the host microphone). The SID's control registers
+ * are write-only, so reading them back cannot show whether a voice sounds.
+ */
+export async function measureSidSilence(ctx: ToolExecutionContext): Promise<{ silent: boolean; averageRms: number; maxRms: number; threshold: number }> {
+  if (DEFAULT_SILENCE_VERIFY_WAIT_MS > 0) {
+    await sleep(DEFAULT_SILENCE_VERIFY_WAIT_MS);
+  }
+  const analysis = await resolveAnalyzer(ctx)({ durationSeconds: DEFAULT_SILENCE_VERIFY_DURATION_SECONDS });
+  const { average, max } = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
+  if (average === null && max === null) {
+    throw new ToolExecutionError("Audio analysis did not provide RMS metrics for silence verification");
+  }
+  const maxRms = max ?? average ?? 0;
+  return {
+    silent: maxRms <= DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD,
+    averageRms: average ?? maxRms,
+    maxRms,
+    threshold: DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD,
+  };
+}
+
 function extractRmsMetrics(globalMetrics: Record<string, unknown>): { average: number | null; max: number | null } {
   const average = typeof globalMetrics.average_rms === "number" ? globalMetrics.average_rms : null;
   const max = typeof globalMetrics.max_rms === "number" ? globalMetrics.max_rms : null;
