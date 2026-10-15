@@ -141,7 +141,8 @@ function tokenize(content: string): Uint8Array {
       continue;
     }
 
-    const plainChar = (!inString && !inRemark ? upper[index]! : char) ?? char;
+    // REM text is folded like string text: LIST would show ASCII a-z as graphics characters.
+    const plainChar = (!inString ? upper[index]! : char) ?? char;
     bytes.push(asciiToPetscii(plainChar));
     if (inData && !inString && plainChar === ":") {
       inData = false;

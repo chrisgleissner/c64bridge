@@ -50,8 +50,10 @@ test("basicToPrg respects strings and remarks", () => {
 
   const bytesAfterRem = firstLineBody.slice(remarkIndex + 1);
   const textAfterRem = String.fromCharCode(...bytesAfterRem);
-  assert.ok(textAfterRem.includes("keep tokens"));
+  // Stored as PETSCII letters (LIST would show ASCII a-z as graphics), but never tokenized.
+  assert.ok(textAfterRem.includes("KEEP TOKENS"));
   assert.ok(!bytesAfterRem.includes(0x99), "Tokens must not appear after REM");
+  assert.ok(!bytesAfterRem.includes(0xa4), "TO in 'tokens' must not become the TO token");
 });
 
 test("encodeStringWithNames maps {heart} to the PETSCII heart glyph", () => {
