@@ -72,6 +72,8 @@ export class ViceMockServer {
   private readonly registerMetadata = buildDefaultRegisterMetadata();
   private registerValues = new Map<number, number>();
   private resources = new Map<string, number | string>();
+  /** Output lines of VICE's I/O simulation joyport device per port (0 = port 1). */
+  private joyportOutput = [0, 0];
   private readonly sockets = new Set<net.Socket>();
 
   constructor(options?: ViceMockServerOptions) {
@@ -222,13 +224,17 @@ export class ViceMockServer {
       case 0x01: { // mem get
         const start = body.readUInt16LE(1);
         const end = body.readUInt16LE(3);
-        const length = Math.max(0, end - start + 1);
+        if (start > end) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x81); // VICE rejects start > end with INVALID_PARAMETER.
+        }
+        const length = end - start + 1;
         const payload = Buffer.alloc(2 + length);
         payload.writeUInt16LE(length & 0xffff, 0); // Like VICE: a full 64 KB read reports ML = 0.
         for (let i = 0; i < length; i += 1) {
           payload[2 + i] = this.memory[(start + i) & 0xffff];
         }
         this.applyHeartbeatOverlay(start, length, payload);
+        this.applyJoyportOverlay(start, length, payload);
         return buildResponse(cmd, reqId, payload);
       }
       case 0x02: { // mem set
@@ -315,6 +321,18 @@ export class ViceMockServer {
           const value = body.subarray(3 + nameLen, 3 + nameLen + valueLen).toString("utf8");
           this.resources.set(name, value);
         }
+        return buildResponse(cmd, reqId);
+      }
+      case 0xA2: { // joyport set: like VICE, it only stores the I/O simulation device's output lines
+        const port = body.readUInt16LE(0);
+        const value = body.readUInt16LE(2);
+        if (port > 1) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01);
+        }
+        if (value > 0xff) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x81);
+        }
+        this.joyportOutput[port] = value & 0x1f;
         return buildResponse(cmd, reqId);
       }
       case 0xAA: // exit monitor
@@ -472,7 +490,24 @@ export class ViceMockServer {
     this.resources = new Map<string, number | string>([
       ["C64Model", 2],
       ["SidEngine", 1],
+      ["JoyPort1Device", 1],
+      ["JoyPort2Device", 1],
     ]);
+    this.joyportOutput = [0, 0];
+  }
+
+  /** Lines a joyport device drives, as CIA1 sees them (active low); only the I/O simulation device (37) is modelled. */
+  joyportLines(port: 1 | 2): number {
+    return this.resources.get(`JoyPort${port}Device`) === 37 ? this.joyportOutput[port - 1]! : 0xff;
+  }
+
+  // CIA1 port A ($DC00) reads joyport 2 and port B ($DC01) joyport 1, ANDed with the keyboard lines.
+  private applyJoyportOverlay(start: number, length: number, payload: Buffer): void {
+    for (const [address, port] of [[0xdc00, 2], [0xdc01, 1]] as const) {
+      if (address >= start && address < start + length) {
+        payload[2 + address - start] = 0xff & this.joyportLines(port);
+      }
+    }
   }
 
   private renderHello(): void {

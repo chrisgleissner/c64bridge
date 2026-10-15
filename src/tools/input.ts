@@ -356,7 +356,6 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const port = parsed.port as 1 | 2;
       const durationMs = parsed.durationMs ?? 80;
       const pressedByte = joystickByte(parsed.controls);
-      const releasedByte = 0xff;
       const platform = await ctx.client.getActiveBackendType();
 
       if (platform === "c64u") {
@@ -377,13 +376,13 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       }
 
       if (parsed.action === "release") {
-        await ctx.client.viceJoyportSet(port, releasedByte);
+        await ctx.client.viceJoystickRelease(port);
         ctx.logger.info("Released joystick", { port });
         return textResult(`Joystick port ${port} released.`, { success: true, port, action: "release" });
       }
 
       if (parsed.action === "press") {
-        await ctx.client.viceJoyportSet(port, pressedByte);
+        await ctx.client.viceJoystickPress(port, pressedByte);
         ctx.logger.info("Pressed joystick", { port, controls: parsed.controls, byte: pressedByte });
         return textResult(
           `Joystick port ${port} pressed: ${parsed.controls.join(", ") || "none"}.`,
@@ -392,9 +391,9 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       }
 
       // tap: press → wait → release
-      await ctx.client.viceJoyportSet(port, pressedByte);
+      await ctx.client.viceJoystickPress(port, pressedByte);
       await new Promise<void>((res) => setTimeout(res, durationMs));
-      await ctx.client.viceJoyportSet(port, releasedByte);
+      await ctx.client.viceJoystickRelease(port);
       ctx.logger.info("Tapped joystick", { port, controls: parsed.controls, durationMs });
       return textResult(
         `Joystick port ${port} tapped: ${parsed.controls.join(", ") || "none"} for ${durationMs}ms.`,

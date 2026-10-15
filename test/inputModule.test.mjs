@@ -32,8 +32,11 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
       const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
       writes.push({ kind: "vice_mem_set", address, bytes: Uint8Array.from(buf) });
     },
-    async viceJoyportSet(port, activeLowMask) {
+    async viceJoystickPress(port, activeLowMask) {
       writes.push({ kind: "vice_joyport_set", port, activeLowMask });
+    },
+    async viceJoystickRelease(port) {
+      writes.push({ kind: "vice_joyport_set", port, activeLowMask: 0xff });
     },
     async readMemoryRaw(address, length) {
       reads.push({ address, length });

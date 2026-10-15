@@ -112,6 +112,8 @@ export interface SampleCaptureResult {
   readonly samples: Int16Array;
 }
 
+/** JOYPORT_ID_IO_SIMULATION in joyport.h (the same in VICE 3.9 and 3.10). */
+const VICE_JOYPORT_IO_SIMULATION = 37;
 const C64U_SYSTEM_MODE_CATEGORY = "U64 Specific Settings";
 const C64U_SYSTEM_MODE_ITEM = "System Mode";
 // System Mode values that run the machine clock at the NTSC frequency
@@ -339,6 +341,8 @@ export class C64Client {
   private readonly greetingDd00Warmups = new Map<DeviceType, Promise<number>>();
   private readonly machineInputCapabilityProbes = new Map<DeviceType, Promise<NativeEndpointAvailability>>();
   private c64uVideoCaptureSession: C64uVideoCaptureSession | null = null;
+  /** VICE joyport device ids to restore when a joystick press ends. */
+  private readonly viceJoyportSavedDevice = new Map<1 | 2, number>();
   private readonly initPromise: Promise<void>;
   private activeType: DeviceType = "c64u";
   private facadePromise: Promise<C64Facade>;
@@ -2254,6 +2258,41 @@ export class C64Client {
 
     async viceJoyportSet(port: 1 | 2, activeLowMask: number): Promise<void> {
       await this.withViceMonitor((client) => client.joyportSet(port, activeLowMask));
+    }
+
+    /**
+     * Hold joystick lines on a VICE control port. Binary Monitor command 0xA2
+     * only drives VICE's "I/O simulation" joyport device, so that device is
+     * attached for the duration of the press and the previous device is
+     * restored on release. The device reads bits 5-7 as low, which the
+     * keyboard scan sees as extra keys, so it must not stay attached.
+     */
+    async viceJoystickPress(port: 1 | 2, activeLowMask: number): Promise<void> {
+      await this.withViceMonitor(async (client) => {
+        const resource = `JoyPort${port}Device`;
+        if (!this.viceJoyportSavedDevice.has(port)) {
+          const current = await client.resourceGet(resource);
+          const currentId = current.type === "int" ? current.value : Number(current.value);
+          if (currentId !== VICE_JOYPORT_IO_SIMULATION) {
+            this.viceJoyportSavedDevice.set(port, currentId);
+            await client.resourceSet(resource, VICE_JOYPORT_IO_SIMULATION);
+          }
+        }
+        // Attaching the device clears its lines to 0 (everything pressed), so set them in the same monitor session.
+        await client.joyportSet(port, activeLowMask);
+      });
+    }
+
+    /** Release a VICE control port and restore the joyport device it had before the press. */
+    async viceJoystickRelease(port: 1 | 2): Promise<void> {
+      await this.withViceMonitor(async (client) => {
+        await client.joyportSet(port, 0xff);
+        const saved = this.viceJoyportSavedDevice.get(port);
+        if (saved !== undefined) {
+          await client.resourceSet(`JoyPort${port}Device`, saved);
+          this.viceJoyportSavedDevice.delete(port);
+        }
+      });
     }
 
     async viceMemGet(address: number, length: number): Promise<Buffer> {
