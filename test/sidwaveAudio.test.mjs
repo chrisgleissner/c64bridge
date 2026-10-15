@@ -125,7 +125,9 @@ timeline:
   const beat = 0.5 * rate;
   // sidplayfp starts after a randomised power-on delay, so the song position is recovered from the
   // quiet spans: every retrigger (and the rest) leaves one, and each ends where a new note starts.
-  const spans = quietSpans(samples).filter(([a, b]) => b - a < 1.2 * beat);
+  // The leading silence (sidplayfp's random power-on delay) is not a note gap: when the delay is
+  // shorter than 1.2 beats it would otherwise shift the inferred song start by a beat.
+  const spans = quietSpans(samples).filter(([a, b]) => a > 0 && b - a < 1.2 * beat);
   const ends = spans.map(([, b]) => b);
   const firstRetrigger = ends.find((e, i) => i + 1 < ends.length && Math.abs(ends[i + 1] - e - beat) < 0.02 * rate);
   assert.ok(firstRetrigger !== undefined, "retrigger gaps are one beat apart");
@@ -133,7 +135,7 @@ timeline:
   const expectedOnsets = [1, 2, 3, 5, 6, 7].map((k) => songStart + k * beat);
   for (const onset of expectedOnsets) {
     const span = spans.find(([, b]) => Math.abs(b - onset) < 0.01 * rate);
-    assert.ok(span, `a gap ends at the note onset ${(onset / rate).toFixed(3)} s`);
+    assert.ok(span, `a gap ends at the note onset ${(onset / rate).toFixed(3)} s; gaps: ${JSON.stringify(spans.map(([a, b]) => [+(a / rate).toFixed(3), +(b / rate).toFixed(3)]))}`);
   }
   // The repeated G4 (entries 2 and 3) is separated by the 2-frame hard restart: a gap of about 40 ms.
   const repeat = spans.find(([, b]) => Math.abs(b - (songStart + 3 * beat)) < 0.01 * rate);
