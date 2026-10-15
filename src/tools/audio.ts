@@ -1007,7 +1007,15 @@ export const audioModule = defineToolModule({
       tags: ["sid", "music", "compiler"],
       prerequisites: [],
       examples: [
-        { name: "Compile PRG", description: "Play compiled PRG", arguments: { sidwave: "song: { title: 'Demo' }", output: "prg", dryRun: false } },
+        {
+          name: "Compile PRG",
+          description: "Play compiled PRG",
+          arguments: {
+            sidwave: "sidwave: 1.0\ntitle: Demo\ntempo: 120\nmode: PAL\nvoices:\n  - id: 1\n    waveform: triangle\n    patterns: { A: { groove: [C4, E4, G4, C5] } }\ntimeline:\n  - { bars: 2, layers: { v1: A } }\n",
+            output: "prg",
+            dryRun: false,
+          },
+        },
       ],
       workflowHints: [
         "Use when the user provides SIDWAVE/CPG scores or asks for export to PRG/SID; share any generated download URIs in your response.",
