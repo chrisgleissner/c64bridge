@@ -81,12 +81,10 @@ const PETSCII_TOKENS: Readonly<Record<string, number>> = {
   LIGHT_GREY: 155,
   REVERSE_ON: 18,
   REVERSE_OFF: 146,
-  FLASH_ON: 130,
-  FLASH_OFF: 148,
+  // FLASH ON/OFF, ESC and TAB are C128 codes: on a C64, 148 is INST (inserts a
+  // space) and 9 re-enables SHIFT+C= case switching, so they are not offered.
   LOWERCASE: 14,
   UPPERCASE: 142,
-  ESCAPE: 27,
-  TAB: 9,
   CURSOR_UP: 145,
   CURSOR_DOWN: 17,
   CURSOR_LEFT: 157,
@@ -225,7 +223,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
@@ -356,7 +354,6 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const port = parsed.port as 1 | 2;
       const durationMs = parsed.durationMs ?? 80;
       const pressedByte = joystickByte(parsed.controls);
-      const releasedByte = 0xff;
       const platform = await ctx.client.getActiveBackendType();
 
       if (platform === "c64u") {
@@ -377,24 +374,24 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       }
 
       if (parsed.action === "release") {
-        await ctx.client.viceJoyportSet(port, releasedByte);
+        await ctx.client.viceJoystickRelease(port);
         ctx.logger.info("Released joystick", { port });
         return textResult(`Joystick port ${port} released.`, { success: true, port, action: "release" });
       }
 
       if (parsed.action === "press") {
-        await ctx.client.viceJoyportSet(port, pressedByte);
+        await ctx.client.viceJoystickPress(port, pressedByte);
         ctx.logger.info("Pressed joystick", { port, controls: parsed.controls, byte: pressedByte });
         return textResult(
-          `Joystick port ${port} pressed: ${parsed.controls.join(", ") || "none"}.`,
+          `Joystick port ${port} pressed: ${parsed.controls.join(", ") || "none"}.${port === 1 ? " On VICE, port 1 also shows phantom keys while held." : ""}`,
           { success: true, port, action: "press", controls: parsed.controls },
         );
       }
 
       // tap: press → wait → release
-      await ctx.client.viceJoyportSet(port, pressedByte);
+      await ctx.client.viceJoystickPress(port, pressedByte);
       await new Promise<void>((res) => setTimeout(res, durationMs));
-      await ctx.client.viceJoyportSet(port, releasedByte);
+      await ctx.client.viceJoystickRelease(port);
       ctx.logger.info("Tapped joystick", { port, controls: parsed.controls, durationMs });
       return textResult(
         `Joystick port ${port} tapped: ${parsed.controls.join(", ") || "none"} for ${durationMs}ms.`,

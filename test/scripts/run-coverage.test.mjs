@@ -7,6 +7,7 @@ import {
   buildCoverageBatches,
   chunkFiles,
   copyCoverageOutput,
+  dropNonCodeLines,
   resolveCoverageShardSize,
 } from "../../scripts/run-coverage.mjs";
 
@@ -84,4 +85,24 @@ test("run-coverage reports missing shard coverage clearly", async () => {
     () => copyCoverageOutput(dir, path.join(dir, "out.lcov.info")),
     /no LCOV report was produced/,
   );
+});
+
+test("dropNonCodeLines removes blank and comment-only lines that Bun reports as executable", async () => {
+  const source = [
+    "function f() {",        // 1
+    "  // explain the next line", // 2
+    "  const x = 1;",        // 3
+    "",                      // 4
+    "  /* block */",         // 5
+    "   * continued",        // 6
+    "  return x; // trailing comment keeps the line", // 7
+    "}",                     // 8
+  ].join("\n");
+  const report = new Map([["src/a.ts", { lines: new Map([[1, 1], [2, 0], [3, 1], [4, 0], [5, 0], [6, 0], [7, 0], [8, 1]]) }]]);
+  const filtered = await dropNonCodeLines(report, async () => source);
+  assert.deepEqual([...filtered.get("src/a.ts").lines.entries()], [[1, 1], [3, 1], [7, 0], [8, 1]]);
+
+  // A file that cannot be read is kept as reported.
+  const unreadable = await dropNonCodeLines(report, async () => { throw new Error("missing"); });
+  assert.equal(unreadable.get("src/a.ts").lines.size, 8);
 });

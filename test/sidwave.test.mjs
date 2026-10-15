@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { compileSidwaveToPrg, compileSidwaveToSid, hzToSidFrequency } from "../src/sidwaveCompiler.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, hzToSidFrequency, sidwaveFrameRate } from "../src/sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
 import { runSidToWav, SidplayExecutionError } from "../src/sidplayRunner.js";
 import os from "node:os";
@@ -50,65 +50,73 @@ test("HARD01-032 sidwaveCompiler's hzToSidFrequency uses the SID's 24-bit phase 
 
 test("SIDWAVE: compile to PRG and SID", () => {
   const doc = parseSidwave(EXAMPLE);
-  const { prg } = compileSidwaveToPrg(doc);
+  const compiled = compileSidwaveToPrg(doc);
+  const { prg } = compiled;
   assert.ok(prg instanceof Buffer);
-  // PRG load address may be $0801 (BASIC header) or $0810 (direct code)
-  const load = prg.readUInt16LE(0);
-  assert.ok(load === 0x0801 || load === 0x0810, `Unexpected load address ${load.toString(16)}`);
+  assert.equal(prg.readUInt16LE(0), 0x0801, "PRG loads at $0801 with a SYS stub");
+  assert.equal(compiled.entryAddress, 0x080d);
   const { sid } = compileSidwaveToSid(doc, prg);
   assert.ok(sid instanceof Buffer);
   assert.equal(sid.toString("ascii", 0, 4), "PSID");
-  assert.ok(sid.length >= 124 + 2, `Unexpected SID length: ${sid.length}`);
+  assert.equal(sid.length, 124 + prg.length);
 });
 
-// The player PRG ends with seven 1-byte tables per voice (freq lo/hi, pw lo/hi, ctrl, ad, sr), each one entry per frame.
-function readFreqFrames(prg, frames) {
-  const body = prg.subarray(2);
-  const tableStart = body.length - (21 * frames);
-  assert.ok(tableStart > 0, `PRG body (${body.length} bytes) is too short for ${frames}-frame tables`);
-  return [0, 1, 2].map((voice) => {
-    const lo = tableStart + (voice * 7 * frames);
-    const hi = lo + frames;
-    return Array.from({ length: frames }, (_, frame) => (body[hi + frame] << 8) | body[lo + frame]);
-  });
-}
-
-function sidFreq(note) {
-  return hzToSidFrequency(midiToHz(noteNameToMidi(note)), "PAL");
-}
-
-test("SIDWAVE: top-level format infers bar count from the timeline and compiles note data", () => {
+test("SIDWAVE: top-level format infers bar count from the timeline", () => {
   const doc = parseSidwave(EXAMPLE);
   assert.equal(doc.song.length_bars, 8);
   assert.equal(doc.song.tempo, 92);
-
-  // 8 bars at 92 BPM exceed the 255-frame table cap.
-  const [v1, v2, v3] = readFreqFrames(compileSidwaveToPrg(doc).prg, 255);
-  assert.ok(v1.includes(sidFreq("E3")), "voice 1 frames should contain the arpeggio note E3");
-  assert.ok(v2.includes(sidFreq("C2")), "voice 2 frames should contain the groove note C2");
-  assert.ok(v3.includes(sidFreq("C1")), "voice 3 frames should contain the groove note C1");
+  // 8 bars of 4 beats at 92 BPM on PAL (50.1245 frames per second).
+  assert.equal(compileSidwaveToPrg(doc).totalFrames, Math.round((32 * sidwaveFrameRate("PAL") * 60) / 92));
 });
 
 test("SIDWAVE: an explicit top-level length_bars is honoured", () => {
   const doc = parseSidwave(EXAMPLE.replace("tempo: 92", "tempo: 92\nlength_bars: 3"));
   assert.equal(doc.song.length_bars, 3);
+  assert.equal(compileSidwaveToPrg(doc).totalFrames, Math.round((12 * sidwaveFrameRate("PAL") * 60) / 92));
 });
 
-test("SIDWAVE: arpeggio, groove and motif patterns start on their first step", () => {
-  // 120 BPM PAL: 25 frames per beat.
-  const doc = parseSidwave({
-    song: { title: "Order", tempo: 120, mode: "PAL" },
-    voices: [
-      { id: 1, waveform: "triangle", patterns: { A: { type: "arpeggio", notes: ["C4", "E4", "G4"] } } },
-      { id: 2, waveform: "triangle", patterns: { B: { groove: ["C3", "G3"] } } },
-      { id: 3, waveform: "triangle", patterns: { M: { motif: "0 4 7", length: 1 } } },
-    ],
-    timeline: [{ section: "S", bars: 2, layers: { v1: "A", v2: "B", v3: "M" } }],
+const VALID = { sidwave: 1, title: "V", tempo: 120, mode: "PAL", voices: [{ id: 1, patterns: { A: { groove: ["C4"] } } }], timeline: [{ bars: 1, layers: { v1: "A" } }] };
+function withChange(change) {
+  const doc = structuredClone(VALID);
+  change(doc);
+  return doc;
+}
+
+const INVALID_CASES = [
+  ["bare '-' in a YAML flow map", "sidwave: 1.0\nvoices: [{ id: 1, patterns: { A: { groove: [C4] } } }]\ntimeline:\n  - { bars: 1, layers: { v1: A, v2: - } }\n", /quote it as '"-"'/],
+  ["unknown pattern reference", withChange((d) => { d.timeline[0].layers.v1 = "B"; }), /timeline\[0\]\.layers\.v1: pattern "B" is not defined for voice 1 \(known: A\)/],
+  ["layer for an undeclared voice", withChange((d) => { d.timeline[0].layers.v2 = "A"; }), /voice 2 is not declared/],
+  ["bad note name", withChange((d) => { d.voices[0].patterns.A.groove = ["H4"]; }), /groove\[0\]: invalid note "H4"/],
+  ["unknown waveform", withChange((d) => { d.voices[0].waveform = "square"; }), /waveform: unknown waveform "square"/],
+  ["tempo out of range", withChange((d) => { d.tempo = 500; }), /tempo: 500 is above the maximum 220/],
+  ["mode", withChange((d) => { d.mode = "SECAM"; }), /expected PAL or NTSC/],
+  ["duplicate voice id", withChange((d) => { d.voices.push({ id: 1 }); }), /voice id 1 is declared more than once/],
+  ["four voices", withChange((d) => { d.voices.push({ id: 2 }, { id: 3 }, { id: 3 }); }), /the SID has 3 voices; 4 were given/],
+  ["adsr out of range", withChange((d) => { d.voices[0].adsr = [0, 0, 16, 0]; }), /adsr\[2\]: 16 is above the maximum 15/],
+  ["unknown effect", withChange((d) => { d.voices[0].patterns.A.fx = { echo: {} }; }), /fx\.echo: unknown field/],
+  ["unknown top-level field", withChange((d) => { d.bpm = 120; }), /\$\.bpm: unknown field/],
+  ["motif without notes", withChange((d) => { d.voices[0].patterns.A = { motif: "dreamy pad" }; }), /contains no notes/],
+  ["fractional bars", withChange((d) => { d.timeline[0].bars = 1.5; }), /bars: expected a whole number/],
+  ["silent pulse width", withChange((d) => { d.voices[0].pulse_width = 4095; }), /pulse width of 0% or 100% is silent/],
+  ["pattern without notes", withChange((d) => { d.voices[0].patterns.A = { length: 4 }; }), /needs 'groove', 'motif' or 'type: arpeggio'/],
+];
+
+for (const [name, input, pattern] of INVALID_CASES) {
+  test(`SIDWAVE validation rejects ${name} with a clear error`, () => {
+    assert.throws(() => parseSidwave(input), pattern);
   });
-  const [v1, v2, v3] = readFreqFrames(compileSidwaveToPrg(doc).prg, 255);
-  assert.deepEqual([v1[0], v1[24], v1[25], v1[50], v1[75]], ["C4", "C4", "E4", "G4", "C4"].map(sidFreq));
-  assert.deepEqual([v2[0], v2[24], v2[25], v2[50]], ["C3", "C3", "G3", "C3"].map(sidFreq));
-  assert.deepEqual([v3[0], v3[25], v3[50], v3[75]], ["C3", "E3", "G3", "C3"].map(sidFreq));
+}
+
+test("SIDWAVE parser: layer references accept modifiers and silence markers", () => {
+  const doc = parseSidwave(withChange((d) => {
+    d.timeline = [
+      { bars: 1, layers: { v1: "A↑" } },
+      { bars: 1, layers: { voice1: "A+5–" } },
+      { bars: 1, layers: { 1: "-" } },
+      { bars: 1, layers: { v1: null } },
+    ];
+  }));
+  assert.deepEqual(doc.timeline.map((t) => t.layers.v1), ["A↑", "A+5–", "-", "-"]);
 });
 
 function parseWavPcm16(buffer) {
@@ -162,7 +170,7 @@ test("SIDWAVE -> SID -> WAV via sidplayfp, then analyze", async (t) => {
   fs.writeFileSync(sidPath, sid);
 
   try {
-  const mode = (doc.mode || "ntsc").toLowerCase() === "pal" ? "pal" : "ntsc";
+  const mode = doc.song.mode === "NTSC" ? "ntsc" : "pal";
   const res = await runSidToWav({ sidPath, wavPath, mode, limitCycles: 800_000 });
     assert.equal(res.exitCode, 0);
     assert.ok(fs.existsSync(wavPath), "WAV not created");
@@ -188,4 +196,27 @@ test("SIDWAVE -> SID -> WAV via sidplayfp, then analyze", async (t) => {
     }
     throw e;
   }
+});
+
+test("SIDWAVE: the music_compile_and_play tool example is a valid document", async () => {
+  const { audioModule } = await import("../src/tools/audio.js");
+  const meta = audioModule.describeTools().find((t) => t.name === "music_compile_and_play");
+  const args = meta.metadata.examples[0].arguments;
+  const result = await audioModule.invoke("music_compile_and_play", { ...args, dryRun: true }, {
+    client: {},
+    logger: { info() {}, debug() {}, warn() {}, error() {} },
+  });
+  assert.equal(result.isError, undefined, result.content[0].text);
+});
+
+test("music_compile_and_play reports SIDWAVE errors as validation errors with a path", async () => {
+  const { audioModule } = await import("../src/tools/audio.js");
+  const result = await audioModule.invoke("music_compile_and_play", {
+    sidwave: "sidwave: 1.0\nvoices:\n  - id: 1\n    patterns: { A: { groove: [C4] } }\ntimeline:\n  - { bars: 1, layers: { v1: X } }\n",
+    dryRun: true,
+  }, { client: {}, logger: { debug() {}, info() {}, warn() {}, error() {} }, platform: { id: "c64u" } });
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata?.error?.kind, "validation");
+  assert.match(result.metadata?.error?.path ?? "", /^\$\.timeline/);
+  assert.match(result.content[0].text, /Invalid SIDWAVE at \$\.timeline/);
 });

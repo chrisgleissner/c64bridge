@@ -267,7 +267,7 @@ export const developerModule = defineToolModule({
             String(parsed.value),
           );
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while updating configuration", {
+            throw new ToolExecutionError("C64 backend reported failure while updating configuration", {
               details: toRecord(result.details),
             });
           }
@@ -319,7 +319,7 @@ export const developerModule = defineToolModule({
 
           const result = await ctx.client.configBatchUpdate(requestPayload);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure during batch configuration update", {
+            throw new ToolExecutionError("C64 backend reported failure during batch configuration update", {
               details: toRecord(result.details),
             });
           }
@@ -357,7 +357,7 @@ export const developerModule = defineToolModule({
 
           const result = await ctx.client.configLoadFromFlash();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while loading from flash", {
+            throw new ToolExecutionError("C64 backend reported failure while loading from flash", {
               details: toRecord(result.details),
             });
           }
@@ -394,7 +394,7 @@ export const developerModule = defineToolModule({
 
           const result = await ctx.client.configSaveToFlash();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while saving to flash", {
+            throw new ToolExecutionError("C64 backend reported failure while saving to flash", {
               details: toRecord(result.details),
             });
           }
@@ -431,7 +431,7 @@ export const developerModule = defineToolModule({
 
           const result = await ctx.client.configResetToDefault();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resetting configuration", {
+            throw new ToolExecutionError("C64 backend reported failure while resetting configuration", {
               details: toRecord(result.details),
             });
           }
@@ -532,7 +532,7 @@ export const developerModule = defineToolModule({
 
           const result = await ctx.client.debugregRead();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while reading debug register", {
+            throw new ToolExecutionError("C64 backend reported failure while reading debug register", {
               details: toRecord(result.details),
             });
           }
@@ -574,7 +574,7 @@ export const developerModule = defineToolModule({
 
           const result = await ctx.client.debugregWrite(value);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while writing debug register", {
+            throw new ToolExecutionError("C64 backend reported failure while writing debug register", {
               details: toRecord(result.details),
             });
           }

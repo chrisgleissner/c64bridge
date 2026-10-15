@@ -11,6 +11,7 @@ import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
+import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
 
@@ -80,7 +81,7 @@ export interface C64Facade {
   configSaveToFlash(): Promise<RunResult>;
   configResetToDefault(): Promise<RunResult>;
   filesInfo(path: string): Promise<unknown>;
-  filesCreateD64(path: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunResult>;
+  filesCreateD64(path: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult>;
   filesCreateD71(path: string, options?: { diskname?: string }): Promise<RunResult>;
   filesCreateD81(path: string, options?: { diskname?: string }): Promise<RunResult>;
   filesCreateDnp(path: string, tracks: number, options?: { diskname?: string }): Promise<RunResult>;
@@ -425,7 +426,7 @@ class C64uBackend implements C64Facade {
   async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return this.actionResult(res.data); }
   async configResetToDefault(): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(":reset_to_default"); return this.actionResult(res.data); }
   async filesInfo(p: string): Promise<unknown> { const res = await this.api.v1.filesInfoDetail(encodeDevicePath(p), ":info"); return res.data; }
-  async filesCreateD64(p: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
+  async filesCreateD64(p: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateD71(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD71Update(encodeDevicePath(p), ":create_d71", { diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateD81(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD81Update(encodeDevicePath(p), ":create_d81", { diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateDnp(p: string, tracks: number, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateDnpUpdate(encodeDevicePath(p), ":create_dnp", { tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
@@ -887,19 +888,35 @@ export class ViceBackend implements C64Facade {
     return { host: this.host, port: this.port };
   }
 
+  // VICE has no "drive enabled" or "attached image" resource. A drive is off
+  // when Drive<n>Type is 0, and images attached through this backend are
+  // remembered here because VICE cannot report them.
+  private readonly attachedImages = new Map<number, string>();
+  private readonly savedDriveTypes = new Map<number, number>();
+  private trackedStateProcessStart = 0;
+
+  /** A restarted VICE has no images attached and default drive types, so forget what was tracked before. */
+  private syncTrackedState(): void {
+    if (this.trackedStateProcessStart !== this.lastProcessStart) {
+      this.attachedImages.clear();
+      this.savedDriveTypes.clear();
+      this.trackedStateProcessStart = this.lastProcessStart;
+    }
+  }
+
   async drivesList(): Promise<unknown> {
+    this.syncTrackedState();
     return await this.withClient(async (client) => {
       const drives = [];
       for (const n of [8, 9, 10, 11]) {
         try {
-          const enabled = await client.resourceGet(`Drive${n}CPUEnabled`);
-          const image = await client.resourceGet(`Drive${n}Image`);
           const typeRes = await client.resourceGet(`Drive${n}Type`);
+          const type = typeRes.type === "int" ? typeRes.value : Number(typeRes.value);
           drives.push({
             id: `drive${n}`,
-            power: (typeof enabled.value === "number" ? enabled.value : 0) ? "on" : "off",
-            image: typeof image.value === "string" && image.value ? image.value : null,
-            type: typeRes.value,
+            power: type !== 0 ? "on" : "off",
+            image: this.attachedImages.get(n) ?? null,
+            type,
           });
         } catch {
           drives.push({ id: `drive${n}`, power: "off", image: null, type: 0 });
@@ -914,26 +931,51 @@ export class ViceBackend implements C64Facade {
       throw unsupported("driveMount type/mode overrides; omit these options on VICE");
     }
     const n = parseDriveNumber(drive);
-    await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 1);
-      await client.resourceSet(`Drive${n}Image`, imagePath);
+    if (n !== 8) {
+      // The Binary Monitor's only attach path is autostart, which always uses drive 8.
+      throw unsupported(`driveMount on drive ${n}; VICE can attach images over the Binary Monitor only to drive 8`);
+    }
+    // Autostart falls back to tape, snapshot, cartridge and PRG handling when a
+    // file is not a disk image, so only disk images are passed on.
+    if (!VICE_DISK_IMAGE_EXTENSIONS.has(path.extname(imagePath).toLowerCase())) {
+      throw new Error(`VICE can mount only disk images (${[...VICE_DISK_IMAGE_EXTENSIONS].join(", ")}): ${imagePath}`);
+    }
+    if (!fs.existsSync(imagePath)) {
+      throw new Error(`Disk image not found on the VICE host: ${imagePath}`);
+    }
+    const outcome = await this.withClient(async (client) => {
+      // Sync after withClient has started VICE, or a start here would clear this mount's record.
+      this.syncTrackedState();
+      await this.ensureDriveOn(client, n);
+      await client.memSet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER);
+      await client.autostart(imagePath, { run: false });
+      // Autoload power-cycles the machine after this call returns; wait until
+      // its LOAD has finished so callers do not write into a machine that is
+      // about to be reset.
+      return waitForAutoloadFinished(client, 30_000);
     });
-    return { success: true, details: { drive, image: imagePath } };
+    this.attachedImages.set(n, imagePath);
+    return {
+      success: true,
+      details: {
+        drive,
+        image: imagePath,
+        loadedFirstProgram: outcome.loaded,
+        note: outcome.loaded
+          ? "VICE attaches images through autoload, which resets the machine (clearing RAM) and LOADs the first program without running it."
+          : "VICE attaches images through autoload, which resets the machine (clearing RAM); the disk has no program to load.",
+      },
+    };
   }
 
-  async driveRemove(drive: string): Promise<RunResult> {
-    const n = parseDriveNumber(drive);
-    await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}Image`, "");
-    });
-    return { success: true, details: { drive } };
+  async driveRemove(_drive: string): Promise<RunResult> {
+    throw unsupported("driveRemove; the VICE Binary Monitor has no command to detach a disk image");
   }
 
   async driveReset(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 0);
-      await client.resourceSet(`Drive${n}CPUEnabled`, 1);
+      await client.resetDrive(n as 8 | 9 | 10 | 11);
     });
     return { success: true, details: { drive } };
   }
@@ -941,22 +983,36 @@ export class ViceBackend implements C64Facade {
   async driveOn(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 1);
+      await this.ensureDriveOn(client, n);
     });
     return { success: true, details: { drive, power: "on" } };
   }
 
   async driveOff(drive: string): Promise<RunResult> {
     const n = parseDriveNumber(drive);
+    this.syncTrackedState();
     await this.withClient(async (client) => {
-      await client.resourceSet(`Drive${n}CPUEnabled`, 0);
+      const current = await client.resourceGet(`Drive${n}Type`);
+      const type = current.type === "int" ? current.value : Number(current.value);
+      if (type !== 0) this.savedDriveTypes.set(n, type);
+      await client.resourceSet(`Drive${n}Type`, 0);
     });
     return { success: true, details: { drive, power: "off" } };
   }
 
+  /** Switch a drive on by giving it a type again: the one it had before driveOff, or a 1541. */
+  private async ensureDriveOn(client: ViceClient, n: number): Promise<void> {
+    const current = await client.resourceGet(`Drive${n}Type`);
+    const type = current.type === "int" ? current.value : Number(current.value);
+    if (type === 0) {
+      await client.resourceSet(`Drive${n}Type`, this.savedDriveTypes.get(n) ?? 1541);
+    }
+  }
+
   async driveSetMode(drive: string, mode: "1541" | "1571" | "1581"): Promise<RunResult> {
     const n = parseDriveNumber(drive);
-    const DRIVE_TYPE: Record<string, number> = { "1541": 2, "1571": 8, "1581": 11 };
+    // Drive<n>Type takes the model number itself (DRIVE_TYPE_1541 = 1541 in VICE's drive.h).
+    const DRIVE_TYPE: Record<string, number> = { "1541": 1541, "1571": 1571, "1581": 1581 };
     const typeNum = DRIVE_TYPE[mode];
     if (typeNum === undefined) throw new Error(`Unknown drive mode: ${mode}`);
     await this.withClient(async (client) => {
@@ -974,10 +1030,11 @@ export class ViceBackend implements C64Facade {
       categories: [
         {
           name: "VICE",
+          // Only resources that exist in VICE 3.10; checked against a running x64sc.
+          // VICE has no warp, drive-enable or attached-image resources.
           items: [
-            "WarpMode", "SoundVolume", "Drive8CPUEnabled", "Drive9CPUEnabled",
-            "Drive10CPUEnabled", "Drive11CPUEnabled", "Drive8Image", "Drive9Image",
-            "Drive8Type", "Drive9Type", "VICIIBorderMode", "VICIIFullscreen",
+            "SoundVolume", "Drive8Type", "Drive9Type", "Drive10Type", "Drive11Type",
+            "VICIIBorderMode", "VICIIFullscreen", "MachineVideoStandard", "SidModel",
           ],
         },
       ],
@@ -1054,12 +1111,61 @@ function parseViceConfigValue(value: unknown, type: string, item: string): strin
   return parsed;
 }
 
-function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend in phase one`); (err as any).code = "UNSUPPORTED"; return err; }
+function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend`); (err as any).code = "UNSUPPORTED"; return err; }
 
 /** Ultimate file APIs treat slash as a path separator. Encode each name once,
  * preserving leading and nested separators for firmware routing. */
 function encodeDevicePath(value: string): string {
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+/** Disk image types VICE's drive 8 can attach (autostart would treat anything else as tape, cartridge or PRG). */
+const VICE_DISK_IMAGE_EXTENSIONS = new Set([".d64", ".g64", ".d71", ".g71", ".d81", ".d80", ".d82", ".x64", ".p64", ".d1m", ".d2m", ".d4m"]);
+
+/**
+ * Bytes written to unused RAM ($02A7-$02AA) before an autoload. The autoload's
+ * power cycle clears them, which shows that the reset has happened.
+ */
+const AUTOLOAD_MARKER_ADDRESS = 0x02a7;
+const AUTOLOAD_MARKER = Buffer.from([0xc6, 0x4b, 0x1d, 0x9e]);
+
+/**
+ * Wait until VICE's autoload has reset the machine and its LOAD has finished.
+ * Completion is the LOAD"/READY. text on screen, or, when the loaded program
+ * covers screen RAM, BASIC initialised (TXTTAB $0801) with its end-of-program
+ * pointer (VARTAB) moved off the reset value $0803 and an empty keyboard buffer.
+ */
+async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<{ loaded: boolean }> {
+  const deadline = Date.now() + timeoutMs;
+  let loadedEnd: number | null = null;
+  while (Date.now() < deadline) {
+    await client.exitMonitor();
+    await delay(250);
+    const marker = await client.memGet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER_ADDRESS + AUTOLOAD_MARKER.length - 1);
+    if (Buffer.from(marker).equals(AUTOLOAD_MARKER)) continue; // not reset yet
+    const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));
+    const load = screen.lastIndexOf('LOAD"');
+    if (load >= 0) {
+      const after = screen.slice(load);
+      // An empty disk is still attached; it just has no program for the autoload to load.
+      if (/\?FILE NOT FOUND/.test(after)) return { loaded: false };
+      const error = /\?([A-Z ]+ERROR|DEVICE NOT PRESENT)/.exec(after);
+      if (error) throw new Error(`VICE autoload failed: ?${error[1]}`);
+      if (after.includes("READY.")) return { loaded: true };
+    }
+    // TXTTAB = $0801 shows BASIC has initialised (right after the power cycle RAM
+    // holds VICE's init pattern); VARTAB off $0803 then shows the LOAD has ended.
+    const pointers = await client.memGet(0x002b, 0x002e);
+    const keyboardQueue = await client.memGet(0x00c6, 0x00c6);
+    const txttab = (pointers[0] ?? 0) | ((pointers[1] ?? 0) << 8);
+    const vartab = (pointers[2] ?? 0) | ((pointers[3] ?? 0) << 8);
+    // BASIC's cold start sets TXTTAB before VARTAB, so require the same end
+    // pointer on two consecutive polls before trusting it.
+    const candidate = txttab === 0x0801 && vartab !== 0x0803 && keyboardQueue[0] === 0 ? vartab : null;
+    if (candidate !== null && candidate === loadedEnd) return { loaded: true };
+    loadedEnd = candidate;
+  }
+  throw new Error("VICE autoload did not finish within the time limit");
 }
 
 /** C64U drive letters with their factory bus numbers, so one drive id works on both backends. */

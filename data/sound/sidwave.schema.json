@@ -2,63 +2,173 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/chrisgleissner/c64bridge/refs/heads/main/data/sound/sidwave.schema.json",
   "title": "SIDWAVE Composition Schema",
+  "description": "See sidwave.md for the meaning of every field. The compiler also checks note ranges after transposition and minimum note durations.",
   "type": "object",
   "required": ["sidwave", "title", "tempo", "mode", "voices", "timeline"],
   "properties": {
     "sidwave": { "type": ["number", "string"], "enum": [1, "1.0", "1"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
-    "tempo": { "type": "number", "minimum": 30, "maximum": 220 },
+    "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
-    "global_fx": { "type": "object", "additionalProperties": true },
+    "length_bars": { "type": "integer", "minimum": 1, "description": "Truncates or repeats the timeline to this many 4/4 bars." },
+    "global_fx": {
+      "type": "object",
+      "properties": {
+        "reverb_sim": {
+          "type": "object",
+          "required": ["depth", "delay_frames"],
+          "properties": {
+            "depth": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "delay_frames": { "type": "integer", "minimum": 1, "maximum": 50 }
+          },
+          "additionalProperties": false
+        },
+        "filter_env": {
+          "type": "object",
+          "required": ["cutoff_base"],
+          "properties": {
+            "cutoff_base": { "type": "number", "minimum": 0, "maximum": 2047 },
+            "sweep": { "type": "number", "minimum": -2047, "maximum": 2047 },
+            "speed": { "type": "number", "exclusiveMinimum": 0, "maximum": 1024, "description": "Beats per one-way sweep." },
+            "resonance": { "type": "integer", "minimum": 0, "maximum": 15 },
+            "type": { "type": "string", "enum": ["lowpass", "bandpass", "highpass"] },
+            "voices": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 3 } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "voices": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 3,
       "items": {
         "type": "object",
         "required": ["id"],
         "properties": {
-          "id": { "type": "number", "minimum": 1, "maximum": 3 },
+          "id": { "type": "integer", "minimum": 1, "maximum": 3 },
           "name": { "type": "string" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },
-          "pulse_width": { "type": "number", "minimum": 0 },
-          "adsr": { "type": "array", "items": { "type": "number", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
+          "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095, "description": "Fraction (0 < x <= 1) or 12-bit value." },
+          "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
           "patterns": {
             "type": "object",
             "additionalProperties": {
               "oneOf": [
-                { "type": "object", "required": ["type", "notes"], "properties": {
-                  "type": { "const": "arpeggio" },
-                  "notes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-                  "frame_rate": { "type": "number", "minimum": 1 },
-                  "fx": { "type": "object", "additionalProperties": true }
-                }, "additionalProperties": false },
-                { "type": "object", "properties": {
-                  "length": { "type": "number", "minimum": 1 },
-                  "motif": { "type": "string" },
-                  "transpositions": { "type": "array", "items": { "type": "number" } },
-                  "fx": { "type": "object", "additionalProperties": true }
-                }, "additionalProperties": false },
-                { "type": "object", "required": ["groove"], "properties": {
-                  "groove": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
-                  "fx": { "type": "object", "additionalProperties": true }
-                }, "additionalProperties": false }
+                {
+                  "type": "object",
+                  "required": ["notes"],
+                  "properties": {
+                    "type": { "const": "arpeggio" },
+                    "notes": { "type": "array", "items": { "$ref": "#/$defs/note" }, "minItems": 1 },
+                    "frame_rate": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Frames per chord tone; makes the notes a fast chord arpeggio." },
+                    "length": { "$ref": "#/$defs/length" },
+                    "transpositions": { "$ref": "#/$defs/transpositions" },
+                    "fx": { "$ref": "#/$defs/fx" }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": ["motif"],
+                  "properties": {
+                    "motif": { "type": "string", "description": "Notes, semitone offsets from root, chord symbols, '-' rests and '~' ties." },
+                    "root": { "$ref": "#/$defs/note" },
+                    "length": { "$ref": "#/$defs/length" },
+                    "transpositions": { "$ref": "#/$defs/transpositions" },
+                    "fx": { "$ref": "#/$defs/fx" }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "required": ["groove"],
+                  "properties": {
+                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "enum": ["-", ".", "~", "_", "r", "rest"] }] }, "minItems": 1 },
+                    "length": { "$ref": "#/$defs/length" },
+                    "transpositions": { "$ref": "#/$defs/transpositions" },
+                    "fx": { "$ref": "#/$defs/fx" }
+                  },
+                  "additionalProperties": false
+                }
               ]
             }
           }
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     },
     "timeline": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "object", "required": ["bars", "layers"], "properties": {
-        "section": { "type": "string" },
-        "bars": { "type": "number", "minimum": 1 },
-        "layers": { "type": "object", "additionalProperties": { "type": "string" } }
-      }, "additionalProperties": false }
+      "items": {
+        "type": "object",
+        "required": ["bars", "layers"],
+        "properties": {
+          "section": { "type": "string" },
+          "bars": { "type": "integer", "minimum": 1 },
+          "layers": {
+            "type": "object",
+            "propertyNames": { "pattern": "^(v|voice)?[1-3]$" },
+            "additionalProperties": { "type": ["string", "null"], "description": "Pattern name with optional ↑ ↓ +N -N modifiers and a trailing – for fade; \"-\" is silence." }
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "note": { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]$" },
+    "length": { "type": "number", "exclusiveMinimum": 0, "maximum": 64, "description": "Beats per entry (default 1)." },
+    "transpositions": { "type": "array", "items": { "type": "integer", "minimum": -48, "maximum": 48 }, "minItems": 1 },
+    "fx": {
+      "type": "object",
+      "properties": {
+        "vibrato": {
+          "type": "object",
+          "required": ["depth", "rate"],
+          "properties": {
+            "depth": { "type": "number", "minimum": 0.03, "maximum": 6, "description": "Semitones." },
+            "rate": { "type": "number", "minimum": 0.2, "maximum": 12, "description": "Hz; at most about a quarter of the frame rate." },
+            "delay": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames." }
+          },
+          "additionalProperties": false
+        },
+        "pwm_sweep": {
+          "type": "object",
+          "required": ["depth", "speed"],
+          "properties": {
+            "depth": { "type": "number", "exclusiveMinimum": 0, "maximum": 2047 },
+            "speed": { "type": "number", "exclusiveMinimum": 0, "maximum": 25, "description": "Cycles per second." }
+          },
+          "additionalProperties": false
+        },
+        "slide": {
+          "type": "object",
+          "required": ["depth", "speed"],
+          "properties": {
+            "depth": { "type": "integer", "minimum": -24, "maximum": 24, "not": { "const": 0 } },
+            "speed": { "type": "integer", "minimum": 1, "maximum": 255, "description": "Frames until the slide reaches the note." }
+          },
+          "additionalProperties": false
+        },
+        "filter_mod": {
+          "type": "object",
+          "required": ["sweep"],
+          "properties": {
+            "sweep": { "type": ["string", "number"], "description": "e.g. \"+500 over 8 steps\" (steps, beats, bars or frames)." },
+            "steps": { "type": "number", "exclusiveMinimum": 0 },
+            "beats": { "type": "number", "exclusiveMinimum": 0 },
+            "bars": { "type": "number", "exclusiveMinimum": 0 },
+            "frames": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

@@ -21,7 +21,7 @@ const tsLoader = "tsx/esm";
 // auto-start for every server spawned by unrelated test files afterward.
 const previousSkipAutoStart = process.env.C64BRIDGE_SKIP_AUTO_START;
 process.env.C64BRIDGE_SKIP_AUTO_START = "1";
-const { parseCliOptions } = await import("../src/mcp-server.js");
+const { parseCliOptions, connectivityProbeUrl } = await import("../src/mcp-server.js");
 if (previousSkipAutoStart === undefined) delete process.env.C64BRIDGE_SKIP_AUTO_START;
 else process.env.C64BRIDGE_SKIP_AUTO_START = previousSkipAutoStart;
 
@@ -155,4 +155,29 @@ test("HARD01-001 --http <port> opens a real HTTP MCP listener; default invocatio
   } finally {
     await stopChild(child);
   }
+});
+
+test("the startup connectivity probe keeps a reverse-proxy path prefix", () => {
+  assert.equal(connectivityProbeUrl("https://proxy.local/c64u"), "https://proxy.local/c64u/v1/info");
+  assert.equal(connectivityProbeUrl("https://proxy.local/c64u/"), "https://proxy.local/c64u/v1/info");
+  assert.equal(connectivityProbeUrl("http://192.0.2.1"), "http://192.0.2.1/v1/info");
+});
+
+test("the startup connectivity probe sends the network password", async (t) => {
+  const mock = await startMockC64Server({ networkPassword: "probe-secret" });
+  t.after(async () => { await mock.close(); });
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-probe-"));
+  t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
+  const configPath = path.join(tempRoot, "config.json");
+  fs.writeFileSync(configPath, JSON.stringify({ c64u: { baseUrl: mock.baseUrl, networkPassword: "probe-secret" } }), "utf8");
+  const homeDir = path.join(tempRoot, "home");
+  fs.mkdirSync(homeDir, { recursive: true });
+  const port = await reserveLoopbackPort();
+
+  // NODE_ENV=test silences the request log that this test reads.
+  const { child, getStderr } = spawnServer(["--http", String(port)], { C64BRIDGE_CONFIG: configPath, HOME: homeDir, C64_TEST_TARGET: "mock", NODE_ENV: "development" });
+  t.after(() => stopChild(child));
+  // Startup takes about 3 s alone but longer while the full suite runs in parallel.
+  await waitFor(() => /GET \S+\/v1\/info status=\d+/.test(getStderr()), { timeoutMs: 60_000 });
+  assert.match(getStderr(), /GET \S+\/v1\/info status=200/);
 });

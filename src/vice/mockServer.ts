@@ -72,12 +72,15 @@ export class ViceMockServer {
   private readonly registerMetadata = buildDefaultRegisterMetadata();
   private registerValues = new Map<number, number>();
   private resources = new Map<string, number | string>();
+  /** Output lines of VICE's I/O simulation joyport device per port (0 = port 1). */
+  private joyportOutput = [0, 0];
   private readonly sockets = new Set<net.Socket>();
 
   constructor(options?: ViceMockServerOptions) {
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
     this.resetState();
+    this.resetResources();
   }
 
   async start(): Promise<{ port: number }> {
@@ -151,9 +154,25 @@ export class ViceMockServer {
     switch (cmd) {
       case 0x85: // info
         return buildResponse(cmd, reqId);
-      case 0xCC: // reset
-        this.resetState();
+      case 0xCC: { // reset: types 8-11 reset only that drive's CPU
+        const type = body[0] ?? 0;
+        if (type >= 8 && type <= 11) {
+          this.driveResets.push(type);
+        } else {
+          this.resetState();
+        }
         return buildResponse(cmd, reqId);
+      }
+      case 0xDD: { // autostart: power-cycles, attaches the image to drive 8 and loads (run=1 also runs)
+        const nameLength = body[3] ?? 0;
+        this.autostarts.push({
+          run: body[0] === 1,
+          fileIndex: body.readUInt16LE(1),
+          filename: body.subarray(4, 4 + nameLength).toString("utf8"),
+        });
+        this.renderAutoload(body[0] === 1);
+        return buildResponse(cmd, reqId);
+      }
       case 0x11: { // checkpoint get
         const id = body.readUInt32LE(0);
         const checkpoint = this.checkpoints.get(id);
@@ -222,13 +241,17 @@ export class ViceMockServer {
       case 0x01: { // mem get
         const start = body.readUInt16LE(1);
         const end = body.readUInt16LE(3);
-        const length = Math.max(0, end - start + 1);
+        if (start > end) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x81); // VICE rejects start > end with INVALID_PARAMETER.
+        }
+        const length = end - start + 1;
         const payload = Buffer.alloc(2 + length);
         payload.writeUInt16LE(length & 0xffff, 0); // Like VICE: a full 64 KB read reports ML = 0.
         for (let i = 0; i < length; i += 1) {
           payload[2 + i] = this.memory[(start + i) & 0xffff];
         }
         this.applyHeartbeatOverlay(start, length, payload);
+        this.applyJoyportOverlay(start, length, payload);
         return buildResponse(cmd, reqId, payload);
       }
       case 0x02: { // mem set
@@ -283,7 +306,7 @@ export class ViceMockServer {
         const name = body.subarray(1, 1 + nameLen).toString("utf8");
         const value = this.resources.get(name);
         if (value === undefined) {
-          return buildResponse(cmd, reqId, Buffer.from([0, 0]));
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01); // VICE: OBJECT_MISSING for an unknown resource.
         }
         if (typeof value === "number") {
           const buffer = Buffer.alloc(2 + 4);
@@ -303,18 +326,38 @@ export class ViceMockServer {
         const isNumber = body[0] === 1;
         const nameLen = body[1] ?? 0;
         const name = body.subarray(2, 2 + nameLen).toString("utf8");
+        if (!this.resources.has(name)) {
+          // VICE: an unknown integer resource fails resources_set (CMD_FAILURE); an unknown string one is OBJECT_MISSING.
+          return buildResponse(cmd, reqId, Buffer.alloc(0), isNumber ? 0x8f : 0x01);
+        }
         if (isNumber) {
           const valueLen = body[2 + nameLen] ?? 0;
           const valueBytes = body.subarray(3 + nameLen, 3 + nameLen + valueLen);
           const padded = Buffer.alloc(4);
           valueBytes.copy(padded, 0, 0, Math.min(4, valueBytes.length));
           const value = padded.readInt32LE(0);
+          // VICE rejects joyport device ids it does not have (JOYPORT_MAX_DEVICES is 44 in 3.10).
+          if (/^JoyPort\dDevice$/.test(name) && (value < 0 || value >= 44)) {
+            return buildResponse(cmd, reqId, Buffer.alloc(0), 0x8f);
+          }
           this.resources.set(name, value);
         } else {
           const valueLen = body[2 + nameLen] ?? 0;
           const value = body.subarray(3 + nameLen, 3 + nameLen + valueLen).toString("utf8");
           this.resources.set(name, value);
         }
+        return buildResponse(cmd, reqId);
+      }
+      case 0xA2: { // joyport set: like VICE, it only stores the I/O simulation device's output lines
+        const port = body.readUInt16LE(0);
+        const value = body.readUInt16LE(2);
+        if (port > 1) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01);
+        }
+        if (value > 0xff) {
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x81);
+        }
+        this.joyportOutput[port] = value & 0x1f;
         return buildResponse(cmd, reqId);
       }
       case 0xAA: // exit monitor
@@ -469,10 +512,58 @@ export class ViceMockServer {
     for (const meta of this.registerMetadata) {
       this.registerValues.set(meta.id, 0);
     }
+    this.joyportOutput = [0, 0];
+  }
+
+  // Resources survive a machine reset in VICE. Only resources that exist in
+  // VICE 3.10 are known; others fail the way VICE fails (see below).
+  private resetResources(): void {
     this.resources = new Map<string, number | string>([
-      ["C64Model", 2],
       ["SidEngine", 1],
+      ["JoyPort1Device", 1],
+      ["JoyPort2Device", 1],
+      ["Drive8Type", 1541],
+      ["Drive9Type", 0],
+      ["Drive10Type", 0],
+      ["Drive11Type", 0],
+      ["VICIIDoubleSize", 0],
+      ["VICIIBorderMode", 0],
+      ["VICIIFullscreen", 0],
+      ["SoundVolume", 100],
+      ["SidModel", 0],
+      ["MachineVideoStandard", 1],
+      ["KernalName", "kernal-901227-03.bin"],
     ]);
+  }
+
+  /** Images attached with autostart, and drive CPU resets, as observed by tests. */
+  readonly autostarts: Array<{ filename: string; run: boolean; fileIndex: number }> = [];
+  readonly driveResets: number[] = [];
+
+  /** Lines a joyport device drives, as CIA1 sees them (active low); only the I/O simulation device (37) is modelled. */
+  joyportLines(port: 1 | 2): number {
+    return this.resources.get(`JoyPort${port}Device`) === 37 ? this.joyportOutput[port - 1]! : 0xff;
+  }
+
+  // CIA1 port A ($DC00) reads joyport 2 and port B ($DC01) joyport 1, ANDed with the keyboard lines.
+  private applyJoyportOverlay(start: number, length: number, payload: Buffer): void {
+    for (const [address, port] of [[0xdc00, 2], [0xdc01, 1]] as const) {
+      if (address >= start && address < start + length) {
+        payload[2 + address - start] = 0xff & this.joyportLines(port);
+      }
+    }
+  }
+
+  // What VICE's autoload leaves on screen after its power cycle: the typed LOAD and READY.
+  private renderAutoload(run: boolean): void {
+    // The power cycle's KERNAL reset clears $0200-$03FF (RAMTAS).
+    this.memory.fill(0x00, 0x0200, 0x0400);
+    this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + 1000);
+    const lines = ['LOAD"*",8,1', "", "SEARCHING FOR *", "LOADING", "READY.", ...(run ? ["RUN"] : [])];
+    lines.forEach((line, row) => {
+      const codes = asciiToScreenCodes(line);
+      codes.copy(Buffer.from(this.memory.buffer, SCREEN_BASE + row * 40, codes.length));
+    });
   }
 
   private renderHello(): void {

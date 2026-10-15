@@ -1,8 +1,18 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "#test/runner";
 import assert from "#test/assert";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { assertToolUnsupported } from "../helpers/toolAssertions.mjs";
 import { getChargenGlyphs } from "../../src/chargen.js";
+
+function writeTempDiskImage() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-suite-d64-"));
+  const file = path.join(dir, "demo.d64");
+  fs.writeFileSync(file, Buffer.alloc(174848));
+  return file;
+}
 
 function getTextContent(result) {
   return result.content.find((entry) => entry.type === "text");
@@ -261,17 +271,19 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         assert.notEqual(overrideResult.metadata?.success, true, "VICE mount type/mode override should be rejected");
       }
 
+      // VICE attaches an image from the host file system, so it must exist there.
+      const viceImage = ctx.platform === "vice" ? writeTempDiskImage() : null;
       const { result: mountResult } = await callTool(ctx, "c64_disk", {
         op: "mount",
         drive: "drive8",
-        image: "/tmp/demo.d64",
+        image: viceImage ?? "/tmp/demo.d64",
         ...(ctx.platform === "vice" ? {} : { type: "d64", attachmentMode: "readwrite" }),
       });
 
       assert.equal(mountResult.metadata?.success, true, "mount operation should succeed");
       if (ctx.platform === "vice") {
         assert.equal(mountResult.metadata?.drive, "drive8");
-        assert.equal(mountResult.metadata?.image, "/tmp/demo.d64");
+        assert.equal(mountResult.metadata?.image, viceImage);
       } else {
       assert.equal(mockServer.state.lastDriveOperation?.action, "mount");
       assert.deepEqual(mockServer.state.drives.a.mountedImage, {
@@ -353,10 +365,10 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         drive: "drive8",
       });
 
-      assert.equal(removeResult.metadata?.success, true, "unmount operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(removeResult.metadata?.drive, "drive8");
+        assertUnsupportedOperation(removeResult, ctx.platform, "drive_remove");
       } else {
+        assert.equal(removeResult.metadata?.success, true, "unmount operation should succeed");
         assert.equal(mockServer.state.drives.a.mountedImage, null);
       }
 

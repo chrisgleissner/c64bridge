@@ -60,7 +60,7 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "description": "Assertion type",
+                  "description": "Assertion type; sid_silent needs the C64 Ultimate audio stream (c64u backend).",
                   "enum": [
                     "screen_contains",
                     "memory_equals",
@@ -462,7 +462,7 @@
                     "properties": {
                       "type": {
                         "type": "string",
-                        "description": "Assertion type",
+                        "description": "Assertion type; sid_silent needs the C64 Ultimate audio stream (c64u backend).",
                         "enum": [
                           "screen_contains",
                           "memory_equals",

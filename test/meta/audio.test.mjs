@@ -363,7 +363,7 @@ describe("meta/audio", () => {
     expect(result.metadata.error?.details?.response).toEqual({ success: false });
   });
 
-  test("music_compile_play_analyze returns unknown errors for invalid SIDWAVE input", async () => {
+  test("music_compile_play_analyze returns validation errors for invalid SIDWAVE input", async () => {
     const result = await metaModule.invoke(
       "music_compile_play_analyze",
       {
@@ -375,7 +375,8 @@ describe("meta/audio", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.metadata.error?.kind).toBe("unknown");
+    expect(result.metadata.error?.kind).toBe("validation");
+    expect(result.metadata.error?.path).toBe("$");
   });
 
   test("music_compile_play_analyze disables post verification by silencing directly", async () => {
@@ -478,6 +479,27 @@ describe("meta/audio", () => {
     expect(result.structuredContent.data.title).toBe("Für Elise");
     expect(result.structuredContent.data.results[0].verification.mode).toBe("audio-analysis");
     expect(ctx.client.runPrg).toHaveBeenCalledTimes(1);
+  });
+
+  test("music_play_preset leaves the last backend playing and silences earlier ones before switching", async () => {
+    const events = [];
+    let activeBackend = "c64u";
+    ctx.client.getActiveBackendType = mock(async () => activeBackend);
+    ctx.client.getAvailableBackends = mock(() => ["vice", "c64u"]);
+    ctx.client.switchBackend = mock((backend) => { activeBackend = backend; events.push(`switch:${backend}`); });
+    ctx.client.sidSilenceAll = mock(async () => { events.push(`silence:${activeBackend}`); return { success: true }; });
+    ctx.client.runPrg = mock(async () => { events.push(`play:${activeBackend}`); return { success: true }; });
+
+    const result = await metaModule.invoke(
+      "music_play_preset",
+      { preset: "fuer_elise", platforms: ["vice", "c64u"], verify: false, restoreActiveBackend: false },
+      ctx,
+    );
+
+    expect(result.metadata.success).toBe(true);
+    // Each backend is silenced before it plays; vice is stopped before switching to c64u,
+    // and c64u, the last backend, keeps playing.
+    expect(events).toEqual(["switch:vice", "silence:vice", "play:vice", "silence:vice", "switch:c64u", "silence:c64u", "play:c64u"]);
   });
 
   test("music_play_preset throws when a requested backend is not available", async () => {

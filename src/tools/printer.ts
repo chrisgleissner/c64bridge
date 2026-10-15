@@ -349,7 +349,7 @@ export const printerModule = defineToolModule({
         });
 
         if (!result.success) {
-          throw new ToolExecutionError("C64 firmware reported failure while printing text", {
+          throw new ToolExecutionError("C64 backend reported failure while printing text", {
             details: normaliseFailure(result.details),
           });
         }
@@ -410,7 +410,7 @@ export const printerModule = defineToolModule({
         });
 
         if (!result.success) {
-          throw new ToolExecutionError("C64 firmware reported failure while printing Commodore bitmap", {
+          throw new ToolExecutionError("C64 backend reported failure while printing Commodore bitmap", {
             details: normaliseFailure(result.details),
           });
         }
@@ -473,7 +473,7 @@ export const printerModule = defineToolModule({
         });
 
         if (!result.success) {
-          throw new ToolExecutionError("C64 firmware reported failure while printing Epson bitmap", {
+          throw new ToolExecutionError("C64 backend reported failure while printing Epson bitmap", {
             details: normaliseFailure(result.details),
           });
         }
@@ -536,7 +536,7 @@ export const printerModule = defineToolModule({
         });
 
         if (!result.success) {
-          throw new ToolExecutionError("C64 firmware reported failure while defining DLL characters", {
+          throw new ToolExecutionError("C64 backend reported failure while defining DLL characters", {
             details: normaliseFailure(result.details),
           });
         }

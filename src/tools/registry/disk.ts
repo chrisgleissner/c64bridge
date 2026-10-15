@@ -137,7 +137,7 @@ const createImageArgsSchema = objectSchema<CreateImageArgs>({
       maxLength: 16,
     })),
     tracks: optionalSchema(numberSchema({
-      description: "Track count (D64 supports 35 or 40; DNP requires explicit tracks).",
+      description: "Track count (D64 supports 35 to 41; DNP requires explicit tracks).",
       integer: true,
       minimum: 1,
       maximum: 255,
@@ -297,10 +297,10 @@ const diskOperations: GroupedOperationConfig[] = [
 
       switch (format) {
         case "d64":
-          if (tracks !== undefined && tracks !== 35 && tracks !== 40) {
-            throw new ToolValidationError("D64 images support 35 or 40 tracks", {
+          if (tracks !== undefined && (tracks < 35 || tracks > 41)) {
+            throw new ToolValidationError("D64 images support 35 to 41 tracks", {
               path: "$.tracks",
-              details: { allowed: [35, 40], received: tracks },
+              details: { minimum: 35, maximum: 41, received: tracks },
             });
           }
           return storageModule.invoke("create_d64", { path, tracks, diskname }, ctx);
@@ -367,8 +367,10 @@ export const diskModuleGroup = defineToolModule({
         variants: diskOperations.map((operation) => operation.schema),
       }),
       tags: ["storage", "drive", "grouped"],
-      operationPlatforms: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
+      // The VICE Binary Monitor has no command to detach a disk image, so unmount is Ultimate-only.
+      operationPlatforms: { unmount: ["c64u", "u2"], file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
       operationToolNames: {
+        unmount: "drive_remove",
         file_info: "file_info",
         create_image: "create_image",
         find_and_run: "find_and_run_program_by_name",

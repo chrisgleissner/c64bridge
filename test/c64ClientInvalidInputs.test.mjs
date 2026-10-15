@@ -57,3 +57,41 @@ test("C64Client: sid helpers validate inputs", async () => {
   assert.equal(badVoice.success, false);
   assert.ok(String(badVoice.details?.message || badVoice.details).includes("Voice"));
 });
+
+test("C64Client: sidNoteOn reports notes above the SID frequency range instead of clamping", async () => {
+  const client = new C64Client("http://example.invalid");
+  const pal = await client.sidNoteOn({ voice: 1, note: "B7", system: "PAL" });
+  assert.equal(pal.success, false);
+  assert.ok(String(pal.details?.message).includes("3848"));
+  const hz = await client.sidNoteOn({ voice: 1, frequencyHz: 5000, system: "NTSC" });
+  assert.equal(hz.success, false);
+  assert.ok(String(hz.details?.message).includes("NTSC"));
+});
+
+test("C64Client: sidSilenceAll still silences the SID when the player check cannot read memory", async () => {
+  const client = new C64Client("http://example.invalid");
+  const writes = [];
+  Reflect.set(client, "facadePromise", Promise.resolve({
+    type: "c64u",
+    async readMemory() { throw new Error("Memory read exceeds location $FFFF"); },
+    async writeMemory(address) { writes.push(address); },
+  }));
+  const result = await client.sidSilenceAll();
+  assert.equal(result.success, true);
+  assert.deepEqual(writes, [0xd404, 0xd40b, 0xd412, 0xd418]);
+});
+
+test("C64Client: sidSilenceAll does not read a SIDWAVE handler that would cross $FFFF", async () => {
+  const client = new C64Client("http://example.invalid");
+  const reads = [];
+  Reflect.set(client, "facadePromise", Promise.resolve({
+    type: "c64u",
+    async readMemory(address, length) {
+      reads.push([address, length]);
+      return address === 0x0314 ? Uint8Array.of(0xfd, 0xff) : new Uint8Array(length);
+    },
+    async writeMemory() {},
+  }));
+  assert.equal((await client.sidSilenceAll()).success, true);
+  assert.deepEqual(reads, [[0x0314, 2]]);
+});

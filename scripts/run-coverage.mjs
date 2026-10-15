@@ -98,7 +98,10 @@ export async function main() {
     legOutputs.push(legPath);
   }
 
-  const finalReport = mergeReports(await Promise.all(legOutputs.map(readReport)));
+  const finalReport = await dropNonCodeLines(
+    mergeReports(await Promise.all(legOutputs.map(readReport))),
+    (relativePath) => fs.readFile(path.join(repoRoot, relativePath), "utf8"),
+  );
   const finalPath = path.join(coverageDir, "lcov.info");
   await fs.writeFile(finalPath, serializeReport(finalReport), "utf8");
 
@@ -263,6 +266,33 @@ function parseReport(text) {
     }
   }
   return report;
+}
+
+/**
+ * Bun's LCOV output lists blank and comment-only lines inside executed
+ * functions as executable lines that were never hit. Drop them, using each
+ * file's source, so coverage counts only code.
+ */
+export async function dropNonCodeLines(report, readSource) {
+  const result = new Map();
+  for (const [filePath, record] of report.entries()) {
+    let sourceLines;
+    try {
+      sourceLines = (await readSource(filePath)).split(/\r?\n/);
+    } catch {
+      result.set(filePath, record);
+      continue;
+    }
+    const lines = new Map();
+    for (const [lineNo, hits] of record.lines.entries()) {
+      const text = (sourceLines[lineNo - 1] ?? "").trim();
+      const isComment = text.startsWith("//") || text.startsWith("/*") || text.startsWith("*");
+      if (text === "" || isComment) continue;
+      lines.set(lineNo, hits);
+    }
+    result.set(filePath, { ...record, lines });
+  }
+  return result;
 }
 
 function mergeReports(reports) {

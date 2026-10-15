@@ -124,7 +124,7 @@ testC64uOnly("stream_start includes the failure reason in the error text when th
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure while starting stream: could not resolve target"));
+  assert.ok(result.content[0].text.includes("backend reported failure while starting stream: could not resolve target"));
 });
 
 testC64uOnly("stream_stop includes the failure reason in the error text when the client provides one", async () => {
@@ -134,7 +134,7 @@ testC64uOnly("stream_stop includes the failure reason in the error text when the
   const result = await streamingModule.invoke("stream_stop", { stream: "audio" }, ctx);
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure while stopping stream: no active stream"));
+  assert.ok(result.content[0].text.includes("backend reported failure while stopping stream: no active stream"));
 });
 
 testC64uOnly("stream failures expose firmware errors in returned results and thrown HTTP response bodies", async () => {

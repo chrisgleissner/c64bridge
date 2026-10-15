@@ -63,7 +63,7 @@ const resourceValueSchema: Schema<string | number> = {
 };
 
 const resourceNameSchema = stringSchema({
-  description: "VICE resource name (example: SidEngine, C64Model).",
+  description: "VICE resource name (example: SidEngine, SidModel).",
   minLength: 1,
   maxLength: 64,
   pattern: RESOURCE_NAME_PATTERN,

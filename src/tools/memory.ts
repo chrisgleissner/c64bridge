@@ -232,7 +232,7 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
 
     const result = await ctx.client.readMemory(parsed.address, String(parsed.length));
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while reading memory", {
+      throw new ToolExecutionError("C64 backend reported failure while reading memory", {
         details: normaliseFailure(result.details),
       });
     }
@@ -279,7 +279,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     if (!shouldVerify) {
       const result = await ctx.client.writeMemory(parsed.address, writeInfo.canonical);
       if (!result.success) {
-        throw new ToolExecutionError("C64 firmware reported failure while writing memory", {
+        throw new ToolExecutionError("C64 backend reported failure while writing memory", {
           details: normaliseFailure(result.details),
         });
       }
@@ -304,7 +304,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       if (canPause) {
         const pauseResult = await ctx.client.pause(pinnedFacade);
         if (!pauseResult.success) {
-          throw new ToolExecutionError("C64 firmware reported failure while pausing", {
+          throw new ToolExecutionError("C64 backend reported failure while pausing", {
             details: normaliseFailure(pauseResult.details),
           });
         }
@@ -317,7 +317,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 
       const preRead = await ctx.client.readMemory(parsed.address, String(readLength), pinnedFacade);
       if (!preRead.success) {
-        throw new ToolExecutionError("C64 firmware reported failure while reading memory", {
+        throw new ToolExecutionError("C64 backend reported failure while reading memory", {
           details: normaliseFailure(preRead.details),
         });
       }
@@ -350,14 +350,14 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 
       const writeResult = await ctx.client.writeMemory(parsed.address, writeInfo.canonical, pinnedFacade);
       if (!writeResult.success) {
-        throw new ToolExecutionError("C64 firmware reported failure while writing memory", {
+        throw new ToolExecutionError("C64 backend reported failure while writing memory", {
           details: normaliseFailure(writeResult.details),
         });
       }
 
       const postRead = await ctx.client.readMemory(parsed.address, String(Math.max(1, writeInfo.bytes.length)), pinnedFacade);
       if (!postRead.success) {
-        throw new ToolExecutionError("C64 firmware reported failure while reading back memory", {
+        throw new ToolExecutionError("C64 backend reported failure while reading back memory", {
           details: normaliseFailure(postRead.details),
         });
       }

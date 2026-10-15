@@ -122,10 +122,10 @@ const createD64ArgsSchema = objectSchema({
   properties: {
     path: diskImagePathSchema,
     tracks: optionalSchema(numberSchema({
-      description: "Track count (35 for standard, 40 for extended).",
+      description: "Track count: 35 for a standard disk, up to 41 for the extended area (firmware limit).",
       integer: true,
       minimum: 35,
-      maximum: 40,
+      maximum: 41,
     })),
     diskname: diskNameSchema,
   },
@@ -205,7 +205,7 @@ export const storageModule = defineToolModule({
           ctx.logger.info("Listing Ultimate drives");
 
           const details = await ctx.client.drivesList();
-          return textResult("Retrieved Ultimate drive status.", {
+          return textResult("Retrieved drive status.", {
             success: true,
             drives: details,
           });
@@ -251,7 +251,7 @@ export const storageModule = defineToolModule({
             mode: parsed.mode as any,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while mounting disk image", {
+            throw new ToolExecutionError("C64 backend reported failure while mounting disk image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -260,7 +260,9 @@ export const storageModule = defineToolModule({
           const finalMode = typeof details.mode === "string" ? details.mode : parsed.mode ?? null;
           const finalType = typeof details.type === "string" ? details.type : parsed.type ?? null;
 
-          return textResult(`Mounted ${parsed.image} on ${parsed.drive}.`, {
+          // Backend notes (for example VICE's autoload resetting the machine) belong in the visible text.
+          const note = typeof details.note === "string" ? ` ${details.note}` : "";
+          return textResult(`Mounted ${parsed.image} on ${parsed.drive}.${note}`, {
             success: true,
             drive: parsed.drive,
             image: parsed.image,
@@ -301,7 +303,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveRemove(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while removing disk image", {
+            throw new ToolExecutionError("C64 backend reported failure while removing disk image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -344,7 +346,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveReset(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resetting drive", {
+            throw new ToolExecutionError("C64 backend reported failure while resetting drive", {
               details: normaliseFailure(result.details),
             });
           }
@@ -387,7 +389,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveOn(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while powering on drive", {
+            throw new ToolExecutionError("C64 backend reported failure while powering on drive", {
               details: normaliseFailure(result.details),
             });
           }
@@ -431,7 +433,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveOff(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while powering off drive", {
+            throw new ToolExecutionError("C64 backend reported failure while powering off drive", {
               details: normaliseFailure(result.details),
             });
           }
@@ -475,7 +477,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveLoadRom(parsed.drive, parsed.path);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while loading drive ROM", {
+            throw new ToolExecutionError("C64 backend reported failure while loading drive ROM", {
               details: normaliseFailure(result.details),
             });
           }
@@ -519,7 +521,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveSetMode(parsed.drive, parsed.mode as "1541" | "1571" | "1581");
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while setting drive mode", {
+            throw new ToolExecutionError("C64 backend reported failure while setting drive mode", {
               details: normaliseFailure(result.details),
             });
           }
@@ -578,7 +580,7 @@ export const storageModule = defineToolModule({
     {
       name: "create_d64",
       description: "Create a blank D64 disk image on the Ultimate filesystem.",
-      summary: "Allocates a 35 or 40 track D64 image with an optional disk name.",
+      summary: "Allocates a 35 to 41 track D64 image with an optional disk name.",
       inputSchema: createD64ArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
       tags: ["disk", "create"],
@@ -603,19 +605,21 @@ export const storageModule = defineToolModule({
           });
 
           const result = await ctx.client.filesCreateD64(parsed.path, {
-            tracks: parsed.tracks as 35 | 40 | undefined,
+            tracks: parsed.tracks,
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating D64 image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating D64 image", {
               details: normaliseFailure(result.details),
             });
           }
 
+          const firmwareTracks = toRecord(result.details)?.tracks;
           return textResult(`Created D64 image at ${parsed.path}.`, {
             success: true,
             path: parsed.path,
-            tracks: parsed.tracks ?? null,
+            // The firmware reports the track count it used, including its default of 35.
+            tracks: typeof firmwareTracks === "number" ? firmwareTracks : parsed.tracks ?? 35,
             diskname: parsed.diskname ?? null,
             details: toRecord(result.details) ?? {},
           });
@@ -657,7 +661,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating D71 image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating D71 image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -706,7 +710,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating D81 image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating D81 image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -758,7 +762,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating DNP image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating DNP image", {
               details: normaliseFailure(result.details),
             });
           }

@@ -252,19 +252,19 @@ test("VICE configuration snapshot/diff/restore round-trips integers and numeric-
     const client = new ViceClient();
     try {
       await client.connect(server.port, "127.0.0.1");
-      for (const item of inventory.categories[0].items) await client.resourceSet(item, item.includes("Image") ? "1541" : 1);
+      for (const item of inventory.categories[0].items) await client.resourceSet(item, 1);
     } finally { client.close(); }
     const ctx = context("vice", backend);
     const file = path.join(dir, "config.json");
     assert.equal((await toolRegistry.invoke("c64_config", { op: "snapshot", path: file }, ctx)).isError, undefined);
     const snapshot = JSON.parse(await fs.readFile(file, "utf8"));
-    assert.equal(snapshot.categories.VICE.WarpMode, 1);
-    assert.equal(snapshot.categories.VICE.Drive8Image, "1541");
+    assert.equal(snapshot.categories.VICE.SoundVolume, 1);
+    assert.equal(snapshot.categories.VICE.Drive8Type, 1);
     const category = await toolRegistry.invoke("c64_config", { op: "get", category: "VICE" }, ctx);
     assert.equal(category.isError, undefined);
     assert.deepEqual(await backend.configGet("VICE"), snapshot.categories.VICE);
-    await backend.configSet("VICE", "WarpMode", "0");
-    await backend.configSet("VICE", "Drive8Image", "changed.d64");
+    await backend.configSet("VICE", "SoundVolume", "0");
+    await backend.configSet("VICE", "Drive8Type", "1581");
     assert.equal((await toolRegistry.invoke("c64_config", { op: "diff", path: file }, ctx)).metadata.changed, 1);
     assert.equal((await toolRegistry.invoke("c64_config", { op: "restore", path: file }, ctx)).isError, undefined);
     assert.deepEqual(await backend.configGet("VICE"), snapshot.categories.VICE);

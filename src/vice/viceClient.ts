@@ -253,6 +253,24 @@ export class ViceClient {
   async resetSoft(): Promise<void> { await this.send(0xCC, Buffer.from([0x00])); }
   async resetHard(): Promise<void> { await this.send(0xCC, Buffer.from([0x01])); }
   async reset(type: 0 | 1 = 0): Promise<void> { await this.send(0xCC, Buffer.from([type])); }
+  /** Reset only the drive CPU of unit 8-11 (BM 0xCC reset types 8-11). */
+  async resetDrive(unit: 8 | 9 | 10 | 11): Promise<void> { await this.send(0xCC, Buffer.from([unit])); }
+  /**
+   * Attach an image and load from it (BM 0xDD Autostart). With run=false VICE
+   * uses its autoload mode, which attaches to drive 8 and LOADs without RUN.
+   */
+  async autostart(filename: string, options: { run: boolean; fileIndex?: number }): Promise<void> {
+    const name = Buffer.from(filename, "utf8");
+    if (name.length === 0 || name.length > 255) {
+      throw new Error("Autostart file names must be 1-255 bytes");
+    }
+    const body = Buffer.alloc(4 + name.length);
+    body[0] = options.run ? 1 : 0;
+    body.writeUInt16LE(options.fileIndex ?? 0, 1);
+    body[3] = name.length;
+    name.copy(body, 4);
+    await this.send(0xDD, body);
+  }
   /**
    * Exit the emulator process (BM 0xBB Quit). The socket will be closed by VICE.
    * Consumers should still call close() to dispose any local resources.

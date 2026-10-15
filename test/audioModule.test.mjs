@@ -413,7 +413,7 @@ test("music_compile_and_play handles C64 firmware failure for PRG", async () => 
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("music_compile_and_play handles C64 firmware failure for SID", async () => {
@@ -433,7 +433,7 @@ test("music_compile_and_play handles C64 firmware failure for SID", async () => 
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("music_compile_and_play wraps unexpected errors", async () => {
@@ -867,4 +867,43 @@ test("record_and_analyze_audio analyzes through the client instead of the host m
   assert.equal(calls.length, 1);
   assert.equal(calls[0].durationSeconds, 1.5);
   assert.equal(res.metadata.globalMetrics.max_rms, 0.12);
+});
+
+test("sid_note_on and music_generate reject notes above the SID frequency range as validation errors", async () => {
+  const calls = [];
+  const ctx = {
+    client: {
+      sidNoteOn: async (payload) => { calls.push(payload); return { success: true }; },
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOff: async () => ({ success: true }),
+    },
+    logger: createLogger(),
+  };
+  const noteOn = await audioModule.invoke("sid_note_on", { voice: 1, note: "B7" }, ctx);
+  assert.equal(noteOn.isError, true);
+  assert.equal(noteOn.metadata?.error?.kind, "validation");
+  assert.equal(noteOn.metadata?.error?.path, "$.note");
+
+  // C7 + 12 semitones = C8, above the PAL limit: rejected before any playback starts.
+  const generated = await audioModule.invoke("music_generate", { root: "C7", pattern: "0,4,7,12", steps: 4, tempoMs: 20 }, ctx);
+  assert.equal(generated.isError, true);
+  assert.equal(generated.metadata?.error?.kind, "validation");
+  assert.match(generated.content[0].text, /C8/);
+  assert.equal(calls.length, 0);
+});
+
+test("music_compile_and_play shows compiler warnings and BASIC free memory", async () => {
+  const notes = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6"];
+  // Three voices of sixteenth notes for 200 bars make a PRG that ends past $A000.
+  const sidwave = {
+    sidwave: 1.0,
+    tempo: 120,
+    voices: [1, 2, 3].map((id) => ({ id, waveform: "triangle", patterns: { P: { length: 0.25, groove: notes.map((_, i) => notes[(i * (id + 2)) % 16]) } } })),
+    timeline: [{ bars: 200, layers: { v1: "P", v2: "P", v3: "P" } }],
+  };
+  const result = await audioModule.invoke("music_compile_and_play", { sidwave, output: "prg", dryRun: true }, { client: {}, logger: createLogger() });
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.match(result.content[0].text, /Warning: The PRG ends at \$[0-9A-F]+, past BASIC's memory/);
+  assert.equal(result.structuredContent?.data?.basicFreeBytes, 0);
+  assert.equal(result.structuredContent?.data?.warnings?.length, 1);
 });

@@ -32,8 +32,11 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
       const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
       writes.push({ kind: "vice_mem_set", address, bytes: Uint8Array.from(buf) });
     },
-    async viceJoyportSet(port, activeLowMask) {
+    async viceJoystickPress(port, activeLowMask) {
       writes.push({ kind: "vice_joyport_set", port, activeLowMask });
+    },
+    async viceJoystickRelease(port) {
+      writes.push({ kind: "vice_joyport_set", port, activeLowMask: 0xff });
     },
     async readMemoryRaw(address, length) {
       reads.push({ address, length });
@@ -268,4 +271,12 @@ test("c64_input.write_text rejects unrecognised key tokens cleanly", async () =>
     op: "key", key: "WHATEVER",
   }, ctx);
   assert.equal(result.isError, true);
+});
+
+test("c64_input.key rejects C128-only key names", async () => {
+  const { ctx } = createInputContext({ platformId: "c64u" });
+  for (const key of ["FLASH_OFF", "FLASH_ON", "ESCAPE", "TAB"]) {
+    const result = await toolRegistry.invoke("c64_input", { op: "key", key }, ctx);
+    assert.equal(result.isError, true, key);
+  }
 });

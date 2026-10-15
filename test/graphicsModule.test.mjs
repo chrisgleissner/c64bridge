@@ -185,7 +185,7 @@ test("render_sprite handles firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("render_sprite reports unexpected execution errors with sprite-specific message", async () => {
@@ -226,7 +226,7 @@ test("render_petscii_text handles firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("render_petscii_text reports unexpected execution errors with petscii-specific message", async () => {
@@ -266,7 +266,7 @@ test("render_petscii_art handles upload failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("render_petscii_art validates input requirements", async () => {
@@ -445,4 +445,19 @@ test("render_bitmap surfaces image import failures as execution errors", async (
 
   assert.equal(result.isError, true);
   assert.equal(result.metadata.error.kind, "execution");
+});
+
+test("render_bitmap reports a display failure with its cause", async () => {
+  const { filePath, cleanup } = await writeSampleImage();
+  const ctx = {
+    client: { async displayBitmap() { return { success: false, details: { message: "dma refused" } }; } },
+    logger: createLogger(),
+  };
+  try {
+    const result = await graphicsModule.invoke("render_bitmap", { imagePath: filePath, format: "hires" }, ctx);
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /^C64 backend reported failure while displaying bitmap image: dma refused$/);
+  } finally {
+    cleanup();
+  }
 });

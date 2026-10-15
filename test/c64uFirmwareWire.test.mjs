@@ -223,12 +223,18 @@ test("C64U drive bus numbers fall back to a=8 and b=9 when the drive listing is 
 test("VICE drive operations accept the C64U drive letters a and b", async () => {
   const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
   const resourceSets = [];
-  backend.withClient = async (fn) => fn({ async resourceSet(name, value) { resourceSets.push([name, value]); } });
+  const types = new Map([[8, 0], [9, 1571], [10, 0]]);
+  backend.withClient = async (fn) => fn({
+    async resourceGet(name) { return { type: "int", value: types.get(Number(/\d+/.exec(name)[0])) }; },
+    async resourceSet(name, value) { resourceSets.push([name, value]); types.set(Number(/\d+/.exec(name)[0]), value); },
+  });
 
   await backend.driveOn("a");
   await backend.driveOff("B");
   await backend.driveOn("drive10");
-  assert.deepEqual(resourceSets, [["Drive8CPUEnabled", 1], ["Drive9CPUEnabled", 0], ["Drive10CPUEnabled", 1]]);
+  await backend.driveOn("b");
+  // Drive<n>Type 0 is off; switching on restores the type the drive had before, or a 1541.
+  assert.deepEqual(resourceSets, [["Drive8Type", 1541], ["Drive9Type", 0], ["Drive10Type", 1541], ["Drive9Type", 1571]]);
   await assert.rejects(() => backend.driveOn("c"), /Invalid drive specification/);
   await assert.rejects(() => backend.driveOn("constructor"), /Invalid drive specification/);
 });

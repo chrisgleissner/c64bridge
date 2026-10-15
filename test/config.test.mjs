@@ -451,3 +451,44 @@ test("legacy top-level fields never reach the other profile's endpoint", (t) => 
   assert.equal(config.ultimate.c64u.baseUrl, "http://127.0.0.1");
   assert.equal(config.ultimate.c64u.networkPassword, "pw");
 });
+
+test("a baseUrl-only endpoint keeps its https scheme and path prefix", (t) => {
+  const originalEnv = process.env.C64BRIDGE_CONFIG;
+  // Host and port environment overrides would replace the section baseUrl.
+  const savedOverrides = Object.fromEntries(["C64U_HOST", "C64U_PORT"].map((key) => [key, process.env[key]]));
+  delete process.env.C64U_HOST;
+  delete process.env.C64U_PORT;
+  t.after(() => {
+    for (const [key, value] of Object.entries(savedOverrides)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  const created = [];
+  const load = (contents) => {
+    const temp = writeTempConfig(contents);
+    created.push(temp.dir);
+    process.env.C64BRIDGE_CONFIG = temp.file;
+    __resetConfigCacheForTests();
+    return loadConfig();
+  };
+  t.after(() => {
+    __resetConfigCacheForTests();
+    if (originalEnv === undefined) delete process.env.C64BRIDGE_CONFIG;
+    else process.env.C64BRIDGE_CONFIG = originalEnv;
+    for (const dir of created) rmSync(dir, { recursive: true, force: true });
+  });
+
+  assert.equal(load({ c64u: { baseUrl: "https://proxy.local:8443/c64u/" } }).ultimate.c64u.baseUrl, "https://proxy.local:8443/c64u");
+  const proxied = load({ c64u: { baseUrl: "https://proxy.local/c64u" } });
+  assert.equal(proxied.baseUrl, "https://proxy.local/c64u");
+  assert.equal(proxied.c64_port, 443);
+  // An explicit host still wins and builds a plain http URL, as documented.
+  assert.equal(load({ c64u: { host: "10.0.0.2", baseUrl: "https://proxy.local/c64u" } }).baseUrl, "http://10.0.0.2");
+  assert.equal(load({ c64u: { baseUrl: "http://10.0.0.3:8080" } }).baseUrl, "http://10.0.0.3:8080");
+  // c64_host omits the scheme's default port.
+  assert.equal(proxied.c64_host, "proxy.local");
+  assert.equal(load({ c64u: { baseUrl: "https://proxy.local:8443/c64u" } }).c64_host, "proxy.local:8443");
+  // A port override keeps the scheme and path instead of downgrading to http.
+  assert.equal(load({ c64u: { baseUrl: "https://proxy.local/c64u", port: 9443 } }).baseUrl, "https://proxy.local:9443/c64u");
+});

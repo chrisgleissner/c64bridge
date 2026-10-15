@@ -394,7 +394,7 @@ test("config_set with firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("config_batch_update with firmware failure", async () => {
@@ -446,7 +446,7 @@ testC64uOnly("config_load_from_flash failure", async () => {
   const result = await developerModule.invoke("config_load_from_flash", {}, ctx);
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 testC64uOnly("config_save_to_flash success", async () => {
@@ -478,7 +478,7 @@ testC64uOnly("config_save_to_flash failure", async () => {
   const result = await developerModule.invoke("config_save_to_flash", {}, ctx);
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 testC64uOnly("config_reset_to_default failure", async () => {
@@ -494,7 +494,7 @@ testC64uOnly("config_reset_to_default failure", async () => {
   const result = await developerModule.invoke("config_reset_to_default", {}, ctx);
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 if (isVice) {

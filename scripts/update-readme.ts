@@ -485,8 +485,9 @@ export async function updateReadme(): Promise<boolean> {
   const generatedDocs = `\n\n${buildDocumentation()}\n\n`;
   const generatedEnv = `\n\n${buildEnvironmentDocumentation()}\n\n`;
   const nextReadme = readme
-    .replace(docsPattern, `${START_MARKER}${generatedDocs}${END_MARKER}`)
-    .replace(envPattern, `${ENV_START_MARKER}${generatedEnv}${ENV_END_MARKER}`);
+    // Replacement functions, not strings: generated text such as "$1E" must not be read as "$1".
+    .replace(docsPattern, () => `${START_MARKER}${generatedDocs}${END_MARKER}`)
+    .replace(envPattern, () => `${ENV_START_MARKER}${generatedEnv}${ENV_END_MARKER}`);
 
   if (nextReadme === readme) {
     return false;

@@ -764,7 +764,7 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 | `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
 | `list_drives` | List Ultimate drive slots and their mounted images. | — | — | ✅ | ✅ | ✅ |
 | `mount` | Mount a disk image with optional verification and retries. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
-| `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | ✅ | ✅ | ✅ |
+| `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | ✅ | ✅ |  |
 
 #### c64_drive
 
@@ -809,7 +809,7 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input; VICE uses Binary Monitor Joyport Set. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
+| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
 | `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
 | `keyboard` | Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). | `inputs`, `transition` | — | ✅ |  |  |
 | `release_all` | Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). | — | — | ✅ |  |  |

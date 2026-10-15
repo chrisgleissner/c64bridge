@@ -12,8 +12,9 @@ import { createSocket, type Socket } from "node:dgram";
 import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
-import { assemblyToPrg, prgEntryAddress } from "./tools/translation/assembler.js";
+import { assemblyToPrgDetailed, prgEntryAddress } from "./tools/translation/assembler.js";
 import { stripHexByteSeparators } from "./tools/hex.js";
+import { SIDWAVE_PLAY_ADDRESS } from "./sidwaveCompiler.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import {
@@ -112,6 +113,8 @@ export interface SampleCaptureResult {
   readonly samples: Int16Array;
 }
 
+/** JOYPORT_ID_IO_SIMULATION in joyport.h (the same in VICE 3.9 and 3.10). */
+const VICE_JOYPORT_IO_SIMULATION = 37;
 const C64U_SYSTEM_MODE_CATEGORY = "U64 Specific Settings";
 const C64U_SYSTEM_MODE_ITEM = "System Mode";
 // System Mode values that run the machine clock at the NTSC frequency
@@ -339,6 +342,8 @@ export class C64Client {
   private readonly greetingDd00Warmups = new Map<DeviceType, Promise<number>>();
   private readonly machineInputCapabilityProbes = new Map<DeviceType, Promise<NativeEndpointAvailability>>();
   private c64uVideoCaptureSession: C64uVideoCaptureSession | null = null;
+  /** VICE joyport device ids to restore when a joystick press ends. */
+  private readonly viceJoyportSavedDevice = new Map<1 | 2, number>();
   private readonly initPromise: Promise<void>;
   private activeType: DeviceType = "c64u";
   private facadePromise: Promise<C64Facade>;
@@ -785,16 +790,17 @@ export class C64Client {
    * range corrupts the workspace. Instead this loads the assembled bytes
    * without running them, then types `SYS <entry>` to transfer control
    * to the entry point: the target of a leading SYS stub at $0801, or else
-   * the lowest assembled address.
+   * the first assembled instruction.
    */
   async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
     try {
-      const prg = assemblyToPrg(program);
+      const assembled = assemblyToPrgDetailed(program);
+      const prg = assembled.prg;
       if (prg.length < 2) {
         return { success: false, details: { message: "Assembled program produced no output" } };
       }
-      const entryAddress = prgEntryAddress(prg);
-      if (entryAddress === 0x0801) {
+      const entryAddress = assembled.entryAddress;
+      if (prg.readUInt16LE(0) === 0x0801 && prgEntryAddress(prg) === 0x0801) {
         // Loading makes BASIC relink $0801 as program lines, which overwrites raw code there.
         return {
           success: false,
@@ -1013,22 +1019,45 @@ export class C64Client {
   async sidReset(hard = false): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
+      // Unhooking a running SIDWAVE player is best-effort: a failed read must not stop the SID being silenced.
+      const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade).catch(() => false);
       if (hard) {
         const span = 0x19;
         const ff = Buffer.alloc(span, 0xff);
         const zz = Buffer.alloc(span, 0x00);
         await facade.writeMemory(0xd400, ff);
         await facade.writeMemory(0xd400, zz);
-        return { success: true };
+        return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
       }
       await facade.writeMemory(0xd404, Buffer.from([0x00]));
       await facade.writeMemory(0xd40b, Buffer.from([0x00]));
       await facade.writeMemory(0xd412, Buffer.from([0x00]));
       await facade.writeMemory(0xd418, Buffer.from([0x00]));
-      return { success: true };
+      return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
+  }
+
+  /**
+   * A SIDWAVE PRG keeps playing from the IRQ after the SID is silenced. Its
+   * IRQ handler is "JSR play / JMP $EA31", and its play vector at $0813 is
+   * "JMP play". When $0314 points at such a handler, point it back at the
+   * KERNAL handler so silencing sticks; other programs' IRQ handlers are left
+   * alone. Both vector bytes go in one write.
+   */
+  private async stopSidwaveIrqPlayer(facade: C64Facade): Promise<boolean> {
+    const vector = await facade.readMemory(0x0314, 2);
+    const handler = (vector[0] ?? 0) | ((vector[1] ?? 0) << 8);
+    // A handler too close to $FFFF cannot hold the 6-byte SIDWAVE handler (and the read would cross $FFFF).
+    if (handler === 0xea31 || handler > 0xfffa) return false;
+    const code = await facade.readMemory(handler, 6);
+    const playVector = await facade.readMemory(SIDWAVE_PLAY_ADDRESS, 3);
+    const isSidwaveHandler = code[0] === 0x20 && code[3] === 0x4c && code[4] === 0x31 && code[5] === 0xea
+      && playVector[0] === 0x4c && playVector[1] === code[1] && playVector[2] === code[2];
+    if (!isSidwaveHandler) return false;
+    await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
+    return true;
   }
 
   async sidNoteOn(options: {
@@ -1050,6 +1079,15 @@ export class C64Client {
     const system = options.system ?? "PAL";
     // The tool schema documents that a note name overrides frequencyHz.
     const hz = options.note ? this.noteNameToHz(options.note) : options.frequencyHz ?? 440;
+    // The 16-bit frequency register tops out at about 3848 Hz on PAL and 3995 Hz
+    // on NTSC (B7 is already above the PAL limit); report it instead of clamping.
+    const maxHz = (0xffff * (system === "PAL" ? 985_248 : 1_022_727)) / 16_777_216;
+    if (hz > maxHz + 0.5) {
+      return {
+        success: false,
+        details: { message: `${options.note ?? `${hz} Hz`} (${hz.toFixed(1)} Hz) is above the SID's highest ${system} frequency of ${maxHz.toFixed(1)} Hz` },
+      };
+    }
     const freq16 = this.hzToSidFrequency(hz, system);
     const freqLo = freq16 & 0xff;
     const freqHi = (freq16 >> 8) & 0xff;
@@ -1409,7 +1447,7 @@ export class C64Client {
     const facade = await this.facadePromise; return facade.filesInfo(path);
   }
 
-  async filesCreateD64(path: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunBasicResult> {
+  async filesCreateD64(path: string, options?: { tracks?: number; diskname?: string }): Promise<RunBasicResult> {
     try { const facade = await this.facadePromise; return await facade.filesCreateD64(path, options); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
@@ -2256,6 +2294,45 @@ export class C64Client {
       await this.withViceMonitor((client) => client.joyportSet(port, activeLowMask));
     }
 
+    /**
+     * Hold joystick lines on a VICE control port. Binary Monitor command 0xA2
+     * only drives VICE's "I/O simulation" joyport device, so that device is
+     * attached for the duration of the press and the previous device is
+     * restored on release. The device reads bits 5-7 as low, which the
+     * keyboard scan sees as extra keys, so it must not stay attached.
+     *
+     * While a press is held: on port 1 the keyboard scan sees phantom keys
+     * (for example SHIFT+C=, which toggles the character set); on port 2,
+     * $DC00 reads with bits 5-7 clear (up = $1E where a joystick gives $7E),
+     * so programs that compare the whole byte will not see the input.
+     */
+    async viceJoystickPress(port: 1 | 2, activeLowMask: number): Promise<void> {
+      await this.withViceMonitor(async (client) => {
+        const resource = `JoyPort${port}Device`;
+        // Read the device every time: after a VICE restart the saved state is stale.
+        const current = await client.resourceGet(resource);
+        const currentId = current.type === "int" ? current.value : Number(current.value);
+        if (currentId !== VICE_JOYPORT_IO_SIMULATION) {
+          this.viceJoyportSavedDevice.set(port, currentId);
+          await client.resourceSet(resource, VICE_JOYPORT_IO_SIMULATION);
+        }
+        // Attaching the device clears its lines to 0 (everything pressed), so set them in the same monitor session.
+        await client.joyportSet(port, activeLowMask);
+      });
+    }
+
+    /** Release a VICE control port and restore the joyport device it had before the press. */
+    async viceJoystickRelease(port: 1 | 2): Promise<void> {
+      await this.withViceMonitor(async (client) => {
+        await client.joyportSet(port, 0xff);
+        const saved = this.viceJoyportSavedDevice.get(port);
+        if (saved !== undefined) {
+          await client.resourceSet(`JoyPort${port}Device`, saved);
+          this.viceJoyportSavedDevice.delete(port);
+        }
+      });
+    }
+
     async viceMemGet(address: number, length: number): Promise<Buffer> {
       const end = (address + length - 1) & 0xffff;
       return this.withViceMonitor((client) => client.memGet(address, end));
@@ -2613,99 +2690,6 @@ function buildGreetingScreenRam(message: string): Uint8Array {
   return screenRam;
 }
 
-function buildSingleSpriteProgram(opts: {
-  spriteBytes: Uint8Array | Buffer;
-  spriteIndex?: number;
-  x?: number;
-  y?: number;
-  color?: number;
-  multicolour?: boolean;
-}): Buffer {
-  const index = Math.max(0, Math.min(7, opts.spriteIndex ?? 0));
-  const mx = Math.max(0, Math.min(511, opts.x ?? 100));
-  const xLo = mx & 0xff;
-  const xMsbBit = (mx & 0x100) ? (1 << index) : 0;
-  const y = toByte(opts.y, 100);
-  const color = toByte(opts.color, 1);
-  const multicolour = !!opts.multicolour;
-
-  const spriteData = Buffer.from(opts.spriteBytes);
-  if (spriteData.length !== 63) {
-    throw new Error("spriteBytes must be exactly 63 bytes");
-  }
-
-  // We'll assemble a tiny machine-code program that:
-  // - Copies 63 bytes to a safe sprite data page ($2000 by default)
-  // - Sets screen memory base to $0400, sprite pointer to point into $2000
-  // - Positions and enables the sprite
-  // - Loops forever
-  // This avoids relying on KERNAL calls and works from a cold start.
-
-  const SPRITE_BASE = 0x2000; // must be 64-byte aligned
-  const POINTER_PAGE = 0x07f8 + index; // sprite pointer table location
-  const pointerValue = (SPRITE_BASE >> 6) & 0xff;
-
-  // Place code starting at $0801 so it runs as a program via SYS.
-  // We'll create an assembler source and reuse assemblyToPrg.
-  const lines: string[] = [];
-  lines.push("* = $0801");
-  // Tiny BASIC loader header not needed; we will use pure ML and jump via RESET runner which executes by SYS 2061
-  // Build code at $0810 to avoid conflicting with potential KERNAL vectors
-  lines.push("* = $0810");
-  lines.push("\nstart:");
-  // Copy 63 bytes from inlined table to SPRITE_BASE
-  lines.push("  LDY #$00");
-  lines.push("copy_loop:");
-  lines.push("  LDA sprite_data,Y");
-  lines.push(`  STA $${hex16(SPRITE_BASE)},Y`);
-  lines.push("  INY");
-  lines.push("  CPY #$3F");
-  lines.push("  BNE copy_loop");
-  // Set sprite pointer, color, coordinates, enable
-  lines.push(`  LDA #$${pointerValue.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${(POINTER_PAGE).toString(16).toUpperCase()}`);
-  lines.push(`  LDA #$${color.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${hex16(0xD027 + index)}`);
-  lines.push(`  LDA #$${xLo.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${(0xD000 + index * 2).toString(16).toUpperCase()}`);
-  lines.push(`  LDA #$${y.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${(0xD001 + index * 2).toString(16).toUpperCase()}`);
-  // MSB X if needed
-  if (xMsbBit) {
-    const bit = xMsbBit;
-    lines.push(`  LDA $D010`);
-    lines.push(`  ORA #$${bit.toString(16).toUpperCase().padStart(2, "0")}`);
-    lines.push(`  STA $D010`);
-  }
-  // Multicolour toggle per-sprite
-  if (multicolour) {
-    const bit = 1 << index;
-    lines.push(`  LDA $D01C`);
-    lines.push(`  ORA #$${bit.toString(16).toUpperCase().padStart(2, "0")}`);
-    lines.push(`  STA $D01C`);
-  }
-  // Enable sprite
-  {
-    const bit = 1 << index;
-    lines.push(`  LDA $D015`);
-    lines.push(`  ORA #$${bit.toString(16).toUpperCase().padStart(2, "0")}`);
-    lines.push(`  STA $D015`);
-  }
-  // Idle loop
-  lines.push("forever: JMP forever");
-  // Sprite data table
-  lines.push("\nsprite_data:");
-  for (let i = 0; i < 63; i += 3) {
-    const a = spriteData[i] ?? 0;
-    const b = spriteData[i + 1] ?? 0;
-    const c = spriteData[i + 2] ?? 0;
-    lines.push(`  .byte $${hex2(a)},$${hex2(b)},$${hex2(c)}`);
-  }
-
-  const source = lines.join("\n");
-  return assemblyToPrg(source, { fileName: "sprite_gen.asm", loadAddress: 0x0801 });
-}
-
 export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; backgroundColor?: number }): string {
   const border = toByte(opts.borderColor ?? 6); // default blue-ish
   const bg = toByte(opts.backgroundColor ?? 0); // default black
@@ -2931,12 +2915,4 @@ export function buildCommodoreDllBasicProgram(opts: {
   }
   lines.push(`${ln} CLOSE1`);
   return lines.join("\n");
-}
-
-function hex2(n: number): string {
-  return (n & 0xff).toString(16).toUpperCase().padStart(2, "0");
-}
-
-function hex16(n: number): string {
-  return (n & 0xffff).toString(16).toUpperCase().padStart(4, "0");
 }

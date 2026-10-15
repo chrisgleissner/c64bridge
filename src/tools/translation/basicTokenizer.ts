@@ -141,7 +141,11 @@ function tokenize(content: string): Uint8Array {
       continue;
     }
 
-    const plainChar = (!inString && !inRemark ? upper[index]! : char) ?? char;
+    // REM text folds only ASCII a-z, like string text (LIST would show them as
+    // graphics); full Unicode upper-casing could change length or leave Latin-1.
+    const plainChar = inRemark
+      ? (char >= "a" && char <= "z" ? char.toUpperCase() : char)
+      : (!inString ? upper[index]! : char) ?? char;
     bytes.push(asciiToPetscii(plainChar));
     if (inData && !inString && plainChar === ":") {
       inData = false;

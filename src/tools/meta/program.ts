@@ -3,6 +3,7 @@ import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { measureSidSilence } from "../audio.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
@@ -263,7 +264,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
         assertions: optionalSchema(arraySchema(objectSchema({
           description: "Assertion to check after run",
           properties: {
-            type: stringSchema({ description: "Assertion type", enum: ["screen_contains", "memory_equals", "sid_silent"] }),
+            type: stringSchema({ description: "Assertion type; sid_silent needs the C64 Ultimate audio stream (c64u backend).", enum: ["screen_contains", "memory_equals", "sid_silent"] }),
             pattern: optionalSchema(stringSchema({ description: "Pattern for screen_contains", minLength: 1 })),
             address: optionalSchema(stringSchema({ description: "Address for memory_equals", minLength: 1 })),
             expected: optionalSchema(stringSchema({ description: "Expected value (hex)", minLength: 1 })),
@@ -807,17 +808,20 @@ export const tools: ToolDefinition[] = [
                 });
                 if (!matched) status = "fail";
               } else if (assertion.type === "sid_silent") {
-                // Check SID gate bits are off (simple check)
-                const result = await (ctx.client as any).readMemory("$D404", "1");
-                if (!result.success || typeof result.data !== "string") {
-                  throw new Error("Failed to read SID voice 1 control register for sid_silent assertion");
+                // SID control registers are write-only (an Ultimate 64 reads $D404 as $00
+                // whatever was written), so silence is measured from the Ultimate audio
+                // stream. Other backends would fall back to the host microphone, which
+                // measures the room rather than the C64, so they report an error instead.
+                const backend = ctx.platform?.id ?? await (ctx.client as any).getActiveBackendType?.();
+                if (backend !== undefined && backend !== "c64u") {
+                  throw new Error(`sid_silent needs the C64 Ultimate audio stream and is not available on ${backend}`);
                 }
-                const gate1 = parseInt(result.data.slice(1), 16) & 0x01;
-                const isSilent = gate1 === 0;
+                const silence = await measureSidSilence(ctx);
+                const isSilent = silence.silent;
                 assertionResults.push({
                   type: assertion.type,
                   status: isSilent ? "pass" : "fail",
-                  message: isSilent ? undefined : "SID voice 1 gate is on",
+                  message: isSilent ? undefined : `SID output is not silent (peak RMS ${silence.maxRms.toFixed(3)} > ${silence.threshold})`,
                 });
                 if (!isSilent) status = "fail";
               }

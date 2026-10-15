@@ -177,13 +177,27 @@ export function resolveUltimateEndpoint(
   ];
 
   const host = firstDefined(...hostCandidates) ?? DEFAULT_HOST;
-  const port = firstDefined(...portCandidates) ?? DEFAULT_PORT;
+  // When the host comes from a baseUrl, keep its scheme and path (for example
+  // https://proxy/c64u), applying only an explicit port override. An explicit
+  // host builds http://host:port as documented.
+  const baseOnly = parsedBaseOverrides.find((entry) => entry.hostname !== undefined);
+  const explicitHost = firstDefined(...hostCandidates.slice(0, -parsedBaseOverrides.length));
+  const explicitPort = firstDefined(...portCandidates.slice(0, -parsedBaseOverrides.length));
+  const keepBaseUrl = baseOnly?.fullUrl !== undefined && explicitHost === undefined;
+  const schemeDefaultPort = keepBaseUrl && baseOnly!.fullUrl!.startsWith("https:") ? 443 : DEFAULT_PORT;
+  const port = firstDefined(...portCandidates) ?? schemeDefaultPort;
   const hostLabel = formatHost(host);
+  let baseUrl = buildBaseUrl(host, port);
+  if (keepBaseUrl) {
+    const url = new URL(baseOnly!.fullUrl!);
+    if (explicitPort !== undefined) url.port = String(explicitPort);
+    baseUrl = stripTrailingSlash(url.toString());
+  }
   return {
     host,
     port,
-    baseUrl: buildBaseUrl(host, port),
-    c64_host: port === DEFAULT_PORT ? hostLabel : `${hostLabel}:${port}`,
+    baseUrl,
+    c64_host: port === schemeDefaultPort ? hostLabel : `${hostLabel}:${port}`,
     networkPassword: firstDefined(
       nonEmptyString(envPassword),
       nonEmptyString(section?.networkPassword),
@@ -239,7 +253,7 @@ function normaliseBaseUrl(value?: string): string | undefined {
   return stripTrailingSlash(input);
 }
 
-function parseEndpoint(value?: string): { hostname?: string; port?: number; baseUrl?: string } {
+function parseEndpoint(value?: string): { hostname?: string; port?: number; baseUrl?: string; fullUrl?: string } {
   const input = configuredString(value);
   if (!input) return {};
   try {
@@ -248,7 +262,9 @@ function parseEndpoint(value?: string): { hostname?: string; port?: number; base
     const hostname = url.hostname || undefined;
     const port = url.port ? configuredPort(url.port) : undefined;
     const baseUrl = stripTrailingSlash(`${url.protocol}//${url.host}`);
-    return { hostname, port, baseUrl };
+    // Scheme and path prefix kept, for an Ultimate reached through a reverse proxy.
+    const fullUrl = stripTrailingSlash(`${url.protocol}//${url.host}${url.pathname}`);
+    return { hostname, port, baseUrl, fullUrl };
   } catch {
     return {};
   }

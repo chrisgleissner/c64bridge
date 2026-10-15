@@ -69,7 +69,7 @@ const OPCODE_ROWS = [
   // 0xE0-0xEF
   [["CPX", M.Imm], ["SBC", M.IndX], ["NOP", M.Imm], ["INS", M.IndX], ["CPX", M.Zp], ["SBC", M.Zp], ["INC", M.Zp], ["INS", M.Zp], ["INX", M.Imp], ["SBC", M.Imm], ["NOP", M.Imp], ["SBC", M.Imm], ["CPX", M.Abs], ["SBC", M.Abs], ["INC", M.Abs], ["INS", M.Abs]],
   // 0xF0-0xFF
-  [["BEQ", M.Rel], ["SBC", M.IndY], ["HLT", M.Imp], ["INS", M.IndY], ["NOP", M.ZpS], ["SBC", M.ZpX], ["INC", M.ZpX], ["INS", M.ZpX], ["SED", M.Imp], ["SBC", M.AbsY], ["NOP", M.Imp], ["INS", M.AbsY], ["NOP", M.AbsX], ["SBC", M.AbsX], ["INC", M.AbsX], ["INS", M.AbsX]],
+  [["BEQ", M.Rel], ["SBC", M.IndY], ["HLT", M.Imp], ["INS", M.IndY], ["NOP", M.ZpX], ["SBC", M.ZpX], ["INC", M.ZpX], ["INS", M.ZpX], ["SED", M.Imp], ["SBC", M.AbsY], ["NOP", M.Imp], ["INS", M.AbsY], ["NOP", M.AbsX], ["SBC", M.AbsX], ["INC", M.AbsX], ["INS", M.AbsX]],
 ] as const satisfies ReadonlyArray<ReadonlyArray<OpcodeTemplate>>;
 
 const ILLEGAL_MAP: ReadonlyArray<number> = [

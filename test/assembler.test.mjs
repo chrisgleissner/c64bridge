@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { assemblyToPrg, AssemblyError, prgEntryAddress } from "../src/tools/translation/assembler.js";
+import { assemblyToPrg, assemblyToPrgDetailed, AssemblyError, prgEntryAddress } from "../src/tools/translation/assembler.js";
 import { disassemble } from "../src/tools/translation/disassembler.js";
 
 test("assemblyToPrg assembles simple program with default load address", () => {
@@ -135,7 +135,6 @@ test("assemblyToPrg roundtrips undocumented opcodes supported by the disassemble
     nop $10,X
     nop $1234,X
     nop #$10
-    nop $10,S
     anc #$10
     rla ($10,X)
     rla $10
@@ -399,4 +398,60 @@ start: lda msg
   assert.deepEqual([...prg.subarray(2, 15)], [0x0c, 0x08, 0x0a, 0x00, 0x9e, 0x30, 0x32, 0x30, 0x36, 0x35, 0x00, 0x00, 0x00]);
   assert.equal(prgEntryAddress(prg), 0x0811);
   assert.deepEqual([...prg.subarray(15)], [0x01, 0x02, 0x03, 0xad, 0x0e, 0x08, 0x60]);
+});
+
+test("assemblyToPrg reserves space with .res without emitting it", () => {
+  const prg = assemblyToPrg(`
+* = $fb
+ptr: .res 2
+* = $c000
+    lda #0
+    sta ptr
+    rts
+buffer: .res 16
+  `);
+  // The zero-page variables are not in the PRG; the buffer right after the code is, zero-filled.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x00, 0x85, 0xfb, 0x60, ...new Array(16).fill(0)]);
+
+  // A trailing counter is zero-initialised when the program loads, as in ca65 and DASM.
+  const counter = assemblyToPrg("* = $c000\n    inc counter\n    rts\ncounter: .res 1");
+  assert.deepEqual([...counter], [0x00, 0xc0, 0xee, 0x04, 0xc0, 0x60, 0x00]);
+
+  // Reserved space between code is still part of the image, zero-filled.
+  const gap = assemblyToPrg("* = $c000\n    nop\n    .res 2\n    rts");
+  assert.deepEqual([...gap], [0x00, 0xc0, 0xea, 0x00, 0x00, 0x60]);
+});
+
+test("assemblyToPrg applies < and > to the whole expression, as ACME and 64tass do", () => {
+  const prg = assemblyToPrg(`
+* = $c000
+table = $10ff
+    lda #>table+1
+    ldx #<table+1
+    ldy #>table
+  `);
+  // >($10FF+1) = $11 and <($10FF+1) = $00; binding tightly would give $10+1 = $11 and $FF+1 = $100.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x11, 0xa2, 0x00, 0xa0, 0x10]);
+  const wide = assemblyToPrg("* = $c000\nmsg = $c0fe\n    lda #>msg+2");
+  // High byte of $C100, not ($C0)+2.
+  assert.deepEqual([...wide], [0x00, 0xc0, 0xa9, 0xc1]);
+});
+
+test("assemblyToPrgDetailed enters at the first instruction, not the lowest address", () => {
+  const result = assemblyToPrgDetailed(`
+* = $c000
+    jmp sub
+* = $0900
+sub: rts
+  `);
+  assert.equal(result.prg.readUInt16LE(0), 0x0900);
+  assert.equal(result.entryAddress, 0xc000);
+  // A leading SYS stub still decides the entry point.
+  assert.equal(assemblyToPrgDetailed("msg: .byte 1\nstart: rts").entryAddress, 0x080f);
+});
+
+test("assemblyToPrg zero-fills reserved space that overlaps later code", () => {
+  // The .byte at $C002 lands inside the reserved block $C001-$C004; the block still extends the image.
+  const prg = assemblyToPrg("* = $c000\n    rts\nv: .res 4\n* = $c002\n    .byte $ee");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0x60, 0x00, 0xee, 0x00, 0x00]);
 });

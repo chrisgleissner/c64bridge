@@ -1,5 +1,5 @@
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
-import { parseSidwave } from "../sidwave.js";
+import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
@@ -355,6 +355,24 @@ function transposeNote(note: string, semitones: number): string {
   return `${names[wrapped]!}${newOctave}`;
 }
 
+/** Highest frequency the SID's 16-bit frequency register can produce (about 3848 Hz PAL, 3995 Hz NTSC). */
+function maxSidFrequencyHz(system: "PAL" | "NTSC"): number {
+  return (0xffff * (system === "PAL" ? 985_248 : 1_022_727)) / 16_777_216;
+}
+
+/** Reject a note or frequency the SID cannot play instead of letting playback clamp or skip it. */
+function assertPlayableFrequency(hz: number, label: string, system: "PAL" | "NTSC", path: string): void {
+  const max = maxSidFrequencyHz(system);
+  if (hz > max + 0.5) {
+    throw new ToolValidationError(`${label} (${hz.toFixed(1)} Hz) is above the SID's highest ${system} frequency of ${max.toFixed(1)} Hz`, { path });
+  }
+}
+
+function noteHz(note: string): number {
+  const midi = noteNameToMidi(note);
+  return midi === undefined ? Number.NaN : midiToHz(midi);
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
@@ -390,6 +408,29 @@ function resolveAnalyzer(ctx: ToolExecutionContext): AudioAnalyzer {
     return (options) => (candidate as AudioAnalyzer).call(ctx.client, options);
   }
   return (options) => recordAndAnalyzeAudio(options);
+}
+
+/**
+ * Measure whether the SID is silent by capturing audio (the Ultimate audio
+ * stream on C64U, otherwise the host microphone). The SID's control registers
+ * are write-only, so reading them back cannot show whether a voice sounds.
+ */
+export async function measureSidSilence(ctx: ToolExecutionContext): Promise<{ silent: boolean; averageRms: number; maxRms: number; threshold: number }> {
+  if (DEFAULT_SILENCE_VERIFY_WAIT_MS > 0) {
+    await sleep(DEFAULT_SILENCE_VERIFY_WAIT_MS);
+  }
+  const analysis = await resolveAnalyzer(ctx)({ durationSeconds: DEFAULT_SILENCE_VERIFY_DURATION_SECONDS });
+  const { average, max } = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
+  if (average === null && max === null) {
+    throw new ToolExecutionError("Audio analysis did not provide RMS metrics for silence verification");
+  }
+  const maxRms = max ?? average ?? 0;
+  return {
+    silent: maxRms <= DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD,
+    averageRms: average ?? maxRms,
+    maxRms,
+    threshold: DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD,
+  };
 }
 
 function extractRmsMetrics(globalMetrics: Record<string, unknown>): { average: number | null; max: number | null } {
@@ -505,7 +546,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.sidSetVolume(parsed.volume);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while setting SID volume", {
+            throw new ToolExecutionError("C64 backend reported failure while setting SID volume", {
               details: normaliseFailure(result.details),
             });
           }
@@ -550,7 +591,7 @@ export const audioModule = defineToolModule({
           cancelGeneratedSidPlayback(); // Reset is the documented way to stop a generated arpeggio.
           const result = await ctx.client.sidReset(parsed.hard);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resetting SID", {
+            throw new ToolExecutionError("C64 backend reported failure while resetting SID", {
               details: normaliseFailure(result.details),
             });
           }
@@ -588,6 +629,12 @@ export const audioModule = defineToolModule({
         try {
           const parsed = sidNoteOnArgsSchema.parse(args ?? {});
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice ?? 1))) as 1 | 2 | 3;
+          const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
+          if (parsed.note) {
+            assertPlayableFrequency(noteHz(parsed.note), parsed.note, system, "$.note");
+          } else if (parsed.frequencyHz !== undefined) {
+            assertPlayableFrequency(parsed.frequencyHz, `${parsed.frequencyHz} Hz`, system, "$.frequencyHz");
+          }
           ctx.logger.info("Starting SID voice", {
             voice,
             note: parsed.note ?? null,
@@ -608,7 +655,7 @@ export const audioModule = defineToolModule({
             release: parsed.release,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting SID voice", {
+            throw new ToolExecutionError("C64 backend reported failure while starting SID voice", {
               details: normaliseFailure(result.details),
             });
           }
@@ -664,7 +711,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.sidNoteOff(voice);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while stopping SID voice", {
+            throw new ToolExecutionError("C64 backend reported failure while stopping SID voice", {
               details: normaliseFailure(result.details),
             });
           }
@@ -707,7 +754,7 @@ export const audioModule = defineToolModule({
           cancelGeneratedSidPlayback(); // Otherwise its remaining notes would resume writing right after this silences the chip.
           const result = await ctx.client.sidSilenceAll();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while silencing SID", {
+            throw new ToolExecutionError("C64 backend reported failure while silencing SID", {
               details: normaliseFailure(result.details),
             });
           }
@@ -812,7 +859,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.sidplayFile(parsed.path, parsed.songnr);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting SID playback", {
+            throw new ToolExecutionError("C64 backend reported failure while starting SID playback", {
               details: normaliseFailure(result.details),
             });
           }
@@ -853,7 +900,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.modplayFile(parsed.path);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting MOD playback", {
+            throw new ToolExecutionError("C64 backend reported failure while starting MOD playback", {
               details: normaliseFailure(result.details),
             });
           }
@@ -900,6 +947,8 @@ export const audioModule = defineToolModule({
             const iv = intervals[i % intervals.length]!;
             const note = transposeNote(parsed.root, iv);
             const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
+            // Playback runs in the background, so a note the SID cannot play must be rejected here.
+            assertPlayableFrequency(noteHz(note), note, "PAL", "$.root");
             timeline.push({ t: timestamp, note, durationMs });
             timestamp += durationMs;
           }
@@ -984,7 +1033,15 @@ export const audioModule = defineToolModule({
       tags: ["sid", "music", "compiler"],
       prerequisites: [],
       examples: [
-        { name: "Compile PRG", description: "Play compiled PRG", arguments: { sidwave: "song: { title: 'Demo' }", output: "prg", dryRun: false } },
+        {
+          name: "Compile PRG",
+          description: "Play compiled PRG",
+          arguments: {
+            sidwave: "sidwave: 1.0\ntitle: Demo\ntempo: 120\nmode: PAL\nvoices:\n  - id: 1\n    waveform: triangle\n    patterns: { A: { groove: [C4, E4, G4, C5] } }\ntimeline:\n  - { bars: 2, layers: { v1: A } }\n",
+            output: "prg",
+            dryRun: false,
+          },
+        },
       ],
       workflowHints: [
         "Use when the user provides SIDWAVE/CPG scores or asks for export to PRG/SID; share any generated download URIs in your response.",
@@ -1020,7 +1077,7 @@ export const audioModule = defineToolModule({
               const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
               const result = await ctx.client.sidplayAttachment(sid.sid);
               if (!result.success) {
-                throw new ToolExecutionError("C64 firmware reported failure while playing compiled SID", {
+                throw new ToolExecutionError("C64 backend reported failure while playing compiled SID", {
                   details: normaliseFailure(result.details),
                 });
               }
@@ -1029,7 +1086,7 @@ export const audioModule = defineToolModule({
             } else {
               const result = await ctx.client.runPrg(compiled.prg);
               if (!result.success) {
-                throw new ToolExecutionError("C64 firmware reported failure while running compiled PRG", {
+                throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
                   details: normaliseFailure(result.details),
                 });
               }
@@ -1047,13 +1104,17 @@ export const audioModule = defineToolModule({
             adsr: voice.adsr,
           }));
 
-          return textResult(message, {
+          // Warnings (for example a PRG that leaves no room for BASIC) go into the text that clients show.
+          const warningText = compiled.warnings.length > 0 ? `\nWarning: ${compiled.warnings.join("\nWarning: ")}` : "";
+          return textResult(`${message}${warningText}`, {
             success: true,
             ranOnC64,
             dryRun: parsed.dryRun,
             format: outputFormat,
             prgSize: compiled.prg.length,
             entryAddress: compiled.entryAddress,
+            basicFreeBytes: compiled.basicFreeBytes,
+            warnings: compiled.warnings,
             song: document.song,
             voices: voiceSummaries,
             runDetails,

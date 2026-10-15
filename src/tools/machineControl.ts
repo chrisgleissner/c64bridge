@@ -82,7 +82,7 @@ export const machineControlModule = defineToolModule({
 
           const result = await ctx.client.reset();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resetting", {
+            throw new ToolExecutionError("C64 backend reported failure while resetting", {
               details: normaliseFailure(result.details),
             });
           }
@@ -122,7 +122,7 @@ export const machineControlModule = defineToolModule({
 
           const result = await ctx.client.reboot();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while rebooting", {
+            throw new ToolExecutionError("C64 backend reported failure while rebooting", {
               details: normaliseFailure(result.details),
             });
           }
@@ -162,7 +162,7 @@ export const machineControlModule = defineToolModule({
 
           const result = await ctx.client.pause();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while pausing", {
+            throw new ToolExecutionError("C64 backend reported failure while pausing", {
               details: normaliseFailure(result.details),
             });
           }
@@ -202,7 +202,7 @@ export const machineControlModule = defineToolModule({
 
           const result = await ctx.client.resume();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resuming", {
+            throw new ToolExecutionError("C64 backend reported failure while resuming", {
               details: normaliseFailure(result.details),
             });
           }
@@ -242,7 +242,7 @@ export const machineControlModule = defineToolModule({
 
           const result = await ctx.client.poweroff();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while powering off", {
+            throw new ToolExecutionError("C64 backend reported failure while powering off", {
               details: normaliseFailure(result.details),
             });
           }
@@ -315,7 +315,7 @@ export const machineControlModule = defineToolModule({
 
           const result = await ctx.client.menuButton();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while toggling menu button", {
+            throw new ToolExecutionError("C64 backend reported failure while toggling menu button", {
               details: normaliseFailure(result.details),
             });
           }

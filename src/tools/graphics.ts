@@ -425,7 +425,7 @@ async function executeGenerateSprite(rawArgs: unknown, ctx: ToolExecutionContext
     });
 
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while rendering sprite", {
+      throw new ToolExecutionError("C64 backend reported failure while rendering sprite", {
         details: normaliseFailure(result.details),
       });
     }
@@ -461,7 +461,7 @@ async function executeRenderPetscii(rawArgs: unknown, ctx: ToolExecutionContext)
 
     const result = await ctx.client.renderPetsciiScreenAndRun(parsed);
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while rendering PETSCII text", {
+      throw new ToolExecutionError("C64 backend reported failure while rendering PETSCII text", {
         details: normaliseFailure(result.details),
       });
     }
@@ -507,7 +507,7 @@ async function executeGenerateBitmap(rawArgs: unknown, ctx: ToolExecutionContext
       screenAddress: parsed.screenAddress,
     });
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while displaying bitmap image", {
+      throw new ToolExecutionError("C64 backend reported failure while displaying bitmap image", {
         details: normaliseFailure(result.details),
       });
     }
@@ -584,7 +584,7 @@ async function executeCreatePetscii(rawArgs: unknown, ctx: ToolExecutionContext)
     if (!parsed.dryRun) {
       runResult = await ctx.client.uploadAndRunBasic(art.program);
       if (!runResult.success) {
-        throw new ToolExecutionError("C64 firmware reported failure while rendering PETSCII art", {
+        throw new ToolExecutionError("C64 backend reported failure while rendering PETSCII art", {
           details: normaliseFailure(runResult.details),
         });
       }

@@ -404,7 +404,7 @@ test("run_prg reports firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("load_prg reports firmware failure", async () => {
@@ -426,7 +426,7 @@ test("load_prg reports firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("program runners wrap unexpected file execution errors", async () => {
@@ -492,7 +492,7 @@ test("upload_run_basic handles firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("upload_run_basic auto-fixes missing closing quote", async () => {

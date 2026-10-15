@@ -502,31 +502,36 @@ test("batch_run_with_assertions does not pass memory_equals when the read fails"
   assert.equal(data.summary?.errors, 1);
 });
 
-test("batch_run_with_assertions checks sid_silent assertion", async () => {
-  const ctx = {
-    client: {
-      async runPrgFile() { return { success: true }; },
-      async readMemory(addr) {
-        if (addr === "$D404") return { success: true, data: "$00" };
-        return { success: true, data: "$00" };
+for (const [maxRms, expectedPassed] of [[0.001, 1], [0.4, 0]]) {
+  test(`batch_run_with_assertions sid_silent measures audio (peak RMS ${maxRms})`, async () => {
+    const reads = [];
+    const ctx = {
+      platform: { id: "c64u" },
+      client: {
+        async runPrgFile() { return { success: true }; },
+        // SID control registers are write-only: on an Ultimate 64 $D404 reads $00
+        // while a voice plays, so a register read must not decide the assertion.
+        async readMemory(addr) { reads.push(addr); return { success: true, data: "$00" }; },
+        async recordAndAnalyzeAudio() {
+          return { analysis: { global_metrics: { average_rms: maxRms / 2, max_rms: maxRms } } };
+        },
+        async reset() { return { success: true }; },
       },
-      async reset() { return { success: true }; },
-    },
-    logger: createLogger(),
-  };
+      logger: createLogger(),
+    };
 
-  const res = await metaModule.invoke("batch_run_with_assertions", {
-    programs: [
-      { path: "/test.prg", assertions: [{ type: "sid_silent" }] },
-    ],
-    durationMs: 5,
-    resetDelayMs: 0,
-  }, ctx);
+    const res = await metaModule.invoke("batch_run_with_assertions", {
+      programs: [
+        { path: "/test.prg", assertions: [{ type: "sid_silent" }] },
+      ],
+      durationMs: 5,
+      resetDelayMs: 0,
+    }, ctx);
 
-  assert.equal(res.metadata?.success, true);
-  const data = res.structuredContent?.data ?? {};
-  assert.equal(data.summary?.passed, 1);
-});
+    assert.equal(res.structuredContent?.data?.summary?.passed, expectedPassed);
+    assert.equal(reads.includes("$D404"), false);
+  });
+}
 
 test("batch_run_with_assertions stops after the first failing CRT program and ignores reset failures", async () => {
   let crtRuns = 0;
@@ -546,8 +551,11 @@ test("batch_run_with_assertions stops after the first failing CRT program and ig
       async readScreen() { return "READY."; },
       async readMemory(addr) {
         readCalls.push(addr);
-        if (addr === "$D404") return { success: true, data: "$01" };
         return { success: true, data: "$01" };
+      },
+      async recordAndAnalyzeAudio() {
+        readCalls.push("audio");
+        return { analysis: { global_metrics: { average_rms: 0.2, max_rms: 0.3 } } };
       },
       async reset() { throw new Error("reset failed"); },
     },
@@ -578,7 +586,7 @@ test("batch_run_with_assertions stops after the first failing CRT program and ig
   assert.equal(crtRuns, 1);
   assert.equal(prgRuns, 0);
   assert.equal(readCalls.includes("$0400"), true);
-  assert.equal(readCalls.includes("$D404"), true);
+  assert.equal(readCalls.includes("audio"), true);
 });
 
 test("batch_run_with_assertions records non-Error execution failures as task errors", async () => {
@@ -849,3 +857,44 @@ test("batch_run_with_assertions reports an unsuccessful PRG launch as a failed r
   assert.equal(res.metadata?.success, false);
   assert.equal(res.structuredContent?.data?.summary?.passed, 0);
 });
+
+test("batch_run_with_assertions reports sid_silent as an error when the audio analysis has no levels", async () => {
+  const ctx = {
+    platform: { id: "c64u" },
+    client: {
+      async runPrgFile() { return { success: true }; },
+      async recordAndAnalyzeAudio() { return { analysis: { global_metrics: {} } }; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [{ path: "/test.prg", assertions: [{ type: "sid_silent" }] }],
+    durationMs: 5,
+    resetDelayMs: 0,
+  }, ctx);
+  assert.equal(res.structuredContent?.data?.summary?.errors, 1);
+  assert.equal(res.structuredContent?.data?.summary?.passed, 0);
+});
+
+for (const backend of ["vice", "u2"]) {
+  test(`batch_run_with_assertions reports sid_silent as unavailable on ${backend} instead of using the host microphone`, async () => {
+    let recorded = false;
+    const ctx = {
+      platform: { id: backend },
+      client: {
+        async runPrgFile() { return { success: true }; },
+        async recordAndAnalyzeAudio() { recorded = true; return { analysis: { global_metrics: { max_rms: 0 } } }; },
+        async reset() { return { success: true }; },
+      },
+      logger: createLogger(),
+    };
+    const res = await metaModule.invoke("batch_run_with_assertions", {
+      programs: [{ path: "/test.prg", assertions: [{ type: "sid_silent" }] }],
+      durationMs: 5,
+      resetDelayMs: 0,
+    }, ctx);
+    assert.equal(res.structuredContent?.data?.summary?.errors, 1);
+    assert.equal(recorded, false);
+  });
+}
