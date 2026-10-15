@@ -264,7 +264,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
         assertions: optionalSchema(arraySchema(objectSchema({
           description: "Assertion to check after run",
           properties: {
-            type: stringSchema({ description: "Assertion type", enum: ["screen_contains", "memory_equals", "sid_silent"] }),
+            type: stringSchema({ description: "Assertion type; sid_silent needs the C64 Ultimate audio stream (c64u backend).", enum: ["screen_contains", "memory_equals", "sid_silent"] }),
             pattern: optionalSchema(stringSchema({ description: "Pattern for screen_contains", minLength: 1 })),
             address: optionalSchema(stringSchema({ description: "Address for memory_equals", minLength: 1 })),
             expected: optionalSchema(stringSchema({ description: "Expected value (hex)", minLength: 1 })),
@@ -809,7 +809,13 @@ export const tools: ToolDefinition[] = [
                 if (!matched) status = "fail";
               } else if (assertion.type === "sid_silent") {
                 // SID control registers are write-only (an Ultimate 64 reads $D404 as $00
-                // whatever was written), so silence is measured from captured audio.
+                // whatever was written), so silence is measured from the Ultimate audio
+                // stream. Other backends would fall back to the host microphone, which
+                // measures the room rather than the C64, so they report an error instead.
+                const backend = ctx.platform?.id ?? await (ctx.client as any).getActiveBackendType?.();
+                if (backend !== undefined && backend !== "c64u") {
+                  throw new Error(`sid_silent needs the C64 Ultimate audio stream and is not available on ${backend}`);
+                }
                 const silence = await measureSidSilence(ctx);
                 const isSilent = silence.silent;
                 assertionResults.push({

@@ -874,3 +874,25 @@ test("batch_run_with_assertions reports sid_silent as an error when the audio an
   assert.equal(res.structuredContent?.data?.summary?.errors, 1);
   assert.equal(res.structuredContent?.data?.summary?.passed, 0);
 });
+
+for (const backend of ["vice", "u2"]) {
+  test(`batch_run_with_assertions reports sid_silent as unavailable on ${backend} instead of using the host microphone`, async () => {
+    let recorded = false;
+    const ctx = {
+      platform: { id: backend },
+      client: {
+        async runPrgFile() { return { success: true }; },
+        async recordAndAnalyzeAudio() { recorded = true; return { analysis: { global_metrics: { max_rms: 0 } } }; },
+        async reset() { return { success: true }; },
+      },
+      logger: createLogger(),
+    };
+    const res = await metaModule.invoke("batch_run_with_assertions", {
+      programs: [{ path: "/test.prg", assertions: [{ type: "sid_silent" }] }],
+      durationMs: 5,
+      resetDelayMs: 0,
+    }, ctx);
+    assert.equal(res.structuredContent?.data?.summary?.errors, 1);
+    assert.equal(recorded, false);
+  });
+}
