@@ -2,6 +2,57 @@
 
 
 
+
+## 1.0.6 - 2026-10-15
+
+### Bug Fixes
+
+- drop blank and comment-only lines from the merged coverage report (cfb9d9c)
+- round SIDWAVE vibrato and reject vibrato above the frequency range (a983e8a)
+- avoid early VICE mount completion and accept empty disks (bfcfd29)
+- show SIDWAVE compiler warnings and free BASIC memory in tool results (cee8102)
+- zero-fill reserved space that overlaps emitted bytes (629db1a)
+- detect VICE autoload completion from machine state and keep the record of the first mount (fe0eb36)
+- correct SIDWAVE filter, slide and vibrato ranges, ties across sections and BASIC after the PRG (1787715)
+- copy generated README text literally (a74054b)
+- make VICE mounts and joystick presses robust and document their side effects (a5ddafd)
+- keep an https baseUrl's scheme and path when only the port is overridden (780d7a6)
+- zero-fill reserved space that adjoins the emitted bytes (c996b64)
+- keep the baseUrl path and send the network password in the startup probe (d7119c6)
+- reject notes above the SID range as validation errors before playback (dcd8315)
+- silence the SID even when the SIDWAVE player check cannot read memory (a08854d)
+- limit the sid_silent assertion to the C64 Ultimate audio stream (b5c9c5f)
+- fold only ASCII letters in REM text (99a859c)
+- keep the last backend playing after music_play_preset (91ec58e)
+- stop a running SIDWAVE PRG player when silencing the SID (8100cd5)
+- report SIDWAVE errors as validation errors with their path (543a6e5)
+- make SIDWAVE play the composition it describes (7337731)
+- word backend failures neutrally instead of blaming the firmware (533834f)
+- drop C128-only key tokens from c64_input (cdc251d)
+- store lowercase REM text as PETSCII letters (a4105b7)
+- skip a partially written line when reading the diagnostics log (b2b26d6)
+- measure audio for the sid_silent batch assertion (9393192)
+- report SID notes above the frequency range instead of clamping them (cb234cc)
+- allow 35 to 41 tracks for D64 images and report the track count used (a4ec462)
+- start assembled programs at their first instruction (a83295c)
+- apply < and > to the whole expression in the assembler (6c21055)
+- reserve space with .res without emitting bytes (2fe3ec6)
+- disassemble and assemble undocumented NOP $F4 as zero page,X (b41d7ff)
+- keep the scheme and path of a baseUrl-only Ultimate endpoint (fc6d0e3)
+- list only VICE resources that exist and mark unmount as Ultimate-only (6dd10bd)
+- drive VICE drives through resources and commands that VICE has (59069c3)
+- make VICE joystick input reach the emulated CIA (706aab8)
+
+### Tests
+
+- allow for frame quantisation when matching SIDWAVE note gaps (add0362)
+- ignore sidplayfp's leading silence when locating SIDWAVE note gaps (e7639ad)
+- check that the startup probe reaches a password-protected mock (84a4a7b)
+- cover display, verified-write and silence-measurement failure paths (b01a902)
+- cover VICE drive operations on the mock and backend failure paths (4a28d14)
+- poll for background task completion and the first arpeggio note instead of fixed sleeps (08aaeaa)
+- read the write-only SID registers as $00 in the mock, as the Ultimate 64 does (547c1a2)
+
 ## 1.0.5 - 2026-10-15
 
 ### Bug Fixes
