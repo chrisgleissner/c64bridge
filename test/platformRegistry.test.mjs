@@ -61,8 +61,11 @@ test("HARD01-030 c64_select_backend cancels an in-flight music_generate arpeggio
   );
   assert.equal(scheduleResult.isError, undefined);
 
-  // Let one or two notes play, then switch backends mid-arpeggio.
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  // Let the first note play, then switch backends mid-arpeggio.
+  const firstNoteDeadline = Date.now() + 2000;
+  while (noteOnCalls.length === 0 && Date.now() < firstNoteDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 2));
+  }
   const callsBeforeSwitch = noteOnCalls.length;
   assert.ok(callsBeforeSwitch >= 1, "expected at least one note before the switch");
 

@@ -4,6 +4,17 @@ import os from "node:os";
 import path from "node:path";
 import { tmpPath } from "./helpers.mjs";
 
+// Poll the task list instead of sleeping a fixed time, which raced the task timer under load.
+async function waitForTaskStatus(listTool, ctx, name, status, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const listed = await listTool.execute({}, ctx);
+    const task = listed.structuredContent?.data?.tasks?.find((entry) => entry.name === name);
+    if (task?.status === status || Date.now() > deadline) return listed;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 function createLogger() {
   return {
     debug() {},
@@ -174,8 +185,7 @@ describe("meta/background state loading", () => {
     );
 
     expect(result.metadata?.success).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const listed = await listTool.execute({}, ctx);
+    const listed = await waitForTaskStatus(listTool, ctx, "alias", "completed");
     expect(listed.structuredContent?.data?.tasks?.[0]?.status).toBe("completed");
     expect(calls).toEqual([{ address: "$0400", length: "16" }]);
   });
@@ -262,8 +272,7 @@ describe("meta/background state loading", () => {
     );
 
     expect(started.metadata?.success).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const listed = await listTool.execute({}, ctx);
+    const listed = await waitForTaskStatus(listTool, ctx, "task-files", "completed");
     const task = listed.structuredContent?.data?.tasks?.find((entry) => entry.name === "task-files");
     const taskDir = path.join(dir, "tasks", "background", task.id);
 
