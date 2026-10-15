@@ -1098,13 +1098,11 @@ class Assembler {
         if (amount < 0) {
           throw new AssemblyError("reserve directive requires a non-negative size", location);
         }
-        if (pass === 1) {
-          for (let i = 0; i < amount; i += 1) {
-            this.writeByte(0, location);
-          }
-        } else {
-          this.pc += amount;
-        }
+        // Reserved space is uninitialised: it advances the PC without emitting
+        // bytes, so a variable block such as "* = $fb / ptr: .res 2" does not
+        // stretch the PRG down into zero page. Gaps between code are still
+        // zero-filled because the PRG covers the lowest to the highest emitted byte.
+        this.pc = (this.pc + amount) & 0xffff;
         break;
       }
       case "include": {

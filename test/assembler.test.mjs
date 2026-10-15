@@ -399,3 +399,21 @@ start: lda msg
   assert.equal(prgEntryAddress(prg), 0x0811);
   assert.deepEqual([...prg.subarray(15)], [0x01, 0x02, 0x03, 0xad, 0x0e, 0x08, 0x60]);
 });
+
+test("assemblyToPrg reserves space with .res without emitting it", () => {
+  const prg = assemblyToPrg(`
+* = $fb
+ptr: .res 2
+* = $c000
+    lda #0
+    sta ptr
+    rts
+buffer: .res 16
+  `);
+  // Only the code is in the PRG: neither the zero-page variables nor the trailing buffer.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x00, 0x85, 0xfb, 0x60]);
+
+  // Reserved space between code is still part of the image, zero-filled.
+  const gap = assemblyToPrg("* = $c000\n    nop\n    .res 2\n    rts");
+  assert.deepEqual([...gap], [0x00, 0xc0, 0xea, 0x00, 0x00, 0x60]);
+});
