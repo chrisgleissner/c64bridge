@@ -80,3 +80,18 @@ test("C64Client: sidSilenceAll still silences the SID when the player check cann
   assert.equal(result.success, true);
   assert.deepEqual(writes, [0xd404, 0xd40b, 0xd412, 0xd418]);
 });
+
+test("C64Client: sidSilenceAll does not read a SIDWAVE handler that would cross $FFFF", async () => {
+  const client = new C64Client("http://example.invalid");
+  const reads = [];
+  Reflect.set(client, "facadePromise", Promise.resolve({
+    type: "c64u",
+    async readMemory(address, length) {
+      reads.push([address, length]);
+      return address === 0x0314 ? Uint8Array.of(0xfd, 0xff) : new Uint8Array(length);
+    },
+    async writeMemory() {},
+  }));
+  assert.equal((await client.sidSilenceAll()).success, true);
+  assert.deepEqual(reads, [[0x0314, 2]]);
+});

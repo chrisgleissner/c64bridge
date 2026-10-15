@@ -449,3 +449,9 @@ sub: rts
   // A leading SYS stub still decides the entry point.
   assert.equal(assemblyToPrgDetailed("msg: .byte 1\nstart: rts").entryAddress, 0x080f);
 });
+
+test("assemblyToPrg zero-fills reserved space that overlaps later code", () => {
+  // The .byte at $C002 lands inside the reserved block $C001-$C004; the block still extends the image.
+  const prg = assemblyToPrg("* = $c000\n    rts\nv: .res 4\n* = $c002\n    .byte $ee");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0x60, 0x00, 0xee, 0x00, 0x00]);
+});

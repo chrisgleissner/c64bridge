@@ -999,8 +999,9 @@ class Assembler {
     for (let changed = true; changed;) {
       changed = false;
       for (const [resStart, resEnd] of this.reserved) {
-        if (resStart === end + 1) { end = resEnd; changed = true; }
-        if (resEnd === start - 1) { start = resStart; changed = true; }
+        // Adjoining or overlapping blocks extend the image.
+        if (resStart <= end + 1 && resEnd > end) { end = resEnd; changed = true; }
+        if (resEnd >= start - 1 && resStart < start) { start = resStart; changed = true; }
       }
     }
     const body = this.memory.subarray(start, end + 1);
