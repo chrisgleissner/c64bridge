@@ -272,3 +272,11 @@ test("c64_input.write_text rejects unrecognised key tokens cleanly", async () =>
   }, ctx);
   assert.equal(result.isError, true);
 });
+
+test("c64_input.key rejects C128-only key names", async () => {
+  const { ctx } = createInputContext({ platformId: "c64u" });
+  for (const key of ["FLASH_OFF", "FLASH_ON", "ESCAPE", "TAB"]) {
+    const result = await toolRegistry.invoke("c64_input", { op: "key", key }, ctx);
+    assert.equal(result.isError, true, key);
+  }
+});

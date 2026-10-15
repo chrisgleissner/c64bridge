@@ -81,12 +81,10 @@ const PETSCII_TOKENS: Readonly<Record<string, number>> = {
   LIGHT_GREY: 155,
   REVERSE_ON: 18,
   REVERSE_OFF: 146,
-  FLASH_ON: 130,
-  FLASH_OFF: 148,
+  // FLASH ON/OFF, ESC and TAB are C128 codes: on a C64, 148 is INST (inserts a
+  // space) and 9 re-enables SHIFT+C= case switching, so they are not offered.
   LOWERCASE: 14,
   UPPERCASE: 142,
-  ESCAPE: 27,
-  TAB: 9,
   CURSOR_UP: 145,
   CURSOR_DOWN: 17,
   CURSOR_LEFT: 157,
