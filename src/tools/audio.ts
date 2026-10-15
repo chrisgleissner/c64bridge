@@ -1,5 +1,5 @@
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
-import { parseSidwave } from "../sidwave.js";
+import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
@@ -355,6 +355,24 @@ function transposeNote(note: string, semitones: number): string {
   return `${names[wrapped]!}${newOctave}`;
 }
 
+/** Highest frequency the SID's 16-bit frequency register can produce (about 3848 Hz PAL, 3995 Hz NTSC). */
+function maxSidFrequencyHz(system: "PAL" | "NTSC"): number {
+  return (0xffff * (system === "PAL" ? 985_248 : 1_022_727)) / 16_777_216;
+}
+
+/** Reject a note or frequency the SID cannot play instead of letting playback clamp or skip it. */
+function assertPlayableFrequency(hz: number, label: string, system: "PAL" | "NTSC", path: string): void {
+  const max = maxSidFrequencyHz(system);
+  if (hz > max + 0.5) {
+    throw new ToolValidationError(`${label} (${hz.toFixed(1)} Hz) is above the SID's highest ${system} frequency of ${max.toFixed(1)} Hz`, { path });
+  }
+}
+
+function noteHz(note: string): number {
+  const midi = noteNameToMidi(note);
+  return midi === undefined ? Number.NaN : midiToHz(midi);
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
@@ -611,6 +629,12 @@ export const audioModule = defineToolModule({
         try {
           const parsed = sidNoteOnArgsSchema.parse(args ?? {});
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice ?? 1))) as 1 | 2 | 3;
+          const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
+          if (parsed.note) {
+            assertPlayableFrequency(noteHz(parsed.note), parsed.note, system, "$.note");
+          } else if (parsed.frequencyHz !== undefined) {
+            assertPlayableFrequency(parsed.frequencyHz, `${parsed.frequencyHz} Hz`, system, "$.frequencyHz");
+          }
           ctx.logger.info("Starting SID voice", {
             voice,
             note: parsed.note ?? null,
@@ -923,6 +947,8 @@ export const audioModule = defineToolModule({
             const iv = intervals[i % intervals.length]!;
             const note = transposeNote(parsed.root, iv);
             const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
+            // Playback runs in the background, so a note the SID cannot play must be rejected here.
+            assertPlayableFrequency(noteHz(note), note, "PAL", "$.root");
             timeline.push({ t: timestamp, note, durationMs });
             timestamp += durationMs;
           }

@@ -868,3 +868,26 @@ test("record_and_analyze_audio analyzes through the client instead of the host m
   assert.equal(calls[0].durationSeconds, 1.5);
   assert.equal(res.metadata.globalMetrics.max_rms, 0.12);
 });
+
+test("sid_note_on and music_generate reject notes above the SID frequency range as validation errors", async () => {
+  const calls = [];
+  const ctx = {
+    client: {
+      sidNoteOn: async (payload) => { calls.push(payload); return { success: true }; },
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOff: async () => ({ success: true }),
+    },
+    logger: createLogger(),
+  };
+  const noteOn = await audioModule.invoke("sid_note_on", { voice: 1, note: "B7" }, ctx);
+  assert.equal(noteOn.isError, true);
+  assert.equal(noteOn.metadata?.error?.kind, "validation");
+  assert.equal(noteOn.metadata?.error?.path, "$.note");
+
+  // C7 + 12 semitones = C8, above the PAL limit: rejected before any playback starts.
+  const generated = await audioModule.invoke("music_generate", { root: "C7", pattern: "0,4,7,12", steps: 4, tempoMs: 20 }, ctx);
+  assert.equal(generated.isError, true);
+  assert.equal(generated.metadata?.error?.kind, "validation");
+  assert.match(generated.content[0].text, /C8/);
+  assert.equal(calls.length, 0);
+});
