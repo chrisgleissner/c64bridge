@@ -12,7 +12,7 @@ import { createSocket, type Socket } from "node:dgram";
 import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
-import { assemblyToPrg, prgEntryAddress } from "./tools/translation/assembler.js";
+import { assemblyToPrgDetailed, prgEntryAddress } from "./tools/translation/assembler.js";
 import { stripHexByteSeparators } from "./tools/hex.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
@@ -789,16 +789,17 @@ export class C64Client {
    * range corrupts the workspace. Instead this loads the assembled bytes
    * without running them, then types `SYS <entry>` to transfer control
    * to the entry point: the target of a leading SYS stub at $0801, or else
-   * the lowest assembled address.
+   * the first assembled instruction.
    */
   async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
     try {
-      const prg = assemblyToPrg(program);
+      const assembled = assemblyToPrgDetailed(program);
+      const prg = assembled.prg;
       if (prg.length < 2) {
         return { success: false, details: { message: "Assembled program produced no output" } };
       }
-      const entryAddress = prgEntryAddress(prg);
-      if (entryAddress === 0x0801) {
+      const entryAddress = assembled.entryAddress;
+      if (prg.readUInt16LE(0) === 0x0801 && prgEntryAddress(prg) === 0x0801) {
         // Loading makes BASIC relink $0801 as program lines, which overwrites raw code there.
         return {
           success: false,
@@ -2652,99 +2653,6 @@ function buildGreetingScreenRam(message: string): Uint8Array {
   return screenRam;
 }
 
-function buildSingleSpriteProgram(opts: {
-  spriteBytes: Uint8Array | Buffer;
-  spriteIndex?: number;
-  x?: number;
-  y?: number;
-  color?: number;
-  multicolour?: boolean;
-}): Buffer {
-  const index = Math.max(0, Math.min(7, opts.spriteIndex ?? 0));
-  const mx = Math.max(0, Math.min(511, opts.x ?? 100));
-  const xLo = mx & 0xff;
-  const xMsbBit = (mx & 0x100) ? (1 << index) : 0;
-  const y = toByte(opts.y, 100);
-  const color = toByte(opts.color, 1);
-  const multicolour = !!opts.multicolour;
-
-  const spriteData = Buffer.from(opts.spriteBytes);
-  if (spriteData.length !== 63) {
-    throw new Error("spriteBytes must be exactly 63 bytes");
-  }
-
-  // We'll assemble a tiny machine-code program that:
-  // - Copies 63 bytes to a safe sprite data page ($2000 by default)
-  // - Sets screen memory base to $0400, sprite pointer to point into $2000
-  // - Positions and enables the sprite
-  // - Loops forever
-  // This avoids relying on KERNAL calls and works from a cold start.
-
-  const SPRITE_BASE = 0x2000; // must be 64-byte aligned
-  const POINTER_PAGE = 0x07f8 + index; // sprite pointer table location
-  const pointerValue = (SPRITE_BASE >> 6) & 0xff;
-
-  // Place code starting at $0801 so it runs as a program via SYS.
-  // We'll create an assembler source and reuse assemblyToPrg.
-  const lines: string[] = [];
-  lines.push("* = $0801");
-  // Tiny BASIC loader header not needed; we will use pure ML and jump via RESET runner which executes by SYS 2061
-  // Build code at $0810 to avoid conflicting with potential KERNAL vectors
-  lines.push("* = $0810");
-  lines.push("\nstart:");
-  // Copy 63 bytes from inlined table to SPRITE_BASE
-  lines.push("  LDY #$00");
-  lines.push("copy_loop:");
-  lines.push("  LDA sprite_data,Y");
-  lines.push(`  STA $${hex16(SPRITE_BASE)},Y`);
-  lines.push("  INY");
-  lines.push("  CPY #$3F");
-  lines.push("  BNE copy_loop");
-  // Set sprite pointer, color, coordinates, enable
-  lines.push(`  LDA #$${pointerValue.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${(POINTER_PAGE).toString(16).toUpperCase()}`);
-  lines.push(`  LDA #$${color.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${hex16(0xD027 + index)}`);
-  lines.push(`  LDA #$${xLo.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${(0xD000 + index * 2).toString(16).toUpperCase()}`);
-  lines.push(`  LDA #$${y.toString(16).toUpperCase().padStart(2, "0")}`);
-  lines.push(`  STA $${(0xD001 + index * 2).toString(16).toUpperCase()}`);
-  // MSB X if needed
-  if (xMsbBit) {
-    const bit = xMsbBit;
-    lines.push(`  LDA $D010`);
-    lines.push(`  ORA #$${bit.toString(16).toUpperCase().padStart(2, "0")}`);
-    lines.push(`  STA $D010`);
-  }
-  // Multicolour toggle per-sprite
-  if (multicolour) {
-    const bit = 1 << index;
-    lines.push(`  LDA $D01C`);
-    lines.push(`  ORA #$${bit.toString(16).toUpperCase().padStart(2, "0")}`);
-    lines.push(`  STA $D01C`);
-  }
-  // Enable sprite
-  {
-    const bit = 1 << index;
-    lines.push(`  LDA $D015`);
-    lines.push(`  ORA #$${bit.toString(16).toUpperCase().padStart(2, "0")}`);
-    lines.push(`  STA $D015`);
-  }
-  // Idle loop
-  lines.push("forever: JMP forever");
-  // Sprite data table
-  lines.push("\nsprite_data:");
-  for (let i = 0; i < 63; i += 3) {
-    const a = spriteData[i] ?? 0;
-    const b = spriteData[i + 1] ?? 0;
-    const c = spriteData[i + 2] ?? 0;
-    lines.push(`  .byte $${hex2(a)},$${hex2(b)},$${hex2(c)}`);
-  }
-
-  const source = lines.join("\n");
-  return assemblyToPrg(source, { fileName: "sprite_gen.asm", loadAddress: 0x0801 });
-}
-
 export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; backgroundColor?: number }): string {
   const border = toByte(opts.borderColor ?? 6); // default blue-ish
   const bg = toByte(opts.backgroundColor ?? 0); // default black
@@ -2970,12 +2878,4 @@ export function buildCommodoreDllBasicProgram(opts: {
   }
   lines.push(`${ln} CLOSE1`);
   return lines.join("\n");
-}
-
-function hex2(n: number): string {
-  return (n & 0xff).toString(16).toUpperCase().padStart(2, "0");
-}
-
-function hex16(n: number): string {
-  return (n & 0xffff).toString(16).toUpperCase().padStart(4, "0");
 }

@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { assemblyToPrg, AssemblyError, prgEntryAddress } from "../src/tools/translation/assembler.js";
+import { assemblyToPrg, assemblyToPrgDetailed, AssemblyError, prgEntryAddress } from "../src/tools/translation/assembler.js";
 import { disassemble } from "../src/tools/translation/disassembler.js";
 
 test("assemblyToPrg assembles simple program with default load address", () => {
@@ -431,4 +431,17 @@ table = $10ff
   const wide = assemblyToPrg("* = $c000\nmsg = $c0fe\n    lda #>msg+2");
   // High byte of $C100, not ($C0)+2.
   assert.deepEqual([...wide], [0x00, 0xc0, 0xa9, 0xc1]);
+});
+
+test("assemblyToPrgDetailed enters at the first instruction, not the lowest address", () => {
+  const result = assemblyToPrgDetailed(`
+* = $c000
+    jmp sub
+* = $0900
+sub: rts
+  `);
+  assert.equal(result.prg.readUInt16LE(0), 0x0900);
+  assert.equal(result.entryAddress, 0xc000);
+  // A leading SYS stub still decides the entry point.
+  assert.equal(assemblyToPrgDetailed("msg: .byte 1\nstart: rts").entryAddress, 0x080f);
 });

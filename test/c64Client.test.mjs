@@ -803,6 +803,14 @@ test("C64Client against mock server", async (t) => {
     assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS2062\r");
   });
 
+  await t.test("uploadAndRunAsm enters at the first instruction when a lower block follows it", async () => {
+    const result = await client.uploadAndRunAsm(".org $C000\n jmp sub\n.org $0900\nsub: rts");
+    assert.equal(result.success, true);
+    assert.equal(result.details.entryAddress, 0xc000);
+    const sysWrite = mock.state.writeLog.slice().reverse().find((entry) => entry.address === 0x0277);
+    assert.equal(Buffer.from(sysWrite.bytes).toString("ascii"), "SYS49152\r");
+  });
+
   await t.test("uploadAndRunAsm refuses raw machine code at $0801 that BASIC would relink", async () => {
     const before = mock.state.loadCount;
     const result = await client.uploadAndRunAsm(".org $0801\nstart: lda #$01\n sta $0400\n rts");

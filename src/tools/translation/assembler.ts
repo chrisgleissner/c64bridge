@@ -229,6 +229,12 @@ const RELATIVE_ONLY = new Set<string>(["BCC", "BCS", "BEQ", "BMI", "BNE", "BPL",
 
 export interface AssemblyResult {
   readonly prg: Buffer;
+  /**
+   * Address to SYS: the target of a leading BASIC SYS line at $0801 (the
+   * automatic stub or the source's own), otherwise the first instruction,
+   * otherwise the load address.
+   */
+  readonly entryAddress: number;
   /** Global label name -> resolved address (after both passes). */
   readonly symbols: ReadonlyMap<string, number>;
 }
@@ -250,7 +256,13 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   assembler.runPass(0);
   assembler.runPass(1);
 
-  return { prg: assembler.buildPrg(), symbols: assembler.getSymbols() };
+  const prg = assembler.buildPrg();
+  const loadAddressOfPrg = prg.length >= 2 ? prg.readUInt16LE(0) : loadAddress;
+  const stubTarget = prg.length >= 2 ? prgEntryAddress(prg) : loadAddressOfPrg;
+  const entryAddress = stubTarget !== loadAddressOfPrg
+    ? stubTarget
+    : assembler.getFirstInstructionAddress() ?? loadAddressOfPrg;
+  return { prg, symbols: assembler.getSymbols(), entryAddress };
 }
 
 function normalizeSource(input: string): string {
@@ -982,6 +994,10 @@ class Assembler {
     const header = Buffer.alloc(2);
     header.writeUInt16LE(start, 0);
     return Buffer.concat([header, Buffer.from(body)]);
+  }
+
+  getFirstInstructionAddress(): number | undefined {
+    return this.firstInstructionAddress;
   }
 
   getSymbols(): ReadonlyMap<string, number> {

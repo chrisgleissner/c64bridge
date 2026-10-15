@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { assemblyToPrgDetailed, AssemblyError, prgEntryAddress } from "./translation/assembler.js";
+import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
 import { basicToPrg } from "./translation/basicTokenizer.js";
 import {
   defineToolModule,
@@ -575,7 +575,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     // Assemble locally to expose structured metadata and capture symbols
     const asmResult = assemblyToPrgDetailed(parsed.program);
     const prg = asmResult.prg;
-    const entryAddress = prgEntryAddress(prg);
+    const entryAddress = asmResult.entryAddress;
     if (ctx.platform.id === "vice") {
       setViceSymbols(asmResult.symbols.entries());
     }
