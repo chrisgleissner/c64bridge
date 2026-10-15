@@ -4483,7 +4483,7 @@
               "integer",
               "null"
             ],
-            "description": "Track count (D64 supports 35 or 40; DNP requires explicit tracks).",
+            "description": "Track count (D64 supports 35 to 41; DNP requires explicit tracks).",
             "minimum": 1,
             "maximum": 255
           },
@@ -4785,7 +4785,7 @@
                     "integer",
                     "null"
                   ],
-                  "description": "Track count (D64 supports 35 or 40; DNP requires explicit tracks).",
+                  "description": "Track count (D64 supports 35 to 41; DNP requires explicit tracks).",
                   "minimum": 1,
                   "maximum": 255
                 },

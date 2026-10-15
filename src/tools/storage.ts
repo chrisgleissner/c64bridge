@@ -122,10 +122,10 @@ const createD64ArgsSchema = objectSchema({
   properties: {
     path: diskImagePathSchema,
     tracks: optionalSchema(numberSchema({
-      description: "Track count (35 for standard, 40 for extended).",
+      description: "Track count: 35 for a standard disk, up to 41 for the extended area (firmware limit).",
       integer: true,
       minimum: 35,
-      maximum: 40,
+      maximum: 41,
     })),
     diskname: diskNameSchema,
   },
@@ -578,7 +578,7 @@ export const storageModule = defineToolModule({
     {
       name: "create_d64",
       description: "Create a blank D64 disk image on the Ultimate filesystem.",
-      summary: "Allocates a 35 or 40 track D64 image with an optional disk name.",
+      summary: "Allocates a 35 to 41 track D64 image with an optional disk name.",
       inputSchema: createD64ArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
       tags: ["disk", "create"],
@@ -603,7 +603,7 @@ export const storageModule = defineToolModule({
           });
 
           const result = await ctx.client.filesCreateD64(parsed.path, {
-            tracks: parsed.tracks as 35 | 40 | undefined,
+            tracks: parsed.tracks,
             diskname: parsed.diskname,
           });
           if (!result.success) {
@@ -612,10 +612,12 @@ export const storageModule = defineToolModule({
             });
           }
 
+          const firmwareTracks = toRecord(result.details)?.tracks;
           return textResult(`Created D64 image at ${parsed.path}.`, {
             success: true,
             path: parsed.path,
-            tracks: parsed.tracks ?? null,
+            // The firmware reports the track count it used, including its default of 35.
+            tracks: typeof firmwareTracks === "number" ? firmwareTracks : parsed.tracks ?? 35,
             diskname: parsed.diskname ?? null,
             details: toRecord(result.details) ?? {},
           });

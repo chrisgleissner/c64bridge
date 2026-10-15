@@ -1325,7 +1325,7 @@ export class Api<SecurityDataType extends unknown> {
       path: string,
       createD64: string,
       query?: {
-        tracks?: 35 | 40;
+        tracks?: number;
         diskname?: string;
       },
       params: RequestParams = {},

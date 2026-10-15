@@ -857,14 +857,25 @@ testC64uOnly("c64_disk create_image validates D64 tracks", async () => {
     setPlatform,
   };
 
-  await assert.rejects(
-    () => toolRegistry.invoke(
-      "c64_disk",
-      { op: "create_image", format: "d64", path: "//USB0/bad.d64", tracks: 36 },
-      ctx,
-    ),
-    ToolValidationError,
-  );
+  // The firmware formats 35 to 41 tracks (route_files.cc create_d64).
+  for (const tracks of [34, 42]) {
+    await assert.rejects(
+      () => toolRegistry.invoke(
+        "c64_disk",
+        { op: "create_image", format: "d64", path: "//USB0/bad.d64", tracks },
+        ctx,
+      ),
+      ToolValidationError,
+    );
+  }
+  const created = [];
+  const okCtx = { ...ctx, client: { async filesCreateD64(path, options) { created.push(options.tracks); return { success: true, details: { tracks: options.tracks } }; } } };
+  for (const tracks of [36, 41]) {
+    const result = await toolRegistry.invoke("c64_disk", { op: "create_image", format: "d64", path: "//USB0/ok.d64", tracks }, okCtx);
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+    assert.equal(result.structuredContent?.data?.tracks, tracks);
+  }
+  assert.deepEqual(created, [36, 41]);
 });
 
 test("c64_disk c64u-only grouped operations reject on vice", async () => {

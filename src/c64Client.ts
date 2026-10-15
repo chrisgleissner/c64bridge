@@ -1414,7 +1414,7 @@ export class C64Client {
     const facade = await this.facadePromise; return facade.filesInfo(path);
   }
 
-  async filesCreateD64(path: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunBasicResult> {
+  async filesCreateD64(path: string, options?: { tracks?: number; diskname?: string }): Promise<RunBasicResult> {
     try { const facade = await this.facadePromise; return await facade.filesCreateD64(path, options); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 

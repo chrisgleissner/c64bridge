@@ -137,7 +137,7 @@ const createImageArgsSchema = objectSchema<CreateImageArgs>({
       maxLength: 16,
     })),
     tracks: optionalSchema(numberSchema({
-      description: "Track count (D64 supports 35 or 40; DNP requires explicit tracks).",
+      description: "Track count (D64 supports 35 to 41; DNP requires explicit tracks).",
       integer: true,
       minimum: 1,
       maximum: 255,
@@ -297,10 +297,10 @@ const diskOperations: GroupedOperationConfig[] = [
 
       switch (format) {
         case "d64":
-          if (tracks !== undefined && tracks !== 35 && tracks !== 40) {
-            throw new ToolValidationError("D64 images support 35 or 40 tracks", {
+          if (tracks !== undefined && (tracks < 35 || tracks > 41)) {
+            throw new ToolValidationError("D64 images support 35 to 41 tracks", {
               path: "$.tracks",
-              details: { allowed: [35, 40], received: tracks },
+              details: { minimum: 35, maximum: 41, received: tracks },
             });
           }
           return storageModule.invoke("create_d64", { path, tracks, diskname }, ctx);

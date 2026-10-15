@@ -80,7 +80,7 @@ export interface C64Facade {
   configSaveToFlash(): Promise<RunResult>;
   configResetToDefault(): Promise<RunResult>;
   filesInfo(path: string): Promise<unknown>;
-  filesCreateD64(path: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunResult>;
+  filesCreateD64(path: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult>;
   filesCreateD71(path: string, options?: { diskname?: string }): Promise<RunResult>;
   filesCreateD81(path: string, options?: { diskname?: string }): Promise<RunResult>;
   filesCreateDnp(path: string, tracks: number, options?: { diskname?: string }): Promise<RunResult>;
@@ -425,7 +425,7 @@ class C64uBackend implements C64Facade {
   async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return this.actionResult(res.data); }
   async configResetToDefault(): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(":reset_to_default"); return this.actionResult(res.data); }
   async filesInfo(p: string): Promise<unknown> { const res = await this.api.v1.filesInfoDetail(encodeDevicePath(p), ":info"); return res.data; }
-  async filesCreateD64(p: string, options?: { tracks?: 35 | 40; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
+  async filesCreateD64(p: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateD71(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD71Update(encodeDevicePath(p), ":create_d71", { diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateD81(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD81Update(encodeDevicePath(p), ":create_d81", { diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateDnp(p: string, tracks: number, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateDnpUpdate(encodeDevicePath(p), ":create_dnp", { tracks, diskname: options?.diskname }); return this.actionResult(res.data); }

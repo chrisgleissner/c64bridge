@@ -433,6 +433,8 @@ test("create_d64 succeeds with minimal args", async () => {
   assert.equal(res.content?.[0].type, "text");
   assert.ok(res.content?.[0].text.includes("Created D64"));
   assert.equal(res.metadata?.success, true);
+  // Without a track count the result reports the firmware default instead of null.
+  assert.equal(res.structuredContent?.data?.tracks, 35);
 });
 
 test("create_d64 succeeds with tracks and diskname", async () => {
