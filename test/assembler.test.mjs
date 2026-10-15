@@ -135,7 +135,6 @@ test("assemblyToPrg roundtrips undocumented opcodes supported by the disassemble
     nop $10,X
     nop $1234,X
     nop #$10
-    nop $10,S
     anc #$10
     rla ($10,X)
     rla $10

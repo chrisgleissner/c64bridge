@@ -110,3 +110,11 @@ test("formatDisassembly marks undocumented instructions with an asterisk", () =>
   const text = formatDisassembly(lines);
   assert.match(text, /SLO\*/, "expected SLO to be flagged with *");
 });
+
+test("undocumented NOP $F4 is zero page,X like $14, $34, $54, $74 and $D4", () => {
+  // The 6510 has no stack-relative mode; the 1541U monitor also shows $F4 as NOP $nn,X.
+  for (const opcode of [0x14, 0x34, 0x54, 0x74, 0xd4, 0xf4]) {
+    assert.equal(OPCODE_INVENTORY[opcode].mode, "zeroPageX", `opcode $${opcode.toString(16)}`);
+  }
+  assert.ok(OPCODE_INVENTORY.every((entry) => entry.mode !== "zeroPageS"));
+});
