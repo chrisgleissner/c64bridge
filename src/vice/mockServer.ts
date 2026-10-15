@@ -522,6 +522,10 @@ export class ViceMockServer {
       ["Drive10Type", 0],
       ["Drive11Type", 0],
       ["VICIIDoubleSize", 0],
+      ["VICIIBorderMode", 0],
+      ["VICIIFullscreen", 0],
+      ["SoundVolume", 100],
+      ["SidModel", 0],
       ["MachineVideoStandard", 1],
       ["KernalName", "kernal-901227-03.bin"],
     ]);

@@ -367,8 +367,10 @@ export const diskModuleGroup = defineToolModule({
         variants: diskOperations.map((operation) => operation.schema),
       }),
       tags: ["storage", "drive", "grouped"],
-      operationPlatforms: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
+      // The VICE Binary Monitor has no command to detach a disk image, so unmount is Ultimate-only.
+      operationPlatforms: { unmount: ["c64u", "u2"], file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
       operationToolNames: {
+        unmount: "drive_remove",
         file_info: "file_info",
         create_image: "create_image",
         find_and_run: "find_and_run_program_by_name",

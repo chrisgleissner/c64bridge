@@ -434,9 +434,8 @@ viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUI
       assert.equal(result.success, true);
     });
 
-    await t.test("driveRemove detaches image from drive 8", async () => {
-      const result = await facade.driveRemove("drive8");
-      assert.equal(result.success, true);
+    await t.test("driveRemove reports that VICE cannot detach an image", async () => {
+      await assert.rejects(() => facade.driveRemove("drive8"), /no command to detach/);
     });
   }
 
@@ -472,19 +471,17 @@ viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUI
       assert.ok("value" in result);
     });
 
-    await t.test("configGet returns empty string for unknown key", async () => {
-      const result = await facade.configGet("VICE", "UnknownKey99");
-      assert.ok(result && typeof result === "object");
-      assert.ok("value" in result);
+    await t.test("configGet rejects an unknown resource, as VICE does", async () => {
+      await assert.rejects(() => facade.configGet("VICE", "UnknownKey99"));
     });
 
     await t.test("configSet writes a resource value", async () => {
-      const result = await facade.configSet("VICE", "WarpMode", "1");
+      const result = await facade.configSet("VICE", "SoundVolume", "80");
       assert.equal(result.success, true);
     });
 
     await t.test("configBatchUpdate sets multiple resources", async () => {
-      const result = await facade.configBatchUpdate({ VICE: { SoundVolume: "80", WarpMode: "0" } });
+      const result = await facade.configBatchUpdate({ VICE: { SoundVolume: "80", VICIIBorderMode: "0" } });
       assert.equal(result.success, true);
     });
   }

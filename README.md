@@ -764,7 +764,7 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 | `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
 | `list_drives` | List Ultimate drive slots and their mounted images. | — | — | ✅ | ✅ | ✅ |
 | `mount` | Mount a disk image with optional verification and retries. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
-| `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | ✅ | ✅ | ✅ |
+| `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | ✅ | ✅ |  |
 
 #### c64_drive
 

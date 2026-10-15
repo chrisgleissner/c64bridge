@@ -4949,6 +4949,10 @@
           "vice"
         ],
         "operationPlatforms": {
+          "unmount": [
+            "c64u",
+            "u2"
+          ],
           "file_info": [
             "c64u",
             "u2"

@@ -992,10 +992,11 @@ export class ViceBackend implements C64Facade {
       categories: [
         {
           name: "VICE",
+          // Only resources that exist in VICE 3.10; checked against a running x64sc.
+          // VICE has no warp, drive-enable or attached-image resources.
           items: [
-            "WarpMode", "SoundVolume", "Drive8CPUEnabled", "Drive9CPUEnabled",
-            "Drive10CPUEnabled", "Drive11CPUEnabled", "Drive8Image", "Drive9Image",
-            "Drive8Type", "Drive9Type", "VICIIBorderMode", "VICIIFullscreen",
+            "SoundVolume", "Drive8Type", "Drive9Type", "Drive10Type", "Drive11Type",
+            "VICIIBorderMode", "VICIIFullscreen", "MachineVideoStandard", "SidModel",
           ],
         },
       ],

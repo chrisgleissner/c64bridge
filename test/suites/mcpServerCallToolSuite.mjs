@@ -353,10 +353,10 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         drive: "drive8",
       });
 
-      assert.equal(removeResult.metadata?.success, true, "unmount operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(removeResult.metadata?.drive, "drive8");
+        assertUnsupportedOperation(removeResult, ctx.platform, "drive_remove");
       } else {
+        assert.equal(removeResult.metadata?.success, true, "unmount operation should succeed");
         assert.equal(mockServer.state.drives.a.mountedImage, null);
       }
 
