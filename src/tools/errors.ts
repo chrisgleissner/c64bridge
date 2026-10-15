@@ -105,6 +105,13 @@ export function unknownErrorResult(error: unknown): ToolRunResult {
   if (error instanceof ToolError) {
     return toolErrorResult(error);
   }
+  // Input documents such as SIDWAVE scores are checked outside the tool schemas;
+  // their errors carry a path and are input errors, not internal failures.
+  if (error instanceof Error && error.name === "SidwaveValidationError") {
+    const path = (error as Error & { path?: unknown }).path;
+    const metadata: ToolErrorMetadata = { kind: "validation", ...(typeof path === "string" ? { path } : {}) };
+    return { ...textResult(error.message, { error: metadata }), isError: true };
+  }
 
   const metadata: ToolErrorMetadata = { kind: "unknown" };
 
