@@ -14,6 +14,7 @@ import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrgDetailed, prgEntryAddress } from "./tools/translation/assembler.js";
 import { stripHexByteSeparators } from "./tools/hex.js";
+import { SIDWAVE_PLAY_ADDRESS } from "./sidwaveCompiler.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import {
@@ -1018,22 +1019,43 @@ export class C64Client {
   async sidReset(hard = false): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
+      const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade);
       if (hard) {
         const span = 0x19;
         const ff = Buffer.alloc(span, 0xff);
         const zz = Buffer.alloc(span, 0x00);
         await facade.writeMemory(0xd400, ff);
         await facade.writeMemory(0xd400, zz);
-        return { success: true };
+        return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
       }
       await facade.writeMemory(0xd404, Buffer.from([0x00]));
       await facade.writeMemory(0xd40b, Buffer.from([0x00]));
       await facade.writeMemory(0xd412, Buffer.from([0x00]));
       await facade.writeMemory(0xd418, Buffer.from([0x00]));
-      return { success: true };
+      return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
+  }
+
+  /**
+   * A SIDWAVE PRG keeps playing from the IRQ after the SID is silenced. Its
+   * IRQ handler is "JSR play / JMP $EA31", and its play vector at $0813 is
+   * "JMP play". When $0314 points at such a handler, point it back at the
+   * KERNAL handler so silencing sticks; other programs' IRQ handlers are left
+   * alone. Both vector bytes go in one write.
+   */
+  private async stopSidwaveIrqPlayer(facade: C64Facade): Promise<boolean> {
+    const vector = await facade.readMemory(0x0314, 2);
+    const handler = (vector[0] ?? 0) | ((vector[1] ?? 0) << 8);
+    if (handler === 0xea31) return false;
+    const code = await facade.readMemory(handler, 6);
+    const playVector = await facade.readMemory(SIDWAVE_PLAY_ADDRESS, 3);
+    const isSidwaveHandler = code[0] === 0x20 && code[3] === 0x4c && code[4] === 0x31 && code[5] === 0xea
+      && playVector[0] === 0x4c && playVector[1] === code[1] && playVector[2] === code[2];
+    if (!isSidwaveHandler) return false;
+    await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
+    return true;
   }
 
   async sidNoteOn(options: {

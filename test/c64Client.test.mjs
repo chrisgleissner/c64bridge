@@ -701,6 +701,25 @@ test("C64Client against mock server", async (t) => {
     assert.equal(mock.state.lastWrite.bytes[0], 0x00);
   });
 
+  await t.test("sidSilenceAll unhooks a running SIDWAVE PRG player but leaves other IRQ handlers alone", async () => {
+    const client = new C64Client(mock.baseUrl);
+    // As on an Ultimate 64 running a SIDWAVE PRG: $0813 is JMP $08CA (play) and the
+    // IRQ handler at $084F is JSR $08CA / JMP $EA31, hooked into $0314.
+    mock.state.memory.set([0x4c, 0xca, 0x08], 0x0813);
+    mock.state.memory.set([0x20, 0xca, 0x08, 0x4c, 0x31, 0xea], 0x084f);
+    mock.state.memory.set([0x4f, 0x08], 0x0314);
+    const result = await client.sidSilenceAll();
+    assert.equal(result.success, true);
+    assert.deepEqual(result.details, { stoppedSidwavePlayer: true });
+    assert.deepEqual([...mock.state.memory.subarray(0x0314, 0x0316)], [0x31, 0xea]);
+
+    // Some other program's IRQ handler stays hooked, even one shaped like JSR x / JMP $EA31.
+    mock.state.memory.set([0x20, 0x00, 0xc3, 0x4c, 0x31, 0xea], 0xc200);
+    mock.state.memory.set([0x00, 0xc2], 0x0314);
+    await client.sidSilenceAll();
+    assert.deepEqual([...mock.state.memory.subarray(0x0314, 0x0316)], [0x00, 0xc2]);
+  });
+
   await t.test("HARD01-032 A4 (440Hz) on PAL resolves to the literal SID register value $1D45 (7493), not the old 2^16 formula", async () => {
     const client = new C64Client(mock.baseUrl);
     await client.sidNoteOn({ voice: 1, note: "A4", waveform: "tri", attack: 1, decay: 7, sustain: 15, release: 0, system: "PAL" });
