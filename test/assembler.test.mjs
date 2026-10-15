@@ -417,3 +417,18 @@ buffer: .res 16
   const gap = assemblyToPrg("* = $c000\n    nop\n    .res 2\n    rts");
   assert.deepEqual([...gap], [0x00, 0xc0, 0xea, 0x00, 0x00, 0x60]);
 });
+
+test("assemblyToPrg applies < and > to the whole expression, as ACME and 64tass do", () => {
+  const prg = assemblyToPrg(`
+* = $c000
+table = $10ff
+    lda #>table+1
+    ldx #<table+1
+    ldy #>table
+  `);
+  // >($10FF+1) = $11 and <($10FF+1) = $00; binding tightly would give $10+1 = $11 and $FF+1 = $100.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x11, 0xa2, 0x00, 0xa0, 0x10]);
+  const wide = assemblyToPrg("* = $c000\nmsg = $c0fe\n    lda #>msg+2");
+  // High byte of $C100, not ($C0)+2.
+  assert.deepEqual([...wide], [0x00, 0xc0, 0xa9, 0xc1]);
+});

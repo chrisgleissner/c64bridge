@@ -695,9 +695,15 @@ function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Ex
   }
   // In operand position, "<" and ">" are byte selectors and "*" is the current
   // PC; parseBinaryExpression consumes them as binary operators elsewhere.
+  // As in ACME, 64tass, DASM and Kick Assembler, "<" and ">" apply to the
+  // whole rest of the expression: "#>msg+1" is the high byte of msg+1.
+  if (token.kind === "punct" && (token.value === "<" || token.value === ">")) {
+    const operand = parseBinaryExpression(stream, terminators, 0);
+    return { type: "unary", op: token.value as UnaryOperator, operand };
+  }
   if (
     token.kind === "punct" &&
-    (token.value === "+" || token.value === "-" || token.value === "!" || token.value === "~" || token.value === "<" || token.value === ">")
+    (token.value === "+" || token.value === "-" || token.value === "!" || token.value === "~")
   ) {
     const operand = parseUnaryExpression(stream, terminators);
     return { type: "unary", op: token.value as UnaryOperator, operand };
