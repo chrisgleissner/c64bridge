@@ -451,3 +451,29 @@ test("legacy top-level fields never reach the other profile's endpoint", (t) => 
   assert.equal(config.ultimate.c64u.baseUrl, "http://127.0.0.1");
   assert.equal(config.ultimate.c64u.networkPassword, "pw");
 });
+
+test("a baseUrl-only endpoint keeps its https scheme and path prefix", (t) => {
+  const originalEnv = process.env.C64BRIDGE_CONFIG;
+  const created = [];
+  const load = (contents) => {
+    const temp = writeTempConfig(contents);
+    created.push(temp.dir);
+    process.env.C64BRIDGE_CONFIG = temp.file;
+    __resetConfigCacheForTests();
+    return loadConfig();
+  };
+  t.after(() => {
+    __resetConfigCacheForTests();
+    if (originalEnv === undefined) delete process.env.C64BRIDGE_CONFIG;
+    else process.env.C64BRIDGE_CONFIG = originalEnv;
+    for (const dir of created) rmSync(dir, { recursive: true, force: true });
+  });
+
+  assert.equal(load({ c64u: { baseUrl: "https://proxy.local:8443/c64u/" } }).ultimate.c64u.baseUrl, "https://proxy.local:8443/c64u");
+  const proxied = load({ c64u: { baseUrl: "https://proxy.local/c64u" } });
+  assert.equal(proxied.baseUrl, "https://proxy.local/c64u");
+  assert.equal(proxied.c64_port, 443);
+  // An explicit host still wins and builds a plain http URL, as documented.
+  assert.equal(load({ c64u: { host: "10.0.0.2", baseUrl: "https://proxy.local/c64u" } }).baseUrl, "http://10.0.0.2");
+  assert.equal(load({ c64u: { baseUrl: "http://10.0.0.3:8080" } }).baseUrl, "http://10.0.0.3:8080");
+});

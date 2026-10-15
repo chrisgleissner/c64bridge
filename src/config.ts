@@ -177,12 +177,19 @@ export function resolveUltimateEndpoint(
   ];
 
   const host = firstDefined(...hostCandidates) ?? DEFAULT_HOST;
-  const port = firstDefined(...portCandidates) ?? DEFAULT_PORT;
+  // When only a baseUrl names the endpoint, keep its scheme and path (for
+  // example https://proxy/c64u); an explicit host or port builds http://host:port.
+  const baseOnly = parsedBaseOverrides.find((entry) => entry.hostname !== undefined);
+  const explicitHostOrPort = firstDefined(...hostCandidates.slice(0, -parsedBaseOverrides.length)) !== undefined
+    || firstDefined(...portCandidates.slice(0, -parsedBaseOverrides.length)) !== undefined;
+  const keepBaseUrl = baseOnly?.fullUrl !== undefined && !explicitHostOrPort;
+  const defaultPort = keepBaseUrl && baseOnly!.fullUrl!.startsWith("https:") ? 443 : DEFAULT_PORT;
+  const port = firstDefined(...portCandidates) ?? defaultPort;
   const hostLabel = formatHost(host);
   return {
     host,
     port,
-    baseUrl: buildBaseUrl(host, port),
+    baseUrl: keepBaseUrl ? baseOnly!.fullUrl! : buildBaseUrl(host, port),
     c64_host: port === DEFAULT_PORT ? hostLabel : `${hostLabel}:${port}`,
     networkPassword: firstDefined(
       nonEmptyString(envPassword),
@@ -239,7 +246,7 @@ function normaliseBaseUrl(value?: string): string | undefined {
   return stripTrailingSlash(input);
 }
 
-function parseEndpoint(value?: string): { hostname?: string; port?: number; baseUrl?: string } {
+function parseEndpoint(value?: string): { hostname?: string; port?: number; baseUrl?: string; fullUrl?: string } {
   const input = configuredString(value);
   if (!input) return {};
   try {
@@ -248,7 +255,9 @@ function parseEndpoint(value?: string): { hostname?: string; port?: number; base
     const hostname = url.hostname || undefined;
     const port = url.port ? configuredPort(url.port) : undefined;
     const baseUrl = stripTrailingSlash(`${url.protocol}//${url.host}`);
-    return { hostname, port, baseUrl };
+    // Scheme and path prefix kept, for an Ultimate reached through a reverse proxy.
+    const fullUrl = stripTrailingSlash(`${url.protocol}//${url.host}${url.pathname}`);
+    return { hostname, port, baseUrl, fullUrl };
   } catch {
     return {};
   }
