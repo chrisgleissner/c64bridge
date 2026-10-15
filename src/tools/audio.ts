@@ -1104,13 +1104,17 @@ export const audioModule = defineToolModule({
             adsr: voice.adsr,
           }));
 
-          return textResult(message, {
+          // Warnings (for example a PRG that leaves no room for BASIC) go into the text that clients show.
+          const warningText = compiled.warnings.length > 0 ? `\nWarning: ${compiled.warnings.join("\nWarning: ")}` : "";
+          return textResult(`${message}${warningText}`, {
             success: true,
             ranOnC64,
             dryRun: parsed.dryRun,
             format: outputFormat,
             prgSize: compiled.prg.length,
             entryAddress: compiled.entryAddress,
+            basicFreeBytes: compiled.basicFreeBytes,
+            warnings: compiled.warnings,
             song: document.song,
             voices: voiceSummaries,
             runDetails,

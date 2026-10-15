@@ -614,6 +614,8 @@ export const tools: ToolDefinition[] = [
             entryAddress: compiled.entryAddress,
             prgBytes: compiled.prg.length,
             title: document.song?.title ?? null,
+            basicFreeBytes: compiled.basicFreeBytes,
+            warnings: compiled.warnings,
           },
           playback: {
             method: playbackMethod,

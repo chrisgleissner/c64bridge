@@ -891,3 +891,19 @@ test("sid_note_on and music_generate reject notes above the SID frequency range 
   assert.match(generated.content[0].text, /C8/);
   assert.equal(calls.length, 0);
 });
+
+test("music_compile_and_play shows compiler warnings and BASIC free memory", async () => {
+  const notes = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6"];
+  // Three voices of sixteenth notes for 200 bars make a PRG that ends past $A000.
+  const sidwave = {
+    sidwave: 1.0,
+    tempo: 120,
+    voices: [1, 2, 3].map((id) => ({ id, waveform: "triangle", patterns: { P: { length: 0.25, groove: notes.map((_, i) => notes[(i * (id + 2)) % 16]) } } })),
+    timeline: [{ bars: 200, layers: { v1: "P", v2: "P", v3: "P" } }],
+  };
+  const result = await audioModule.invoke("music_compile_and_play", { sidwave, output: "prg", dryRun: true }, { client: {}, logger: createLogger() });
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.match(result.content[0].text, /Warning: The PRG ends at \$[0-9A-F]+, past BASIC's memory/);
+  assert.equal(result.structuredContent?.data?.basicFreeBytes, 0);
+  assert.equal(result.structuredContent?.data?.warnings?.length, 1);
+});
