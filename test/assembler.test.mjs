@@ -410,8 +410,12 @@ ptr: .res 2
     rts
 buffer: .res 16
   `);
-  // Only the code is in the PRG: neither the zero-page variables nor the trailing buffer.
-  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x00, 0x85, 0xfb, 0x60]);
+  // The zero-page variables are not in the PRG; the buffer right after the code is, zero-filled.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x00, 0x85, 0xfb, 0x60, ...new Array(16).fill(0)]);
+
+  // A trailing counter is zero-initialised when the program loads, as in ca65 and DASM.
+  const counter = assemblyToPrg("* = $c000\n    inc counter\n    rts\ncounter: .res 1");
+  assert.deepEqual([...counter], [0x00, 0xc0, 0xee, 0x04, 0xc0, 0x60, 0x00]);
 
   // Reserved space between code is still part of the image, zero-filled.
   const gap = assemblyToPrg("* = $c000\n    nop\n    .res 2\n    rts");

@@ -930,6 +930,8 @@ class Assembler {
   private lowestWritten = MAX_ADDRESS;
   private highestWritten = 0;
   private firstInstructionAddress: number | undefined;
+  /** Reserved (.res) ranges from the last pass, as [start, end] inclusive. */
+  private reserved: Array<[number, number]> = [];
 
   constructor(private readonly lines: ParsedLine[], private readonly defaultLoadAddress: number) {
     this.symbolTable.reset();
@@ -944,6 +946,7 @@ class Assembler {
       this.highestWritten = 0;
       this.firstInstructionAddress = undefined;
     }
+    this.reserved = [];
     // Loading a PRG at $0801 makes BASIC relink the bytes there as program
     // lines, which corrupts raw machine code. Code that starts at $0801
     // without its own org therefore gets a "10 SYS" stub that jumps to the
@@ -988,8 +991,18 @@ class Assembler {
     if (this.lowestWritten > this.highestWritten) {
       return Buffer.alloc(0);
     }
-    const start = this.lowestWritten;
-    const end = this.highestWritten;
+    let start = this.lowestWritten;
+    let end = this.highestWritten;
+    // Reserved space that adjoins the emitted bytes (a trailing "counter: .res 1")
+    // is part of the image and zero-filled, as in ca65 and DASM; detached blocks
+    // such as zero-page variables are not, so they do not stretch the PRG.
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const [resStart, resEnd] of this.reserved) {
+        if (resStart === end + 1) { end = resEnd; changed = true; }
+        if (resEnd === start - 1) { start = resStart; changed = true; }
+      }
+    }
     const body = this.memory.subarray(start, end + 1);
     const header = Buffer.alloc(2);
     header.writeUInt16LE(start, 0);
@@ -1120,10 +1133,9 @@ class Assembler {
         if (amount < 0) {
           throw new AssemblyError("reserve directive requires a non-negative size", location);
         }
-        // Reserved space is uninitialised: it advances the PC without emitting
-        // bytes, so a variable block such as "* = $fb / ptr: .res 2" does not
-        // stretch the PRG down into zero page. Gaps between code are still
-        // zero-filled because the PRG covers the lowest to the highest emitted byte.
+        // Reserved space advances the PC without emitting; buildPrg includes it
+        // (zero-filled) only where it adjoins emitted bytes.
+        if (amount > 0) this.reserved.push([this.pc, Math.min(0xffff, this.pc + amount - 1)]);
         this.pc = (this.pc + amount) & 0xffff;
         break;
       }
