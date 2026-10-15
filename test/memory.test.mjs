@@ -1261,3 +1261,17 @@ test("save_memory surfaces filesystem write failures", async () => {
     fs.promises.writeFile = originalWriteFile;
   }
 });
+
+test("write with verify reports a failed pre-read with its cause", async () => {
+  const ctx = {
+    client: createMockClient({
+      async pause() { return { success: true }; },
+      async resume() { return { success: true }; },
+      async readMemory() { return { success: false, details: { message: "read refused" } }; },
+    }),
+    logger: createLogger(),
+  };
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AABB", verify: true }, ctx);
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /^C64 backend reported failure while reading memory: read refused$/);
+});

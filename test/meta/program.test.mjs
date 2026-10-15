@@ -856,3 +856,21 @@ test("batch_run_with_assertions reports an unsuccessful PRG launch as a failed r
   assert.equal(res.metadata?.success, false);
   assert.equal(res.structuredContent?.data?.summary?.passed, 0);
 });
+
+test("batch_run_with_assertions reports sid_silent as an error when the audio analysis has no levels", async () => {
+  const ctx = {
+    client: {
+      async runPrgFile() { return { success: true }; },
+      async recordAndAnalyzeAudio() { return { analysis: { global_metrics: {} } }; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [{ path: "/test.prg", assertions: [{ type: "sid_silent" }] }],
+    durationMs: 5,
+    resetDelayMs: 0,
+  }, ctx);
+  assert.equal(res.structuredContent?.data?.summary?.errors, 1);
+  assert.equal(res.structuredContent?.data?.summary?.passed, 0);
+});

@@ -446,3 +446,18 @@ test("render_bitmap surfaces image import failures as execution errors", async (
   assert.equal(result.isError, true);
   assert.equal(result.metadata.error.kind, "execution");
 });
+
+test("render_bitmap reports a display failure with its cause", async () => {
+  const { filePath, cleanup } = await writeSampleImage();
+  const ctx = {
+    client: { async displayBitmap() { return { success: false, details: { message: "dma refused" } }; } },
+    logger: createLogger(),
+  };
+  try {
+    const result = await graphicsModule.invoke("render_bitmap", { imagePath: filePath, format: "hires" }, ctx);
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /^C64 backend reported failure while displaying bitmap image: dma refused$/);
+  } finally {
+    cleanup();
+  }
+});
