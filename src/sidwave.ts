@@ -287,7 +287,8 @@ function validatePatternFx(raw: unknown, path: string): void {
   if (fx.vibrato !== undefined) {
     const v = requireObject(fx.vibrato, `${path}.vibrato`, ["depth", "rate", "delay"]);
     requireNumber(v.depth, `${path}.vibrato.depth`, { min: 0.03, max: 6 });
-    requireNumber(v.rate, `${path}.vibrato.rate`, { min: 0.2, max: 25 });
+    // At about 50 player calls per second, faster rates sample too few points per cycle (25 Hz lands on zero crossings).
+    requireNumber(v.rate, `${path}.vibrato.rate`, { min: 0.2, max: 12 });
     if (v.delay !== undefined) requireNumber(v.delay, `${path}.vibrato.delay`, { min: 0, max: 255, integer: true });
   }
   if (fx.pwm_sweep !== undefined) {

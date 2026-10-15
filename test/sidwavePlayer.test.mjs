@@ -12,7 +12,7 @@ import {
   sidwaveFrameRate,
   SIDWAVE_HARD_RESTART_FRAMES,
 } from "../src/sidwaveCompiler.js";
-import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
+import { midiToHz, noteNameToMidi, parseSidwave, SidwaveValidationError } from "../src/sidwave.js";
 
 // ---------------------------------------------------------------------------
 // Minimal NMOS 6502 (official opcodes; decimal mode is not used by the player)
@@ -175,7 +175,7 @@ function runPsid(sid, frames) {
   const cpu = new Cpu(mem, {
     write(a, v) {
       if (a >= 0xd400 && a <= 0xd418) regs[a - 0xd400] = v;
-      else if (!(a < 0x0200 || (a >= load && a < end))) strayWrites.push(a);
+      else if (!(a === 0x01 || (a >= 0xfb && a <= 0xfe) || (a >= 0x0100 && a < 0x0200) || (a >= load && a < end))) strayWrites.push(a);
     },
   });
   cpu.call(init, 0);
@@ -589,8 +589,8 @@ test("SIDWAVE player stays inside its memory and the frame budget", () => {
   assert.ok(compiled.endAddress <= 0xd000);
   const run = runPsid(sid, 3000);
   assert.deepEqual(run.strayWrites, [], "no writes outside zero page/stack, the player image and the SID");
-  // A PAL frame has 19,656 cycles (312 lines x 63); the spec example needs about 3,400 (54 raster lines).
-  assert.ok(run.maxPlayCycles < 4000, `play routine took up to ${run.maxPlayCycles} cycles`);
+  // A PAL frame has 19,656 cycles (312 lines x 63); the spec example needs about 4,100 (65 raster lines).
+  assert.ok(run.maxPlayCycles < 4500, `play routine took up to ${run.maxPlayCycles} cycles`);
   assert.equal(run.mem[0xfb], 0, "zero-page pointer restored");
 });
 
@@ -605,13 +605,18 @@ test("SIDWAVE note range: C0..A#7 on PAL, B7 only on NTSC", () => {
   assert.throws(() => compile(doc({ voices: `  - id: 1\n    patterns: { A: { groove: [G7], transpositions: [12] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` })), /G8 \(after transposition \+12\)/);
 });
 
-test("SIDWAVE tempo extremes: 220 BPM sixteenths still retrigger; notes shorter than 2 frames are rejected", () => {
+test("SIDWAVE tempo extremes: 220 BPM sixteenths still retrigger; notes shorter than 3 frames are rejected", () => {
   const fast = doc({ tempo: 220, voices: `  - id: 1\n    patterns: { A: { groove: [C4, D4], length: 0.25 } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
   const { compiled, sid } = compile(fast);
-  const ons = gateOns(voice(runPsid(sid, compiled.totalFrames).states, 0));
+  const fastV = voice(runPsid(sid, compiled.totalFrames).states, 0);
+  const ons = gateOns(fastV);
   assert.equal(ons.length, 16);
+  // Every note sounds with the gate on for at least one frame before its hard restart.
+  for (const o of ons) assert.equal(fastV.ctrl[o.frame] & 1, 1);
   const tooFast = fast.replace("length: 0.25", "length: 0.125");
-  assert.throws(() => compile(tooFast), /at least 2 frames per note/);
+  assert.throws(() => compile(tooFast), /at least 3 frames per note \(one sounding frame plus the 2-frame hard restart\)/);
+  // 0.2 beats at 220 BPM is 2.73 frames: some entries would get 2 frames, leaving no sounding frame after the hard restart.
+  assert.throws(() => compile(fast.replace("length: 0.25", "length: 0.2")), /at least 3 frames per note/);
   const slow = doc({ tempo: 30, voices: `  - id: 1\n    patterns: { A: { groove: [C4] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
   const slowRun = compile(slow);
   assert.equal(slowRun.compiled.totalFrames, at(4, 30));
@@ -629,7 +634,7 @@ test("SIDWAVE size limit: a long sparse song fits, an over-long dense song fails
     voices: [1, 2, 3].map((id) => `  - id: ${id}\n    patterns: { A: { groove: [C4, E4, G4, B4], length: 0.25 } }`).join("\n"),
     timeline: `  - { bars: 400, layers: { v1: A, v2: A, v3: A } }`,
   });
-  assert.throws(() => compile(dense), /past the \$D000 limit; shorten the timeline/);
+  assert.throws(() => compile(dense), /past the \$D000 limit \(about 50 KB\); shorten the timeline/);
 });
 
 test("SIDWAVE legacy song: block compiles to the same player as the top-level format", () => {
@@ -713,7 +718,136 @@ test("SIDWAVE player worst case: three voices with arpeggio, vibrato, slide, PWM
   const { sid, compiled } = compile(source);
   const run = runPsid(sid, compiled.totalFrames + 20);
   assert.deepEqual(run.strayWrites, []);
-  // Starting three notes with every effect in one frame is the most expensive case (about 7,800 cycles,
-  // dominated by the multiplications for vibrato and slide); it must stay below half an NTSC frame (17,095 cycles).
-  assert.ok(run.maxPlayCycles < 17_095 / 2, `play routine took up to ${run.maxPlayCycles} cycles`);
+  // Starting three notes with every effect in one frame is the most expensive case (about 9,800 cycles,
+  // half a PAL frame, mostly the vibrato and slide arithmetic); it must stay below 60% of an NTSC frame (17,095 cycles).
+  assert.ok(run.maxPlayCycles < 17_095 * 0.6, `play routine took up to ${run.maxPlayCycles} cycles`);
+});
+
+// ---------------------------------------------------------------------------
+// Review fixes: effect ranges, ties across sections, size and BASIC limits
+
+const cutoffOf = (s) => (s[0x16] << 3) | (s[0x15] & 7);
+const centsOf = (freq, note) => 1200 * Math.log2(freq / sidFreq(note));
+
+test("SIDWAVE filter_mod sweeps beyond ±1023 ramp smoothly and clamp to 0..2047", () => {
+  for (const [sweep, end, mid] of [["+1500", 2047, 1774], ["-1500", 0, 274], ["+2047", 2047, null], ["-2047", 0, null], ["+800", 1824, 1424]]) {
+    const source = doc({
+      voices: `  - id: 1\n    waveform: sawtooth\n    patterns:\n      A: { groove: [C3], length: 4, fx: { filter_mod: { sweep: "${sweep} over 4 beats" } } }`,
+      timeline: `  - { bars: 1, layers: { v1: A } }`,
+    });
+    const cutoff = runPsid(compile(source).sid, at(4)).states.map(cutoffOf);
+    assert.equal(cutoff[0], 1024, "default base cutoff");
+    const up = sweep.startsWith("+");
+    for (let f = 1; f < cutoff.length; f += 1) {
+      assert.ok(up ? cutoff[f] >= cutoff[f - 1] : cutoff[f] <= cutoff[f - 1], `${sweep}: frame ${f} moves ${cutoff[f - 1]} -> ${cutoff[f]}`);
+    }
+    if (mid !== null) assert.ok(Math.abs(cutoff[50] - mid) <= 2, `${sweep}: half-way ${cutoff[50]}, expected ${mid}`);
+    assert.ok(Math.abs(cutoff[at(4) - 1] - end) <= 9, `${sweep}: ends at ${cutoff[at(4) - 1]}, expected ${end}`);
+  }
+});
+
+test("SIDWAVE slide: depths up to ±24 semitones and speeds up to 255 frames glide linearly from the right start pitch", () => {
+  for (const [note, depth] of [["E5", -24], ["G5", -24], ["F5", 24], ["F7", 24], ["C2", 12], ["A4", -12]]) {
+    for (const speed of [1, 3, 40, 100, 200, 255]) {
+      const source = doc({
+        voices: `  - id: 1\n    waveform: triangle\n    patterns:\n      A: { groove: [${note}], length: 12, fx: { slide: { depth: ${depth}, speed: ${speed} } } }`,
+        timeline: `  - { bars: 3, layers: { v1: A } }`,
+      });
+      const freq = voice(runPsid(compile(source).sid, speed + 2).states, 0).freq;
+      const target = sidFreq(note);
+      const start = hzToSidFrequency(midiToHz(noteNameToMidi(note) - depth), "PAL");
+      const label = `${note} depth ${depth} speed ${speed}`;
+      assert.equal(freq[0], start, `${label}: starts ${depth} semitones away`);
+      for (let k = 1; k < speed; k += 1) {
+        const expected = start + ((target - start) * k) / speed;
+        assert.ok(Math.abs(freq[k] - expected) <= 1 + 0.002 * Math.abs(target - start), `${label}: frame ${k} is ${freq[k]}, expected ${expected.toFixed(1)}`);
+      }
+      assert.equal(freq[speed], target, `${label}: reaches the note after ${speed} frames`);
+      assert.equal(freq[speed + 1], target);
+    }
+  }
+  const outOfRange = doc({ voices: `  - id: 1\n    patterns: { A: { groove: [F7], fx: { slide: { depth: -24, speed: 3 } } } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
+  assert.throws(() => compile(outOfRange), /slide into F7 would start at F9, outside the playable range C0..A#7 on PAL/);
+});
+
+test("SIDWAVE vibrato swings ±depth semitones symmetrically up to the maximum depth; rates above 12 Hz are rejected", () => {
+  for (const depth of [0.1, 0.5, 2, 4, 6]) {
+    // 1.566 Hz is a phase step of 8 per frame, so the triangle's peaks fall exactly on frames.
+    const source = doc({
+      voices: `  - id: 1\n    waveform: sawtooth\n    patterns:\n      A: { groove: [A4], length: 4, fx: { vibrato: { depth: ${depth}, rate: 1.566 } } }`,
+      timeline: `  - { bars: 1, layers: { v1: A } }`,
+    });
+    const cents = voice(runPsid(compile(source).sid, 98).states, 0).freq.slice(0, 97).map((f) => centsOf(f, "A4"));
+    assert.ok(Math.abs(Math.max(...cents) - depth * 100) <= 2.5, `depth ${depth}: peak ${Math.max(...cents).toFixed(1)} cents`);
+    assert.ok(Math.abs(Math.min(...cents) + depth * 100) <= 2.5, `depth ${depth}: trough ${Math.min(...cents).toFixed(1)} cents`);
+  }
+  const fast = doc({ voices: `  - id: 1\n    patterns: { A: { groove: [A4], fx: { vibrato: { depth: 0.5, rate: 13 } } } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
+  assert.throws(() => compile(fast), /vibrato\.rate: 13 is above the maximum 12/);
+});
+
+test("SIDWAVE: songs larger than 64 KB fail with the same validation error as songs just over the limit", () => {
+  for (const bars of [400, 600, 2000]) {
+    const dense = doc({
+      voices: [1, 2, 3].map((id) => `  - id: ${id}\n    patterns: { A: { groove: [C4, E4, G4, B4], length: 0.25 } }`).join("\n"),
+      timeline: `  - { bars: ${bars}, layers: { v1: A, v2: A, v3: A } }`,
+    });
+    assert.throws(() => compile(dense), (error) => error instanceof SidwaveValidationError && /past the \$D000 limit/.test(error.message), `${bars} bars`);
+  }
+});
+
+test("SIDWAVE: a tie at the start of a section holds the note from the previous section", () => {
+  const source = doc({
+    voices: `  - id: 1
+    waveform: triangle
+    patterns:
+      A: { groove: [C4, "~", "~", E4] }
+      B: { groove: ["~", "~", G4, "~"] }`,
+    timeline: `  - { bars: 1, layers: { v1: A } }
+  - { bars: 1, layers: { v1: B } }`,
+  });
+  const v = voice(runPsid(compile(source).sid, at(8)).states, 0);
+  assert.deepEqual(gateOns(v).map((o) => [o.frame, o.freq]), [[0, sidFreq("C4")], [at(3), sidFreq("E4")], [at(6), sidFreq("G4")]]);
+  for (let f = at(3); f < at(6) - 2; f += 1) {
+    assert.equal(v.ctrl[f] & 1, 1, `E4 is held across the section boundary (frame ${f})`);
+    assert.equal(v.freq[f], sidFreq("E4"));
+  }
+});
+
+test("SIDWAVE: the filter_env sweep restarts with the song, so every pass is identical", () => {
+  const source = doc({
+    extra: `global_fx:\n  filter_env: { cutoff_base: 1500, sweep: -700, speed: 3 }\n`,
+    voices: `  - id: 1\n    waveform: sawtooth\n    patterns: { A: { groove: [C3], length: 4 } }`,
+    timeline: `  - { bars: 1, layers: { v1: A } }`,
+  });
+  const { compiled, sid } = compile(source);
+  const total = compiled.totalFrames;
+  const cutoff = runPsid(sid, 2 * total).states.map(cutoffOf);
+  assert.equal(cutoff[total], 1500);
+  for (let f = 0; f < total; f += 1) assert.equal(cutoff[f + total], cutoff[f], `frame ${f} of the second pass`);
+});
+
+test("SIDWAVE PRG keeps BASIC usable: program and variables move behind the player", () => {
+  const { compiled } = compile(SCALE);
+  const mem = new Uint8Array(65536);
+  mem.set(compiled.prg.subarray(2), 0x0801);
+  mem.fill(0xaa, compiled.endAddress, compiled.endAddress + 3);
+  mem[0xea31] = 0x60;
+  let raster = 0;
+  const cpu = new Cpu(mem, { read(a) { return a === 0xd012 ? (raster = (raster + 1) % 312) & 0xff : undefined; } });
+  cpu.call(compiled.entryAddress);
+  const word = (a) => mem[a] | (mem[a + 1] << 8);
+  const end = compiled.endAddress;
+  assert.equal(word(0x2b), end + 1, "start of BASIC (TXTTAB) is behind the player");
+  for (const ptr of [0x2d, 0x2f, 0x31]) assert.equal(word(ptr), end + 3, `VARTAB/ARYTAB/STREND at $${ptr.toString(16)}`);
+  assert.deepEqual(Array.from(mem.subarray(end, end + 3)), [0, 0, 0], "an empty BASIC program behind the player");
+  assert.equal(compiled.basicFreeBytes, 0xa000 - (end + 3));
+  assert.deepEqual(compiled.warnings, []);
+
+  const large = compile(doc({
+    voices: [1, 2, 3].map((id) => `  - id: ${id}\n    patterns: { A: { groove: [C4, E4, G4, B4], length: 0.25 } }`).join("\n"),
+    timeline: `  - { bars: 210, layers: { v1: A, v2: A, v3: A } }`,
+  })).compiled;
+  assert.ok(large.endAddress > 0xa000, `end $${large.endAddress.toString(16)}`);
+  assert.equal(large.basicFreeBytes, 0);
+  assert.match(large.warnings.join(" "), /past BASIC's memory \(\$A000\).*OUT OF MEMORY/);
 });

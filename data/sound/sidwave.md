@@ -120,7 +120,7 @@ Time is 4/4: a bar has four beats. The player runs once per video frame of a rea
 
 Every pattern is a list of **entries**. Each entry lasts `length` beats (default 1; fractions allowed, e.g. `0.25` for sixteenth notes). The pattern repeats until its section ends; a note that would run past the section end is cut there.
 
-- **groove** — `groove: [C2, "-", C2, "~", G1]`: one note per entry. `-` (or `.`) is a rest, `~` ties the entry to the previous note (no retrigger).
+- **groove** — `groove: [C2, "-", C2, "~", G1]`: one note per entry. `-` (or `.`) is a rest, `~` ties the entry to the previous note (no retrigger). A tie holds whatever note is sounding right before it, also across a section boundary (a section that starts with `~` continues the last note of the previous section). After a rest, or at the very start of the song, a tie is a rest.
 - **arpeggio** — `type: arpeggio`, `notes: [...]`. Without `frame_rate`, the notes are played one per entry (a broken chord). With `frame_rate: N`, all notes form one entry that sounds as a fast chord arpeggio, switching to the next chord tone every N frames (`frame_rate: 1` = one tone per frame, about 50 per second on PAL); each entry retriggers the chord.
 - **motif** — `motif: "..."` with tokens separated by spaces or commas:
   - note names (`C4`, `Eb3`, `F#2`),
@@ -137,10 +137,10 @@ Notes range from C0 to B7. At the PAL clock B7 exceeds the SID's 16-bit frequenc
 
 | Effect | Fields | Behaviour |
 | --- | --- | --- |
-| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–25), `delay` (frames, optional) | Triangle pitch modulation of ±`depth` semitones around the note, starting `delay` frames after the note. |
+| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth`), starting `delay` frames after the note. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
 | `pwm_sweep` | `depth` (fraction ≤ 1 or 12-bit units), `speed` (cycles per second) | Pulse width moves linearly between `pulse_width − depth` and `pulse_width + depth`, restarting at the base on each note. Pulse waveform only. |
-| `slide` | `depth` (semitones, ±24, non-zero), `speed` (frames) | Each note starts `depth` semitones below the target (above when negative) and glides to it in `speed` frames. |
-| `filter_mod` | `sweep: "+500 over 8 steps"` (units: `steps`, `beats`, `bars`, `frames`; a step is one entry), or `{ sweep: 500, beats: 8 }` | Routes the voice through the filter while the pattern plays. At each repetition of the pattern the cutoff offset restarts at 0 and ramps to `sweep` (cutoff units, −2047..2047) over the given time, then holds. The offset is removed when the section ends. |
+| `slide` | `depth` (semitones, ±24, non-zero), `speed` (frames, 1–255) | Each note starts `depth` semitones below the target (above when negative) and glides to it linearly in frequency, arriving after `speed` frames. The start note must itself be playable (C0..A#7 on PAL, C0..B7 on NTSC); otherwise the document is rejected. |
+| `filter_mod` | `sweep: "+500 over 8 steps"` (units: `steps`, `beats`, `bars`, `frames`; a step is one entry), or `{ sweep: 500, beats: 8 }` | Routes the voice through the filter while the pattern plays. At each repetition of the pattern the cutoff offset restarts at 0 and ramps to `sweep` (cutoff units, −2047..2047) over the given time, then holds. The resulting cutoff is clamped to 0..2047. The offset is removed when the section ends. |
 
 ## Timeline
 
@@ -156,7 +156,7 @@ Fading lowers the voice's sustain level linearly to 0 across the section. When e
 
 | Effect | Fields | Behaviour |
 | --- | --- | --- |
-| `filter_env` | `cutoff_base` (0–2047), `sweep` (±2047), `speed` (beats per one-way sweep), `resonance` (0–15, default 8), `type` (`lowpass` default, `bandpass`, `highpass`), `voices` (default all) | Enables the SID filter for the listed voices. The cutoff moves back and forth between `cutoff_base` and `cutoff_base + sweep`, each direction taking `speed` beats. Without `sweep`/`speed` the cutoff stays at `cutoff_base`. `filter_mod` offsets are added on top. |
+| `filter_env` | `cutoff_base` (0–2047), `sweep` (±2047), `speed` (beats per one-way sweep), `resonance` (0–15, default 8), `type` (`lowpass` default, `bandpass`, `highpass`), `voices` (default all) | Enables the SID filter for the listed voices. The cutoff moves back and forth between `cutoff_base` and `cutoff_base + sweep`, each direction taking `speed` beats. Without `sweep`/`speed` the cutoff stays at `cutoff_base`. The sweep restarts from `cutoff_base` each time the song loops, so every pass sounds the same. `filter_mod` offsets are added on top. |
 | `reverb_sim` | `depth` (0 < x ≤ 1), `delay_frames` (1–50) | In sections that leave a voice free, the lowest free voice echoes the lowest sounding voice `delay_frames` later, with its sustain level scaled by `depth`. The SID has no per-voice volume, so the echo's attack peak is as loud as the original; only the sustained part is quieter. Sections that use all three voices have no echo. |
 
 Without `filter_env`, a `filter_mod` uses a low-pass filter with cutoff 1024 and resonance 8 as its base. The SID has a single filter, so all routed voices share it; when several patterns with `filter_mod` start at once, the most recent start sets the ramp.
@@ -167,16 +167,18 @@ Without `filter_env`, a `filter_mod` uses a low-pass filter with cutoff 1024 and
 
 The compiler arranges the timeline into per-voice note events and encodes them as compact command streams (note, instrument, wait, gate-off, hard restart, sustain, volume, filter ramp, loop). A 6502 player reads these streams once per video frame and computes per-frame effects itself.
 
-- **Hard restart:** two frames before every new note the voice's gate is released and its ADSR is set to zero, so each note starts a fresh envelope (this avoids the SID's ADSR delay bug). A note therefore sounds with the gate on until two frames before the next note; it must last at least 2 frames, which limits very short entries at fast tempos.
+- **Hard restart:** two frames before every new note the voice's gate is released and its ADSR is set to zero, so each note starts a fresh envelope (this avoids the SID's ADSR delay bug). A note therefore sounds with the gate on until two frames before the next note, so every note needs at least 3 frames (one sounding frame plus the hard restart). Entries shorter than 3 frames are rejected, which limits very short entries at fast tempos (for example 1/16 notes are fine at 220 BPM, 1/32 notes are not). A note that is cut to fewer than 3 frames by the end of a section is dropped.
 - **Gate:** a rest releases the gate at its start, so the note decays with its release rate.
 - **Instruments:** each voice/pattern/effect combination becomes an instrument with its own ADSR, waveform, pulse settings, vibrato, arpeggio table, slide and filter routing (up to 63).
-- **Memory:** the program loads at $0801 and must end below $D000 (about 50 KB). Very long, dense songs are rejected with an error rather than truncated.
-- **CPU time:** typical songs take 20–55 raster lines per frame (about 1,400–3,400 cycles). The worst case, all three voices starting notes with vibrato, slide, arpeggio, pulse sweep and filter ramp in the same frame, takes about 7,800 cycles (124 raster lines, 40 % of a PAL frame), mostly for the multiplications that scale vibrato and slide to each note's pitch.
+- **Memory:** the program loads at $0801 and must end below $D000 (about 50 KB). Very long, dense songs are rejected with a validation error rather than truncated. The player uses zero-page bytes $FB/$FC and restores them after every call.
+- **CPU time:** typical songs take 20–65 raster lines per frame (about 1,400–4,100 cycles). The worst case, all three voices starting notes with vibrato, slide, arpeggio, pulse sweep and filter ramp in the same frame, takes about 9,800 cycles (155 raster lines, half a PAL frame), mostly for the arithmetic that scales vibrato and slide to each note's pitch (an 8×8 multiply from a 1 KB table of squares).
 
 ### Output formats
 
 - **PSID (`output: sid`):** PSID v2 with init at $0810, play at $0813, vertical-blank timing, and the PAL or NTSC clock flag from `mode`. The SID model is left unspecified.
-- **PRG (`output: prg`):** `10 SYS2061`. The program detects whether the machine is PAL or NTSC, programs the CIA timer for the song's frame rate on that clock, installs an IRQ handler, and returns to BASIC while the music plays. Pitch and tempo are therefore correct on either machine type.
+- **PRG (`output: prg`):** `10 SYS2061`. The program detects whether the machine is PAL or NTSC, programs CIA 1 timer A for the song's frame rate on that clock, installs an IRQ handler, and returns to BASIC while the music plays. Pitch and tempo are therefore correct on either machine type.
+  - Before returning, it moves the start of BASIC and the variable area behind the player (like `NEW` with a raised start of BASIC), so direct-mode commands, variables and new program lines work without touching the player. The compile result reports `basicFreeBytes`. A song whose PRG ends at or above $A000 leaves no BASIC memory: BASIC commands that need memory then fail with `?OUT OF MEMORY` while the music keeps playing, and the compile result carries a warning.
+  - Because the KERNAL's IRQ (keyboard scan, cursor blink, jiffy clock) now runs at the song's frame rate instead of 60 Hz, `TI`/`TI$` runs about 16.5 % slow for a PAL song (0.3 % for NTSC), and key repeat and cursor blink slow down accordingly while the music plays.
 
 ### Not supported
 

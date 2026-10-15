@@ -32,6 +32,10 @@ export const SIDWAVE_LOAD_ADDRESS = 0x0801;
 export const SIDWAVE_MEMORY_END = 0xd000;
 /** Frames of gate-off with zeroed ADSR before every new note (hard restart). */
 export const SIDWAVE_HARD_RESTART_FRAMES = 2;
+/** Shortest note: one frame with the gate on plus the hard restart before the next note. */
+export const SIDWAVE_MIN_NOTE_FRAMES = SIDWAVE_HARD_RESTART_FRAMES + 1;
+/** BASIC's memory ends where the BASIC ROM starts. */
+export const SIDWAVE_BASIC_END = 0xa000;
 
 export interface CompileResult {
   prg: Buffer;
@@ -48,6 +52,10 @@ export interface CompileResult {
   instrumentCount: number;
   /** Per-voice command stream sizes in bytes. */
   streamBytes: [number, number, number];
+  /** Bytes of BASIC memory left after the standalone PRG returns to BASIC (program and variables live behind the player). */
+  basicFreeBytes: number;
+  /** Conditions the caller should pass on, such as a PRG that leaves no BASIC memory. */
+  warnings: string[];
 }
 
 /**
@@ -61,18 +69,38 @@ export interface CompileResult {
 export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
   const arrangement = arrangeSidwave(doc);
   const streams = arrangement.voices.map((v) => encodeVoiceStream(v.events, arrangement.totalFrames));
+  // Check the size before assembling the streams: the player and its tables are assembled once with
+  // empty streams, which gives the exact start of the stream data. Songs larger than 64 KB would
+  // otherwise wrap the address counter inside the assembler.
+  const layout = assemblyToPrgDetailed(buildPlayerAsm(arrangement, [[OP.LOOP], [OP.LOOP], [OP.LOOP]]), {
+    fileName: "sidwave_player.asm",
+    loadAddress: SIDWAVE_LOAD_ADDRESS,
+  });
+  const streamStart = layout.symbols.get("stream0")!;
+  const projectedEnd = streamStart + streams.reduce((sum, st) => sum + st.length, 0);
+  // The PRG installer also writes three bytes after the program (an empty BASIC program).
+  if (projectedEnd + 3 > SIDWAVE_MEMORY_END) {
+    const kb = ((projectedEnd - SIDWAVE_LOAD_ADDRESS) / 1024).toFixed(1);
+    throw new SidwaveValidationError(
+      "$.timeline",
+      `the compiled song needs ${kb} KB and would end at $${projectedEnd.toString(16).toUpperCase()}, past the $D000 limit (about 50 KB); shorten the timeline or use longer note lengths`,
+    );
+  }
   const asm = buildPlayerAsm(arrangement, streams);
   const assembled = assemblyToPrgDetailed(asm, { fileName: "sidwave_player.asm", loadAddress: SIDWAVE_LOAD_ADDRESS });
   const prg = assembled.prg;
   const endAddress = SIDWAVE_LOAD_ADDRESS + prg.length - 2;
-  for (const [label, expected] of [["install", SIDWAVE_PRG_ENTRY], ["init_vec", SIDWAVE_INIT_ADDRESS], ["play_vec", SIDWAVE_PLAY_ADDRESS]] as const) {
+  for (const [label, expected] of [["install", SIDWAVE_PRG_ENTRY], ["init_vec", SIDWAVE_INIT_ADDRESS], ["play_vec", SIDWAVE_PLAY_ADDRESS], ["prg_end", endAddress]] as const) {
     if (assembled.symbols.get(label) !== expected) throw new Error(`SIDWAVE player layout error: ${label} is not at $${expected.toString(16)}`);
   }
-  if (endAddress > SIDWAVE_MEMORY_END) {
-    const kb = ((endAddress - SIDWAVE_LOAD_ADDRESS) / 1024).toFixed(1);
-    throw new SidwaveValidationError(
-      "$.timeline",
-      `the compiled song needs ${kb} KB and ends at $${endAddress.toString(16).toUpperCase()}, past the $D000 limit; shorten the timeline or use longer note lengths`,
+  // After the PRG's SYS returns, BASIC's program and variables start right behind the player.
+  const basicFreeBytes = Math.max(0, SIDWAVE_BASIC_END - (endAddress + 3));
+  const warnings: string[] = [];
+  if (basicFreeBytes < 1024) {
+    warnings.push(
+      basicFreeBytes === 0
+        ? `The PRG ends at $${endAddress.toString(16).toUpperCase()}, past BASIC's memory ($A000): after it returns to BASIC, any BASIC command that needs memory fails with ?OUT OF MEMORY. The music keeps playing.`
+        : `The PRG leaves only ${basicFreeBytes} bytes of BASIC memory after it returns to BASIC.`,
     );
   }
   return {
@@ -86,6 +114,8 @@ export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
     framesPerSecond: arrangement.fps,
     instrumentCount: arrangement.instruments.length - 1,
     streamBytes: streams.map((s) => s.length) as [number, number, number],
+    basicFreeBytes,
+    warnings,
   };
 }
 
@@ -164,13 +194,19 @@ export interface Instrument {
   pwStep: number;
   pwMin: number;
   pwMax: number;
-  vibDepth: number; // 1/32 semitone
+  /**
+   * Vibrato amplitude factors as mantissa/shift pairs: amplitude = ft[note] * mant >> (8 + shift), with the factor
+   * 2^(d/12) - 1 above the note and 1 - 2^(-d/12) below it, so the pitch swings exactly ±depth semitones.
+   */
+  vibUp: [number, number];
+  vibDown: [number, number];
   vibRate: number; // phase increment per frame (256 = one cycle)
   vibDelay: number;
   arp: number[]; // semitone offsets; empty = none
   arpSpeed: number;
   slideSemis: number;
   slideSpeed: number;
+  /** round(65536 / speed): the player's per-frame slide step is magnitude x slideRecip / 256 (16.8 fixed point). */
   slideRecip: number;
   filter: number;
 }
@@ -216,7 +252,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   const totalFrames = frameAt(totalBars * 4);
 
   // Instrument 0 is a neutral placeholder: voices that have not played a note yet use it, so they are not routed to the filter.
-  const instruments: Instrument[] = [{ ad: 0, sr: 0, wave: 0, pw: 0, pwStep: 0, pwMin: 0, pwMax: 0, vibDepth: 0, vibRate: 0, vibDelay: 0, arp: [], arpSpeed: 0, slideSemis: 0, slideSpeed: 0, slideRecip: 0, filter: 0 }];
+  const instruments: Instrument[] = [{ ad: 0, sr: 0, wave: 0, pw: 0, pwStep: 0, pwMin: 0, pwMax: 0, vibUp: [0, 0], vibDown: [0, 0], vibRate: 0, vibDelay: 0, arp: [], arpSpeed: 0, slideSemis: 0, slideSpeed: 0, slideRecip: 0, filter: 0 }];
   const instKeys = new Map<string, number>();
   const instIndex = (inst: Instrument): number => {
     const key = JSON.stringify(inst);
@@ -279,7 +315,6 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
       const transpositions = pattern.transpositions ?? [0];
       const cycleBeats = entries.length * lengthBeats;
       const out = notes[id - 1]!;
-      const firstInSection = out.length;
       for (let c = 0; ; c += 1) {
         const cycleStart = sec.startBeat + c * cycleBeats;
         if (cycleStart >= sec.endBeat - BEAT_EPS) break;
@@ -287,7 +322,8 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
         if (filterMod) {
           const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: 4 * framesPerBeat, frames: 1 }[filterMod.unit];
           const count = Math.max(1, Math.min(0xffff, Math.round(filterMod.amount * unitFrames)));
-          const step = Math.max(-0x7fff, Math.min(0x7fff, Math.round((filterMod.sweep * 32) / count)));
+          // Offset and step are in cutoff x 32 units and signed 24-bit in the player, so the full ±2047 range ramps smoothly.
+          const step = Math.round((filterMod.sweep * 32) / count);
           globals.push({ frame: frameAt(cycleStart), kind: "filtermod", step, count });
         }
         for (let k = 0; k < entries.length; k += 1) {
@@ -299,15 +335,16 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
           const entry = entries[k]!;
           if (entry.kind === "rest") continue;
           if (entry.kind === "tie") {
+            // A tie holds the note sounding right before it, also across a section boundary; after a rest it is a rest.
             const last = out[out.length - 1];
-            if (out.length > firstInSection && last && last.end === f0) last.end = f1;
+            if (last && last.end === f0) last.end = f1;
             continue;
           }
-          if (f1 - f0 < 2) {
+          if (f1 - f0 < SIDWAVE_MIN_NOTE_FRAMES) {
             if (truncated) continue;
             throw new SidwaveValidationError(
               patPath,
-              `each entry lasts ${(lengthBeats * framesPerBeat).toFixed(2)} frames at ${doc.song.tempo} BPM; the player needs at least 2 frames per note (raise 'length' or lower the tempo)`,
+              `each entry lasts ${(lengthBeats * framesPerBeat).toFixed(2)} frames at ${doc.song.tempo} BPM; the player needs at least ${SIDWAVE_MIN_NOTE_FRAMES} frames per note (one sounding frame plus the ${SIDWAVE_HARD_RESTART_FRAMES}-frame hard restart); raise 'length' or lower the tempo`,
             );
           }
           const base = entry.notes[0]! + tr;
@@ -320,6 +357,13 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
                 `note ${midiToNoteName(midi)} (after transposition ${tr >= 0 ? "+" : ""}${tr}) is outside the playable range C0..${midiToNoteName(maxMidi)} on ${system}`,
               );
             }
+          }
+          const slideDepth = fxRaw.slide ? Number(fxRaw.slide.depth) : 0;
+          if (slideDepth !== 0 && (base - slideDepth < 12 || base - slideDepth > maxMidi)) {
+            throw new SidwaveValidationError(
+              `${patPath}.fx.slide.depth`,
+              `the slide into ${midiToNoteName(base)} would start at ${midiToNoteName(base - slideDepth)}, outside the playable range C0..${midiToNoteName(maxMidi)} on ${system}`,
+            );
           }
           const inst = buildInstrument(voice, fxRaw, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps);
           out.push({ start: f0, end: f1, midi: base, inst: instIndex(inst) });
@@ -346,7 +390,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
         if (n.start < sf || n.start >= ef) continue;
         const start = n.start + delay;
         const end = Math.min(n.end + delay, ef);
-        if (end - start < 2) continue;
+        if (end - start < SIDWAVE_MIN_NOTE_FRAMES) continue;
         const srcInst = instruments[n.inst]!;
         const sustain = Math.round((srcInst.sr >> 4) * reverb.depth);
         const echo: Instrument = { ...srcInst, sr: (sustain << 4) | (srcInst.sr & 0x0f) };
@@ -429,6 +473,9 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
   }
   const vib = fx.vibrato;
   const slide = fx.slide;
+  const depth = vib ? Number(vib.depth) : 0;
+  const slideSpeed = slide ? Number(slide.speed) : 0;
+  const slideRecip = slideSpeed > 1 ? Math.round(65536 / slideSpeed) : 0;
   return {
     ad: ((adsr[0] & 0xf) << 4) | (adsr[1] & 0xf),
     sr: ((adsr[2] & 0xf) << 4) | (adsr[3] & 0xf),
@@ -437,16 +484,25 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
     pwStep,
     pwMin,
     pwMax,
-    vibDepth: vib ? Math.max(1, Math.min(192, Math.round(Number(vib.depth) * 32))) : 0,
+    // The player's triangle peaks at 126/128, so the factors are raised by 128/126 to reach ±depth exactly.
+    vibUp: vib ? mantissaShift((128 / 126) * (Math.pow(2, depth / 12) - 1)) : [0, 0],
+    vibDown: vib ? mantissaShift((128 / 126) * (1 - Math.pow(2, -depth / 12))) : [0, 0],
     vibRate: vib ? Math.max(1, Math.min(255, Math.round((256 * Number(vib.rate)) / fps))) : 0,
     vibDelay: vib ? Number(vib.delay ?? 0) : 0,
     arp,
     arpSpeed,
     slideSemis: slide ? Number(slide.depth) : 0,
-    slideSpeed: slide ? Number(slide.speed) : 0,
-    slideRecip: slide ? Math.min(255, Math.round(256 / Number(slide.speed))) : 0,
+    slideSpeed,
+    slideRecip,
     filter,
   };
+}
+
+/** Represents 0 < k < 1 as mant / 2^(8 + shift) with the largest shift that keeps mant <= 255 (at least 7 bits of precision). */
+function mantissaShift(k: number): [number, number] {
+  let shift = 0;
+  while (shift < 15 && Math.round(k * 2 ** (9 + shift)) <= 255) shift += 1;
+  return [Math.max(1, Math.round(k * 2 ** (8 + shift))), shift];
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +517,7 @@ export const OP = {
   SETSR: 0xe2, // nn
   SETVOL: 0xe3, // nn
   WAITLONG: 0xe4, // nn frames, 0 = 256
-  FILTERMOD: 0xe5, // step lo, step hi, count lo, count hi
+  FILTERMOD: 0xe5, // step (signed 24-bit, cutoff x 32), count lo, count hi
   LOOP: 0xe6,
 } as const;
 
@@ -500,11 +556,11 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
     if (g.kind === "volume") {
       events.push({ frame: wrap(g.frame), order: ORDER.volume, bytes: [OP.SETVOL, g.value] });
     } else {
-      const step = g.step & 0xffff;
+      const step = g.step & 0xffffff;
       events.push({
         frame: wrap(g.frame),
         order: g.count === 0 ? ORDER.filterReset : ORDER.filterStart,
-        bytes: [OP.FILTERMOD, step & 0xff, step >> 8, g.count & 0xff, g.count >> 8],
+        bytes: [OP.FILTERMOD, step & 0xff, (step >> 8) & 0xff, step >> 16, g.count & 0xff, g.count >> 8],
       });
     }
   }
@@ -604,7 +660,10 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   col("i_pwminhi", insts.map((i) => i.pwMin >> 8));
   col("i_pwmaxlo", insts.map((i) => i.pwMax & 0xff));
   col("i_pwmaxhi", insts.map((i) => i.pwMax >> 8));
-  col("i_vibdep", insts.map((i) => i.vibDepth));
+  col("i_vupm", insts.map((i) => i.vibUp[0]));
+  col("i_vupsh", insts.map((i) => i.vibUp[1]));
+  col("i_vdnm", insts.map((i) => i.vibDown[0]));
+  col("i_vdnsh", insts.map((i) => i.vibDown[1]));
   col("i_vibrate", insts.map((i) => i.vibRate));
   col("i_vibdel", insts.map((i) => i.vibDelay));
   col("i_arpst", arpStart);
@@ -612,9 +671,15 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   col("i_arpspd", insts.map((i) => Math.max(1, i.arpSpeed)));
   col("i_slsemi", insts.map((i) => i.slideSemis & 0xff));
   col("i_slspd", insts.map((i) => i.slideSpeed));
-  col("i_slrec", insts.map((i) => i.slideRecip));
+  col("i_slreclo", insts.map((i) => i.slideRecip & 0xff));
+  col("i_slrechi", insts.map((i) => i.slideRecip >> 8));
   col("i_filt", insts.map((i) => i.filter));
   col("arptab", arpTable.length ? arpTable.map((v) => v & 0xff) : [0]);
+
+  // Quarter-square table for the 8x8 multiply: sq(x) = floor(x * x / 4), x = 0..511.
+  const squares = Array.from({ length: 512 }, (_, x) => Math.floor((x * x) / 4));
+  col("sq_lo", squares.map((v) => v & 0xff));
+  col("sq_hi", squares.map((v) => (v >> 8) & 0xff));
 
   // Frequency tables C0..B7 for both clocks; init copies the right one into ftlo/fthi.
   for (const sys of ["PAL", "NTSC"] as const) {
@@ -632,16 +697,19 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   L.push(`vars_end:`);
 
   streams.forEach((s, i) => pushByteRows(L, `stream${i}`, s.map((b) => `$${hex2(b)}`)));
+  L.push(`prg_end:`);
   return L.join("\n");
 }
 
 const VOICE_VARS = [
   "ptrlo", "ptrhi", "wait", "note", "inst", "ctrl", "ad", "sr", "pwlo", "pwhi", "pwdir", "arppos", "arpcnt",
-  "vibph", "vibdel", "vamplo", "vamphi", "sofflo", "soffhi", "sstlo", "ssthi", "scnt",
+  "vibph", "vibdel", "vuplo", "vuphi", "vdnlo", "vdnhi", "sofflo", "soffmd", "soffhi", "sstlo", "sstmd", "ssthi", "sdir", "scnt",
 ];
 const GLOBAL_VARS = [
-  "g_vol", "g_cutlo", "g_cuthi", "g_edir", "g_mofflo", "g_moffhi", "g_mstlo", "g_msthi", "g_mcntlo", "g_mcnthi",
-  "f_lo", "f_hi", "p0", "p1", "p2", "m_lo", "m_hi", "m_fac", "m_cnt", "tmp", "t_lo", "t_hi", "save01",
+  "g_vol", "g_cutlo", "g_cuthi", "g_edir", "g_mofflo", "g_moffmd", "g_moffhi", "g_mstlo", "g_mstmd", "g_msthi", "g_mcntlo", "g_mcnthi",
+  "f_lo", "f_hi", "p0", "p1", "p2", "m_lo", "m_hi", "m_fac", "n_lo", "n_hi", "q0", "q1", "q2", "q3",
+  "ma", "mb", "r_lo", "r_hi", "ysave",
+  "tmp", "t_lo", "t_hi", "t_xx",
 ];
 
 // The player. X holds the voice index (0..2) inside the voice routine; Y is scratch.
@@ -669,6 +737,24 @@ det_pal:
   sta $DC0E
   txa
   jsr init_core
+  ; Move BASIC's program and variables behind the player (like NEW with a raised start of BASIC),
+  ; so BASIC stays usable after the SYS returns and new program lines cannot overwrite the player.
+  lda #0
+  sta prg_end
+  sta prg_end+1
+  sta prg_end+2
+  lda #<(prg_end+1)
+  sta $2B
+  lda #>(prg_end+1)
+  sta $2C
+  lda #<(prg_end+3)
+  sta $2D
+  sta $2F
+  sta $31
+  lda #>(prg_end+3)
+  sta $2E
+  sta $30
+  sta $32
   lda #<irq
   sta $0314
   lda #>irq
@@ -730,12 +816,7 @@ ini_voice:
   bpl ini_voice
   lda #15
   sta g_vol
-  lda fenv_init
-  sta g_cutlo
-  lda fenv_init+1
-  sta g_cuthi
-  lda fenv_init+2
-  sta g_edir
+  jsr env_reset
   pla
   sta $01
   rts
@@ -839,6 +920,8 @@ c_fmod:
   jsr fetch
   sta g_mstlo
   jsr fetch
+  sta g_mstmd
+  jsr fetch
   sta g_msthi
   jsr fetch
   sta g_mcntlo
@@ -846,6 +929,7 @@ c_fmod:
   sta g_mcnthi
   lda #0
   sta g_mofflo
+  sta g_moffmd
   sta g_moffhi
   jmp v_read
 c_loop:
@@ -853,7 +937,21 @@ c_loop:
   sta ptr
   lda start_hi,x
   sta ptr+1
+  cpx #0
+  bne c_loop_x
+  jsr env_reset
+c_loop_x:
   jmp v_read
+
+; the filter sweep restarts with the song so every pass sounds the same
+env_reset:
+  lda fenv_init
+  sta g_cutlo
+  lda fenv_init+1
+  sta g_cuthi
+  lda fenv_init+2
+  sta g_edir
+  rts
 
 v_save:
   lda ptr
@@ -881,120 +979,107 @@ note_on:
   sta v_arpcnt,x
   lda i_vibdel,y
   sta v_vibdel,x
+  lda i_slspd,y
+  sta v_scnt,x
   lda #0
   sta v_pwdir,x
   sta v_arppos,x
   sta v_vibph,x
-  sta v_vamplo,x
-  sta v_vamphi,x
-  sta v_sofflo,x
-  sta v_soffhi,x
-  sta v_scnt,x
-  ; vibrato amplitude = (ft[n+1] - ft[n]) * depth / 32
-  lda i_vibdep,y
+  sta v_vuplo,x
+  sta v_vuphi,x
+  sta v_vdnlo,x
+  sta v_vdnhi,x
+  ; vibrato amplitudes above and below the note: ft[n] * mant >> (8 + shift)
+  lda i_vupm,y
   beq vn_slide
-  sta m_fac
-  lda v_note,x
-  cmp #95
-  bcc vn_vib_ok
-  lda #94
-vn_vib_ok:
-  tay
-  sec
-  lda ftlo+1,y
-  sbc ftlo,y
+  ldy v_note,x
+  lda ftlo,y
   sta m_lo
-  lda fthi+1,y
-  sbc fthi,y
+  lda fthi,y
   sta m_hi
+  ldy v_inst,x
+  lda i_vupm,y
+  sta m_fac
   jsr mul
-  asl p0
-  rol p1
-  rol p2
-  asl p0
-  rol p1
-  rol p2
-  asl p0
-  rol p1
-  rol p2
+  lda i_vupsh,y
+  jsr shr_p
   lda p1
-  sta v_vamplo,x
+  sta v_vuplo,x
   lda p2
-  sta v_vamphi,x
+  sta v_vuphi,x
+  lda i_vdnm,y
+  sta m_fac
+  jsr mul
+  lda i_vdnsh,y
+  jsr shr_p
+  lda p1
+  sta v_vdnlo,x
+  lda p2
+  sta v_vdnhi,x
 vn_slide:
   ldy v_inst,x
   lda i_slsemi,y
   bne vn_sl_on
   jmp v_read
 vn_sl_on:
-  bmi vn_sl_neg
+  ; the slide starts at note - semis (the compiler checks that it is in range)
   sta tmp
   lda v_note,x
   sec
   sbc tmp
-  bcs vn_sl_idx
-  lda #0
-  jmp vn_sl_idx
-vn_sl_neg:
-  eor #$FF
-  clc
-  adc #1
-  clc
-  adc v_note,x
-  cmp #96
-  bcc vn_sl_idx
-  lda #95
-vn_sl_idx:
   tay
-  lda ftlo,y
-  sta t_lo
-  lda fthi,y
-  sta t_hi
+  lda tmp
+  bmi vn_sl_above
+  ; start below: magnitude = ft[note] - ft[start]
+  lda #0
+  sta v_sdir,x
+  sty tmp
   ldy v_note,x
   sec
-  lda t_lo
+  lda ftlo,y
+  ldy tmp
   sbc ftlo,y
-  sta v_sofflo,x
-  lda t_hi
+  sta m_lo
+  ldy v_note,x
+  lda fthi,y
+  ldy tmp
   sbc fthi,y
+  sta m_hi
+  jmp vn_sl_step
+vn_sl_above:
+  ; start above: magnitude = ft[start] - ft[note]
+  lda #1
+  sta v_sdir,x
+  sty tmp
+  sec
+  lda ftlo,y
+  ldy v_note,x
+  sbc ftlo,y
+  sta m_lo
+  ldy tmp
+  lda fthi,y
+  ldy v_note,x
+  sbc fthi,y
+  sta m_hi
+vn_sl_step:
+  ; offset = magnitude (16.8 fixed point); step per frame = magnitude * round(65536 / speed) / 256
+  lda #0
+  sta v_sofflo,x
+  lda m_lo
+  sta v_soffmd,x
+  lda m_hi
   sta v_soffhi,x
-  ; magnitude of the offset into m_lo/m_hi
-  bpl vn_sl_pos
-  lda #0
-  sec
-  sbc v_sofflo,x
-  sta m_lo
-  lda #0
-  sbc v_soffhi,x
-  sta m_hi
-  jmp vn_sl_mul
-vn_sl_pos:
-  lda v_sofflo,x
-  sta m_lo
-  lda v_soffhi,x
-  sta m_hi
-vn_sl_mul:
   ldy v_inst,x
-  lda i_slrec,y
-  sta m_fac
-  lda i_slspd,y
-  sta v_scnt,x
-  jsr mul
-  ; step moves the offset toward zero: positive when the offset is negative
-  lda v_soffhi,x
-  bmi vn_sl_up
-  sec
-  lda #0
-  sbc p1
+  lda i_slreclo,y
+  sta n_lo
+  lda i_slrechi,y
+  sta n_hi
+  jsr mul16
+  lda q1
   sta v_sstlo,x
-  lda #0
-  sbc p2
-  sta v_ssthi,x
-  jmp v_read
-vn_sl_up:
-  lda p1
-  sta v_sstlo,x
-  lda p2
+  lda q2
+  sta v_sstmd,x
+  lda q3
   sta v_ssthi,x
   jmp v_read
 
@@ -1019,35 +1104,51 @@ vr_note:
   sta f_lo
   lda fthi,y
   sta f_hi
-  ; slide offset (signed)
-  lda v_sofflo,x
-  ora v_soffhi,x
-  beq vr_vib
-  clc
+  ; slide: the remaining offset, applied below or above the note
+  lda v_scnt,x
+  bne vr_sl_on
+  jmp vr_vib
+vr_sl_on:
+  lda v_soffmd,x
+  sta t_lo
+  lda v_soffhi,x
+  sta t_hi
+vr_sl_apply:
+  lda v_sdir,x
+  bne vr_sl_up
+  sec
   lda f_lo
-  adc v_sofflo,x
+  sbc t_lo
   sta f_lo
   lda f_hi
-  adc v_soffhi,x
+  sbc t_hi
   sta f_hi
-  ldy v_soffhi,x
-  bmi vr_sl_neg
-  bcc vr_vib
-  lda #$FF
-  sta f_lo
-  sta f_hi
-  jmp vr_vib
-vr_sl_neg:
   bcs vr_vib
   lda #0
   sta f_lo
   sta f_hi
+  jmp vr_vib
+vr_sl_up:
+  clc
+  lda f_lo
+  adc t_lo
+  sta f_lo
+  lda f_hi
+  adc t_hi
+  sta f_hi
+  bcc vr_vib
+  lda #$FF
+  sta f_lo
+  sta f_hi
 vr_vib:
-  lda v_vamplo,x
-  ora v_vamphi,x
-  beq vr_write
+  lda v_vuplo,x
+  ora v_vuphi,x
+  beq vr_novib
   lda v_vibdel,x
-  bne vr_write
+  beq vr_vib_on
+vr_novib:
+  jmp vr_write
+vr_vib_on:
   lda v_vibph,x
   and #$7F
   cmp #$40
@@ -1056,16 +1157,16 @@ vr_vib:
 vr_tri:
   asl
   sta m_fac
-  lda v_vamplo,x
+  lda v_vibph,x
+  bmi vr_vib_dn
+  lda v_vuplo,x
   sta m_lo
-  lda v_vamphi,x
+  lda v_vuphi,x
   sta m_hi
   jsr mul
   asl p0
   rol p1
   rol p2
-  lda v_vibph,x
-  bmi vr_vib_sub
   clc
   lda f_lo
   adc p1
@@ -1078,7 +1179,15 @@ vr_tri:
   sta f_lo
   sta f_hi
   jmp vr_write
-vr_vib_sub:
+vr_vib_dn:
+  lda v_vdnlo,x
+  sta m_lo
+  lda v_vdnhi,x
+  sta m_hi
+  jsr mul
+  asl p0
+  rol p1
+  rol p2
   sec
   lda f_lo
   sbc p1
@@ -1127,18 +1236,19 @@ va_slide:
   lda v_scnt,x
   beq va_vib
   dec v_scnt,x
-  beq va_sl_end
-  clc
+  sec
   lda v_sofflo,x
-  adc v_sstlo,x
+  sbc v_sstlo,x
   sta v_sofflo,x
+  lda v_soffmd,x
+  sbc v_sstmd,x
+  sta v_soffmd,x
   lda v_soffhi,x
-  adc v_ssthi,x
+  sbc v_ssthi,x
   sta v_soffhi,x
-  jmp va_vib
-va_sl_end:
+  bcs va_vib
   lda #0
-  sta v_sofflo,x
+  sta v_soffmd,x
   sta v_soffhi,x
 va_vib:
   lda v_vibdel,x
@@ -1203,50 +1313,149 @@ va_pw_min:
 va_done:
   rts
 
-; ---- 16x8 multiply: m_hi:m_lo * m_fac -> p2:p1:p0 (preserves X and Y) ----
+;  ---- p2:p1 >>= A (A = 0..15) ----
+shr_p:
+  sta tmp
+shr_l:
+  lda tmp
+  beq shr_x
+  lsr p2
+  ror p1
+  dec tmp
+  jmp shr_l
+shr_x:
+  rts
+
+; ---- 8x8 multiply: ma * mb -> r_hi:r_lo, using a*b = sq(a+b) - sq(|a-b|) with sq(x) = floor(x*x/4) ----
+; Clobbers A and Y; preserves X, ma and mb.
+mul8:
+  lda ma
+  clc
+  adc mb
+  tay
+  bcc mul8_low
+  lda sq_lo+256,y
+  sta r_lo
+  lda sq_hi+256,y
+  sta r_hi
+  jmp mul8_diff
+mul8_low:
+  lda sq_lo,y
+  sta r_lo
+  lda sq_hi,y
+  sta r_hi
+mul8_diff:
+  lda ma
+  sec
+  sbc mb
+  bcs mul8_pos
+  eor #$FF
+  adc #1
+mul8_pos:
+  tay
+  sec
+  lda r_lo
+  sbc sq_lo,y
+  sta r_lo
+  lda r_hi
+  sbc sq_hi,y
+  sta r_hi
+  rts
+
+; ---- 16x8 multiply: m_hi:m_lo * m_fac -> p2:p1:p0 (preserves X, Y and m) ----
 mul:
-  lda #0
+  sty ysave
+  lda m_fac
+  sta mb
+  lda m_lo
+  sta ma
+  jsr mul8
+  lda r_lo
+  sta p0
+  lda r_hi
   sta p1
-  sta p2
-  lda #8
-  sta m_cnt
-mul_l:
-  lsr m_fac
-  bcc mul_n
+  lda m_hi
+  sta ma
+  jsr mul8
   clc
   lda p1
-  adc m_lo
+  adc r_lo
   sta p1
-  lda p2
-  adc m_hi
+  lda r_hi
+  adc #0
   sta p2
-mul_n:
-  ror p2
-  ror p1
-  ror p0
-  dec m_cnt
-  bne mul_l
+  ldy ysave
+  rts
+
+; ---- 16x16 multiply: m_hi:m_lo * n_hi:n_lo -> q3:q2:q1:q0 (preserves X, Y, m and n) ----
+mul16:
+  sty ysave
+  lda m_lo
+  sta ma
+  lda n_lo
+  sta mb
+  jsr mul8
+  lda r_lo
+  sta q0
+  lda r_hi
+  sta q1
+  lda m_hi
+  sta ma
+  jsr mul8
+  clc
+  lda q1
+  adc r_lo
+  sta q1
+  lda r_hi
+  adc #0
+  sta q2
+  lda n_hi
+  sta mb
+  jsr mul8
+  clc
+  lda q2
+  adc r_lo
+  sta q2
+  lda r_hi
+  adc #0
+  sta q3
+  lda m_lo
+  sta ma
+  jsr mul8
+  clc
+  lda q1
+  adc r_lo
+  sta q1
+  lda q2
+  adc r_hi
+  sta q2
+  lda q3
+  adc #0
+  sta q3
+  ldy ysave
   rts
 
 ; ---- filter, routing and volume ----
 globals:
+  ; cutoff = sweep position (unsigned 16-bit) + filter_mod offset (signed 24-bit), clamped to 0..2047 x 32
   clc
   lda g_cutlo
   adc g_mofflo
   sta t_lo
   lda g_cuthi
-  adc g_moffhi
+  adc g_moffmd
   sta t_hi
-  ldy g_moffhi
-  bmi gl_neg
-  bcc gl_out
+  lda #0
+  adc g_moffhi
+  sta t_xx
+  bmi gl_low
+  beq gl_out
   lda #$E0
   sta t_lo
   lda #$FF
   sta t_hi
   jmp gl_out
-gl_neg:
-  bcs gl_out
+gl_low:
   lda #0
   sta t_lo
   sta t_hi
@@ -1287,6 +1496,9 @@ gl_route_n:
   lda g_mofflo
   adc g_mstlo
   sta g_mofflo
+  lda g_moffmd
+  adc g_mstmd
+  sta g_moffmd
   lda g_moffhi
   adc g_msthi
   sta g_moffhi
