@@ -146,3 +146,20 @@ testC64uOnly("define_printer_chars uploads character bitmap", async () => {
   assert.equal(calls[0].chars[0].a, 1);
   assert.deepEqual(calls[0].chars[0].columns, Array(11).fill(0x7f));
 });
+
+for (const [tool, method, args] of [
+  ["print_text", "printTextOnPrinterAndRun", { text: "HI" }],
+  ["print_bitmap_commodore", "printBitmapOnCommodoreAndRun", { columns: [1, 2] }],
+  ["print_bitmap_epson", "printBitmapOnEpsonAndRun", { columns: [1, 2], mode: "K" }],
+  ["define_printer_chars", "defineCustomCharsOnCommodoreAndRun", { firstChar: 65, chars: [{ columns: Array.from({ length: 11 }, () => 0) }] }],
+]) {
+  testC64uOnly(`${tool} reports a backend failure with its cause`, async () => {
+    const ctx = {
+      client: { async [method]() { return { success: false, details: { message: "printer offline" } }; } },
+      logger: createLogger(),
+    };
+    const result = await printerModule.invoke(tool, args, ctx);
+    assert.equal(result.isError, true, JSON.stringify(result.content));
+    assert.match(result.content[0].text, /^C64 backend reported failure while .*: printer offline$/);
+  });
+}

@@ -86,3 +86,27 @@ test("memory_dump_to_file writes hex and manifest", async () => {
   assert.equal(manifest.length, 32);
   assert.ok(manifest.checksum);
 });
+
+for (const failing of ["pause", "readMemory", "writeMemory", "readBack"]) {
+  test(`verify_and_write_memory reports a ${failing} failure with its cause`, async () => {
+    let reads = 0;
+    const ctx = {
+      platform: { id: "c64u" },
+      client: {
+        async pause() { return failing === "pause" ? { success: false, details: { message: "pause refused" } } : { success: true }; },
+        async resume() { return { success: true }; },
+        async readMemory() {
+          reads += 1;
+          if (failing === "readMemory" && reads === 1) return { success: false, details: { message: "read refused" } };
+          if (failing === "readBack" && reads === 2) return { success: false, details: { message: "read refused" } };
+          return { success: true, data: reads === 1 ? "$0000" : "$AA55" };
+        },
+        async writeMemory() { return failing === "writeMemory" ? { success: false, details: { message: "write refused" } } : { success: true }; },
+      },
+      logger: createLogger(),
+    };
+    const res = await metaModule.invoke("verify_and_write_memory", { address: "$0400", bytes: "$AA55" }, ctx);
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /C64 backend reported failure while .*: (pause|read|write) refused/);
+  });
+}

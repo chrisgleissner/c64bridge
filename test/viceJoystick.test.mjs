@@ -45,3 +45,21 @@ test("VICE mock rejects a memory read whose start is past its end, as VICE does"
   const { client } = await createViceClient(t);
   await assert.rejects(() => client.viceMemGet(0xfff0, 0x20));
 });
+
+test("VICE drive operations use Drive<n>Type, drive CPU resets and autostart on the mock", async (t) => {
+  const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => { await server.stop(); });
+  const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+
+  assert.equal((await backend.driveOff("drive8")).details.power, "off");
+  assert.equal((await backend.drivesList())[0].power, "off");
+  // Mount switches drive 8 back on with its previous type and attaches through autoload.
+  assert.equal((await backend.driveMount("drive8", "/games/demo.d64")).success, true);
+  assert.deepEqual(server.autostarts, [{ run: false, fileIndex: 0, filename: "/games/demo.d64" }]);
+  assert.deepEqual((await backend.drivesList())[0], { id: "drive8", power: "on", image: "/games/demo.d64", type: 1541 });
+
+  assert.equal((await backend.driveReset("drive9")).success, true);
+  assert.deepEqual(server.driveResets, [9]);
+  assert.equal((await backend.driveSetMode("drive8", "1581")).success, true);
+  assert.equal((await backend.drivesList())[0].type, 1581);
+});

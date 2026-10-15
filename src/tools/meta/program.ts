@@ -808,7 +808,6 @@ export const tools: ToolDefinition[] = [
                 });
                 if (!matched) status = "fail";
               } else if (assertion.type === "sid_silent") {
-                // Check SID gate bits are off (simple check)
                 // SID control registers are write-only (an Ultimate 64 reads $D404 as $00
                 // whatever was written), so silence is measured from captured audio.
                 const silence = await measureSidSilence(ctx);
