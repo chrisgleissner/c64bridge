@@ -258,7 +258,7 @@ export const tools: ToolDefinition[] = [
         try {
           const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(length));
           if (!read.success || typeof read.data !== "string") {
-            throw new ToolExecutionError("C64 firmware reported failure while reading memory", { details: normalizeErrorDetails(read.details) });
+            throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normalizeErrorDetails(read.details) });
           }
           const bytes = hexToBytes(read.data);
           if (bytes.length < length) {

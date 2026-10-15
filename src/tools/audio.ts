@@ -528,7 +528,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.sidSetVolume(parsed.volume);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while setting SID volume", {
+            throw new ToolExecutionError("C64 backend reported failure while setting SID volume", {
               details: normaliseFailure(result.details),
             });
           }
@@ -573,7 +573,7 @@ export const audioModule = defineToolModule({
           cancelGeneratedSidPlayback(); // Reset is the documented way to stop a generated arpeggio.
           const result = await ctx.client.sidReset(parsed.hard);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resetting SID", {
+            throw new ToolExecutionError("C64 backend reported failure while resetting SID", {
               details: normaliseFailure(result.details),
             });
           }
@@ -631,7 +631,7 @@ export const audioModule = defineToolModule({
             release: parsed.release,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting SID voice", {
+            throw new ToolExecutionError("C64 backend reported failure while starting SID voice", {
               details: normaliseFailure(result.details),
             });
           }
@@ -687,7 +687,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.sidNoteOff(voice);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while stopping SID voice", {
+            throw new ToolExecutionError("C64 backend reported failure while stopping SID voice", {
               details: normaliseFailure(result.details),
             });
           }
@@ -730,7 +730,7 @@ export const audioModule = defineToolModule({
           cancelGeneratedSidPlayback(); // Otherwise its remaining notes would resume writing right after this silences the chip.
           const result = await ctx.client.sidSilenceAll();
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while silencing SID", {
+            throw new ToolExecutionError("C64 backend reported failure while silencing SID", {
               details: normaliseFailure(result.details),
             });
           }
@@ -835,7 +835,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.sidplayFile(parsed.path, parsed.songnr);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting SID playback", {
+            throw new ToolExecutionError("C64 backend reported failure while starting SID playback", {
               details: normaliseFailure(result.details),
             });
           }
@@ -876,7 +876,7 @@ export const audioModule = defineToolModule({
 
           const result = await ctx.client.modplayFile(parsed.path);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while starting MOD playback", {
+            throw new ToolExecutionError("C64 backend reported failure while starting MOD playback", {
               details: normaliseFailure(result.details),
             });
           }
@@ -1043,7 +1043,7 @@ export const audioModule = defineToolModule({
               const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
               const result = await ctx.client.sidplayAttachment(sid.sid);
               if (!result.success) {
-                throw new ToolExecutionError("C64 firmware reported failure while playing compiled SID", {
+                throw new ToolExecutionError("C64 backend reported failure while playing compiled SID", {
                   details: normaliseFailure(result.details),
                 });
               }
@@ -1052,7 +1052,7 @@ export const audioModule = defineToolModule({
             } else {
               const result = await ctx.client.runPrg(compiled.prg);
               if (!result.success) {
-                throw new ToolExecutionError("C64 firmware reported failure while running compiled PRG", {
+                throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
                   details: normaliseFailure(result.details),
                 });
               }

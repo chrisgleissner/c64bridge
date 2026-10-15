@@ -413,7 +413,7 @@ test("music_compile_and_play handles C64 firmware failure for PRG", async () => 
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("music_compile_and_play handles C64 firmware failure for SID", async () => {
@@ -433,7 +433,7 @@ test("music_compile_and_play handles C64 firmware failure for SID", async () => 
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("music_compile_and_play wraps unexpected errors", async () => {

@@ -185,7 +185,7 @@ test("render_sprite handles firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("render_sprite reports unexpected execution errors with sprite-specific message", async () => {
@@ -226,7 +226,7 @@ test("render_petscii_text handles firmware failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("render_petscii_text reports unexpected execution errors with petscii-specific message", async () => {
@@ -266,7 +266,7 @@ test("render_petscii_art handles upload failure", async () => {
   );
 
   assert.equal(result.isError, true);
-  assert.ok(result.content[0].text.includes("firmware reported failure"));
+  assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
 test("render_petscii_art validates input requirements", async () => {

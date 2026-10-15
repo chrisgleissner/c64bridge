@@ -288,12 +288,12 @@ test("merge schemas respects permissive additional properties on one side", () =
 });
 
 test("tool error text includes the underlying detail message", () => {
-  const error = new ToolExecutionError("C64 firmware reported failure while reading memory", {
+  const error = new ToolExecutionError("C64 backend reported failure while reading memory", {
     details: { message: "Memory range must stay within 0x0000 - 0xFFFF" },
   });
   assert.equal(
     toolErrorResult(error).content[0].text,
-    "C64 firmware reported failure while reading memory: Memory range must stay within 0x0000 - 0xFFFF",
+    "C64 backend reported failure while reading memory: Memory range must stay within 0x0000 - 0xFFFF",
   );
   // No duplicate when the summary already contains the detail, and no change without one.
   assert.equal(toolErrorResult(new ToolExecutionError("Boom", { details: { message: "Boom" } })).content[0].text, "Boom");

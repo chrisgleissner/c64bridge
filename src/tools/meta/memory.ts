@@ -104,7 +104,7 @@ export const tools: ToolDefinition[] = [
         if (canPause) {
           const pauseResult = await (ctx.client as any).pause();
           if (!pauseResult.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while pausing", { details: normalizeErrorDetails(pauseResult.details) });
+            throw new ToolExecutionError("C64 backend reported failure while pausing", { details: normalizeErrorDetails(pauseResult.details) });
           }
           paused = true;
         }
@@ -113,7 +113,7 @@ export const tools: ToolDefinition[] = [
         try {
           const pre = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, readLen)));
           if (!pre.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while reading memory", { details: normalizeErrorDetails(pre.details) });
+            throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normalizeErrorDetails(pre.details) });
           }
           preReadHex = (pre.data as string) ?? "$";
           const preBytes = hexToBytes(preReadHex);
@@ -135,12 +135,12 @@ export const tools: ToolDefinition[] = [
 
           const write = await (ctx.client as any).writeMemory(parsed.address, bytesToHex(writeBytes));
           if (!write.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while writing memory", { details: normalizeErrorDetails(write.details) });
+            throw new ToolExecutionError("C64 backend reported failure while writing memory", { details: normalizeErrorDetails(write.details) });
           }
 
           const post = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, writeBytes.length)));
           if (!post.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while reading back memory", { details: normalizeErrorDetails(post.details) });
+            throw new ToolExecutionError("C64 backend reported failure while reading back memory", { details: normalizeErrorDetails(post.details) });
           }
           const postBytes = hexToBytes((post.data as string) ?? "$");
 

@@ -373,7 +373,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     let result = await runBasic(activeProgram);
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while running BASIC program", {
+      throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
         details: extractFailureDetails(result.details),
       });
     }
@@ -583,7 +583,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const result = await ctx.client.uploadAndRunAsm(parsed.program);
     if (!result.success) {
       return toolErrorResult(
-        new ToolExecutionError("C64 firmware reported failure while running assembly program", {
+        new ToolExecutionError("C64 backend reported failure while running assembly program", {
           details: extractFailureDetails(result.details),
         }),
       );
@@ -658,7 +658,7 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
 
     const result = await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while loading PRG", {
+      throw new ToolExecutionError("C64 backend reported failure while loading PRG", {
         details: extractFailureDetails(result.details),
       });
     }
@@ -710,7 +710,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 
     const result = await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while running PRG", {
+      throw new ToolExecutionError("C64 backend reported failure while running PRG", {
         details: extractFailureDetails(result.details),
       });
     }
@@ -747,7 +747,7 @@ async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 
     const result = await ctx.client.runCrtFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 firmware reported failure while running CRT", {
+      throw new ToolExecutionError("C64 backend reported failure while running CRT", {
         details: extractFailureDetails(result.details),
       });
     }
@@ -922,7 +922,7 @@ export const programRunnersModule = defineToolModule({
 
           const result = await ctx.client.runCrtFile(parsed.path);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while running CRT", {
+            throw new ToolExecutionError("C64 backend reported failure while running CRT", {
               details: extractFailureDetails(result.details),
             });
           }

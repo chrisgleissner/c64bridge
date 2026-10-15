@@ -251,7 +251,7 @@ export const storageModule = defineToolModule({
             mode: parsed.mode as any,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while mounting disk image", {
+            throw new ToolExecutionError("C64 backend reported failure while mounting disk image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -301,7 +301,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveRemove(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while removing disk image", {
+            throw new ToolExecutionError("C64 backend reported failure while removing disk image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -344,7 +344,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveReset(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while resetting drive", {
+            throw new ToolExecutionError("C64 backend reported failure while resetting drive", {
               details: normaliseFailure(result.details),
             });
           }
@@ -387,7 +387,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveOn(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while powering on drive", {
+            throw new ToolExecutionError("C64 backend reported failure while powering on drive", {
               details: normaliseFailure(result.details),
             });
           }
@@ -431,7 +431,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveOff(parsed.drive);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while powering off drive", {
+            throw new ToolExecutionError("C64 backend reported failure while powering off drive", {
               details: normaliseFailure(result.details),
             });
           }
@@ -475,7 +475,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveLoadRom(parsed.drive, parsed.path);
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while loading drive ROM", {
+            throw new ToolExecutionError("C64 backend reported failure while loading drive ROM", {
               details: normaliseFailure(result.details),
             });
           }
@@ -519,7 +519,7 @@ export const storageModule = defineToolModule({
 
           const result = await ctx.client.driveSetMode(parsed.drive, parsed.mode as "1541" | "1571" | "1581");
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while setting drive mode", {
+            throw new ToolExecutionError("C64 backend reported failure while setting drive mode", {
               details: normaliseFailure(result.details),
             });
           }
@@ -607,7 +607,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating D64 image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating D64 image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -659,7 +659,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating D71 image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating D71 image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -708,7 +708,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating D81 image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating D81 image", {
               details: normaliseFailure(result.details),
             });
           }
@@ -760,7 +760,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 firmware reported failure while creating DNP image", {
+            throw new ToolExecutionError("C64 backend reported failure while creating DNP image", {
               details: normaliseFailure(result.details),
             });
           }

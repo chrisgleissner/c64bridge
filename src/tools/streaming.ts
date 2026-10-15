@@ -94,7 +94,7 @@ export const streamingModule = defineToolModule({
 
           const result = await ctx.client.streamStart(parsed.stream as StreamKind, parsed.target);
           if (!result.success) {
-            throw new ToolExecutionError(withFailureReason("C64 firmware reported failure while starting stream", result.details), {
+            throw new ToolExecutionError(withFailureReason("C64 backend reported failure while starting stream", result.details), {
               details: toRecord(result.details),
             });
           }
@@ -135,7 +135,7 @@ export const streamingModule = defineToolModule({
 
           const result = await ctx.client.streamStop(parsed.stream as StreamKind);
           if (!result.success) {
-            throw new ToolExecutionError(withFailureReason("C64 firmware reported failure while stopping stream", result.details), {
+            throw new ToolExecutionError(withFailureReason("C64 backend reported failure while stopping stream", result.details), {
               details: toRecord(result.details),
             });
           }
