@@ -221,11 +221,6 @@ export function getChargenGlyphs(): readonly ChargenGlyph[] {
   return glyphCache.glyphs;
 }
 
-export function findGlyphByPetscii(code: number): ChargenGlyph | undefined {
-  loadGlyphs();
-  return glyphCache.byPetscii.get(code);
-}
-
 export function findGlyphByBasicChar(char: string): ChargenGlyph | undefined {
   if (!char) {
     return undefined;

@@ -106,10 +106,6 @@ export function getDiagnosticsSessionInfo(): DiagnosticsSessionInfo | null {
   return state?.info ?? null;
 }
 
-export function getDiagnosticsDirectory(): string {
-  return resolveDiagnosticsDirectory();
-}
-
 export function writeDiagnosticEvent(event: string, details?: unknown): void {
   if (!isDiagnosticsEnabled()) {
     return;

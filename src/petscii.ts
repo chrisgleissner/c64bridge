@@ -174,12 +174,6 @@ const NAMED_CHARS: Record<string, number> = Object.freeze({
   "pi": 222,
 });
 
-export function listNamedPetscii(): Array<{ name: string; code: number; hex: string }> {
-  return Object.entries(NAMED_CHARS)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, code]) => ({ name, code, hex: `$${code.toString(16).toUpperCase().padStart(2, "0")}` }));
-}
-
 export function lookupNamedPetscii(name: string): number | undefined {
   const key = name.trim().toLowerCase().replace(/\s+/g, "_");
   // Own keys only, so names like "constructor" don't resolve to Object.prototype members.
