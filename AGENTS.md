@@ -90,7 +90,7 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 
 ## Capabilities
 
-- Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`)
+- Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`)
 - Fast demo workflow: `c64_program` (`cross_platform_greeting`) for one-call greetings on VICE and/or C64U with screenshot capture and verification
 - Screen & memory: `c64_memory` (`read`, `write`, `read_screen`, `wait_for_text`)
 - System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks)
