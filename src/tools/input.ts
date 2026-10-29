@@ -16,6 +16,7 @@ import {
 } from "./schema.js";
 import { jsonResult, textResult } from "./responses.js";
 import {
+  ToolExecutionError,
   ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
@@ -29,10 +30,10 @@ function isMissingNativeInputEndpoint(error: unknown): boolean {
 }
 
 function nativeInputUnavailableResult(operation: string) {
-  return textResult(
+  return toolErrorResult(new ToolExecutionError(
     `Native physical input is unavailable on this firmware, so ${operation} was not sent. Use c64://platform/status before choosing native input; use key or write_text for ordinary C64 input.`,
-    { success: false, code: "native_input_unavailable", fallback: "key_or_write_text" },
-  );
+    { code: "native_input_unavailable", details: { fallback: "key_or_write_text" } },
+  ));
 }
 
 // ---------------------------------------------------------------------------

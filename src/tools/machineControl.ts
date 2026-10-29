@@ -361,10 +361,10 @@ export const machineControlModule = defineToolModule({
         } catch (error) {
           if (error instanceof ToolError) return toolErrorResult(error);
           if (isMissingMenuScreenEndpoint(error)) {
-            return textResult(
+            return toolErrorResult(new ToolExecutionError(
               "No menu matrix is available. Open the Ultimate menu and retry; if it remains unavailable, this firmware does not provide machine:menu_screen. Use REST configuration instead of menu navigation where possible.",
-              { success: false, code: "native_menu_screen_unavailable", fallback: "rest_configuration_or_manual_menu" },
-            );
+              { code: "native_menu_screen_unavailable", details: { fallback: "rest_configuration_or_manual_menu" }, cause: error },
+            ));
           }
           return unknownErrorResult(error);
         }

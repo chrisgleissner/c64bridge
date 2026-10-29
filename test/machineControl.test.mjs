@@ -40,9 +40,11 @@ testC64uOnly("read_menu_screen returns fallback guidance when no matrix endpoint
     logger: createLogger(),
   };
   const res = await machineControlModule.invoke("read_menu_screen", {}, ctx);
-  assert.equal(res.isError, undefined);
-  assert.equal(res.metadata?.success, false);
-  assert.equal(res.metadata?.code, "native_menu_screen_unavailable");
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+  assert.equal(res.metadata?.error?.code, "native_menu_screen_unavailable");
+  assert.equal(res.metadata?.error?.details?.fallback, "rest_configuration_or_manual_menu");
+  assert.match(res.content[0].text, /No menu matrix is available/);
 });
 
 test("power_cycle delegates to the platform-aware client flow", async () => {

@@ -28,6 +28,7 @@ test("firmware_info_and_healthcheck reports unhealthy on failures", async () => 
     logger: createLogger(),
   };
   const res = await metaModule.invoke("firmware_info_and_healthcheck", {}, ctx);
+  assert.equal(res.isError, true);
   assert.equal(res.metadata?.success, false);
   assert.equal(res.structuredContent?.data?.isHealthy, false);
 });

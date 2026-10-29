@@ -64,7 +64,8 @@ export const tools: ToolDefinition[] = [
           version,
           info,
         };
-        return jsonResult(report, { success: report.isHealthy });
+        const result = jsonResult(report, { success: report.isHealthy });
+        return report.isHealthy ? result : { ...result, isError: true };
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

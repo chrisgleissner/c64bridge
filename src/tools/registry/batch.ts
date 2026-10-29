@@ -11,7 +11,7 @@ import {
   stringSchema,
 } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolValidationError, unknownErrorResult } from "../errors.js";
+import { unknownErrorResult } from "../errors.js";
 
 const commandSchema = objectSchema<Record<string, unknown>>({
   description: "A single batch command.",
@@ -178,12 +178,6 @@ export const batchModuleGroup = defineToolModule({
           ctx.logger.info("Batch complete", { total: parsed.commands.length, succeeded, failed, elapsedMs: totalElapsedMs });
           return jsonResult(summary, { success: failed === 0, succeeded, failed, total: parsed.commands.length });
         } catch (error) {
-          if (error instanceof ToolValidationError) {
-            return {
-              content: [{ type: "text" as const, text: error.message }],
-              isError: true,
-            };
-          }
           return unknownErrorResult(error);
         }
       },
