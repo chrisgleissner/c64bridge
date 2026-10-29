@@ -6,7 +6,7 @@ import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValida
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
-import { captureConfigSnapshot, validateSnapshotCategories } from "./configInventory.js";
+import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
 import { normalizeErrorDetails } from "./util.js";
 
 const configSnapshotAndRestoreArgsSchema = objectSchema({
@@ -14,6 +14,7 @@ const configSnapshotAndRestoreArgsSchema = objectSchema({
   properties: {
     action: stringSchema({ description: "One of: snapshot|restore|diff", enum: ["snapshot", "restore", "diff"] }),
     path: stringSchema({ description: "Snapshot file path", minLength: 1 }),
+    includeSecretValues: optionalSchema(booleanSchema({ description: "Snapshot and diff only: store credential values (network password, FTP/Telnet passwords, Wi-Fi keys) in plain text in the snapshot file. Default false: they are written as ***, and restore skips them.", default: false }), false),
     applyToFlash: optionalSchema(booleanSchema({ description: "Save configuration to flash after restore (C64U/U64 and U2 only)", default: false }), false),
   },
   required: ["action", "path"],
@@ -42,7 +43,7 @@ export const tools: ToolDefinition[] = [
           const [version, info, snapshotData] = await Promise.all([
             (ctx.client as any).version(),
             (ctx.client as any).info(),
-            captureConfigSnapshot(ctx.client as any),
+            captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true }),
           ]);
           const snapshot = {
             createdAt: new Date().toISOString(),
@@ -67,7 +68,7 @@ export const tools: ToolDefinition[] = [
           }
           let payload: Record<string, object>;
           try {
-            payload = validateSnapshotCategories(snapshot.categories) as Record<string, object>;
+            payload = stripRedactedSecrets(validateSnapshotCategories(snapshot.categories) as Record<string, object>);
           } catch {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
@@ -87,7 +88,7 @@ export const tools: ToolDefinition[] = [
         const text = await fs.readFile(path, "utf8");
         const snapshot = JSON.parse(text);
         const snapCats = validateSnapshotCategories(snapshot.categories ?? {});
-        const current = (await captureConfigSnapshot(ctx.client as any)).categories;
+        const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true })).categories;
         const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = {};
         for (const [cat, snapVal] of Object.entries(snapCats)) {
           const curVal = current[cat];

@@ -36,6 +36,26 @@ The audit findings above describe the code before this change. This change adds 
 - `redactValue` and `redactText` are applied in `createPrefixedLogger` (`src/logger.ts`) to the message and details, in `sanitize` (`src/diagnostics.ts`) before the existing size limiting, in `toCallToolResult` (`src/mcp-server.ts`) to `content`, `structuredContent` and `metadata`, and to the fatal error in `main().catch`. `redactValue` reduces `Error` objects to name, message, stack, code, status and cause, redacts credential header names at any depth, and replaces registered secrets in all strings.
 - `loadConfig` now logs only the error name for an unreadable configuration file, because the JSON parser message can quote part of the file.
 
-Remaining limitation: redaction replaces the exact registered password string. A transformed form of the password (for example base64-encoded) is not detected. Firmware configuration values that are not the configured password, such as values returned by `config_get` or written to snapshots, are not treated as secrets.
+Remaining limitation: redaction replaces the exact registered password string. A transformed form of the password (for example base64-encoded) is not detected. Firmware configuration values are handled separately, see below.
 
 Regression test: `test/secretRedaction.test.mjs` configures a distinctive password through `C64U_PASSWORD`, then drives HTTP 401 (with the password echoed in the body), HTTP 403, a client timeout and a refused connection against local servers. It asserts that the password is absent from captured console output, diagnostics files and records, `util.inspect`, `JSON.stringify`, `toJSON` and `stack` of the errors, and from `toCallToolResult` output for `toolErrorResult` and `unknownErrorResult`. With `src/redact.ts` replaced by no-op functions and the other `src/` changes reverted, the test fails with "password leaked in: AxiosError: Request failed with status code 401". With the fix it passes. `npm test` passes.
+
+## Firmware-returned configuration values
+
+**Evidence in the repository.** The repository does not list individual configuration item names for the credential settings. What it records:
+
+- `doc/c64u/c64-rest-api.md:17`: firmware 3.12 has an optional "Network Password".
+- `doc/c64u/c64-rest-api.md:93`–`95` (and the captured `scripts/compare-rest/rest-compare-2025-11-01T00-25-21-830Z.json:371`–`376`): the category list contains "Network settings", "WiFi settings" and "Modem Settings". These are the categories that can hold network, Wi-Fi and service credentials (network password, FTP/Telnet passwords, Wi-Fi key).
+- `doc/c64u/c64-rest-api.md:108`–`143`: category reads return `{ "<Category>": { "<Item>": value } }`, and item reads return `{ "<Category>": { "<Item>": { current, min, max, ... } } }`.
+- `doc/c64u/c64-openapi.yaml` and `doc/u2/u2-openapi.yaml` describe `X-Password` only; they define no password item.
+
+Whether the firmware returns the password through `/v1/configs` is therefore not established by repository data. The fix assumes that it can.
+
+**Behaviour.** `config_get` and `config_snapshot_and_restore` (snapshot and diff) now replace the value of credential items with `***` and keep the item name. An item is treated as a credential when its name contains `password`, `passwd`, `passphrase`, `passcode`, `psk` or `secret`, or is a bare Wi-Fi `key`. Matching is by item name (`isSensitiveConfigItem` in `src/redact.ts`), not by category, so it also applies to items in categories not listed above. For item reads, the whole item object (including `min`/`max`/`default`) is replaced by `***`.
+
+- Opt-in: `includeSecretValues: true` on `config_get` and on `config_snapshot_and_restore` returns or stores the values in plain text. Without the flag the values are never returned or written. The configured network password is still replaced by the registered-secret redaction in `toCallToolResult`, even with the flag.
+- Restore: a default snapshot contains `***`. `stripRedactedSecrets` removes those placeholders from the restore payload, so a restore never sets a password to the literal `***`. Credentials in a default snapshot are therefore not restored. Snapshots made with `includeSecretValues: true` restore them.
+- Diff: both sides are redacted by default, so a changed password is not reported unless the flag is set when the snapshot is taken and when diffing.
+- Limitation: detection is by item name. A credential item with a name that does not match the patterns above is not redacted.
+
+**Test.** `test/configSecretRedaction.test.mjs` uses a mocked firmware with "Network Password", "FTP Password", "Telnet Password" and a Wi-Fi "Password". It asserts redaction in the `config_get` result and in the written snapshot file, that other values (Hostname, Volume, access point name) are unchanged, that restore does not write `***`, and that the opt-in flag returns plain values. With `isSensitiveConfigItem` changed to always return false, 3 of its 4 tests fail.

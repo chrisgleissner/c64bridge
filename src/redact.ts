@@ -126,3 +126,53 @@ export function scrubRequestError<T>(error: T): T {
   }
   return error;
 }
+
+/**
+ * Firmware configuration items that hold credentials. The Ultimate config API
+ * lists items by display name (for example "Network Password" in the
+ * "Network settings" category), so matching is by item name: passwords,
+ * passphrases and pre-shared keys, plus a bare "key" item in a Wi-Fi category.
+ */
+const SENSITIVE_CONFIG_ITEM = /pass(word|wd|phrase|code)?\b|\bpsk\b|secret/i;
+const WIFI_CATEGORY = /wi-?fi|wlan|wireless/i;
+const BARE_KEY_ITEM = /^(wifi |wlan )?(key|wpa key|network key)$/i;
+
+export function isSensitiveConfigItem(category: string | undefined, item: string | undefined): boolean {
+  if (!item) return false;
+  if (SENSITIVE_CONFIG_ITEM.test(item)) return true;
+  return BARE_KEY_ITEM.test(item.trim()) && (item.toLowerCase().includes("wifi") || WIFI_CATEGORY.test(category ?? ""));
+}
+
+/**
+ * Returns a copy of a firmware configuration response in which the value of
+ * every credential item is replaced with `***`. Item names stay, so a client can
+ * see that the item exists. `category` and `item` describe the request: when an
+ * item was requested and the response is its bare value, the value is replaced.
+ */
+export function redactConfigValue(value: unknown, category?: string, item?: string): unknown {
+  if (item && isSensitiveConfigItem(category, item)) {
+    return value !== null && typeof value === "object" ? redactConfigTree(value, category) : REDACTED;
+  }
+  return redactConfigTree(value, category);
+}
+
+function redactConfigTree(value: unknown, category: string | undefined): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactConfigTree(entry, category));
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (isSensitiveConfigItem(category, key) && entry !== null && entry !== undefined) {
+      out[key] = REDACTED;
+    } else {
+      // Keys at the top level of a response are category names.
+      out[key] = redactConfigTree(entry, entry !== null && typeof entry === "object" && !Array.isArray(entry) ? key : category);
+    }
+  }
+  return out;
+}
+
+export const REDACTED_PLACEHOLDER = REDACTED;
