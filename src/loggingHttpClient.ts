@@ -1,5 +1,6 @@
 import type { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
+import { registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
 
 type RequestMeta = {
@@ -28,6 +29,7 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
   logger: PrefixedLogger = loggerFor("c64u"),
 ): HttpClient<SecurityDataType> {
   const http = new HttpClient<SecurityDataType>(config);
+  registerSecret(readPasswordHeader(config?.headers));
 
   http.instance.interceptors.request.use((request) => {
     const method = (request.method ?? "get").toUpperCase();
@@ -53,11 +55,19 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
     },
     (error: AxiosError) => {
       handleError(error, logger);
-      return Promise.reject(error);
+      return Promise.reject(scrubRequestError(error));
     },
   );
 
   return http;
+}
+
+function readPasswordHeader(headers: unknown): string | undefined {
+  if (!headers || typeof headers !== "object") return undefined;
+  for (const [key, value] of Object.entries(headers)) {
+    if (/^x-password$/i.test(key) && typeof value === "string") return value;
+  }
+  return undefined;
 }
 
 function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {

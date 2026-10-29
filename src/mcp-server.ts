@@ -30,6 +30,7 @@ import type { ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import axios, { type AxiosResponse } from "axios";
+import { redactValue, registerSecret } from "./redact.js";
 import { loggerFor, payloadByteLength, formatPayloadForDebug, formatErrorMessage } from "./logger.js";
 import { getDiagnosticsSessionInfo, installProcessDiagnostics, withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
 
@@ -639,6 +640,7 @@ async function logConnectivity(client: C64Client, baseUrl: string, networkPasswo
 
   try {
     // Send the network password like every other request, or a protected device answers 403.
+    registerSecret(networkPassword);
     const probeResponse = await axios.get(infoUrl, {
       timeout: 2000,
       ...(networkPassword ? { headers: { "X-Password": networkPassword } } : {}),
@@ -687,7 +689,7 @@ async function logConnectivity(client: C64Client, baseUrl: string, networkPasswo
   }
 }
 
-function toCallToolResult(result: ToolRunResult): {
+export function toCallToolResult(result: ToolRunResult): {
   content: ToolRunResult["content"];
   structuredContent?: ToolRunResult["structuredContent"];
   metadata?: ToolRunResult["metadata"];
@@ -698,13 +700,13 @@ function toCallToolResult(result: ToolRunResult): {
     structuredContent?: ToolRunResult["structuredContent"];
     metadata?: ToolRunResult["metadata"];
     isError?: boolean;
-  } = { content: result.content };
+  } = { content: redactValue(result.content) as ToolRunResult["content"] };
 
   if (result.structuredContent !== undefined) {
-    base.structuredContent = result.structuredContent;
+    base.structuredContent = redactValue(result.structuredContent) as ToolRunResult["structuredContent"];
   }
   if (result.metadata !== undefined) {
-    base.metadata = result.metadata;
+    base.metadata = redactValue(result.metadata) as ToolRunResult["metadata"];
   }
   if (result.isError !== undefined) {
     base.isError = result.isError;
@@ -741,7 +743,7 @@ if (process.env.C64BRIDGE_SKIP_AUTO_START !== "1") {
       diagnosticsFile: getDiagnosticsSessionInfo()?.filePath,
       error,
     });
-    console.error("Fatal error in MCP server:", error);
+    console.error("Fatal error in MCP server:", redactValue(error));
     process.exit(1);
   });
 }

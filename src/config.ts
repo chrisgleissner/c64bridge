@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import os from "node:os";
 import { fileURLToPath } from "url";
+import { registerSecret } from "./redact.js";
 
 export interface C64BridgeConfig {
   c64_host: string;
@@ -66,7 +67,7 @@ export function loadConfig(): C64BridgeConfig {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         // Deliberately omit file contents/credentials. Configuration mistakes
         // should not prevent the MCP server from exposing a recoverable path.
-        console.error(`[c64bridge] ignoring configuration '${candidatePath}': ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`[c64bridge] ignoring configuration '${candidatePath}': ${error instanceof Error ? error.name : "unreadable"}`);
       }
     }
   }
@@ -193,16 +194,18 @@ export function resolveUltimateEndpoint(
     if (explicitPort !== undefined) url.port = String(explicitPort);
     baseUrl = stripTrailingSlash(url.toString());
   }
+  const networkPassword = firstDefined(
+    nonEmptyString(envPassword),
+    nonEmptyString(section?.networkPassword),
+    nonEmptyString(legacy?.networkPassword),
+  );
+  registerSecret(networkPassword);
   return {
     host,
     port,
     baseUrl,
     c64_host: port === schemeDefaultPort ? hostLabel : `${hostLabel}:${port}`,
-    networkPassword: firstDefined(
-      nonEmptyString(envPassword),
-      nonEmptyString(section?.networkPassword),
-      nonEmptyString(legacy?.networkPassword),
-    ),
+    networkPassword,
   };
 }
 

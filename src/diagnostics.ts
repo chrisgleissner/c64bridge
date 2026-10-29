@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { redactValue } from "./redact.js";
 
 export interface DiagnosticsSessionInfo {
   readonly component: string;
@@ -442,6 +443,10 @@ function isDiagnosticsEnabled(): boolean {
 }
 
 function sanitize(value: unknown, depth = 0): unknown {
+  return sanitizeUnredacted(redactValue(value), depth);
+}
+
+function sanitizeUnredacted(value: unknown, depth = 0): unknown {
   if (value instanceof Error) {
     const extra = value as Error & { cause?: unknown; code?: unknown };
     return {
