@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { redactText, redactValue } from "./redact.js";
 import type { ToolLogger } from "./tools/types.js";
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
@@ -40,9 +41,9 @@ function createPrefixedLogger(prefix: string): PrefixedLogger {
       return;
     }
     const consoleMethod = selectConsole(level);
-    const label = `[${prefix}] ${message}`;
+    const label = `[${prefix}] ${redactText(message)}`;
     if (details && Object.keys(details).length > 0) {
-      consoleMethod(label, details);
+      consoleMethod(label, redactValue(details));
     } else {
       consoleMethod(label);
     }

@@ -237,10 +237,10 @@ test("c64_input gives fallback guidance when native input is absent", async () =
   const result = await toolRegistry.invoke("c64_input", {
     op: "keyboard", inputs: ["f1"], transition: "tap",
   }, ctx);
-  assert.equal(result.isError, undefined);
-  assert.equal(result.metadata?.success, false);
-  assert.equal(result.metadata?.code, "native_input_unavailable");
-  assert.equal(result.metadata?.fallback, "key_or_write_text");
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata?.error?.kind, "execution");
+  assert.equal(result.metadata?.error?.code, "native_input_unavailable");
+  assert.equal(result.metadata?.error?.details?.fallback, "key_or_write_text");
 });
 
 test("c64_input.joystick supports release and tap actions on vice", async () => {

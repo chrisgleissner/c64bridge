@@ -1,3 +1,5 @@
+import { isSensitiveConfigItem, redactConfigValue, REDACTED_PLACEHOLDER } from "../../redact.js";
+
 export interface ConfigInventoryEntry {
   readonly category: string;
   readonly item?: string;
@@ -83,13 +85,24 @@ export function normalizeConfigInventory(details: unknown): readonly ConfigInven
   return inventory;
 }
 
-export async function captureConfigSnapshot(client: ConfigReadableClient): Promise<ConfigSnapshotData> {
+export interface CaptureConfigSnapshotOptions {
+  /** Keep credential values (network password, Wi-Fi keys, ...) in plain text. Default: replace them with `***`. */
+  readonly includeSecretValues?: boolean;
+}
+
+export async function captureConfigSnapshot(
+  client: ConfigReadableClient,
+  options: CaptureConfigSnapshotOptions = {},
+): Promise<ConfigSnapshotData> {
   const inventory = normalizeConfigInventory(await client.configsList());
   const categories: Record<string, unknown> = {};
 
   for (const entry of inventory) {
     try {
-      const value = normalizeSnapshotValue(await client.configGet(entry.category, entry.item), entry);
+      const normalized = normalizeSnapshotValue(await client.configGet(entry.category, entry.item), entry);
+      const value = options.includeSecretValues
+        ? normalized
+        : redactConfigValue(normalized, entry.category, entry.item);
       setSnapshotValue(categories, entry, value);
     } catch (error) {
       setSnapshotValue(categories, entry, {
@@ -99,6 +112,26 @@ export async function captureConfigSnapshot(client: ConfigReadableClient): Promi
   }
 
   return { inventory, categories };
+}
+
+/**
+ * Drops redacted credential placeholders from a snapshot payload before it is
+ * written back, so restoring a default snapshot never sets a password to `***`.
+ */
+export function stripRedactedSecrets(categories: Record<string, object>): Record<string, object> {
+  const strip = (category: string, value: unknown): unknown => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+    const kept: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (entry === REDACTED_PLACEHOLDER && isSensitiveConfigItem(category, key)) continue;
+      // Per-item snapshot entries keep the firmware wrapper: { category: { item: value } }.
+      kept[key] = strip(entry !== null && typeof entry === "object" && !Array.isArray(entry) ? key : category, entry);
+    }
+    return kept;
+  };
+  return Object.fromEntries(
+    Object.entries(categories).map(([category, items]) => [category, strip(category, items) as object]),
+  );
 }
 
 export function validateSnapshotCategories(value: unknown): Record<string, unknown> {

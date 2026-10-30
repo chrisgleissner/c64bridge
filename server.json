@@ -38,11 +38,12 @@
         },
         {
           "name": "C64_MODE",
-          "description": "Active backend.",
+          "description": "Active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator).",
           "format": "string",
           "default": "c64u",
           "choices": [
             "c64u",
+            "u2",
             "vice"
           ]
         },
@@ -61,6 +62,22 @@
         {
           "name": "C64U_PASSWORD",
           "description": "Ultimate 64 network password sent as X-Password.",
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "U2_HOST",
+          "description": "U2/U2+/U2+L host name or IP address when C64_MODE=u2.",
+          "format": "string"
+        },
+        {
+          "name": "U2_PORT",
+          "description": "U2-family REST port when C64_MODE=u2.",
+          "format": "number"
+        },
+        {
+          "name": "U2_PASSWORD",
+          "description": "U2-family network password sent as X-Password.",
           "format": "string",
           "isSecret": true
         },

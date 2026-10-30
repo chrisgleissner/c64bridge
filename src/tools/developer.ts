@@ -1,11 +1,13 @@
 import { defineToolModule } from "./types.js";
 import {
+  booleanSchema,
   objectSchema,
   optionalSchema,
   stringSchema,
   type Schema,
 } from "./schema.js";
 import { jsonResult, textResult } from "./responses.js";
+import { redactConfigValue } from "../redact.js";
 import {
   ToolError,
   ToolExecutionError,
@@ -87,6 +89,10 @@ const configGetArgsSchema = objectSchema({
   properties: {
     category: categorySchema,
     item: itemSchema,
+    includeSecretValues: optionalSchema(booleanSchema({
+      description: "Return credential values (network password, FTP/Telnet passwords, Wi-Fi keys) in plain text. Default false: those values are replaced with ***.",
+      default: false,
+    }), false),
   },
   required: ["category"],
   additionalProperties: false,
@@ -224,7 +230,10 @@ export const developerModule = defineToolModule({
             item: parsed.item ?? null,
           });
 
-          const details = await ctx.client.configGet(parsed.category, parsed.item);
+          const raw = await ctx.client.configGet(parsed.category, parsed.item);
+          const details = parsed.includeSecretValues === true
+            ? raw
+            : redactConfigValue(raw, parsed.category, parsed.item);
           return withStructuredJson({ value: details }, {
             success: true,
             category: parsed.category,

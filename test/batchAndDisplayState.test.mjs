@@ -189,6 +189,13 @@ test("c64_batch rejects unknown tools per command without aborting the batch", a
   assert.equal(data.results[1].success, true);
 });
 
+test("c64_batch reports invalid arguments with structured validation metadata", async () => {
+  const result = await toolRegistry.invoke("c64_batch", { commands: "not-an-array" }, makeCtx());
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata?.error?.kind, "validation");
+  assert.ok(result.content[0].text.length > 0);
+});
+
 // ---------------------------------------------------------------------------
 // c64_graphics get_display_state
 // ---------------------------------------------------------------------------
