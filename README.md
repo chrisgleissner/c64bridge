@@ -717,7 +717,7 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 | --- | --- | --- | --- | --- | --- | --- |
 | `batch_update` | Apply multiple configuration updates in a single request. | — | — | ✅ | ✅ | ✅ |
 | `diff` | Compare the current configuration with a snapshot. | `path` | — | ✅ | ✅ | ✅ |
-| `get` | Read a configuration category or specific item. | `category` | `item` | ✅ | ✅ | ✅ |
+| `get` | Read a configuration category or specific item. | `category` | `item`, `includeSecretValues=false` | ✅ | ✅ | ✅ |
 | `info` | Retrieve Ultimate hardware information and status. | — | — | ✅ | ✅ | ✅ |
 | `list` | List configuration categories reported by the firmware. | — | — | ✅ | ✅ | ✅ |
 | `load_flash` | Load configuration from flash storage. | — | — | ✅ | ✅ |  |

@@ -5725,6 +5725,14 @@
             "description": "Specific configuration item inside the selected category (e.g. 'Volume').",
             "minLength": 1
           },
+          "includeSecretValues": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Return credential values (network password, FTP/Telnet passwords, Wi-Fi keys) in plain text. Default false: those values are replaced with ***.",
+            "default": false
+          },
           "value": {
             "description": "Primitive configuration value (string, number, or boolean).",
             "type": [
@@ -5818,7 +5826,7 @@
         "required": [
           "op"
         ],
-        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
+        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item, includeSecretValues.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
         "additionalProperties": false,
         "x-c64bridge-operations": [
           {
@@ -5847,7 +5855,8 @@
               "category"
             ],
             "optional": [
-              "item"
+              "item",
+              "includeSecretValues"
             ],
             "inputSchema": {
               "type": "object",
@@ -5865,6 +5874,14 @@
                   ],
                   "description": "Specific configuration item inside the selected category (e.g. 'Volume').",
                   "minLength": 1
+                },
+                "includeSecretValues": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Return credential values (network password, FTP/Telnet passwords, Wi-Fi keys) in plain text. Default false: those values are replaced with ***.",
+                  "default": false
                 },
                 "op": {
                   "const": "get"
