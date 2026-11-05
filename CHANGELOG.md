@@ -3,6 +3,22 @@
 
 
 
+
+## 1.0.7 - 2026-11-05
+
+### Bug Fixes
+
+- report tool failures through the shared error helpers (b043a1e)
+
+### Refactoring
+
+- remove unused exported functions (4eb7eea)
+
+### Documentation
+
+- regenerate MCP interface and README for config_get includeSecretValues (6a6d360)
+- align server.json and AGENTS.md with registered tools and env (501089b)
+
 ## 1.0.6 - 2026-10-15
 
 ### Bug Fixes
