@@ -73,7 +73,7 @@
     "date-fns": "^4.4.0",
     "fastify": "^5.12.5",
     "jimp": "^1.6.1",
-    "meyda": "^5.6.3",
+    "meyda": "5.6.2",
     "octokit": "^5.0.5",
     "pitchfinder": "^2.3.4",
     "reflect-metadata": "^0.2.2",
@@ -81,6 +81,9 @@
   },
   "optionalDependencies": {
     "naudiodon": "^2.3.6"
+  },
+  "overrides": {
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/node": "^25.9.5",
