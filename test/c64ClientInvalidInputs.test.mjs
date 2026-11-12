@@ -95,3 +95,18 @@ test("C64Client: sidSilenceAll does not read a SIDWAVE handler that would cross 
   assert.equal((await client.sidSilenceAll()).success, true);
   assert.deepEqual(reads, [[0x0314, 2]]);
 });
+
+test("C64Client: readMemory rejects bare hex, leading-zero decimals and accepts % binary", async () => {
+  const client = new C64Client("http://example.invalid");
+  const bare = await client.readMemory("C000", "1");
+  assert.equal(bare.success, false);
+  assert.ok(String(bare.details?.message).includes("$C000"));
+  const zero = await client.readMemory("0400", "1");
+  assert.equal(zero.success, false);
+  assert.ok(String(zero.details?.message).toLowerCase().includes("leading zero"));
+  const badLength = await client.readMemory("$0400", "010");
+  assert.equal(badLength.success, false);
+  const overflow = await client.readMemory("%1111111111111111", "2");
+  assert.equal(overflow.success, false);
+  assert.ok(String(overflow.details?.message).toLowerCase().includes("range"));
+});

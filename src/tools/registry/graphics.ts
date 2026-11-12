@@ -21,9 +21,13 @@ import {
   type GroupedOperationConfig,
   type GenericOperationMap,
 } from "./utils.js";
+import { Jimp } from "jimp";
 import { jsonResult } from "../responses.js";
+import { VIC_PALETTE } from "../../vicBitmap.js";
+import type { ToolResponseContentImage } from "../types.js";
 import {
   ToolError,
+  ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "../errors.js";
@@ -42,9 +46,13 @@ const captureFrameArgsSchema = objectSchema({
       default: 1,
     }), 1),
     includePixels: optionalSchema(booleanSchema({
-      description: "Include pixel payload bytes in the response.",
-      default: true,
-    }), true),
+      description: "Include raw pixel payload bytes in the response. Off by default because a frame is about 100 KB; the response is rejected above 2 MiB, so lower count when it is on.",
+      default: false,
+    }), false),
+    format: optionalSchema(stringSchema({
+      description: "Set to png to receive each frame as an MCP image block (C64 palette). At most 4 frames per call.",
+      enum: ["png"],
+    })),
     encoding: optionalSchema(stringSchema({
       description: "Encoding used for the pixel payload when included.",
       enum: ["base64", "hex"],
@@ -54,6 +62,37 @@ const captureFrameArgsSchema = objectSchema({
   required: ["op"],
   additionalProperties: false,
 });
+
+/** Largest raw pixel payload (encoded size, all frames) one capture_frame response may carry. */
+export const MAX_CAPTURE_PAYLOAD_BYTES = 2 * 1024 * 1024;
+export const MAX_PNG_FRAMES = 4;
+
+/** Renders one captured frame (one palette index per byte) as a PNG image content block. */
+export async function frameToPngContent(frame: {
+  readonly width: number;
+  readonly height: number;
+  readonly bitsPerPixel: number;
+  readonly pixels: Uint8Array;
+}): Promise<ToolResponseContentImage> {
+  const { width, height } = frame;
+  if (frame.bitsPerPixel > 8 || frame.pixels.length < width * height) {
+    throw new ToolValidationError("PNG output needs indexed frames with one byte per pixel; use includePixels for raw data", {
+      path: "$.format",
+      details: { bitsPerPixel: frame.bitsPerPixel, width, height, byteLength: frame.pixels.length },
+    });
+  }
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < width * height; i += 1) {
+    const [r, g, b] = VIC_PALETTE[frame.pixels[i]! & 0x0f]!;
+    rgba[i * 4] = r;
+    rgba[i * 4 + 1] = g;
+    rgba[i * 4 + 2] = b;
+    rgba[i * 4 + 3] = 0xff;
+  }
+  const image = new Jimp({ width, height, data: rgba });
+  const png = await image.getBuffer("image/png");
+  return { type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" };
+}
 
 // ---------------------------------------------------------------------------
 // get_display_state helpers — VIC-II register decoding
@@ -129,11 +168,32 @@ const graphicsOperations: GroupedOperationConfig[] = [
           count: parsed.count,
           includePixels: parsed.includePixels,
           encoding: parsed.encoding,
+          format: parsed.format,
         });
 
+        if (parsed.format === "png" && (parsed.count ?? 1) > MAX_PNG_FRAMES) {
+          throw new ToolValidationError(`count must be at most ${MAX_PNG_FRAMES} when format is png`, {
+            path: "$.count",
+            details: { count: parsed.count, maximum: MAX_PNG_FRAMES },
+          });
+        }
+
         const capture = await ctx.client.captureFrames({ count: parsed.count });
-        const includePixels = parsed.includePixels !== false;
+        const includePixels = parsed.includePixels === true;
         const encoding = parsed.encoding ?? "base64";
+        if (includePixels) {
+          const rawBytes = capture.frames.reduce((sum, frame) => sum + frame.pixels.length, 0);
+          const encodedBytes = encoding === "hex" ? rawBytes * 2 : Math.ceil(rawBytes / 3) * 4;
+          if (encodedBytes > MAX_CAPTURE_PAYLOAD_BYTES) {
+            throw new ToolValidationError(
+              `Raw pixel response would be ${encodedBytes} bytes, above the ${MAX_CAPTURE_PAYLOAD_BYTES} byte limit; lower count or use format png`,
+              { path: "$.count", details: { count: parsed.count, encodedBytes, limitBytes: MAX_CAPTURE_PAYLOAD_BYTES } },
+            );
+          }
+        }
+        const images = parsed.format === "png"
+          ? await Promise.all(capture.frames.map((frame) => frameToPngContent(frame)))
+          : [];
         const frames = capture.frames.map((frame, index) => {
           const pixels = includePixels
             ? {
@@ -156,7 +216,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
           };
         });
 
-        return jsonResult(
+        const result = jsonResult(
           {
             backend: capture.backend,
             count: frames.length,
@@ -168,8 +228,10 @@ const graphicsOperations: GroupedOperationConfig[] = [
             count: frames.length,
             includePixels,
             encoding: includePixels ? encoding : null,
+            format: parsed.format ?? null,
           },
         );
+        return images.length > 0 ? { ...result, content: [...result.content, ...images] } : result;
       } catch (error) {
         if (error instanceof ToolError) {
           return toolErrorResult(error);
@@ -266,6 +328,10 @@ export const graphicsModuleGroup = defineToolModule({
         description: "Graphics operations available via the c64_graphics tool.",
         variants: graphicsOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        capture_frame: "read", render_petscii_art: "write", render_petscii_text: "write",
+        render_sprite: "write", render_bitmap: "write", get_display_state: "read",
+      },
       tags: ["graphics", "vic", "grouped"],
       examples: [
         {

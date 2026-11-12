@@ -2,6 +2,7 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { createPromptRegistry } from "../src/prompts/registry.js";
 import { RESOURCE_URIS } from "../src/rag/resourceUris.js";
+import { describeToolModules } from "../src/tools/registry/index.js";
 
 const registry = createPromptRegistry();
 
@@ -118,4 +119,17 @@ test("all prompts have valid tool references", () => {
       `Prompt ${entry.descriptor.name} should resolve without errors`
     );
   }
+});
+
+test("every prompt named in a tool's _meta.prompts exists in the prompt registry", () => {
+  const known = new Set(registry.list().map((entry) => entry.descriptor.name));
+  const missing = [];
+  for (const module of describeToolModules()) {
+    for (const tool of module.tools) {
+      for (const prompt of tool.metadata?.prompts ?? []) {
+        if (!known.has(prompt)) missing.push(`${tool.name} -> ${prompt}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, []);
 });

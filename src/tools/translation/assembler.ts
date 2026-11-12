@@ -82,7 +82,7 @@ interface AssignmentStatement {
   isLocationCounter: boolean;
 }
 
-type DirectiveName = "org" | "byte" | "word" | "reserve" | "include";
+type DirectiveName = "org" | "byte" | "word" | "text" | "fill" | "align" | "equ" | "reserve" | "include";
 
 type DirectiveArg =
   | { kind: "expr"; expr: Expression }
@@ -220,6 +220,11 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   "RES": "reserve",
   ".DS": "reserve",
   "DS": "reserve",
+  ".EQU": "equ",
+  ".FILL": "fill",
+  ".ALIGN": "align",
+  ".TEXT": "text",
+  ".ASCII": "text",
   ".INCLUDE": "include",
   "INCLUDE": "include",
 };
@@ -290,20 +295,30 @@ class Parser {
     for (let index = 0; index < lines.length; index += 1) {
       const originalLine = lines[index] ?? "";
       const location: SourceLocation = { file: fileName, line: index + 1, text: originalLine };
-      const tokens = tokenize(originalLine);
-      if (tokens.length === 0) {
-        continue;
+      let labels: string[] = [];
+      let statement: Statement | undefined;
+      try {
+        const tokens = tokenize(originalLine);
+        if (tokens.length === 0) {
+          continue;
+        }
+
+        const stream = new TokenStream(tokens);
+        labels = [];
+
+        while (stream.peek()?.kind === "symbol" && stream.peek(1)?.kind === "punct" && stream.peek(1)!.value === ":") {
+          labels.push(stream.consumeSymbol());
+          stream.consumePunct(":");
+        }
+
+        statement = this.parseStatement(stream, location, includeStack, statements);
+      } catch (error) {
+        // Name the source line for syntax errors as well.
+        if (error instanceof AssemblyError) {
+          throw error;
+        }
+        throw new AssemblyError(error instanceof Error ? error.message : String(error), location);
       }
-
-      const stream = new TokenStream(tokens);
-      const labels: string[] = [];
-
-      while (stream.peek()?.kind === "symbol" && stream.peek(1)?.kind === "punct" && stream.peek(1)!.value === ":") {
-        labels.push(stream.consumeSymbol());
-        stream.consumePunct(":");
-      }
-
-      const statement = this.parseStatement(stream, location, includeStack, statements);
 
       statements.push({
         labels,
@@ -352,6 +367,16 @@ class Parser {
       throw new AssemblyError("Expected an opcode, directive, or assignment", location);
     }
 
+    // "name .equ expr", the same as "name = expr".
+    const second = stream.peek(1);
+    if (second?.kind === "symbol" && second.value.toUpperCase() === ".EQU") {
+      const target = stream.consumeSymbol();
+      stream.consumeSymbol();
+      const expr = parseExpression(stream, new Set<string>());
+      stream.expectEnd();
+      return { kind: "assignment", target, expr, isLocationCounter: false };
+    }
+
     const upper = stream.consumeSymbol().toUpperCase();
 
     if (upper in DIRECTIVE_ALIASES) {
@@ -385,7 +410,26 @@ class Parser {
           this.parseInto(statements, normalizeSource(includeContent), includeName, [...includeStack, includePath]);
           return undefined;
         }
+        case "equ": {
+          // ".equ name, expr", the same as "name = expr".
+          const target = stream.consumeSymbol(".equ expects a symbol name");
+          stream.consumePunct(",", ".equ expects a comma between the name and the value");
+          const expr = parseExpression(stream, new Set<string>());
+          stream.expectEnd();
+          return { kind: "assignment", target, expr, isLocationCounter: false };
+        }
+        case "fill":
+        case "align": {
+          const args: DirectiveArg[] = [{ kind: "expr", expr: parseExpression(stream, new Set<string>([","])) }];
+          if (stream.peek()?.kind === "punct" && stream.peek()!.value === ",") {
+            stream.consumePunct(",");
+            args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>()) });
+          }
+          stream.expectEnd();
+          return { kind: "directive", name: directive, args };
+        }
         case "byte":
+        case "text":
         case "word": {
           const args: DirectiveArg[] = [];
           while (!stream.isAtEnd()) {
@@ -848,10 +892,32 @@ class SymbolTable {
   reset(): void {
     this.globals = new Map();
     this.locals = new Map();
+    this.definitions.clear();
     this.currentScope = undefined;
   }
 
-  setLabel(label: string, value: number): void {
+  private readonly definitions = new Map<string, { location: SourceLocation; value: number; isLabel: boolean }>();
+
+  /**
+   * Records where a name was first defined and rejects a second definition.
+   * Redefining a constant with the same value is allowed.
+   */
+  private recordDefinition(label: string, value: number, isLabel: boolean, location: SourceLocation | undefined): void {
+    if (!location) return;
+    const key = label.startsWith(".") ? `${this.currentScope ?? ""}\u0000${label}` : label;
+    const previous = this.definitions.get(key);
+    if (previous && (previous.isLabel || isLabel || previous.value !== value)) {
+      const kind = isLabel || previous.isLabel ? "label" : "symbol";
+      throw new Error(`Duplicate ${kind} "${label}" (first defined at ${previous.location.file}:${previous.location.line})`);
+    }
+    this.definitions.set(key, { location, value, isLabel });
+  }
+
+  setLabel(label: string, value: number, location?: SourceLocation): void {
+    if (label.startsWith(".") && !this.currentScope) {
+      throw new Error(`Local label "${label}" defined before any global label`);
+    }
+    this.recordDefinition(label, value, true, location);
     if (label.startsWith(".")) {
       if (!this.currentScope) {
         throw new Error(`Local label "${label}" defined before any global label`);
@@ -877,7 +943,11 @@ class SymbolTable {
     this.ensureUnchanged(label, expected);
   }
 
-  setAssignment(label: string, value: number): void {
+  setAssignment(label: string, value: number, location?: SourceLocation): void {
+    if (label.startsWith(".") && !this.currentScope) {
+      throw new Error(`Local constant "${label}" defined before any global label`);
+    }
+    this.recordDefinition(label, value, false, location);
     if (label.startsWith(".")) {
       if (!this.currentScope) {
         throw new Error(`Local constant "${label}" defined before any global label`);
@@ -1021,7 +1091,7 @@ class Assembler {
   private processLine(line: ParsedLine, pass: 0 | 1): void {
     for (const label of line.labels) {
       if (pass === 0) {
-        this.symbolTable.setLabel(label, this.pc);
+        this.symbolTable.setLabel(label, this.pc, line.location);
       } else {
         this.symbolTable.ensureLabel(label, this.pc);
       }
@@ -1049,12 +1119,12 @@ class Assembler {
   private handleAssignment(statement: AssignmentStatement, pass: 0 | 1, location: SourceLocation): void {
     const value = this.evaluate(statement.expr, pass, location);
     if (value === undefined) {
-      throw new AssemblyError("Assignment depends on an undefined symbol", location);
+      throw this.undefinedError(statement.expr, location, "Assignment depends on an undefined symbol");
     }
     if (statement.isLocationCounter) {
       this.pc = value & 0xffff;
     } else if (pass === 0) {
-      this.symbolTable.setAssignment(statement.target, value);
+      this.symbolTable.setAssignment(statement.target, value, location);
     } else {
       this.symbolTable.ensureAssignment(statement.target, value);
     }
@@ -1068,17 +1138,23 @@ class Assembler {
         }
         const value = this.evaluate(statement.args[0]?.expr, pass, location);
         if (value === undefined) {
-          throw new AssemblyError("org directive requires a defined value", location);
+          throw this.undefinedError(statement.args[0].expr, location, "org directive requires a defined value");
         }
         this.pc = value & 0xffff;
         break;
       }
-      case "byte": {
+      case "byte":
+      case "text": {
+        const isText = statement.name === "text";
         for (const arg of statement.args) {
           if (arg.kind === "string") {
             if (pass === 1) {
               for (const char of arg.value) {
-                this.writeByte(char.charCodeAt(0), location);
+                const code = isText ? asciiToPetscii(char, location) : char.charCodeAt(0);
+                if (code > 0xff) {
+                  throw new AssemblyError(`byte directive character '${char}' (code ${code}) does not fit in one byte`, location);
+                }
+                this.writeByte(code, location);
               }
             } else {
               this.pc += arg.value.length;
@@ -1087,7 +1163,10 @@ class Assembler {
             const value = this.evaluate(arg.expr, pass, location);
             if (pass === 1) {
               if (value === undefined) {
-                throw new AssemblyError("byte directive contains undefined expression", location);
+                throw this.undefinedError(arg.expr, location, "byte directive contains undefined expression");
+              }
+              if (value < -128 || value > 255) {
+                throw new AssemblyError(`byte directive value ${value} is outside -128..255 and would be truncated`, location);
               }
               this.writeByte(value, location);
             } else {
@@ -1111,10 +1190,13 @@ class Assembler {
             const value = this.evaluate(arg.expr, pass, location);
             if (value === undefined) {
               if (pass === 1) {
-                throw new AssemblyError("word directive contains undefined expression", location);
+                throw this.undefinedError(arg.expr, location, "word directive contains undefined expression");
               }
               this.pc += 2;
             } else if (pass === 1) {
+              if (value < -32768 || value > 65535) {
+                throw new AssemblyError(`word directive value ${value} is outside -32768..65535 and would be truncated`, location);
+              }
               this.writeWord(value, location);
             } else {
               this.pc += 2;
@@ -1123,21 +1205,60 @@ class Assembler {
         }
         break;
       }
+      case "fill": {
+        const count = this.evaluateDefined(statement.args[0]!, pass, location, "fill directive");
+        if (!Number.isInteger(count) || count < 0 || count > 0x10000) {
+          throw new AssemblyError(`fill directive requires a count of 0..65536, got ${count}`, location);
+        }
+        const value = statement.args[1] ? this.evaluateDefined(statement.args[1], pass, location, "fill directive") : 0;
+        if (pass === 1) {
+          this.checkByteValue(value, "fill directive", location);
+          for (let index = 0; index < count; index += 1) this.writeByte(value, location);
+        } else {
+          this.pc += count;
+        }
+        break;
+      }
+      case "align": {
+        const boundary = this.evaluateDefined(statement.args[0]!, pass, location, "align directive");
+        if (!Number.isInteger(boundary) || boundary < 1 || boundary > 0x10000) {
+          throw new AssemblyError(`align directive requires a boundary of 1..65536, got ${boundary}`, location);
+        }
+        const value = statement.args[1] ? this.evaluateDefined(statement.args[1], pass, location, "align directive") : 0;
+        const padding = (boundary - (this.pc % boundary)) % boundary;
+        if (pass === 1) {
+          this.checkByteValue(value, "align directive", location);
+          for (let index = 0; index < padding; index += 1) this.writeByte(value, location);
+        } else {
+          this.pc += padding;
+        }
+        break;
+      }
+      case "equ": {
+        // Parsed as an assignment; never reaches the directive handler.
+        break;
+      }
       case "reserve": {
         if (statement.args.length !== 1 || statement.args[0]?.kind !== "expr") {
           throw new AssemblyError("reserve directive expects a single expression", location);
         }
         const amount = this.evaluate(statement.args[0]?.expr, pass, location);
         if (amount === undefined) {
-          throw new AssemblyError("reserve directive requires a defined value", location);
+          throw this.undefinedError(statement.args[0].expr, location, "reserve directive requires a defined value");
         }
         if (amount < 0) {
           throw new AssemblyError("reserve directive requires a non-negative size", location);
         }
         // Reserved space advances the PC without emitting; buildPrg includes it
         // (zero-filled) only where it adjoins emitted bytes.
-        if (amount > 0) this.reserved.push([this.pc, Math.min(0xffff, this.pc + amount - 1)]);
-        this.pc = (this.pc + amount) & 0xffff;
+        if (this.pc + amount > MAX_ADDRESS + 1) {
+          throw new AssemblyError(
+            `reserve directive of ${amount} bytes at ${formatHex(this.pc)} passes $FFFF`,
+            location,
+          );
+        }
+        if (amount > 0) this.reserved.push([this.pc, this.pc + amount - 1]);
+        this.pc += amount;
         break;
       }
       case "include": {
@@ -1160,7 +1281,8 @@ class Assembler {
     }
 
     if (modeExpectsValue(info.mode) && info.value === undefined) {
-      throw new AssemblyError("Undefined expression", location);
+      const operand = statement.operand;
+      throw this.undefinedError("expr" in operand ? operand.expr : undefined, location, "Undefined expression");
     }
 
     const opcode = lookupOpcode(statement.mnemonic, info.mode, location);
@@ -1193,6 +1315,49 @@ class Assembler {
       default:
         throw new AssemblyError(`Unhandled addressing mode ${info.mode}`, location);
     }
+  }
+
+  private evaluateDefined(arg: DirectiveArg, pass: 0 | 1, location: SourceLocation, context: string): number {
+    if (arg.kind !== "expr") {
+      throw new AssemblyError(`${context} expects a numeric expression`, location);
+    }
+    const value = this.evaluate(arg.expr, pass, location);
+    if (value === undefined) {
+      throw this.undefinedError(arg.expr, location, `${context} requires a defined value`);
+    }
+    return value;
+  }
+
+  private checkByteValue(value: number, context: string, location: SourceLocation): void {
+    if (value < -128 || value > 255) {
+      throw new AssemblyError(`${context} value ${value} is outside -128..255 and would be truncated`, location);
+    }
+  }
+
+  private undefinedSymbols(expr: Expression | undefined): string[] {
+    if (!expr) return [];
+    switch (expr.type) {
+      case "number":
+        return [];
+      case "symbol":
+        return expr.name !== "*" && this.symbolTable.get(expr.name) === undefined ? [expr.name] : [];
+      case "unary":
+        return this.undefinedSymbols(expr.operand);
+      case "binary":
+        return [...new Set([...this.undefinedSymbols(expr.left), ...this.undefinedSymbols(expr.right)])];
+      default:
+        return [];
+    }
+  }
+
+  /** Names the undefined symbols of an expression; falls back to the generic message. */
+  private undefinedError(expr: Expression | undefined, location: SourceLocation, fallback: string): AssemblyError {
+    const names = this.undefinedSymbols(expr);
+    if (names.length === 0) {
+      return new AssemblyError(fallback, location);
+    }
+    const quoted = names.map((name) => `"${name}"`).join(", ");
+    return new AssemblyError(`Undefined symbol${names.length > 1 ? "s" : ""} ${quoted}`, location);
   }
 
   private evaluate(expr: Expression, pass: 0 | 1, location: SourceLocation): number | undefined {
@@ -1275,12 +1440,20 @@ class Assembler {
   }
 
   private writeByte(value: number, location: SourceLocation): void {
+    if (this.pc > MAX_ADDRESS) {
+      throw new AssemblyError(
+        `Output passes $FFFF: a byte would be written at ${formatHex(this.pc)}, outside the 64 KB address space`,
+        location,
+      );
+    }
     const masked = value & 0xff;
     this.memory[this.pc] = masked;
     this.written[this.pc] = 1;
     this.lowestWritten = Math.min(this.lowestWritten, this.pc);
     this.highestWritten = Math.max(this.highestWritten, this.pc);
-    this.pc = (this.pc + 1) & 0xffff;
+    // The counter may reach $10000 so that a following write is detected; a
+    // wrapped counter would silently overwrite the start of the image.
+    this.pc += 1;
   }
 
   private writeWord(value: number, location: SourceLocation): void {
@@ -1288,6 +1461,22 @@ class Assembler {
     this.writeByte(masked & 0xff, location);
     this.writeByte((masked >> 8) & 0xff, location);
   }
+}
+
+/**
+ * ASCII to PETSCII for .text/.ascii in the default upper-case/graphics
+ * character set: a-z and A-Z both become the PETSCII upper-case codes
+ * $41-$5A, newline becomes RETURN ($0D), every other ASCII character is
+ * unchanged. Characters above $7F have no mapping.
+ */
+function asciiToPetscii(char: string, location: SourceLocation): number {
+  const code = char.charCodeAt(0);
+  if (code > 0x7f) {
+    throw new AssemblyError(`text directive character '${char}' (code ${code}) is not ASCII and has no PETSCII mapping`, location);
+  }
+  if (code >= 0x61 && code <= 0x7a) return code - 0x20;
+  if (code === 0x0a) return 0x0d;
+  return code;
 }
 
 interface ResolvedInstruction {
@@ -1306,6 +1495,7 @@ function determineInstruction(
   if (statement.resolvedMode && pass === 1) {
     const value = statement.operand.kind === "none" ? undefined : resolveOperandValue(statement.operand, evaluator, pass, location);
     assertZeroPageOperand(statement.mnemonic, statement.resolvedMode, value, location);
+    assertOperandRange(statement.mnemonic, statement.resolvedMode, value, location);
     const size = instructionSize(statement.resolvedMode);
     return {
       mode: statement.resolvedMode,
@@ -1452,6 +1642,50 @@ function assertZeroPageOperand(mnemonic: string, mode: AddressingMode, value: nu
     `Instruction ${mnemonic} does not support ${absoluteMode} addressing (operand ${formatHex(value)} is outside zero page)`,
     location,
   );
+}
+
+/**
+ * Rejects operands that the encoding would truncate. Runs in the final pass
+ * only, where every symbol has a value; in the first pass a forward reference
+ * is still undefined and is sized as absolute.
+ */
+function assertOperandRange(mnemonic: string, mode: AddressingMode, value: number | undefined, location: SourceLocation): void {
+  if (value === undefined) return;
+  switch (mode) {
+    case AddressingMode.Immediate:
+      if (value < -128 || value > 255) {
+        throw new AssemblyError(
+          `Immediate operand ${value} of ${mnemonic} is outside -128..255 and would be truncated to one byte`,
+          location,
+        );
+      }
+      return;
+    case AddressingMode.IndirectX:
+    case AddressingMode.IndirectY:
+      if (value < 0 || value > 0xff) {
+        const form = mode === AddressingMode.IndirectX ? "(zp,X)" : "(zp),Y";
+        throw new AssemblyError(
+          `Instruction ${mnemonic} ${form} requires a zero-page operand ($00-$FF), got ${value < 0 ? value : formatHex(value)}`,
+          location,
+        );
+      }
+      return;
+    case AddressingMode.ZeroPageS:
+      if (value < 0 || value > 0xff) {
+        throw new AssemblyError(`Stack-relative operand ${value} of ${mnemonic} is outside 0..255`, location);
+      }
+      return;
+    case AddressingMode.Absolute:
+    case AddressingMode.AbsoluteX:
+    case AddressingMode.AbsoluteY:
+    case AddressingMode.Indirect:
+      if (value < 0 || value > 0xffff) {
+        throw new AssemblyError(`Address operand ${value} of ${mnemonic} is outside $0000-$FFFF`, location);
+      }
+      return;
+    default:
+      return;
+  }
 }
 
 const ZERO_PAGE_TO_ABSOLUTE_MODE = new Map<AddressingMode, AddressingMode>([

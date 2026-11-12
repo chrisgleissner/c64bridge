@@ -2,6 +2,7 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { toolRegistry } from "../../src/tools/registry/index.js";
+import { publishedInputSchema } from "../../src/tools/types.js";
 
 function stripUndefinedDeep(value) {
   if (Array.isArray(value)) {
@@ -66,8 +67,8 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
         if (descriptor.inputSchema) {
           assert.deepEqual(
             stripUndefinedDeep(listed.inputSchema),
-            stripUndefinedDeep(descriptor.inputSchema),
-            "input schema should match registry",
+            stripUndefinedDeep(publishedInputSchema(descriptor.inputSchema, { verbose: false })),
+            "input schema should match the published form of the registry schema",
           );
         } else {
           assert.ok(
@@ -112,6 +113,71 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
           );
         }
       }
+    });
+  });
+
+  test("tools/list stays below 90 KB and omits the duplicated per-op schemas", async () => {
+    await withSharedMcpClient(async ({ client }) => {
+      const listResult = await client.request(
+        { method: "tools/list", params: {} },
+        ListToolsResultSchema,
+      );
+      const bytes = Buffer.byteLength(JSON.stringify(listResult));
+      assert.ok(bytes < 90_000, `tools/list is ${bytes} bytes`);
+      for (const tool of listResult.tools) {
+        assert.ok(
+          !("x-c64bridge-operations" in (tool.inputSchema ?? {})),
+          `${tool.name} should not publish x-c64bridge-operations`,
+        );
+      }
+    });
+  });
+
+  test("tools/list publishes annotations derived from the operation effects", async () => {
+    await withSharedMcpClient(async ({ client }) => {
+      const listResult = await client.request(
+        { method: "tools/list", params: {} },
+        ListToolsResultSchema,
+      );
+      const listed = new Map(listResult.tools.map((tool) => [tool.name, tool]));
+      assert.deepEqual(listed.get("c64_rag").annotations, {
+        readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false,
+      });
+      assert.equal(listed.get("c64_system").annotations.destructiveHint, true);
+      assert.equal(listed.get("c64_system").annotations.readOnlyHint, false);
+      assert.equal(listed.get("c64_memory").annotations.destructiveHint, false);
+      assert.match(listed.get("c64_system").inputSchema.description, /\n- poweroff \[c64u, vice\] \[destructive\]: /);
+      for (const descriptor of toolRegistry.list()) {
+        assert.deepEqual(listed.get(descriptor.name).annotations, descriptor.annotations, descriptor.name);
+      }
+    });
+  });
+
+  test("published grouped tool descriptions state required parameters per op", async () => {
+    await withSharedMcpClient(async ({ client }) => {
+      const listResult = await client.request(
+        { method: "tools/list", params: {} },
+        ListToolsResultSchema,
+      );
+      const listed = new Map(listResult.tools.map((tool) => [tool.name, tool]));
+      let checked = 0;
+      for (const descriptor of toolRegistry.list()) {
+        const operations = descriptor.inputSchema?.["x-c64bridge-operations"];
+        if (!operations) continue;
+        const text = listed.get(descriptor.name).inputSchema.description;
+        for (const operation of operations) {
+          const line = text.split("\n").find((entry) => entry.startsWith(`- ${operation.op} `) || entry.startsWith(`- ${operation.op}:`));
+          assert.ok(line, `${descriptor.name} description should list op ${operation.op}`);
+          if (operation.required.length > 0) {
+            assert.ok(line.includes(`Required inputs: ${operation.required.join(", ")}.`), `${descriptor.name}.${operation.op}: ${line}`);
+          }
+          for (const name of operation.optional) {
+            assert.ok(line.includes(name), `${descriptor.name}.${operation.op} should name optional ${name}`);
+          }
+          checked += 1;
+        }
+      }
+      assert.ok(checked > 50, `checked ${checked} operations`);
     });
   });
 }

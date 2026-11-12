@@ -112,7 +112,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "batch_update",
       ensureDescriptor(developerDescriptorIndex, "config_batch_update").inputSchema,
-      { description: "Apply multiple configuration updates in a single request." },
+      { description: "Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_batch_update", rawArgs, ctx),
   },
@@ -268,6 +268,13 @@ export const configModuleGroup = defineToolModule({
         description: "Configuration operations available via the c64_config tool.",
         variants: configOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        list: "read", get: "read", set: "write", batch_update: "write", load_flash: "destructive",
+        save_flash: "destructive", reset_defaults: "destructive", read_debugreg: "read",
+        write_debugreg: "destructive", info: "read", version: "read", snapshot: "write",
+        restore: "write", diff: "read", shuffle: "write",
+      },
+      effectOf: (op, args) => (op === "restore" && (args as { applyToFlash?: unknown }).applyToFlash === true ? "destructive" : undefined),
       tags: ["config", "diagnostics", "grouped"],
       operationPlatforms: {
         load_flash: ["c64u", "u2"],
@@ -299,7 +306,7 @@ export const configModuleGroup = defineToolModule({
         {
           name: "Snapshot config",
           description: "Write configuration snapshot to disk",
-          arguments: { op: "snapshot", path: "./snapshots/c64_json" },
+          arguments: { op: "snapshot", path: "./snapshots/c64.json" },
         },
       ],
       execute: createOperationDispatcher<GenericOperationMap>(

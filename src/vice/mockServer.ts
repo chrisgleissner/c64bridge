@@ -66,6 +66,8 @@ export class ViceMockServer {
   private server: net.Server | null = null;
   private memory = new Uint8Array(0x10000);
   private helloReady = false;
+  /** Test hook: the payload of every keyboard feed command received, in order. */
+  readonly keyboardFeeds: Buffer[] = [];
   private heartbeat: { startedAt: number; baseValue: number } | null = null;
   private checkpoints = new Map<number, MockCheckpoint>();
   private nextCheckpointId = 1;
@@ -274,6 +276,7 @@ export class ViceMockServer {
       }
       case 0x72: { // keyboard feed
         const len = body[0] ?? 0;
+        this.keyboardFeeds.push(Buffer.from(body.subarray(1, 1 + len)));
         const text = body.subarray(1, 1 + len).toString("ascii").toUpperCase();
         if (text.includes("RUN")) {
           this.renderHello();

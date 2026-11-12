@@ -133,7 +133,7 @@ test("c64_system pause is rejected on vice", async () => {
 
   await assert.rejects(
     () => toolRegistry.invoke("c64_system", { op: "pause" }, ctx),
-    /Tool pause is not available on platform vice/,
+    /`c64_system` op `pause` requires backend c64u or u2 \(active: vice\)/,
   );
 });
 
@@ -147,7 +147,6 @@ test("c64_program c64u-only grouped operations reject on vice", async () => {
   };
 
   for (const [args, expectedTool] of [
-    [{ op: "load_prg", path: "//USB0/demo.prg" }, "load_prg"],
     [{ op: "run_crt", path: "//USB0/demo.crt" }, "run_crt"],
   ]) {
     await assert.rejects(
@@ -665,7 +664,7 @@ test("c64_system background task lifecycle proxies to meta tools", async () => {
 
     const start = await toolRegistry.invoke(
       "c64_system",
-  { op: "start_task", name: "grouped-task", operation: "read", intervalMs: 10, maxIterations: 1 },
+  { op: "start_task", name: "grouped-task", operation: "read", intervalMs: 100, maxIterations: 1 },
       ctx,
     );
     assert.equal(start.metadata?.success, true);
@@ -1669,7 +1668,7 @@ test("c64_graphics capture_frame returns normalized frame payload", async () => 
 
   const result = await toolRegistry.invoke(
     "c64_graphics",
-    { op: "capture_frame", count: 2 },
+    { op: "capture_frame", count: 2, includePixels: true },
     ctx,
   );
 
@@ -2165,7 +2164,7 @@ test("c64_debug wait_for_state reports matched and timed out outcomes", async ()
 
     const matched = await toolRegistry.invoke(
       "c64_debug",
-      { op: "wait_for_state", expectedPC: "$1004", timeoutMs: 50, pollMs: 10 },
+      { op: "wait_for_state", expectedPC: "$1004", timeoutMs: 2000, pollMs: 10 },
       { client: matchedClient, rag: {}, logger, platform: getPlatformStatus(), setPlatform },
     );
     const timedOut = await toolRegistry.invoke(

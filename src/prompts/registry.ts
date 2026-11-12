@@ -3,6 +3,7 @@ import type { KnowledgeResourceDefinition } from "../rag/knowledgeIndex.js";
 import { RESOURCE_URIS } from "../rag/resourceUris.js";
 import { toolRegistry } from "../tools/registry/index.js";
 import type { ToolDescriptor } from "../tools/types.js";
+import { ToolValidationError } from "../tools/errors.js";
 
 export interface PromptDescriptor {
   readonly name: string;
@@ -434,7 +435,11 @@ export function createPromptRegistry(): PromptRegistry {
     resolve(name: string, args: Record<string, unknown>): ResolvedPrompt {
       const definition = definitionByName.get(name);
       if (!definition) {
-        throw new Error(`Unknown prompt: ${name}`);
+        const allowed = Array.from(definitionByName.keys()).sort();
+        throw new ToolValidationError(`Unknown prompt: ${name}. Valid prompts: ${allowed.join(", ")}`, {
+          path: "$.name",
+          details: { allowed, received: name },
+        });
       }
 
       const rawArgs = args ?? {};

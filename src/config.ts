@@ -65,6 +65,12 @@ export function loadConfig(): C64BridgeConfig {
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (candidatePath === configPath) {
+          // An explicitly named file that cannot be used must not silently
+          // hand control to another candidate, which may be another machine.
+          // The parser message is omitted because it can quote file content.
+          throw new Error(`C64BRIDGE_CONFIG file '${candidatePath}' cannot be parsed (${error instanceof Error ? error.name : "unreadable"}); fix or remove it`);
+        }
         // Deliberately omit file contents/credentials. Configuration mistakes
         // should not prevent the MCP server from exposing a recoverable path.
         console.error(`[c64bridge] ignoring configuration '${candidatePath}': ${error instanceof Error ? error.name : "unreadable"}`);
@@ -146,14 +152,16 @@ export function resolveUltimateEndpoint(
   const envPort = profile === "u2" ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT;
   const envPassword = profile === "u2" ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD;
 
-  const parsedSectionHost = parseEndpoint(configuredString(section?.host));
-  const parsedSectionHostname = parseEndpoint(configuredString(section?.hostname));
-  const parsedLegacyHost = parseEndpoint(configuredString(legacy?.c64_host));
-  const parsedLegacyIp = parseEndpoint(configuredString(legacy?.c64_ip));
-  const parsedEnvHost = parseEndpoint(configuredString(envHost));
+  const envHostName = profile === "u2" && process.env.U2_HOST !== undefined ? "U2_HOST" : "C64U_HOST";
+  const envPortName = profile === "u2" && process.env.U2_PORT !== undefined ? "U2_PORT" : "C64U_PORT";
+  const parsedSectionHost = parseEndpoint(configuredString(section?.host), `${profile}.host`);
+  const parsedSectionHostname = parseEndpoint(configuredString(section?.hostname), `${profile}.hostname`);
+  const parsedLegacyHost = parseEndpoint(configuredString(legacy?.c64_host), "c64_host");
+  const parsedLegacyIp = parseEndpoint(configuredString(legacy?.c64_ip), "c64_ip");
+  const parsedEnvHost = parseEndpoint(configuredString(envHost), envHostName);
   const parsedBaseOverrides = [
-    parseEndpoint(normaliseBaseUrl(configuredString(section?.baseUrl))),
-    parseEndpoint(normaliseBaseUrl(configuredString(legacy?.baseUrl))),
+    parseEndpoint(normaliseBaseUrl(configuredString(section?.baseUrl)), `${profile}.baseUrl`),
+    parseEndpoint(normaliseBaseUrl(configuredString(legacy?.baseUrl)), "baseUrl"),
   ];
 
   const hostCandidates = [
@@ -166,12 +174,12 @@ export function resolveUltimateEndpoint(
   ];
 
   const portCandidates = [
-    configuredPort(envPort),
+    configuredPort(envPort, envPortName),
     parsedEnvHost.port,
-    configuredPort(section?.port),
+    configuredPort(section?.port, `${profile}.port`),
     parsedSectionHost.port,
     parsedSectionHostname.port,
-    configuredPort(legacy?.c64_port),
+    configuredPort(legacy?.c64_port, "c64_port"),
     parsedLegacyHost.port,
     parsedLegacyIp.port,
     ...parsedBaseOverrides.map((entry) => entry.port),
@@ -218,17 +226,20 @@ function nonEmptyString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function configuredPort(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65535) {
-    return value;
+/** An absent or empty value is "not set"; any other value must be a valid port. */
+function configuredPort(value: unknown, source: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string" && !value.trim()) return undefined;
+  let parsed: number | undefined;
+  if (typeof value === "number") {
+    parsed = value;
+  } else if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    parsed = Number(value.trim());
   }
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.trim());
-    if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
-      return parsed;
-    }
+  if (parsed !== undefined && Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
+    return parsed;
   }
-  return undefined;
+  throw new Error(`Invalid port ${JSON.stringify(typeof value === "string" ? value.trim() : value)} in ${source}: expected an integer from 1 to 65535`);
 }
 
 function configuredBoolean(value: unknown): boolean | undefined {
@@ -256,20 +267,28 @@ function normaliseBaseUrl(value?: string): string | undefined {
   return stripTrailingSlash(input);
 }
 
-function parseEndpoint(value?: string): { hostname?: string; port?: number; baseUrl?: string; fullUrl?: string } {
+function parseEndpoint(value: string | undefined, source: string): { hostname?: string; port?: number; baseUrl?: string; fullUrl?: string } {
   const input = configuredString(value);
   if (!input) return {};
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input);
+  // A bare IPv6 address (two or more colons, no brackets) is not a valid URL
+  // authority until it is bracketed.
+  const bareIpv6 = !hasScheme && !input.startsWith("[") && (input.match(/:/g)?.length ?? 0) >= 2 && !input.includes("/");
+  let url: URL;
   try {
-    const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input);
-    const url = new URL(hasScheme ? input : `http://${input}`);
+    url = new URL(hasScheme ? input : `http://${bareIpv6 ? `[${input}]` : input}`);
+  } catch {
+    // Drop any user:password@ prefix before echoing the value.
+    const shown = input.replace(/^([a-z][a-z0-9+.-]*:\/\/)?[^@/]*@/i, "$1");
+    throw new Error(`Invalid host ${JSON.stringify(shown)} in ${source}: expected a host name or IP address, optionally with a port`);
+  }
+  {
     const hostname = url.hostname || undefined;
-    const port = url.port ? configuredPort(url.port) : undefined;
+    const port = url.port ? configuredPort(url.port, source) : undefined;
     const baseUrl = stripTrailingSlash(`${url.protocol}//${url.host}`);
     // Scheme and path prefix kept, for an Ultimate reached through a reverse proxy.
     const fullUrl = stripTrailingSlash(`${url.protocol}//${url.host}${url.pathname}`);
     return { hostname, port, baseUrl, fullUrl };
-  } catch {
-    return {};
   }
 }
 

@@ -116,8 +116,12 @@ export const programModule = defineToolModule({
         description: "Program operations available via the c64_program tool.",
         variants: programOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        load_prg: "write", run_prg: "write", run_crt: "write", upload_run_basic: "write",
+        upload_run_asm: "write", batch_run: "write", bundle_run: "write", cross_platform_greeting: "write",
+      },
       tags: ["programs", "execution", "grouped"],
-      operationPlatforms: { load_prg: ["c64u", "u2"], run_crt: ["c64u", "u2"] },
+      operationPlatforms: { run_crt: ["c64u", "u2"] },
       operationToolNames: {
         load_prg: "load_prg",
         run_crt: "run_crt",

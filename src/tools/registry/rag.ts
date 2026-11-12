@@ -59,6 +59,7 @@ export const ragModuleGroup = defineToolModule({
         description: "RAG operations available via the c64_rag tool.",
         variants: ragOperations.map((operation) => operation.schema),
       }),
+      operationEffects: { basic: "read", asm: "read" },
       tags: ["rag", "reference", "grouped"],
       examples: [
         {

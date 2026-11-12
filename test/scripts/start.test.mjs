@@ -331,3 +331,59 @@ test("start script reports missing entry points", async (t) => {
   assert.equal(process.exitCode, 1);
   assert.ok(errors.some((line) => line.includes("Unable to locate server entry point")));
 });
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitUntil(predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+test("start script forwards SIGTERM to the Bun child and the child exits", async (t) => {
+  const fixture = createFixture();
+  t.after(() => {
+    fs.rmSync(fixture.dir, { recursive: true, force: true });
+  });
+  const pidFile = path.join(fixture.dir, "child.pid");
+  const stubPath = path.join(fixture.dir, "bun-stub.sh");
+  // The stub stands in for Bun: it records its pid, then becomes a long sleep.
+  writeFile(stubPath, `#!/bin/sh\necho $$ > "${pidFile}"\nexec sleep 60\n`, 0o755);
+  writeFile(path.join(fixture.dir, "src", "index.ts"), "// fake entry\n");
+
+  const { spawn } = await import("node:child_process");
+  const launcher = spawn(process.env.C64BRIDGE_TEST_NODE_BIN || "node", [sourceStartScript], {
+    cwd: fixture.dir,
+    env: {
+      ...process.env,
+      C64BRIDGE_PROJECT_ROOT: fixture.dir,
+      C64BRIDGE_START_SKIP_AUTO_LAUNCH: "0",
+      BUN_BIN: stubPath,
+    },
+    stdio: "ignore",
+  });
+  const exited = new Promise((resolve) => launcher.once("exit", (code, signal) => resolve({ code, signal })));
+  t.after(() => {
+    if (launcher.exitCode === null && launcher.signalCode === null) launcher.kill("SIGKILL");
+  });
+
+  assert.ok(await waitUntil(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, "utf8").trim() !== ""), "child never started");
+  const childPid = Number(fs.readFileSync(pidFile, "utf8").trim());
+  assert.ok(pidAlive(childPid));
+
+  t.after(() => {
+    if (pidAlive(childPid)) process.kill(childPid, "SIGKILL");
+  });
+  launcher.kill("SIGTERM");
+  await exited;
+  assert.ok(await waitUntil(() => !pidAlive(childPid)), "child process survived SIGTERM to the launcher");
+});

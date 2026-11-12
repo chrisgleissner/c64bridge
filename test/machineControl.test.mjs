@@ -359,3 +359,94 @@ if (isVice) {
       );
     }));
 }
+
+// --- poweroff recovery note ---
+
+testC64uOnly("poweroff result and description state that power must be restored at the outlet", async () => {
+  const ctx = { client: createMockClient(), logger: createLogger() };
+  const res = await machineControlModule.invoke("poweroff", {}, ctx);
+  const text = res.content[0].text;
+  assert.match(text, /power must be restored at the outlet/);
+  assert.match(text, /automatic startup on power restoration/);
+
+  const descriptor = machineControlModule.describeTools().find((tool) => tool.name === "poweroff");
+  assert.match(descriptor.description, /power must be restored at the outlet/);
+  assert.match(descriptor.description, /automatic startup on power restoration/);
+});
+
+test("c64_system poweroff operation description states the power restoration requirement", async () => {
+  const { systemModuleGroup } = await import("../src/tools/registry/system.js");
+  const description = systemModuleGroup.describeTools()[0].inputSchema.description;
+  const line = description.split("\n").find((entry) => entry.startsWith("- poweroff "));
+  assert.match(line, /power must be restored at the outlet/);
+  assert.match(line, /automatic startup on power restoration/);
+});
+
+// --- F-01: waitForReady ---------------------------------------------------
+test("reset, reboot and power_cycle wait for READY. when waitForReady is true", async () => {
+  for (const [tool, op] of [["reset_c64", "reset"], ["reboot_c64", "reboot"], ["power_cycle", "powerCycle"]]) {
+    let reads = 0;
+    const ctx = {
+      client: createMockClient({
+        // First reads fail (device unreachable), then a blank screen, then READY.
+        async readScreen() {
+          reads += 1;
+          if (reads === 1) throw new Error("ECONNREFUSED");
+          if (reads === 2) return "  STARTING";
+          return "\n READY.\n";
+        },
+      }),
+      logger: createLogger(),
+    };
+    const res = await machineControlModule.invoke(tool, { waitForReady: true, readyTimeoutMs: 5000 }, ctx);
+    assert.equal(res.isError, undefined, op);
+    assert.equal(res.metadata.ready, true);
+    assert.ok(res.metadata.readyElapsedMs >= 0);
+    assert.ok(reads >= 3);
+    assert.match(res.content[0].text, /READY\. prompt reached/);
+  }
+});
+
+test("waitForReady timeout is reported as ready=false without failing the reset", async () => {
+  const ctx = { client: createMockClient({ async readScreen() { return "BOOTING"; } }), logger: createLogger() };
+  const res = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 700 }, ctx);
+  assert.equal(res.isError, undefined);
+  assert.equal(res.metadata.success, true);
+  assert.equal(res.metadata.ready, false);
+  assert.match(res.content[0].text, /not seen/);
+});
+
+test("reset without waitForReady does not read the screen and reports no ready field", async () => {
+  const ctx = {
+    client: createMockClient({ async readScreen() { throw new Error("must not be called"); } }),
+    logger: createLogger(),
+  };
+  const res = await machineControlModule.invoke("reset_c64", {}, ctx);
+  assert.equal(res.isError, undefined);
+  assert.equal(res.metadata.ready, undefined);
+  assert.equal(res.content[0].text, "C64 reset command issued successfully.");
+  const bad = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 120001 }, ctx);
+  assert.equal(bad.isError, true);
+});
+
+test("waitForReady ignores the READY. still on screen from before the reset", async () => {
+  const stale = "\n READY.\n LIST\n";
+  const ctx = { client: createMockClient({ async readScreen() { return stale; } }), logger: createLogger() };
+  const res = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 1000 }, ctx);
+  assert.equal(res.isError, undefined);
+  assert.equal(res.metadata.ready, false);
+});
+
+test("waitForReady keeps to its timeout when a screen read never returns, and reports the last read error", async () => {
+  const hanging = { client: createMockClient({ readScreen: () => new Promise(() => {}) }), logger: createLogger() };
+  const started = Date.now();
+  const res = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 600 }, hanging);
+  assert.equal(res.metadata.ready, false);
+  assert.ok(Date.now() - started < 600 + 2000 + 1000, `took ${Date.now() - started} ms`);
+
+  const failing = { client: createMockClient({ async readScreen() { throw new Error("Request failed with status code 403"); } }), logger: createLogger() };
+  const denied = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 600 }, failing);
+  assert.equal(denied.metadata.ready, false);
+  assert.match(denied.metadata.readyError, /403/);
+  assert.match(denied.content[0].text, /403/);
+});

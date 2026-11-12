@@ -29,7 +29,7 @@ test("wait_for_screen_text resolves when pattern appears", async () => {
     },
     logger: createLogger(),
   };
-  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 500, intervalMs: 10 }, ctx);
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 500, intervalMs: 20 }, ctx);
   assert.equal(res.metadata?.success, true);
   const body = res.structuredContent?.data;
   assert.equal(body?.matched, true);
@@ -41,7 +41,7 @@ test("wait_for_screen_text fails on timeout", async () => {
     client: { async readScreen() { return "never"; } },
     logger: createLogger(),
   };
-  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 50, intervalMs: 5 }, ctx);
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 50, intervalMs: 20 }, ctx);
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
 });
@@ -276,4 +276,53 @@ test("rip_charset_from_ram scans common locations", async () => {
   assert.equal(payload?.found, true);
   assert.ok(payload?.charset);
   assert.ok(payload?.candidates >= 1);
+});
+
+function screenCtx(screenText, counter) {
+  return {
+    client: { async readScreen() { if (counter) counter.reads += 1; return screenText; } },
+    logger: createLogger(),
+  };
+}
+
+test("wait_for_screen_text rejects catastrophic, backreference, oversized and invalid patterns without reading the screen", async () => {
+  const bad = ["(a+)+$", "(a*)*b", "(x+y?){2,}", "(a|b+)*c", "(a)\\1", "(?<n>a)\\k<n>", "a".repeat(201), "(unclosed"];
+  for (const pattern of bad) {
+    const counter = { reads: 0 };
+    const res = await metaModule.invoke("wait_for_screen_text", { pattern, isRegex: true, timeoutMs: 100, intervalMs: 20 }, screenCtx("A".repeat(1000), counter));
+    assert.equal(res.isError, true, pattern);
+    assert.equal(res.metadata?.error?.kind, "validation", pattern);
+    assert.equal(counter.reads, 0, pattern);
+  }
+});
+
+test("wait_for_screen_text accepts ordinary regular expressions and literal text that looks like a regex", async () => {
+  const ok = await metaModule.invoke("wait_for_screen_text", { pattern: "(?:RE|AD)+Y\\.?$", isRegex: true, timeoutMs: 100, intervalMs: 20 }, screenCtx("READY."));
+  assert.equal(ok.isError, undefined);
+  const literal = await metaModule.invoke("wait_for_screen_text", { pattern: "(a+)+", timeoutMs: 100, intervalMs: 20 }, screenCtx("x (a+)+ y"));
+  assert.equal(literal.isError, undefined);
+});
+
+test("wait_for_screen_text bounds timeoutMs and intervalMs", async () => {
+  const tooLong = await metaModule.invoke("wait_for_screen_text", { pattern: "x", timeoutMs: 120001 }, screenCtx("x"));
+  assert.equal(tooLong.metadata?.error?.kind, "validation");
+  const tooFast = await metaModule.invoke("wait_for_screen_text", { pattern: "x", intervalMs: 19 }, screenCtx("x"));
+  assert.equal(tooFast.metadata?.error?.kind, "validation");
+});
+
+test("wait_for_screen_text timeout result includes the last screen text", async () => {
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 60, intervalMs: 20 }, screenCtx("LOADING..."));
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+  assert.equal(res.metadata?.error?.details?.screen, "LOADING...");
+});
+
+test("waitForScreenText is exported for reuse and does not throw on timeout", async () => {
+  const { waitForScreenText } = await import("../../src/tools/meta/screen.js");
+  const timedOut = await waitForScreenText({ async readScreen() { return "abc"; } }, { pattern: "zzz", timeoutMs: 40, intervalMs: 20 });
+  assert.equal(timedOut.matched, false);
+  assert.equal(timedOut.screen, "abc");
+  const hit = await waitForScreenText({ async readScreen() { return "abc"; } }, { pattern: "B", timeoutMs: 40, intervalMs: 20 });
+  assert.equal(hit.matched, true);
+  assert.equal(hit.match.index, 1);
 });

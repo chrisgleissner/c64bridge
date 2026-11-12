@@ -151,3 +151,37 @@ testC64uOnly("stream failures expose firmware errors in returned results and thr
     assert.match(result.content[0].text, /Network Host Resolve Error/);
   }
 });
+
+testC64uOnly("stream_start accepts IPv4 and hostname targets with optional port", async () => {
+  for (const target of ["192.168.1.10", "192.168.1.10:11000", "pc.local:11000", "host-1"]) {
+    const ctx = createCtx();
+    const calls = [];
+    ctx.client.streamStart = async (stream, t) => { calls.push(t); return { success: true }; };
+    const result = await streamingModule.invoke("stream_start", { stream: "audio", target }, ctx);
+    assert.equal(result.metadata.success, true, target);
+    assert.deepEqual(calls, [target]);
+  }
+});
+
+testC64uOnly("stream_start rejects malformed targets naming the parameter", async () => {
+  for (const target of ["http://x", "a b", "1.2.3.4:70000", "::1", "", "host:0", "1.2.3", "300.1.1.1", "-a.b", "a..b", "h:1:2"]) {
+    const ctx = createCtx();
+    let called = false;
+    ctx.client.streamStart = async () => { called = true; return { success: true }; };
+    const result = await streamingModule.invoke("stream_start", { stream: "audio", target }, ctx);
+    assert.equal(called, false, `forwarded ${JSON.stringify(target)}`);
+    assert.ok(result.isError || result.metadata?.success === false, `accepted ${JSON.stringify(target)}`);
+    assert.ok(/target/.test(result.content[0].text), target);
+  }
+  const ctx = createCtx();
+  const bad = await streamingModule.invoke("stream_start", { stream: "audio", target: "http://x" }, ctx);
+  assert.ok(bad.content[0].text.includes("IPv4 address or hostname"));
+});
+
+testC64uOnly("stream start descriptions state unencrypted UDP", async () => {
+  const tool = streamingModule.describeTools().find((t) => t.name === "stream_start");
+  assert.ok(/unencrypted UDP/.test(tool.description));
+  const { streamModule } = await import("../src/tools/registry/stream.js");
+  const grouped = JSON.stringify(streamModule.describeTools().find((t) => t.name === "c64_stream").inputSchema);
+  assert.ok(grouped.includes("unencrypted UDP"));
+});

@@ -28,7 +28,8 @@ case "$MODE" in
     fi
     (
       cd "$PACKAGE_DIR" || exit 1
-  timeout --signal=TERM "$DURATION" node dist/index.js
+      # The server exits when stdin closes, so keep stdin open until the timeout ends the run.
+      sleep $((DURATION + 1)) | timeout --signal=TERM "$DURATION" node dist/index.js
     ) 2>&1 | tee "$LOGFILE"
     STATUS=${PIPESTATUS[0]}
     ;;
@@ -43,7 +44,7 @@ case "$MODE" in
     fi
     (
       cd "$PACKAGE_DIR" || exit 1
-      timeout --signal=TERM "$DURATION" node dist/index.js
+      sleep $((DURATION + 1)) | timeout --signal=TERM "$DURATION" node dist/index.js
     ) 2>&1 | tee "$LOGFILE"
     STATUS=${PIPESTATUS[0]}
     ;;

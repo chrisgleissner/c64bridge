@@ -5,7 +5,8 @@ import { jsonResult } from "../responses.js";
 import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
-import { dirname, resolve as resolvePath } from "node:path";
+import { dirname } from "node:path";
+import { resolveHostPath } from "../../hostPaths.js";
 import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
 import { normalizeErrorDetails } from "./util.js";
 
@@ -20,6 +21,16 @@ const configSnapshotAndRestoreArgsSchema = objectSchema({
   required: ["action", "path"],
   additionalProperties: false,
 });
+
+// JSON.parse errors can quote the start of the file, so only the path is reported.
+async function readSnapshotFile(path: string): Promise<any> {
+  const text = await fs.readFile(path, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ToolValidationError(`Snapshot file is not valid JSON: ${path}`, { path: "$.path" });
+  }
+}
 
 export const tools: ToolDefinition[] = [
   {
@@ -36,7 +47,7 @@ export const tools: ToolDefinition[] = [
         if (action === "restore" && parsed.applyToFlash && platform === "vice") {
           throw new ToolUnsupportedPlatformError("config_save_to_flash", platform, ["c64u", "u2"]);
         }
-        const path = resolvePath(String(parsed.path));
+        const path = resolveHostPath(String(parsed.path), { purpose: action === "snapshot" ? "write" : "read" });
 
         if (action === "snapshot") {
           await fs.mkdir(dirname(path), { recursive: true });
@@ -61,8 +72,7 @@ export const tools: ToolDefinition[] = [
         }
 
         if (action === "restore") {
-          const text = await fs.readFile(path, "utf8");
-          const snapshot = JSON.parse(text);
+          const snapshot = await readSnapshotFile(path);
           if (!snapshot || typeof snapshot !== "object") {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
@@ -85,8 +95,7 @@ export const tools: ToolDefinition[] = [
           return jsonResult({ restored: true, categories: Object.keys(payload).length }, { success: true });
         }
 
-        const text = await fs.readFile(path, "utf8");
-        const snapshot = JSON.parse(text);
+        const snapshot = await readSnapshotFile(path);
         const snapCats = validateSnapshotCategories(snapshot.categories ?? {});
         const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true })).categories;
         const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = {};

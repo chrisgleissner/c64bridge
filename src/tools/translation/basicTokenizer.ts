@@ -8,6 +8,7 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from "node:buffer";
 import { asciiToPetscii, encodeStringWithNames } from "../../petscii.js";
+import { ToolValidationError } from "../errors.js";
 
 const DEFAULT_START_ADDRESS = 0x0801;
 const REM_TOKEN = 0x8f;
@@ -23,6 +24,11 @@ type TokenEntry = {
 
 const TOKEN_TABLE: TokenEntry[] = buildTokenTable();
 
+/** Keyword text for a BASIC V2 token byte (0x80-0xCB), or undefined. */
+export function basicTokenText(byte: number): string | undefined {
+  return TOKEN_TABLE.find((entry) => entry.byte === byte)?.text;
+}
+
 export function basicToPrg(source: string, options?: { startAddress?: number }): Buffer {
   const startAddress = options?.startAddress ?? DEFAULT_START_ADDRESS;
   const normalizedSource = normalize(source);
@@ -32,7 +38,7 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
   // duplicate replaces the earlier line, and a bare line number deletes it.
   const programLines = new Map<number, Uint8Array>();
 
-  for (const rawLine of lines) {
+  for (const [lineIndex, rawLine] of lines.entries()) {
     const trimmedRight = rawLine.replace(/\s+$/u, "");
     if (trimmedRight === "") {
       continue;
@@ -40,12 +46,12 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
 
     const match = /^\s*(\d+)\s*(.*)$/u.exec(trimmedRight);
     if (!match) {
-      throw new Error(`Expected line number at: "${rawLine}"`);
+      throw new ToolValidationError(`Expected a line number at the start of line ${lineIndex + 1} of the program: "${rawLine}"`, { path: "$.program" });
     }
 
     const lineNumber = Number.parseInt(match[1], 10);
     if (!Number.isInteger(lineNumber) || lineNumber < 0 || lineNumber > MAX_LINE_NUMBER) {
-      throw new Error(`Line number out of range: ${match[1]} (C64 BASIC accepts 0-${MAX_LINE_NUMBER})`);
+      throw new ToolValidationError(`Line number out of range: ${match[1]} on line ${lineIndex + 1} of the program (C64 BASIC accepts 0-${MAX_LINE_NUMBER})`, { path: "$.program" });
     }
 
     const content = match[2] ?? "";

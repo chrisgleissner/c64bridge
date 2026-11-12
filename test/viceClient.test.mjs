@@ -115,7 +115,7 @@ test("ViceClient encodes requests and decodes protocol responses", async (t) => 
   const memory = await client.memGet(0x1000, 0x1002);
   await client.memSet(0x2000, Buffer.from([0x10, 0x11, 0x12]));
   const beforeEmptyKeyboard = requests.length;
-  await client.keyboardFeed("");
+  await assert.rejects(() => client.keyboardFeed(""), /non-empty/);
   await client.keyboardFeed("RUN\r");
   await client.exitMonitor();
   await client.quit();
@@ -515,4 +515,38 @@ test("displayGet decodes the VICE mock server display with the real VICE layout"
     Array.from(display.pixels.subarray(0, 60)),
     Array.from({ length: 60 }, (_, i) => i & 0x0f),
   );
+});
+
+test("R-11 connect gives up after the connect timeout and names host:port", async () => {
+  const { ViceClient: Client } = await import("../src/vice/viceClient.js");
+  const client = new Client();
+  let destroyed = false;
+  // A socket whose connect never completes, like a host that drops the SYN.
+  const factory = () => {
+    const socket = new net.Socket();
+    socket.connect = () => socket;
+    const destroy = socket.destroy.bind(socket);
+    socket.destroy = (...args) => { destroyed = true; return destroy(...args); };
+    return socket;
+  };
+  const started = Date.now();
+  await assert.rejects(
+    () => client.connect(6510, "203.0.113.9", { connectTimeoutMs: 50, socketFactory: factory }),
+    /203\.0\.113\.9:6510/,
+  );
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(destroyed, true);
+});
+
+test("R-12 keyboardFeed splits text longer than 255 bytes into ordered commands", async (t) => {
+  const server = await startViceMockServer();
+  t.after(async () => { await server.stop?.(); });
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(server.port);
+  const text = Array.from({ length: 600 }, (_, index) => String.fromCharCode(0x41 + (index % 26))).join("");
+  await client.keyboardFeed(text);
+  assert.deepEqual(server.keyboardFeeds.map((chunk) => chunk.length), [255, 255, 90]);
+  assert.equal(Buffer.concat(server.keyboardFeeds).toString("ascii"), text);
+  await assert.rejects(() => client.keyboardFeed(""), /non-empty/);
 });

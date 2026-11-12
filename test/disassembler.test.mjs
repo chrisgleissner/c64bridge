@@ -118,3 +118,14 @@ test("undocumented NOP $F4 is zero page,X like $14, $34, $54, $74 and $D4", () =
   }
   assert.ok(OPCODE_INVENTORY.every((entry) => entry.mode !== "zeroPageS"));
 });
+
+test("disassembler renders a truncated trailing instruction as .byte data", () => {
+  // LDA abs needs 3 bytes; only the opcode and one operand byte exist.
+  const lines = disassemble(Uint8Array.of(0xea, 0xad, 0x00), 0xc000);
+  assert.equal(lines.length, 2);
+  assert.equal(lines[1].mnemonic, ".byte");
+  assert.equal(lines[1].operand, "$AD,$00");
+  assert.deepEqual([...lines[1].bytes], [0xad, 0x00]);
+  assert.equal(lines[1].undocumented, false);
+  assert.ok(!formatDisassembly(lines).includes("LDA"));
+});

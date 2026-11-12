@@ -107,6 +107,32 @@ export async function main() {
 
   const summary = summariseReport(finalReport);
   console.log(JSON.stringify({ lines: summary }, null, 2));
+
+  // The merged report only carries line data, so only the line threshold can be enforced here.
+  const minimum = resolveLineThreshold(coverageConfig, process.env);
+  try {
+    enforceLineThreshold(summary, minimum);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+}
+
+/** Minimum line coverage in percent: C64BRIDGE_COVERAGE_MIN_LINES overrides `lines` from .c8rc.json. */
+export function resolveLineThreshold(config, env = process.env) {
+  const fromEnv = Number(env.C64BRIDGE_COVERAGE_MIN_LINES ?? "");
+  if (env.C64BRIDGE_COVERAGE_MIN_LINES !== undefined && env.C64BRIDGE_COVERAGE_MIN_LINES !== "" && Number.isFinite(fromEnv)) {
+    return fromEnv;
+  }
+  const fromConfig = Number(config?.lines);
+  return Number.isFinite(fromConfig) ? fromConfig : 0;
+}
+
+export function enforceLineThreshold(summary, minimum) {
+  const pct = Number(summary.pct);
+  if (!(pct >= minimum)) {
+    throw new Error(`Line coverage ${summary.pct}% is below the required ${minimum}%`);
+  }
 }
 
 export function buildCoverageBatches(testFiles, extraTests, env = process.env) {
@@ -327,7 +353,7 @@ function serializeReport(report) {
   return `${lines.join("\n")}\n`;
 }
 
-function summariseReport(report) {
+export function summariseReport(report) {
   let covered = 0;
   let total = 0;
   for (const record of report.values()) {

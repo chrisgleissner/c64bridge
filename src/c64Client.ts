@@ -9,6 +9,7 @@ See <https://www.gnu.org/licenses/> for details.
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { createSocket, type Socket } from "node:dgram";
+import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
@@ -17,6 +18,8 @@ import { stripHexByteSeparators } from "./tools/hex.js";
 import { SIDWAVE_PLAY_ADDRESS } from "./sidwaveCompiler.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
+import { assertNotBareHex, parseNumericLiteral } from "./numericArg.js";
+import { ToolValidationError } from "./tools/errors.js";
 import {
   C64Facade,
   createAllFacades,
@@ -27,7 +30,7 @@ import {
   ViceBackend,
 } from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
-import { createLoggingHttpClient } from "./loggingHttpClient.js";
+import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
 import {
   analyzeStereoStream,
@@ -103,6 +106,8 @@ export interface NativeEndpointCapabilities {
 export interface FrameCaptureResult {
   readonly backend: "c64u" | "vice";
   readonly frames: readonly CapturedFrame[];
+  /** Non-fatal problems, for example a failed stream stop after a successful capture. */
+  readonly warnings?: readonly string[];
 }
 
 export interface SampleCaptureResult {
@@ -111,6 +116,11 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+}
+
+function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || h === "::1" || h.startsWith("127.");
 }
 
 /** JOYPORT_ID_IO_SIMULATION in joyport.h (the same in VICE 3.9 and 3.10). */
@@ -351,7 +361,8 @@ export class C64Client {
   constructor(baseUrl: string, options: C64ClientOptions = {}) {
     this.baseUrl = baseUrl;
     const headers = options.networkPassword ? { "X-Password": options.networkPassword } : undefined;
-    this.http = createLoggingHttpClient({ baseURL: baseUrl, timeout: 10_000, headers });
+    // Shares the device queue with the C64U backend: the fallback REST calls made through this client must not overlap its requests.
+    this.http = createLoggingHttpClient({ baseURL: baseUrl, timeout: 10_000, headers }, undefined, RequestQueue.forDevice(baseUrl));
     this.api = new Api(this.http);
     const forceC64uFacade = options.forceC64uFacade ?? true;
     if (forceC64uFacade) {
@@ -898,9 +909,36 @@ export class C64Client {
   }
 
   async readScreen(): Promise<string> {
+    return (await this.readScreenDetailed()).text;
+  }
+
+  /**
+   * Reads the text screen where the VIC-II currently shows it: the screen
+   * base comes from $D018 bits 4-7 and the VIC bank from $DD00 bits 0-1, and
+   * $D018 bit 1 selects the lower-case character set. Reads of both registers
+   * that fail, or that both return $00 (not a usable VIC state), fall back to
+   * the default $0400 and the upper-case set.
+   */
+  async readScreenDetailed(): Promise<{ text: string; baseAddress: number; charset: "upper" | "lower"; registers?: { d018: number; dd00: number } }> {
     return withDiagnosticSpan("client", "read_screen", {}, async () => {
-      const bytes = await this.readMemoryRaw(0x0400, 0x03e8);
-      return screenCodesToAscii(bytes, { columns: 40, rows: 25 });
+      let baseAddress = 0x0400;
+      let charset: "upper" | "lower" = "upper";
+      let registers: { d018: number; dd00: number } | undefined;
+      try {
+        const d018 = (await this.readMemoryRaw(0xd018, 1))[0];
+        const dd00 = (await this.readMemoryRaw(0xdd00, 1))[0];
+        if (d018 !== undefined && dd00 !== undefined && !(d018 === 0 && dd00 === 0)) {
+          registers = { d018, dd00 };
+          baseAddress = (3 - (dd00 & 0x03)) * 0x4000 + ((d018 >> 4) & 0x0f) * 0x0400;
+          charset = (d018 & 0x02) !== 0 ? "lower" : "upper";
+        }
+      } catch {
+        // Keep the defaults when the VIC registers cannot be read.
+      }
+      const length = Math.min(0x03e8, 0x10000 - baseAddress);
+      const bytes = await this.readMemoryRaw(baseAddress, length);
+      const text = screenCodesToAscii(bytes, { columns: 40, rows: 25, charset });
+      return { text, baseAddress, charset, ...(registers ? { registers } : {}) };
     });
   }
 
@@ -908,6 +946,7 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.reset();
+      if (res.success) this.clearExplicitPause(facade);
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -918,6 +957,7 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.reboot();
+      if (res.success) this.clearExplicitPause(facade);
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1165,8 +1205,101 @@ export class C64Client {
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
+  /**
+   * Pause bookkeeping per facade. Tools that pause for their own purpose
+   * (acquirePause/releasePause) share one device pause: it is sent when the
+   * owned depth goes 0 -> 1 and the machine is not already explicitly paused,
+   * and the device resume is sent only when the depth returns to 0 and no
+   * explicit `c64_system pause` is in effect. An explicit pause is cleared
+   * only by an explicit resume.
+   */
+  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult> }>();
+
+  private pauseStateFor(facade: C64Facade) {
+    let state = this.pauseStates.get(facade);
+    if (!state) {
+      state = { depth: 0, explicit: false };
+      this.pauseStates.set(facade, state);
+    }
+    return state;
+  }
+
+  /** Owned pause for one tool call. Pass the facade pinned at call start; pair with releasePause. A failed result holds no pause and needs no release. */
+  async acquirePause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      state.depth += 1;
+      if (state.depth === 1 && !state.explicit) {
+        const pending = facade.pause().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+        state.devicePause = pending;
+      }
+      const result = state.devicePause ? await state.devicePause : { success: true } as RunBasicResult;
+      if (!result.success) {
+        state.depth -= 1;
+        if (state.depth === 0) state.devicePause = undefined;
+        return result;
+      }
+      return result;
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** Release one owned pause. The device resume is sent only by the last release and not while an explicit pause is in effect. */
+  async releasePause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      if (state.depth === 0) return { success: true, details: { resumed: false, reason: "no owned pause" } };
+      state.depth -= 1;
+      if (state.depth > 0) return { success: true, details: { resumed: false, reason: "pause still held by another call" } };
+      state.devicePause = undefined;
+      if (state.explicit) return { success: true, details: { resumed: false, reason: "machine was paused explicitly" } };
+      return await facade.resume();
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** `c64_system pause`: stays in effect until an explicit resume, whatever tools acquire or release meanwhile. */
+  async explicitPause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      if (state.depth > 0 && !state.explicit) {
+        state.explicit = true; // the device is already paused by a running tool call
+        return { success: true, details: { alreadyPaused: true } };
+      }
+      const result = await facade.pause();
+      if (result.success) state.explicit = true;
+      return result;
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** `c64_system resume`: clears the explicit pause. While a tool call still holds an owned pause, the device resume is left to its release. */
+  async explicitResume(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      state.explicit = false;
+      if (state.depth > 0) return { success: true, details: { resumed: false, reason: "a running tool call still holds a pause; it resumes the machine when it finishes" } };
+      return await facade.resume();
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
   async poweroff(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.poweroff(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try {
+      const facade = await this.facadePromise;
+      const result = await facade.poweroff();
+      if (result.success) this.clearExplicitPause(facade);
+      return result;
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /**
+   * A reset, reboot, power-off or power cycle restarts the CPU, so an explicit
+   * `c64_system pause` no longer holds. Without clearing the flag, later tool
+   * calls would skip their own pause and read or write a running machine.
+   */
+  private clearExplicitPause(facade: C64Facade): void {
+    this.pauseStateFor(facade).explicit = false;
   }
 
   /**
@@ -1175,6 +1308,14 @@ export class C64Client {
    * VICE is restarted when it is managed by c64bridge.
    */
   async powerCycle(): Promise<RunBasicResult> {
+    let facade: C64Facade | undefined;
+    try { facade = await this.facadePromise; } catch { facade = undefined; }
+    const result = await this.powerCycleActiveBackend();
+    if (result.success && facade) this.clearExplicitPause(facade);
+    return result;
+  }
+
+  private async powerCycleActiveBackend(): Promise<RunBasicResult> {
     let menuOpened = false;
     let cleanup: RunBasicResult | undefined;
     let pinnedFacade: C64Facade | undefined;
@@ -1431,16 +1572,16 @@ export class C64Client {
     try { const facade = await this.facadePromise; return await facade.configBatchUpdate(payload); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async configLoadFromFlash(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.configLoadFromFlash(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  async configLoadFromFlash(category?: string): Promise<RunBasicResult> {
+    try { const facade = await this.facadePromise; return await facade.configLoadFromFlash(category); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async configSaveToFlash(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.configSaveToFlash(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  async configSaveToFlash(category?: string): Promise<RunBasicResult> {
+    try { const facade = await this.facadePromise; return await facade.configSaveToFlash(category); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async configResetToDefault(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.configResetToDefault(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  async configResetToDefault(category?: string): Promise<RunBasicResult> {
+    try { const facade = await this.facadePromise; return await facade.configResetToDefault(category); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async filesInfo(path: string): Promise<unknown> {
@@ -1525,10 +1666,26 @@ export class C64Client {
     }
 
     const host = new URL(this.baseUrl).hostname;
-    const bindAddress = await this.resolveLocalCaptureAddress(host);
+    const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     const packets: ReturnType<typeof parseVideoPacket>[] = [];
     let stopError: Error | null = null;
+    let captureFailed = false;
+    let stopped = false;
+    // Stops the stream once. A failure is reported as a warning (success path)
+    // or as a diagnostic (failure path); it never replaces the capture outcome.
+    const stopOneShotVideoStream = async (): Promise<{ warnings?: string[] }> => {
+      if (stopped) return {};
+      stopped = true;
+      try {
+        await this.ensureStreamSuccess(await facade.streamStop("video"), "stop video stream");
+        return {};
+      } catch (error) {
+        stopError = error instanceof Error ? error : new Error(String(error));
+        writeDiagnosticEvent("video_capture_stop_failed", { error: this.normaliseError(stopError) });
+        return { warnings: [`Video stream stop failed after the capture: ${stopError.message}`] };
+      }
+    };
 
     try {
       await this.bindCaptureSocket(socket, bindAddress);
@@ -1541,7 +1698,8 @@ export class C64Client {
           reject(new Error(`Timed out after ${timeoutMs}ms while capturing ${count} video frame(s)`));
         }, timeoutMs);
 
-        socket.on("message", (msg) => {
+        socket.on("message", (msg, rinfo) => {
+          if (!acceptsSource(rinfo.address)) return;
           try {
             const packet = this.parseVideoPacketOrNull(Buffer.from(msg));
             if (!packet) {
@@ -1565,17 +1723,16 @@ export class C64Client {
         });
       });
 
-      return { backend: "c64u", frames };
+      return { backend: "c64u", frames, ...(await stopOneShotVideoStream()) };
+    } catch (error) {
+      captureFailed = true;
+      throw error;
     } finally {
-      try {
-        await this.ensureStreamSuccess(await facade.streamStop("video"), "stop video stream");
-      } catch (error) {
-        stopError = error instanceof Error ? error : new Error(String(error));
+      if (captureFailed) {
+        // Keep the capture error; the stop failure is only a diagnostic.
+        await stopOneShotVideoStream();
       }
       socket.close();
-      if (stopError) {
-        throw stopError;
-      }
     }
   }
 
@@ -1595,7 +1752,7 @@ export class C64Client {
     await this.stopC64uVideoCaptureSession();
 
     const host = new URL(this.baseUrl).hostname;
-    const bindAddress = await this.resolveLocalCaptureAddress(host);
+    const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     await this.bindCaptureSocket(socket, bindAddress);
     const target = this.socketEndpoint(socket, bindAddress);
@@ -1612,8 +1769,8 @@ export class C64Client {
       error: null,
     };
 
-    socket.on("message", (msg) => {
-      if (session.closed) {
+    socket.on("message", (msg, rinfo) => {
+      if (session.closed || !acceptsSource(rinfo.address)) {
         return;
       }
       const packet = this.parseVideoPacketOrNull(Buffer.from(msg));
@@ -1796,7 +1953,7 @@ export class C64Client {
     options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
   ): Promise<SampleCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
-    const bindAddress = await this.resolveLocalCaptureAddress(host);
+    const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     const chunks: Int16Array[] = [];
     let collectedValues = 0;
@@ -1810,7 +1967,8 @@ export class C64Client {
 
     // The firmware can emit UDP before its REST response reaches us. Listen
     // before starting, and cap collection even while start/config/stop requests are pending.
-    const onMessage = (msg: Buffer) => {
+    const onMessage = (msg: Buffer, rinfo: { address: string }) => {
+      if (!acceptsSource(rinfo.address)) return;
       if (captureSettled || captureError || collectedValues >= neededValues) return;
       try {
         const packet = parseAudioPacket(msg);
@@ -1908,7 +2066,31 @@ export class C64Client {
     return C64U_PAL_AUDIO_SAMPLE_RATE;
   }
 
-  private async resolveLocalCaptureAddress(remoteHost: string): Promise<string> {
+  /**
+   * Local address to bind the capture socket to, and a filter that accepts UDP
+   * packets only from the device. The device host is resolved once here. A
+   * device on loopback (the mock) is reached and heard on loopback.
+   */
+  private async resolveCaptureEndpoint(remoteHost: string): Promise<{ bindAddress: string; acceptsSource: (address: string) => boolean }> {
+    const loopback = isLoopbackHost(remoteHost);
+    let deviceAddresses: string[];
+    try {
+      const resolved = await lookup(remoteHost, { all: true, family: 4 });
+      deviceAddresses = resolved.map((entry) => entry.address);
+    } catch (error) {
+      if (!loopback) {
+        throw new Error(`Cannot resolve the device host '${remoteHost}' to an IPv4 address for stream capture: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      deviceAddresses = ["127.0.0.1"];
+    }
+    const deviceIsLoopback = loopback || deviceAddresses.every((address) => address.startsWith("127."));
+    const acceptsSource = (address: string) => deviceIsLoopback
+      ? address.startsWith("127.")
+      : deviceAddresses.includes(address.replace(/^::ffff:/i, ""));
+    return { bindAddress: await this.resolveLocalCaptureAddress(remoteHost, deviceIsLoopback), acceptsSource };
+  }
+
+  private async resolveLocalCaptureAddress(remoteHost: string, deviceIsLoopback = isLoopbackHost(remoteHost)): Promise<string> {
     const socket = createSocket("udp4");
     try {
       await new Promise<void>((resolve, reject) => {
@@ -1923,11 +2105,14 @@ export class C64Client {
         return address.address;
       }
     } catch {
-      // Fall back below.
+      // Handled below.
     } finally {
       socket.close();
     }
-    return "127.0.0.1";
+    // Falling back to loopback would tell the device to stream to itself, and
+    // the caller would only see a capture timeout.
+    if (deviceIsLoopback) return "127.0.0.1";
+    throw new Error(`Cannot find a local network address that reaches the device at ${remoteHost}; the stream target must be an address the device can send to. Check the network route to the device.`);
   }
 
   private async bindCaptureSocket(socket: Socket, bindAddress: string): Promise<void> {
@@ -2491,42 +2676,14 @@ export class C64Client {
     if (typeof value !== "string") {
       throw new Error("Expected string input");
     }
-
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
+    if (value.trim().length === 0) {
       throw new Error("Empty numeric value");
     }
-
-    const lower = trimmed.toLowerCase();
-    let radix = 10;
-    let literal = lower;
-
-    let pattern: RegExp;
-    if (lower.startsWith("$")) {
-      radix = 16;
-      literal = lower.slice(1);
-      pattern = /^[0-9a-f]+$/;
-    } else if (lower.startsWith("0x")) {
-      radix = 16;
-      literal = lower.slice(2);
-      pattern = /^[0-9a-f]+$/;
-    } else if (lower.startsWith("%")) {
-      radix = 2;
-      literal = lower.slice(1);
-      pattern = /^[01]+$/;
-    } else {
-      pattern = /^[0-9]+$/;
+    const parsed = parseNumericLiteral(value);
+    if (parsed === undefined) {
+      assertNotBareHex(value);
+      throw new ToolValidationError(`Unable to parse numeric value "${value}"`);
     }
-
-    if (!pattern.test(literal)) {
-      throw new Error(`Unable to parse numeric value "${value}"`);
-    }
-
-    const parsed = Number.parseInt(literal, radix);
-    if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) {
-      throw new Error(`Unable to parse numeric value "${value}"`);
-    }
-
     return parsed;
   }
 

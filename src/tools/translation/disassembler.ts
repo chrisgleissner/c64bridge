@@ -149,6 +149,20 @@ export function disassemble(
     }
 
     const size = modeSize(op.mode);
+    if (offset + size > bytes.length) {
+      // The input ends inside this instruction: its operand bytes are unknown,
+      // so show the bytes that exist as data instead of inventing an operand.
+      const remaining = Array.from(bytes.subarray(offset));
+      lines.push({
+        address: instrAddr,
+        bytes: remaining,
+        label,
+        mnemonic: ".byte",
+        operand: remaining.map((value) => `$${hex2(value)}`).join(","),
+        undocumented: false,
+      });
+      break;
+    }
     const instrBytes: number[] = [];
     for (let i = 0; i < size && offset + i < bytes.length; i += 1) {
       instrBytes.push(bytes[offset + i] ?? 0);

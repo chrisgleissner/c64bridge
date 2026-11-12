@@ -244,7 +244,7 @@ test("pollForProgramOutcome ASM detects screen change", async () => {
   assert.equal(result.type, "ASM");
 });
 
-test("pollForProgramOutcome ASM detects crash when no screen change", async () => {
+test("pollForProgramOutcome ASM reports unconfirmed (not crashed) when no screen change", async () => {
   const screens = [
     "READY.\n",
     "RUN\nSYS 2061\n",
@@ -271,12 +271,12 @@ test("pollForProgramOutcome ASM detects crash when no screen change", async () =
     { maxMs: 100, intervalMs: 20, stabilizeMs: 0 },
   );
   
-  assert.equal(result.status, "crashed");
+  assert.equal(result.status, "unconfirmed");
   assert.equal(result.type, "ASM");
   assert.equal(result.reason, "no program-visible screen progression within window");
 });
 
-test("HARD01-019/HARD01-020 ASM polling only ever reads screen RAM, never VIC/CIA I/O, and a stable signature is reported crashed", async () => {
+test("HARD01-019/HARD01-020 ASM polling only ever reads screen RAM, never VIC/CIA I/O, and a stable signature is reported unconfirmed", async () => {
   const memoryReads = [];
   const client = {
     async readScreen() {
@@ -298,7 +298,7 @@ test("HARD01-019/HARD01-020 ASM polling only ever reads screen RAM, never VIC/CI
     { maxMs: 80, intervalMs: 10, stabilizeMs: 0 },
   );
 
-  assert.equal(result.status, "crashed");
+  assert.equal(result.status, "unconfirmed");
   assert.equal(result.type, "ASM");
   assert.ok(memoryReads.length > 0, "expected at least one poll read");
 
@@ -364,10 +364,60 @@ test("HARD01-036 pollForProgramOutcome BASIC reports an error instead of blind s
   assert.match(result.message, /does not appear to have run/i);
 });
 
-test("HARD01-036 pollForProgramOutcome ASM reports crashed instead of blind success when RUN is never detected", async () => {
-  // Regression test mirroring the BASIC case above: previously, never
-  // observing RUN/ERROR text short-circuited straight to a false "ok"
-  // without ever running the hardware liveness check.
+test("HARD01-036 pollForProgramOutcome ASM reports not_loaded instead of blind success when the program is not in memory", async () => {
+  // A firmware whose run_prg returns success without loading anything leaves
+  // different bytes at the load address, and no RUN text appears either.
+  const program = { address: 0xc000, bytes: Uint8Array.of(0xa9, 0x01, 0x8d, 0x20, 0xd0, 0x4c, 0x05, 0xc0) };
+  const client = {
+    async readScreen() {
+      return "READY.\n";
+    },
+    async readMemoryRaw(_address, length) {
+      return new Uint8Array(length); // never loaded: zeros
+    },
+  };
+
+  const result = await pollForProgramOutcome(
+    "ASM",
+    client,
+    createLogger(),
+    { maxMs: 50, intervalMs: 10, stabilizeMs: 0 },
+    program,
+  );
+
+  assert.equal(result.status, "not_loaded");
+  assert.equal(result.type, "ASM");
+  assert.equal(result.load.address, 0xc000);
+  assert.equal(result.load.expected, "A9 01 8D 20 D0 4C 05 C0");
+  assert.equal(result.load.found, "00 00 00 00 00 00 00 00");
+});
+
+test("ASM load readback compares at most 16 bytes and accepts a matching program", async () => {
+  const body = Uint8Array.from({ length: 40 }, (_, index) => index + 1);
+  const reads = [];
+  const client = {
+    async readScreen() {
+      return "READY.\n";
+    },
+    async readMemoryRaw(address, length) {
+      reads.push({ address, length });
+      return address === 0xc000 ? body.slice(0, length) : new Uint8Array(length);
+    },
+  };
+  const result = await pollForProgramOutcome("ASM", client, createLogger(), { maxMs: 50, intervalMs: 10, stabilizeMs: 0 }, { address: 0xc000, bytes: body });
+  assert.deepEqual(reads[0], { address: 0xc000, length: 16 });
+  assert.equal(result.status, "unconfirmed");
+  assert.equal(result.loadCheck, "matched");
+
+  const short = Uint8Array.of(1, 2, 3);
+  const shortReads = [];
+  const shortClient = { ...client, async readMemoryRaw(address, length) { shortReads.push(length); return short.slice(0, length); } };
+  const shortResult = await pollForProgramOutcome("ASM", shortClient, createLogger(), { maxMs: 40, intervalMs: 10, stabilizeMs: 0 }, { address: 0xc000, bytes: short });
+  assert.equal(shortReads[0], 3);
+  assert.equal(shortResult.loadCheck, "matched");
+});
+
+test("HARD01-036 pollForProgramOutcome ASM reports unconfirmed, not a crash, when a loaded program changes nothing on screen", async () => {
   const client = {
     async readScreen() {
       return "READY.\n";
@@ -381,7 +431,7 @@ test("HARD01-036 pollForProgramOutcome ASM reports crashed instead of blind succ
     { maxMs: 50, intervalMs: 10, stabilizeMs: 0 },
   );
 
-  assert.equal(result.status, "crashed");
+  assert.equal(result.status, "unconfirmed");
   assert.equal(result.type, "ASM");
   assert.equal(result.reason, "no program-visible screen progression within window");
 });
@@ -569,7 +619,7 @@ test("pollForProgramOutcome ASM tolerates screen read failures before RUN and th
   assert.equal(result.type, "ASM");
 });
 
-test("pollForProgramOutcome ASM treats repeated memory read failures as crashed", async () => {
+test("pollForProgramOutcome ASM treats repeated memory read failures as unconfirmed", async () => {
   const client = {
     async readScreen() {
       return "RUN\nSYS 2061\n";
@@ -586,7 +636,7 @@ test("pollForProgramOutcome ASM treats repeated memory read failures as crashed"
     { maxMs: 60, intervalMs: 10, stabilizeMs: 0 },
   );
 
-  assert.equal(result.status, "crashed");
+  assert.equal(result.status, "unconfirmed");
   assert.equal(result.type, "ASM");
   assert.equal(result.reason, "no program-visible screen progression within window");
 });

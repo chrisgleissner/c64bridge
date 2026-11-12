@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
 import { basicToPrg } from "./translation/basicTokenizer.js";
 import {
@@ -84,6 +85,9 @@ type BasicRuntimeError = {
 type BasicAutoFixChange = {
   readonly line: number;
   readonly notes: readonly string[];
+  /** The program line as submitted and as rewritten. */
+  readonly before: string;
+  readonly after: string;
 };
 
 type BasicAutoFixResult = {
@@ -201,10 +205,13 @@ function attemptAutoFixBasicProgram(
 
     if (notes.length > 0) {
       const updated = content.length > 0 ? `${lineNumber} ${content}` : `${lineNumber}`;
+      const before = rawLine.trim();
       lines[index] = updated;
       changes.push({
         line: lineNumber,
         notes,
+        before,
+        after: updated,
       });
     }
   }
@@ -304,6 +311,10 @@ const uploadBasicArgsSchema = objectSchema({
       description: "Run post-execution polling to ensure the BASIC program executed without errors.",
       default: false,
     }),
+    autoFix: optionalSchema(booleanSchema({
+      description: "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      default: true,
+    })),
   },
   required: ["program"],
   additionalProperties: false,
@@ -317,7 +328,7 @@ const uploadAsmArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Run post-execution polling to confirm the assembly program remained stable.",
+      description: "Treat missing evidence of execution as an error. The bytes read back at the load address must always match the assembled program (a mismatch is an error either way). With verify:true, a program that loaded but changed nothing on screen is an error; with verify:false it returns success with execution:\"unconfirmed\" (SID players, border effects and JMP * loops change no screen RAM).",
       default: false,
     }),
   },
@@ -401,7 +412,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         });
 
         const normalizedErrors = normalizeRuntimeErrors(errors);
-        const fixAttempt = attemptAutoFixBasicProgram(activeProgram, errors);
+        const fixAttempt = parsed.autoFix === false ? undefined : attemptAutoFixBasicProgram(activeProgram, errors);
         if (!fixAttempt) {
           const data = {
             kind: "basic_runtime_error" as const,
@@ -410,9 +421,15 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
             ...(screenOutput ? { screen: screenOutput } : {}),
             autoFix: {
               attempted: false,
+              ...(parsed.autoFix === false ? { disabled: true } : {}),
             },
           };
-          return structuredExecutionError("Detected BASIC runtime errors after execution.", data);
+          return structuredExecutionError(
+            parsed.autoFix === false
+              ? "Detected BASIC runtime errors after execution. Auto-fix is disabled (autoFix:false), so the program was not rewritten or run again."
+              : "Detected BASIC runtime errors after execution.",
+            data,
+          );
         }
 
         ctx.logger.info("Attempting BASIC auto-fix", {
@@ -513,9 +530,14 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       }
     }
 
+    const changedLines = autoFixInfo
+      ? autoFixInfo.changes.map((change) => `line ${change.line}: "${change.before}" -> "${change.after}"`).join("; ")
+      : "";
     const message = autoFixInfo
-      ? "Detected BASIC errors on execution; applied auto-fix and re-ran successfully."
-      : "BASIC program uploaded and executed successfully.";
+      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run showed no BASIC error on screen.${verified ? "" : " Execution was not verified."}`
+      : verified
+        ? "BASIC program uploaded and executed successfully (verified)."
+        : "BASIC program uploaded and started. No BASIC error was visible on the screen immediately afterwards; pass verify:true to poll for the outcome.";
 
     const metadata = {
       success: true,
@@ -529,6 +551,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
               applied: true,
               changes: autoFixInfo.changes,
               originalErrors: autoFixInfo.originalErrors,
+              programSource: activeProgram,
             },
           }
         : {}),
@@ -545,8 +568,10 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       ...(autoFixInfo
         ? {
             autoFix: {
+              applied: true,
               changes: autoFixInfo.changes,
               originalErrors: autoFixInfo.originalErrors,
+              programSource: activeProgram,
             },
           }
         : {}),
@@ -589,20 +614,44 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       );
     }
 
-    // Poll for ASM execution outcome
+    // Read back the program bytes (load evidence), then poll for signs of execution.
     let verified = false;
+    let execution: "confirmed" | "unconfirmed" | undefined;
+    let loadCheck: string | undefined;
+    const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
     try {
-      const outcome = await pollForProgramOutcome("ASM", ctx.client, ctx.logger);
-      if (outcome.status === "crashed") {
-        ctx.logger.warn("Polling detected ASM program crash", { reason: outcome.reason });
-        return toolErrorResult(
-          new ToolExecutionError("Assembly program appears to have crashed (no screen changes detected)", {
-            details: { reason: outcome.reason },
-          }),
-        );
-      }
-      if (shouldVerify) {
-        verified = true;
+      const outcome = await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, {
+        address: loadAddress,
+        bytes: prg.subarray(2),
+      });
+      if (outcome.type === "ASM") {
+        loadCheck = outcome.loadCheck;
+        if (outcome.status === "not_loaded") {
+          ctx.logger.warn("ASM program was not loaded", { reason: outcome.reason });
+          return toolErrorResult(
+            new ToolExecutionError(
+              `Assembly program was not loaded: ${outcome.reason}. The backend reported success, but the bytes read back at the load address differ from the assembled program (a program that overwrites its own first bytes also looks like this).`,
+              { details: { reason: outcome.reason, ...(outcome.load ? { loadAddress: outcome.load.address, expected: outcome.load.expected, found: outcome.load.found } : {}) } },
+            ),
+          );
+        }
+        if (outcome.status === "unconfirmed") {
+          if (shouldVerify) {
+            ctx.logger.warn("ASM execution could not be verified", { reason: outcome.reason });
+            return toolErrorResult(
+              new ToolExecutionError(
+                "Assembly program was loaded, but no screen change was observed, so its execution could not be verified",
+                { details: { reason: outcome.reason, loadCheck: outcome.loadCheck, execution: "unconfirmed" } },
+              ),
+            );
+          }
+          execution = "unconfirmed";
+        } else {
+          execution = "confirmed";
+          if (shouldVerify) {
+            verified = true;
+          }
+        }
       }
     } catch (pollError) {
       ctx.logger.debug("Polling encountered an error", toRecord(pollError));
@@ -621,13 +670,20 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       entryAddress,
       prgSize: prg.length,
       resources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
+      ...(loadCheck ? { loadCheck } : {}),
+      ...(execution ? { execution } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
     };
-    const base = textResult("Assembly program assembled, uploaded, and executed successfully.", {
+    const message = execution === "unconfirmed"
+      ? "Assembly program assembled, uploaded and loaded. No screen change was observed, so it is not confirmed that the program is running (a SID player, a border effect or a JMP * loop looks like this)."
+      : "Assembly program assembled, uploaded, and executed successfully.";
+    const base = textResult(message, {
       success: true,
       entryAddress,
       prgSize: prg.length,
       details: result.details ?? null,
+      ...(loadCheck ? { loadCheck } : {}),
+      ...(execution ? { execution } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
     });
     return { ...base, structuredContent: { type: "json", data } };
@@ -694,8 +750,9 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     if (ctx.platform.id === "vice") {
       clearViceSymbols();
       if (parsed.symbolsFile) {
+        const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
         try {
-          const content = await fs.promises.readFile(parsed.symbolsFile, "utf8");
+          const content = await fs.promises.readFile(symbolsPath, "utf8");
           const syms = parseViceSymbolFile(content);
           setViceSymbols(syms.entries());
           symbolsLoaded = syms.size;
@@ -866,7 +923,7 @@ export const programRunnersModule = defineToolModule({
         "Stage PRG files without running when the user wants to inspect memory first.",
         "Confirm the Ultimate filesystem path (e.g. //USB0/demo.prg) is accessible before invoking.",
       ],
-      supportedPlatforms: ["c64u", "u2"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeLoadPrg(args, ctx);
       },

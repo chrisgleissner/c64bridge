@@ -461,3 +461,105 @@ test("render_bitmap reports a display failure with its cause", async () => {
     cleanup();
   }
 });
+
+// --- F-07: capture_frame defaults, PNG output and size limits ---------------
+import { toolRegistry } from "../src/tools/registry/index.js";
+import { VIC_PALETTE } from "../src/vicBitmap.js";
+
+function frameCtx(frames) {
+  const requests = [];
+  return {
+    requests,
+    ctx: {
+      client: {
+        async captureFrames(options) {
+          requests.push(options);
+          return { backend: "vice", frames: frames(options.count) };
+        },
+      },
+      rag: {},
+      logger: createLogger(),
+      platform: { id: "vice", features: [], limitedFeatures: [] },
+      setPlatform() {},
+    },
+  };
+}
+
+function indexedFrame(width, height, fill) {
+  return { frameNumber: null, width, height, bitsPerPixel: 8, pixels: Uint8Array.from({ length: width * height }, (_, i) => fill(i % width, Math.floor(i / width))), complete: true };
+}
+
+test("capture_frame omits raw pixels by default", async () => {
+  const { ctx } = frameCtx((count) => Array.from({ length: count }, () => indexedFrame(4, 2, () => 1)));
+  const result = await toolRegistry.invoke("c64_graphics", { op: "capture_frame" }, ctx);
+  assert.equal(result.metadata.includePixels, false);
+  const frame = result.structuredContent.data.frames[0];
+  assert.equal(frame.pixels, undefined);
+  assert.equal(frame.byteLength, 8);
+  assert.equal(result.content.length, 1);
+  assert.ok(!result.content[0].text.includes("base64"));
+});
+
+test("capture_frame format png returns decodable image blocks in the C64 palette", async () => {
+  const { ctx } = frameCtx((count) => Array.from({ length: count }, () => indexedFrame(8, 4, (x) => (x < 4 ? 2 : 6))));
+  const result = await toolRegistry.invoke("c64_graphics", { op: "capture_frame", count: 2, format: "png" }, ctx);
+  assert.equal(result.isError, undefined);
+  const images = result.content.filter((block) => block.type === "image");
+  assert.equal(images.length, 2);
+  assert.equal(images[0].mimeType, "image/png");
+  const decoded = await Jimp.read(Buffer.from(images[0].data, "base64"));
+  assert.equal(decoded.bitmap.width, 8);
+  assert.equal(decoded.bitmap.height, 4);
+  const rgb = (x, y) => decoded.getPixelColor(x, y) >>> 8;
+  const expected = (index) => (VIC_PALETTE[index][0] << 16) | (VIC_PALETTE[index][1] << 8) | VIC_PALETTE[index][2];
+  assert.equal(rgb(0, 0), expected(2));
+  assert.equal(rgb(7, 3), expected(6));
+  assert.equal(result.structuredContent.data.frames[0].pixels, undefined);
+});
+
+test("capture_frame rejects more than 4 PNG frames before capturing, naming count", async () => {
+  const { ctx, requests } = frameCtx(() => []);
+  const result = await toolRegistry.invoke("c64_graphics", { op: "capture_frame", count: 5, format: "png" }, ctx);
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /count/);
+  assert.equal(requests.length, 0);
+});
+
+test("capture_frame rejects raw pixel responses above 2 MiB, naming count", async () => {
+  const { ctx } = frameCtx((count) => Array.from({ length: count }, () => indexedFrame(384, 272, () => 1)));
+  const big = await toolRegistry.invoke("c64_graphics", { op: "capture_frame", count: 20, includePixels: true }, ctx);
+  assert.equal(big.isError, true);
+  assert.match(big.content[0].text, /count/);
+  const small = await toolRegistry.invoke("c64_graphics", { op: "capture_frame", count: 2, includePixels: true }, ctx);
+  assert.equal(small.isError, undefined);
+  assert.equal(small.structuredContent.data.frames[0].pixels.encoding, "base64");
+});
+
+test("capture_samples rejects payloads above 2 MiB, naming count", async () => {
+  const ctx = {
+    client: {
+      async captureSamples() {
+        return { backend: "c64u", channels: 2, sampleRateHz: 48000, samplePairs: 700000, samples: new Int16Array(1_400_000) };
+      },
+    },
+    rag: {},
+    logger: createLogger(),
+    platform: { id: "c64u", features: [], limitedFeatures: [] },
+    setPlatform() {},
+  };
+  const result = await toolRegistry.invoke("c64_sound", { op: "capture_samples" }, ctx);
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /count/);
+});
+
+test("c64_batch passes capture_frame image blocks through after the JSON summary", async () => {
+  const { ctx } = frameCtx((count) => Array.from({ length: count }, () => indexedFrame(8, 4, () => 1)));
+  const result = await toolRegistry.invoke("c64_batch", {
+    commands: [{ tool: "c64_graphics", args: { op: "capture_frame", count: 2, format: "png" } }],
+  }, ctx);
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  const images = result.content.filter((block) => block.type === "image");
+  assert.equal(images.length, 2);
+  assert.equal(images[0].mimeType, "image/png");
+  assert.equal(result.structuredContent.data.results[0].images, 2);
+});

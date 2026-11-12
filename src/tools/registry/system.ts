@@ -3,6 +3,7 @@ import {
   defineToolModule,
   discriminatedUnionSchema,
 } from "../types.js";
+import { taskOperationEffect } from "../access.js";
 import { machineControlModule } from "../machineControl.js";
 import { metaModule } from "../meta/index.js";
 import {
@@ -60,7 +61,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "poweroff",
       ensureDescriptor(machineDescriptorIndex, "poweroff").inputSchema,
-      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off." },
+      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
@@ -160,6 +161,12 @@ export const systemModuleGroup = defineToolModule({
         description: "System operations available via the c64_system tool.",
         variants: systemOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        pause: "write", resume: "write", reset: "write", reboot: "destructive", poweroff: "destructive",
+        power_cycle: "destructive", menu: "write", read_menu_screen: "read", start_task: "write",
+        stop_task: "write", stop_all_tasks: "write", list_tasks: "read", performance_report: "read",
+      },
+      effectOf: (op, args) => (op === "start_task" ? taskOperationEffect((args as { operation?: unknown }).operation) : undefined),
       tags: ["system", "control", "grouped"],
       operationPlatforms: { poweroff: ["c64u", "vice"], pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
       operationToolNames: { poweroff: "poweroff", pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },

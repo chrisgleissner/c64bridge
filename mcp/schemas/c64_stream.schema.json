@@ -20,84 +20,13 @@
     },
     "target": {
       "type": "string",
-      "description": "Destination host:port or UDP target understood by the firmware.",
-      "minLength": 3
+      "description": "Destination of the UDP stream: IPv4 address or hostname with an optional :port (1-65535), e.g. 192.168.1.10, 192.168.1.10:11000 or pc.local:11000. The device sends the stream unencrypted over UDP to this address.",
+      "minLength": 1
     }
   },
   "required": [
     "op"
   ],
-  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop: Stop an active Ultimate streaming session. Required inputs: stream.",
-  "additionalProperties": false,
-  "x-c64bridge-operations": [
-    {
-      "op": "start",
-      "description": "Start an Ultimate streaming session toward a host:port target.",
-      "required": [
-        "stream",
-        "target"
-      ],
-      "optional": [],
-      "inputSchema": {
-        "type": "object",
-        "description": "Start an Ultimate streaming session toward a host:port target.",
-        "properties": {
-          "stream": {
-            "type": "string",
-            "description": "Stream type to control (video/audio/debug).",
-            "enum": [
-              "video",
-              "audio",
-              "debug"
-            ]
-          },
-          "target": {
-            "type": "string",
-            "description": "Destination host:port or UDP target understood by the firmware.",
-            "minLength": 3
-          },
-          "op": {
-            "const": "start"
-          }
-        },
-        "required": [
-          "stream",
-          "target",
-          "op"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "op": "stop",
-      "description": "Stop an active Ultimate streaming session.",
-      "required": [
-        "stream"
-      ],
-      "optional": [],
-      "inputSchema": {
-        "type": "object",
-        "description": "Stop an active Ultimate streaming session.",
-        "properties": {
-          "stream": {
-            "type": "string",
-            "description": "Stream type to control (video/audio/debug).",
-            "enum": [
-              "video",
-              "audio",
-              "debug"
-            ]
-          },
-          "op": {
-            "const": "stop"
-          }
-        },
-        "required": [
-          "stream",
-          "op"
-        ],
-        "additionalProperties": false
-      }
-    }
-  ]
+  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start [write]: Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
+  "additionalProperties": false
 }

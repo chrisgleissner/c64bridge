@@ -22,7 +22,7 @@ Use this skill when the user wants visual output on the C64, whether generated d
 ## Validation
 
 1. Use `c64_memory` with `op: "read_screen"` for text-mode validation.
-2. Use `c64_graphics` with `op: "capture_frame"` for full-frame verification.
+2. Use `c64_graphics` with `op: "capture_frame"` for full-frame verification. Pass `format: "png"` (at most 4 frames) to receive viewable images; raw pixels are off by default and need `includePixels: true` with a small `count`.
 3. Summarize the resulting mode, palette choices, and any captured assets.
 
 ## Safety

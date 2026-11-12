@@ -34,7 +34,8 @@
         ],
         "additionalProperties": false
       },
-      "minItems": 1
+      "minItems": 1,
+      "maxItems": 64
     },
     "stopOnError": {
       "type": [

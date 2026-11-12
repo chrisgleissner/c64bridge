@@ -22,6 +22,10 @@ import { disassemble, formatDisassembly } from "./translation/disassembler.js";
 import { getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
+import { resolveHostPath } from "../hostPaths.js";
+import { petsciiToAscii } from "../petscii.js";
+import { listBasicProgram, MAX_BASIC_IMAGE_BYTES } from "./translation/basicDetokenizer.js";
+import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../numericArg.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -156,6 +160,11 @@ const readMemoryArgsSchema = objectSchema({
       maximum: 4096,
       default: 256,
     }),
+    format: optionalSchema(stringSchema({
+      description: "Output layout. hex (default) returns one hex string; dump adds a 16-bytes-per-line listing with addresses and a printable PETSCII column.",
+      enum: ["hex", "dump"],
+      default: "hex",
+    }), "hex"),
   },
   required: ["address"],
   additionalProperties: false,
@@ -210,12 +219,20 @@ async function executeReadScreen(rawArgs: unknown, ctx: ToolExecutionContext): P
     readScreenArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Reading C64 screen contents");
 
-    const screen = await ctx.client.readScreen();
+    const client = ctx.client as typeof ctx.client & { readScreenDetailed?: () => Promise<{ text: string; baseAddress: number; charset: "upper" | "lower" }> };
+    const detailed = typeof client.readScreenDetailed === "function" ? await client.readScreenDetailed() : undefined;
+    const screen = detailed ? detailed.text : await ctx.client.readScreen();
 
     return textResult(`Current screen contents:\n${screen}`, {
       success: true,
       screen,
       length: screen.length,
+      ...(detailed
+        ? {
+            screenBase: `$${detailed.baseAddress.toString(16).toUpperCase().padStart(4, "0")}`,
+            charset: detailed.charset,
+          }
+        : {}),
     });
   } catch (error) {
     if (error instanceof ToolError) {
@@ -225,10 +242,82 @@ async function executeReadScreen(rawArgs: unknown, ctx: ToolExecutionContext): P
   }
 }
 
+const listBasicArgsSchema = objectSchema({
+  description: "List the BASIC program currently in memory. Reads the start ($2B/$2C) and end ($2D/$2E) pointers and detokenises the program text.",
+  properties: {},
+  additionalProperties: false,
+});
+
+async function readRange(ctx: ToolExecutionContext, start: number, length: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for (let offset = 0; offset < length; offset += 4096) {
+    const count = Math.min(4096, length - offset);
+    const address = `$${(start + offset).toString(16).toUpperCase().padStart(4, "0")}`;
+    const result = await ctx.client.readMemory(address, String(count));
+    if (!result.success) {
+      throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normaliseFailure(result.details) });
+    }
+    const bytes = parseFirmwareHex(result.data, "BASIC program read").bytes;
+    if (bytes.length !== count) {
+      throw new ToolExecutionError("Memory read returned an unexpected number of bytes", { details: { address, expected: count, received: bytes.length } });
+    }
+    chunks.push(bytes);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function executeListBasic(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    listBasicArgsSchema.parse(rawArgs ?? {});
+    const pointers = await readRange(ctx, 0x002b, 4);
+    const start = pointers[0]! | (pointers[1]! << 8);
+    const end = pointers[2]! | (pointers[3]! << 8);
+    const fmt = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+    if (end <= start) {
+      return jsonResult({ start: fmt(start), end: fmt(end), lines: [], listing: "" }, { success: true, lineCount: 0 });
+    }
+    const length = end - start;
+    if (length > MAX_BASIC_IMAGE_BYTES) {
+      throw new ToolExecutionError("BASIC end pointer is implausible", { details: { start: fmt(start), end: fmt(end) } });
+    }
+    const image = await readRange(ctx, start, length);
+    const lines = listBasicProgram(image, start);
+    const listing = lines.map((line) => `${line.number} ${line.text}`).join("\n");
+    return jsonResult(
+      { start: fmt(start), end: fmt(end), lines, listing },
+      { success: true, lineCount: lines.length },
+    );
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
+    return unknownErrorResult(error);
+  }
+}
+
+/** 16 bytes per line: `$ADDR: HH HH ... |text|`. Bytes with no printable PETSCII glyph show as `.`. */
+export function formatHexDump(start: number, bytes: Uint8Array): string[] {
+  const lines: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += 16) {
+    const row = bytes.subarray(offset, offset + 16);
+    const hex = Array.from(row, (b) => b.toString(16).toUpperCase().padStart(2, "0")).join(" ").padEnd(16 * 3 - 1, " ");
+    const text = Array.from(row, (b) => {
+      if (b === 0x20 || b === 0xa0) return " ";
+      const ch = petsciiToAscii(Uint8Array.of(b));
+      return ch.length === 1 && ch > " " && ch <= "~" ? ch : ".";
+    }).join("");
+    const address = ((start + offset) & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+    lines.push(`$${address}: ${hex}  |${text}|`);
+  }
+  return lines;
+}
+
 async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = readMemoryArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Reading C64 memory", { address: parsed.address, length: parsed.length });
+
+    // Validate before any device call so a bad address is a validation error.
+    const readStart = parseAddressArg(parsed.address, "$.address");
+    assertAddressRange(readStart, parsed.length ?? 256, "$.length");
 
     const result = await ctx.client.readMemory(parsed.address, String(parsed.length));
     if (!result.success) {
@@ -240,16 +329,22 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const detailRecord = toRecord(result.details) ?? {};
     const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
     const resolvedLength = resolveLength(detailRecord) ?? parsed.length;
+    const dumpLines = parsed.format === "dump" && typeof result.data === "string"
+      ? formatHexDump(readStart, parseFirmwareHex(result.data, "memory read").bytes)
+      : undefined;
     const data = {
       success: true,
       address: resolvedAddress,
       length: resolvedLength,
       hexData: result.data ?? null,
+      ...(dumpLines ? { dump: dumpLines } : {}),
       details: detailRecord,
     };
 
     // Many clients show only the text content, so it carries the bytes too.
-    const hexSummary = typeof result.data === "string" && result.data.length > 0 ? `\n${result.data}` : "";
+    const hexSummary = dumpLines
+      ? `\n${dumpLines.join("\n")}`
+      : typeof result.data === "string" && result.data.length > 0 ? `\n${result.data}` : "";
     const base = textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.${hexSummary}`, data);
     return {
       ...base,
@@ -275,6 +370,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     const expectedInfo = parsed.expected ? parseUserHex(parsed.expected, "$.expected") : undefined;
     const maskInfo = parsed.mask ? parseUserHex(parsed.mask, "$.mask") : undefined;
     const shouldVerify = parsed.verify || Boolean(expectedInfo) || Boolean(maskInfo);
+    assertAddressRange(parseAddressArg(parsed.address, "$.address"), writeInfo.bytes.length, "$.bytes");
 
     if (!shouldVerify) {
       const result = await ctx.client.writeMemory(parsed.address, writeInfo.canonical);
@@ -302,7 +398,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     let paused = false;
     try {
       if (canPause) {
-        const pauseResult = await ctx.client.pause(pinnedFacade);
+        const pauseResult = ctx.client.acquirePause ? await ctx.client.acquirePause(pinnedFacade) : await ctx.client.pause(pinnedFacade);
         if (!pauseResult.success) {
           throw new ToolExecutionError("C64 backend reported failure while pausing", {
             details: normaliseFailure(pauseResult.details),
@@ -410,7 +506,8 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       }
 
       if (paused) { // A failed resume here leaves the machine paused: a recoverable operation failure, not a log.
-        const resumeResult = await ctx.client.resume(pinnedFacade);
+        const resumeResult = ctx.client.releasePause ? await ctx.client.releasePause(pinnedFacade) : await ctx.client.resume(pinnedFacade);
+        paused = false; // released once, whatever the outcome: the finally block must not release again
         if (!resumeResult.success) {
           throw new ToolExecutionError("Write completed but the machine could not be resumed", {
             details: {
@@ -436,7 +533,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     } finally {
       if (paused) {
         try {
-          const resumeResult = await ctx.client.resume(pinnedFacade);
+          const resumeResult = ctx.client.releasePause ? await ctx.client.releasePause(pinnedFacade) : await ctx.client.resume(pinnedFacade);
           if (!resumeResult.success) {
             ctx.logger.warn("C64 resume reported failure after write", {
               details: normaliseFailure(resumeResult.details),
@@ -475,7 +572,7 @@ const disassembleArgsSchema = objectSchema({
       default: 64,
     }),
     instructionCount: optionalSchema(numberSchema({
-      description: "Stop after this many instructions (overrides length as a termination condition).",
+      description: "Stop after this many instructions. When given, it replaces length: 3 x instructionCount bytes are read (fewer near $FFFF).",
       integer: true,
       minimum: 1,
       maximum: 512,
@@ -488,10 +585,14 @@ const disassembleArgsSchema = objectSchema({
 async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = disassembleArgsSchema.parse(rawArgs ?? {});
-    const length = parsed.length ?? 64;
+    const address = parseAddressArg(parsed.address, "$.address");
+    // An instruction is at most 3 bytes, so 3 x instructionCount bytes always
+    // cover the requested instructions; clamp at the end of the address space.
+    const length = parsed.instructionCount !== undefined
+      ? Math.min(3 * parsed.instructionCount, 0x10000 - address)
+      : parsed.length ?? 64;
     ctx.logger.info("Disassembling VICE memory", { address: parsed.address, length });
 
-    const address = parseAddressArg(parsed.address, "$.address");
     validateRangeWithinAddressSpace(address, length, "$.address");
 
     const bytes = await ctx.client.readMemoryRaw(address, length);
@@ -505,6 +606,14 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
       address: addrHex,
       bytesRead: bytes.length,
       instructionCount: lines.length,
+      lines: lines.map((line) => ({
+        address: `$${line.address.toString(16).toUpperCase().padStart(4, "0")}`,
+        bytes: line.bytes.map((value) => value.toString(16).toUpperCase().padStart(2, "0")),
+        ...(line.label ? { label: line.label } : {}),
+        mnemonic: line.mnemonic,
+        operand: line.operand,
+        undocumented: line.undocumented,
+      })),
     });
   } catch (error) {
     if (error instanceof ToolError) {
@@ -519,23 +628,16 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
 // ---------------------------------------------------------------------------
 function parseAddressArg(raw: string, fieldPath: string): number {
   const trimmed = raw.trim();
-  let addr: number;
-  if (/^\$[0-9A-Fa-f]+$/.test(trimmed)) {
-    addr = parseInt(trimmed.slice(1), 16);
-  } else if (/^0[xX][0-9A-Fa-f]+$/.test(trimmed)) {
-    addr = parseInt(trimmed.slice(2), 16);
-  } else if (/^[0-9]+$/.test(trimmed)) {
-    addr = parseInt(trimmed, 10);
-  } else {
+  let addr = parseNumericLiteral(trimmed, fieldPath);
+  if (addr === undefined) {
     const resolved = resolveAddressSymbol(trimmed);
     if (resolved === undefined) {
+      assertNotBareHex(trimmed, fieldPath);
       throw new ToolValidationError(`Unknown address or symbol: ${trimmed}`, { path: fieldPath });
     }
     addr = resolved;
   }
-  if (!Number.isInteger(addr) || addr < 0 || addr > 0xffff) {
-    throw new ToolValidationError("Address must be in range $0000-$FFFF", { path: fieldPath });
-  }
+  assertAddressRange(addr, undefined, fieldPath);
   return addr;
 }
 
@@ -657,15 +759,19 @@ async function executeSearchMemory(rawArgs: unknown, ctx: ToolExecutionContext):
     ctx.logger.info("Searching memory", { start: fmtAddr(start), end: fmtAddr(end), pattern: parsed.pattern });
     const haystack = await ctx.client.readMemoryRaw(start, len);
     const matches: string[] = [];
-    outer: for (let i = 0; i <= haystack.length - needle.length && matches.length < maxResults; i++) {
+    // The whole range is already read, so counting past maxResults costs no device call.
+    let totalMatches = 0;
+    outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
       for (let j = 0; j < needle.length; j++) {
         if (haystack[i + j] !== needle[j]) continue outer;
       }
-      matches.push(fmtAddr(start + i));
+      totalMatches += 1;
+      if (matches.length < maxResults) matches.push(fmtAddr(start + i));
     }
+    const truncated = totalMatches > matches.length;
     return jsonResult(
-      { found: matches.length, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) } },
-      { success: true, found: matches.length },
+      { found: matches.length, totalMatches, truncated, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) } },
+      { success: true, found: matches.length, totalMatches, truncated },
     );
   } catch (error) {
     if (error instanceof ToolError) return toolErrorResult(error);
@@ -704,8 +810,11 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
     ]);
     type Diff = { offset: number; address1: string; address2: string; value1: string; value2: string };
     const diffs: Diff[] = [];
-    for (let i = 0; i < len && diffs.length < maxDiffs; i++) {
+    let totalDiffs = 0;
+    for (let i = 0; i < len; i++) {
       if (r1[i] !== r2[i]) {
+        totalDiffs += 1;
+        if (diffs.length >= maxDiffs) continue;
         diffs.push({
           offset: i,
           address1: fmtAddr(a1 + i),
@@ -715,10 +824,11 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
         });
       }
     }
-    const identical = diffs.length === 0;
+    const identical = totalDiffs === 0;
+    const truncated = totalDiffs > diffs.length;
     return jsonResult(
-      { identical, diffCount: diffs.length, diffs, region1: fmtAddr(a1), region2: fmtAddr(a2), length: len },
-      { success: true, identical, diffCount: diffs.length },
+      { identical, diffCount: totalDiffs, returnedDiffs: diffs.length, truncated, diffs, region1: fmtAddr(a1), region2: fmtAddr(a2), length: len },
+      { success: true, identical, diffCount: totalDiffs, truncated },
     );
   } catch (error) {
     if (error instanceof ToolError) return toolErrorResult(error);
@@ -749,7 +859,7 @@ async function executeSaveMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     if (end < start) throw new ToolValidationError("endAddress must be ≥ startAddress", { path: "$.endAddress" });
     const asPrg = parsed.asPrg !== false;
     const len = end - start + 1;
-    const resolvedPath = path.resolve(parsed.filePath);
+    const resolvedPath = resolveHostPath(parsed.filePath, { purpose: "write" });
     ctx.logger.info("Saving memory to file", { start: fmtAddr(start), end: fmtAddr(end), filePath: resolvedPath, asPrg });
     const bytes = await ctx.client.readMemoryRaw(start, len);
     const header = asPrg ? Buffer.from([start & 0xff, (start >> 8) & 0xff]) : Buffer.alloc(0);
@@ -773,6 +883,7 @@ export interface MemoryOperationMap extends OperationMap {
     readonly expected?: string; readonly mask?: string; readonly abortOnMismatch?: boolean;
   };
   readonly read_screen: Record<string, never>;
+  readonly list_basic: Record<string, never>;
   readonly disassemble: { readonly address: string; readonly length?: number; readonly instructionCount?: number };
   readonly copy_memory: { readonly source: string; readonly dest: string; readonly length: number };
   readonly fill_memory: { readonly address: string; readonly length: number; readonly pattern: string };
@@ -785,6 +896,7 @@ export const memoryOperationHandlers: OperationHandlerMap<MemoryOperationMap> = 
   read: async (args, ctx) => executeReadMemory(stripOperationDiscriminator(args), ctx),
   write: async (args, ctx) => executeWriteMemory(stripOperationDiscriminator(args), ctx),
   read_screen: async (args, ctx) => executeReadScreen(stripOperationDiscriminator(args), ctx),
+  list_basic: async (args, ctx) => executeListBasic(stripOperationDiscriminator(args), ctx),
   disassemble: async (args, ctx) => executeDisassemble(stripOperationDiscriminator(args), ctx),
   copy_memory: async (args, ctx) => executeCopyMemory(stripOperationDiscriminator(args), ctx),
   fill_memory: async (args, ctx) => executeFillMemory(stripOperationDiscriminator(args), ctx),
@@ -794,6 +906,7 @@ export const memoryOperationHandlers: OperationHandlerMap<MemoryOperationMap> = 
 };
 
 export {
+  listBasicArgsSchema,
   disassembleArgsSchema,
   copyMemoryArgsSchema,
   fillMemoryArgsSchema,

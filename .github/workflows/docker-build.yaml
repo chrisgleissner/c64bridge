@@ -2,19 +2,33 @@ name: Build Docker Image
 
 on:
   workflow_call:
+    inputs:
+      push:
+        type: boolean
+        default: false
+        description: "Push the image to GHCR (only for pushes to main)"
   workflow_dispatch:
+    inputs:
+      push:
+        type: boolean
+        default: false
+        description: "Push the image to GHCR"
+
+# No permissions block on purpose: as a called workflow this inherits the permissions of the calling job
+# (ci.yaml grants packages: write only to the push-to-main call). A block here that asks for more than the
+# caller grants makes the whole run invalid.
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Log in to GitHub Container Registry
+        if: ${{ inputs.push }}
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build image
@@ -24,6 +38,7 @@ jobs:
             -t ghcr.io/${{ github.repository_owner }}/mcp-builder:${{ github.sha }} .
 
       - name: Push image
+        if: ${{ inputs.push }}
         run: |
           docker tag ghcr.io/${{ github.repository_owner }}/mcp-builder:${{ github.sha }} ghcr.io/${{ github.repository_owner }}/mcp-builder:latest
           docker push ghcr.io/${{ github.repository_owner }}/mcp-builder:${{ github.sha }}

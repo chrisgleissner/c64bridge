@@ -164,4 +164,20 @@ export function registerMcpServerPromptsTests(withSharedMcpClient) {
       );
     });
   });
+
+  test("prompts/get for an unknown prompt fails with InvalidParams and lists the valid prompts", async () => {
+    await withSharedMcpClient(async ({ client }) => {
+      await assert.rejects(
+        () => client.request(
+          { method: "prompts/get", params: { name: "no-such-prompt" } },
+          GetPromptResultSchema,
+        ),
+        (error) => {
+          assert.equal(error.code, -32602);
+          assert.match(error.message, /Unknown prompt: no-such-prompt\. Valid prompts: .*basic-program/);
+          return true;
+        },
+      );
+    });
+  });
 }

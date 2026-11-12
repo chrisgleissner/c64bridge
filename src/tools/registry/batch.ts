@@ -1,6 +1,7 @@
 import {
   defineToolModule,
   type ToolExecutionContext,
+  type ToolResponseContent,
 } from "../types.js";
 import { getPlatformStatus } from "../../platform.js";
 import {
@@ -12,6 +13,8 @@ import {
 } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { unknownErrorResult } from "../errors.js";
+
+export const MAX_BATCH_COMMANDS = 64;
 
 const commandSchema = objectSchema<Record<string, unknown>>({
   description: "A single batch command.",
@@ -34,6 +37,7 @@ const executeBatchArgsSchema = objectSchema({
     commands: arraySchema(commandSchema, {
       description: "Ordered list of commands to execute.",
       minItems: 1,
+      maxItems: MAX_BATCH_COMMANDS,
     }),
     stopOnError: optionalSchema(booleanSchema({
       description: "Halt the batch after the first failure. Default: true.",
@@ -52,6 +56,8 @@ interface BatchResult {
   result?: unknown;
   error?: string;
   elapsedMs: number;
+  /** Number of image blocks this command returned; they follow the JSON summary in the batch content. */
+  images?: number;
 }
 
 export const batchModuleGroup = defineToolModule({
@@ -71,6 +77,9 @@ export const batchModuleGroup = defineToolModule({
       description: "Execute multiple c64bridge tool calls in a single request. Reduces latency for multi-step workflows.",
       summary: "Runs an ordered list of tool commands and returns all results with per-command timing.",
       inputSchema: executeBatchArgsSchema.jsonSchema,
+      // Annotated as the worst case; the access check runs per command when it is dispatched.
+      effect: "destructive",
+      effectOf: () => "read",
       tags: ["batch", "orchestration", "grouped"],
       examples: [
         {
@@ -104,6 +113,7 @@ export const batchModuleGroup = defineToolModule({
           const { toolRegistry } = await import("./index.js");
 
           const results: BatchResult[] = [];
+          const imageBlocks: ToolResponseContent[] = [];
           let succeeded = 0;
           let failed = 0;
           const batchStart = Date.now();
@@ -146,19 +156,23 @@ export const batchModuleGroup = defineToolModule({
               });
               const elapsedMs = Date.now() - cmdStart;
               const isError = toolResult.isError === true || toolResult.metadata?.success === false;
-              const text = toolResult.content.map((c) => c.text).join("\n");
+              const text = toolResult.content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n");
               const resultPayload = toolResult.structuredContent?.data ?? text;
+              // Image blocks (capture_frame format "png") have no text form, so they are passed through after the summary.
+              const images = toolResult.content.filter((c) => c.type === "image");
+              imageBlocks.push(...images);
               if (isError) {
                 results.push({ index: i, tool: toolName, description: label, success: false, error: text, elapsedMs });
                 failed++;
                 if (stopOnError) break;
               } else {
-                results.push({ index: i, tool: toolName, description: label, success: true, result: resultPayload, elapsedMs });
+                results.push({ index: i, tool: toolName, description: label, success: true, result: resultPayload, elapsedMs, ...(images.length > 0 ? { images: images.length } : {}) });
                 succeeded++;
               }
             } catch (err) {
               const elapsedMs = Date.now() - cmdStart;
-              const message = err instanceof Error ? err.message : String(err);
+              // Keep the validation detail (allowed values, bounds) that the CallTool error path would show.
+              const message = unknownErrorResult(err).content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n");
               results.push({ index: i, tool: toolName, description: label, success: false, error: message, elapsedMs });
               failed++;
               if (stopOnError) break;
@@ -176,7 +190,9 @@ export const batchModuleGroup = defineToolModule({
           };
 
           ctx.logger.info("Batch complete", { total: parsed.commands.length, succeeded, failed, elapsedMs: totalElapsedMs });
-          return jsonResult(summary, { success: failed === 0, succeeded, failed, total: parsed.commands.length });
+          const summaryResult = jsonResult(summary, { success: failed === 0, succeeded, failed, total: parsed.commands.length });
+          const outcome = imageBlocks.length > 0 ? { ...summaryResult, content: [...summaryResult.content, ...imageBlocks] } : summaryResult;
+          return failed > 0 ? { ...outcome, isError: true } : outcome;
         } catch (error) {
           return unknownErrorResult(error);
         }

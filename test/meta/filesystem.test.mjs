@@ -2,6 +2,9 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { toolRegistry } from "../../src/tools/registry/index.js";
+import { C64Client } from "../../src/c64Client.js";
+import { startMockC64Server } from "../../scripts/mockC64Server.mjs";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { createLogger, tmpPath } from "./helpers.mjs";
 
@@ -739,4 +742,54 @@ test("drive_mount_and_verify fails when post-mount verification lookup breaks", 
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
   assert.ok(String(res.content?.[0]?.text ?? "").length > 0);
+});
+
+test("c64_disk find_paths searches without running and builds a root pattern without a doubled slash", async () => {
+  const patterns = [];
+  let ran = 0;
+  const ctx = {
+    client: {
+      async filesInfo(pattern) { patterns.push(pattern); return ["/games/demo.prg"]; },
+      async runPrgFile() { ran++; return { success: true }; },
+      async runCrtFile() { ran++; return { success: true }; },
+    },
+    logger: createLogger(),
+    platform: { id: "c64u", features: [], limitedFeatures: [] },
+  };
+  const res = await toolRegistry.invoke("c64_disk", { op: "find_paths", nameContains: "demo", extensions: ["prg"] }, ctx);
+  assert.equal(res.metadata?.success, true);
+  assert.deepEqual(res.structuredContent.data.results, ["/games/demo.prg"]);
+  assert.equal(res.structuredContent.data.truncated, false);
+  assert.deepEqual(patterns, ["/**/*demo*.prg"]);
+  assert.equal(ran, 0);
+
+  patterns.length = 0;
+  await metaModule.invoke("find_and_run_program_by_name", { root: "/", nameContains: "demo" }, ctx).catch(() => {});
+  assert.ok(patterns.length > 0 && patterns.every((p) => p.startsWith("/**/")), `unexpected patterns ${patterns.join(",")}`);
+});
+
+test("find_paths caps results at maxResults and reports truncated", async () => {
+  const paths = Array.from({ length: 5 }, (_, i) => `/a/demo${i}.prg`);
+  const ctx = { client: { async filesInfo() { return paths; } }, logger: createLogger() };
+  const capped = await metaModule.invoke("find_paths_by_name", { nameContains: "demo", maxResults: 3 }, ctx);
+  assert.equal(capped.structuredContent.data.results.length, 3);
+  assert.equal(capped.structuredContent.data.truncated, true);
+  const exact = await metaModule.invoke("find_paths_by_name", { nameContains: "demo", maxResults: 5 }, ctx);
+  assert.equal(exact.structuredContent.data.results.length, 5);
+  assert.equal(exact.structuredContent.data.truncated, false);
+  const tooMany = await metaModule.invoke("find_paths_by_name", { nameContains: "demo", maxResults: 1001 }, ctx);
+  assert.equal(tooMany.isError, true);
+  assert.match(JSON.stringify(tooMany), /maxResults/);
+});
+
+test("find_paths sends the wildcard pattern to the mock /v1/files route", async () => {
+  const mock = await startMockC64Server();
+  try {
+    const client = new C64Client(mock.baseUrl);
+    const ctx = { client, logger: createLogger(), platform: { id: "c64u", features: [], limitedFeatures: [] } };
+    await toolRegistry.invoke("c64_disk", { op: "find_paths", nameContains: "demo", extensions: ["prg"] }, ctx);
+    assert.equal(mock.state.lastFileInfo, "/**/*demo*.prg");
+  } finally {
+    await mock.close();
+  }
 });

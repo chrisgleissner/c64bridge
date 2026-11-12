@@ -95,10 +95,30 @@ const PETSCII_TOKENS: Readonly<Record<string, number>> = {
 // ASCII a-z are shifted graphics characters in PETSCII, so typed "print" would
 // reach BASIC as graphics and give ?SYNTAX ERROR. Literal letters are therefore
 // sent as the unshifted PETSCII letters $41-$5A; {tokens} keep their codes.
+// Newline is RETURN. Any other character without a PETSCII equivalent, and any
+// unknown {TOKEN}, is rejected instead of being typed as something else.
+function describeChar(char: string): string {
+  const codePoint = char.codePointAt(0) ?? 0;
+  return `'${codePoint < 0x20 ? "" : char}' (U+${codePoint.toString(16).toUpperCase().padStart(4, "0")})`;
+}
+
 function expandPetsciiTokens(text: string): string {
-  return text.replace(/\{([^}]+)\}|[a-z]/g, (_match, token: string | undefined) => {
+  return text.replace(/\{([^}]+)\}|\r\n|[\s\S]/gu, (match: string, token: string | undefined, offset: number) => {
     if (token === undefined) {
-      return _match.toUpperCase();
+      if (match === "\n" || match === "\r" || match === "\r\n") {
+        return String.fromCharCode(13);
+      }
+      const code = match.codePointAt(0) ?? 0;
+      if (code >= 0x61 && code <= 0x7a) {
+        return match.toUpperCase();
+      }
+      if (code >= 0x20 && code <= 0x7e) {
+        return match;
+      }
+      throw new ToolValidationError(
+        `Character ${describeChar(match)} at position ${offset + 1} of the text has no PETSCII mapping. Use printable ASCII, \\n for RETURN, or a {TOKEN}.`,
+        { path: "$.text" },
+      );
     }
     const upper = token.trim().toUpperCase();
     const code = PETSCII_TOKENS[upper];
@@ -115,7 +135,10 @@ function expandPetsciiTokens(text: string): string {
     if (!isNaN(num) && num >= 0 && num <= 255) {
       return String.fromCharCode(num);
     }
-    return _match.toUpperCase(); // type unrecognised tokens literally
+    throw new ToolValidationError(
+      `Unknown token {${token}} at position ${offset + 1} of the text. Valid tokens: ${Object.keys(PETSCII_TOKENS).map((name) => `{${name}}`).join(", ")}, or a numeric code such as {$1D} or {29} (0-255).`,
+      { path: "$.text" },
+    );
   });
 }
 
@@ -179,7 +202,7 @@ export const writeTextArgsSchema = objectSchema({
   properties: {
     op: literalSchema("write_text"),
     text: stringSchema({
-      description: "Text to type. Use {RETURN}, {CLR}, {F1}…{F8}, {UP/DOWN/LEFT/RIGHT}, colour names, etc.",
+      description: "Text to type: printable ASCII (letters are sent as PETSCII upper case), \\n for RETURN, and {TOKEN}s such as {RETURN}, {CLR}, {F1}…{F8}, {UP}, {DOWN}, {LEFT}, {RIGHT}, colour names, or {$1D}/{29} codes. Characters with no PETSCII mapping and unknown tokens are rejected.",
       minLength: 1,
       maxLength: 512,
     }),
@@ -196,7 +219,7 @@ export const writeTextArgsSchema = objectSchema({
 });
 
 export const keyArgsSchema = objectSchema({
-  description: "Tap a single key or hold it for a duration.",
+  description: "Press a single key one or more times, optionally with a delay between presses.",
   properties: {
     op: literalSchema("key"),
     key: stringSchema({
@@ -328,7 +351,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const keyByte = tokenCode !== undefined
         ? tokenCode
         : parsed.key.length === 1
-          ? parsed.key.toUpperCase().charCodeAt(0) & 0xff
+          ? expandPetsciiTokens(parsed.key).charCodeAt(0)
           : (() => {
               throw new ToolValidationError(`Unrecognised key: ${parsed.key}. Use a single character or a PETSCII token name.`, { path: "$.key" });
             })();
@@ -480,6 +503,7 @@ export const inputModule = defineToolModule({
         ],
       }),
       operationPlatforms: { joystick: ["c64u", "vice"], keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"] },
+      operationEffects: { write_text: "write", key: "write", keyboard: "write", joystick: "write", release_all: "write", state: "read" },
       tags: ["input", "keyboard", "joystick"],
       examples: [
         {

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { __programRunnerHelpersForTests, programOperationHandlers, programRunnersModule } from "../src/tools/programRunners.js";
+import { assemblyToPrg } from "../src/tools/translation/assembler.js";
 import { ToolUnsupportedPlatformError } from "../src/tools/errors.js";
 import { clearViceSymbols, getViceSymbol, setViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
@@ -13,6 +14,26 @@ function createLogger() {
     info() {},
     warn() {},
     error() {},
+  };
+}
+
+// A backend that really loaded the program returns its bytes at the load
+// address (the readback upload_run_asm now performs); every other read goes to
+// the test's own memory behaviour.
+function withProgramLoaded(ctx, source) {
+  const prg = assemblyToPrg(source);
+  const loadAddress = prg.readUInt16LE(0);
+  const body = prg.subarray(2);
+  const inner = ctx.client.readMemoryRaw?.bind(ctx.client) ?? (async (_address, length) => new Uint8Array(length));
+  return {
+    ...ctx,
+    client: {
+      ...ctx.client,
+      async readMemoryRaw(address, length) {
+        if (address === loadAddress && length <= 16) return Uint8Array.from(body.subarray(0, length));
+        return inner(address, length);
+      },
+    },
   };
 }
 
@@ -292,11 +313,13 @@ test("upload_run_basic is available on vice", async () => {
   assert.equal(calls.length, 1);
 });
 
-test("load_prg rejects vice platform", async () => {
+test("load_prg is accepted on the vice platform", async () => {
+  const calls = [];
   const ctx = {
     client: {
-      async loadPrgFile() {
-        throw new Error("should not execute on unsupported platform");
+      async loadPrgFile(path) {
+        calls.push(path);
+        return { success: true };
       },
     },
     logger: createLogger(),
@@ -304,10 +327,9 @@ test("load_prg rejects vice platform", async () => {
     setPlatform: () => createPlatformStatus("vice"),
   };
 
-  await assert.rejects(
-    () => programRunnersModule.invoke("load_prg", { path: "//USB0/demo.prg" }, ctx),
-    ToolUnsupportedPlatformError,
-  );
+  const result = await programRunnersModule.invoke("load_prg", { path: "/tmp/demo.prg" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(calls, ["/tmp/demo.prg"]);
 });
 
 test("load_prg validates path", async () => {
@@ -904,7 +926,7 @@ test("upload_run_asm returns structured content on success", async () => {
   const result = await programRunnersModule.invoke(
     "upload_run_asm",
     { program: ".org $0801\n rts" },
-    ctx,
+    withProgramLoaded(ctx, ".org $0801\n rts"),
   );
 
   assert.equal(result.isError, undefined);
@@ -954,7 +976,7 @@ test("upload_run_asm verify true annotates metadata", async () => {
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: asmSource, verify: true },
-      ctx,
+      withProgramLoaded(ctx, asmSource),
     );
 
     assert.equal(result.isError, undefined);
@@ -1008,7 +1030,7 @@ test("upload_run_asm reports crashed programs when verification detects no progr
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\nstart: rts", verify: true },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\nstart: rts"),
     );
 
     assert.equal(result.isError, true);
@@ -1057,7 +1079,7 @@ test("upload_run_asm verify tolerates transient screen read failures and still v
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\nstart: rts", verify: true },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\nstart: rts"),
     );
 
     assert.equal(result.isError, undefined);
@@ -1090,4 +1112,85 @@ test("upload_run_asm reports assembly diagnostics with file and line", async () 
   assert.equal(result.metadata.error.kind, "validation");
   assert.ok(typeof result.metadata.error.details.line === "number");
   assert.ok(String(result.metadata.error.details.message ?? "").length > 0);
+});
+
+test("upload_run_basic reports BASIC syntax problems as validation errors naming the line", async () => {
+  const ctx = {
+    client: {
+      async uploadAndRunBasic() {
+        throw new Error("should not run");
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const noNumber = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\nPRINT "B"' }, ctx);
+  assert.equal(noNumber.isError, true);
+  assert.equal(noNumber.metadata.error.kind, "validation");
+  assert.equal(noNumber.metadata.error.path, "$.program");
+  assert.match(noNumber.content[0].text, /line 2 of the program/);
+
+  const tooBig = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\n99999 END' }, ctx);
+  assert.equal(tooBig.isError, true);
+  assert.equal(tooBig.metadata.error.kind, "validation");
+  assert.match(tooBig.content[0].text, /Line number out of range: 99999 on line 2/);
+});
+
+function autoFixContext(calls) {
+  const screens = ["?SYNTAX ERROR IN 10\nREADY.\n"];
+  return {
+    client: {
+      async uploadAndRunBasic(program) {
+        calls.push(program);
+        return { success: true };
+      },
+      async readScreen() {
+        return screens.shift() ?? "READY.\n";
+      },
+    },
+    logger: createLogger(),
+  };
+}
+
+test("upload_run_basic autoFix:false does not rewrite or re-run the program", async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke(
+    "upload_run_basic",
+    { program: '10 PRINT "HELLO\n20 END', autoFix: false },
+    autoFixContext(calls),
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.data.autoFix.attempted, false);
+  assert.equal(result.structuredContent.data.autoFix.disabled, true);
+  assert.match(result.content[0].text, /not rewritten or run again/);
+});
+
+test("upload_run_basic reports the rewritten lines before and after", async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke(
+    "upload_run_basic",
+    { program: '10 PRINT "HELLO\n20 END' },
+    autoFixContext(calls),
+  );
+  assert.equal(calls.length, 2);
+  assert.equal(result.isError, undefined);
+  const change = result.structuredContent.data.autoFix.changes[0];
+  assert.equal(change.before, '10 PRINT "HELLO');
+  assert.equal(change.after, '10 PRINT "HELLO"');
+  assert.equal(result.metadata.autoFix.changes[0].before, '10 PRINT "HELLO');
+  assert.match(result.content[0].text, /10 PRINT "HELLO" -> .*10 PRINT "HELLO"/);
+  assert.match(result.content[0].text, /second time/);
+});
+
+test("upload_run_basic words an unverified run as started, not executed successfully", async () => {
+  const calls = [];
+  const ctx = autoFixContext(calls);
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: "10 PRINT 1" }, {
+    ...ctx,
+    client: { ...ctx.client, async readScreen() { return "READY.\n"; } },
+  });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /uploaded and started/);
+  assert.ok(!/executed successfully/.test(result.content[0].text));
 });

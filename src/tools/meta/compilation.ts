@@ -5,6 +5,7 @@ import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
+import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { sleep } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 
@@ -51,7 +52,7 @@ export const tools: ToolDefinition[] = [
         const durationMs = parsed.durationMs ?? 2000;
 
         const outputPath = parsed.outputPath
-          ? resolvePath(String(parsed.outputPath))
+          ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
           : resolvePath(joinPath(getTasksHomeDir(), `cycle_${Date.now()}`));
         await fs.mkdir(outputPath, { recursive: true });
 
@@ -88,14 +89,14 @@ export const tools: ToolDefinition[] = [
           }
 
           // Archive artifacts
-          const sourcePath = resolvePath(joinPath(outputPath, `source.${sourceType}`));
+          const sourcePath = resolveHostChildPath(outputPath, `source.${sourceType}`);
           await fs.writeFile(sourcePath, source, "utf8");
 
-          const screenPath = resolvePath(joinPath(outputPath, "screen.txt"));
+          const screenPath = resolveHostChildPath(outputPath, "screen.txt");
           const screen = await (ctx.client as any).readScreen();
           await fs.writeFile(screenPath, screen, "utf8");
 
-          const manifestPath = resolvePath(joinPath(outputPath, "manifest.json"));
+          const manifestPath = resolveHostChildPath(outputPath, "manifest.json");
           const manifest = {
             runId,
             sourceType,
@@ -114,7 +115,7 @@ export const tools: ToolDefinition[] = [
           return jsonResult({ runId, outputPath, compiled, ran, verified, verificationMessage }, { success: verified || !verifyScreen });
         } catch (e) {
           const error = e instanceof Error ? e.message : String(e);
-          const manifestPath = resolvePath(joinPath(outputPath, "manifest.json"));
+          const manifestPath = resolveHostChildPath(outputPath, "manifest.json");
           const manifest = {
             runId,
             sourceType,

@@ -88,6 +88,16 @@ interface SendOptions {
   readonly timeoutMs?: number;
 }
 
+/** How long a TCP connect to the monitor may take before it is abandoned. */
+export const VICE_CONNECT_TIMEOUT_MS = 5_000;
+
+export interface ViceConnectOptions {
+  /** Connect timeout in milliseconds (default 5000). */
+  readonly connectTimeoutMs?: number;
+  /** Replaces net.connect, for tests that must not depend on the network. */
+  readonly socketFactory?: (host: string, port: number) => net.Socket;
+}
+
 export class ViceClient {
   private socket!: net.Socket;
   private buffer: Buffer = Buffer.alloc(0);
@@ -100,16 +110,27 @@ export class ViceClient {
     this.onUnsolicitedHandler = handler;
   }
 
-  async connect(port: number, host = "127.0.0.1"): Promise<void> {
-    this.socket = net.connect({ host, port });
+  async connect(port: number, host = "127.0.0.1", options: ViceConnectOptions = {}): Promise<void> {
+    const timeoutMs = options.connectTimeoutMs ?? VICE_CONNECT_TIMEOUT_MS;
+    this.socket = options.socketFactory ? options.socketFactory(host, port) : net.connect({ host, port });
     this.closing = false;
     this.socket.setNoDelay(true);
     await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        // A host that drops the SYN would otherwise block until the OS gives up.
+        this.socket.off("connect", onConnect);
+        this.socket.off("error", onError);
+        this.socket.on("error", () => {}); // destroy() may still emit an error
+        this.socket.destroy();
+        reject(new Error(`Timed out after ${timeoutMs} ms connecting to the VICE monitor at ${host}:${port}`));
+      }, timeoutMs);
       const onConnect = () => {
+        clearTimeout(timer);
         this.socket.off("error", onError);
         resolve();
       };
       const onError = (error: Error) => {
+        clearTimeout(timer);
         this.socket.off("connect", onConnect);
         reject(error);
       };
@@ -307,10 +328,14 @@ export class ViceClient {
   }
 
   async keyboardFeed(text: string): Promise<void> {
-    if (!text) return;
+    if (!text) throw new Error("keyboardFeed requires non-empty text");
     const bytes = Buffer.from(text, "ascii");
-    const body = Buffer.concat([Buffer.from([bytes.length & 0xff]), bytes]);
-    await this.send(0x72, body);
+    // The command carries its length in one byte, so longer text goes out as
+    // consecutive commands, in order.
+    for (let offset = 0; offset < bytes.length; offset += 255) {
+      const chunk = bytes.subarray(offset, offset + 255);
+      await this.send(0x72, Buffer.concat([Buffer.from([chunk.length]), chunk]));
+    }
   }
 
   /** Set the VICE joyport's active-low control byte (BM command 0xA2). */

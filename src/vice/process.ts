@@ -214,7 +214,26 @@ export async function terminateProcess(child: ChildProcess | null, signal: NodeJ
   await waitForExit(child, timeoutMs);
 }
 
+/**
+ * Rejects when something already listens on the monitor address. waitForPort
+ * succeeds against any listener, so without this check a foreign process on
+ * the port would be taken for the new emulator's monitor.
+ */
+export async function assertMonitorPortFree(host: string, port: number): Promise<void> {
+  if (!Number.isInteger(port) || port <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const probe = net.connect({ host, port });
+    probe.setTimeout(500, () => probe.destroy(new Error("timeout")));
+    probe.once("connect", () => {
+      probe.destroy();
+      reject(new Error(`Cannot start VICE: port ${port} on ${host} is already in use by another process. Stop it or configure a different vice.port.`));
+    });
+    probe.once("error", () => resolve()); // refused or unreachable: nothing is listening
+  });
+}
+
 export async function startViceProcess(options: ViceProcessOptions): Promise<ViceProcessHandle> {
+  await assertMonitorPortFree(options.host, options.port);
   const debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
   // When headless=true, skip Xvfb entirely and rely on VICE's own -headless flag (VICE 3.5+).
   const useHeadless = options.headless === true || process.env.VICE_HEADLESS === "1";

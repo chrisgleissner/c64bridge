@@ -24,6 +24,7 @@ import {
 } from "./utils.js";
 import {
   ToolError,
+  ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "../errors.js";
@@ -31,6 +32,9 @@ import { jsonResult } from "../responses.js";
 
 const audioDescriptorIndex = buildDescriptorIndex(audioModule);
 const metaDescriptorIndex = buildDescriptorIndex(metaModule);
+
+/** Largest encoded PCM payload one capture_samples response may carry. */
+const MAX_SAMPLE_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
 const captureSamplesArgsSchema = objectSchema({
   description: "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
@@ -71,6 +75,14 @@ const soundOperations: GroupedOperationConfig[] = [
           capture.samples.byteOffset,
           capture.samples.byteLength,
         );
+
+        const encodedBytes = parsed.encoding === "hex" ? samplesBuffer.length * 2 : Math.ceil(samplesBuffer.length / 3) * 4;
+        if (encodedBytes > MAX_SAMPLE_PAYLOAD_BYTES) {
+          throw new ToolValidationError(
+            `Sample response would be ${encodedBytes} bytes, above the ${MAX_SAMPLE_PAYLOAD_BYTES} byte limit; lower count`,
+            { path: "$.count", details: { count: parsed.count, encodedBytes, limitBytes: MAX_SAMPLE_PAYLOAD_BYTES } },
+          );
+        }
 
         return jsonResult(
           {
@@ -243,6 +255,11 @@ export const soundModuleGroup = defineToolModule({
         description: "Sound operations available via the c64_sound tool.",
         variants: soundOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        capture_samples: "read", set_volume: "write", reset: "write", note_on: "write", note_off: "write",
+        silence_all: "write", play_sid_file: "write", play_mod_file: "write", generate: "write",
+        compile_play: "write", play_preset: "write", pipeline: "write", analyze: "read", record_analyze: "read",
+      },
       tags: ["sid", "audio", "grouped"],
       operationPlatforms: {
         capture_samples: ["c64u"],

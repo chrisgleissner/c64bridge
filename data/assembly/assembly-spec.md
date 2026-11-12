@@ -483,6 +483,8 @@ FF ISC ABSX U 7 - M←M+1; A←A-M-(1-C); set(C,Z,N,V)
 - Data: `.byte expr[,…]`, `.word expr[,…]`  
 - Symbols: `name = expr` / `.equ name, expr`  
 - Alignment/fill (assembler‑specific): `.align n`, `.fill count, value`
+- Text: `.text "str"` / `.ascii "str"` convert ASCII to PETSCII for the default upper-case/graphics set: `a`-`z` and `A`-`Z` both become codes `$41`-`$5A`, `\n` becomes RETURN (`$0D`), other ASCII characters (digits, punctuation, space) are unchanged, and characters above `$7F` are an error.
+- `.equ` accepts both `name .equ expr` and `.equ name, expr`; `.fill count[, value]` and `.align n[, fill]` default the fill byte to 0.
 
 ## Tips and Tricks
 

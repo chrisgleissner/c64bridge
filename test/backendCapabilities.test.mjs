@@ -34,12 +34,12 @@ async function withDirectory(fn) {
 // This matrix states device constraints independently of implementation metadata.
 // Exercise every rejected operation through the public registry with no client I/O.
 const restrictions = {
-  c64_program: { load_prg: ["c64u", "u2"], run_crt: ["c64u", "u2"] },
+  c64_program: { run_crt: ["c64u", "u2"] },
   c64_sound: { capture_samples: ["c64u"], play_sid_file: ["c64u", "u2"], play_mod_file: ["c64u", "u2"] },
   c64_system: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"], poweroff: ["c64u", "vice"] },
   c64_graphics: { capture_frame: ["c64u", "vice"] },
   c64_drive: { load_rom: ["c64u", "u2"] },
-  c64_disk: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
+  c64_disk: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"], find_paths: ["c64u", "u2"] },
   c64_config: { load_flash: ["c64u", "u2"], save_flash: ["c64u", "u2"], reset_defaults: ["c64u", "u2"], read_debugreg: ["c64u"], write_debugreg: ["c64u"], shuffle: ["c64u", "u2"] },
   c64_extract: { fs_stats: ["c64u", "u2"] },
   c64_input: { keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"], joystick: ["c64u", "vice"] },
@@ -51,7 +51,8 @@ for (const [name, operations] of Object.entries(restrictions)) {
         const descriptor = toolRegistry.list().find((tool) => tool.name === name);
         assert.deepEqual([...descriptor.metadata.operationPlatforms[op]].sort(), [...supported].sort());
         let accesses = 0;
-        const client = new Proxy({}, { get() { accesses++; throw new Error("unexpected client access"); } });
+        // getAvailableBackends is configuration, not device I/O: the error message uses it to suggest a switch.
+        const client = new Proxy({}, { get(_target, key) { if (key === "getAvailableBackends") return () => [platform]; accesses++; throw new Error("unexpected client access"); } });
         await assert.rejects(() => toolRegistry.invoke(name, { op }, context(platform, client)), (error) => error instanceof ToolUnsupportedPlatformError);
         assert.equal(accesses, 0);
       });
@@ -328,12 +329,12 @@ test("VICE resource writes honor booleans, preserve numeric strings, and reject 
   const backend = Object.create(ViceBackend.prototype);
   const writes = [];
   backend.withClient = async (fn) => fn({
-    async resourceGet(item) { return { type: item === "Label" ? "string" : "int", value: item === "Label" ? "1541" : 1 }; },
+    async resourceGet(item) { return { type: item === "SoundLabel" ? "string" : "int", value: item === "SoundLabel" ? "1541" : 1 }; },
     async resourceSet(item, value) { writes.push([item, value]); },
   });
   await backend.configSet("VICE", "WarpMode", "true");
-  await backend.configBatchUpdate({ VICE: { WarpMode: false, Label: "1541" } });
-  assert.deepEqual(writes, [["WarpMode", 1], ["WarpMode", 0], ["Label", "1541"]]);
+  await backend.configBatchUpdate({ VICE: { WarpMode: false, SoundLabel: "1541" } });
+  assert.deepEqual(writes, [["WarpMode", 1], ["WarpMode", 0], ["SoundLabel", "1541"]]);
   for (const value of ["0.5", "NaN", "Infinity", "2147483648", "-2147483649"]) {
     await assert.rejects(() => backend.configSet("VICE", "WarpMode", value), /32-bit integer/);
   }
@@ -355,7 +356,7 @@ test("flash save failure after restore is reported honestly", async () => withDi
 for (const op of ["print_text", "print_bitmap", "define_chars"]) {
   test(`c64_printer.${op} rejects vice before device I/O`, async () => {
     let accesses = 0;
-    const client = new Proxy({}, { get() { accesses++; throw new Error("unexpected client access"); } });
+    const client = new Proxy({}, { get(_target, key) { if (key === "getAvailableBackends") return () => ["vice"]; accesses++; throw new Error("unexpected client access"); } });
     await assert.rejects(() => toolRegistry.invoke("c64_printer", { op }, context("vice", client)), (error) => error instanceof ToolUnsupportedPlatformError);
     assert.equal(accesses, 0);
   });

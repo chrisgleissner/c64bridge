@@ -199,7 +199,7 @@ test("read falls back to the requested address when the response omits one", asy
     logger: createLogger(),
   };
 
-  const res = await memoryModule.invoke("read", { address: "0400", length: 1 }, ctx);
+  const res = await memoryModule.invoke("read", { address: "$0400", length: 1 }, ctx);
 
   assert.equal(res.isError, undefined);
   assert.equal(res.metadata.address, "$0400");
@@ -229,7 +229,7 @@ test("read handles failure with scalar details", async () => {
     }),
     logger: createLogger(),
   };
-  const res = await memoryModule.invoke("read", { address: "$FFFF", length: 2 }, ctx);
+  const res = await memoryModule.invoke("read", { address: "$FFF0", length: 2 }, ctx);
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
 });
@@ -316,7 +316,7 @@ test("write handles string address without $ prefix", async () => {
     }),
     logger: createLogger(),
   };
-  const res = await memoryModule.invoke("write", { address: "0400", bytes: "$AA55" }, ctx);
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA55" }, ctx);
   assert.equal(res.metadata?.success, true);
   assert.ok(res.metadata?.address?.startsWith("$"));
 });
@@ -1042,6 +1042,8 @@ test("search_memory finds matches and respects maxResults", async () => {
   assert.equal(res.isError, undefined);
   assert.deepEqual(res.structuredContent?.data.matches, ["$2000", "$2002"]);
   assert.equal(res.structuredContent?.data.found, 2);
+  assert.equal(res.structuredContent?.data.totalMatches, 3);
+  assert.equal(res.structuredContent?.data.truncated, true);
 });
 
 test("search_memory rejects reversed ranges", async () => {
@@ -1106,7 +1108,9 @@ test("compare_memory reports differences and respects maxDiffs", async () => {
 
   assert.equal(res.isError, undefined);
   assert.equal(res.structuredContent?.data.identical, false);
-  assert.equal(res.structuredContent?.data.diffCount, 1);
+  assert.equal(res.structuredContent?.data.diffCount, 2);
+  assert.equal(res.structuredContent?.data.returnedDiffs, 1);
+  assert.equal(res.structuredContent?.data.truncated, true);
   assert.deepEqual(res.structuredContent?.data.diffs, [{
     offset: 1,
     address1: "$3001",
@@ -1274,4 +1278,101 @@ test("write with verify reports a failed pre-read with its cause", async () => {
   const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AABB", verify: true }, ctx);
   assert.equal(res.isError, true);
   assert.match(res.content[0].text, /^C64 backend reported failure while reading memory: read refused$/);
+});
+
+test("disassemble with instructionCount reads 3 bytes per instruction, clamped at $FFFF, and returns lines", async () => {
+  const reads = [];
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        reads.push([address, length]);
+        return new Uint8Array(length).fill(0xea);
+      },
+    }),
+    logger: createLogger(),
+    platform: { id: "c64u", features: [], limitedFeatures: [] },
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$C000", instructionCount: 100 }, ctx);
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(reads[0], [0xc000, 300]);
+  assert.equal(res.metadata.instructionCount, 100);
+  assert.equal(res.metadata.lines.length, 100);
+  assert.equal(res.metadata.lines[0].mnemonic, "NOP");
+
+  const near = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$FFFE", instructionCount: 10 }, ctx);
+  assert.equal(near.isError, undefined);
+  assert.deepEqual(reads[1], [0xfffe, 2]);
+});
+
+test("read and write reject ambiguous or out-of-range addresses as validation errors before any device call", async () => {
+  let calls = 0;
+  const ctx = {
+    client: createMockClient({
+      async readMemory() { calls += 1; return { success: true, data: "$00", details: {} }; },
+      async writeMemory() { calls += 1; return { success: true, details: {} }; },
+    }),
+    logger: createLogger(),
+  };
+  for (const address of ["C000", "0400", "$FFFF", "$10000"]) {
+    const length = address === "$FFFF" ? 2 : 1;
+    const read = await memoryModule.invoke("read", { address, length }, ctx);
+    assert.equal(read.isError, true, `read ${address}`);
+    assert.equal(read.metadata?.error?.kind, "validation", `read ${address}`);
+    const write = await memoryModule.invoke("write", { address, bytes: length === 2 ? "$AABB" : "$AA" }, ctx);
+    assert.equal(write.isError, true, `write ${address}`);
+    assert.equal(write.metadata?.error?.kind, "validation", `write ${address}`);
+  }
+  assert.equal(calls, 0);
+  const ok = await memoryModule.invoke("read", { address: "%1000000000000", length: 1 }, ctx);
+  assert.equal(ok.isError, undefined);
+  assert.equal(calls, 1);
+});
+
+test("search_memory and compare_memory report truncated:false when nothing was cut off", async () => {
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        return address === 0x3100 ? Uint8Array.of(1, 2, 3, 9) : Uint8Array.of(1, 2, 3, 4);
+      },
+    }),
+    logger: createLogger(),
+  };
+  const search = await toolRegistry.invoke("c64_memory", { op: "search_memory", startAddress: "$3000", endAddress: "$3003", pattern: "02", maxResults: 5 }, ctx);
+  assert.equal(search.structuredContent?.data.truncated, false);
+  assert.equal(search.structuredContent?.data.totalMatches, 1);
+  const compare = await toolRegistry.invoke("c64_memory", { op: "compare_memory", address1: "$3000", address2: "$3100", length: 4, maxDiffs: 5 }, ctx);
+  assert.equal(compare.structuredContent?.data.diffCount, 1);
+  assert.equal(compare.structuredContent?.data.truncated, false);
+});
+
+// --- F-05: read format dump ---
+test("read format dump lists 16 bytes per line with address and PETSCII column", async () => {
+  const bytes = Buffer.from([...Buffer.from("HELLO WORLD!"), 0x00, 0x0d, 0xff, 0x20, 0x41, 0x42, 0x43]);
+  const ctx = {
+    client: createMockClient({
+      async readMemory() {
+        return { success: true, data: `$${bytes.toString("hex").toUpperCase()}`, details: { address: "0400", length: bytes.length } };
+      },
+    }),
+    logger: createLogger(),
+  };
+  const res = await memoryModule.invoke("read", { address: "$0400", length: bytes.length, format: "dump" }, ctx);
+  assert.equal(res.isError, undefined);
+  const dump = res.structuredContent.data.dump;
+  assert.equal(dump.length, 2);
+  assert.equal(dump[0], "$0400: 48 45 4C 4C 4F 20 57 4F 52 4C 44 21 00 0D FF 20  |HELLO WORLD!... |");
+  assert.ok(dump[1].startsWith("$0410: 41 42 43"));
+  assert.ok(dump[1].endsWith("|ABC|"));
+  assert.ok(res.content[0].text.includes(dump[0]));
+  assert.equal(res.structuredContent.data.hexData, `$${bytes.toString("hex").toUpperCase()}`);
+});
+
+test("read defaults to the unchanged hex output and rejects unknown formats", async () => {
+  const ctx = { client: createMockClient(), logger: createLogger() };
+  const res = await memoryModule.invoke("read", { address: "$0400", length: 4 }, ctx);
+  assert.equal(res.structuredContent.data.dump, undefined);
+  assert.ok(res.content[0].text.endsWith("$AABBCCDD"));
+  const bad = await memoryModule.invoke("read", { address: "$0400", length: 4, format: "xxd" }, ctx);
+  assert.equal(bad.isError, true);
 });

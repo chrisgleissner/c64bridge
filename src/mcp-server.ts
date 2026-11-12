@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import "./bootstrap/stdio-logger.js";
-import { createServer } from "node:http";
+import { createServer, type IncomingHttpHeaders } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -13,6 +14,8 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ErrorCode,
+  McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { loadConfig } from "./config.js";
 import { C64Client } from "./c64Client.js";
@@ -24,9 +27,12 @@ import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
 import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
+import { stopAllBackgroundTasks } from "./tools/meta/background.js";
+import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
-import { unknownErrorResult } from "./tools/errors.js";
-import type { ToolRunResult } from "./tools/types.js";
+import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
+import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
+import { publishedInputSchema, type ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import axios, { type AxiosResponse } from "axios";
@@ -65,6 +71,88 @@ export function parseCliOptions(argv: string[]): CliOptions {
   }
   const portCandidate = argv[httpIndex + 1];
   return { mode: "http", port: parsePort(portCandidate) };
+}
+
+/**
+ * DNS-rebinding and cross-origin protection for the HTTP transport. Returns
+ * the rejection (status and message) or null when the request may proceed.
+ * Host must be a loopback name with the listening port, any Origin must be a
+ * loopback http origin on that port, and when a token is configured the
+ * request must carry the matching bearer token.
+ */
+export function checkHttpRequestAccess(
+  headers: IncomingHttpHeaders,
+  port: number,
+  token?: string,
+): { status: number; message: string } | null {
+  const allowedHosts = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`];
+  const host = headers.host?.toLowerCase();
+  if (!host || !allowedHosts.includes(host)) {
+    return { status: 403, message: "Forbidden: invalid Host header" };
+  }
+  const origin = headers.origin;
+  if (origin !== undefined) {
+    const allowedOrigins = allowedHosts.map((entry) => `http://${entry}`);
+    if (typeof origin !== "string" || !allowedOrigins.includes(origin.toLowerCase())) {
+      return { status: 403, message: "Forbidden: invalid Origin header" };
+    }
+  }
+  if (token) {
+    const header = headers.authorization;
+    const presented = typeof header === "string" && /^Bearer /i.test(header) ? header.slice(7) : "";
+    const expectedBuffer = Buffer.from(token, "utf8");
+    const presentedBuffer = Buffer.from(presented, "utf8");
+    if (presentedBuffer.length !== expectedBuffer.length || !timingSafeEqual(presentedBuffer, expectedBuffer)) {
+      return { status: 401, message: "Unauthorized" };
+    }
+  }
+  return null;
+}
+
+const SHUTDOWN_CLEANUP_TIMEOUT_MS = 2_000;
+
+/**
+ * Installs the single shutdown path. The first trigger stops background
+ * tasks, releases any capture session and stops managed VICE processes, then
+ * exits. Later triggers return the same promise. Stdin end/close is a
+ * trigger only in stdio mode (the client went away).
+ */
+function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
+  delegateViceSignalHandling();
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (reason: string, exitCode: number): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
+    writeDiagnosticEvent("server_shutdown", { reason });
+    console.error(`c64bridge shutting down (${reason})`);
+    shutdownPromise = (async () => {
+      try {
+        const cleanup = Promise.allSettled([
+          stopAllBackgroundTasks(),
+          client.releaseVideoCapture(),
+        ]);
+        await Promise.race([
+          cleanup,
+          new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS).unref()),
+        ]);
+      } catch {
+        // Cleanup is best effort; always continue to exit.
+      }
+      try {
+        stopManagedViceProcessesSync();
+      } catch {
+        // ignore
+      }
+      process.exit(exitCode);
+    })();
+    return shutdownPromise;
+  };
+  process.on("SIGTERM", () => void shutdown("SIGTERM", 143));
+  process.on("SIGINT", () => void shutdown("SIGINT", 130));
+  process.on("SIGHUP", () => void shutdown("SIGHUP", 129));
+  if (mode === "stdio") {
+    process.stdin.once("end", () => void shutdown("stdin end", 0));
+    process.stdin.once("close", () => void shutdown("stdin close", 0));
+  }
 }
 
 function parsePort(raw?: string): number | undefined {
@@ -137,7 +225,11 @@ async function main() {
   const getPromptRegistry = createPromptRegistryGetter();
   const implementationInfo = getMcpServerImplementationInfo();
 
-  // Create MCP server
+  // Create MCP server. Stateless HTTP mode needs a fresh Server and transport
+  // per request (the SDK rejects reuse of a stateless transport), so server
+  // creation and handler registration live in this factory. The handler bodies
+  // below are unchanged and intentionally not re-indented.
+  const createMcpServer = (): Server => {
   const server = new Server(
     implementationInfo,
     {
@@ -260,7 +352,8 @@ async function main() {
           name: tool.name,
           title: tool.metadata.summary,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema: publishedInputSchema(tool.inputSchema),
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
           _meta: tool.metadata,
         })),
       };
@@ -486,32 +579,60 @@ async function main() {
         latencyMs: latency,
         error,
       });
+      if (error instanceof ToolValidationError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message);
+      }
       throw error;
     }
   });
 
+  return server;
+  };
+
   const cli = parseCliOptions(process.argv.slice(2));
   if (cli.mode === "http") {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await server.connect(transport);
     const port = cli.port ?? 3000;
+    const httpToken = process.env.C64BRIDGE_HTTP_TOKEN || undefined;
+    if (httpToken) {
+      registerSecret(httpToken);
+    }
     const httpServer = createServer((request, response) => {
+      const rejection = checkHttpRequestAccess(request.headers, port, httpToken);
+      if (rejection) {
+        response.statusCode = rejection.status;
+        if (rejection.status === 401) response.setHeader("WWW-Authenticate", "Bearer");
+        response.end(rejection.message);
+        return;
+      }
       if (request.url?.split("?")[0] !== "/mcp") {
         response.statusCode = 404;
         response.end("Not found");
         return;
       }
-      void transport.handleRequest(request, response).catch((error) => {
-        if (!response.headersSent) response.statusCode = 500;
-        response.end(error instanceof Error ? error.message : "MCP transport error");
+      // Stateless mode: one Server and one transport per request.
+      const server = createMcpServer();
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      response.once("close", () => {
+        void transport.close().catch(() => {});
+        void server.close().catch(() => {});
       });
+      void server
+        .connect(transport)
+        .then(() => transport.handleRequest(request, response))
+        .catch((error) => {
+          if (!response.headersSent) response.statusCode = 500;
+          response.end(error instanceof Error ? error.message : "MCP transport error");
+        });
     });
     await new Promise<void>((resolve, reject) => httpServer.listen(port, "127.0.0.1", resolve).once("error", reject));
+    installShutdown(client, "http");
     writeDiagnosticEvent("mcp_transport_connected", { mode: "http", port });
     console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
   } else {
+    const server = createMcpServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
+    installShutdown(client, "stdio");
     writeDiagnosticEvent("mcp_transport_connected", { mode: "stdio" });
     console.error("c64bridge MCP server running on stdio");
   }
@@ -559,6 +680,8 @@ export async function renderPlatformStatusMarkdown(client: C64Client): Promise<s
     "",
     `Current platform: \`${status.id}\``,
     "",
+    `Access mode: \`${getAccessMode()}\` (\`${ACCESS_ENV_VAR}\`; full allows everything, no-destructive blocks power, flash, drive ROM, image creation and debug register operations, read-only allows only read operations)`,
+    "",
     "## Available Backends",
     "",
     ...availableBackends.map((backend) => `- \`${backend}\`${backend === status.id ? " (active)" : ""}`),
@@ -594,6 +717,13 @@ export async function renderPlatformStatusMarkdown(client: C64Client): Promise<s
             .map((tool) => `\`${tool}\``)
             .join(", ")}`
         : "- Unsupported tools: _none_",
+    );
+    lines.push(
+      info.unsupported_operations.length > 0
+        ? `- Unsupported operations of supported tools (${info.unsupported_operations.length}): ${info.unsupported_operations
+            .map((operation) => `\`${operation}\``)
+            .join(", ")}`
+        : "- Unsupported operations of supported tools: _none_",
     );
     lines.push("");
   }

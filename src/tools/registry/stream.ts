@@ -22,7 +22,7 @@ const streamOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "start",
       ensureDescriptor(streamingDescriptorIndex, "stream_start").inputSchema,
-      { description: "Start an Ultimate streaming session toward a host:port target." },
+      { description: "Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(streamingModule, "stream_start", rawArgs, ctx),
   },
@@ -58,6 +58,7 @@ export const streamModule = defineToolModule({
         description: "Streaming operations available via the c64_stream tool.",
         variants: streamOperations.map((operation) => operation.schema),
       }),
+      operationEffects: { start: "write", stop: "write" },
       tags: ["stream", "monitor", "grouped"],
       examples: [
         {

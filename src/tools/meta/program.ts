@@ -7,6 +7,7 @@ import { measureSidSilence } from "../audio.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
+import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { sleep, formatTimestampSpec } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 import { Jimp } from "jimp";
@@ -391,9 +392,9 @@ export const tools: ToolDefinition[] = [
         const captureScreenshot = visibleViceFastPath ? false : parsed.captureScreenshot !== false;
         const restoreActiveBackend = parsed.restoreActiveBackend !== false;
         const outputPath = (captureScreenshot && requestedBackends.some((backend) => backend !== "u2")) || parsed.outputPath
-          ? resolvePath(
-              String(parsed.outputPath ?? joinPath(process.cwd(), "artifacts", "greetings", `run_${Date.now()}`)),
-            )
+          ? (parsed.outputPath
+            ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
+            : defaultHostOutputDir("artifacts", "greetings", `run_${Date.now()}`))
           : undefined;
         const timeoutMs = parsed.timeoutMs ?? 1500;
         const pollIntervalMs = parsed.pollIntervalMs ?? 100;
@@ -520,7 +521,7 @@ export const tools: ToolDefinition[] = [
                 await timedStep("persist_screenshot", async () => {
                   screenshotAnalysis = analyseCapturedFrame(frame);
                   screenshotPath = outputPath
-                    ? resolvePath(joinPath(outputPath, `${backend}.png`))
+                    ? resolveHostChildPath(outputPath, `${backend}.png`)
                     : undefined;
                   if (screenshotPath) {
                     await writeCapturedFramePng(frame, screenshotPath);
@@ -599,7 +600,7 @@ export const tools: ToolDefinition[] = [
         };
 
         if (outputPath) {
-          const reportPath = resolvePath(joinPath(outputPath, "results.json"));
+          const reportPath = resolveHostChildPath(outputPath, "results.json");
           await fs.writeFile(reportPath, JSON.stringify(payload, null, 2), "utf8");
           payload.outputPath = outputPath;
           (payload as { reportPath?: string }).reportPath = reportPath;
@@ -657,7 +658,7 @@ export const tools: ToolDefinition[] = [
 
         // Prepare output directory
         const outputPath = parsed.outputPath 
-          ? resolvePath(String(parsed.outputPath))
+          ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
           : resolvePath(joinPath(getTasksHomeDir(), `shuffle_${Date.now()}`));
         await fs.mkdir(outputPath, { recursive: true });
 
@@ -708,7 +709,7 @@ export const tools: ToolDefinition[] = [
         }
 
         // Write log
-        const logPath = resolvePath(joinPath(outputPath, "shuffle.json"));
+        const logPath = resolveHostChildPath(outputPath, "shuffle.json");
         await fs.writeFile(logPath, JSON.stringify({ programs: results, summary: { total: results.length, errors: results.filter(r => r.error).length } }, null, 2), "utf8");
 
         return jsonResult({ outputPath, programs: results.length, errors: results.filter(r => r.error).length, logPath }, { success: true });
@@ -749,7 +750,7 @@ export const tools: ToolDefinition[] = [
   const resetDelayMs = parsed.resetDelayMs ?? 100;
 
         const outputPath = parsed.outputPath
-          ? resolvePath(String(parsed.outputPath))
+          ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
           : resolvePath(joinPath(getTasksHomeDir(), `batch_${Date.now()}`));
         await fs.mkdir(outputPath, { recursive: true });
 
@@ -854,7 +855,7 @@ export const tools: ToolDefinition[] = [
         }
 
         // Write junit-like report
-        const reportPath = resolvePath(joinPath(outputPath, "results.json"));
+        const reportPath = resolveHostChildPath(outputPath, "results.json");
         const summary = {
           total: results.length,
           passed: results.filter(r => r.status === "pass").length,

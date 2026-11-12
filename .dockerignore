@@ -1,0 +1,8 @@
+.git
+node_modules
+dist
+coverage
+artifacts
+external
+.env*
+.c64bridge.json

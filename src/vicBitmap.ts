@@ -68,7 +68,7 @@ const COLOR_RAM_ADDRESS = 0xD800;
 const CHAR_ROM_SHADOW_OFFSET = 0x1000;
 const CHAR_ROM_SHADOW_LENGTH = 0x1000;
 
-const VIC_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
+export const VIC_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
   [0x00, 0x00, 0x00],
   [0xFF, 0xFF, 0xFF],
   [0x81, 0x33, 0x38],

@@ -5,15 +5,29 @@
 import axios from "axios";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
+import { resolveHostPath, DISK_IMAGE_MAX_READ_BYTES } from "./hostPaths.js";
 import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
-import { createLoggingHttpClient } from "./loggingHttpClient.js";
+import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
+import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
+
+let signalDelegate = false;
+
+/** Stops every VICE process started by this server, synchronously. */
+export function stopManagedViceProcessesSync(): void {
+  ViceBackend.stopAllSupervisorsSync();
+}
+
+/** Marks that the caller owns signal handling and process exit (see mcp-server shutdown). */
+export function delegateViceSignalHandling(): void {
+  signalDelegate = true;
+}
 
 export type DeviceType = "c64u" | "u2" | "vice";
 
@@ -77,9 +91,9 @@ export interface C64Facade {
   configGet(category: string, item?: string): Promise<unknown>;
   configSet(category: string, item: string, value: string): Promise<RunResult>;
   configBatchUpdate(payload: Record<string, object>): Promise<RunResult>;
-  configLoadFromFlash(): Promise<RunResult>;
-  configSaveToFlash(): Promise<RunResult>;
-  configResetToDefault(): Promise<RunResult>;
+  configLoadFromFlash(category?: string): Promise<RunResult>;
+  configSaveToFlash(category?: string): Promise<RunResult>;
+  configResetToDefault(category?: string): Promise<RunResult>;
   filesInfo(path: string): Promise<unknown>;
   filesCreateD64(path: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult>;
   filesCreateD71(path: string, options?: { diskname?: string }): Promise<RunResult>;
@@ -184,9 +198,14 @@ function coalesceMemoryWriteBlocks(
 function readConfigFile(): BackendConfig {
   const config = loadConfig();
   const sections = config.backendConfig;
+  // An endpoint environment variable selects that backend explicitly, like a
+  // config section does, so an offline device is reported as unreachable
+  // instead of silently replaced by an emulator.
+  const envSelects = (prefix: "C64U_" | "U2_") => ["HOST", "PORT", "PASSWORD"]
+    .some((suffix) => (process.env[`${prefix}${suffix}`] ?? "").trim() !== "");
   return {
-    c64u: sections.c64u || config.legacyUltimateEndpoint ? config.ultimate.c64u : undefined,
-    u2: sections.u2 ? config.ultimate.u2 : undefined,
+    c64u: sections.c64u || config.legacyUltimateEndpoint || envSelects("C64U_") ? config.ultimate.c64u : undefined,
+    u2: sections.u2 || envSelects("U2_") ? config.ultimate.u2 : undefined,
     vice: sections.vice as ViceConfig | undefined,
     endpoints: config.ultimate,
   };
@@ -212,21 +231,60 @@ function uploadFile(bytes: Uint8Array, name: string): File {
   return new File([Uint8Array.from(bytes)], name, { type: "application/octet-stream" });
 }
 
+/**
+ * Reachability probe for an Ultimate REST endpoint: GET <baseUrl>/v1/version,
+ * keeping any reverse-proxy path prefix. Any HTTP response, including 403 or
+ * 404, shows that a server answers at the address; only a transport failure
+ * (refused, unreachable, timeout) counts as unreachable.
+ */
+export async function probeUltimateReachable(baseUrl: string, timeout: number, networkPassword?: string): Promise<boolean> {
+  try {
+    await axios.get(`${baseUrl.replace(/\/+$/, "")}/v1/version`, {
+      timeout,
+      headers: buildC64uHeaders(networkPassword),
+      validateStatus: () => true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resources that the VICE config inventory (configsList) advertises and that
+ * snapshot/restore round-trip. They are vetted here and are not host file
+ * names, so c64_config accepts them in addition to the shared c64_vice policy.
+ */
+const VICE_CONFIG_INVENTORY = [
+  "SoundVolume", "Drive8Type", "Drive9Type", "Drive10Type", "Drive11Type",
+  "VICIIBorderMode", "VICIIFullscreen", "MachineVideoStandard", "SidModel",
+] as const;
+
+/** c64_config on VICE follows the same resource policy as c64_vice. */
+function assertAllowedViceResource(name: string): void {
+  if ((VICE_CONFIG_INVENTORY as readonly string[]).includes(name)) return;
+  const problem = resourceNameProblem(name);
+  if (problem) throw new Error(`VICE resource '${name}' is not allowed: ${problem.message}`);
+}
+
 class C64uBackend implements C64Facade {
   readonly type: "c64u" | "u2";
   private readonly baseUrl: string;
   private readonly networkPassword?: string;
   private readonly api: Api<unknown>;
+  /** The device serves REST requests on one thread: all requests to it, probes included, run one at a time in arrival order. */
+  private readonly requestQueue: RequestQueue;
 
   constructor(endpoint: C64uEndpoint, type: "c64u" | "u2" = "c64u") {
     this.type = type;
     this.baseUrl = endpoint.baseUrl;
+    this.requestQueue = RequestQueue.forDevice(this.baseUrl);
     this.networkPassword = endpoint.networkPassword;
     const http = createLoggingHttpClient({
       baseURL: this.baseUrl,
       timeout: 10_000,
       headers: buildC64uHeaders(this.networkPassword),
-    });
+    }, undefined, this.requestQueue);
     this.api = new Api(http);
   }
 
@@ -248,13 +306,7 @@ class C64uBackend implements C64Facade {
   }
 
   async ping(): Promise<boolean> {
-    try {
-      const res = await axios.get(this.baseUrl, {
-        timeout: 2000,
-        headers: buildC64uHeaders(this.networkPassword),
-      });
-      return res.status >= 200 && res.status < 500;
-    } catch { return false; }
+    return this.requestQueue.run(() => probeUltimateReachable(this.baseUrl, 2000, this.networkPassword));
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
@@ -422,9 +474,9 @@ class C64uBackend implements C64Facade {
   async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
   async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
   async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return this.actionResult(res.data); }
-  async configLoadFromFlash(): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(":load_from_flash"); return this.actionResult(res.data); }
-  async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return this.actionResult(res.data); }
-  async configResetToDefault(): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(":reset_to_default"); return this.actionResult(res.data); }
+  async configLoadFromFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(configActionRoute(":load_from_flash", category)); return this.actionResult(res.data); }
+  async configSaveToFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(configActionRoute(":save_to_flash", category)); return this.actionResult(res.data); }
+  async configResetToDefault(category?: string): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(configActionRoute(":reset_to_default", category)); return this.actionResult(res.data); }
   async filesInfo(p: string): Promise<unknown> { const res = await this.api.v1.filesInfoDetail(encodeDevicePath(p), ":info"); return res.data; }
   async filesCreateD64(p: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateD71(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD71Update(encodeDevicePath(p), ":create_d71", { diskname: options?.diskname }); return this.actionResult(res.data); }
@@ -446,6 +498,13 @@ export class ViceBackend implements C64Facade {
   private readonly extraArgs: string[];
   private static readonly supervisors = new Map<string, ViceProcessHandle>();
   private static cleanupRegistered = false;
+
+  static stopAllSupervisorsSync(): void {
+    for (const [, handle] of ViceBackend.supervisors) {
+      handle.stopSync();
+    }
+    ViceBackend.supervisors.clear();
+  }
   private readonly debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
   private startupPromise: Promise<void> | null = null;
   private monitorQueue: Promise<void> = Promise.resolve();
@@ -602,15 +661,16 @@ export class ViceBackend implements C64Facade {
       return;
     }
     ViceBackend.cleanupRegistered = true;
-    const cleanupSync = () => {
-      for (const [, handle] of ViceBackend.supervisors) {
-        handle.stopSync();
-      }
-      ViceBackend.supervisors.clear();
-    };
+    const cleanupSync = stopManagedViceProcessesSync;
     process.once("exit", cleanupSync);
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
       process.once(signal, () => {
+        // When the MCP server installed its shutdown handler, it performs the
+        // async cleanup, calls stopManagedViceProcessesSync and exits itself;
+        // exactly one handler per signal may call process.exit.
+        if (signalDelegate) {
+          return;
+        }
         cleanupSync();
         process.exit(signal === "SIGINT" ? 130 : 143);
       });
@@ -726,10 +786,13 @@ export class ViceBackend implements C64Facade {
     return { success: true };
   }
 
-  async loadPrgFile(_path: string): Promise<RunResult> { throw unsupported("loadPrgFile"); }
+  async loadPrgFile(prgPath: string): Promise<RunResult> {
+    const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));
+    return this.loadPrg(data);
+  }
 
   async runPrgFile(prgPath: string): Promise<RunResult> {
-    const data = fs.readFileSync(prgPath);
+    const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));
     await this.injectPrg(data);
     return { success: true };
   }
@@ -940,6 +1003,7 @@ export class ViceBackend implements C64Facade {
     if (!VICE_DISK_IMAGE_EXTENSIONS.has(path.extname(imagePath).toLowerCase())) {
       throw new Error(`VICE can mount only disk images (${[...VICE_DISK_IMAGE_EXTENSIONS].join(", ")}): ${imagePath}`);
     }
+    imagePath = resolveHostPath(imagePath, { purpose: "read", maxBytes: DISK_IMAGE_MAX_READ_BYTES });
     if (!fs.existsSync(imagePath)) {
       throw new Error(`Disk image not found on the VICE host: ${imagePath}`);
     }
@@ -1032,10 +1096,7 @@ export class ViceBackend implements C64Facade {
           name: "VICE",
           // Only resources that exist in VICE 3.10; checked against a running x64sc.
           // VICE has no warp, drive-enable or attached-image resources.
-          items: [
-            "SoundVolume", "Drive8Type", "Drive9Type", "Drive10Type", "Drive11Type",
-            "VICIIBorderMode", "VICIIFullscreen", "MachineVideoStandard", "SidModel",
-          ],
+          items: [...VICE_CONFIG_INVENTORY],
         },
       ],
     };
@@ -1053,6 +1114,7 @@ export class ViceBackend implements C64Facade {
         return values;
       });
     }
+    assertAllowedViceResource(item);
     return await this.withClient(async (client) => {
       const res = await client.resourceGet(item as string);
       return { category: _category, item, value: res.value, type: res.type };
@@ -1060,6 +1122,7 @@ export class ViceBackend implements C64Facade {
   }
 
   async configSet(_category: string, item: string, value: string): Promise<RunResult> {
+    assertAllowedViceResource(item);
     let parsed: string | number = value;
     await this.withClient(async (client) => {
       const current = await client.resourceGet(item);
@@ -1075,6 +1138,7 @@ export class ViceBackend implements C64Facade {
       for (const [category, items] of Object.entries(payload)) {
         for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
           try {
+            assertAllowedViceResource(item);
             const current = await client.resourceGet(item);
             const parsed = parseViceConfigValue(value, current.type, item);
             await client.resourceSet(item, parsed);
@@ -1112,6 +1176,11 @@ function parseViceConfigValue(value: unknown, type: string, item: string): strin
 }
 
 function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend`); (err as any).code = "UNSUPPORTED"; return err; }
+
+/** Whole-device route suffix, or `/{category}:action` for one category (the generated client prefixes `/v1/configs`). */
+function configActionRoute(action: string, category?: string): string {
+  return category === undefined ? action : `/${encodeURIComponent(category)}${action}`;
+}
 
 /** Ultimate file APIs treat slash as a path separator. Encode each name once,
  * preserving leading and nested separators for firmware routing. */
@@ -1371,14 +1440,11 @@ export async function createFacade(logger?: { info: (...a: any[]) => void }, opt
   }
   // No configuration
   const probeBase = cfg.endpoints.c64u.baseUrl;
-  try {
-    const res = await axios.get(probeBase, { timeout: 1500 });
-    if (res.status >= 200 && res.status < 500) {
-      const backend = new C64uBackend(cfg.endpoints.c64u);
-      logger?.info?.("Active backend: c64u (fallback – hardware reachable)");
-      return { facade: backend, selected: "c64u", reason: "fallback (reachable)", details: { baseUrl: probeBase } };
-    }
-  } catch {}
+  if (await probeUltimateReachable(probeBase, 1500, cfg.endpoints.c64u.networkPassword)) {
+    const backend = new C64uBackend(cfg.endpoints.c64u);
+    logger?.info?.("Active backend: c64u (fallback – hardware reachable)");
+    return { facade: backend, selected: "c64u", reason: "fallback (reachable)", details: { baseUrl: probeBase } };
+  }
   const backend = new ViceBackend(cfg.vice ?? {});
   logger?.info?.("Active backend: vice (fallback – hardware unavailable)");
   const endpoint = backend.getEndpoint();

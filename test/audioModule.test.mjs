@@ -907,3 +907,11 @@ test("music_compile_and_play shows compiler warnings and BASIC free memory", asy
   assert.equal(result.structuredContent?.data?.basicFreeBytes, 0);
   assert.equal(result.structuredContent?.data?.warnings?.length, 1);
 });
+
+test("record_analyze descriptions state host microphone use on non-C64U backends", async () => {
+  const { soundModuleGroup } = await import("../src/tools/registry/sound.js");
+  const text = JSON.stringify(soundModuleGroup.describeTools().find((t) => t.name === "c64_sound").inputSchema);
+  assert.ok(text.includes("host microphone on other backends"));
+  const tool = audioModule.describeTools().find((t) => t.name === "record_and_analyze_audio");
+  assert.ok(/host default input device \(microphone\)/.test(tool.description));
+});

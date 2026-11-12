@@ -125,9 +125,12 @@ timeline:
   const beat = 0.5 * rate;
   // sidplayfp starts after a randomised power-on delay, so the song position is recovered from the
   // quiet spans: every retrigger (and the rest) leaves one, and each ends where a new note starts.
-  // The leading silence (sidplayfp's random power-on delay) is not a note gap: when the delay is
-  // shorter than 1.2 beats it would otherwise shift the inferred song start by a beat.
-  const spans = quietSpans(samples).filter(([a, b]) => a > 0 && b - a < 1.2 * beat);
+  // The leading silence (sidplayfp's random power-on delay) is not a note gap: it ends one beat
+  // before the first real gap and would otherwise be taken for a retrigger gap, shifting the
+  // inferred song start by a beat. It does not start at sample 0 but a few windows later, after the
+  // initial click (measured: about 6 ms), so exclude every span that starts within the first 100 ms.
+  // The first real gap starts at least 0.47 s into the audio (one beat minus the 2-frame restart).
+  const spans = quietSpans(samples).filter(([a, b]) => a > 0.1 * rate && b - a < 1.2 * beat);
   const ends = spans.map(([, b]) => b);
   const firstRetrigger = ends.find((e, i) => i + 1 < ends.length && Math.abs(ends[i + 1] - e - beat) < 0.02 * rate);
   assert.ok(firstRetrigger !== undefined, "retrigger gaps are one beat apart");

@@ -6,6 +6,8 @@ import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, un
 import { normalizeErrorDetails } from "./util.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
+import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
+import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
   const platformId = ctx.platform?.id ?? ctx.client?.type;
@@ -248,15 +250,15 @@ export const tools: ToolDefinition[] = [
         }
 
         const canPause = pauseDuringRead && supportsMachinePause(ctx as any);
-        const pauseResume = canPause
-          ? await (ctx.client as any).pause()
-          : { success: true };
-        if (canPause && !pauseResume.success) {
-          throw new ToolExecutionError("Pause failed before sprite scan", { details: normalizeErrorDetails(pauseResume.details) });
+        const owned = await acquireOwnedPause(ctx.client, canPause);
+        const pinned = owned.facade;
+        if (canPause && !owned.result.success) {
+          throw new ToolExecutionError("Pause failed before sprite scan", { details: normalizeErrorDetails(owned.result.details) });
         }
 
+        let released = false;
         try {
-          const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(length));
+          const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(length), pinned);
           if (!read.success || typeof read.data !== "string") {
             throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normalizeErrorDetails(read.details) });
           }
@@ -284,10 +286,10 @@ export const tools: ToolDefinition[] = [
 
           let outputFiles: Array<{ path: string; address: string }> = [];
           if (parsed.outputDir && sprites.length > 0) {
-            const resolvedDir = resolvePath(String(parsed.outputDir));
+            const resolvedDir = resolveHostPath(String(parsed.outputDir), { purpose: "write" });
             await fs.mkdir(resolvedDir, { recursive: true });
             outputFiles = await Promise.all(sprites.map(async (sprite) => {
-              const filePath = resolvePath(resolvedDir, `sprite_${sprite.address.replace("$", "").toLowerCase()}.spr`);
+              const filePath = resolveHostChildPath(resolvedDir, `sprite_${sprite.address.replace("$", "").toLowerCase()}.spr`);
               await fs.mkdir(dirname(filePath), { recursive: true });
               await fs.writeFile(filePath, Buffer.from(hexClean(sprite.bytesHex), "hex"));
               sprite.filePath = filePath;
@@ -295,6 +297,15 @@ export const tools: ToolDefinition[] = [
             }));
           }
 
+          let warnings: string[] | undefined;
+          if (canPause) {
+            released = true;
+            const result = await owned.release();
+            if (!result.success) {
+              warnings = [resumeWarning(result.details)];
+              ctx.logger.warn("C64 resume reported failure after sprite scan", { details: result.details });
+            }
+          }
           return jsonResult({
             scanned: {
               address: `$${formatAddressHex(startAddress)}`,
@@ -305,10 +316,12 @@ export const tools: ToolDefinition[] = [
             },
             sprites,
             outputFiles,
+            ...(warnings ? { warnings } : {}),
           }, { success: true });
         } finally {
-          if (canPause) {
-            await (ctx.client as any).resume();
+          if (canPause && !released) {
+            const result = await owned.release();
+            if (!result.success) ctx.logger.warn("C64 resume reported failure after sprite scan", { details: result.details });
           }
         }
       } catch (error) {
@@ -365,20 +378,20 @@ export const tools: ToolDefinition[] = [
         }
 
         const canPause = pauseDuringRead && supportsMachinePause(ctx as any);
-        const pauseResume = canPause
-          ? await (ctx.client as any).pause()
-          : { success: true };
-        if (canPause && !pauseResume.success) {
-          throw new ToolExecutionError("Pause failed before charset scan", { details: normalizeErrorDetails(pauseResume.details) });
+        const owned = await acquireOwnedPause(ctx.client, canPause);
+        const pinned = owned.facade;
+        if (canPause && !owned.result.success) {
+          throw new ToolExecutionError("Pause failed before charset scan", { details: normalizeErrorDetails(owned.result.details) });
         }
 
+        let released = false;
         try {
           const candidates: Array<CharsetAnalysis & { bytes?: Uint8Array }> = [];
 
           for (const startAddress of scanLocations) {
             if (startAddress + charsetSize - 1 > 0xFFFF) continue;
 
-            const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(charsetSize));
+            const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(charsetSize), pinned);
             if (!read.success || typeof read.data !== "string") {
               continue; // Skip this location if read fails
             }
@@ -394,11 +407,23 @@ export const tools: ToolDefinition[] = [
             }
           }
 
+          // Resume as soon as the reads are done, so a failure can be reported in the result.
+          let warnings: string[] | undefined;
+          if (canPause) {
+            released = true;
+            const result = await owned.release();
+            if (!result.success) {
+              warnings = [resumeWarning(result.details)];
+              ctx.logger.warn("C64 resume reported failure after charset scan", { details: result.details });
+            }
+          }
+
           if (candidates.length === 0) {
             return jsonResult({
               found: false,
               scanned: scanLocations.length,
               message: "No valid charsets found matching criteria",
+              ...(warnings ? { warnings } : {}),
             }, { success: true });
           }
 
@@ -413,7 +438,7 @@ export const tools: ToolDefinition[] = [
 
           let outputFile: { path: string; address: string } | null = null;
           if (parsed.outputPath && bestCandidate.bytes) {
-            const resolvedPath = resolvePath(String(parsed.outputPath));
+            const resolvedPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
             await fs.mkdir(dirname(resolvedPath), { recursive: true });
             await fs.writeFile(resolvedPath, Buffer.from(bestCandidate.bytes));
             outputFile = { path: resolvedPath, address: bestCandidate.address };
@@ -427,10 +452,12 @@ export const tools: ToolDefinition[] = [
             candidates: candidates.length,
             outputFile,
             paused: canPause,
+            ...(warnings ? { warnings } : {}),
           }, { success: true });
         } finally {
-          if (canPause) {
-            await (ctx.client as any).resume();
+          if (canPause && !released) {
+            const result = await owned.release();
+            if (!result.success) ctx.logger.warn("C64 resume reported failure after charset scan", { details: result.details });
           }
         }
       } catch (error) {

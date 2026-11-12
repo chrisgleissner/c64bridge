@@ -122,7 +122,7 @@ export function writeDiagnosticEvent(event: string, details?: unknown): void {
   };
 
   try {
-    fs.appendFileSync(current.info.filePath, `${JSON.stringify(record)}\n`, "utf8");
+    fs.appendFileSync(current.info.filePath, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
   } catch (error) {
     safeStderrWrite(
       `[diagnostics] failed to append event ${event}: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -380,13 +380,76 @@ function ensureState(component: string): DiagnosticsState {
 
 function createSessionInfo(component: string): DiagnosticsSessionInfo {
   const directory = resolveDiagnosticsDirectory();
-  fs.mkdirSync(directory, { recursive: true });
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 
   const startedAt = new Date().toISOString().replace(/[:.]/g, "-");
   const safeComponent = component.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "runtime";
   const sessionId = `${startedAt}-${process.pid}`;
   const filePath = path.join(directory, `${sessionId}-${safeComponent}.ndjson`);
+  pruneDiagnosticsDirectory(directory, { keep: resolveDiagnosticsKeep(), currentFile: filePath });
   return { component: safeComponent, directory, filePath, sessionId };
+}
+
+const DEFAULT_DIAGNOSTICS_KEEP = 200;
+const DIAGNOSTICS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const DIAGNOSTICS_FILE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-\d+-[a-z0-9_-]+\.ndjson$/i;
+
+/** Reset the cached session so a test can start a new one. Not used by the server. */
+export function resetDiagnosticsStateForTesting(): void {
+  state = null;
+}
+
+function resolveDiagnosticsKeep(): number {
+  const raw = process.env.C64BRIDGE_DIAGNOSTICS_KEEP?.trim();
+  if (raw === undefined || raw === "") {
+    return DEFAULT_DIAGNOSTICS_KEEP;
+  }
+  if (!/^\d+$/.test(raw)) {
+    safeStderrWrite(
+      `[diagnostics] ignoring invalid C64BRIDGE_DIAGNOSTICS_KEEP="${raw}"; using ${DEFAULT_DIAGNOSTICS_KEEP}\n`,
+    );
+    return DEFAULT_DIAGNOSTICS_KEEP;
+  }
+  return Number(raw);
+}
+
+/**
+ * Best-effort retention: delete regular diagnostics files (by naming pattern) beyond the newest `keep`
+ * or older than 30 days. Uses lstat so symlinks are never followed; never recurses.
+ */
+export function pruneDiagnosticsDirectory(
+  directory: string,
+  options: { keep: number; currentFile?: string; now?: number },
+): void {
+  try {
+    const now = options.now ?? Date.now();
+    const candidates: { file: string; mtimeMs: number }[] = [];
+    for (const name of fs.readdirSync(directory)) {
+      if (!DIAGNOSTICS_FILE_PATTERN.test(name)) continue;
+      const file = path.join(directory, name);
+      if (options.currentFile && path.resolve(file) === path.resolve(options.currentFile)) continue;
+      try {
+        const stat = fs.lstatSync(file);
+        if (stat.isFile()) candidates.push({ file, mtimeMs: stat.mtimeMs });
+      } catch {
+        // ignore entries that vanish or cannot be inspected
+      }
+    }
+    candidates.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.file < b.file ? 1 : -1));
+    // The current session's file counts toward the kept total.
+    const keepOthers = Math.max(0, options.keep - (options.currentFile ? 1 : 0));
+    candidates.forEach((entry, index) => {
+      if (index >= keepOthers || now - entry.mtimeMs > DIAGNOSTICS_MAX_AGE_MS) {
+        try {
+          fs.unlinkSync(entry.file);
+        } catch {
+          // best effort
+        }
+      }
+    });
+  } catch {
+    // best effort: an unreadable directory must not stop diagnostics
+  }
 }
 
 function resolveDiagnosticsDirectory(): string {

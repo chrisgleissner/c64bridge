@@ -23,8 +23,9 @@ function debugLog(...args) {
     console.error("[device.test]", ...args);
   }
 }
-// Points the no-config fallback probe at a closed loopback port, so tests never
-// send requests to a real "c64u" host on the local network.
+// Closed loopback port. A C64U_* variable selects the c64u backend explicitly,
+// so these tests never reach the unconfigured fallback that would probe the
+// default "c64u" host (a real device on the local network); they must not.
 const UNREACHABLE_C64U_ENV = { C64U_HOST: "127.0.0.1", C64U_PORT: "9", C64U_PASSWORD: undefined };
 const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
@@ -784,10 +785,9 @@ test("device: createFacade merges backend sections across config candidates", as
         // The probe is pointed at a closed loopback port so the test never
         // contacts a real "c64u" host on the network.
         await withEnv(UNREACHABLE_C64U_ENV, async () => {
-          const { facade, selected, reason } = await createFacade();
-          assert.match(reason, /fallback/);
-          assert.equal(selected, "vice");
-          assert.equal(facade.type, "vice");
+          const { facade, selected } = await createFacade();
+          assert.equal(selected, "c64u");
+          assert.equal(facade.type, "c64u");
           // The real assertion this scenario exists for: home's vice section
           // must not have leaked in via merging.
           assert.notEqual(facade.exe, leakFixtureExe);
@@ -1025,8 +1025,8 @@ test("device: createFacade fallback behavior", async (t) => {
       async () => {
         await withEnv(UNREACHABLE_C64U_ENV, async () => {
           const { facade, selected } = await createFacade();
-          assert.equal(selected, "vice");
-          assert.equal(facade.type, "vice");
+          assert.equal(selected, "c64u");
+          assert.equal(facade.type, "c64u");
         });
       },
     );
@@ -1174,15 +1174,15 @@ test("device: ViceBackend unit branches", async () => {
         if (name === "Drive11Type") return { type: "int", value: 1571 };
         if (name === "WarpMode") return { type: "int", value: 1 };
         if (name === "MachineVideoStandard") return { type: "string", value: "PAL" };
-        if (name === "DriveLabel") return { type: "string", value: "1541" };
-        if (name === "BadSetting") return { type: "string", value: "" };
+        if (name === "SoundLabel") return { type: "string", value: "1541" };
+        if (name === "SoundBadSetting") return { type: "string", value: "" };
         throw new Error(`unexpected resource ${name}`);
       },
       async resourceSet(name, value) {
         calls.push(["resourceSet", name, value]);
         const driveType = /^Drive(\d+)Type$/.exec(name);
         if (driveType) driveTypes.set(Number(driveType[1]), value);
-        if (name === "BadSetting") {
+        if (name === "SoundBadSetting") {
           throw new Error("write failed");
         }
       },
@@ -1227,6 +1227,21 @@ test("device: ViceBackend unit branches", async () => {
     assert.ok(!loadPrgCalls.some((c) => c[0] === "keyboardFeed" && c[1] === "RUN\r"), "loadPrg must not type RUN");
     assert.ok(loadPrgCalls.some((c) => c[0] === "memSet" && c[1] === 0xC000), "loadPrg must place the code at its origin");
 
+    // F-03: the file-path variant reads the host file and loads it like loadPrg.
+    const loadFile = path.join(os.tmpdir(), "vice-backend-loadprg-test.prg");
+    fs.writeFileSync(loadFile, Buffer.from([0x00, 0xC1, 0xEA, 0x60]));
+    const callsBeforeLoadFile = calls.length;
+    try {
+      const loadFileResult = await backend.loadPrgFile(loadFile);
+      assert.equal(loadFileResult.success, true);
+    } finally {
+      fs.rmSync(loadFile, { force: true });
+    }
+    const loadFileCalls = calls.slice(callsBeforeLoadFile);
+    assert.deepEqual(loadFileCalls.find((c) => c[0] === "memSet" && c[1] === 0xC100), ["memSet", 0xC100, [0xEA, 0x60]]);
+    assert.ok(!loadFileCalls.some((c) => c[0] === "keyboardFeed" && c[1] === "RUN\r"), "loadPrgFile must not type RUN");
+    await assert.rejects(() => backend.loadPrgFile(path.join(os.tmpdir(), "vice-backend-missing.prg")), /ENOENT/);
+
     const resetResult = await backend.reset();
     const rebootResult = await backend.reboot();
     assert.equal(resetResult.success, true);
@@ -1266,20 +1281,20 @@ test("device: ViceBackend unit branches", async () => {
     // HARD01-035: a string resource whose value happens to be all digits
     // ("1541") must not be coerced to the integer 1541 merely because it
     // looks numeric; the resource's declared type governs the payload.
-    const labelResult = await backend.configSet("VICE", "DriveLabel", "1541");
+    const labelResult = await backend.configSet("VICE", "SoundLabel", "1541");
     assert.equal(labelResult.details.value, "1541");
     assert.equal(typeof labelResult.details.value, "string");
-    const labelSetCall = calls.find((c) => c[0] === "resourceSet" && c[1] === "DriveLabel");
+    const labelSetCall = calls.find((c) => c[0] === "resourceSet" && c[1] === "SoundLabel");
     assert.equal(typeof labelSetCall[2], "string");
     assert.equal(labelSetCall[2], "1541");
 
     const batch = await backend.configBatchUpdate({
-      VICE: { WarpMode: "1", BadSetting: "oops" },
+      VICE: { WarpMode: "1", SoundBadSetting: "oops" },
     });
     assert.equal(batch.success, false);
     assert.deepEqual(batch.details.results, [
       { item: "VICE/WarpMode", success: true },
-      { item: "VICE/BadSetting", success: false, error: "write failed" },
+      { item: "VICE/SoundBadSetting", success: false, error: "write failed" },
     ]);
 
     await withEnv({ VICE_TEST_TARGET: undefined }, async () => {

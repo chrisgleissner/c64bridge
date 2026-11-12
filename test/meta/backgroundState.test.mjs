@@ -60,7 +60,7 @@ describe("meta/background state loading", () => {
           type: "background",
           operation: "read",
           args: { address: "$0400", length: 2 },
-          intervalMs: 25,
+          intervalMs: 100,
           maxIterations: 3,
           iterations: 2,
           status: "stopped",
@@ -119,7 +119,7 @@ describe("meta/background state loading", () => {
           type: "background",
           operation: "read",
           args: {},
-          intervalMs: 20,
+          intervalMs: 100,
           iterations: 1,
           status: "running",
           startedAt: "2025-03-08T10:00:00.000Z",
@@ -149,7 +149,7 @@ describe("meta/background state loading", () => {
     // Because the reloaded task is honestly "stopped", starting a new task
     // under the same name must now succeed rather than be rejected.
     const result = await startTool.execute(
-      { name: "dup", operation: "read", intervalMs: 5, maxIterations: 1 },
+      { name: "dup", operation: "read", intervalMs: 100, maxIterations: 1 },
       { client: {}, logger: createLogger() },
     );
     expect(result.isError).toBeUndefined();
@@ -180,7 +180,7 @@ describe("meta/background state loading", () => {
     };
 
     const result = await startTool.execute(
-      { name: "alias", operation: "read_memory", intervalMs: 5, maxIterations: 1 },
+      { name: "alias", operation: "read_memory", intervalMs: 100, maxIterations: 1 },
       ctx,
     );
 
@@ -216,7 +216,7 @@ describe("meta/background state loading", () => {
           type: "background",
           operation: "read_screen",
           args: null,
-          intervalMs: 50,
+          intervalMs: 100,
           iterations: 4,
           status: "error",
           startedAt: "not-a-date",
@@ -267,7 +267,7 @@ describe("meta/background state loading", () => {
     };
 
     const started = await startTool.execute(
-      { name: "task-files", operation: "read_screen", intervalMs: 5, maxIterations: 1 },
+      { name: "task-files", operation: "read_screen", intervalMs: 100, maxIterations: 1 },
       ctx,
     );
 
@@ -294,7 +294,7 @@ describe("meta/background state loading", () => {
           type: "background",
           operation: "read",
           args: {},
-          intervalMs: 20,
+          intervalMs: 100,
           iterations: 3,
           status: "completed",
           startedAt: "2025-03-08T10:00:00.000Z",

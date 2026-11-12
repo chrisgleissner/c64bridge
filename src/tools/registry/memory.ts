@@ -6,6 +6,7 @@ import {
 import {
   memoryModule,
   memoryOperationHandlers as groupedMemoryHandlers,
+  listBasicArgsSchema,
   disassembleArgsSchema,
   copyMemoryArgsSchema,
   fillMemoryArgsSchema,
@@ -63,6 +64,15 @@ const memoryOperations: GroupedOperationConfig[] = [
       { description: "Poll the screen until a substring or regex appears, or timeout elapses." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "wait_for_screen_text", rawArgs, ctx),
+  },
+  {
+    op: "list_basic",
+    schema: extendSchemaWithOp(
+      "list_basic",
+      listBasicArgsSchema.jsonSchema,
+      { description: "List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE." },
+    ),
+    handler: groupedMemoryHandlers.list_basic,
   },
   {
     op: "disassemble",
@@ -142,6 +152,11 @@ export const memoryModuleGroup = defineToolModule({
         description: "Memory operations available via the c64_memory tool.",
         variants: memoryOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        read: "read", write: "write", read_screen: "read", wait_for_text: "read", list_basic: "read", disassemble: "read",
+        copy_memory: "write", fill_memory: "write", search_memory: "read", compare_memory: "read",
+        save_memory: "write",
+      },
       tags: ["memory", "screen", "grouped"],
       examples: [
         {

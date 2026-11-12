@@ -216,3 +216,30 @@ test("c64_vice describes a flattened Claude-compatible input schema", () => {
   assert.equal(descriptor.inputSchema.oneOf, undefined);
   assert.equal(descriptor.inputSchema.discriminator, undefined);
 });
+
+test("S-04 c64_config on VICE applies the c64_vice resource policy on get, set and batch update", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const backend = Object.create(ViceBackend.prototype);
+  const touched = [];
+  backend.withClient = async (fn) => fn({
+    async resourceGet(item) { touched.push(["get", item]); return { type: "int", value: 1 }; },
+    async resourceSet(item, value) { touched.push(["set", item, value]); },
+  });
+
+  // Accepted: WarpMode is on the shared list.
+  await backend.configGet("VICE", "WarpMode");
+  await backend.configSet("VICE", "WarpMode", "true");
+  assert.deepEqual(touched, [["get", "WarpMode"], ["get", "WarpMode"], ["set", "WarpMode", 1]]);
+
+  // Rejected on every path, before the client is touched.
+  touched.length = 0;
+  for (const name of ["FSDevice8Dir", "SoundRecordDeviceArg", "Kernal", "lowercase"]) {
+    await assert.rejects(() => backend.configGet("VICE", name), /not allowed/, `get ${name}`);
+    await assert.rejects(() => backend.configSet("VICE", name, "x"), /not allowed/, `set ${name}`);
+    const batch = await backend.configBatchUpdate({ VICE: { [name]: "x", WarpMode: 0 } });
+    assert.equal(batch.success, false);
+    assert.equal(batch.details.results.find((entry) => entry.item === `VICE/${name}`).success, false);
+    assert.equal(batch.details.results.find((entry) => entry.item === "VICE/WarpMode").success, true);
+  }
+  assert.ok(!touched.some((entry) => entry[1] !== "WarpMode"), JSON.stringify(touched));
+});

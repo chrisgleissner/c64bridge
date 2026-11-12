@@ -378,6 +378,54 @@ The screenshots below are available for the two backends that provide frame capt
 | U2-family | Frame capture unavailable (no firmware streaming). |
 | VICE | ![VICE backend switch example](doc/img/backend-switch/hello-vice.png) |
 
+### Host File Access
+
+Tool arguments that name a file or directory on the machine running C64 Bridge (memory dumps, configuration snapshots, sprite and charset exports, run artifacts, symbol files, and VICE PRG or disk image paths) are confined to a set of allowed directories:
+
+- the working directory of the server, unless it is the user's home directory or `/`
+- `~/.c64bridge`
+- the system temporary directory (`os.tmpdir()`)
+
+Paths are resolved to their real location before the check, so `..` segments and symbolic links cannot leave these directories. A rejected path produces a validation error that lists the allowed directories, and nothing is written. Files read through these arguments are limited to 16 MiB (64 MiB for disk images).
+
+Set `C64BRIDGE_ALLOWED_DIRS` to add directories. Separate entries with the platform path delimiter (`:` on Linux and macOS, `;` on Windows). The single value `*` disables the confinement.
+
+```json
+"env": { "C64BRIDGE_ALLOWED_DIRS": "/home/you/c64:/home/you/disks" }
+```
+
+Earlier versions accepted any path. Clients that pass paths outside these directories must now add them through `C64BRIDGE_ALLOWED_DIRS`.
+
+### Access Mode
+
+Every operation has an effect: `read` (no change), `write` (changes machine or emulator state that a reset undoes, or writes a host file) or `destructive` (survives a reset or interrupts availability, for example power off, power cycle, reboot, flash save, load or reset to defaults, drive ROM load, disk image creation, debug register write, and config restore with `applyToFlash`). `tools/list` publishes MCP annotations derived from these effects, and each operation line in a tool description names its effect when it is not `read`.
+
+Set `C64BRIDGE_ACCESS` to restrict what a client may call:
+
+- `full` (default): all operations are allowed.
+- `no-destructive`: `destructive` operations are rejected.
+- `read-only`: only `read` operations are allowed.
+
+The variable is read on every call. An unknown value is treated as `read-only` and logged to stderr once. A rejected call returns a validation error that names the operation, its effect and the active mode. `c64_batch` checks each command separately, and `c64_system` `start_task` checks the effect of its task operation when the task starts. `c64://platform/status` shows the active mode.
+
+After `c64_system` `poweroff` on C64U/U64, power must be restored at the outlet. The machine starts by itself only if automatic startup on power restoration is enabled in its configuration.
+
+```json
+"env": { "C64BRIDGE_ACCESS": "no-destructive" }
+```
+
+### Operator Environment Variables
+
+These variables are read by the server itself and are set in the `env` block of the MCP client configuration. `C64BRIDGE_ALLOWED_DIRS` and `C64BRIDGE_ACCESS` are described above.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `C64BRIDGE_ALLOWED_DIRS` | unset | Additional directories for host file paths in tool arguments. Separate entries with the platform path delimiter; `*` disables the confinement. |
+| `C64BRIDGE_ACCESS` | `full` | `full`, `no-destructive` or `read-only`. Limits which operations a client may call. |
+| `C64BRIDGE_HTTP_TOKEN` | unset | When set, the optional HTTP transport (`--http`) requires `Authorization: Bearer <token>`. The transport accepts only loopback `Host` and `Origin` headers regardless of this setting. |
+| `C64BRIDGE_DIAGNOSTICS_KEEP` | `200` | Number of diagnostics files kept in the diagnostics directory. At startup the server deletes older files beyond this count and files older than 30 days. An invalid value is ignored with a warning on stderr. Diagnostics files are created with mode 0600 in a directory created with mode 0700. |
+| `C64BRIDGE_VERBOSE_SCHEMA` | unset | Set to `1` to include the full per-operation schemas in `tools/list`. By default they are omitted to keep the listing small. |
+
 ## VS Code MCP Setup
 
 This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.
@@ -524,12 +572,17 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | --- | --- | --- | --- |
 | `C64_MODE` | c64u | — | Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator) |
 | `C64_TASK_STATE_FILE` | auto | — | Override the path used to persist MCP background-task state |
+| `C64BRIDGE_ACCESS` | full | — | Access mode limiting which operations may be called (full, no-destructive, read-only) |
+| `C64BRIDGE_ALLOWED_DIRS` |  | — | Additional directories allowed for host file paths in tool arguments, separated by the path delimiter; * disables the check |
 | `C64BRIDGE_CONFIG` | ~/.c64bridge.json | config path | Path to configuration JSON |
 | `C64BRIDGE_DIAGNOSTICS_DIR` | ~/.c64bridge/diagnostics | — | Override the directory where persistent MCP diagnostics files are written |
+| `C64BRIDGE_DIAGNOSTICS_KEEP` | 200 | — | Number of diagnostics files kept at startup; files older than 30 days are always removed |
 | `C64BRIDGE_DISABLE_DIAGNOSTICS` | 0 | — | Set to 1 to disable persistent diagnostics logging |
+| `C64BRIDGE_HTTP_TOKEN` |  | — | Bearer token required by the optional HTTP transport (--http) |
 | `C64BRIDGE_POLL_INTERVAL_MS` | 200 | — | Interval between screen polls during program-output validation in normal runtime mode |
 | `C64BRIDGE_POLL_MAX_MS` | 2000 | — | Maximum time to poll for program-output validation before timing out in normal runtime mode |
 | `C64BRIDGE_POLL_STABILIZE_MS` | 100 | — | Extra settle time after a successful poll match before considering output stable |
+| `C64BRIDGE_VERBOSE_SCHEMA` |  | — | Set to 1 to include full per-operation schemas in tools/list |
 | `LOG_LEVEL` | info | — | Logger verbosity (debug, info, warn, error) |
 
 #### C64 Ultimate
@@ -715,16 +768,16 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `batch_update` | Apply multiple configuration updates in a single request. | — | — | ✅ | ✅ | ✅ |
+| `batch_update` | Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime. | — | `updates` | ✅ | ✅ | ✅ |
 | `diff` | Compare the current configuration with a snapshot. | `path` | — | ✅ | ✅ | ✅ |
 | `get` | Read a configuration category or specific item. | `category` | `item`, `includeSecretValues=false` | ✅ | ✅ | ✅ |
 | `info` | Retrieve Ultimate hardware information and status. | — | — | ✅ | ✅ | ✅ |
 | `list` | List configuration categories reported by the firmware. | — | — | ✅ | ✅ | ✅ |
-| `load_flash` | Load configuration from flash storage. | — | — | ✅ | ✅ |  |
+| `load_flash` | Load configuration from flash storage. | — | `category` | ✅ | ✅ |  |
 | `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |  |
-| `reset_defaults` | Reset firmware configuration to factory defaults. | — | — | ✅ | ✅ |  |
+| `reset_defaults` | Reset firmware configuration to factory defaults. | — | `category` | ✅ | ✅ |  |
 | `restore` | Restore configuration from a snapshot file. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
-| `save_flash` | Persist the current configuration to flash storage. | — | — | ✅ | ✅ |  |
+| `save_flash` | Persist the current configuration to flash storage. | — | `category` | ✅ | ✅ |  |
 | `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | ✅ | ✅ | ✅ |
 | `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ |  |
 | `snapshot` | Snapshot configuration to disk for later restore or diff. | `path` | — | ✅ | ✅ | ✅ |
@@ -762,6 +815,7 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 | `create_image` | Create a blank disk image of the specified format. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
 | `file_info` | Inspect metadata for a file on the Ultimate filesystem. | `path` | — | ✅ | ✅ |  |
 | `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
+| `find_paths` | Search Ultimate storage for paths whose names contain a substring, without running anything. | `nameContains` | `root="/"`, `extensions`, `maxResults=100`, `caseInsensitive=true` | ✅ | ✅ |  |
 | `list_drives` | List Ultimate drive slots and their mounted images. | — | — | ✅ | ✅ | ✅ |
 | `mount` | Mount a disk image with optional verification and retries. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
 | `unmount` | Remove the mounted image from an Ultimate drive slot. | `drive` | — | ✅ | ✅ |  |
@@ -796,7 +850,7 @@ Grouped entry point for frame capture and graphics rendering workflows.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=true`, `encoding="base64"` | ✅ |  | ✅ |
+| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=false`, `format`, `encoding="base64"` | ✅ |  | ✅ |
 | `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. | — | — | ✅ | ✅ | ✅ |
 | `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | ✅ | ✅ | ✅ |
 | `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | ✅ | ✅ | ✅ |
@@ -810,7 +864,7 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
-| `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
+| `key` | Press a single key one or more times, optionally with a delay between presses. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
 | `keyboard` | Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). | `inputs`, `transition` | — | ✅ |  |  |
 | `release_all` | Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). | — | — | ✅ |  |  |
 | `state` | Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). | — | — | ✅ |  |  |
@@ -826,7 +880,8 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 | `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | — | ✅ | ✅ | ✅ |
 | `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ | ✅ |
-| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256` | ✅ | ✅ | ✅ |
+| `list_basic` | List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE. | — | — | ✅ | ✅ | ✅ |
+| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"` | ✅ | ✅ | ✅ |
 | `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ | ✅ |
 | `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true` | ✅ | ✅ | ✅ |
 | `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10` | ✅ | ✅ | ✅ |
@@ -852,11 +907,11 @@ Grouped entry point for program upload, execution, and batch workflows.
 | `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | `continueOnError=false`, `durationMs=2000`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ | ✅ |
 | `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg` | ✅ | ✅ | ✅ |
 | `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Supports verification. | — | `platforms`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
-| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | ✅ | ✅ |  |
+| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | ✅ | ✅ | ✅ |
 | `run_crt` | Mount and run a CRT cartridge image. | `path` | — | ✅ | ✅ |  |
 | `run_prg` | Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. | `path` | `symbolsFile` | ✅ | ✅ | ✅ |
 | `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
-| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
+| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. Supports verification. | `program` | `verify=false`, `autoFix=true` | ✅ | ✅ | ✅ |
 
 #### c64_rag
 
@@ -902,7 +957,7 @@ Grouped entry point for starting and stopping Ultimate streaming sessions.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `start` | Start an Ultimate streaming session toward a host:port target. | `stream`, `target` | — | ✅ |  |  |
+| `start` | Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). | `stream`, `target` | — | ✅ |  |  |
 | `stop` | Stop an active Ultimate streaming session. | `stream` | — | ✅ |  |  |
 
 #### c64_system
@@ -915,11 +970,11 @@ Grouped entry point for power, reset, menu, and background task control.
 | `menu` | Toggle the Ultimate menu button for navigation. | — | — | ✅ | ✅ |  |
 | `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ |  |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | ✅ | ✅ | ✅ |
-| `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. | — | — | ✅ | ✅ | ✅ |
-| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. | — | — | ✅ |  | ✅ |
+| `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
+| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. | — | — | ✅ |  | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). | — | — | ✅ | ✅ |  |
-| `reboot` | Trigger a firmware reboot to recover from faults. | — | — | ✅ | ✅ | ✅ |
-| `reset` | Issue a soft reset without cutting power. | — | — | ✅ | ✅ | ✅ |
+| `reboot` | Trigger a firmware reboot to recover from faults. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
+| `reset` | Issue a soft reset without cutting power. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ |  |
 | `start_task` | Start a named background task that runs on an interval. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
 | `stop_all_tasks` | Stop every running background task and persist state. | — | — | ✅ | ✅ | ✅ |

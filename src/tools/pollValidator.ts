@@ -36,10 +36,28 @@ export interface BasicPollResult {
  * Result of Assembly program polling.
  */
 export interface AsmPollResult {
-  status: "ok" | "crashed";
+  /**
+   * ok: the program showed signs of running (screen RAM changed, or it
+   * returned to BASIC). unconfirmed: the program was loaded but nothing
+   * observable changed, which is normal for a SID player, a border effect or a
+   * `JMP *` loop. not_loaded: the bytes at the load address differ from the
+   * assembled program, so the run request did not load it (HARD01-036).
+   */
+  status: "ok" | "unconfirmed" | "not_loaded";
   type: "ASM";
   reason?: string;
+  loadCheck?: "matched" | "unavailable" | "skipped";
+  /** Set when status is not_loaded: load address and the compared bytes as hex. */
+  load?: { address: number; expected: string; found: string };
 }
+
+/** The first bytes of the assembled program, compared with memory after the upload. */
+export interface ExpectedProgramBytes {
+  readonly address: number;
+  readonly bytes: Uint8Array;
+}
+
+const LOAD_CHECK_BYTES = 16;
 
 export type PollResult = BasicPollResult | AsmPollResult;
 
@@ -215,11 +233,59 @@ async function pollBasicOutcome(
  * to determine if program is alive or crashed.
  * First waits for RUN to appear, then monitors for activity across multiple memory regions.
  */
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (value) => value.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+}
+
+/**
+ * Reads back up to 16 bytes at the load address and compares them with the
+ * assembled program. A U2-family firmware answers run_prg with success without
+ * loading anything, so this is the evidence that the program reached memory.
+ * Needs confirmation on U2 hardware; it is exercised against mocks only.
+ */
+async function checkProgramLoaded(
+  client: C64Client,
+  logger: ToolLogger,
+  program: ExpectedProgramBytes,
+): Promise<Pick<AsmPollResult, "loadCheck" | "load">> {
+  const length = Math.min(LOAD_CHECK_BYTES, program.bytes.length, 0x10000 - program.address);
+  if (length <= 0) {
+    return { loadCheck: "skipped" };
+  }
+  const expected = program.bytes.subarray(0, length);
+  let found: Uint8Array;
+  try {
+    found = await client.readMemoryRaw(program.address, length);
+  } catch (error) {
+    logger.debug("Unable to read back the loaded program", { error });
+    return { loadCheck: "unavailable" };
+  }
+  if (!buffersEqual(found.subarray(0, length), expected)) {
+    return { loadCheck: "matched", load: { address: program.address, expected: toHex(expected), found: toHex(found.subarray(0, length)) } };
+  }
+  return { loadCheck: "matched" };
+}
+
 async function pollAsmOutcome(
   client: C64Client,
   logger: ToolLogger,
   config: PollConfig,
+  program?: ExpectedProgramBytes,
 ): Promise<AsmPollResult> {
+  let loadCheck: AsmPollResult["loadCheck"] = "skipped";
+  if (program) {
+    const check = await checkProgramLoaded(client, logger, program);
+    loadCheck = check.loadCheck;
+    if (check.load) {
+      return {
+        status: "not_loaded",
+        type: "ASM",
+        reason: `memory at $${program.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the assembled program`,
+        loadCheck: "matched",
+        load: check.load,
+      };
+    }
+  }
   const startTime = Date.now();
   let pollCount = 0;
   let runDetected = false;
@@ -239,7 +305,7 @@ async function pollAsmOutcome(
       if (returnedToBasicAfterSys(screen)) {
         // The typed SYS line is followed by READY., so the routine ran and returned with RTS.
         logger.debug("ASM program returned to BASIC", { elapsed: Date.now() - startTime });
-        return { status: "ok", type: "ASM" };
+        return { status: "ok", type: "ASM", loadCheck };
       }
       if (upperScreen.includes("RUN") || upperScreen.includes("SYS") || upperScreen.includes("ERROR")) {
         runDetected = true;
@@ -274,7 +340,7 @@ async function pollAsmOutcome(
       // A routine that works for a while before RTS shows READY. only after the first screen read.
       if (returnedToBasicAfterSys(await client.readScreen())) {
         logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
-        return { status: "ok", type: "ASM" };
+        return { status: "ok", type: "ASM", loadCheck };
       }
     } catch (error) {
       logger.debug("Failed to read screen during ASM polling", { error, pollCount });
@@ -309,15 +375,17 @@ async function pollAsmOutcome(
     return {
       status: "ok",
       type: "ASM",
+      loadCheck,
     };
   }
   
-  // No activity detected - consider it crashed
-  logger.debug("ASM program crashed - no VIC/CIA/TI/screen progression", { pollCount, elapsed: Date.now() - startTime });
+  // No screen change: the program may be running silently, so this is not evidence of a crash.
+  logger.debug("ASM program unconfirmed - no screen progression", { pollCount, elapsed: Date.now() - startTime });
   return {
-    status: "crashed",
+    status: "unconfirmed",
     type: "ASM",
     reason: "no program-visible screen progression within window",
+    loadCheck,
   };
 }
 
@@ -335,6 +403,7 @@ export async function pollForProgramOutcome(
   client: C64Client,
   logger: ToolLogger,
   config?: Partial<PollConfig>,
+  program?: ExpectedProgramBytes,
 ): Promise<PollResult> {
   const defaults = loadPollConfig();
   const pollConfig: PollConfig = {
@@ -355,5 +424,5 @@ export async function pollForProgramOutcome(
     return pollBasicOutcome(client, logger, pollConfig);
   }
   
-  return pollAsmOutcome(client, logger, pollConfig);
+  return pollAsmOutcome(client, logger, pollConfig, program);
 }
