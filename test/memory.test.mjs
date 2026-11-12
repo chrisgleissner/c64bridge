@@ -1042,6 +1042,8 @@ test("search_memory finds matches and respects maxResults", async () => {
   assert.equal(res.isError, undefined);
   assert.deepEqual(res.structuredContent?.data.matches, ["$2000", "$2002"]);
   assert.equal(res.structuredContent?.data.found, 2);
+  assert.equal(res.structuredContent?.data.totalMatches, 3);
+  assert.equal(res.structuredContent?.data.truncated, true);
 });
 
 test("search_memory rejects reversed ranges", async () => {
@@ -1106,7 +1108,9 @@ test("compare_memory reports differences and respects maxDiffs", async () => {
 
   assert.equal(res.isError, undefined);
   assert.equal(res.structuredContent?.data.identical, false);
-  assert.equal(res.structuredContent?.data.diffCount, 1);
+  assert.equal(res.structuredContent?.data.diffCount, 2);
+  assert.equal(res.structuredContent?.data.returnedDiffs, 1);
+  assert.equal(res.structuredContent?.data.truncated, true);
   assert.deepEqual(res.structuredContent?.data.diffs, [{
     offset: 1,
     address1: "$3001",
@@ -1323,4 +1327,21 @@ test("read and write reject ambiguous or out-of-range addresses as validation er
   const ok = await memoryModule.invoke("read", { address: "%1000000000000", length: 1 }, ctx);
   assert.equal(ok.isError, undefined);
   assert.equal(calls, 1);
+});
+
+test("search_memory and compare_memory report truncated:false when nothing was cut off", async () => {
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        return address === 0x3100 ? Uint8Array.of(1, 2, 3, 9) : Uint8Array.of(1, 2, 3, 4);
+      },
+    }),
+    logger: createLogger(),
+  };
+  const search = await toolRegistry.invoke("c64_memory", { op: "search_memory", startAddress: "$3000", endAddress: "$3003", pattern: "02", maxResults: 5 }, ctx);
+  assert.equal(search.structuredContent?.data.truncated, false);
+  assert.equal(search.structuredContent?.data.totalMatches, 1);
+  const compare = await toolRegistry.invoke("c64_memory", { op: "compare_memory", address1: "$3000", address2: "$3100", length: 4, maxDiffs: 5 }, ctx);
+  assert.equal(compare.structuredContent?.data.diffCount, 1);
+  assert.equal(compare.structuredContent?.data.truncated, false);
 });

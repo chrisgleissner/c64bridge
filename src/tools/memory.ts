@@ -670,15 +670,19 @@ async function executeSearchMemory(rawArgs: unknown, ctx: ToolExecutionContext):
     ctx.logger.info("Searching memory", { start: fmtAddr(start), end: fmtAddr(end), pattern: parsed.pattern });
     const haystack = await ctx.client.readMemoryRaw(start, len);
     const matches: string[] = [];
-    outer: for (let i = 0; i <= haystack.length - needle.length && matches.length < maxResults; i++) {
+    // The whole range is already read, so counting past maxResults costs no device call.
+    let totalMatches = 0;
+    outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
       for (let j = 0; j < needle.length; j++) {
         if (haystack[i + j] !== needle[j]) continue outer;
       }
-      matches.push(fmtAddr(start + i));
+      totalMatches += 1;
+      if (matches.length < maxResults) matches.push(fmtAddr(start + i));
     }
+    const truncated = totalMatches > matches.length;
     return jsonResult(
-      { found: matches.length, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) } },
-      { success: true, found: matches.length },
+      { found: matches.length, totalMatches, truncated, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) } },
+      { success: true, found: matches.length, totalMatches, truncated },
     );
   } catch (error) {
     if (error instanceof ToolError) return toolErrorResult(error);
@@ -717,8 +721,11 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
     ]);
     type Diff = { offset: number; address1: string; address2: string; value1: string; value2: string };
     const diffs: Diff[] = [];
-    for (let i = 0; i < len && diffs.length < maxDiffs; i++) {
+    let totalDiffs = 0;
+    for (let i = 0; i < len; i++) {
       if (r1[i] !== r2[i]) {
+        totalDiffs += 1;
+        if (diffs.length >= maxDiffs) continue;
         diffs.push({
           offset: i,
           address1: fmtAddr(a1 + i),
@@ -728,10 +735,11 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
         });
       }
     }
-    const identical = diffs.length === 0;
+    const identical = totalDiffs === 0;
+    const truncated = totalDiffs > diffs.length;
     return jsonResult(
-      { identical, diffCount: diffs.length, diffs, region1: fmtAddr(a1), region2: fmtAddr(a2), length: len },
-      { success: true, identical, diffCount: diffs.length },
+      { identical, diffCount: totalDiffs, returnedDiffs: diffs.length, truncated, diffs, region1: fmtAddr(a1), region2: fmtAddr(a2), length: len },
+      { success: true, identical, diffCount: totalDiffs, truncated },
     );
   } catch (error) {
     if (error instanceof ToolError) return toolErrorResult(error);

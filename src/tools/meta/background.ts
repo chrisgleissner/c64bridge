@@ -606,12 +606,14 @@ export const tools: ToolDefinition[] = [
         stopAllBackgroundTasksArgsSchema.parse(args ?? {});
         const stoppedTasks: BackgroundTask[] = [];
         for (const task of TASKS.values()) {
+          // Tasks that already finished or were stopped are left as they are.
+          if (task.status !== "running") continue;
           stopTask(task);
           stoppedTasks.push(task);
           await appendTaskLog(task, "stopped");
         }
         await persistTasks(stoppedTasks);
-        return jsonResult({ stoppedAll: true, count: TASKS.size }, { success: true });
+        return jsonResult({ stoppedAll: true, count: stoppedTasks.length, totalTasks: TASKS.size }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

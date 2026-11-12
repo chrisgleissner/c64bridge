@@ -130,7 +130,7 @@ test("background tasks stop all", async () => {
     assert.equal(res.metadata?.success, true);
     await waitForTaskCompletion(metaModule, "noop", ctx);
     res = await metaModule.invoke("stop_all_background_tasks", {}, ctx);
-    assert.equal(res.metadata?.success, true);
+    assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
     const list = await metaModule.invoke("list_background_tasks", {}, ctx);
     assert.equal(list.metadata?.success, true);
   } finally {
@@ -679,6 +679,24 @@ test("R-05 a task folder derived from a persisted id cannot escape the task dire
     const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
     const res = await tool("start_background_task").execute({ name: "evil", operation: "read_screen", intervalMs: 100, maxIterations: 1 }, ctx);
     assert.equal(res.isError, true);
+  } finally {
+    restore();
+  }
+});
+
+test("stop_all_background_tasks counts only the tasks that were running", async () => {
+  const { tool, file, restore } = await freshBackground("stopall-count", "background-stopall-count");
+  try {
+    await fs.writeFile(file, JSON.stringify({ tasks: [persistedTask("0001_done", "done")] }));
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
+    const started = await tool("start_background_task").execute({ name: "live", operation: "read_screen", intervalMs: 60_000 }, ctx);
+    assert.equal(started.metadata?.success, true);
+    const stopped = await tool("stop_all_background_tasks").execute({}, ctx);
+    assert.equal(stopped.structuredContent.data.count, 1);
+
+    assert.equal(stopped.structuredContent.data.totalTasks, 2);
+    const again = await tool("stop_all_background_tasks").execute({}, ctx);
+    assert.equal(again.structuredContent.data.count, 0);
   } finally {
     restore();
   }
