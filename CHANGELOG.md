@@ -24,6 +24,7 @@
 
 ### Bug Fixes
 
+- override hono to 4.13.16 or later, which fixes five advisories in the MCP SDK's hono dependency
 - share one REST request queue per device between the backend and C64Client (7eb9a2f)
 - do not take a stale READY. for the new one and bound each screen read in waitForReady (e28e62f)
 - pass image blocks from capture_frame through c64_batch (1e2c060)

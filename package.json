@@ -82,7 +82,8 @@
     "naudiodon": "^2.3.6"
   },
   "overrides": {
-    "zod": "^4.6.6"
+    "zod": "^4.6.6",
+    "hono": "^4.13.16"
   },
   "devDependencies": {
     "@types/node": "^25.9.5",
