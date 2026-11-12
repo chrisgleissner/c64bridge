@@ -212,12 +212,20 @@ async function executeReadScreen(rawArgs: unknown, ctx: ToolExecutionContext): P
     readScreenArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Reading C64 screen contents");
 
-    const screen = await ctx.client.readScreen();
+    const client = ctx.client as typeof ctx.client & { readScreenDetailed?: () => Promise<{ text: string; baseAddress: number; charset: "upper" | "lower" }> };
+    const detailed = typeof client.readScreenDetailed === "function" ? await client.readScreenDetailed() : undefined;
+    const screen = detailed ? detailed.text : await ctx.client.readScreen();
 
     return textResult(`Current screen contents:\n${screen}`, {
       success: true,
       screen,
       length: screen.length,
+      ...(detailed
+        ? {
+            screenBase: `$${detailed.baseAddress.toString(16).toUpperCase().padStart(4, "0")}`,
+            charset: detailed.charset,
+          }
+        : {}),
     });
   } catch (error) {
     if (error instanceof ToolError) {

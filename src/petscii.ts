@@ -84,6 +84,20 @@ export interface ScreenAsciiOptions {
   readonly rows?: number;
   readonly trimTrailingSpaces?: boolean;
   readonly trimTrailingEmptyRows?: boolean;
+  /**
+   * Character set the screen codes are shown in. "upper" (default) is the
+   * upper-case/graphics set; "lower" is the lower-case/upper-case set, where
+   * screen codes 1-26 are a-z and 65-90 are A-Z.
+   */
+  readonly charset?: "upper" | "lower";
+}
+
+/** Letters of the lower-case set; reverse-video codes (+128) show the same letter. */
+function lowerCaseSetChar(code: number): string | undefined {
+  const base = code & 0x7f;
+  if (base >= 1 && base <= 26) return String.fromCharCode(0x60 + base);
+  if (base >= 0x41 && base <= 0x5a) return String.fromCharCode(base);
+  return undefined;
 }
 
 export function screenCodesToAscii(bytes: Uint8Array, options?: ScreenAsciiOptions): string {
@@ -93,6 +107,7 @@ export function screenCodesToAscii(bytes: Uint8Array, options?: ScreenAsciiOptio
   const maxRows = options?.rows && options.rows > 0 ? options.rows : undefined;
   const trimSpaces = options?.trimTrailingSpaces !== false;
   const trimEmptyRows = options?.trimTrailingEmptyRows !== false;
+  const lowerCase = options?.charset === "lower";
 
   const lines: string[] = [];
   const totalCells = maxRows ? Math.min(bytes.length, columns * maxRows) : bytes.length;
@@ -106,7 +121,9 @@ export function screenCodesToAscii(bytes: Uint8Array, options?: ScreenAsciiOptio
     let line = "";
     for (let idx = index; idx < end; idx += 1) {
       const code = bytes[idx] ?? 0;
-      const char = SCREEN_CODE_TO_ASCII.get(code & 0xff) ?? petsciiByteToChar(code & 0xff);
+      const char = lowerCase
+        ? lowerCaseSetChar(code & 0xff) ?? SCREEN_CODE_TO_ASCII.get(code & 0xff) ?? petsciiByteToChar(code & 0xff)
+        : SCREEN_CODE_TO_ASCII.get(code & 0xff) ?? petsciiByteToChar(code & 0xff);
       line += char;
     }
 

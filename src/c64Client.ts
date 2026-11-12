@@ -908,9 +908,36 @@ export class C64Client {
   }
 
   async readScreen(): Promise<string> {
+    return (await this.readScreenDetailed()).text;
+  }
+
+  /**
+   * Reads the text screen where the VIC-II currently shows it: the screen
+   * base comes from $D018 bits 4-7 and the VIC bank from $DD00 bits 0-1, and
+   * $D018 bit 1 selects the lower-case character set. Reads of both registers
+   * that fail, or that both return $00 (not a usable VIC state), fall back to
+   * the default $0400 and the upper-case set.
+   */
+  async readScreenDetailed(): Promise<{ text: string; baseAddress: number; charset: "upper" | "lower"; registers?: { d018: number; dd00: number } }> {
     return withDiagnosticSpan("client", "read_screen", {}, async () => {
-      const bytes = await this.readMemoryRaw(0x0400, 0x03e8);
-      return screenCodesToAscii(bytes, { columns: 40, rows: 25 });
+      let baseAddress = 0x0400;
+      let charset: "upper" | "lower" = "upper";
+      let registers: { d018: number; dd00: number } | undefined;
+      try {
+        const d018 = (await this.readMemoryRaw(0xd018, 1))[0];
+        const dd00 = (await this.readMemoryRaw(0xdd00, 1))[0];
+        if (d018 !== undefined && dd00 !== undefined && !(d018 === 0 && dd00 === 0)) {
+          registers = { d018, dd00 };
+          baseAddress = (3 - (dd00 & 0x03)) * 0x4000 + ((d018 >> 4) & 0x0f) * 0x0400;
+          charset = (d018 & 0x02) !== 0 ? "lower" : "upper";
+        }
+      } catch {
+        // Keep the defaults when the VIC registers cannot be read.
+      }
+      const length = Math.min(0x03e8, 0x10000 - baseAddress);
+      const bytes = await this.readMemoryRaw(baseAddress, length);
+      const text = screenCodesToAscii(bytes, { columns: 40, rows: 25, charset });
+      return { text, baseAddress, charset, ...(registers ? { registers } : {}) };
     });
   }
 
