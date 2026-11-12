@@ -24,6 +24,7 @@ import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { petsciiToAscii } from "../petscii.js";
+import { listBasicProgram, MAX_BASIC_IMAGE_BYTES } from "./translation/basicDetokenizer.js";
 import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../numericArg.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
@@ -237,6 +238,57 @@ async function executeReadScreen(rawArgs: unknown, ctx: ToolExecutionContext): P
     if (error instanceof ToolError) {
       return toolErrorResult(error);
     }
+    return unknownErrorResult(error);
+  }
+}
+
+const listBasicArgsSchema = objectSchema({
+  description: "List the BASIC program currently in memory. Reads the start ($2B/$2C) and end ($2D/$2E) pointers and detokenises the program text.",
+  properties: {},
+  additionalProperties: false,
+});
+
+async function readRange(ctx: ToolExecutionContext, start: number, length: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for (let offset = 0; offset < length; offset += 4096) {
+    const count = Math.min(4096, length - offset);
+    const address = `$${(start + offset).toString(16).toUpperCase().padStart(4, "0")}`;
+    const result = await ctx.client.readMemory(address, String(count));
+    if (!result.success) {
+      throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normaliseFailure(result.details) });
+    }
+    const bytes = parseFirmwareHex(result.data, "BASIC program read").bytes;
+    if (bytes.length !== count) {
+      throw new ToolExecutionError("Memory read returned an unexpected number of bytes", { details: { address, expected: count, received: bytes.length } });
+    }
+    chunks.push(bytes);
+  }
+  return Buffer.concat(chunks);
+}
+
+async function executeListBasic(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
+  try {
+    listBasicArgsSchema.parse(rawArgs ?? {});
+    const pointers = await readRange(ctx, 0x002b, 4);
+    const start = pointers[0]! | (pointers[1]! << 8);
+    const end = pointers[2]! | (pointers[3]! << 8);
+    const fmt = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+    if (end <= start) {
+      return jsonResult({ start: fmt(start), end: fmt(end), lines: [], listing: "" }, { success: true, lineCount: 0 });
+    }
+    const length = end - start;
+    if (length > MAX_BASIC_IMAGE_BYTES) {
+      throw new ToolExecutionError("BASIC end pointer is implausible", { details: { start: fmt(start), end: fmt(end) } });
+    }
+    const image = await readRange(ctx, start, length);
+    const lines = listBasicProgram(image, start);
+    const listing = lines.map((line) => `${line.number} ${line.text}`).join("\n");
+    return jsonResult(
+      { start: fmt(start), end: fmt(end), lines, listing },
+      { success: true, lineCount: lines.length },
+    );
+  } catch (error) {
+    if (error instanceof ToolError) return toolErrorResult(error);
     return unknownErrorResult(error);
   }
 }
@@ -831,6 +883,7 @@ export interface MemoryOperationMap extends OperationMap {
     readonly expected?: string; readonly mask?: string; readonly abortOnMismatch?: boolean;
   };
   readonly read_screen: Record<string, never>;
+  readonly list_basic: Record<string, never>;
   readonly disassemble: { readonly address: string; readonly length?: number; readonly instructionCount?: number };
   readonly copy_memory: { readonly source: string; readonly dest: string; readonly length: number };
   readonly fill_memory: { readonly address: string; readonly length: number; readonly pattern: string };
@@ -843,6 +896,7 @@ export const memoryOperationHandlers: OperationHandlerMap<MemoryOperationMap> = 
   read: async (args, ctx) => executeReadMemory(stripOperationDiscriminator(args), ctx),
   write: async (args, ctx) => executeWriteMemory(stripOperationDiscriminator(args), ctx),
   read_screen: async (args, ctx) => executeReadScreen(stripOperationDiscriminator(args), ctx),
+  list_basic: async (args, ctx) => executeListBasic(stripOperationDiscriminator(args), ctx),
   disassemble: async (args, ctx) => executeDisassemble(stripOperationDiscriminator(args), ctx),
   copy_memory: async (args, ctx) => executeCopyMemory(stripOperationDiscriminator(args), ctx),
   fill_memory: async (args, ctx) => executeFillMemory(stripOperationDiscriminator(args), ctx),
@@ -852,6 +906,7 @@ export const memoryOperationHandlers: OperationHandlerMap<MemoryOperationMap> = 
 };
 
 export {
+  listBasicArgsSchema,
   disassembleArgsSchema,
   copyMemoryArgsSchema,
   fillMemoryArgsSchema,

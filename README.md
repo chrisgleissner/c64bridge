@@ -863,6 +863,7 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 | `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | — | ✅ | ✅ | ✅ |
 | `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ | ✅ |
+| `list_basic` | List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE. | — | — | ✅ | ✅ | ✅ |
 | `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"` | ✅ | ✅ | ✅ |
 | `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ | ✅ |
 | `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true` | ✅ | ✅ | ✅ |

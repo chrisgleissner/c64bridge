@@ -24,6 +24,11 @@ type TokenEntry = {
 
 const TOKEN_TABLE: TokenEntry[] = buildTokenTable();
 
+/** Keyword text for a BASIC V2 token byte (0x80-0xCB), or undefined. */
+export function basicTokenText(byte: number): string | undefined {
+  return TOKEN_TABLE.find((entry) => entry.byte === byte)?.text;
+}
+
 export function basicToPrg(source: string, options?: { startAddress?: number }): Buffer {
   const startAddress = options?.startAddress ?? DEFAULT_START_ADDRESS;
   const normalizedSource = normalize(source);
