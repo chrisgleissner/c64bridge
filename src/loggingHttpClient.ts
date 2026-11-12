@@ -31,6 +31,19 @@ function redactHeaders(headers: AxiosRequestConfig["headers"] | undefined): Axio
  * successful one, so the queue cannot deadlock.
  */
 export class RequestQueue {
+  private static readonly byDevice = new Map<string, RequestQueue>();
+
+  /** The shared queue for one device base URL, so every client of that device (backends, fallback clients) waits in the same line. */
+  static forDevice(baseUrl: string): RequestQueue {
+    const key = baseUrl.replace(/\/+$/, "").toLowerCase();
+    let queue = RequestQueue.byDevice.get(key);
+    if (!queue) {
+      queue = new RequestQueue();
+      RequestQueue.byDevice.set(key, queue);
+    }
+    return queue;
+  }
+
   private tail: Promise<void> = Promise.resolve();
 
   /** Resolves when all earlier holders have released; call the returned function exactly once. */

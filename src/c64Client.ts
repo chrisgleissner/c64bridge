@@ -30,7 +30,7 @@ import {
   ViceBackend,
 } from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
-import { createLoggingHttpClient } from "./loggingHttpClient.js";
+import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
 import {
   analyzeStereoStream,
@@ -361,7 +361,8 @@ export class C64Client {
   constructor(baseUrl: string, options: C64ClientOptions = {}) {
     this.baseUrl = baseUrl;
     const headers = options.networkPassword ? { "X-Password": options.networkPassword } : undefined;
-    this.http = createLoggingHttpClient({ baseURL: baseUrl, timeout: 10_000, headers });
+    // Shares the device queue with the C64U backend: the fallback REST calls made through this client must not overlap its requests.
+    this.http = createLoggingHttpClient({ baseURL: baseUrl, timeout: 10_000, headers }, undefined, RequestQueue.forDevice(baseUrl));
     this.api = new Api(this.http);
     const forceC64uFacade = options.forceC64uFacade ?? true;
     if (forceC64uFacade) {

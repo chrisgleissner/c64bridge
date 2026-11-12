@@ -273,11 +273,12 @@ class C64uBackend implements C64Facade {
   private readonly networkPassword?: string;
   private readonly api: Api<unknown>;
   /** The device serves REST requests on one thread: all requests to it, probes included, run one at a time in arrival order. */
-  private readonly requestQueue = new RequestQueue();
+  private readonly requestQueue: RequestQueue;
 
   constructor(endpoint: C64uEndpoint, type: "c64u" | "u2" = "c64u") {
     this.type = type;
     this.baseUrl = endpoint.baseUrl;
+    this.requestQueue = RequestQueue.forDevice(this.baseUrl);
     this.networkPassword = endpoint.networkPassword;
     const http = createLoggingHttpClient({
       baseURL: this.baseUrl,

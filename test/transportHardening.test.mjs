@@ -171,6 +171,30 @@ test("R-06 time spent waiting in the queue does not count against a request time
   assert.deepEqual(settled.map((entry) => entry.status), ["rejected", "rejected"]);
 });
 
+test("R-06 the backend and C64Client's fallback HTTP client share one queue per device", async (t) => {
+  let active = 0;
+  let max = 0;
+  const server = http.createServer((req, res) => {
+    active += 1;
+    max = Math.max(max, active);
+    setTimeout(() => {
+      active -= 1;
+      res.setHeader("Content-Type", "application/json");
+      res.end("{}");
+    }, 40);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const client = new C64Client(baseUrl);
+  const facade = await client.pinFacade();
+  // C64Client's own client (used for the readmem/writemem fallbacks) and the backend's client.
+  const own = client.http.instance.request({ url: "/v1/version", method: "get" });
+  const backend = facade.version();
+  await Promise.all([own, backend, client.http.instance.request({ url: "/v1/info", method: "get" })]);
+  assert.equal(max, 1);
+});
+
 test("R-06 a request that fails before it is sent releases the queue", async (t) => {
   const server = http.createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
