@@ -393,7 +393,7 @@ test("HARD01-006 a project-cwd .c64bridge.json is honoured from a foreign (insta
   }
 });
 
-test("HARD01-027 loadConfig warns and falls back from invalid JSON", (t) => {
+test("HARD01-027 loadConfig rejects an invalid C64BRIDGE_CONFIG file", (t) => {
   const originalEnv = process.env.C64BRIDGE_CONFIG;
   const { dir, file } = writeTempConfig({ c64u: { host: "placeholder" } });
   writeFileSync(file, "{ invalid json\n", "utf8");
@@ -401,7 +401,7 @@ test("HARD01-027 loadConfig warns and falls back from invalid JSON", (t) => {
   process.env.C64BRIDGE_CONFIG = file;
   __resetConfigCacheForTests();
 
-  assert.doesNotThrow(() => loadConfig());
+  assert.throws(() => loadConfig(), /C64BRIDGE_CONFIG/);
 
   t.after(() => {
     __resetConfigCacheForTests();
@@ -491,4 +491,72 @@ test("a baseUrl-only endpoint keeps its https scheme and path prefix", (t) => {
   assert.equal(load({ c64u: { baseUrl: "https://proxy.local:8443/c64u" } }).c64_host, "proxy.local:8443");
   // A port override keeps the scheme and path instead of downgrading to http.
   assert.equal(load({ c64u: { baseUrl: "https://proxy.local/c64u", port: 9443 } }).baseUrl, "https://proxy.local:9443/c64u");
+});
+
+const ENDPOINT_ENV = ["C64BRIDGE_CONFIG", "C64_MODE", "C64U_HOST", "C64U_PORT", "C64U_PASSWORD", "U2_HOST", "U2_PORT", "U2_PASSWORD"];
+
+function withCleanEndpointEnv(t, vars) {
+  const saved = Object.fromEntries(ENDPOINT_ENV.map((key) => [key, process.env[key]]));
+  for (const key of ENDPOINT_ENV) delete process.env[key];
+  Object.assign(process.env, vars);
+  t.after(() => {
+    for (const key of ENDPOINT_ENV) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+}
+
+test("loadConfig brackets a bare IPv6 host instead of falling back to the default", (t) => {
+  withCleanEndpointEnv(t, { C64U_HOST: "::1" });
+  let config = loadConfig();
+  assert.equal(config.baseUrl, "http://[::1]");
+  assert.equal(config.c64_port, 80);
+  process.env.C64U_HOST = "fe80::1";
+  config = loadConfig();
+  assert.equal(config.baseUrl, "http://[fe80::1]");
+  process.env.C64U_HOST = "[::1]";
+  process.env.C64U_PORT = "8080";
+  assert.equal(loadConfig().baseUrl, "http://[::1]:8080");
+});
+
+test("loadConfig rejects invalid ports with the variable name and value", (t) => {
+  withCleanEndpointEnv(t, {});
+  for (const bad of ["80x", "99999", "0", "-1", "1.5"]) {
+    process.env.C64U_PORT = bad;
+    assert.throws(() => loadConfig(), (error) => error.message.includes("C64U_PORT") && error.message.includes(JSON.stringify(bad)), `port ${bad}`);
+  }
+  process.env.C64U_PORT = "8080";
+  assert.equal(loadConfig().c64_port, 8080);
+  delete process.env.C64U_PORT;
+  process.env.U2_PORT = "70000";
+  assert.throws(() => loadConfig(), /U2_PORT/);
+});
+
+test("loadConfig rejects an invalid host and does not echo credentials", (t) => {
+  withCleanEndpointEnv(t, { C64U_HOST: "user:hunter2@bad host" });
+  assert.throws(() => loadConfig(), (error) => error.message.includes("C64U_HOST") && !error.message.includes("hunter2"));
+});
+
+test("loadConfig fails on an unparseable C64BRIDGE_CONFIG file instead of using another candidate", (t) => {
+  withCleanEndpointEnv(t, {});
+  const dir = mkdtempSync(path.join(tmpdir(), "c64-config-bad-"));
+  const file = path.join(dir, "broken.json");
+  writeFileSync(file, '{ "c64u": { "networkPassword": "hunter2", ', "utf8");
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  process.env.C64BRIDGE_CONFIG = file;
+  assert.throws(() => loadConfig(), (error) => error.message.includes("C64BRIDGE_CONFIG") && error.message.includes(file) && !error.message.includes("hunter2"));
+});
+
+test("loadConfig still falls through a malformed ./.c64bridge.json", (t) => {
+  withCleanEndpointEnv(t, {});
+  const originalCwd = process.cwd();
+  const cwdDir = mkdtempSync(path.join(tmpdir(), "c64-cwd-bad-"));
+  writeFileSync(path.join(cwdDir, ".c64bridge.json"), "{ not json", "utf8");
+  process.chdir(cwdDir);
+  t.after(() => {
+    process.chdir(originalCwd);
+    rmSync(cwdDir, { recursive: true, force: true });
+  });
+  assert.doesNotThrow(() => loadConfig());
 });
