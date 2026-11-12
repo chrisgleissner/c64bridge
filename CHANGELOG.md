@@ -4,6 +4,93 @@
 
 
 
+
+## 1.1.0 - 2026-11-12
+
+### Features
+
+- add c64_memory list_basic to list the BASIC program in memory (67ec19c)
+- add a dump format with a PETSCII column to c64_memory read (15621e5)
+- optionally wait for READY. after reset, reboot and power_cycle (d0f9f97)
+- return capture_frame as PNG image blocks and stop sending raw pixels by default (bba6a9e)
+- accept a category on c64_config load_flash, save_flash and reset_defaults (99fbe86)
+- add c64_disk find_paths and fix the root search pattern (6cb639a)
+- enable c64_program load_prg on VICE (e5e25a8)
+- name undefined symbols and duplicate labels, add .equ .fill .align .text (3b08ca6)
+- add operation effects, C64BRIDGE_ACCESS access modes and MCP tool annotations (7cd1e89)
+- omit duplicated per-op schemas from tools/list (e848afe)
+- expose per-operation backend support in descriptions, status resource and backend switch result (f941a7d)
+- document updates form for c64_config batch_update (4767203)
+
+### Bug Fixes
+
+- share one REST request queue per device between the backend and C64Client (7eb9a2f)
+- do not take a stale READY. for the new one and bound each screen read in waitForReady (e28e62f)
+- pass image blocks from capture_frame through c64_batch (1e2c060)
+- keep the encodeDevicePath comment on its function (4dbe7a1)
+- end an explicit pause when the machine is reset, rebooted or powered off (c6a4616)
+- check the final path of files written inside a resolved output directory (76c9df4)
+- release the REST request queue when a request fails before it is sent (b4245b0)
+- keep the package smoke test's stdin open for the whole run (5457fb8)
+- update bun.lock for the removed fastify dependency (97bfa62)
+- narrow package contents, ship skills, drop unused fastify and move octokit to devDependencies (261e6f8)
+- run prepack from the scripts block so the package is built before packing (d513cc3)
+- limit diagnostics retention and create diagnostics files owner-only (bc9ebec)
+- validate the stream target and state the unencrypted UDP destination (b592339)
+- correct two published tool examples that did not validate (7842d64)
+- verify the loaded program and report unconfirmed execution instead of a crash (db49ddf)
+- add autoFix opt-out to upload_run_basic and report rewritten lines (9f83f8a)
+- read_screen follows the VIC screen base and character set (4036cfe)
+- report truncation in search_memory and compare_memory and count stopped tasks (abe39b5)
+- reject unmappable characters and unknown tokens in write_text (7fcbcec)
+- validate wait_for_text patterns and bounds and return the screen on timeout (ee63f4e)
+- report BASIC line number problems as validation errors (e2dac01)
+- parse memory addresses and lengths with one strict parser (f086722)
+- disassemble reads enough bytes for instructionCount and shows truncated tails as data (d3ab352)
+- reject assembler operands and data that would be truncated (2772039)
+- refuse to start VICE when the monitor port is already in use (7568435)
+- keep the capture error, require a reachable local address and filter capture packet sources (9e25b8b)
+- apply the c64_vice resource policy to c64_config on VICE (578ce99)
+- send long keyboard feeds as consecutive monitor commands (bb3c43f)
+- time out the VICE monitor connect after 5 seconds (d906b74)
+- pair tool pauses across concurrent calls and keep an explicit pause (7ff2de7)
+- serialise REST requests to one Ultimate device (597ded3)
+- select the c64u or u2 backend when an endpoint variable is set (e7b5e3e)
+- probe /v1/version and accept any HTTP response as reachable (2b135b1)
+- reject invalid host, port and config file values at startup (b4f562d)
+- state that poweroff needs outlet power and automatic startup to recover (e7e6744)
+- merged grouped-tool schema accepts every operation's values (9c9850b)
+- c64_batch reports failed commands as errors and limits batch size (2ed404f)
+- name the public tool and required backends in unsupported-backend errors (9cd11cd)
+- report unknown tools and prompts as validation errors listing valid names (ec53cfe)
+- include allowed values and bounds in validation error text (4c3bfcd)
+- bound background tasks and make their persistence robust (d646e87)
+- validate background task operations and keep their results (619430c)
+- pin the backend facade for background tasks at start (10de4a0)
+- forward termination signals from the launcher to its child (6477a98)
+- exit when the client disconnects or a signal arrives (7ee33a8)
+- restrict HTTP MCP transport to loopback Host and Origin (e896684)
+- serve each HTTP MCP request with its own server and transport (200b152)
+- do not echo snapshot file content in config restore parse errors (8fa585b)
+- confine host file paths from tool arguments to allowed directories (f7edb1b)
+
+### Documentation
+
+- list the new environment variables in mcp.json and the generated README table (2bc14c0)
+- update agent guide, VICE support matrix, env variables and skills from the registry; move stale plan and worklog files (11c89fa)
+- add hardening round 2 brief (6c2f160)
+
+### Tests
+
+- wait for the final task writes before checking for temporary files (61aa6fa)
+- ignore the leading power-on silence when locating audio note gaps (2c4d546)
+- give the wait_for_state match case room under parallel load (c0d13ae)
+- stop device tests from relying on the unconfigured c64u fallback (326b862)
+
+### Chores
+
+- stop pull requests pushing the builder image, restrict token permissions and enforce the line coverage threshold (d51d37b)
+
 ## 1.0.7 - 2026-11-05
 
 ### Bug Fixes
