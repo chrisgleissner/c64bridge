@@ -11,6 +11,7 @@ import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
+import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
@@ -247,6 +248,23 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
   } catch {
     return false;
   }
+}
+
+/**
+ * Resources that the VICE config inventory (configsList) advertises and that
+ * snapshot/restore round-trip. They are vetted here and are not host file
+ * names, so c64_config accepts them in addition to the shared c64_vice policy.
+ */
+const VICE_CONFIG_INVENTORY = [
+  "SoundVolume", "Drive8Type", "Drive9Type", "Drive10Type", "Drive11Type",
+  "VICIIBorderMode", "VICIIFullscreen", "MachineVideoStandard", "SidModel",
+] as const;
+
+/** c64_config on VICE follows the same resource policy as c64_vice. */
+function assertAllowedViceResource(name: string): void {
+  if ((VICE_CONFIG_INVENTORY as readonly string[]).includes(name)) return;
+  const problem = resourceNameProblem(name);
+  if (problem) throw new Error(`VICE resource '${name}' is not allowed: ${problem.message}`);
 }
 
 class C64uBackend implements C64Facade {
@@ -1074,10 +1092,7 @@ export class ViceBackend implements C64Facade {
           name: "VICE",
           // Only resources that exist in VICE 3.10; checked against a running x64sc.
           // VICE has no warp, drive-enable or attached-image resources.
-          items: [
-            "SoundVolume", "Drive8Type", "Drive9Type", "Drive10Type", "Drive11Type",
-            "VICIIBorderMode", "VICIIFullscreen", "MachineVideoStandard", "SidModel",
-          ],
+          items: [...VICE_CONFIG_INVENTORY],
         },
       ],
     };
@@ -1095,6 +1110,7 @@ export class ViceBackend implements C64Facade {
         return values;
       });
     }
+    assertAllowedViceResource(item);
     return await this.withClient(async (client) => {
       const res = await client.resourceGet(item as string);
       return { category: _category, item, value: res.value, type: res.type };
@@ -1102,6 +1118,7 @@ export class ViceBackend implements C64Facade {
   }
 
   async configSet(_category: string, item: string, value: string): Promise<RunResult> {
+    assertAllowedViceResource(item);
     let parsed: string | number = value;
     await this.withClient(async (client) => {
       const current = await client.resourceGet(item);
@@ -1117,6 +1134,7 @@ export class ViceBackend implements C64Facade {
       for (const [category, items] of Object.entries(payload)) {
         for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
           try {
+            assertAllowedViceResource(item);
             const current = await client.resourceGet(item);
             const parsed = parseViceConfigValue(value, current.type, item);
             await client.resourceSet(item, parsed);

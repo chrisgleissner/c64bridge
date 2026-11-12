@@ -1174,15 +1174,15 @@ test("device: ViceBackend unit branches", async () => {
         if (name === "Drive11Type") return { type: "int", value: 1571 };
         if (name === "WarpMode") return { type: "int", value: 1 };
         if (name === "MachineVideoStandard") return { type: "string", value: "PAL" };
-        if (name === "DriveLabel") return { type: "string", value: "1541" };
-        if (name === "BadSetting") return { type: "string", value: "" };
+        if (name === "SoundLabel") return { type: "string", value: "1541" };
+        if (name === "SoundBadSetting") return { type: "string", value: "" };
         throw new Error(`unexpected resource ${name}`);
       },
       async resourceSet(name, value) {
         calls.push(["resourceSet", name, value]);
         const driveType = /^Drive(\d+)Type$/.exec(name);
         if (driveType) driveTypes.set(Number(driveType[1]), value);
-        if (name === "BadSetting") {
+        if (name === "SoundBadSetting") {
           throw new Error("write failed");
         }
       },
@@ -1266,20 +1266,20 @@ test("device: ViceBackend unit branches", async () => {
     // HARD01-035: a string resource whose value happens to be all digits
     // ("1541") must not be coerced to the integer 1541 merely because it
     // looks numeric; the resource's declared type governs the payload.
-    const labelResult = await backend.configSet("VICE", "DriveLabel", "1541");
+    const labelResult = await backend.configSet("VICE", "SoundLabel", "1541");
     assert.equal(labelResult.details.value, "1541");
     assert.equal(typeof labelResult.details.value, "string");
-    const labelSetCall = calls.find((c) => c[0] === "resourceSet" && c[1] === "DriveLabel");
+    const labelSetCall = calls.find((c) => c[0] === "resourceSet" && c[1] === "SoundLabel");
     assert.equal(typeof labelSetCall[2], "string");
     assert.equal(labelSetCall[2], "1541");
 
     const batch = await backend.configBatchUpdate({
-      VICE: { WarpMode: "1", BadSetting: "oops" },
+      VICE: { WarpMode: "1", SoundBadSetting: "oops" },
     });
     assert.equal(batch.success, false);
     assert.deepEqual(batch.details.results, [
       { item: "VICE/WarpMode", success: true },
-      { item: "VICE/BadSetting", success: false, error: "write failed" },
+      { item: "VICE/SoundBadSetting", success: false, error: "write failed" },
     ]);
 
     await withEnv({ VICE_TEST_TARGET: undefined }, async () => {

@@ -329,12 +329,12 @@ test("VICE resource writes honor booleans, preserve numeric strings, and reject 
   const backend = Object.create(ViceBackend.prototype);
   const writes = [];
   backend.withClient = async (fn) => fn({
-    async resourceGet(item) { return { type: item === "Label" ? "string" : "int", value: item === "Label" ? "1541" : 1 }; },
+    async resourceGet(item) { return { type: item === "SoundLabel" ? "string" : "int", value: item === "SoundLabel" ? "1541" : 1 }; },
     async resourceSet(item, value) { writes.push([item, value]); },
   });
   await backend.configSet("VICE", "WarpMode", "true");
-  await backend.configBatchUpdate({ VICE: { WarpMode: false, Label: "1541" } });
-  assert.deepEqual(writes, [["WarpMode", 1], ["WarpMode", 0], ["Label", "1541"]]);
+  await backend.configBatchUpdate({ VICE: { WarpMode: false, SoundLabel: "1541" } });
+  assert.deepEqual(writes, [["WarpMode", 1], ["WarpMode", 0], ["SoundLabel", "1541"]]);
   for (const value of ["0.5", "NaN", "Infinity", "2147483648", "-2147483649"]) {
     await assert.rejects(() => backend.configSet("VICE", "WarpMode", value), /32-bit integer/);
   }

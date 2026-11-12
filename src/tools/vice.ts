@@ -19,6 +19,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+import { RESOURCE_NAME_PATTERN, resourceNameProblem } from "../vice/resourcePolicy.js";
 
 interface ViceOperationMap extends OperationMap {
   readonly resource_get: {
@@ -29,18 +30,6 @@ interface ViceOperationMap extends OperationMap {
     readonly value: string | number;
   };
 }
-
-const RESOURCE_NAME_PATTERN = /^[A-Z][A-Za-z0-9_.-]{0,63}$/;
-const SAFE_RESOURCE_PREFIXES = [
-  "C64",
-  "Machine",
-  "Sid",
-  "VIC",
-  "VICII",
-  "CIA",
-  "Joy",
-  "Sound",
-] as const;
 
 const resourceValueSchema: Schema<string | number> = {
   jsonSchema: {
@@ -195,16 +184,8 @@ function handleToolError(error: unknown) {
 }
 
 function ensureSafeResourceName(name: string, path: string): void {
-  if (!RESOURCE_NAME_PATTERN.test(name)) {
-    throw new ToolValidationError(
-      "Resource names must start with an uppercase letter and use letters, numbers, dashes, underscores, or periods.",
-      { path, details: { name } },
-    );
-  }
-  if (!SAFE_RESOURCE_PREFIXES.some((prefix) => name.startsWith(prefix))) {
-    throw new ToolValidationError(
-      `Resource name must start with one of: ${SAFE_RESOURCE_PREFIXES.join(", ")}`,
-      { path, details: { name } },
-    );
+  const problem = resourceNameProblem(name);
+  if (problem) {
+    throw new ToolValidationError(problem.message, { path, details: { name } });
   }
 }
