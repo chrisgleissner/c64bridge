@@ -23,9 +23,15 @@ function debugLog(...args) {
     console.error("[device.test]", ...args);
   }
 }
-// Points the no-config fallback probe at a closed loopback port, so tests never
-// send requests to a real "c64u" host on the local network.
-const UNREACHABLE_C64U_ENV = { C64U_HOST: "127.0.0.1", C64U_PORT: "9", C64U_PASSWORD: undefined };
+// The unconfigured fallback probes the default "c64u" host. Routing HTTP through
+// a closed loopback proxy makes that probe fail without sending any request to
+// a real "c64u" host on the local network. (A C64U_* variable no longer works
+// here: it selects the c64u backend explicitly.)
+const UNREACHABLE_C64U_ENV = {
+  C64U_HOST: undefined, C64U_PORT: undefined, C64U_PASSWORD: undefined,
+  U2_HOST: undefined, U2_PORT: undefined, U2_PASSWORD: undefined,
+  HTTP_PROXY: "http://127.0.0.1:9", http_proxy: "http://127.0.0.1:9", NO_PROXY: undefined, no_proxy: undefined,
+};
 const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;

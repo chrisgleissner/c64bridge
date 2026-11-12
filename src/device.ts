@@ -197,9 +197,14 @@ function coalesceMemoryWriteBlocks(
 function readConfigFile(): BackendConfig {
   const config = loadConfig();
   const sections = config.backendConfig;
+  // An endpoint environment variable selects that backend explicitly, like a
+  // config section does, so an offline device is reported as unreachable
+  // instead of silently replaced by an emulator.
+  const envSelects = (prefix: "C64U_" | "U2_") => ["HOST", "PORT", "PASSWORD"]
+    .some((suffix) => (process.env[`${prefix}${suffix}`] ?? "").trim() !== "");
   return {
-    c64u: sections.c64u || config.legacyUltimateEndpoint ? config.ultimate.c64u : undefined,
-    u2: sections.u2 ? config.ultimate.u2 : undefined,
+    c64u: sections.c64u || config.legacyUltimateEndpoint || envSelects("C64U_") ? config.ultimate.c64u : undefined,
+    u2: sections.u2 || envSelects("U2_") ? config.ultimate.u2 : undefined,
     vice: sections.vice as ViceConfig | undefined,
     endpoints: config.ultimate,
   };
