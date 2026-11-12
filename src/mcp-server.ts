@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import "./bootstrap/stdio-logger.js";
-import { createServer } from "node:http";
+import { createServer, type IncomingHttpHeaders } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -65,6 +66,42 @@ export function parseCliOptions(argv: string[]): CliOptions {
   }
   const portCandidate = argv[httpIndex + 1];
   return { mode: "http", port: parsePort(portCandidate) };
+}
+
+/**
+ * DNS-rebinding and cross-origin protection for the HTTP transport. Returns
+ * the rejection (status and message) or null when the request may proceed.
+ * Host must be a loopback name with the listening port, any Origin must be a
+ * loopback http origin on that port, and when a token is configured the
+ * request must carry the matching bearer token.
+ */
+export function checkHttpRequestAccess(
+  headers: IncomingHttpHeaders,
+  port: number,
+  token?: string,
+): { status: number; message: string } | null {
+  const allowedHosts = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`];
+  const host = headers.host?.toLowerCase();
+  if (!host || !allowedHosts.includes(host)) {
+    return { status: 403, message: "Forbidden: invalid Host header" };
+  }
+  const origin = headers.origin;
+  if (origin !== undefined) {
+    const allowedOrigins = allowedHosts.map((entry) => `http://${entry}`);
+    if (typeof origin !== "string" || !allowedOrigins.includes(origin.toLowerCase())) {
+      return { status: 403, message: "Forbidden: invalid Origin header" };
+    }
+  }
+  if (token) {
+    const header = headers.authorization;
+    const presented = typeof header === "string" && /^Bearer /i.test(header) ? header.slice(7) : "";
+    const expectedBuffer = Buffer.from(token, "utf8");
+    const presentedBuffer = Buffer.from(presented, "utf8");
+    if (presentedBuffer.length !== expectedBuffer.length || !timingSafeEqual(presentedBuffer, expectedBuffer)) {
+      return { status: 401, message: "Unauthorized" };
+    }
+  }
+  return null;
 }
 
 function parsePort(raw?: string): number | undefined {
@@ -500,7 +537,18 @@ async function main() {
   const cli = parseCliOptions(process.argv.slice(2));
   if (cli.mode === "http") {
     const port = cli.port ?? 3000;
+    const httpToken = process.env.C64BRIDGE_HTTP_TOKEN || undefined;
+    if (httpToken) {
+      registerSecret(httpToken);
+    }
     const httpServer = createServer((request, response) => {
+      const rejection = checkHttpRequestAccess(request.headers, port, httpToken);
+      if (rejection) {
+        response.statusCode = rejection.status;
+        if (rejection.status === 401) response.setHeader("WWW-Authenticate", "Bearer");
+        response.end(rejection.message);
+        return;
+      }
       if (request.url?.split("?")[0] !== "/mcp") {
         response.statusCode = 404;
         response.end("Not found");

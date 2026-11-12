@@ -136,3 +136,48 @@ test("R-01 HTTP mode serves initialize, tools/list and tools/call in sequence", 
   const again = await rpc(port, { jsonrpc: "2.0", id: 4, method: "tools/list", params: {} });
   assert.equal(again.status, 200);
 });
+
+async function rawStatus(port, headers) {
+  // fetch() forbids overriding Host, so use node:http for the Host tests.
+  const http = await import("node:http");
+  return await new Promise((resolve, reject) => {
+    const req = http.request(
+      { host: "127.0.0.1", port, path: "/mcp", method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers } },
+      (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode));
+      },
+    );
+    req.on("error", reject);
+    req.end(JSON.stringify(initializeBody));
+  });
+}
+
+test("S-03 HTTP mode rejects foreign Host and Origin headers and accepts loopback ones", async (t) => {
+  const { port } = await startHttpServer(t);
+  assert.equal(await rawStatus(port, { host: "evil.example" }), 403);
+  assert.equal(await rawStatus(port, { host: "evil.example:" + port }), 403);
+  assert.equal(await rawStatus(port, { host: `127.0.0.1:${port + 1}` }), 403);
+  assert.equal(await rawStatus(port, { origin: "http://evil.example" }), 403);
+  assert.equal(await rawStatus(port, { origin: `https://127.0.0.1:${port}` }), 403);
+  assert.equal(await rawStatus(port, { origin: "null" }), 403);
+
+  assert.equal(await rawStatus(port, { host: `localhost:${port}` }), 200);
+  assert.equal(await rawStatus(port, { host: `[::1]:${port}` }), 200);
+  assert.equal(await rawStatus(port, { origin: `http://localhost:${port}` }), 200);
+  assert.equal(await rawStatus(port, { origin: `http://127.0.0.1:${port}` }), 200);
+  assert.equal(await rawStatus(port, {}), 200);
+});
+
+test("S-03 C64BRIDGE_HTTP_TOKEN requires a matching bearer token and is not logged", async (t) => {
+  const token = "s3cret-token-value-xyz";
+  const { port, getStderr } = await startHttpServer(t, { C64BRIDGE_HTTP_TOKEN: token });
+  assert.equal(await rawStatus(port, {}), 401);
+  assert.equal(await rawStatus(port, { authorization: "Bearer wrong-token-value-xyz1" }), 401);
+  assert.equal(await rawStatus(port, { authorization: "Bearer short" }), 401);
+  assert.equal(await rawStatus(port, { authorization: token }), 401);
+  assert.equal(await rawStatus(port, { authorization: `Bearer ${token}` }), 200);
+  const ok = await rpc(port, initializeBody, { authorization: `Bearer ${token}` });
+  assert.equal(ok.status, 200);
+  assert.ok(!getStderr().includes(token));
+});
