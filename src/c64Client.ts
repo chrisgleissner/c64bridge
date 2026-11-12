@@ -945,6 +945,7 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.reset();
+      if (res.success) this.clearExplicitPause(facade);
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -955,6 +956,7 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.reboot();
+      if (res.success) this.clearExplicitPause(facade);
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1282,7 +1284,21 @@ export class C64Client {
   }
 
   async poweroff(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.poweroff(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try {
+      const facade = await this.facadePromise;
+      const result = await facade.poweroff();
+      if (result.success) this.clearExplicitPause(facade);
+      return result;
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /**
+   * A reset, reboot, power-off or power cycle restarts the CPU, so an explicit
+   * `c64_system pause` no longer holds. Without clearing the flag, later tool
+   * calls would skip their own pause and read or write a running machine.
+   */
+  private clearExplicitPause(facade: C64Facade): void {
+    this.pauseStateFor(facade).explicit = false;
   }
 
   /**
@@ -1291,6 +1307,14 @@ export class C64Client {
    * VICE is restarted when it is managed by c64bridge.
    */
   async powerCycle(): Promise<RunBasicResult> {
+    let facade: C64Facade | undefined;
+    try { facade = await this.facadePromise; } catch { facade = undefined; }
+    const result = await this.powerCycleActiveBackend();
+    if (result.success && facade) this.clearExplicitPause(facade);
+    return result;
+  }
+
+  private async powerCycleActiveBackend(): Promise<RunBasicResult> {
     let menuOpened = false;
     let cleanup: RunBasicResult | undefined;
     let pinnedFacade: C64Facade | undefined;

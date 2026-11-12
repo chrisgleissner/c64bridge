@@ -240,6 +240,21 @@ test("R-07 an explicit pause survives a tool call that pauses and resumes", asyn
   assert.equal(mock.state.paused, false);
 });
 
+test("R-07 a reset ends an explicit pause, so the next tool call pauses the device itself", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+
+  assert.equal((await machineControlModule.invoke("pause", {}, ctx)).isError, undefined);
+  assert.equal((await machineControlModule.invoke("reset_c64", {}, ctx)).isError, undefined);
+  mock.state.requestOrder.length = 0;
+  const written = await writeCall(ctx, "$0400", "AA");
+  assert.equal(written.metadata?.success, true, JSON.stringify(written.content));
+  assert.equal(deviceCalls(mock, "pause"), 1);
+  assert.equal(deviceCalls(mock, "resume"), 1);
+});
+
 test("R-07 an explicit resume during a tool call leaves the device resume to the call", async (t) => {
   const mock = await startMockC64Server();
   t.after(() => mock.close());
