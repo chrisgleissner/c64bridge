@@ -223,6 +223,24 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
   return schema;
 }
 
+/**
+ * Returns the input schema as published on the wire. The per-operation schemas in
+ * "x-c64bridge-operations" duplicate the property information of the flattened
+ * schema and roughly halve its size, so they are omitted unless a client opts in
+ * with C64BRIDGE_VERBOSE_SCHEMA=1. The registry keeps them for documentation generators.
+ */
+export function publishedInputSchema(
+  schema: JsonSchema | undefined,
+  options: { verbose?: boolean } = {},
+): JsonSchema | undefined {
+  const verbose = options.verbose ?? process.env.C64BRIDGE_VERBOSE_SCHEMA === "1";
+  if (!schema || verbose || !("x-c64bridge-operations" in schema)) {
+    return schema;
+  }
+  const { "x-c64bridge-operations": _operations, ...published } = schema;
+  return published;
+}
+
 const OP_LIMITS_NOTE = "Limits depend on op.";
 
 const WIDENABLE_KEYS = new Set([

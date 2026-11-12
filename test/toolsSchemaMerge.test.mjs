@@ -182,3 +182,14 @@ test("identical property schemas stay untouched", () => {
   });
   assert.deepEqual(schema.properties.value, prop);
 });
+
+test("publishedInputSchema strips x-c64bridge-operations unless verbose", async () => {
+  const { publishedInputSchema } = await import("../src/tools/types.js");
+  const tool = groupedTools[0];
+  const published = publishedInputSchema(tool.inputSchema, { verbose: false });
+  assert.equal("x-c64bridge-operations" in published, false);
+  assert.deepEqual(published.properties, tool.inputSchema.properties);
+  assert.ok(tool.inputSchema["x-c64bridge-operations"], "registry keeps the per-op data");
+  assert.equal(publishedInputSchema(tool.inputSchema, { verbose: true }), tool.inputSchema);
+  assert.equal(publishedInputSchema(undefined), undefined);
+});

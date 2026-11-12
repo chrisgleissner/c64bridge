@@ -31,7 +31,7 @@ import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
-import type { ToolRunResult } from "./tools/types.js";
+import { publishedInputSchema, type ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import axios, { type AxiosResponse } from "axios";
@@ -351,7 +351,7 @@ async function main() {
           name: tool.name,
           title: tool.metadata.summary,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema: publishedInputSchema(tool.inputSchema),
           _meta: tool.metadata,
         })),
       };
