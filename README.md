@@ -756,11 +756,11 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 | `get` | Read a configuration category or specific item. | `category` | `item`, `includeSecretValues=false` | ✅ | ✅ | ✅ |
 | `info` | Retrieve Ultimate hardware information and status. | — | — | ✅ | ✅ | ✅ |
 | `list` | List configuration categories reported by the firmware. | — | — | ✅ | ✅ | ✅ |
-| `load_flash` | Load configuration from flash storage. | — | — | ✅ | ✅ |  |
+| `load_flash` | Load configuration from flash storage. | — | `category` | ✅ | ✅ |  |
 | `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |  |
-| `reset_defaults` | Reset firmware configuration to factory defaults. | — | — | ✅ | ✅ |  |
+| `reset_defaults` | Reset firmware configuration to factory defaults. | — | `category` | ✅ | ✅ |  |
 | `restore` | Restore configuration from a snapshot file. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
-| `save_flash` | Persist the current configuration to flash storage. | — | — | ✅ | ✅ |  |
+| `save_flash` | Persist the current configuration to flash storage. | — | `category` | ✅ | ✅ |  |
 | `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | ✅ | ✅ | ✅ |
 | `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ |  |
 | `snapshot` | Snapshot configuration to disk for later restore or diff. | `path` | — | ✅ | ✅ | ✅ |

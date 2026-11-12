@@ -835,6 +835,29 @@ export async function startMockC64Server(options = {}) {
       }
     }
 
+    const categoryFlashRoute = /^\/v1\/configs\/([^/:]+):(load_from_flash|save_to_flash|reset_to_default)(?:\?|$)/.exec(url);
+    if (categoryFlashRoute && method === "PUT") {
+      const requested = decodeURIComponent(categoryFlashRoute[1]);
+      const action = categoryFlashRoute[2];
+      const category = Object.keys(state.configs).find((name) => name.toLowerCase() === requested.toLowerCase());
+      if (!category) {
+        sendJson(res, { errors: [`Category ${requested} not found`] }, 404);
+        return;
+      }
+      const clone = (value) => JSON.parse(JSON.stringify(value));
+      if (action === "load_from_flash") {
+        if (state.flashSnapshot?.[category]) state.configs[category] = clone(state.flashSnapshot[category]);
+      } else if (action === "save_to_flash") {
+        state.flashSnapshot = state.flashSnapshot ?? {};
+        state.flashSnapshot[category] = clone(state.configs[category]);
+      } else {
+        state.configs[category] = clone(createDefaultConfigs()[category] ?? {});
+      }
+      state.lastConfigAction = { action, category };
+      sendJson(res, { result: action, category });
+      return;
+    }
+
     if (url.startsWith("/v1/configs/")) {
       const routeUrl = new URL(url, "http://mock.local");
       const segments = routeUrl.pathname.split("/").filter(Boolean).slice(2).map((segment) => decodeURIComponent(segment)); // remove v1 + configs

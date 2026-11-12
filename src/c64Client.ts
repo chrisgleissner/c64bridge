@@ -1547,16 +1547,16 @@ export class C64Client {
     try { const facade = await this.facadePromise; return await facade.configBatchUpdate(payload); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async configLoadFromFlash(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.configLoadFromFlash(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  async configLoadFromFlash(category?: string): Promise<RunBasicResult> {
+    try { const facade = await this.facadePromise; return await facade.configLoadFromFlash(category); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async configSaveToFlash(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.configSaveToFlash(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  async configSaveToFlash(category?: string): Promise<RunBasicResult> {
+    try { const facade = await this.facadePromise; return await facade.configSaveToFlash(category); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
-  async configResetToDefault(): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.configResetToDefault(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  async configResetToDefault(category?: string): Promise<RunBasicResult> {
+    try { const facade = await this.facadePromise; return await facade.configResetToDefault(category); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async filesInfo(path: string): Promise<unknown> {

@@ -91,9 +91,9 @@ export interface C64Facade {
   configGet(category: string, item?: string): Promise<unknown>;
   configSet(category: string, item: string, value: string): Promise<RunResult>;
   configBatchUpdate(payload: Record<string, object>): Promise<RunResult>;
-  configLoadFromFlash(): Promise<RunResult>;
-  configSaveToFlash(): Promise<RunResult>;
-  configResetToDefault(): Promise<RunResult>;
+  configLoadFromFlash(category?: string): Promise<RunResult>;
+  configSaveToFlash(category?: string): Promise<RunResult>;
+  configResetToDefault(category?: string): Promise<RunResult>;
   filesInfo(path: string): Promise<unknown>;
   filesCreateD64(path: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult>;
   filesCreateD71(path: string, options?: { diskname?: string }): Promise<RunResult>;
@@ -473,9 +473,9 @@ class C64uBackend implements C64Facade {
   async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
   async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
   async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return this.actionResult(res.data); }
-  async configLoadFromFlash(): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(":load_from_flash"); return this.actionResult(res.data); }
-  async configSaveToFlash(): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(":save_to_flash"); return this.actionResult(res.data); }
-  async configResetToDefault(): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(":reset_to_default"); return this.actionResult(res.data); }
+  async configLoadFromFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(configActionRoute(":load_from_flash", category)); return this.actionResult(res.data); }
+  async configSaveToFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(configActionRoute(":save_to_flash", category)); return this.actionResult(res.data); }
+  async configResetToDefault(category?: string): Promise<RunResult> { const res = await this.api.v1.configsResetToDefaultUpdate(configActionRoute(":reset_to_default", category)); return this.actionResult(res.data); }
   async filesInfo(p: string): Promise<unknown> { const res = await this.api.v1.filesInfoDetail(encodeDevicePath(p), ":info"); return res.data; }
   async filesCreateD64(p: string, options?: { tracks?: number; diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD64Update(encodeDevicePath(p), ":create_d64", { tracks: options?.tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateD71(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD71Update(encodeDevicePath(p), ":create_d71", { diskname: options?.diskname }); return this.actionResult(res.data); }
@@ -1178,6 +1178,11 @@ function unsupported(name: string): Error { const err = new Error(`Operation '${
 
 /** Ultimate file APIs treat slash as a path separator. Encode each name once,
  * preserving leading and nested separators for firmware routing. */
+/** Whole-device route suffix, or `/{category}:action` for one category (the generated client prefixes `/v1/configs`). */
+function configActionRoute(action: string, category?: string): string {
+  return category === undefined ? action : `/${encodeURIComponent(category)}${action}`;
+}
+
 function encodeDevicePath(value: string): string {
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }

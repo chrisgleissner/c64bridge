@@ -41,6 +41,17 @@ const noArgsSchema = objectSchema<Record<string, never>>({
   additionalProperties: false,
 });
 
+const flashCategoryArgsSchema = objectSchema<{ category?: string }>({
+  description: "Optional configuration category; omit to apply to the whole device configuration.",
+  properties: {
+    category: optionalSchema(stringSchema({
+      description: "Configuration category name (e.g. 'Audio Mixer'). Omit to act on every category.",
+      minLength: 1,
+    })),
+  },
+  additionalProperties: false,
+});
+
 const categorySchema = stringSchema({
   description: "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
   minLength: 1,
@@ -384,7 +395,7 @@ export const developerModule = defineToolModule({
       name: "config_load_from_flash",
       description: "Load configuration settings from flash storage.",
       summary: "Restores the firmware configuration by reading the persisted flash snapshot.",
-      inputSchema: noArgsSchema.jsonSchema,
+      inputSchema: flashCategoryArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "flash"],
       examples: [
@@ -395,17 +406,17 @@ export const developerModule = defineToolModule({
       ],
       async execute(args, ctx) {
         try {
-          noArgsSchema.parse(args ?? {});
-          ctx.logger.info("Loading configuration from flash");
+          const { category } = flashCategoryArgsSchema.parse(args ?? {});
+          ctx.logger.info("Loading configuration from flash", { category });
 
-          const result = await ctx.client.configLoadFromFlash();
+          const result = await ctx.client.configLoadFromFlash(category);
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while loading from flash", {
               details: toRecord(result.details),
             });
           }
 
-          return textResult("Configuration loaded from flash.", {
+          return textResult(`Configuration${category ? ` category ${category}` : ""} loaded from flash.`, {
             success: true,
             details: toRecord(result.details) ?? null,
           });
@@ -421,7 +432,7 @@ export const developerModule = defineToolModule({
       name: "config_save_to_flash",
       description: "Persist current configuration settings to flash storage.",
       summary: "Saves the active configuration snapshot so it survives power cycles.",
-      inputSchema: noArgsSchema.jsonSchema,
+      inputSchema: flashCategoryArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "flash"],
       examples: [
@@ -432,17 +443,17 @@ export const developerModule = defineToolModule({
       ],
       async execute(args, ctx) {
         try {
-          noArgsSchema.parse(args ?? {});
-          ctx.logger.info("Saving configuration to flash");
+          const { category } = flashCategoryArgsSchema.parse(args ?? {});
+          ctx.logger.info("Saving configuration to flash", { category });
 
-          const result = await ctx.client.configSaveToFlash();
+          const result = await ctx.client.configSaveToFlash(category);
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while saving to flash", {
               details: toRecord(result.details),
             });
           }
 
-          return textResult("Configuration saved to flash.", {
+          return textResult(`Configuration${category ? ` category ${category}` : ""} saved to flash.`, {
             success: true,
             details: toRecord(result.details) ?? null,
           });
@@ -458,7 +469,7 @@ export const developerModule = defineToolModule({
       name: "config_reset_to_default",
       description: "Reset configuration categories to their factory defaults.",
       summary: "Instructs the firmware to discard overrides and restore default configuration values.",
-      inputSchema: noArgsSchema.jsonSchema,
+      inputSchema: flashCategoryArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "reset"],
       examples: [
@@ -469,17 +480,17 @@ export const developerModule = defineToolModule({
       ],
       async execute(args, ctx) {
         try {
-          noArgsSchema.parse(args ?? {});
-          ctx.logger.info("Resetting configuration to defaults");
+          const { category } = flashCategoryArgsSchema.parse(args ?? {});
+          ctx.logger.info("Resetting configuration to defaults", { category });
 
-          const result = await ctx.client.configResetToDefault();
+          const result = await ctx.client.configResetToDefault(category);
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while resetting configuration", {
               details: toRecord(result.details),
             });
           }
 
-          return textResult("Configuration reset to defaults.", {
+          return textResult(`Configuration${category ? ` category ${category}` : ""} reset to defaults.`, {
             success: true,
             details: toRecord(result.details) ?? null,
           });
