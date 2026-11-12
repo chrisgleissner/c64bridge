@@ -225,6 +225,25 @@ function uploadFile(bytes: Uint8Array, name: string): File {
   return new File([Uint8Array.from(bytes)], name, { type: "application/octet-stream" });
 }
 
+/**
+ * Reachability probe for an Ultimate REST endpoint: GET <baseUrl>/v1/version,
+ * keeping any reverse-proxy path prefix. Any HTTP response, including 403 or
+ * 404, shows that a server answers at the address; only a transport failure
+ * (refused, unreachable, timeout) counts as unreachable.
+ */
+export async function probeUltimateReachable(baseUrl: string, timeout: number, networkPassword?: string): Promise<boolean> {
+  try {
+    await axios.get(`${baseUrl.replace(/\/+$/, "")}/v1/version`, {
+      timeout,
+      headers: buildC64uHeaders(networkPassword),
+      validateStatus: () => true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 class C64uBackend implements C64Facade {
   readonly type: "c64u" | "u2";
   private readonly baseUrl: string;
@@ -261,13 +280,7 @@ class C64uBackend implements C64Facade {
   }
 
   async ping(): Promise<boolean> {
-    try {
-      const res = await axios.get(this.baseUrl, {
-        timeout: 2000,
-        headers: buildC64uHeaders(this.networkPassword),
-      });
-      return res.status >= 200 && res.status < 500;
-    } catch { return false; }
+    return probeUltimateReachable(this.baseUrl, 2000, this.networkPassword);
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
@@ -1393,14 +1406,11 @@ export async function createFacade(logger?: { info: (...a: any[]) => void }, opt
   }
   // No configuration
   const probeBase = cfg.endpoints.c64u.baseUrl;
-  try {
-    const res = await axios.get(probeBase, { timeout: 1500 });
-    if (res.status >= 200 && res.status < 500) {
-      const backend = new C64uBackend(cfg.endpoints.c64u);
-      logger?.info?.("Active backend: c64u (fallback – hardware reachable)");
-      return { facade: backend, selected: "c64u", reason: "fallback (reachable)", details: { baseUrl: probeBase } };
-    }
-  } catch {}
+  if (await probeUltimateReachable(probeBase, 1500, cfg.endpoints.c64u.networkPassword)) {
+    const backend = new C64uBackend(cfg.endpoints.c64u);
+    logger?.info?.("Active backend: c64u (fallback – hardware reachable)");
+    return { facade: backend, selected: "c64u", reason: "fallback (reachable)", details: { baseUrl: probeBase } };
+  }
   const backend = new ViceBackend(cfg.vice ?? {});
   logger?.info?.("Active backend: vice (fallback – hardware unavailable)");
   const endpoint = backend.getEndpoint();
