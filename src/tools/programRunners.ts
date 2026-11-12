@@ -328,7 +328,7 @@ const uploadAsmArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Run post-execution polling to confirm the assembly program remained stable.",
+      description: "Treat missing evidence of execution as an error. The bytes read back at the load address must always match the assembled program (a mismatch is an error either way). With verify:true, a program that loaded but changed nothing on screen is an error; with verify:false it returns success with execution:\"unconfirmed\" (SID players, border effects and JMP * loops change no screen RAM).",
       default: false,
     }),
   },
@@ -614,20 +614,44 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       );
     }
 
-    // Poll for ASM execution outcome
+    // Read back the program bytes (load evidence), then poll for signs of execution.
     let verified = false;
+    let execution: "confirmed" | "unconfirmed" | undefined;
+    let loadCheck: string | undefined;
+    const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
     try {
-      const outcome = await pollForProgramOutcome("ASM", ctx.client, ctx.logger);
-      if (outcome.status === "crashed") {
-        ctx.logger.warn("Polling detected ASM program crash", { reason: outcome.reason });
-        return toolErrorResult(
-          new ToolExecutionError("Assembly program appears to have crashed (no screen changes detected)", {
-            details: { reason: outcome.reason },
-          }),
-        );
-      }
-      if (shouldVerify) {
-        verified = true;
+      const outcome = await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, {
+        address: loadAddress,
+        bytes: prg.subarray(2),
+      });
+      if (outcome.type === "ASM") {
+        loadCheck = outcome.loadCheck;
+        if (outcome.status === "not_loaded") {
+          ctx.logger.warn("ASM program was not loaded", { reason: outcome.reason });
+          return toolErrorResult(
+            new ToolExecutionError(
+              `Assembly program was not loaded: ${outcome.reason}. The backend reported success, but the bytes read back at the load address differ from the assembled program (a program that overwrites its own first bytes also looks like this).`,
+              { details: { reason: outcome.reason, ...(outcome.load ? { loadAddress: outcome.load.address, expected: outcome.load.expected, found: outcome.load.found } : {}) } },
+            ),
+          );
+        }
+        if (outcome.status === "unconfirmed") {
+          if (shouldVerify) {
+            ctx.logger.warn("ASM execution could not be verified", { reason: outcome.reason });
+            return toolErrorResult(
+              new ToolExecutionError(
+                "Assembly program was loaded, but no screen change was observed, so its execution could not be verified",
+                { details: { reason: outcome.reason, loadCheck: outcome.loadCheck, execution: "unconfirmed" } },
+              ),
+            );
+          }
+          execution = "unconfirmed";
+        } else {
+          execution = "confirmed";
+          if (shouldVerify) {
+            verified = true;
+          }
+        }
       }
     } catch (pollError) {
       ctx.logger.debug("Polling encountered an error", toRecord(pollError));
@@ -646,13 +670,20 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       entryAddress,
       prgSize: prg.length,
       resources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
+      ...(loadCheck ? { loadCheck } : {}),
+      ...(execution ? { execution } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
     };
-    const base = textResult("Assembly program assembled, uploaded, and executed successfully.", {
+    const message = execution === "unconfirmed"
+      ? "Assembly program assembled, uploaded and loaded. No screen change was observed, so it is not confirmed that the program is running (a SID player, a border effect or a JMP * loop looks like this)."
+      : "Assembly program assembled, uploaded, and executed successfully.";
+    const base = textResult(message, {
       success: true,
       entryAddress,
       prgSize: prg.length,
       details: result.details ?? null,
+      ...(loadCheck ? { loadCheck } : {}),
+      ...(execution ? { execution } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
     });
     return { ...base, structuredContent: { type: "json", data } };

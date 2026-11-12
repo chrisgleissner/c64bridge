@@ -1,6 +1,27 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { programRunnersModule } from "../src/tools/programRunners.js";
+import { assemblyToPrg } from "../src/tools/translation/assembler.js";
+// A backend that really loaded the program returns its bytes at the load
+// address (the readback upload_run_asm now performs); every other read goes to
+// the test's own memory behaviour.
+function withProgramLoaded(ctx, source) {
+  const prg = assemblyToPrg(source);
+  const loadAddress = prg.readUInt16LE(0);
+  const body = prg.subarray(2);
+  const inner = ctx.client.readMemoryRaw?.bind(ctx.client) ?? (async (_address, length) => new Uint8Array(length));
+  return {
+    ...ctx,
+    client: {
+      ...ctx.client,
+      async readMemoryRaw(address, length) {
+        if (address === loadAddress && length <= 16) return Uint8Array.from(body.subarray(0, length));
+        return inner(address, length);
+      },
+    },
+  };
+}
+
 
 function createLogger() {
   return {
@@ -59,7 +80,7 @@ test("ASM program with screen changes is detected as ok", async () => {
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\n lda #$01\n sta $0400\n rts" },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\n lda #$01\n sta $0400\n rts"),
     );
     
     assert.equal(result.isError, undefined);
@@ -71,7 +92,7 @@ test("ASM program with screen changes is detected as ok", async () => {
   }
 });
 
-test("ASM program with no screen changes is detected as crashed", async () => {
+test("ASM program with no screen changes is reported as loaded but unconfirmed, and an error with verify", async () => {
   const restoreStabilize = withPollStabilize(0);
   const screens = [
     "READY.\n",
@@ -99,14 +120,18 @@ test("ASM program with no screen changes is detected as crashed", async () => {
   };
   
   try {
-    const result = await programRunnersModule.invoke(
-      "upload_run_asm",
-      { program: ".org $0801\nloop: jmp loop" }, // Infinite loop
-      ctx,
-    );
-    
-    assert.equal(result.isError, true);
-    assert.ok(result.content[0].text.includes("crashed"));
+    const program = ".org $0801\nloop: jmp loop"; // Infinite loop: nothing changes on screen.
+    const plain = await programRunnersModule.invoke("upload_run_asm", { program }, withProgramLoaded(ctx, program));
+    assert.equal(plain.isError, undefined, JSON.stringify(plain.content));
+    assert.equal(plain.structuredContent.data.execution, "unconfirmed");
+    assert.equal(plain.metadata.execution, "unconfirmed");
+    assert.match(plain.content[0].text, /no screen change was observed/i);
+    assert.ok(!/crash/i.test(plain.content[0].text));
+
+    const verified = await programRunnersModule.invoke("upload_run_asm", { program, verify: true }, withProgramLoaded(ctx, program));
+    assert.equal(verified.isError, true);
+    assert.match(verified.content[0].text, /no screen change was observed/i);
+    assert.ok(!/crashed/.test(verified.content[0].text));
   } finally {
     restoreStabilize();
   }
@@ -146,11 +171,12 @@ test("ASM polling respects environment variables", async () => {
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\nrts" },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\nrts"),
     );
     
-    // With short timeout, should quickly timeout and report crashed
-    assert.equal(result.isError, true);
+    // With a short timeout the poll ends quickly without screen evidence.
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.data.execution, "unconfirmed");
   } finally {
     delete process.env.C64BRIDGE_POLL_MAX_MS;
     delete process.env.C64BRIDGE_POLL_INTERVAL_MS;
@@ -187,7 +213,7 @@ test("HARD01-036 ASM program with no RUN echo is ok only when screen RAM genuine
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\nrts" },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\nrts"),
     );
 
     assert.equal(result.isError, undefined);
@@ -213,7 +239,7 @@ test("ASM routine that returns to BASIC with RTS is ok, not crashed", async () =
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: "* = $c000\n inc $d020\n rts" },
-      ctx,
+      withProgramLoaded(ctx, "* = $c000\n inc $d020\n rts"),
     );
     assert.equal(result.isError, undefined, JSON.stringify(result.content));
   } finally {
@@ -238,8 +264,31 @@ test("ASM routine whose READY. appears after the first screen read is ok, not cr
   };
 
   try {
-    const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $c000\n inc $d020\n rts" }, ctx);
+    const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $c000\n inc $d020\n rts" }, withProgramLoaded(ctx, "* = $c000\n inc $d020\n rts"));
     assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  } finally {
+    restoreStabilize();
+  }
+});
+
+test("ASM program that was never loaded is an error with and without verify (HARD01-036)", async () => {
+  const restoreStabilize = withPollStabilize(0);
+  const ctx = {
+    client: {
+      async uploadAndRunAsm() { return { success: true }; }, // the U2 firmware answers success without loading
+      async readScreen() { return "READY.\n"; },
+      async readMemoryRaw(_address, length) { return new Uint8Array(length); }, // zeros: nothing was loaded
+    },
+    logger: createLogger(),
+  };
+  try {
+    for (const verify of [false, true]) {
+      const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $c000\n lda #$01\n sta $d020\n rts", verify }, ctx);
+      assert.equal(result.isError, true, `verify ${verify}`);
+      assert.match(result.content[0].text, /was not loaded/);
+      assert.equal(result.metadata.error.details.loadAddress, 0xc000);
+      assert.equal(result.metadata.error.details.expected, "A9 01 8D 20 D0 60");
+    }
   } finally {
     restoreStabilize();
   }

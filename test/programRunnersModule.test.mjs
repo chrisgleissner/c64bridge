@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { __programRunnerHelpersForTests, programOperationHandlers, programRunnersModule } from "../src/tools/programRunners.js";
+import { assemblyToPrg } from "../src/tools/translation/assembler.js";
 import { ToolUnsupportedPlatformError } from "../src/tools/errors.js";
 import { clearViceSymbols, getViceSymbol, setViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
@@ -13,6 +14,26 @@ function createLogger() {
     info() {},
     warn() {},
     error() {},
+  };
+}
+
+// A backend that really loaded the program returns its bytes at the load
+// address (the readback upload_run_asm now performs); every other read goes to
+// the test's own memory behaviour.
+function withProgramLoaded(ctx, source) {
+  const prg = assemblyToPrg(source);
+  const loadAddress = prg.readUInt16LE(0);
+  const body = prg.subarray(2);
+  const inner = ctx.client.readMemoryRaw?.bind(ctx.client) ?? (async (_address, length) => new Uint8Array(length));
+  return {
+    ...ctx,
+    client: {
+      ...ctx.client,
+      async readMemoryRaw(address, length) {
+        if (address === loadAddress && length <= 16) return Uint8Array.from(body.subarray(0, length));
+        return inner(address, length);
+      },
+    },
   };
 }
 
@@ -904,7 +925,7 @@ test("upload_run_asm returns structured content on success", async () => {
   const result = await programRunnersModule.invoke(
     "upload_run_asm",
     { program: ".org $0801\n rts" },
-    ctx,
+    withProgramLoaded(ctx, ".org $0801\n rts"),
   );
 
   assert.equal(result.isError, undefined);
@@ -954,7 +975,7 @@ test("upload_run_asm verify true annotates metadata", async () => {
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: asmSource, verify: true },
-      ctx,
+      withProgramLoaded(ctx, asmSource),
     );
 
     assert.equal(result.isError, undefined);
@@ -1008,7 +1029,7 @@ test("upload_run_asm reports crashed programs when verification detects no progr
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\nstart: rts", verify: true },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\nstart: rts"),
     );
 
     assert.equal(result.isError, true);
@@ -1057,7 +1078,7 @@ test("upload_run_asm verify tolerates transient screen read failures and still v
     const result = await programRunnersModule.invoke(
       "upload_run_asm",
       { program: ".org $0801\nstart: rts", verify: true },
-      ctx,
+      withProgramLoaded(ctx, ".org $0801\nstart: rts"),
     );
 
     assert.equal(result.isError, undefined);
