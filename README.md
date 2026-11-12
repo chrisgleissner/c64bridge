@@ -892,7 +892,7 @@ Grouped entry point for program upload, execution, and batch workflows.
 | `run_crt` | Mount and run a CRT cartridge image. | `path` | — | ✅ | ✅ |  |
 | `run_prg` | Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. | `path` | `symbolsFile` | ✅ | ✅ | ✅ |
 | `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
-| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
+| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. Supports verification. | `program` | `verify=false`, `autoFix=true` | ✅ | ✅ | ✅ |
 
 #### c64_rag
 

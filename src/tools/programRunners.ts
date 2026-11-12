@@ -85,6 +85,9 @@ type BasicRuntimeError = {
 type BasicAutoFixChange = {
   readonly line: number;
   readonly notes: readonly string[];
+  /** The program line as submitted and as rewritten. */
+  readonly before: string;
+  readonly after: string;
 };
 
 type BasicAutoFixResult = {
@@ -202,10 +205,13 @@ function attemptAutoFixBasicProgram(
 
     if (notes.length > 0) {
       const updated = content.length > 0 ? `${lineNumber} ${content}` : `${lineNumber}`;
+      const before = rawLine.trim();
       lines[index] = updated;
       changes.push({
         line: lineNumber,
         notes,
+        before,
+        after: updated,
       });
     }
   }
@@ -305,6 +311,10 @@ const uploadBasicArgsSchema = objectSchema({
       description: "Run post-execution polling to ensure the BASIC program executed without errors.",
       default: false,
     }),
+    autoFix: optionalSchema(booleanSchema({
+      description: "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      default: true,
+    })),
   },
   required: ["program"],
   additionalProperties: false,
@@ -402,7 +412,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         });
 
         const normalizedErrors = normalizeRuntimeErrors(errors);
-        const fixAttempt = attemptAutoFixBasicProgram(activeProgram, errors);
+        const fixAttempt = parsed.autoFix === false ? undefined : attemptAutoFixBasicProgram(activeProgram, errors);
         if (!fixAttempt) {
           const data = {
             kind: "basic_runtime_error" as const,
@@ -411,9 +421,15 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
             ...(screenOutput ? { screen: screenOutput } : {}),
             autoFix: {
               attempted: false,
+              ...(parsed.autoFix === false ? { disabled: true } : {}),
             },
           };
-          return structuredExecutionError("Detected BASIC runtime errors after execution.", data);
+          return structuredExecutionError(
+            parsed.autoFix === false
+              ? "Detected BASIC runtime errors after execution. Auto-fix is disabled (autoFix:false), so the program was not rewritten or run again."
+              : "Detected BASIC runtime errors after execution.",
+            data,
+          );
         }
 
         ctx.logger.info("Attempting BASIC auto-fix", {
@@ -514,9 +530,14 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       }
     }
 
+    const changedLines = autoFixInfo
+      ? autoFixInfo.changes.map((change) => `line ${change.line}: "${change.before}" -> "${change.after}"`).join("; ")
+      : "";
     const message = autoFixInfo
-      ? "Detected BASIC errors on execution; applied auto-fix and re-ran successfully."
-      : "BASIC program uploaded and executed successfully.";
+      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run showed no BASIC error on screen.${verified ? "" : " Execution was not verified."}`
+      : verified
+        ? "BASIC program uploaded and executed successfully (verified)."
+        : "BASIC program uploaded and started. No BASIC error was visible on the screen immediately afterwards; pass verify:true to poll for the outcome.";
 
     const metadata = {
       success: true,
@@ -530,6 +551,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
               applied: true,
               changes: autoFixInfo.changes,
               originalErrors: autoFixInfo.originalErrors,
+              programSource: activeProgram,
             },
           }
         : {}),
@@ -546,8 +568,10 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       ...(autoFixInfo
         ? {
             autoFix: {
+              applied: true,
               changes: autoFixInfo.changes,
               originalErrors: autoFixInfo.originalErrors,
+              programSource: activeProgram,
             },
           }
         : {}),

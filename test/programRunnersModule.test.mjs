@@ -1113,3 +1113,62 @@ test("upload_run_basic reports BASIC syntax problems as validation errors naming
   assert.equal(tooBig.metadata.error.kind, "validation");
   assert.match(tooBig.content[0].text, /Line number out of range: 99999 on line 2/);
 });
+
+function autoFixContext(calls) {
+  const screens = ["?SYNTAX ERROR IN 10\nREADY.\n"];
+  return {
+    client: {
+      async uploadAndRunBasic(program) {
+        calls.push(program);
+        return { success: true };
+      },
+      async readScreen() {
+        return screens.shift() ?? "READY.\n";
+      },
+    },
+    logger: createLogger(),
+  };
+}
+
+test("upload_run_basic autoFix:false does not rewrite or re-run the program", async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke(
+    "upload_run_basic",
+    { program: '10 PRINT "HELLO\n20 END', autoFix: false },
+    autoFixContext(calls),
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.data.autoFix.attempted, false);
+  assert.equal(result.structuredContent.data.autoFix.disabled, true);
+  assert.match(result.content[0].text, /not rewritten or run again/);
+});
+
+test("upload_run_basic reports the rewritten lines before and after", async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke(
+    "upload_run_basic",
+    { program: '10 PRINT "HELLO\n20 END' },
+    autoFixContext(calls),
+  );
+  assert.equal(calls.length, 2);
+  assert.equal(result.isError, undefined);
+  const change = result.structuredContent.data.autoFix.changes[0];
+  assert.equal(change.before, '10 PRINT "HELLO');
+  assert.equal(change.after, '10 PRINT "HELLO"');
+  assert.equal(result.metadata.autoFix.changes[0].before, '10 PRINT "HELLO');
+  assert.match(result.content[0].text, /10 PRINT "HELLO" -> .*10 PRINT "HELLO"/);
+  assert.match(result.content[0].text, /second time/);
+});
+
+test("upload_run_basic words an unverified run as started, not executed successfully", async () => {
+  const calls = [];
+  const ctx = autoFixContext(calls);
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: "10 PRINT 1" }, {
+    ...ctx,
+    client: { ...ctx.client, async readScreen() { return "READY.\n"; } },
+  });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /uploaded and started/);
+  assert.ok(!/executed successfully/.test(result.content[0].text));
+});
