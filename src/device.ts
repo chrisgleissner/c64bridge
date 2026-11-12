@@ -1176,13 +1176,13 @@ function parseViceConfigValue(value: unknown, type: string, item: string): strin
 
 function unsupported(name: string): Error { const err = new Error(`Operation '${name}' is not supported by the VICE backend`); (err as any).code = "UNSUPPORTED"; return err; }
 
-/** Ultimate file APIs treat slash as a path separator. Encode each name once,
- * preserving leading and nested separators for firmware routing. */
 /** Whole-device route suffix, or `/{category}:action` for one category (the generated client prefixes `/v1/configs`). */
 function configActionRoute(action: string, category?: string): string {
   return category === undefined ? action : `/${encodeURIComponent(category)}${action}`;
 }
 
+/** Ultimate file APIs treat slash as a path separator. Encode each name once,
+ * preserving leading and nested separators for firmware routing. */
 function encodeDevicePath(value: string): string {
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }
