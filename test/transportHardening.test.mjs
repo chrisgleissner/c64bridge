@@ -159,14 +159,34 @@ test("R-06 time spent waiting in the queue does not count against a request time
   const client = createLoggingHttpClient({ baseURL: `http://127.0.0.1:${server.address().port}`, timeout: 150 }, undefined, new RequestQueue());
   // Four requests of 80 ms each take 320 ms in total; the last one waits 240 ms,
   // longer than the 150 ms timeout, yet must not time out.
-  const results = await Promise.all([1, 2, 3, 4].map(() => client.instance.get("/x")));
+  // The generated client sends every request through `instance.request`.
+  const get = (http) => http.instance.request({ url: "/x", method: "get" });
+  const results = await Promise.all([1, 2, 3, 4].map(() => get(client)));
   assert.equal(results.length, 4);
   assert.equal(max, 1);
 
   // A timed-out request releases the queue for the next one.
   const slow = createLoggingHttpClient({ baseURL: `http://127.0.0.1:${server.address().port}`, timeout: 20 }, undefined, new RequestQueue());
-  const settled = await Promise.allSettled([slow.instance.get("/x"), slow.instance.get("/x")]);
+  const settled = await Promise.allSettled([get(slow), get(slow)]);
   assert.deepEqual(settled.map((entry) => entry.status), ["rejected", "rejected"]);
+});
+
+test("R-06 a request that fails before it is sent releases the queue", async (t) => {
+  const server = http.createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const client = createLoggingHttpClient({ baseURL: `http://127.0.0.1:${server.address().port}`, timeout: 500 }, undefined, new RequestQueue());
+  // A BigInt body cannot be serialised, so axios fails in transformRequest,
+  // before the adapter is called.
+  await assert.rejects(client.instance.request({ url: "/x", method: "post", data: { value: 1n } }));
+  const next = await Promise.race([
+    client.instance.request({ url: "/x", method: "get" }).then(() => "completed"),
+    new Promise((resolve) => setTimeout(() => resolve("stalled"), 1000)),
+  ]);
+  assert.equal(next, "completed");
 });
 
 // ---- R-07 pause ownership -------------------------------------------------

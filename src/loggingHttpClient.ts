@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
+import { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
 import { registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
@@ -85,29 +85,17 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
   });
 
   if (queue) {
-    // Registered after the logging interceptor: axios runs request
-    // interceptors last-registered first, so a request waits for its turn
-    // before its start time is recorded. Axios starts the request timeout when
-    // the adapter is called, so time spent waiting here does not count against
-    // a request's timeout. The gate is released when the adapter settles,
-    // whether the request succeeded, failed or timed out.
-    http.instance.interceptors.request.use(async (request) => {
-      const release = await queue.acquire();
-      try {
-        const inner = axios.getAdapter(request.adapter ?? http.instance.defaults.adapter);
-        request.adapter = async (adapterConfig) => {
-          try {
-            return await inner(adapterConfig);
-          } finally {
-            release();
-          }
-        };
-      } catch (error) {
-        release();
-        throw error;
-      }
-      return request;
-    });
+    // The generated client sends every request through `instance.request`, so
+    // the gate is taken around that call. Interceptors, request transforms and
+    // the adapter all run inside it: the start time is recorded after the wait,
+    // the request timeout (started by the adapter) does not include the wait,
+    // and the gate is released however the request settles, including a
+    // failure before the adapter is called (for example a body that cannot be
+    // serialised).
+    const instance = http.instance;
+    const sendRequest = instance.request.bind(instance);
+    instance.request = ((requestConfig: AxiosRequestConfig) =>
+      queue.run(() => sendRequest(requestConfig))) as typeof instance.request;
   }
 
   http.instance.interceptors.response.use(
