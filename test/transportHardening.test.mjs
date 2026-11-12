@@ -8,6 +8,7 @@ import assert from "#test/assert";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
 import { C64Client } from "../src/c64Client.js";
 import { RequestQueue, createLoggingHttpClient } from "../src/loggingHttpClient.js";
+import { assertMonitorPortFree, startViceProcess, waitForPort } from "../src/vice/process.js";
 import { createFacade, probeUltimateReachable } from "../src/device.js";
 
 async function closedLoopbackPort() {
@@ -334,4 +335,26 @@ test("R-13 packets from another source address are ignored", async (t) => {
   const original = client.resolveCaptureEndpoint.bind(client);
   client.resolveCaptureEndpoint = async (host) => ({ ...(await original(host)), acceptsSource: () => false });
   await assert.rejects(() => client.captureC64uVideoFrames(stub, 1), /Timed out/);
+});
+
+// ---- R-14 VICE monitor port already in use ---------------------------------
+
+test("R-14 a foreign listener on the monitor port is detected before VICE is spawned", async (t) => {
+  const listener = net.createServer((socket) => socket.end());
+  await new Promise((resolve) => listener.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => listener.close(resolve)));
+  const { port } = listener.address();
+
+  // Confirms the defect: the readiness check is satisfied by the foreign listener.
+  await waitForPort("127.0.0.1", port, 500);
+
+  await assert.rejects(() => assertMonitorPortFree("127.0.0.1", port), new RegExp(`port ${port}`));
+  // The check runs first: a binary that does not exist is never spawned.
+  await assert.rejects(
+    () => startViceProcess({ binary: "/nonexistent/x64sc", host: "127.0.0.1", port, headless: true }),
+    new RegExp(`port ${port} on 127\\.0\\.0\\.1 is already in use`),
+  );
+
+  const free = await closedLoopbackPort();
+  await assertMonitorPortFree("127.0.0.1", free);
 });
