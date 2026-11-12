@@ -63,3 +63,18 @@ test("platform status lists unsupported operations per backend", async () => {
   const c64u = markdown.slice(markdown.indexOf("### C64U"), markdown.indexOf("### U2"));
   assert.match(c64u, /Unsupported operations of supported tools: _none_/);
 });
+
+test("platform status reports the active access mode", async () => {
+  const previous = process.env.C64BRIDGE_ACCESS;
+  try {
+    delete process.env.C64BRIDGE_ACCESS;
+    assert.match(await renderPlatformStatusMarkdown(createFakeClient()), /Access mode: `full` \(`C64BRIDGE_ACCESS`/);
+    process.env.C64BRIDGE_ACCESS = "no-destructive";
+    assert.match(await renderPlatformStatusMarkdown(createFakeClient()), /Access mode: `no-destructive`/);
+    process.env.C64BRIDGE_ACCESS = "read-only";
+    assert.match(await renderPlatformStatusMarkdown(createFakeClient()), /Access mode: `read-only`/);
+  } finally {
+    if (previous === undefined) delete process.env.C64BRIDGE_ACCESS;
+    else process.env.C64BRIDGE_ACCESS = previous;
+  }
+});

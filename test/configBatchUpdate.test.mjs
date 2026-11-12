@@ -73,5 +73,5 @@ test("published schema documents updates and keeps additionalProperties false", 
   assert.equal(tool.inputSchema.additionalProperties, false);
   const operation = tool.inputSchema["x-c64bridge-operations"].find((entry) => entry.op === "batch_update");
   assert.ok(operation.optional.includes("updates"));
-  assert.match(tool.inputSchema.description, /batch_update: .*`updates`/);
+  assert.match(tool.inputSchema.description, /batch_update \[write\]: .*`updates`/);
 });

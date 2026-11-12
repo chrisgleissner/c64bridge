@@ -1,5 +1,6 @@
 import type { ToolDescriptor, ToolExecutionContext, ToolModule, ToolRunResult } from "../types.js";
 import { ToolValidationError } from "../errors.js";
+import { assertAccess } from "../access.js";
 import { getPlatformStatus, setPlatform } from "../../platform.js";
 import { programModule } from "./program.js";
 import { memoryModuleGroup as memoryModule } from "./memory.js";
@@ -84,9 +85,21 @@ export const toolRegistry = {
       });
     }
 
+    // Single enforcement point for C64BRIDGE_ACCESS. Batch commands and background task starts
+    // also arrive here (the batch tool and c64_system start_task declare their effect per call).
+    const effect = entry.module.effectOf ? entry.module.effectOf(name, args) : "destructive";
+    if (effect) {
+      assertAccess(name, getOperation(args), effect);
+    }
+
     return entry.module.invoke(name, args, enrichedCtx);
   },
 };
+
+function getOperation(args: unknown): string | undefined {
+  const op = typeof args === "object" && args !== null ? (args as Record<string, unknown>).op : undefined;
+  return typeof op === "string" && op.length > 0 ? op : undefined;
+}
 
 export function describeToolModules(): readonly ToolModuleDescriptor[] {
   return modules.map((module) => ({

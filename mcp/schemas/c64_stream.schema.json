@@ -27,6 +27,6 @@
   "required": [
     "op"
   ],
-  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop: Stop an active Ultimate streaming session. Required inputs: stream.",
+  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start [write]: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
   "additionalProperties": false
 }

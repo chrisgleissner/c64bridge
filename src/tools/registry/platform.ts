@@ -136,6 +136,7 @@ export const platformModuleGroup = defineToolModule({
         description: "Runtime backend selection operations.",
         variants: [selectBackendSchema],
       }),
+      operationEffects: { select: "write" },
       tags: ["platform", "backend", "switch"],
       execute: createOperationDispatcher<PlatformOperations>(
         "c64_select_backend",

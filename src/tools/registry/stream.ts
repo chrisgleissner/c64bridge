@@ -58,6 +58,7 @@ export const streamModule = defineToolModule({
         description: "Streaming operations available via the c64_stream tool.",
         variants: streamOperations.map((operation) => operation.schema),
       }),
+      operationEffects: { start: "write", stop: "write" },
       tags: ["stream", "monitor", "grouped"],
       examples: [
         {

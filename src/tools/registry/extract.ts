@@ -85,6 +85,9 @@ export const extractModule = defineToolModule({
         description: "Extraction operations available via the c64_extract tool.",
         variants: extractOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        sprites: "write", charset: "write", memory_dump: "write", fs_stats: "read", firmware_health: "read",
+      },
       tags: ["extract", "diagnostics", "grouped"],
       operationPlatforms: { fs_stats: ["c64u", "u2"] },
       operationToolNames: { fs_stats: "filesystem_stats_by_extension" },

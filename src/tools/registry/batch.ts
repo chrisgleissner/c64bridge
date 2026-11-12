@@ -74,6 +74,9 @@ export const batchModuleGroup = defineToolModule({
       description: "Execute multiple c64bridge tool calls in a single request. Reduces latency for multi-step workflows.",
       summary: "Runs an ordered list of tool commands and returns all results with per-command timing.",
       inputSchema: executeBatchArgsSchema.jsonSchema,
+      // Annotated as the worst case; the access check runs per command when it is dispatched.
+      effect: "destructive",
+      effectOf: () => "read",
       tags: ["batch", "orchestration", "grouped"],
       examples: [
         {

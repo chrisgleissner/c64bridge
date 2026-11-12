@@ -30,6 +30,7 @@ import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
+import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
 import { publishedInputSchema, type ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
@@ -352,6 +353,7 @@ async function main() {
           title: tool.metadata.summary,
           description: tool.description,
           inputSchema: publishedInputSchema(tool.inputSchema),
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
           _meta: tool.metadata,
         })),
       };
@@ -677,6 +679,8 @@ export async function renderPlatformStatusMarkdown(client: C64Client): Promise<s
     "# MCP Platform Status",
     "",
     `Current platform: \`${status.id}\``,
+    "",
+    `Access mode: \`${getAccessMode()}\` (\`${ACCESS_ENV_VAR}\`; full allows everything, no-destructive blocks power, flash, drive ROM, image creation and debug register operations, read-only allows only read operations)`,
     "",
     "## Available Backends",
     "",

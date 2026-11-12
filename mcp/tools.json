@@ -260,8 +260,14 @@
         "required": [
           "op"
         ],
-        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg [c64u, u2]: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: symbolsFile.\n- run_prg: Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. Required inputs: path. Optional inputs: symbolsFile.\n- run_crt [c64u, u2]: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify.\n- upload_run_asm: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
+        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg [c64u, u2] [write]: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: symbolsFile.\n- run_prg [write]: Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. Required inputs: path. Optional inputs: symbolsFile.\n- run_crt [c64u, u2] [write]: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic [write]: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify.\n- upload_run_asm [write]: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "programs",
@@ -325,6 +331,16 @@
             "c64u",
             "u2"
           ]
+        },
+        "operationEffects": {
+          "load_prg": "write",
+          "run_prg": "write",
+          "run_crt": "write",
+          "upload_run_basic": "write",
+          "upload_run_asm": "write",
+          "batch_run": "write",
+          "bundle_run": "write",
+          "cross_platform_greeting": "write"
         }
       }
     },
@@ -511,8 +527,14 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length.\n- write: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "memory",
@@ -620,7 +642,19 @@
           "c64u",
           "u2",
           "vice"
-        ]
+        ],
+        "operationEffects": {
+          "read": "read",
+          "write": "write",
+          "read_screen": "read",
+          "wait_for_text": "read",
+          "disassemble": "read",
+          "copy_memory": "write",
+          "fill_memory": "write",
+          "search_memory": "read",
+          "compare_memory": "read",
+          "save_memory": "write"
+        }
       }
     },
     {
@@ -983,8 +1017,14 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file [c64u, u2]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset.\n- compile_play: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun.\n- play_preset: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request. Optional inputs: durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset [write]: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun.\n- play_preset [write]: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request. Optional inputs: durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "audio",
@@ -1074,6 +1114,22 @@
             "u2",
             "vice"
           ]
+        },
+        "operationEffects": {
+          "capture_samples": "read",
+          "set_volume": "write",
+          "reset": "write",
+          "note_on": "write",
+          "note_off": "write",
+          "silence_all": "write",
+          "play_sid_file": "write",
+          "play_mod_file": "write",
+          "generate": "write",
+          "compile_play": "write",
+          "play_preset": "write",
+          "pipeline": "write",
+          "analyze": "read",
+          "record_analyze": "read"
         }
       }
     },
@@ -1175,8 +1231,14 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause [c64u, u2]: Pause the machine until resumed. Required inputs: none.\n- resume [c64u, u2]: Resume CPU execution after a pause. Required inputs: none.\n- reset: Issue a soft reset without cutting power. Required inputs: none.\n- reboot: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff [c64u, vice]: Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. Required inputs: none.\n- power_cycle: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. Required inputs: none.\n- menu [c64u, u2]: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). Required inputs: none.\n- start_task: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause [c64u, u2] [write]: Pause the machine until resumed. Required inputs: none.\n- resume [c64u, u2] [write]: Resume CPU execution after a pause. Required inputs: none.\n- reset [write]: Issue a soft reset without cutting power. Required inputs: none.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Required inputs: none.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. Required inputs: none.\n- power_cycle [destructive]: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. Required inputs: none.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). Required inputs: none.\n- start_task [write]: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task [write]: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks [write]: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "system",
@@ -1250,6 +1312,21 @@
             "c64u",
             "u2"
           ]
+        },
+        "operationEffects": {
+          "pause": "write",
+          "resume": "write",
+          "reset": "write",
+          "reboot": "destructive",
+          "poweroff": "destructive",
+          "power_cycle": "destructive",
+          "menu": "write",
+          "read_menu_screen": "read",
+          "start_task": "write",
+          "stop_task": "write",
+          "stop_all_tasks": "write",
+          "list_tasks": "read",
+          "performance_report": "read"
         }
       }
     },
@@ -1280,8 +1357,14 @@
         "required": [
           "op"
         ],
-        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
+        "description": "Runtime backend selection operations.\n\nOperations:\n- select [write]: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "platform",
@@ -1315,7 +1398,10 @@
           "c64u",
           "u2",
           "vice"
-        ]
+        ],
+        "operationEffects": {
+          "select": "write"
+        }
       }
     },
     {
@@ -1553,8 +1639,14 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. Required inputs: none.",
+        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art [write]: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap [write]: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. Required inputs: none.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "graphics",
@@ -1640,6 +1732,14 @@
             "c64u",
             "vice"
           ]
+        },
+        "operationEffects": {
+          "capture_frame": "read",
+          "render_petscii_art": "write",
+          "render_petscii_text": "write",
+          "render_sprite": "write",
+          "render_bitmap": "write",
+          "get_display_state": "read"
         }
       }
     },
@@ -1679,6 +1779,12 @@
         ],
         "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "rag",
@@ -1725,7 +1831,11 @@
           "c64u",
           "u2",
           "vice"
-        ]
+        ],
+        "operationEffects": {
+          "basic": "read",
+          "asm": "read"
+        }
       }
     },
     {
@@ -1925,8 +2035,14 @@
         "required": [
           "op"
         ],
-        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2]: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2]: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.",
+        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount [write]: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "storage",
@@ -1997,6 +2113,14 @@
             "c64u",
             "u2"
           ]
+        },
+        "operationEffects": {
+          "list_drives": "read",
+          "mount": "write",
+          "unmount": "write",
+          "file_info": "read",
+          "create_image": "destructive",
+          "find_and_run": "write"
         }
       }
     },
@@ -2041,8 +2165,14 @@
         "required": [
           "op"
         ],
-        "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom [c64u, u2]: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
+        "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset [write]: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on [write]: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off [write]: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom [c64u, u2] [destructive]: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode [write]: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "drive",
@@ -2090,6 +2220,13 @@
             "c64u",
             "u2"
           ]
+        },
+        "operationEffects": {
+          "reset": "write",
+          "power_on": "write",
+          "power_off": "write",
+          "load_rom": "destructive",
+          "set_mode": "write"
         }
       }
     },
@@ -2254,8 +2391,14 @@
         "required": [
           "op"
         ],
-        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text: Generate BASIC that prints text to device 4. Required inputs: text. Optional inputs: target, secondaryAddress, formFeed.\n- print_bitmap: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns. Optional inputs: repeats, useSubRepeat, secondaryAddress, ensureMsb, mode, density, timesPerLine.\n- define_chars: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars. Optional inputs: secondaryAddress.",
+        "description": "Printer operations available via the c64_printer tool.\n\nOperations:\n- print_text [write]: Generate BASIC that prints text to device 4. Required inputs: text. Optional inputs: target, secondaryAddress, formFeed.\n- print_bitmap [write]: Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. Required inputs: printer, columns. Optional inputs: repeats, useSubRepeat, secondaryAddress, ensureMsb, mode, density, timesPerLine.\n- define_chars [write]: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars. Optional inputs: secondaryAddress.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "printer",
@@ -2303,7 +2446,12 @@
         "platforms": [
           "c64u",
           "u2"
-        ]
+        ],
+        "operationEffects": {
+          "print_text": "write",
+          "print_bitmap": "write",
+          "define_chars": "write"
+        }
       }
     },
     {
@@ -2463,8 +2611,14 @@
         "required": [
           "op"
         ],
-        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item, includeSecretValues.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime. Required inputs: none. Optional inputs: updates.\n- load_flash [c64u, u2]: Load configuration from flash storage. Required inputs: none.\n- save_flash [c64u, u2]: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults [c64u, u2]: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg [c64u]: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg [c64u]: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle [c64u, u2]: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
+        "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item, includeSecretValues.\n- set [write]: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update [write]: Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime. Required inputs: none. Optional inputs: updates.\n- load_flash [c64u, u2] [destructive]: Load configuration from flash storage. Required inputs: none.\n- save_flash [c64u, u2] [destructive]: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults [c64u, u2] [destructive]: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg [c64u]: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg [c64u] [destructive]: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot [write]: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore [write]: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle [c64u, u2] [write]: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "config",
@@ -2542,6 +2696,23 @@
             "c64u",
             "u2"
           ]
+        },
+        "operationEffects": {
+          "list": "read",
+          "get": "read",
+          "set": "write",
+          "batch_update": "write",
+          "load_flash": "destructive",
+          "save_flash": "destructive",
+          "reset_defaults": "destructive",
+          "read_debugreg": "read",
+          "write_debugreg": "destructive",
+          "info": "read",
+          "version": "read",
+          "snapshot": "write",
+          "restore": "write",
+          "diff": "read",
+          "shuffle": "write"
         }
       }
     },
@@ -2753,8 +2924,14 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, outputDir, pauseDuringRead.\n- charset: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
+        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "extract",
@@ -2806,6 +2983,13 @@
             "c64u",
             "u2"
           ]
+        },
+        "operationEffects": {
+          "sprites": "write",
+          "charset": "write",
+          "memory_dump": "write",
+          "fs_stats": "read",
+          "firmware_health": "read"
         }
       }
     },
@@ -2842,8 +3026,14 @@
         "required": [
           "op"
         ],
-        "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop: Stop an active Ultimate streaming session. Required inputs: stream.",
+        "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start [write]: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "stream",
@@ -2886,7 +3076,11 @@
         ],
         "platforms": [
           "c64u"
-        ]
+        ],
+        "operationEffects": {
+          "start": "write",
+          "stop": "write"
+        }
       }
     },
     {
@@ -3130,8 +3324,14 @@
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none. Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none. Optional inputs: memspace, registers.\n- set_registers: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step: Single-step CPU execution. Required inputs: none. Optional inputs: count, mode.\n- step_return: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none. Optional inputs: memspace.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none. Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none. Optional inputs: memspace, registers.\n- set_registers [write]: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step [write]: Single-step CPU execution. Required inputs: none. Optional inputs: count, mode.\n- step_return [write]: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none. Optional inputs: memspace.\n- wait_for_state: Poll CPU registers until PC equals expectedPC or timeout elapses. Required inputs: none. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [write]: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "debug",
@@ -3221,7 +3421,24 @@
         ],
         "platforms": [
           "vice"
-        ]
+        ],
+        "operationEffects": {
+          "list_checkpoints": "read",
+          "get_checkpoint": "read",
+          "create_checkpoint": "write",
+          "delete_checkpoint": "write",
+          "toggle_checkpoint": "write",
+          "set_condition": "write",
+          "list_registers": "read",
+          "get_registers": "read",
+          "set_registers": "write",
+          "step": "write",
+          "step_return": "write",
+          "get_monitor_state": "read",
+          "wait_for_state": "read",
+          "nuclear_reset": "write",
+          "continue_execution": "write"
+        }
       }
     },
     {
@@ -3257,8 +3474,14 @@
         "required": [
           "op"
         ],
-        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.",
+        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "vice",
@@ -3302,7 +3525,11 @@
         ],
         "platforms": [
           "vice"
-        ]
+        ],
+        "operationEffects": {
+          "resource_get": "read",
+          "resource_set": "write"
+        }
       }
     },
     {
@@ -3488,8 +3715,14 @@
         "required": [
           "op"
         ],
-        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick [c64u, vice]: Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard [c64u]: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all [c64u]: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state [c64u]: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
+        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text [write]: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key [write]: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick [c64u, vice] [write]: Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard [c64u] [write]: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all [c64u] [write]: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state [c64u]: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "input",
@@ -3588,6 +3821,14 @@
           "state": [
             "c64u"
           ]
+        },
+        "operationEffects": {
+          "write_text": "write",
+          "key": "write",
+          "keyboard": "write",
+          "joystick": "write",
+          "release_all": "write",
+          "state": "read"
         }
       }
     },
@@ -3648,6 +3889,12 @@
         ],
         "description": "Execute multiple tool calls in one request.",
         "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
       },
       "_meta": {
         "domain": "batch",
@@ -3724,7 +3971,8 @@
           "c64u",
           "u2",
           "vice"
-        ]
+        ],
+        "effect": "destructive"
       }
     }
   ]

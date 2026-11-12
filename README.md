@@ -396,6 +396,22 @@ Set `C64BRIDGE_ALLOWED_DIRS` to add directories. Separate entries with the platf
 
 Earlier versions accepted any path. Clients that pass paths outside these directories must now add them through `C64BRIDGE_ALLOWED_DIRS`.
 
+### Access Mode
+
+Every operation has an effect: `read` (no change), `write` (changes machine or emulator state that a reset undoes, or writes a host file) or `destructive` (survives a reset or interrupts availability, for example power off, power cycle, reboot, flash save, load or reset to defaults, drive ROM load, disk image creation, debug register write, and config restore with `applyToFlash`). `tools/list` publishes MCP annotations derived from these effects, and each operation line in a tool description names its effect when it is not `read`.
+
+Set `C64BRIDGE_ACCESS` to restrict what a client may call:
+
+- `full` (default): all operations are allowed.
+- `no-destructive`: `destructive` operations are rejected.
+- `read-only`: only `read` operations are allowed.
+
+The variable is read on every call. An unknown value is treated as `read-only` and logged to stderr once. A rejected call returns a validation error that names the operation, its effect and the active mode. `c64_batch` checks each command separately, and `c64_system` `start_task` checks the effect of its task operation when the task starts. `c64://platform/status` shows the active mode.
+
+```json
+"env": { "C64BRIDGE_ACCESS": "no-destructive" }
+```
+
 ## VS Code MCP Setup
 
 This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.

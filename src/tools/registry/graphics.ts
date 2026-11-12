@@ -266,6 +266,10 @@ export const graphicsModuleGroup = defineToolModule({
         description: "Graphics operations available via the c64_graphics tool.",
         variants: graphicsOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        capture_frame: "read", render_petscii_art: "write", render_petscii_text: "write",
+        render_sprite: "write", render_bitmap: "write", get_display_state: "read",
+      },
       tags: ["graphics", "vic", "grouped"],
       examples: [
         {

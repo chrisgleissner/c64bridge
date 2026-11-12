@@ -619,6 +619,12 @@ export const debugModuleGroup = defineToolModule({
         description: "Available debugger operations.",
         variants: debugOperationSchemas.map((schema) => schema.jsonSchema),
       }),
+      operationEffects: {
+        list_checkpoints: "read", get_checkpoint: "read", create_checkpoint: "write", delete_checkpoint: "write",
+        toggle_checkpoint: "write", set_condition: "write", list_registers: "read", get_registers: "read",
+        set_registers: "write", step: "write", step_return: "write", get_monitor_state: "read",
+        wait_for_state: "read", nuclear_reset: "write", continue_execution: "write",
+      },
       tags: ["debug", "breakpoint", "registers", "grouped"],
       examples: [
         {

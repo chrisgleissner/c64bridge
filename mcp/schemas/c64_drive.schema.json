@@ -35,6 +35,6 @@
   "required": [
     "op"
   ],
-  "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom [c64u, u2]: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
+  "description": "Drive operations available via the c64_drive tool.\n\nOperations:\n- reset [write]: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on [write]: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off [write]: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom [c64u, u2] [destructive]: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode [write]: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
   "additionalProperties": false
 }

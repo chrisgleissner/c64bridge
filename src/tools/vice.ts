@@ -168,6 +168,7 @@ export const viceModuleGroup = defineToolModule({
         description: "VICE emulator operations available via the c64_vice tool.",
         variants: viceOperationSchemas.map((schema) => schema.jsonSchema),
       }),
+      operationEffects: { resource_get: "read", resource_set: "write" },
       tags: ["vice", "resource", "grouped"],
       examples: [
         {

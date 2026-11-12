@@ -268,6 +268,13 @@ export const configModuleGroup = defineToolModule({
         description: "Configuration operations available via the c64_config tool.",
         variants: configOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        list: "read", get: "read", set: "write", batch_update: "write", load_flash: "destructive",
+        save_flash: "destructive", reset_defaults: "destructive", read_debugreg: "read",
+        write_debugreg: "destructive", info: "read", version: "read", snapshot: "write",
+        restore: "write", diff: "read", shuffle: "write",
+      },
+      effectOf: (op, args) => (op === "restore" && (args as { applyToFlash?: unknown }).applyToFlash === true ? "destructive" : undefined),
       tags: ["config", "diagnostics", "grouped"],
       operationPlatforms: {
         load_flash: ["c64u", "u2"],

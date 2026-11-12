@@ -480,6 +480,7 @@ export const inputModule = defineToolModule({
         ],
       }),
       operationPlatforms: { joystick: ["c64u", "vice"], keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"] },
+      operationEffects: { write_text: "write", key: "write", keyboard: "write", joystick: "write", release_all: "write", state: "read" },
       tags: ["input", "keyboard", "joystick"],
       examples: [
         {

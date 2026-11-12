@@ -9,6 +9,9 @@ import {
 } from "../platform.js";
 import { withDiagnosticSpan } from "../diagnostics.js";
 import { ToolUnsupportedPlatformError, ToolValidationError } from "./errors.js";
+import { annotationsForEffects, type ToolAnnotationsHint, type ToolEffect } from "./access.js";
+
+export type { ToolEffect } from "./access.js";
 
 export type JsonSchema = {
   readonly type?: string | readonly string[];
@@ -453,6 +456,15 @@ export interface ToolDefinition {
   readonly supportedPlatforms?: readonly PlatformId[];
   readonly operationPlatforms?: Record<string, readonly PlatformId[]>;
   readonly operationToolNames?: Record<string, string>;
+  /** Effect of every operation of a grouped tool; every operation must be listed. */
+  readonly operationEffects?: Record<string, ToolEffect>;
+  /** Effect of a tool without operations (also its annotation effect). */
+  readonly effect?: ToolEffect;
+  /**
+   * Overrides the effect of one call, for example by an argument. Returns undefined to use the
+   * declared effect of the operation.
+   */
+  readonly effectOf?: (op: string | undefined, args: unknown) => ToolEffect | undefined;
   readonly execute: (args: unknown, ctx: ToolExecutionContext) => Promise<ToolRunResult>;
 }
 
@@ -460,6 +472,7 @@ export interface ToolDescriptor {
   readonly name: string;
   readonly description: string;
   readonly inputSchema?: JsonSchema;
+  readonly annotations?: ToolAnnotationsHint;
   readonly metadata: {
     readonly domain: string;
     readonly summary: string;
@@ -472,6 +485,8 @@ export interface ToolDescriptor {
     readonly prerequisites?: readonly string[];
     readonly platforms?: readonly PlatformId[];
     readonly operationPlatforms?: Record<string, readonly PlatformId[]>;
+    readonly operationEffects?: Record<string, ToolEffect>;
+    readonly effect?: ToolEffect;
   };
 }
 
@@ -495,6 +510,11 @@ export interface ToolModule {
   readonly workflowHints?: readonly string[];
   describeTools(): readonly ToolDescriptor[];
   invoke(name: string, args: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult>;
+  /**
+   * Effect of one call to a tool of this module, or undefined when the call selects no known
+   * operation (the dispatcher then reports the validation error).
+   */
+  effectOf?(name: string, args: unknown): ToolEffect | undefined;
 }
 
 export function defineToolModule(config: ToolModuleConfig): ToolModule {
@@ -533,15 +553,23 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
           ...(prerequisites ? { prerequisites } : {}),
           ...(platforms ? { platforms } : {}),
           ...(tool.operationPlatforms ? { operationPlatforms: tool.operationPlatforms } : {}),
+          ...(tool.operationEffects ? { operationEffects: tool.operationEffects } : {}),
+          ...(tool.effect ? { effect: tool.effect } : {}),
         };
+        const declaredEffects = tool.operationEffects ? Object.values(tool.operationEffects) : tool.effect ? [tool.effect] : [];
 
         return {
           name: tool.name,
           description: tool.description,
-          inputSchema: tagOperationPlatforms(tool.inputSchema, tool.operationPlatforms),
+          inputSchema: tagOperations(tool.inputSchema, tool.operationPlatforms, tool.operationEffects),
+          annotations: annotationsForEffects(declaredEffects),
           metadata,
         } satisfies ToolDescriptor;
       });
+    },
+    effectOf(name, args) {
+      const tool = toolMap.get(name);
+      return tool ? resolveToolEffect(tool, args) : undefined;
     },
     async invoke(name, args, ctx) {
       const tool = toolMap.get(name);
@@ -592,27 +620,63 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
 const ALL_PLATFORMS: readonly PlatformId[] = ["c64u", "u2", "vice"];
 
 /**
- * Marks operations that are not available on every backend in the operation list
- * of a grouped tool description, for example "- unmount [c64u, u2]: ...".
+ * Marks operations in the operation list of a grouped tool description: operations that are not
+ * available on every backend get their backend list and operations that are not read-only get
+ * their effect, for example "- unmount [c64u, u2] [write]: ...".
  */
-export function tagOperationPlatforms(
+export function tagOperations(
   schema: JsonSchema | undefined,
   operationPlatforms: Record<string, readonly PlatformId[]> | undefined,
+  operationEffects?: Record<string, ToolEffect>,
 ): JsonSchema | undefined {
-  if (!schema?.description || !operationPlatforms) {
+  if (!schema?.description || (!operationPlatforms && !operationEffects)) {
     return schema;
   }
   let description = schema.description;
-  for (const [op, platforms] of Object.entries(operationPlatforms)) {
-    if (platforms.length === 0 || ALL_PLATFORMS.every((id) => platforms.includes(id))) {
+  const ops = new Set([...Object.keys(operationPlatforms ?? {}), ...Object.keys(operationEffects ?? {})]);
+  for (const op of ops) {
+    const platforms = ownValue(operationPlatforms, op);
+    const effect = ownValue(operationEffects, op);
+    let tags = "";
+    if (platforms && platforms.length > 0 && !ALL_PLATFORMS.every((id) => platforms.includes(id))) {
+      tags += ` [${platforms.join(", ")}]`;
+    }
+    if (effect && effect !== "read") {
+      tags += ` [${effect}]`;
+    }
+    if (!tags) {
       continue;
     }
     const marker = `\n- ${op}: `;
     if (description.includes(marker)) {
-      description = description.replace(marker, `\n- ${op} [${platforms.join(", ")}]: `);
+      description = description.replace(marker, `\n- ${op}${tags}: `);
     }
   }
   return description === schema.description ? schema : { ...schema, description };
+}
+
+function resolveToolEffect(tool: ToolDefinition, args: unknown): ToolEffect | undefined {
+  const op = getSelectedOperation(args);
+  const overridden = tool.effectOf?.(op, args);
+  if (overridden) {
+    return overridden;
+  }
+  if (!tool.operationEffects) {
+    // Tools without operations; an undeclared effect fails closed.
+    return tool.effect ?? "destructive";
+  }
+  if (!op) {
+    return undefined;
+  }
+  const declared = ownValue(tool.operationEffects, op);
+  if (declared) {
+    return declared;
+  }
+  const opSchema = tool.inputSchema?.properties?.[OPERATION_DISCRIMINATOR];
+  const known = opSchema?.enum?.includes(op) === true;
+  // An operation of the schema without a declared effect fails closed; an unknown name is left
+  // to the dispatcher, which reports the validation error.
+  return known ? "destructive" : undefined;
 }
 
 function configuredBackends(ctx: ToolExecutionContext): readonly PlatformId[] | undefined {

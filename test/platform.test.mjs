@@ -210,9 +210,9 @@ test("describePlatformCapabilities lists unsupported operations of supported too
 test("registry descriptions tag operations that are not available on every backend", async () => {
   const { toolRegistry } = await import("../src/tools/registry/index.js");
   const disk = toolRegistry.list().find((tool) => tool.name === "c64_disk");
-  assert.match(disk.inputSchema.description, /\n- unmount \[c64u, u2\]: /);
+  assert.match(disk.inputSchema.description, /\n- unmount \[c64u, u2\] \[write\]: /);
   const memory = toolRegistry.list().find((tool) => tool.name === "c64_memory");
   assert.ok(!/\n- read \[/.test(memory.inputSchema.description), "ops available everywhere stay untagged");
   const system = toolRegistry.list().find((tool) => tool.name === "c64_system");
-  assert.match(system.inputSchema.description, /\n- poweroff \[c64u, vice\]: /);
+  assert.match(system.inputSchema.description, /\n- poweroff \[c64u, vice\] \[destructive\]: /);
 });

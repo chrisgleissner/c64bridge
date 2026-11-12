@@ -133,6 +133,26 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
     });
   });
 
+  test("tools/list publishes annotations derived from the operation effects", async () => {
+    await withSharedMcpClient(async ({ client }) => {
+      const listResult = await client.request(
+        { method: "tools/list", params: {} },
+        ListToolsResultSchema,
+      );
+      const listed = new Map(listResult.tools.map((tool) => [tool.name, tool]));
+      assert.deepEqual(listed.get("c64_rag").annotations, {
+        readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false,
+      });
+      assert.equal(listed.get("c64_system").annotations.destructiveHint, true);
+      assert.equal(listed.get("c64_system").annotations.readOnlyHint, false);
+      assert.equal(listed.get("c64_memory").annotations.destructiveHint, false);
+      assert.match(listed.get("c64_system").inputSchema.description, /\n- poweroff \[c64u, vice\] \[destructive\]: /);
+      for (const descriptor of toolRegistry.list()) {
+        assert.deepEqual(listed.get(descriptor.name).annotations, descriptor.annotations, descriptor.name);
+      }
+    });
+  });
+
   test("published grouped tool descriptions state required parameters per op", async () => {
     await withSharedMcpClient(async ({ client }) => {
       const listResult = await client.request(

@@ -1,4 +1,5 @@
 // Background task management meta tools
+import { assertAccess, taskOperationEffect } from "../access.js";
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
@@ -471,6 +472,8 @@ export const tools: ToolDefinition[] = [
         await ensureTasksLoaded();
         const parsed = startBackgroundTaskArgsSchema.parse(args ?? {});
         validateTaskOperation(parsed.operation, (parsed.arguments as Record<string, unknown> | undefined) ?? {});
+        // The effect of the task operation is checked once, at start; a running task is not re-checked.
+        assertAccess("c64_system", "start_task", taskOperationEffect(parsed.operation));
         const now = new Date();
         const existing = TASKS.get(parsed.name);
         if (existing && existing.status === "running") {

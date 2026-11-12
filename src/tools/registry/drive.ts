@@ -85,6 +85,9 @@ export const driveModuleGroup = defineToolModule({
         description: "Drive operations available via the c64_drive tool.",
         variants: driveOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        reset: "write", power_on: "write", power_off: "write", load_rom: "destructive", set_mode: "write",
+      },
       tags: ["drive", "hardware", "grouped"],
       operationPlatforms: { load_rom: ["c64u", "u2"] },
       operationToolNames: { load_rom: "drive_load_rom" },

@@ -142,6 +142,11 @@ export const memoryModuleGroup = defineToolModule({
         description: "Memory operations available via the c64_memory tool.",
         variants: memoryOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        read: "read", write: "write", read_screen: "read", wait_for_text: "read", disassemble: "read",
+        copy_memory: "write", fill_memory: "write", search_memory: "read", compare_memory: "read",
+        save_memory: "write",
+      },
       tags: ["memory", "screen", "grouped"],
       examples: [
         {

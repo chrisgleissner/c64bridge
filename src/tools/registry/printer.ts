@@ -186,6 +186,7 @@ export const printerModuleGroup = defineToolModule({
         description: "Printer operations available via the c64_printer tool.",
         variants: printerOperations.map((operation) => operation.schema),
       }),
+      operationEffects: { print_text: "write", print_bitmap: "write", define_chars: "write" },
       tags: ["printer", "device", "grouped"],
       examples: [
         {

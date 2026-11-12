@@ -243,6 +243,11 @@ export const soundModuleGroup = defineToolModule({
         description: "Sound operations available via the c64_sound tool.",
         variants: soundOperations.map((operation) => operation.schema),
       }),
+      operationEffects: {
+        capture_samples: "read", set_volume: "write", reset: "write", note_on: "write", note_off: "write",
+        silence_all: "write", play_sid_file: "write", play_mod_file: "write", generate: "write",
+        compile_play: "write", play_preset: "write", pipeline: "write", analyze: "read", record_analyze: "read",
+      },
       tags: ["sid", "audio", "grouped"],
       operationPlatforms: {
         capture_samples: ["c64u"],
