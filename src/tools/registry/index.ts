@@ -1,4 +1,5 @@
 import type { ToolDescriptor, ToolExecutionContext, ToolModule, ToolRunResult } from "../types.js";
+import { ToolValidationError } from "../errors.js";
 import { getPlatformStatus, setPlatform } from "../../platform.js";
 import { programModule } from "./program.js";
 import { memoryModuleGroup as memoryModule } from "./memory.js";
@@ -76,7 +77,11 @@ export const toolRegistry = {
 
     const entry = toolMap.get(name);
     if (!entry) {
-      throw new Error(`Unknown tool: ${name}`);
+      const allowed = Array.from(toolMap.keys()).sort();
+      throw new ToolValidationError(`Unknown tool: ${name}`, {
+        path: "$.name",
+        details: { allowed, received: name },
+      });
     }
 
     return entry.module.invoke(name, args, enrichedCtx);

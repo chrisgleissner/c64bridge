@@ -14,6 +14,8 @@ import {
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  ErrorCode,
+  McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { loadConfig } from "./config.js";
 import { C64Client } from "./c64Client.js";
@@ -28,7 +30,7 @@ import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
-import { unknownErrorResult } from "./tools/errors.js";
+import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
 import type { ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
@@ -575,6 +577,9 @@ async function main() {
         latencyMs: latency,
         error,
       });
+      if (error instanceof ToolValidationError) {
+        throw new McpError(ErrorCode.InvalidParams, error.message);
+      }
       throw error;
     }
   });

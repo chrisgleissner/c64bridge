@@ -170,10 +170,11 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.ok(first, "Expected text response content");
       assert.equal(first.type, "text");
       assert.match(first.text, /Unknown tool/i);
+      assert.match(first.text, /allowed: .*c64_memory/);
 
       assert.ok(result.metadata, "CallTool result should include metadata for errors");
       assert.ok(result.metadata?.error, "Metadata should expose error details");
-      assert.equal(result.metadata?.error?.kind, "unknown");
+      assert.equal(result.metadata?.error?.kind, "validation");
     });
   });
 

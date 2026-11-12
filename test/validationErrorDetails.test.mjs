@@ -83,3 +83,31 @@ test("long allowed lists are capped", () => {
   assert.ok(!/v40/.test(text));
   assert.match(text, /60 total/);
 });
+
+test("unknown tool is a validation error listing the valid tool names", async () => {
+  await assert.rejects(
+    () => toolRegistry.invoke("nonexistent_tool_xyz", {}, ctx),
+    (error) => {
+      assert.ok(error instanceof ToolValidationError);
+      assert.match(error.message, /Unknown tool: nonexistent_tool_xyz/);
+      assert.ok(error.details.allowed.includes("c64_memory"));
+      const text = unknownErrorResult(error).content[0].text;
+      assert.match(text, /allowed: .*c64_memory/);
+      assert.equal(unknownErrorResult(error).metadata.error.kind, "validation");
+      return true;
+    },
+  );
+});
+
+test("unknown prompt is a validation error listing the valid prompt names", async () => {
+  const { createPromptRegistry } = await import("../src/prompts/registry.js");
+  const registry = createPromptRegistry();
+  assert.throws(
+    () => registry.resolve("nonexistent-prompt-xyz", {}),
+    (error) => {
+      assert.ok(error instanceof ToolValidationError);
+      assert.match(error.message, /Unknown prompt: nonexistent-prompt-xyz\. Valid prompts: .*basic-program/);
+      return true;
+    },
+  );
+});

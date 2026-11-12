@@ -378,7 +378,10 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
     async invoke(name, args, ctx) {
       const tool = toolMap.get(name);
       if (!tool) {
-        throw new Error(`Unknown tool: ${name}`);
+        throw new ToolValidationError(`Unknown tool: ${name}`, {
+          path: "$.name",
+          details: { allowed: Array.from(toolMap.keys()).sort(), received: name },
+        });
       }
 
       const platforms = resolveSupportedPlatforms(tool, args, defaultPlatforms);
