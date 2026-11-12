@@ -272,3 +272,66 @@ test("R-07 a failed resume is reported as a warning in the result", async (t) =>
   assert.match(payload, /could not be resumed/);
   assert.ok(quietLogger.warnings.length >= 1);
 });
+
+// ---- R-13 video capture -----------------------------------------------------
+
+
+test("R-13 a failed stream stop after a successful capture is a warning, not a failure", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  mock.state.forcedErrors = ["stop refused"];
+  mock.state.forcedErrorsUrlMatch = "video:stop";
+  const result = await client.captureFrames({ count: 1 });
+  assert.equal(result.frames.length, 1);
+  assert.equal(result.warnings?.length, 1);
+  assert.match(result.warnings[0], /stop/);
+});
+
+test("R-13 a failed stream stop does not mask the capture error", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const facade = await client.pinFacade();
+  // Start "succeeds" but no packets are ever sent, so the capture times out; stop fails too.
+  const stub = Object.create(facade);
+  stub.streamStart = async () => ({ success: true });
+  stub.streamStop = async () => ({ success: false, details: { errors: ["stop refused"] } });
+  await assert.rejects(() => client.captureC64uVideoFrames(stub, 1), /Timed out/);
+});
+
+test("R-13 capture fails clearly when no local address reaches a non-loopback device", async () => {
+  const client = new C64Client("http://127.0.0.1:9");
+  // An invalid host argument makes the route lookup fail without any network traffic.
+  await assert.rejects(() => client.resolveLocalCaptureAddress({}, false), /Cannot find a local network address/);
+  assert.equal(await client.resolveLocalCaptureAddress({}, true), "127.0.0.1");
+});
+
+test("R-13 capture accepts packets only from the device address", async () => {
+  const client = new C64Client("http://127.0.0.1:9");
+  const loopback = await client.resolveCaptureEndpoint("127.0.0.1");
+  assert.equal(loopback.acceptsSource("127.0.0.1"), true);
+  assert.equal(loopback.acceptsSource("192.0.2.9"), false);
+  // A non-loopback IP literal needs no DNS. The route lookup may legitimately fail on a host without a route.
+  try {
+    const remote = await client.resolveCaptureEndpoint("192.0.2.5");
+    assert.equal(remote.acceptsSource("192.0.2.5"), true);
+    assert.equal(remote.acceptsSource("192.0.2.6"), false);
+    assert.equal(remote.acceptsSource("127.0.0.1"), false);
+  } catch (error) {
+    assert.match(error.message, /Cannot find a local network address/);
+  }
+});
+
+test("R-13 packets from another source address are ignored", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const facade = await client.pinFacade();
+  const stub = Object.create(facade);
+  // Inject a packet from a non-loopback-range source would need a second interface; instead
+  // verify the filter wiring: with the filter replaced to reject everything, nothing is captured.
+  const original = client.resolveCaptureEndpoint.bind(client);
+  client.resolveCaptureEndpoint = async (host) => ({ ...(await original(host)), acceptsSource: () => false });
+  await assert.rejects(() => client.captureC64uVideoFrames(stub, 1), /Timed out/);
+});

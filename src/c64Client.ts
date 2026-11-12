@@ -9,6 +9,7 @@ See <https://www.gnu.org/licenses/> for details.
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { createSocket, type Socket } from "node:dgram";
+import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
 import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
@@ -103,6 +104,8 @@ export interface NativeEndpointCapabilities {
 export interface FrameCaptureResult {
   readonly backend: "c64u" | "vice";
   readonly frames: readonly CapturedFrame[];
+  /** Non-fatal problems, for example a failed stream stop after a successful capture. */
+  readonly warnings?: readonly string[];
 }
 
 export interface SampleCaptureResult {
@@ -111,6 +114,11 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+}
+
+function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || h === "::1" || h.startsWith("127.");
 }
 
 /** JOYPORT_ID_IO_SIMULATION in joyport.h (the same in VICE 3.9 and 3.10). */
@@ -1604,10 +1612,26 @@ export class C64Client {
     }
 
     const host = new URL(this.baseUrl).hostname;
-    const bindAddress = await this.resolveLocalCaptureAddress(host);
+    const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     const packets: ReturnType<typeof parseVideoPacket>[] = [];
     let stopError: Error | null = null;
+    let captureFailed = false;
+    let stopped = false;
+    // Stops the stream once. A failure is reported as a warning (success path)
+    // or as a diagnostic (failure path); it never replaces the capture outcome.
+    const stopOneShotVideoStream = async (): Promise<{ warnings?: string[] }> => {
+      if (stopped) return {};
+      stopped = true;
+      try {
+        await this.ensureStreamSuccess(await facade.streamStop("video"), "stop video stream");
+        return {};
+      } catch (error) {
+        stopError = error instanceof Error ? error : new Error(String(error));
+        writeDiagnosticEvent("video_capture_stop_failed", { error: this.normaliseError(stopError) });
+        return { warnings: [`Video stream stop failed after the capture: ${stopError.message}`] };
+      }
+    };
 
     try {
       await this.bindCaptureSocket(socket, bindAddress);
@@ -1620,7 +1644,8 @@ export class C64Client {
           reject(new Error(`Timed out after ${timeoutMs}ms while capturing ${count} video frame(s)`));
         }, timeoutMs);
 
-        socket.on("message", (msg) => {
+        socket.on("message", (msg, rinfo) => {
+          if (!acceptsSource(rinfo.address)) return;
           try {
             const packet = this.parseVideoPacketOrNull(Buffer.from(msg));
             if (!packet) {
@@ -1644,17 +1669,16 @@ export class C64Client {
         });
       });
 
-      return { backend: "c64u", frames };
+      return { backend: "c64u", frames, ...(await stopOneShotVideoStream()) };
+    } catch (error) {
+      captureFailed = true;
+      throw error;
     } finally {
-      try {
-        await this.ensureStreamSuccess(await facade.streamStop("video"), "stop video stream");
-      } catch (error) {
-        stopError = error instanceof Error ? error : new Error(String(error));
+      if (captureFailed) {
+        // Keep the capture error; the stop failure is only a diagnostic.
+        await stopOneShotVideoStream();
       }
       socket.close();
-      if (stopError) {
-        throw stopError;
-      }
     }
   }
 
@@ -1674,7 +1698,7 @@ export class C64Client {
     await this.stopC64uVideoCaptureSession();
 
     const host = new URL(this.baseUrl).hostname;
-    const bindAddress = await this.resolveLocalCaptureAddress(host);
+    const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     await this.bindCaptureSocket(socket, bindAddress);
     const target = this.socketEndpoint(socket, bindAddress);
@@ -1691,8 +1715,8 @@ export class C64Client {
       error: null,
     };
 
-    socket.on("message", (msg) => {
-      if (session.closed) {
+    socket.on("message", (msg, rinfo) => {
+      if (session.closed || !acceptsSource(rinfo.address)) {
         return;
       }
       const packet = this.parseVideoPacketOrNull(Buffer.from(msg));
@@ -1875,7 +1899,7 @@ export class C64Client {
     options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
   ): Promise<SampleCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
-    const bindAddress = await this.resolveLocalCaptureAddress(host);
+    const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     const chunks: Int16Array[] = [];
     let collectedValues = 0;
@@ -1889,7 +1913,8 @@ export class C64Client {
 
     // The firmware can emit UDP before its REST response reaches us. Listen
     // before starting, and cap collection even while start/config/stop requests are pending.
-    const onMessage = (msg: Buffer) => {
+    const onMessage = (msg: Buffer, rinfo: { address: string }) => {
+      if (!acceptsSource(rinfo.address)) return;
       if (captureSettled || captureError || collectedValues >= neededValues) return;
       try {
         const packet = parseAudioPacket(msg);
@@ -1987,7 +2012,31 @@ export class C64Client {
     return C64U_PAL_AUDIO_SAMPLE_RATE;
   }
 
-  private async resolveLocalCaptureAddress(remoteHost: string): Promise<string> {
+  /**
+   * Local address to bind the capture socket to, and a filter that accepts UDP
+   * packets only from the device. The device host is resolved once here. A
+   * device on loopback (the mock) is reached and heard on loopback.
+   */
+  private async resolveCaptureEndpoint(remoteHost: string): Promise<{ bindAddress: string; acceptsSource: (address: string) => boolean }> {
+    const loopback = isLoopbackHost(remoteHost);
+    let deviceAddresses: string[];
+    try {
+      const resolved = await lookup(remoteHost, { all: true, family: 4 });
+      deviceAddresses = resolved.map((entry) => entry.address);
+    } catch (error) {
+      if (!loopback) {
+        throw new Error(`Cannot resolve the device host '${remoteHost}' to an IPv4 address for stream capture: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      deviceAddresses = ["127.0.0.1"];
+    }
+    const deviceIsLoopback = loopback || deviceAddresses.every((address) => address.startsWith("127."));
+    const acceptsSource = (address: string) => deviceIsLoopback
+      ? address.startsWith("127.")
+      : deviceAddresses.includes(address.replace(/^::ffff:/i, ""));
+    return { bindAddress: await this.resolveLocalCaptureAddress(remoteHost, deviceIsLoopback), acceptsSource };
+  }
+
+  private async resolveLocalCaptureAddress(remoteHost: string, deviceIsLoopback = isLoopbackHost(remoteHost)): Promise<string> {
     const socket = createSocket("udp4");
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2002,11 +2051,14 @@ export class C64Client {
         return address.address;
       }
     } catch {
-      // Fall back below.
+      // Handled below.
     } finally {
       socket.close();
     }
-    return "127.0.0.1";
+    // Falling back to loopback would tell the device to stream to itself, and
+    // the caller would only see a capture timeout.
+    if (deviceIsLoopback) return "127.0.0.1";
+    throw new Error(`Cannot find a local network address that reaches the device at ${remoteHost}; the stream target must be an address the device can send to. Check the network route to the device.`);
   }
 
   private async bindCaptureSocket(socket: Socket, bindAddress: string): Promise<void> {
