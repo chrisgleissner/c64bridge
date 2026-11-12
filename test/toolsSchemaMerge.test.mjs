@@ -3,12 +3,8 @@ import assert from "#test/assert";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { combinePropertySchemas, discriminatedUnionSchema, operationSchema } from "../src/tools/types.js";
 
-// Examples that are invalid against their own operation schema at baseline.
-// They are tracked as item T-20 and are fixed there; do not edit them here.
-const KNOWN_INVALID_EXAMPLES = new Set([
-  // T-20: uses ensureReturn, which is not a parameter of the operation
-  "c64_printer:Print text",
-]);
+// Every published example must validate; none are exempt.
+const KNOWN_INVALID_EXAMPLES = new Set([]);
 
 function jsonType(value) {
   if (value === null) return "null";

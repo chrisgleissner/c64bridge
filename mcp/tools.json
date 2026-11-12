@@ -2424,7 +2424,8 @@
             "arguments": {
               "op": "print_text",
               "text": "HELLO",
-              "ensureReturn": true
+              "target": "commodore",
+              "formFeed": true
             }
           },
           {
@@ -2663,7 +2664,7 @@
             "description": "Write configuration snapshot to disk",
             "arguments": {
               "op": "snapshot",
-              "path": "./snapshots/c64_json"
+              "path": "./snapshots/c64.json"
             }
           }
         ],

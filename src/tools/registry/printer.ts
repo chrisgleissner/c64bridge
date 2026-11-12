@@ -192,7 +192,7 @@ export const printerModuleGroup = defineToolModule({
         {
           name: "Print text",
           description: "Generate BASIC for device 4",
-          arguments: { op: "print_text", text: "HELLO", ensureReturn: true },
+          arguments: { op: "print_text", text: "HELLO", target: "commodore", formFeed: true },
         },
         {
           name: "Print bitmap",

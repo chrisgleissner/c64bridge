@@ -306,7 +306,7 @@ export const configModuleGroup = defineToolModule({
         {
           name: "Snapshot config",
           description: "Write configuration snapshot to disk",
-          arguments: { op: "snapshot", path: "./snapshots/c64_json" },
+          arguments: { op: "snapshot", path: "./snapshots/c64.json" },
         },
       ],
       execute: createOperationDispatcher<GenericOperationMap>(
