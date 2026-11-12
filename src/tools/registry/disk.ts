@@ -342,6 +342,15 @@ const diskOperations: GroupedOperationConfig[] = [
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "find_and_run_program_by_name", rawArgs, ctx),
   },
+  {
+    op: "find_paths",
+    schema: extendSchemaWithOp(
+      "find_paths",
+      ensureDescriptor(metaDescriptorIndex, "find_paths_by_name").inputSchema,
+      { description: "Search Ultimate storage for paths whose names contain a substring, without running anything." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "find_paths_by_name", rawArgs, ctx),
+  },
 ];
 
 const diskOperationHandlers = createOperationHandlers(diskOperations);
@@ -368,16 +377,17 @@ export const diskModuleGroup = defineToolModule({
       }),
       operationEffects: {
         list_drives: "read", mount: "write", unmount: "write", file_info: "read",
-        create_image: "destructive", find_and_run: "write",
+        create_image: "destructive", find_and_run: "write", find_paths: "read",
       },
       tags: ["storage", "drive", "grouped"],
       // The VICE Binary Monitor has no command to detach a disk image, so unmount is Ultimate-only.
-      operationPlatforms: { unmount: ["c64u", "u2"], file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
+      operationPlatforms: { unmount: ["c64u", "u2"], file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"], find_paths: ["c64u", "u2"] },
       operationToolNames: {
         unmount: "drive_remove",
         file_info: "file_info",
         create_image: "create_image",
         find_and_run: "find_and_run_program_by_name",
+        find_paths: "find_paths_by_name",
       },
       examples: [
         {

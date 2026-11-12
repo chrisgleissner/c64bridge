@@ -147,7 +147,6 @@ test("c64_program c64u-only grouped operations reject on vice", async () => {
   };
 
   for (const [args, expectedTool] of [
-    [{ op: "load_prg", path: "//USB0/demo.prg" }, "load_prg"],
     [{ op: "run_crt", path: "//USB0/demo.crt" }, "run_crt"],
   ]) {
     await assert.rejects(

@@ -18,7 +18,7 @@ const findPathsByNameArgsSchema = objectSchema({
     root: optionalSchema(stringSchema({ description: "Root path to search (host)" }), "/"),
     nameContains: stringSchema({ description: "Substring to match", minLength: 1 }),
     extensions: optionalSchema(arraySchema(stringSchema({ description: "Extension filter without dot", minLength: 1 }))),
-    maxResults: optionalSchema(numberSchema({ description: "Maximum results", integer: true, minimum: 1, default: 50 }), 50),
+    maxResults: optionalSchema(numberSchema({ description: "Maximum results", integer: true, minimum: 1, maximum: 1000, default: 100 }), 100),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive name match", default: true }), true),
   },
   required: ["nameContains"],
@@ -351,12 +351,10 @@ function extensionKey(path: string): { raw: string; normalised: string } {
   return { raw, normalised: raw.length > 0 ? raw : "(none)" };
 }
 
-function buildSearchPattern(root: string, extension?: string): string {
-  const trimmed = root === "/" ? "/" : root.replace(/\/+$/, "");
-  if (trimmed === "/") {
-    return extension ? `/**/*.${extension}` : `/**/*`;
-  }
-  return extension ? `${trimmed}/**/*.${extension}` : `${trimmed}/**/*`;
+function buildSearchPattern(root: string, extension?: string, nameContains?: string): string {
+  const trimmed = root.replace(/\/+$/, "");
+  const name = nameContains ? `*${nameContains}*` : "*";
+  return extension ? `${trimmed}/**/${name}.${extension}` : `${trimmed}/**/${name}`;
 }
 
 export const tools: ToolDefinition[] = [
@@ -374,8 +372,9 @@ export const tools: ToolDefinition[] = [
 
         const exts = (parsed.extensions ?? []) as string[];
         const patterns: string[] = exts.length > 0
-          ? exts.map((e) => `${root}/**/*${parsed.nameContains}*.${e}`)
-          : [`${root}/**/*${parsed.nameContains}*`];
+          ? exts.map((e) => buildSearchPattern(root, e, parsed.nameContains as string))
+          : [buildSearchPattern(root, undefined, parsed.nameContains as string)];
+        const limit = parsed.maxResults ?? 100;
 
         const seen = new Set<string>();
         const results: string[] = [];
@@ -388,7 +387,7 @@ export const tools: ToolDefinition[] = [
               if (name.includes(needle) && !seen.has(p)) {
                 seen.add(p);
                 results.push(p);
-                if (results.length >= (parsed.maxResults ?? 50)) break;
+                if (results.length >= (limit + 1)) break;
               }
             }
           } else if (info && typeof info === "object" && Array.isArray((info as any).paths)) {
@@ -398,13 +397,15 @@ export const tools: ToolDefinition[] = [
               if (name.includes(needle) && !seen.has(p)) {
                 seen.add(p);
                 results.push(p);
-                if (results.length >= (parsed.maxResults ?? 50)) break;
+                if (results.length >= (limit + 1)) break;
               }
             }
           }
-          if (results.length >= (parsed.maxResults ?? 50)) break;
+          if (results.length >= (limit + 1)) break;
         }
-        return jsonResult({ root, pattern: parsed.nameContains, results }, { success: true, count: results.length });
+        const truncated = results.length > limit;
+        if (truncated) results.length = limit;
+        return jsonResult({ root, pattern: parsed.nameContains, results, truncated }, { success: true, count: results.length, truncated });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
@@ -565,7 +566,7 @@ export const tools: ToolDefinition[] = [
           const candidates: string[] = [];
 
           for (const ext of extensions) {
-            const pattern = `${root}/**/*${needle}*.${ext}`;
+            const pattern = buildSearchPattern(root, ext, needle);
             try {
               const info = await (ctx.client as any).filesInfo(pattern);
               const paths = extractPaths(info);

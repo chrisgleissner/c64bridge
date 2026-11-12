@@ -39,7 +39,7 @@ const restrictions = {
   c64_system: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"], poweroff: ["c64u", "vice"] },
   c64_graphics: { capture_frame: ["c64u", "vice"] },
   c64_drive: { load_rom: ["c64u", "u2"] },
-  c64_disk: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"] },
+  c64_disk: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"], find_paths: ["c64u", "u2"] },
   c64_config: { load_flash: ["c64u", "u2"], save_flash: ["c64u", "u2"], reset_defaults: ["c64u", "u2"], read_debugreg: ["c64u"], write_debugreg: ["c64u"], shuffle: ["c64u", "u2"] },
   c64_extract: { fs_stats: ["c64u", "u2"] },
   c64_input: { keyboard: ["c64u"], release_all: ["c64u"], state: ["c64u"], joystick: ["c64u", "vice"] },

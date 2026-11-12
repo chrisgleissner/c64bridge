@@ -1858,7 +1858,8 @@
               "unmount",
               "file_info",
               "create_image",
-              "find_and_run"
+              "find_and_run",
+              "find_paths"
             ],
             "description": "Selects the operation."
           },
@@ -1977,8 +1978,7 @@
               "string",
               "null"
             ],
-            "description": "Root path to search",
-            "minLength": 1,
+            "description": "Root path to search Limits depend on op.",
             "default": "/"
           },
           "nameContains": {
@@ -1995,7 +1995,8 @@
               "type": "string",
               "description": "File extensions to include (without dot)",
               "minLength": 1
-            }
+            },
+            "description": "Limits depend on op."
           },
           "caseInsensitive": {
             "type": [
@@ -2035,12 +2036,22 @@
             "minimum": 1,
             "maximum": 100,
             "default": 10
+          },
+          "maxResults": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Maximum results",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
           }
         },
         "required": [
           "op"
         ],
-        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount [write]: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.",
+        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List Ultimate drive slots and their mounted images. Required inputs: none.\n- mount [write]: Mount a disk image with optional verification and retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Remove the mounted image from an Ultimate drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect metadata for a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image of the specified format. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Search Ultimate storage for paths whose names contain a substring, without running anything. Required inputs: nameContains. Optional inputs: root, extensions, maxResults, caseInsensitive.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2117,6 +2128,10 @@
           "find_and_run": [
             "c64u",
             "u2"
+          ],
+          "find_paths": [
+            "c64u",
+            "u2"
           ]
         },
         "operationEffects": {
@@ -2125,7 +2140,8 @@
           "unmount": "write",
           "file_info": "read",
           "create_image": "destructive",
-          "find_and_run": "write"
+          "find_and_run": "write",
+          "find_paths": "read"
         }
       }
     },
