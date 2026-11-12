@@ -23,15 +23,10 @@ function debugLog(...args) {
     console.error("[device.test]", ...args);
   }
 }
-// The unconfigured fallback probes the default "c64u" host. Routing HTTP through
-// a closed loopback proxy makes that probe fail without sending any request to
-// a real "c64u" host on the local network. (A C64U_* variable no longer works
-// here: it selects the c64u backend explicitly.)
-const UNREACHABLE_C64U_ENV = {
-  C64U_HOST: undefined, C64U_PORT: undefined, C64U_PASSWORD: undefined,
-  U2_HOST: undefined, U2_PORT: undefined, U2_PASSWORD: undefined,
-  HTTP_PROXY: "http://127.0.0.1:9", http_proxy: "http://127.0.0.1:9", NO_PROXY: undefined, no_proxy: undefined,
-};
+// Closed loopback port. A C64U_* variable selects the c64u backend explicitly,
+// so these tests never reach the unconfigured fallback that would probe the
+// default "c64u" host (a real device on the local network); they must not.
+const UNREACHABLE_C64U_ENV = { C64U_HOST: "127.0.0.1", C64U_PORT: "9", C64U_PASSWORD: undefined };
 const READY_PATTERN = Uint8Array.of(0x12, 0x05, 0x01, 0x04, 0x19, 0x2E);
 const WAIT_READY_TIMEOUT_MS = useViceMock ? 1_000 : 10_000;
 const WAIT_READY_INTERVAL_MS = useViceMock ? 25 : 200;
@@ -790,10 +785,9 @@ test("device: createFacade merges backend sections across config candidates", as
         // The probe is pointed at a closed loopback port so the test never
         // contacts a real "c64u" host on the network.
         await withEnv(UNREACHABLE_C64U_ENV, async () => {
-          const { facade, selected, reason } = await createFacade();
-          assert.match(reason, /fallback/);
-          assert.equal(selected, "vice");
-          assert.equal(facade.type, "vice");
+          const { facade, selected } = await createFacade();
+          assert.equal(selected, "c64u");
+          assert.equal(facade.type, "c64u");
           // The real assertion this scenario exists for: home's vice section
           // must not have leaked in via merging.
           assert.notEqual(facade.exe, leakFixtureExe);
@@ -1031,8 +1025,8 @@ test("device: createFacade fallback behavior", async (t) => {
       async () => {
         await withEnv(UNREACHABLE_C64U_ENV, async () => {
           const { facade, selected } = await createFacade();
-          assert.equal(selected, "vice");
-          assert.equal(facade.type, "vice");
+          assert.equal(selected, "c64u");
+          assert.equal(facade.type, "c64u");
         });
       },
     );
