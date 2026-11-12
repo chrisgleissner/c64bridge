@@ -8,6 +8,9 @@ import {
   chunkFiles,
   copyCoverageOutput,
   dropNonCodeLines,
+  enforceLineThreshold,
+  resolveLineThreshold,
+  summariseReport,
   resolveCoverageShardSize,
 } from "../../scripts/run-coverage.mjs";
 
@@ -105,4 +108,23 @@ test("dropNonCodeLines removes blank and comment-only lines that Bun reports as 
   // A file that cannot be read is kept as reported.
   const unreadable = await dropNonCodeLines(report, async () => { throw new Error("missing"); });
   assert.equal(unreadable.get("src/a.ts").lines.size, 8);
+});
+
+test("run-coverage fails a synthetic low report and passes one at the threshold", () => {
+  const low = summariseReport(new Map([["src/a.ts", { lines: new Map([[1, 1], [2, 0], [3, 0], [4, 0]]) }]]));
+  assert.equal(low.pct, "25.00");
+  assert.throws(() => enforceLineThreshold(low, 90), /Line coverage 25\.00% is below the required 90%/);
+
+  const ok = summariseReport(new Map([["src/a.ts", { lines: new Map([[1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1], [8, 1], [9, 1], [10, 0]]) }]]));
+  enforceLineThreshold(ok, 90);
+
+  // An empty report is 0 percent and must not pass.
+  assert.throws(() => enforceLineThreshold(summariseReport(new Map()), 90), /below the required/);
+});
+
+test("run-coverage reads the line threshold from .c8rc.json and allows an environment override", () => {
+  assert.equal(resolveLineThreshold({ lines: 90 }, {}), 90);
+  assert.equal(resolveLineThreshold({ lines: 90 }, { C64BRIDGE_COVERAGE_MIN_LINES: "85" }), 85);
+  assert.equal(resolveLineThreshold({ lines: 90 }, { C64BRIDGE_COVERAGE_MIN_LINES: "abc" }), 90);
+  assert.equal(resolveLineThreshold({}, {}), 0);
 });

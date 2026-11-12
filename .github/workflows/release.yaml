@@ -12,6 +12,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
   group: npm-release
   cancel-in-progress: false
@@ -38,6 +41,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.version) || github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Set up Node.js for release publishing
         uses: actions/setup-node@v6
@@ -492,6 +496,9 @@ jobs:
   verify_npm:
     needs:
       - release
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/package-check.yaml
     with:
       package_source: npm
