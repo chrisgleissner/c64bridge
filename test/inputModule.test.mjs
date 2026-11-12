@@ -115,19 +115,17 @@ test("c64_input.write_text works the same way under VICE", async () => {
   assert.equal(inject.bytes.length, 4);
 });
 
-test("c64_input.write_text expands numeric PETSCII tokens and preserves unknown tokens", async () => {
+test("c64_input.write_text expands numeric PETSCII tokens", async () => {
   const { ctx, writes } = createInputContext({ platformId: "c64u" });
   const result = await toolRegistry.invoke("c64_input", {
     op: "write_text",
-    text: "A{$1D}{29}{unknown}",
+    text: "A{$1D}{29}{down}",
   }, ctx);
 
   assert.equal(result.isError, undefined);
   const inject = writes.find((w) => w.kind === "kbd_queue");
   assert.ok(inject);
-  assert.deepEqual(Array.from(inject.bytes.slice(0, 3)), [65, 29, 29]);
-  // Unrecognised tokens are typed literally, with letters as PETSCII $41-$5A.
-  assert.equal(String.fromCharCode(...inject.bytes.slice(3)), "{UNKNOWN}");
+  assert.deepEqual(Array.from(inject.bytes), [65, 29, 29, 17]);
 });
 
 test("c64_input.write_text sends lowercase letters as PETSCII letters so BASIC accepts them", async () => {
@@ -143,12 +141,44 @@ test("c64_input.write_text sends lowercase letters as PETSCII letters so BASIC a
   assert.equal(String.fromCharCode(...inject.bytes), 'PRINT "HI"\r');
 });
 
-test("c64_input.write_text types malformed numeric tokens literally", async () => {
+test("c64_input.write_text rejects unknown and malformed tokens and lists the valid ones, sending nothing", async () => {
+  for (const text of ["{12AB}", "{$1G}", "{256}", "ab{unknown}"]) {
+    const { ctx, writes } = createInputContext({ platformId: "c64u" });
+    const result = await toolRegistry.invoke("c64_input", { op: "write_text", text }, ctx);
+    assert.equal(result.isError, true, text);
+    assert.equal(result.metadata?.error?.kind, "validation", text);
+    assert.match(result.content[0].text, /Unknown token \{/);
+    assert.match(result.content[0].text, /\{RETURN\}/);
+    assert.equal(writes.find((w) => w.kind === "kbd_queue"), undefined, text);
+  }
+  const { ctx } = createInputContext({ platformId: "c64u" });
+  const positioned = await toolRegistry.invoke("c64_input", { op: "write_text", text: "ab{unknown}" }, ctx);
+  assert.match(positioned.content[0].text, /position 3/);
+});
+
+test("c64_input.write_text rejects characters without a PETSCII mapping, naming character and position", async () => {
   const { ctx, writes } = createInputContext({ platformId: "c64u" });
-  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "{12AB}{$1G}{256}" }, ctx);
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "ok \u20ac" }, ctx);
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata?.error?.kind, "validation");
+  assert.match(result.content[0].text, /'\u20ac' \(U\+20AC\) at position 4/);
+  assert.equal(writes.find((w) => w.kind === "kbd_queue"), undefined);
+  const tab = await toolRegistry.invoke("c64_input", { op: "write_text", text: "a\tb" }, ctx);
+  assert.equal(tab.isError, true);
+});
+
+test("c64_input.write_text maps newlines to RETURN", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "10 end\r\nrun\n" }, ctx);
   assert.equal(result.isError, undefined);
   const inject = writes.find((w) => w.kind === "kbd_queue");
-  assert.equal(String.fromCharCode(...inject.bytes), "{12AB}{$1G}{256}");
+  assert.equal(String.fromCharCode(...inject.bytes), "10 END\rRUN\r");
+});
+
+test("c64_input.key description does not claim to hold a key", async () => {
+  const { keyArgsSchema } = await import("../src/tools/input.js");
+  assert.ok(keyArgsSchema.jsonSchema.description.length > 0);
+  assert.ok(!/hold/i.test(keyArgsSchema.jsonSchema.description));
 });
 
 test("c64_input.key sends a lowercase letter as the PETSCII letter", async () => {

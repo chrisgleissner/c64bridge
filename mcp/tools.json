@@ -3554,7 +3554,7 @@
           },
           "text": {
             "type": "string",
-            "description": "Text to type. Use {RETURN}, {CLR}, {F1}…{F8}, {UP/DOWN/LEFT/RIGHT}, colour names, etc.",
+            "description": "Text to type: printable ASCII (letters are sent as PETSCII upper case), \\n for RETURN, and {TOKEN}s such as {RETURN}, {CLR}, {F1}…{F8}, {UP}, {DOWN}, {LEFT}, {RIGHT}, colour names, or {$1D}/{29} codes. Characters with no PETSCII mapping and unknown tokens are rejected.",
             "minLength": 1,
             "maxLength": 512
           },
@@ -3716,7 +3716,7 @@
         "required": [
           "op"
         ],
-        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text [write]: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key [write]: Tap a single key or hold it for a duration. Required inputs: key. Optional inputs: durationMs, count.\n- joystick [c64u, vice] [write]: Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard [c64u] [write]: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all [c64u] [write]: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state [c64u]: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
+        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text [write]: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key [write]: Press a single key one or more times, optionally with a delay between presses. Required inputs: key. Optional inputs: durationMs, count.\n- joystick [c64u, vice] [write]: Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard [c64u] [write]: Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: inputs, transition.\n- release_all [c64u] [write]: Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.\n- state [c64u]: Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). Required inputs: none.",
         "additionalProperties": false
       },
       "annotations": {

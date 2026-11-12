@@ -846,7 +846,7 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
-| `key` | Tap a single key or hold it for a duration. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
+| `key` | Press a single key one or more times, optionally with a delay between presses. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
 | `keyboard` | Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+). | `inputs`, `transition` | — | ✅ |  |  |
 | `release_all` | Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+). | — | — | ✅ |  |  |
 | `state` | Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+). | — | — | ✅ |  |  |
