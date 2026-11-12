@@ -6,7 +6,7 @@ import { ToolError, ToolValidationError, ToolUnsupportedPlatformError, toolError
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath, isAbsolute } from "node:path";
-import { isWithin, resolveHostPath } from "../../hostPaths.js";
+import { isWithin, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 
 const bundleRunArtifactsArgsSchema = objectSchema({
   description: "Gather screen capture, memory snapshot, and debugreg into a structured bundle.",
@@ -116,5 +116,5 @@ function containedPath(base: string, name: string): string {
   if (!name || isAbsolute(name) || name.includes("/") || name.includes("\\")) throw new ToolValidationError("Unsafe artifact filename.");
   const candidate = resolvePath(joinPath(base, name));
   if (candidate === base || !isWithin(base, candidate)) throw new ToolValidationError("Artifact path escapes its output directory.");
-  return candidate;
+  return resolveHostChildPath(base, name);
 }

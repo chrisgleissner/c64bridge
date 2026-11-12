@@ -202,3 +202,20 @@ test("paths inside the temp directory are still accepted", async () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("memory_dump_to_file does not follow a symbolic link planted at the manifest path", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h2-manifest-"));
+  const outside = outsideTarget("manifest.json");
+  fs.mkdirSync(outside.dir);
+  try {
+    const outputPath = path.join(dir, "dump.hex");
+    fs.symlinkSync(outside.file, `${outputPath}.json`);
+    const ctx = { platform: { id: "c64u" }, client: { async readMemory() { return { success: true, data: "$AABB" }; } }, logger: createLogger() };
+    const res = await metaModule.invoke("memory_dump_to_file", { address: "$C000", length: 2, outputPath, pauseDuringRead: false }, ctx);
+    assert.equal(res.isError, true, JSON.stringify(res.content));
+    assert.equal(fs.existsSync(outside.file), false, "nothing was written through the link");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside.dir, { recursive: true, force: true });
+  }
+});

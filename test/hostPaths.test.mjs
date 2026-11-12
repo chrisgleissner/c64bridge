@@ -3,7 +3,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { allowedHostRoots, isWithin, resolveHostPath } from "../src/hostPaths.js";
+import { allowedHostRoots, defaultHostOutputDir, isWithin, resolveHostChildPath, resolveHostPath } from "../src/hostPaths.js";
 import { ToolValidationError } from "../src/tools/errors.js";
 
 function withEnv(env, fn) {
@@ -178,6 +178,39 @@ test("C64BRIDGE_ALLOWED_DIRS=* disables confinement", () => {
       assert.ok(resolveHostPath("/etc/c64bridge-test-should-not-exist", { purpose: "write" }));
     });
   } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("resolveHostChildPath rejects a symbolic link planted at the appended name", () => {
+  const { base, root, outside } = makeFixture();
+  try {
+    withEnv({ TMPDIR: path.join(base, "tmp"), C64BRIDGE_ALLOWED_DIRS: root }, () => {
+      assert.throws(() => resolveHostChildPath(root, "link-file"), ToolValidationError);
+      assert.throws(() => resolveHostChildPath(root, "link-dir", "manifest.json"), ToolValidationError);
+      assert.throws(() => resolveHostChildPath(root, "dangling"), ToolValidationError);
+      assert.equal(resolveHostChildPath(root, "manifest.json"), path.join(root, "manifest.json"));
+      assert.equal(fs.readFileSync(path.join(outside, "secret.txt"), "utf8"), "secret");
+    });
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("defaultHostOutputDir falls back to ~/.c64bridge when the working directory is not a root", () => {
+  const { base, root } = makeFixture();
+  const originalCwd = process.cwd();
+  try {
+    withEnv({ HOME: root, TMPDIR: path.join(base, "tmp"), C64BRIDGE_ALLOWED_DIRS: undefined }, () => {
+      process.chdir(root);
+      assert.equal(defaultHostOutputDir("artifacts", "run_1"), path.join(root, ".c64bridge", "artifacts", "run_1"));
+    });
+    process.chdir(base);
+    withEnv({ C64BRIDGE_ALLOWED_DIRS: undefined }, () => {
+      assert.equal(defaultHostOutputDir("artifacts", "run_1"), path.join(base, "artifacts", "run_1"));
+    });
+  } finally {
+    process.chdir(originalCwd);
     fs.rmSync(base, { recursive: true, force: true });
   }
 });

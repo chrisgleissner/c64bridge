@@ -6,7 +6,7 @@ import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, un
 import { normalizeErrorDetails } from "./util.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
-import { resolveHostPath } from "../../hostPaths.js";
+import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
@@ -289,7 +289,7 @@ export const tools: ToolDefinition[] = [
             const resolvedDir = resolveHostPath(String(parsed.outputDir), { purpose: "write" });
             await fs.mkdir(resolvedDir, { recursive: true });
             outputFiles = await Promise.all(sprites.map(async (sprite) => {
-              const filePath = resolvePath(resolvedDir, `sprite_${sprite.address.replace("$", "").toLowerCase()}.spr`);
+              const filePath = resolveHostChildPath(resolvedDir, `sprite_${sprite.address.replace("$", "").toLowerCase()}.spr`);
               await fs.mkdir(dirname(filePath), { recursive: true });
               await fs.writeFile(filePath, Buffer.from(hexClean(sprite.bytesHex), "hex"));
               sprite.filePath = filePath;

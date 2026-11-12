@@ -72,6 +72,26 @@ export function allowedHostRoots(): string[] {
   return [...new Set(roots)];
 }
 
+/**
+ * Resolve a file name that the server appends to an already resolved directory.
+ * The final path is checked again: a symbolic link planted at that name in a
+ * shared directory (for example the temp directory) must not redirect the write
+ * outside the allowed roots.
+ */
+export function resolveHostChildPath(dir: string, ...names: string[]): string {
+  return resolveHostPath(path.join(dir, ...names), { purpose: "write" });
+}
+
+/** Default output directory under the working directory, or under ~/.c64bridge when the working directory is not an allowed root. */
+export function defaultHostOutputDir(...names: string[]): string {
+  try {
+    return resolveHostPath(path.join(process.cwd(), ...names), { purpose: "write" });
+  } catch (error) {
+    if (!(error instanceof ToolValidationError)) throw error;
+    return resolveHostPath(path.join(homeDirectory(), ".c64bridge", ...names), { purpose: "write" });
+  }
+}
+
 function confinementDisabled(): boolean {
   const extra = process.env[ALLOWED_DIRS_ENV];
   return !!extra && extra.trim() === "*";

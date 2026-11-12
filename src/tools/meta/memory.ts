@@ -270,7 +270,7 @@ export const tools: ToolDefinition[] = [
             paused: canPause,
             createdAt: new Date().toISOString(),
           };
-          await fs.writeFile(`${outputPath}.json`, JSON.stringify(manifest, null, 2), "utf8");
+          await fs.writeFile(resolveHostPath(`${outputPath}.json`, { purpose: "write" }), JSON.stringify(manifest, null, 2), "utf8");
           let warnings: string[] | undefined;
           if (canPause) {
             released = true;
