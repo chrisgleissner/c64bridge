@@ -1078,7 +1078,11 @@ class Assembler {
           if (arg.kind === "string") {
             if (pass === 1) {
               for (const char of arg.value) {
-                this.writeByte(char.charCodeAt(0), location);
+                const code = char.charCodeAt(0);
+                if (code > 0xff) {
+                  throw new AssemblyError(`byte directive character '${char}' (code ${code}) does not fit in one byte`, location);
+                }
+                this.writeByte(code, location);
               }
             } else {
               this.pc += arg.value.length;
@@ -1088,6 +1092,9 @@ class Assembler {
             if (pass === 1) {
               if (value === undefined) {
                 throw new AssemblyError("byte directive contains undefined expression", location);
+              }
+              if (value < -128 || value > 255) {
+                throw new AssemblyError(`byte directive value ${value} is outside -128..255 and would be truncated`, location);
               }
               this.writeByte(value, location);
             } else {
@@ -1115,6 +1122,9 @@ class Assembler {
               }
               this.pc += 2;
             } else if (pass === 1) {
+              if (value < -32768 || value > 65535) {
+                throw new AssemblyError(`word directive value ${value} is outside -32768..65535 and would be truncated`, location);
+              }
               this.writeWord(value, location);
             } else {
               this.pc += 2;
@@ -1136,8 +1146,14 @@ class Assembler {
         }
         // Reserved space advances the PC without emitting; buildPrg includes it
         // (zero-filled) only where it adjoins emitted bytes.
-        if (amount > 0) this.reserved.push([this.pc, Math.min(0xffff, this.pc + amount - 1)]);
-        this.pc = (this.pc + amount) & 0xffff;
+        if (this.pc + amount > MAX_ADDRESS + 1) {
+          throw new AssemblyError(
+            `reserve directive of ${amount} bytes at ${formatHex(this.pc)} passes $FFFF`,
+            location,
+          );
+        }
+        if (amount > 0) this.reserved.push([this.pc, this.pc + amount - 1]);
+        this.pc += amount;
         break;
       }
       case "include": {
@@ -1275,12 +1291,20 @@ class Assembler {
   }
 
   private writeByte(value: number, location: SourceLocation): void {
+    if (this.pc > MAX_ADDRESS) {
+      throw new AssemblyError(
+        `Output passes $FFFF: a byte would be written at ${formatHex(this.pc)}, outside the 64 KB address space`,
+        location,
+      );
+    }
     const masked = value & 0xff;
     this.memory[this.pc] = masked;
     this.written[this.pc] = 1;
     this.lowestWritten = Math.min(this.lowestWritten, this.pc);
     this.highestWritten = Math.max(this.highestWritten, this.pc);
-    this.pc = (this.pc + 1) & 0xffff;
+    // The counter may reach $10000 so that a following write is detected; a
+    // wrapped counter would silently overwrite the start of the image.
+    this.pc += 1;
   }
 
   private writeWord(value: number, location: SourceLocation): void {
@@ -1306,6 +1330,7 @@ function determineInstruction(
   if (statement.resolvedMode && pass === 1) {
     const value = statement.operand.kind === "none" ? undefined : resolveOperandValue(statement.operand, evaluator, pass, location);
     assertZeroPageOperand(statement.mnemonic, statement.resolvedMode, value, location);
+    assertOperandRange(statement.mnemonic, statement.resolvedMode, value, location);
     const size = instructionSize(statement.resolvedMode);
     return {
       mode: statement.resolvedMode,
@@ -1452,6 +1477,50 @@ function assertZeroPageOperand(mnemonic: string, mode: AddressingMode, value: nu
     `Instruction ${mnemonic} does not support ${absoluteMode} addressing (operand ${formatHex(value)} is outside zero page)`,
     location,
   );
+}
+
+/**
+ * Rejects operands that the encoding would truncate. Runs in the final pass
+ * only, where every symbol has a value; in the first pass a forward reference
+ * is still undefined and is sized as absolute.
+ */
+function assertOperandRange(mnemonic: string, mode: AddressingMode, value: number | undefined, location: SourceLocation): void {
+  if (value === undefined) return;
+  switch (mode) {
+    case AddressingMode.Immediate:
+      if (value < -128 || value > 255) {
+        throw new AssemblyError(
+          `Immediate operand ${value} of ${mnemonic} is outside -128..255 and would be truncated to one byte`,
+          location,
+        );
+      }
+      return;
+    case AddressingMode.IndirectX:
+    case AddressingMode.IndirectY:
+      if (value < 0 || value > 0xff) {
+        const form = mode === AddressingMode.IndirectX ? "(zp,X)" : "(zp),Y";
+        throw new AssemblyError(
+          `Instruction ${mnemonic} ${form} requires a zero-page operand ($00-$FF), got ${value < 0 ? value : formatHex(value)}`,
+          location,
+        );
+      }
+      return;
+    case AddressingMode.ZeroPageS:
+      if (value < 0 || value > 0xff) {
+        throw new AssemblyError(`Stack-relative operand ${value} of ${mnemonic} is outside 0..255`, location);
+      }
+      return;
+    case AddressingMode.Absolute:
+    case AddressingMode.AbsoluteX:
+    case AddressingMode.AbsoluteY:
+    case AddressingMode.Indirect:
+      if (value < 0 || value > 0xffff) {
+        throw new AssemblyError(`Address operand ${value} of ${mnemonic} is outside $0000-$FFFF`, location);
+      }
+      return;
+    default:
+      return;
+  }
 }
 
 const ZERO_PAGE_TO_ABSOLUTE_MODE = new Map<AddressingMode, AddressingMode>([

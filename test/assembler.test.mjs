@@ -350,7 +350,7 @@ test("assemblyToPrg evaluates * as the current PC and < > as low and high byte s
     ldx #>msg
     lda #<(msg + $ff)
     lda #2*3
-    lda #* - $bf00
+    lda #<(* - $bf00)
 msg:
     .byte 0
   `;
@@ -454,4 +454,45 @@ test("assemblyToPrg zero-fills reserved space that overlaps later code", () => {
   // The .byte at $C002 lands inside the reserved block $C001-$C004; the block still extends the image.
   const prg = assemblyToPrg("* = $c000\n    rts\nv: .res 4\n* = $c002\n    .byte $ee");
   assert.deepEqual([...prg], [0x00, 0xc0, 0x60, 0x00, 0xee, 0x00, 0x00]);
+});
+
+function assemblyError(source) {
+  try {
+    assemblyToPrg(source);
+  } catch (error) {
+    assert.ok(error instanceof AssemblyError, `expected AssemblyError, got ${error}`);
+    return error.message;
+  }
+  assert.fail("expected assembly to fail");
+}
+
+test("assembler rejects operands that would be truncated and names the line", () => {
+  assert.match(assemblyError("*=$C000\n nop\n lda ($1000),y"), /:3: .*zero-page/);
+  assert.match(assemblyError("*=$C000\n lda ($1000,x)"), /:2: .*zero-page/);
+  assert.match(assemblyError("*=$C000\n nop\n lda #256"), /:3: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n lda #-129"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n .byte 1,256"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n .byte -129"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n .word 1\n .word 70000"), /:3: .*-32768\.\.65535/);
+  assert.match(assemblyError("*=$C000\n .word -32769"), /:2: .*-32768\.\.65535/);
+  assert.match(assemblyError("*=$C000\n jmp $10000"), /:2: .*\$0000-\$FFFF/);
+});
+
+test("assembler accepts the boundary values of each range", () => {
+  const prg = assemblyToPrg("*=$C000\n lda #255\n lda #-128\n lda ($FF),y\n .byte -128,255\n .word -32768,65535");
+  assert.deepEqual([...prg.subarray(2)], [0xa9, 0xff, 0xa9, 0x80, 0xb1, 0xff, 0x80, 0xff, 0x00, 0x80, 0xff, 0xff]);
+});
+
+test("assembler checks ranges on the final value of forward references only", () => {
+  const prg = assemblyToPrg("*=$C000\n lda #<later\n lda ($10),y\n jmp later\nlater: rts");
+  assert.equal(prg[prg.length - 1], 0x60);
+  assert.match(assemblyError("*=$C000\n lda #later\nlater: rts"), /:2: .*-128\.\.255/);
+});
+
+test("assembler rejects output that passes $FFFF", () => {
+  assert.match(assemblyError("*=$FFFE\n nop\n nop\n nop"), /:4: .*\$FFFF/);
+  assert.match(assemblyError("*=$FFFE\n jmp $1234"), /:2: .*\$FFFF/);
+  assert.match(assemblyError("*=$FFF0\n .res $20"), /:2: .*\$FFFF/);
+  const prg = assemblyToPrg("*=$FFFE\n nop\n nop");
+  assert.deepEqual([...prg], [0xfe, 0xff, 0xea, 0xea]);
 });
