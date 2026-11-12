@@ -64,7 +64,7 @@
     },
     "pattern": {
       "type": "string",
-      "description": "Substring or regex to find Limits depend on op.",
+      "description": "Substring or regex to find (at most 200 characters; regex with nested quantifiers or backreferences is rejected) Limits depend on op.",
       "minLength": 1
     },
     "isRegex": {
@@ -88,8 +88,9 @@
         "integer",
         "null"
       ],
-      "description": "Overall timeout in milliseconds",
+      "description": "Overall timeout in milliseconds (1-120000)",
       "minimum": 1,
+      "maximum": 120000,
       "default": 3000
     },
     "intervalMs": {
@@ -97,8 +98,8 @@
         "integer",
         "null"
       ],
-      "description": "Poll interval in milliseconds",
-      "minimum": 1,
+      "description": "Poll interval in milliseconds (at least 20)",
+      "minimum": 20,
       "default": 100
     },
     "instructionCount": {
