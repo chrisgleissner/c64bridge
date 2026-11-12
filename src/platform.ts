@@ -68,10 +68,10 @@ export function isPlatformSupported(
 }
 
 export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
-  const map: Record<PlatformId, { available: string[]; unsupported: string[] }> = {
-    c64u: { available: [], unsupported: [] },
-    u2: { available: [], unsupported: [] },
-    vice: { available: [], unsupported: [] },
+  const map: Record<PlatformId, { available: string[]; unsupported: string[]; unsupportedOperations: string[] }> = {
+    c64u: { available: [], unsupported: [], unsupportedOperations: [] },
+    u2: { available: [], unsupported: [], unsupportedOperations: [] },
+    vice: { available: [], unsupported: [], unsupportedOperations: [] },
   };
 
   for (const tool of tools) {
@@ -79,6 +79,12 @@ export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
     for (const id of ["c64u", "u2", "vice"] as const) {
       if (supported.includes(id)) {
         map[id].available.push(tool.name);
+        // Operations of an available tool that this backend does not provide.
+        for (const [op, platforms] of Object.entries(tool.metadata.operationPlatforms ?? {})) {
+          if (platforms.length > 0 && !platforms.includes(id)) {
+            map[id].unsupportedOperations.push(`${tool.name}.${op}`);
+          }
+        }
       } else {
         map[id].unsupported.push(tool.name);
       }
@@ -92,18 +98,21 @@ export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
         limited_features: PLATFORM_FEATURES.c64u.limited,
         tools: map.c64u.available.sort(),
         unsupported_tools: map.c64u.unsupported.sort(),
+        unsupported_operations: map.c64u.unsupportedOperations.sort(),
       },
       u2: {
         features: PLATFORM_FEATURES.u2.features,
         limited_features: PLATFORM_FEATURES.u2.limited,
         tools: map.u2.available.sort(),
         unsupported_tools: map.u2.unsupported.sort(),
+        unsupported_operations: map.u2.unsupportedOperations.sort(),
       },
       vice: {
         features: PLATFORM_FEATURES.vice.features,
         limited_features: PLATFORM_FEATURES.vice.limited,
         tools: map.vice.available.sort(),
         unsupported_tools: map.vice.unsupported.sort(),
+        unsupported_operations: map.vice.unsupportedOperations.sort(),
       },
     },
   } as const;

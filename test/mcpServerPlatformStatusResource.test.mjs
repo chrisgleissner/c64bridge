@@ -53,3 +53,13 @@ test("renderPlatformStatusMarkdown reports a confirmed capability without waitin
   assert.ok(elapsed < 500, `expected an immediate response, took ${elapsed}ms`);
   assert.match(markdown, /machine:input.*\*\*available\*\*/s);
 });
+
+test("platform status lists unsupported operations per backend", async () => {
+  const markdown = await renderPlatformStatusMarkdown(createFakeClient());
+  const vice = markdown.slice(markdown.indexOf("### VICE"));
+  assert.match(vice, /Unsupported operations of supported tools \(\d+\):.*`c64_disk\.unmount`/);
+  const u2 = markdown.slice(markdown.indexOf("### U2"), markdown.indexOf("### VICE"));
+  assert.match(u2, /Unsupported operations of supported tools \(\d+\):.*`c64_input\.joystick`/);
+  const c64u = markdown.slice(markdown.indexOf("### C64U"), markdown.indexOf("### U2"));
+  assert.match(c64u, /Unsupported operations of supported tools: _none_/);
+});

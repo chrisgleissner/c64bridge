@@ -714,6 +714,13 @@ export async function renderPlatformStatusMarkdown(client: C64Client): Promise<s
             .join(", ")}`
         : "- Unsupported tools: _none_",
     );
+    lines.push(
+      info.unsupported_operations.length > 0
+        ? `- Unsupported operations of supported tools (${info.unsupported_operations.length}): ${info.unsupported_operations
+            .map((operation) => `\`${operation}\``)
+            .join(", ")}`
+        : "- Unsupported operations of supported tools: _none_",
+    );
     lines.push("");
   }
 

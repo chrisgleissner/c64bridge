@@ -187,3 +187,32 @@ test("getAllPlatformStatuses includes features and limitations", () => {
   assert.ok(vice.limitedFeatures.length > 0);
   assert.equal(c64u.limitedFeatures.length, 0);
 });
+
+test("describePlatformCapabilities lists unsupported operations of supported tools", () => {
+  const tools = [
+    {
+      name: "c64_disk",
+      metadata: {
+        platforms: ["c64u", "u2", "vice"],
+        operationPlatforms: { unmount: ["c64u", "u2"], mount: ["c64u", "u2", "vice"] },
+      },
+    },
+    { name: "c64_only", metadata: { platforms: ["c64u"], operationPlatforms: { x: ["c64u"] } } },
+  ];
+  const desc = describePlatformCapabilities(tools);
+  assert.deepEqual(desc.platforms.vice.unsupported_operations, ["c64_disk.unmount"]);
+  assert.deepEqual(desc.platforms.u2.unsupported_operations, []);
+  assert.deepEqual(desc.platforms.c64u.unsupported_operations, []);
+  // Tools that are unavailable as a whole are reported as tools, not as operations.
+  assert.ok(desc.platforms.vice.unsupported_tools.includes("c64_only"));
+});
+
+test("registry descriptions tag operations that are not available on every backend", async () => {
+  const { toolRegistry } = await import("../src/tools/registry/index.js");
+  const disk = toolRegistry.list().find((tool) => tool.name === "c64_disk");
+  assert.match(disk.inputSchema.description, /\n- unmount \[c64u, u2\]: /);
+  const memory = toolRegistry.list().find((tool) => tool.name === "c64_memory");
+  assert.ok(!/\n- read \[/.test(memory.inputSchema.description), "ops available everywhere stay untagged");
+  const system = toolRegistry.list().find((tool) => tool.name === "c64_system");
+  assert.match(system.inputSchema.description, /\n- poweroff \[c64u, vice\]: /);
+});

@@ -97,6 +97,8 @@ test("c64_select_backend switches to an available backend and updates platform s
   assert.equal(result.structuredContent?.data?.activeBackend, "vice");
   assert.ok(result.structuredContent?.data?.availableTools.includes("c64_select_backend"));
   assert.ok(result.structuredContent?.data?.unavailableTools.includes("c64_printer"));
+  assert.ok(result.structuredContent?.data?.unavailableOperations.includes("c64_disk.unmount"));
+  assert.ok(!result.structuredContent?.data?.unavailableOperations.includes("c64_memory.read"));
 });
 
 test("c64_select_backend returns an error result when the backend is unavailable", async () => {

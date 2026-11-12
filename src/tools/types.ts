@@ -520,7 +520,7 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
         return {
           name: tool.name,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema: tagOperationPlatforms(tool.inputSchema, tool.operationPlatforms),
           metadata,
         } satisfies ToolDescriptor;
       });
@@ -569,6 +569,32 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
       );
     },
   };
+}
+
+const ALL_PLATFORMS: readonly PlatformId[] = ["c64u", "u2", "vice"];
+
+/**
+ * Marks operations that are not available on every backend in the operation list
+ * of a grouped tool description, for example "- unmount [c64u, u2]: ...".
+ */
+export function tagOperationPlatforms(
+  schema: JsonSchema | undefined,
+  operationPlatforms: Record<string, readonly PlatformId[]> | undefined,
+): JsonSchema | undefined {
+  if (!schema?.description || !operationPlatforms) {
+    return schema;
+  }
+  let description = schema.description;
+  for (const [op, platforms] of Object.entries(operationPlatforms)) {
+    if (platforms.length === 0 || ALL_PLATFORMS.every((id) => platforms.includes(id))) {
+      continue;
+    }
+    const marker = `\n- ${op}: `;
+    if (description.includes(marker)) {
+      description = description.replace(marker, `\n- ${op} [${platforms.join(", ")}]: `);
+    }
+  }
+  return description === schema.description ? schema : { ...schema, description };
 }
 
 function configuredBackends(ctx: ToolExecutionContext): readonly PlatformId[] | undefined {

@@ -62,6 +62,7 @@ function describeTargetPlatform(target: PlatformId) {
   return {
     availableTools: info.tools,
     unavailableTools: info.unsupported_tools,
+    unavailableOperations: info.unsupported_operations,
   };
 }
 
@@ -99,7 +100,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
     ctx.client.switchBackend(backend);
     ctx.setPlatform(backend);
 
-    const { availableTools, unavailableTools } = describeTargetPlatform(backend);
+    const { availableTools, unavailableTools, unavailableOperations } = describeTargetPlatform(backend);
     const switchBackTarget = availableBackends.find((candidate) => candidate !== backend);
     const data = {
       success: true,
@@ -107,6 +108,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
       configuredBackends: availableBackends,
       availableTools,
       unavailableTools,
+      unavailableOperations,
       usageHint: switchBackTarget
         ? `Use c64_select_backend again with backend: "${switchBackTarget}" to switch back.`
         : "No other backend is configured.",
