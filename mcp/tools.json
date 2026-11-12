@@ -456,7 +456,7 @@
               "integer",
               "null"
             ],
-            "description": "Stop after this many instructions (overrides length as a termination condition).",
+            "description": "Stop after this many instructions. When given, it replaces length: 3 x instructionCount bytes are read (fewer near $FFFF).",
             "minimum": 1,
             "maximum": 512
           },

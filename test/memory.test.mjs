@@ -1275,3 +1275,28 @@ test("write with verify reports a failed pre-read with its cause", async () => {
   assert.equal(res.isError, true);
   assert.match(res.content[0].text, /^C64 backend reported failure while reading memory: read refused$/);
 });
+
+test("disassemble with instructionCount reads 3 bytes per instruction, clamped at $FFFF, and returns lines", async () => {
+  const reads = [];
+  const ctx = {
+    client: createMockClient({
+      async readMemoryRaw(address, length) {
+        reads.push([address, length]);
+        return new Uint8Array(length).fill(0xea);
+      },
+    }),
+    logger: createLogger(),
+    platform: { id: "c64u", features: [], limitedFeatures: [] },
+  };
+
+  const res = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$C000", instructionCount: 100 }, ctx);
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(reads[0], [0xc000, 300]);
+  assert.equal(res.metadata.instructionCount, 100);
+  assert.equal(res.metadata.lines.length, 100);
+  assert.equal(res.metadata.lines[0].mnemonic, "NOP");
+
+  const near = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$FFFE", instructionCount: 10 }, ctx);
+  assert.equal(near.isError, undefined);
+  assert.deepEqual(reads[1], [0xfffe, 2]);
+});

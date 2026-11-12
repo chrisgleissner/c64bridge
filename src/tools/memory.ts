@@ -477,7 +477,7 @@ const disassembleArgsSchema = objectSchema({
       default: 64,
     }),
     instructionCount: optionalSchema(numberSchema({
-      description: "Stop after this many instructions (overrides length as a termination condition).",
+      description: "Stop after this many instructions. When given, it replaces length: 3 x instructionCount bytes are read (fewer near $FFFF).",
       integer: true,
       minimum: 1,
       maximum: 512,
@@ -490,10 +490,14 @@ const disassembleArgsSchema = objectSchema({
 async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = disassembleArgsSchema.parse(rawArgs ?? {});
-    const length = parsed.length ?? 64;
+    const address = parseAddressArg(parsed.address, "$.address");
+    // An instruction is at most 3 bytes, so 3 x instructionCount bytes always
+    // cover the requested instructions; clamp at the end of the address space.
+    const length = parsed.instructionCount !== undefined
+      ? Math.min(3 * parsed.instructionCount, 0x10000 - address)
+      : parsed.length ?? 64;
     ctx.logger.info("Disassembling VICE memory", { address: parsed.address, length });
 
-    const address = parseAddressArg(parsed.address, "$.address");
     validateRangeWithinAddressSpace(address, length, "$.address");
 
     const bytes = await ctx.client.readMemoryRaw(address, length);
@@ -507,6 +511,14 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
       address: addrHex,
       bytesRead: bytes.length,
       instructionCount: lines.length,
+      lines: lines.map((line) => ({
+        address: `$${line.address.toString(16).toUpperCase().padStart(4, "0")}`,
+        bytes: line.bytes.map((value) => value.toString(16).toUpperCase().padStart(2, "0")),
+        ...(line.label ? { label: line.label } : {}),
+        mnemonic: line.mnemonic,
+        operand: line.operand,
+        undocumented: line.undocumented,
+      })),
     });
   } catch (error) {
     if (error instanceof ToolError) {
