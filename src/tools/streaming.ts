@@ -4,6 +4,7 @@ import { textResult } from "./responses.js";
 import {
   ToolError,
   ToolExecutionError,
+  ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
@@ -20,8 +21,8 @@ const streamStartArgsSchema = objectSchema({
   properties: {
     stream: streamIdentifierSchema,
     target: stringSchema({
-      description: "Destination host:port or UDP target understood by the firmware.",
-      minLength: 3,
+      description: "Destination of the UDP stream: IPv4 address or hostname with an optional :port (1-65535), e.g. 192.168.1.10, 192.168.1.10:11000 or pc.local:11000. The device sends the stream unencrypted over UDP to this address.",
+      minLength: 1,
     }),
   },
   required: ["stream", "target"],
@@ -36,6 +37,34 @@ const streamStopArgsSchema = objectSchema({
   required: ["stream"],
   additionalProperties: false,
 });
+
+const STREAM_TARGET_FORMS = "an IPv4 address or hostname with an optional :port (1-65535), e.g. 192.168.1.10, 192.168.1.10:11000 or pc.local:11000";
+const HOST_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+
+export function validateStreamTarget(target: string): void {
+  const fail = (): never => {
+    throw new ToolValidationError(
+      `Invalid parameter 'target' (${JSON.stringify(target)}): expected ${STREAM_TARGET_FORMS}.`,
+      { path: "target" },
+    );
+  };
+  const parts = target.split(":");
+  if (parts.length > 2) fail();
+  const [host, port] = parts;
+  if (port !== undefined) {
+    if (!/^\d{1,5}$/.test(port)) fail();
+    const n = Number(port);
+    if (n < 1 || n > 65535) fail();
+  }
+  if (!host || host.length > 253) fail();
+  const labels = host.split(".");
+  if (!labels.every((label) => HOST_LABEL.test(label))) fail();
+  if (/^[\d.]+$/.test(host)) {
+    // Numeric-only: must be a proper dotted IPv4 address.
+    const octets = labels;
+    if (octets.length !== 4 || !octets.every((o) => /^\d{1,3}$/.test(o) && Number(o) <= 255)) fail();
+  }
+}
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -72,7 +101,7 @@ export const streamingModule = defineToolModule({
   tools: [
     {
       name: "stream_start",
-      description: "Start an Ultimate streaming session (video/audio/debug) targeting a host:port destination. See c64://guide/index for usage notes.",
+      description: "Start an Ultimate streaming session (video/audio/debug) sending an unencrypted UDP stream from the device to an IPv4 address or hostname with an optional :port. See c64://guide/index for usage notes.",
       summary: "Validates stream arguments and forwards the request to firmware, returning status metadata.",
       inputSchema: streamStartArgsSchema.jsonSchema,
       tags: ["stream", "start"],
@@ -87,6 +116,7 @@ export const streamingModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = streamStartArgsSchema.parse(args ?? {});
+          validateStreamTarget(parsed.target);
           ctx.logger.info("Starting Ultimate stream", {
             stream: parsed.stream,
             target: parsed.target,

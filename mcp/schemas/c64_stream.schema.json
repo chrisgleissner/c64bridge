@@ -20,13 +20,13 @@
     },
     "target": {
       "type": "string",
-      "description": "Destination host:port or UDP target understood by the firmware.",
-      "minLength": 3
+      "description": "Destination of the UDP stream: IPv4 address or hostname with an optional :port (1-65535), e.g. 192.168.1.10, 192.168.1.10:11000 or pc.local:11000. The device sends the stream unencrypted over UDP to this address.",
+      "minLength": 1
     }
   },
   "required": [
     "op"
   ],
-  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start [write]: Start an Ultimate streaming session toward a host:port target. Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
+  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start [write]: Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
   "additionalProperties": false
 }

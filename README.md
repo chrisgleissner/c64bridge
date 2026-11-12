@@ -938,7 +938,7 @@ Grouped entry point for starting and stopping Ultimate streaming sessions.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `start` | Start an Ultimate streaming session toward a host:port target. | `stream`, `target` | — | ✅ |  |  |
+| `start` | Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). | `stream`, `target` | — | ✅ |  |  |
 | `stop` | Stop an active Ultimate streaming session. | `stream` | — | ✅ |  |  |
 
 #### c64_system
