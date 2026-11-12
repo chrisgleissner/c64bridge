@@ -513,3 +513,173 @@ test("R-04 a background task stays on the backend it was started against after a
     else process.env.C64_TASK_STATE_FILE = previous;
   }
 });
+
+// R-05: each test loads its own copy of the module so the registry and load state start empty.
+async function freshBackground(tag, subdir) {
+  const { file, dir } = tmpPath(subdir, "tasks.json");
+  await fs.rm(dir, { recursive: true, force: true });
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  const mod = await import(`../../src/tools/meta/background.ts?r05=${tag}`);
+  const tool = (name) => mod.tools.find((entry) => entry.name === name);
+  const restore = () => {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  };
+  return { mod, tool, file, dir, restore };
+}
+
+const persistedTask = (id, name, extra = {}) => ({
+  id,
+  name,
+  type: "background",
+  operation: "read",
+  args: {},
+  intervalMs: 100,
+  iterations: 1,
+  status: "completed",
+  startedAt: "2026-03-26T09:00:00.000Z",
+  updatedAt: "2026-03-26T09:00:01.000Z",
+  stoppedAt: "2026-03-26T09:00:01.000Z",
+  lastError: null,
+  nextRunAt: null,
+  folder: `tasks/background/${id}`,
+  ...extra,
+});
+
+test("R-05 interval, iteration and running task count are bounded", async () => {
+  const { tool, restore } = await freshBackground("limits", "background-limits");
+  try {
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
+    const start = (args) => tool("start_background_task").execute(args, ctx);
+
+    const fast = await start({ name: "fast", operation: "read_screen", intervalMs: 99 });
+    assert.equal(fast.isError, true);
+    const many = await start({ name: "many", operation: "read_screen", intervalMs: 100, maxIterations: 100_001 });
+    assert.equal(many.isError, true);
+    const edge = await start({ name: "edge", operation: "read_screen", intervalMs: 100, maxIterations: 100_000 });
+    assert.equal(edge.metadata?.success, true);
+    await tool("stop_background_task").execute({ name: "edge" }, ctx);
+
+    for (let index = 0; index < 16; index += 1) {
+      const res = await start({ name: `limit-${index}`, operation: "read_screen", intervalMs: 60_000 });
+      assert.equal(res.metadata?.success, true, `task ${index} should start`);
+    }
+    const seventeenth = await start({ name: "limit-16", operation: "read_screen", intervalMs: 60_000 });
+    assert.equal(seventeenth.isError, true);
+    assert.ok(JSON.stringify(seventeenth.content).includes("16"));
+
+    // Stopping one frees a slot.
+    await tool("stop_background_task").execute({ name: "limit-0" }, ctx);
+    const again = await start({ name: "limit-16", operation: "read_screen", intervalMs: 60_000 });
+    assert.equal(again.metadata?.success, true);
+    await tool("stop_all_background_tasks").execute({}, ctx);
+  } finally {
+    restore();
+  }
+});
+
+test("R-05 concurrent first calls all see the persisted registry", async () => {
+  const { tool, file, restore } = await freshBackground("concurrent", "background-concurrent");
+  try {
+    await fs.writeFile(file, JSON.stringify({ tasks: [persistedTask("0001_saved", "saved")] }));
+    const ctx = { client: {}, logger: createLogger() };
+    const results = await Promise.all([1, 2, 3].map(() => tool("list_background_tasks").execute({}, ctx)));
+    for (const res of results) {
+      assert.deepEqual(res.structuredContent.data.tasks.map((entry) => entry.name), ["saved"]);
+    }
+  } finally {
+    restore();
+  }
+});
+
+test("R-05 a stop that arrives during an iteration is not overwritten by completed", async () => {
+  const { tool, restore } = await freshBackground("stoprace", "background-stoprace");
+  try {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let entered;
+    const inFlight = new Promise((resolve) => { entered = resolve; });
+    const ctx = {
+      client: { async readMemory() { entered(); await gate; return { success: true, data: "$00" }; } },
+      logger: createLogger(),
+    };
+    const started = await tool("start_background_task").execute({ name: "race", operation: "read", intervalMs: 100, maxIterations: 1 }, ctx);
+    assert.equal(started.metadata?.success, true);
+    await inFlight;
+    const stopped = await tool("stop_background_task").execute({ name: "race" }, ctx);
+    assert.equal(stopped.structuredContent.data.status, "stopped");
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const list = await tool("list_background_tasks").execute({}, ctx);
+    const task = list.structuredContent.data.tasks.find((entry) => entry.name === "race");
+    assert.equal(task.status, "stopped");
+    assert.equal(task.iterations, 0);
+  } finally {
+    restore();
+  }
+});
+
+test("R-05 an unparseable state file is moved aside and the registry starts empty", async () => {
+  const { tool, file, dir, restore } = await freshBackground("corrupt", "background-corrupt");
+  try {
+    await fs.writeFile(file, "{ not json");
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
+    const list = await tool("list_background_tasks").execute({}, ctx);
+    assert.deepEqual(list.structuredContent.data.tasks, []);
+    const entries = await fs.readdir(dir);
+    const aside = entries.filter((name) => name.startsWith("tasks.json.corrupt-"));
+    assert.equal(aside.length, 1);
+    assert.equal(await fs.readFile(`${dir}/${aside[0]}`, "utf8"), "{ not json");
+    // The next start writes a fresh registry; the moved file stays as evidence.
+    const started = await tool("start_background_task").execute({ name: "after-corrupt", operation: "read_screen", intervalMs: 60_000 }, ctx);
+    assert.equal(started.metadata?.success, true);
+    await tool("stop_all_background_tasks").execute({}, ctx);
+    assert.equal(JSON.parse(await fs.readFile(file, "utf8")).tasks[0].name, "after-corrupt");
+  } finally {
+    restore();
+  }
+});
+
+test("R-05 log.txt is capped, only changed tasks are rewritten and no temporary files remain", async () => {
+  const { tool, file, dir, restore } = await freshBackground("logcap", "background-logcap");
+  try {
+    const other = persistedTask("0001_other", "other");
+    await fs.writeFile(file, JSON.stringify({ tasks: [other] }));
+    await fs.mkdir(`${dir}/tasks/background/0001_other`, { recursive: true });
+    await fs.writeFile(`${dir}/tasks/background/0001_other/task.json`, "SENTINEL");
+    await fs.mkdir(`${dir}/tasks/background/0002_big`, { recursive: true });
+    const line = `[2026-03-26T09:00:00.000Z] ${"x".repeat(100)}\n`;
+    await fs.writeFile(`${dir}/tasks/background/0002_big/log.txt`, line.repeat(5000)); // about 520 KB
+
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
+    const started = await tool("start_background_task").execute({ name: "big", operation: "read_screen", intervalMs: 100, maxIterations: 1 }, ctx);
+    assert.equal(started.metadata?.success, true);
+    assert.equal(started.structuredContent.data.task.id, "0002_big");
+    await waitForTaskCompletion({ invoke: (name, args, c) => tool(name).execute(args, c) }, "big", ctx);
+
+    const log = await fs.readFile(`${dir}/tasks/background/0002_big/log.txt`, "utf8");
+    assert.ok(log.length <= 256 * 1024, `log.txt is ${log.length} bytes`);
+    assert.ok(log.includes("completed iterations=1"));
+    assert.ok(log.startsWith("[2026-03-26T09:00:00.000Z] x"), "log must start at a line boundary");
+
+    assert.equal(await fs.readFile(`${dir}/tasks/background/0001_other/task.json`, "utf8"), "SENTINEL");
+    const leftovers = (await fs.readdir(`${dir}/tasks/background/0002_big`)).concat(await fs.readdir(dir)).filter((name) => name.endsWith(".tmp"));
+    assert.deepEqual(leftovers, []);
+  } finally {
+    restore();
+  }
+});
+
+test("R-05 a task folder derived from a persisted id cannot escape the task directory", async () => {
+  const { tool, file, restore } = await freshBackground("contain", "background-contain");
+  try {
+    await fs.writeFile(file, JSON.stringify({ tasks: [persistedTask("0001_../../../../escaped", "evil")] }));
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
+    const res = await tool("start_background_task").execute({ name: "evil", operation: "read_screen", intervalMs: 100, maxIterations: 1 }, ctx);
+    assert.equal(res.isError, true);
+  } finally {
+    restore();
+  }
+});

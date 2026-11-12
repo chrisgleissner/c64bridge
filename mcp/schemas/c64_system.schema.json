@@ -28,7 +28,7 @@
     },
     "operation": {
       "type": "string",
-      "description": "Operation name (e.g., read, read_screen)",
+      "description": "Operation name: read, write, read_screen or menu_button (read_memory and write_memory are aliases). write requires arguments.address and arguments.bytes.",
       "minLength": 1
     },
     "arguments": {
@@ -46,8 +46,8 @@
         "integer",
         "null"
       ],
-      "description": "Interval milliseconds",
-      "minimum": 1,
+      "description": "Interval milliseconds (minimum 100)",
+      "minimum": 100,
       "default": 1000
     },
     "maxIterations": {
@@ -55,8 +55,9 @@
         "integer",
         "null"
       ],
-      "description": "Maximum number of iterations (omit for indefinite)",
-      "minimum": 1
+      "description": "Maximum number of iterations (1 to 100000; omit for indefinite)",
+      "minimum": 1,
+      "maximum": 100000
     },
     "scope": {
       "type": [
@@ -271,7 +272,7 @@
           },
           "operation": {
             "type": "string",
-            "description": "Operation name (e.g., read, read_screen)",
+            "description": "Operation name: read, write, read_screen or menu_button (read_memory and write_memory are aliases). write requires arguments.address and arguments.bytes.",
             "minLength": 1
           },
           "arguments": {
@@ -289,8 +290,8 @@
               "integer",
               "null"
             ],
-            "description": "Interval milliseconds",
-            "minimum": 1,
+            "description": "Interval milliseconds (minimum 100)",
+            "minimum": 100,
             "default": 1000
           },
           "maxIterations": {
@@ -298,8 +299,9 @@
               "integer",
               "null"
             ],
-            "description": "Maximum number of iterations (omit for indefinite)",
-            "minimum": 1
+            "description": "Maximum number of iterations (1 to 100000; omit for indefinite)",
+            "minimum": 1,
+            "maximum": 100000
           },
           "op": {
             "const": "start_task"
