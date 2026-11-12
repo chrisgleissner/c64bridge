@@ -13,6 +13,8 @@ import {
 import { jsonResult } from "../responses.js";
 import { unknownErrorResult } from "../errors.js";
 
+export const MAX_BATCH_COMMANDS = 64;
+
 const commandSchema = objectSchema<Record<string, unknown>>({
   description: "A single batch command.",
   properties: {
@@ -34,6 +36,7 @@ const executeBatchArgsSchema = objectSchema({
     commands: arraySchema(commandSchema, {
       description: "Ordered list of commands to execute.",
       minItems: 1,
+      maxItems: MAX_BATCH_COMMANDS,
     }),
     stopOnError: optionalSchema(booleanSchema({
       description: "Halt the batch after the first failure. Default: true.",
@@ -158,7 +161,8 @@ export const batchModuleGroup = defineToolModule({
               }
             } catch (err) {
               const elapsedMs = Date.now() - cmdStart;
-              const message = err instanceof Error ? err.message : String(err);
+              // Keep the validation detail (allowed values, bounds) that the CallTool error path would show.
+              const message = unknownErrorResult(err).content.map((c) => c.text).join("\n");
               results.push({ index: i, tool: toolName, description: label, success: false, error: message, elapsedMs });
               failed++;
               if (stopOnError) break;
@@ -176,7 +180,8 @@ export const batchModuleGroup = defineToolModule({
           };
 
           ctx.logger.info("Batch complete", { total: parsed.commands.length, succeeded, failed, elapsedMs: totalElapsedMs });
-          return jsonResult(summary, { success: failed === 0, succeeded, failed, total: parsed.commands.length });
+          const outcome = jsonResult(summary, { success: failed === 0, succeeded, failed, total: parsed.commands.length });
+          return failed > 0 ? { ...outcome, isError: true } : outcome;
         } catch (error) {
           return unknownErrorResult(error);
         }

@@ -244,3 +244,55 @@ test("c64_graphics.get_display_state works on vice with same shape", async () =>
   assert.ok(typeof data.screenRamAddress === "string");
   assert.ok(typeof data.charOrBitmapAddress === "string");
 });
+
+// ---------------------------------------------------------------------------
+// c64_batch failure reporting and bounds
+// ---------------------------------------------------------------------------
+
+test("c64_batch sets isError when any command failed and keeps the results", async () => {
+  const ctx = makeCtx();
+  const result = await toolRegistry.invoke("c64_batch", {
+    stopOnError: false,
+    commands: [
+      { tool: "c64_memory", args: { op: "read", address: "$0400", length: 1 } },
+      { tool: "c64_memory", args: { op: "read", address: "$0400", length: -1 } },
+    ],
+  }, ctx);
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata?.success, false);
+  const data = result.structuredContent?.data;
+  assert.equal(data.succeeded, 1);
+  assert.equal(data.failed, 1);
+  assert.equal(data.results[0].success, true);
+});
+
+test("c64_batch with only successful commands has no isError", async () => {
+  const result = await toolRegistry.invoke("c64_batch", {
+    commands: [{ tool: "c64_memory", args: { op: "read", address: "$0400", length: 1 } }],
+  }, makeCtx());
+  assert.equal(result.isError, undefined);
+});
+
+test("c64_batch per-command errors keep the allowed values", async () => {
+  const result = await toolRegistry.invoke("c64_batch", {
+    commands: [{ tool: "c64_memory", args: { op: "nope" } }],
+  }, makeCtx());
+  assert.equal(result.isError, true);
+  const error = result.structuredContent.data.results[0].error;
+  assert.match(error, /allowed: .*read/);
+});
+
+test("c64_batch limits the number of commands to 64", async () => {
+  const tool = toolRegistry.list().find((d) => d.name === "c64_batch");
+  assert.equal(tool.inputSchema.properties.commands.maxItems, 64);
+
+  const command = { tool: "c64_memory", args: { op: "read", address: "$0400", length: 1 } };
+  const ok = await toolRegistry.invoke("c64_batch", { commands: Array.from({ length: 64 }, () => command) }, makeCtx());
+  assert.equal(ok.isError, undefined);
+
+  const tooMany = await toolRegistry.invoke("c64_batch", { commands: Array.from({ length: 65 }, () => command) }, makeCtx());
+  assert.equal(tooMany.isError, true);
+  assert.equal(tooMany.metadata?.error?.kind, "validation");
+  assert.match(tooMany.content[0].text, /too many items/);
+  assert.match(tooMany.content[0].text, /maxItems: 64/);
+});
