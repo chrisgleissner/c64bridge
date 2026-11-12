@@ -115,7 +115,7 @@ test("assemblyToPrg reports undefined symbols", () => {
 
   assert.throws(
     () => assemblyToPrg(source),
-    (error) => error instanceof AssemblyError && /Undefined expression/iu.test(error.message),
+    (error) => error instanceof AssemblyError && /:3: Undefined symbol "missing"/u.test(error.message),
   );
 });
 
@@ -495,4 +495,51 @@ test("assembler rejects output that passes $FFFF", () => {
   assert.match(assemblyError("*=$FFF0\n .res $20"), /:2: .*\$FFFF/);
   const prg = assemblyToPrg("*=$FFFE\n nop\n nop");
   assert.deepEqual([...prg], [0xfe, 0xff, 0xea, 0xea]);
+});
+
+test("assembler names the undefined symbol", () => {
+  assert.match(assemblyError("*=$C000\n nop\n jmp nowhere"), /:3: Undefined symbol "nowhere"/);
+  assert.match(assemblyError("*=$C000\n lda #<missing+other"), /:2: Undefined symbols "missing", "other"/);
+  assert.match(assemblyError("*=$C000\n .byte ghost"), /:2: Undefined symbol "ghost"/);
+  assert.match(assemblyError("*=$C000\n .word ghost"), /:2: Undefined symbol "ghost"/);
+});
+
+test("assembler reports a duplicate label with both line numbers", () => {
+  const message = assemblyError("*=$C000\nstart: nop\n nop\nstart: rts");
+  assert.match(message, /:4: Duplicate label "start" \(first defined at \(input\):2\)/);
+  assert.match(assemblyError("*=$C000\nmain: nop\n.loop: nop\n.loop: nop"), /:4: Duplicate label "\.loop" \(first defined at \(input\):3\)/);
+  // The same local name under different global labels is fine.
+  assert.equal(assemblyToPrg("*=$C000\na: nop\n.l: nop\nb: nop\n.l: nop").length, 6);
+  assert.match(assemblyError("*=$C000\nx = 1\nx: nop"), /:3: Duplicate label "x" \(first defined at \(input\):2\)/);
+});
+
+test(".equ defines constants in both documented forms", () => {
+  const prg = assemblyToPrg("*=$C000\nBORDER .equ $d020\n.equ COLOR, 5\n lda #COLOR\n sta BORDER");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x05, 0x8d, 0x20, 0xd0]);
+  assert.match(assemblyError("*=$C000\n.equ X 5"), /:2: .*comma/);
+});
+
+test(".fill emits count bytes of the value, default 0", () => {
+  assert.deepEqual([...assemblyToPrg("*=$C000\n.fill 3\n.fill 2, $ea")], [0x00, 0xc0, 0, 0, 0, 0xea, 0xea]);
+  assert.match(assemblyError("*=$C000\n.fill 2, 300"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n.fill -1"), /:2: .*count/);
+  assert.match(assemblyError("*=$C000\n.fill n"), /:2: Undefined symbol "n"/);
+});
+
+test(".align pads to a multiple of the boundary", () => {
+  const prg = assemblyToPrg("*=$C000\n nop\n.align 4\nhere: .byte 7\n.align 4, $ea\n.align 2");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xea, 0, 0, 0, 7, 0xea, 0xea, 0xea]);
+  const withLabel = assemblyToPrgDetailed("*=$C001\n.align 256\nlab: rts");
+  assert.equal(withLabel.symbols.get("lab"), 0xc100);
+  assert.match(assemblyError("*=$C000\n.align 0"), /:2: .*boundary/);
+});
+
+test(".text and .ascii map ASCII letters to PETSCII upper case", () => {
+  const prg = assemblyToPrg('*=$C000\n.text "Hello, 1!"\n.ascii "az", $0d\n.text "a\\n"');
+  assert.deepEqual([...prg.subarray(2)], [
+    0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x2c, 0x20, 0x31, 0x21,
+    0x41, 0x5a, 0x0d,
+    0x41, 0x0d,
+  ]);
+  assert.match(assemblyError('*=$C000\n.text "café€"'), /:2: .*no PETSCII mapping/);
 });
