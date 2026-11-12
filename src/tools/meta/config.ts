@@ -5,7 +5,8 @@ import { jsonResult } from "../responses.js";
 import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
-import { dirname, resolve as resolvePath } from "node:path";
+import { dirname } from "node:path";
+import { resolveHostPath } from "../../hostPaths.js";
 import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
 import { normalizeErrorDetails } from "./util.js";
 
@@ -36,7 +37,7 @@ export const tools: ToolDefinition[] = [
         if (action === "restore" && parsed.applyToFlash && platform === "vice") {
           throw new ToolUnsupportedPlatformError("config_save_to_flash", platform, ["c64u", "u2"]);
         }
-        const path = resolvePath(String(parsed.path));
+        const path = resolveHostPath(String(parsed.path), { purpose: action === "snapshot" ? "write" : "read" });
 
         if (action === "snapshot") {
           await fs.mkdir(dirname(path), { recursive: true });

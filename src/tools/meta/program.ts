@@ -7,6 +7,7 @@ import { measureSidSilence } from "../audio.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
+import { resolveHostPath } from "../../hostPaths.js";
 import { sleep, formatTimestampSpec } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 import { Jimp } from "jimp";
@@ -391,9 +392,11 @@ export const tools: ToolDefinition[] = [
         const captureScreenshot = visibleViceFastPath ? false : parsed.captureScreenshot !== false;
         const restoreActiveBackend = parsed.restoreActiveBackend !== false;
         const outputPath = (captureScreenshot && requestedBackends.some((backend) => backend !== "u2")) || parsed.outputPath
-          ? resolvePath(
-              String(parsed.outputPath ?? joinPath(process.cwd(), "artifacts", "greetings", `run_${Date.now()}`)),
-            )
+          ? (parsed.outputPath
+            ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
+            : resolvePath(
+              String(joinPath(process.cwd(), "artifacts", "greetings", `run_${Date.now()}`)),
+            ))
           : undefined;
         const timeoutMs = parsed.timeoutMs ?? 1500;
         const pollIntervalMs = parsed.pollIntervalMs ?? 100;
@@ -657,7 +660,7 @@ export const tools: ToolDefinition[] = [
 
         // Prepare output directory
         const outputPath = parsed.outputPath 
-          ? resolvePath(String(parsed.outputPath))
+          ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
           : resolvePath(joinPath(getTasksHomeDir(), `shuffle_${Date.now()}`));
         await fs.mkdir(outputPath, { recursive: true });
 
@@ -749,7 +752,7 @@ export const tools: ToolDefinition[] = [
   const resetDelayMs = parsed.resetDelayMs ?? 100;
 
         const outputPath = parsed.outputPath
-          ? resolvePath(String(parsed.outputPath))
+          ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
           : resolvePath(joinPath(getTasksHomeDir(), `batch_${Date.now()}`));
         await fs.mkdir(outputPath, { recursive: true });
 

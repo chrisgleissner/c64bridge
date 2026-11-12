@@ -33,6 +33,10 @@ Use `C64_MODE=u2` to select that profile. U2-family cartridges support the share
 
 When Ultimate firmware network protection is enabled, `networkPassword` is sent as the `X-Password` header on every REST request.
 
+### Host File Access
+
+Tool arguments that become host file paths (memory dumps, config snapshots, sprite/charset exports, run artifacts, `symbolsFile`, VICE PRG and disk image paths) must lie inside the working directory (not when it is `~` or `/`), `~/.c64bridge`, or the system temp directory. Other locations are rejected with an error that lists the allowed roots; use a path inside one of them rather than retrying elsewhere. The operator can add roots with `C64BRIDGE_ALLOWED_DIRS` (entries separated by the path delimiter; `*` disables the check).
+
 ### Runtime Backend Switching
 
 When any combination of `c64u`, `u2`, and `vice` is configured, the server can keep the configured backends live at the same time.

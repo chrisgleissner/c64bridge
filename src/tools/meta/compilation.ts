@@ -5,6 +5,7 @@ import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
+import { resolveHostPath } from "../../hostPaths.js";
 import { sleep } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 
@@ -51,7 +52,7 @@ export const tools: ToolDefinition[] = [
         const durationMs = parsed.durationMs ?? 2000;
 
         const outputPath = parsed.outputPath
-          ? resolvePath(String(parsed.outputPath))
+          ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
           : resolvePath(joinPath(getTasksHomeDir(), `cycle_${Date.now()}`));
         await fs.mkdir(outputPath, { recursive: true });
 

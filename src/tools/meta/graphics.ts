@@ -6,6 +6,7 @@ import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, un
 import { normalizeErrorDetails } from "./util.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
+import { resolveHostPath } from "../../hostPaths.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
   const platformId = ctx.platform?.id ?? ctx.client?.type;
@@ -284,7 +285,7 @@ export const tools: ToolDefinition[] = [
 
           let outputFiles: Array<{ path: string; address: string }> = [];
           if (parsed.outputDir && sprites.length > 0) {
-            const resolvedDir = resolvePath(String(parsed.outputDir));
+            const resolvedDir = resolveHostPath(String(parsed.outputDir), { purpose: "write" });
             await fs.mkdir(resolvedDir, { recursive: true });
             outputFiles = await Promise.all(sprites.map(async (sprite) => {
               const filePath = resolvePath(resolvedDir, `sprite_${sprite.address.replace("$", "").toLowerCase()}.spr`);
@@ -413,7 +414,7 @@ export const tools: ToolDefinition[] = [
 
           let outputFile: { path: string; address: string } | null = null;
           if (parsed.outputPath && bestCandidate.bytes) {
-            const resolvedPath = resolvePath(String(parsed.outputPath));
+            const resolvedPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
             await fs.mkdir(dirname(resolvedPath), { recursive: true });
             await fs.writeFile(resolvedPath, Buffer.from(bestCandidate.bytes));
             outputFile = { path: resolvedPath, address: bestCandidate.address };

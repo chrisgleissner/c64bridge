@@ -5,6 +5,7 @@
 import axios from "axios";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
+import { resolveHostPath, DISK_IMAGE_MAX_READ_BYTES } from "./hostPaths.js";
 import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
@@ -729,7 +730,7 @@ export class ViceBackend implements C64Facade {
   async loadPrgFile(_path: string): Promise<RunResult> { throw unsupported("loadPrgFile"); }
 
   async runPrgFile(prgPath: string): Promise<RunResult> {
-    const data = fs.readFileSync(prgPath);
+    const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));
     await this.injectPrg(data);
     return { success: true };
   }
@@ -940,6 +941,7 @@ export class ViceBackend implements C64Facade {
     if (!VICE_DISK_IMAGE_EXTENSIONS.has(path.extname(imagePath).toLowerCase())) {
       throw new Error(`VICE can mount only disk images (${[...VICE_DISK_IMAGE_EXTENSIONS].join(", ")}): ${imagePath}`);
     }
+    imagePath = resolveHostPath(imagePath, { purpose: "read", maxBytes: DISK_IMAGE_MAX_READ_BYTES });
     if (!fs.existsSync(imagePath)) {
       throw new Error(`Disk image not found on the VICE host: ${imagePath}`);
     }

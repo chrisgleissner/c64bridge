@@ -5,7 +5,8 @@ import { jsonResult } from "../responses.js";
 import { ToolError, ToolValidationError, ToolUnsupportedPlatformError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
-import { resolve as resolvePath, join as joinPath, relative, sep, isAbsolute } from "node:path";
+import { resolve as resolvePath, join as joinPath, isAbsolute } from "node:path";
+import { isWithin, resolveHostPath } from "../../hostPaths.js";
 
 const bundleRunArtifactsArgsSchema = objectSchema({
   description: "Gather screen capture, memory snapshot, and debugreg into a structured bundle.",
@@ -49,7 +50,7 @@ export const tools: ToolDefinition[] = [
         if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runId) || runId === "." || runId === "..") {
           throw new ToolValidationError("runId must be a non-empty safe filename (letters, digits, dot, underscore, and dash only).", { path: "$.runId" });
         }
-        const outputPath = resolvePath(String(parsed.outputPath));
+        const outputPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
         const captureScreen = parsed.captureScreen !== false;
         const platform = ctx.platform?.id ?? getPlatformStatus().id;
         const captureDebugReg = parsed.captureDebugReg ?? (platform === "c64u");
@@ -114,7 +115,6 @@ export const tools: ToolDefinition[] = [
 function containedPath(base: string, name: string): string {
   if (!name || isAbsolute(name) || name.includes("/") || name.includes("\\")) throw new ToolValidationError("Unsafe artifact filename.");
   const candidate = resolvePath(joinPath(base, name));
-  const rel = relative(base, candidate);
-  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new ToolValidationError("Artifact path escapes its output directory.");
+  if (candidate === base || !isWithin(base, candidate)) throw new ToolValidationError("Artifact path escapes its output directory.");
   return candidate;
 }

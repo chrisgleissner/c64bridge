@@ -4,7 +4,8 @@ import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
-import { dirname, resolve as resolvePath } from "node:path";
+import { dirname } from "node:path";
+import { resolveHostPath } from "../../hostPaths.js";
 import { createHash } from "node:crypto";
 import { normalizeErrorDetails } from "./util.js";
 import { stripHexByteSeparators } from "../hex.js";
@@ -189,7 +190,7 @@ export const tools: ToolDefinition[] = [
         const length = parsed.length as number;
         const chunk = Math.min(Math.max(1, parsed.chunkSize ?? 512), 4096);
         const pause = parsed.pauseDuringRead !== false;
-        const outputPath = resolvePath(String(parsed.outputPath));
+        const outputPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
         const outDir = dirname(outputPath);
         await fs.mkdir(outDir, { recursive: true });
 

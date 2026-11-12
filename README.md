@@ -378,6 +378,24 @@ The screenshots below are available for the two backends that provide frame capt
 | U2-family | Frame capture unavailable (no firmware streaming). |
 | VICE | ![VICE backend switch example](doc/img/backend-switch/hello-vice.png) |
 
+### Host File Access
+
+Tool arguments that name a file or directory on the machine running C64 Bridge (memory dumps, configuration snapshots, sprite and charset exports, run artifacts, symbol files, and VICE PRG or disk image paths) are confined to a set of allowed directories:
+
+- the working directory of the server, unless it is the user's home directory or `/`
+- `~/.c64bridge`
+- the system temporary directory (`os.tmpdir()`)
+
+Paths are resolved to their real location before the check, so `..` segments and symbolic links cannot leave these directories. A rejected path produces a validation error that lists the allowed directories, and nothing is written. Files read through these arguments are limited to 16 MiB (64 MiB for disk images).
+
+Set `C64BRIDGE_ALLOWED_DIRS` to add directories. Separate entries with the platform path delimiter (`:` on Linux and macOS, `;` on Windows). The single value `*` disables the confinement.
+
+```json
+"env": { "C64BRIDGE_ALLOWED_DIRS": "/home/you/c64:/home/you/disks" }
+```
+
+Earlier versions accepted any path. Clients that pass paths outside these directories must now add them through `C64BRIDGE_ALLOWED_DIRS`.
+
 ## VS Code MCP Setup
 
 This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.

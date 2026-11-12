@@ -22,6 +22,7 @@ import { disassemble, formatDisassembly } from "./translation/disassembler.js";
 import { getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
+import { resolveHostPath } from "../hostPaths.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -749,7 +750,7 @@ async function executeSaveMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     if (end < start) throw new ToolValidationError("endAddress must be ≥ startAddress", { path: "$.endAddress" });
     const asPrg = parsed.asPrg !== false;
     const len = end - start + 1;
-    const resolvedPath = path.resolve(parsed.filePath);
+    const resolvedPath = resolveHostPath(parsed.filePath, { purpose: "write" });
     ctx.logger.info("Saving memory to file", { start: fmtAddr(start), end: fmtAddr(end), filePath: resolvedPath, asPrg });
     const bytes = await ctx.client.readMemoryRaw(start, len);
     const header = asPrg ? Buffer.from([start & 0xff, (start >> 8) & 0xff]) : Buffer.alloc(0);
