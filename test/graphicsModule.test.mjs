@@ -551,3 +551,15 @@ test("capture_samples rejects payloads above 2 MiB, naming count", async () => {
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /count/);
 });
+
+test("c64_batch passes capture_frame image blocks through after the JSON summary", async () => {
+  const { ctx } = frameCtx((count) => Array.from({ length: count }, () => indexedFrame(8, 4, () => 1)));
+  const result = await toolRegistry.invoke("c64_batch", {
+    commands: [{ tool: "c64_graphics", args: { op: "capture_frame", count: 2, format: "png" } }],
+  }, ctx);
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  const images = result.content.filter((block) => block.type === "image");
+  assert.equal(images.length, 2);
+  assert.equal(images[0].mimeType, "image/png");
+  assert.equal(result.structuredContent.data.results[0].images, 2);
+});
