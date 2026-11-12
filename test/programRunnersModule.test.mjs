@@ -313,11 +313,13 @@ test("upload_run_basic is available on vice", async () => {
   assert.equal(calls.length, 1);
 });
 
-test("load_prg rejects vice platform", async () => {
+test("load_prg is accepted on the vice platform", async () => {
+  const calls = [];
   const ctx = {
     client: {
-      async loadPrgFile() {
-        throw new Error("should not execute on unsupported platform");
+      async loadPrgFile(path) {
+        calls.push(path);
+        return { success: true };
       },
     },
     logger: createLogger(),
@@ -325,10 +327,9 @@ test("load_prg rejects vice platform", async () => {
     setPlatform: () => createPlatformStatus("vice"),
   };
 
-  await assert.rejects(
-    () => programRunnersModule.invoke("load_prg", { path: "//USB0/demo.prg" }, ctx),
-    ToolUnsupportedPlatformError,
-  );
+  const result = await programRunnersModule.invoke("load_prg", { path: "/tmp/demo.prg" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(calls, ["/tmp/demo.prg"]);
 });
 
 test("load_prg validates path", async () => {

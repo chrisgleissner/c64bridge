@@ -34,7 +34,7 @@ async function withDirectory(fn) {
 // This matrix states device constraints independently of implementation metadata.
 // Exercise every rejected operation through the public registry with no client I/O.
 const restrictions = {
-  c64_program: { load_prg: ["c64u", "u2"], run_crt: ["c64u", "u2"] },
+  c64_program: { run_crt: ["c64u", "u2"] },
   c64_sound: { capture_samples: ["c64u"], play_sid_file: ["c64u", "u2"], play_mod_file: ["c64u", "u2"] },
   c64_system: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"], poweroff: ["c64u", "vice"] },
   c64_graphics: { capture_frame: ["c64u", "vice"] },

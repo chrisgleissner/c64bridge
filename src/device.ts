@@ -785,7 +785,10 @@ export class ViceBackend implements C64Facade {
     return { success: true };
   }
 
-  async loadPrgFile(_path: string): Promise<RunResult> { throw unsupported("loadPrgFile"); }
+  async loadPrgFile(prgPath: string): Promise<RunResult> {
+    const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));
+    return this.loadPrg(data);
+  }
 
   async runPrgFile(prgPath: string): Promise<RunResult> {
     const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));

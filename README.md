@@ -888,7 +888,7 @@ Grouped entry point for program upload, execution, and batch workflows.
 | `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | `continueOnError=false`, `durationMs=2000`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ | ✅ |
 | `bundle_run` | Capture screen, memory, and debug registers into an artifact bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg` | ✅ | ✅ | ✅ |
 | `cross_platform_greeting` | Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Supports verification. | — | `platforms`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
-| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | ✅ | ✅ |  |
+| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `symbolsFile` | ✅ | ✅ | ✅ |
 | `run_crt` | Mount and run a CRT cartridge image. | `path` | — | ✅ | ✅ |  |
 | `run_prg` | Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. | `path` | `symbolsFile` | ✅ | ✅ | ✅ |
 | `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |

@@ -923,7 +923,7 @@ export const programRunnersModule = defineToolModule({
         "Stage PRG files without running when the user wants to inspect memory first.",
         "Confirm the Ultimate filesystem path (e.g. //USB0/demo.prg) is accessible before invoking.",
       ],
-      supportedPlatforms: ["c64u", "u2"] as const,
+      supportedPlatforms: ["c64u", "u2", "vice"] as const,
       async execute(args, ctx) {
         return executeLoadPrg(args, ctx);
       },

@@ -435,15 +435,6 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
 
   test("c64_program grouped platform restrictions are enforced via MCP", async () => {
     await withSharedMcpClient(async (ctx) => {
-      const { result: loadResult, supported } = await callTool(ctx, "c64_program", {
-        op: "load_prg",
-        path: "//USB0/demo.prg",
-      });
-
-      if (!supported) {
-        return;
-      }
-
       const { result: crtResult } = await callTool(ctx, "c64_program", {
         op: "run_crt",
         path: "//USB0/demo.crt",
@@ -453,7 +444,6 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
 
-      assertUnsupportedOperation(loadResult, ctx.platform, "load_prg");
       assertUnsupportedOperation(crtResult, ctx.platform, "run_crt");
     });
   });

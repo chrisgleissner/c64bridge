@@ -21,7 +21,7 @@ This document is the source of truth for VICE support in the public MCP surface.
 
 | Tool | Operations |
 | --- | --- |
-| `c64_program` | `run_prg`, `upload_run_basic`, `upload_run_asm`, `batch_run` |
+| `c64_program` | `load_prg`, `run_prg`, `upload_run_basic`, `upload_run_asm`, `batch_run` |
 | `c64_memory` | `read`, `read_screen`, `wait_for_text`, `write` |
 | `c64_system` | `reset`, `reboot`, `poweroff`, `start_task`, `stop_task`, `stop_all_tasks`, `list_tasks` |
 | `c64_graphics` | `render_petscii_art`, `render_bitmap`, `render_sprite`, `render_petscii_text` |
@@ -37,7 +37,7 @@ This document is the source of truth for VICE support in the public MCP surface.
 
 | Tool | Operations |
 | --- | --- |
-| `c64_program` | `load_prg`, `run_crt`, `bundle_run` |
+| `c64_program` | `run_crt`, `bundle_run` |
 | `c64_disk` | `file_info`, `create_image`, `find_and_run` |
 | `c64_drive` | `load_rom` |
 | `c64_sound` | `play_sid_file`, `play_mod_file`, `pipeline`, `analyze`, `record_analyze` |

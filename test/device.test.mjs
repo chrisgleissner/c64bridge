@@ -1227,6 +1227,21 @@ test("device: ViceBackend unit branches", async () => {
     assert.ok(!loadPrgCalls.some((c) => c[0] === "keyboardFeed" && c[1] === "RUN\r"), "loadPrg must not type RUN");
     assert.ok(loadPrgCalls.some((c) => c[0] === "memSet" && c[1] === 0xC000), "loadPrg must place the code at its origin");
 
+    // F-03: the file-path variant reads the host file and loads it like loadPrg.
+    const loadFile = path.join(os.tmpdir(), "vice-backend-loadprg-test.prg");
+    fs.writeFileSync(loadFile, Buffer.from([0x00, 0xC1, 0xEA, 0x60]));
+    const callsBeforeLoadFile = calls.length;
+    try {
+      const loadFileResult = await backend.loadPrgFile(loadFile);
+      assert.equal(loadFileResult.success, true);
+    } finally {
+      fs.rmSync(loadFile, { force: true });
+    }
+    const loadFileCalls = calls.slice(callsBeforeLoadFile);
+    assert.deepEqual(loadFileCalls.find((c) => c[0] === "memSet" && c[1] === 0xC100), ["memSet", 0xC100, [0xEA, 0x60]]);
+    assert.ok(!loadFileCalls.some((c) => c[0] === "keyboardFeed" && c[1] === "RUN\r"), "loadPrgFile must not type RUN");
+    await assert.rejects(() => backend.loadPrgFile(path.join(os.tmpdir(), "vice-backend-missing.prg")), /ENOENT/);
+
     const resetResult = await backend.reset();
     const rebootResult = await backend.reboot();
     assert.equal(resetResult.success, true);
