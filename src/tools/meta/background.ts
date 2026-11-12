@@ -7,6 +7,8 @@ import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath } from "node:path";
 import os from "node:os";
 import { addMilliseconds } from "date-fns";
+import type { C64Facade } from "../../device.js";
+import { screenCodesToAscii } from "../../petscii.js";
 import { formatTimestampSpec, parseTimestampSpec } from "./util.js";
 
 type TaskStatus = "running" | "completed" | "stopped" | "error";
@@ -26,7 +28,9 @@ interface BackgroundTask {
   lastError?: string | null;
   nextRunAt?: Date | null;
   folder: string; // e.g. tasks/background/0001_read
+  backendId?: string | null; // backend the task was pinned to at start
   _timer?: NodeJS.Timeout | null; // transient, not persisted
+  _facade?: C64Facade; // transient: facade pinned at start, so a later backend switch cannot retarget the task
 }
 
 const TASKS: Map<string, BackgroundTask> = new Map();
@@ -58,6 +62,7 @@ type PersistedTask = {
   lastError?: string | null;
   nextRunAt?: string | null;
   folder: string;
+  backendId?: string | null;
 };
 
 function toPersistedTask(t: BackgroundTask): PersistedTask {
@@ -77,6 +82,7 @@ function toPersistedTask(t: BackgroundTask): PersistedTask {
     lastError: t.lastError ?? null,
     nextRunAt: t.nextRunAt ? formatTimestampSpec(t.nextRunAt) : null,
     folder: t.folder,
+    backendId: t.backendId ?? null,
   };
 }
 
@@ -97,6 +103,7 @@ function fromPersistedTask(p: PersistedTask): BackgroundTask {
     lastError: p.lastError ?? null,
     nextRunAt: parseTimestampSpec(p.nextRunAt ?? null),
     folder: p.folder,
+    backendId: p.backendId ?? null,
     _timer: null,
   };
 }
@@ -209,23 +216,30 @@ async function persistTasks(): Promise<void> {
   }
 }
 
-function runOperation(op: string, args: Record<string, unknown>, ctx: Parameters<ToolDefinition["execute"]>[1]) {
-  switch (normaliseOperation(op)) {
+function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]) {
+  const args = task.args;
+  const facade = task._facade;
+  switch (normaliseOperation(task.operation)) {
     case "read": {
       const address = String((args as any).address ?? "$0400");
       const length = String((args as any).length ?? "16");
-      return ctx.client.readMemory(address, length);
+      return ctx.client.readMemory(address, length, facade);
     }
     case "write": {
       const address = String((args as any).address ?? "$0400");
       const bytes = String((args as any).bytes ?? "$00");
-      return ctx.client.writeMemory(address, bytes);
+      return ctx.client.writeMemory(address, bytes, facade);
     }
     case "read_screen": {
+      if (facade) {
+        return ctx.client
+          .readMemoryRaw(0x0400, 0x03e8, facade)
+          .then((bytes) => screenCodesToAscii(bytes, { columns: 40, rows: 25 }));
+      }
       return ctx.client.readScreen();
     }
     case "menu_button": {
-      return ctx.client.menuButton();
+      return facade ? facade.menuButton() : ctx.client.menuButton();
     }
     default:
       return Promise.resolve({ success: true });
@@ -239,7 +253,7 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
   task._timer = setTimeout(async () => {
     if (task.status !== "running") return;
     try {
-      const result = await runOperation(task.operation, task.args, ctx);
+      const result = await runOperation(task, ctx);
       if (result && typeof result === "object" && "success" in result && (result as { success?: unknown }).success === false) {
         throw new Error(`Operation returned failure: ${JSON.stringify((result as { details?: unknown }).details ?? result)}`);
       }
@@ -344,6 +358,10 @@ export const tools: ToolDefinition[] = [
         const newCounter = String(currentMax + 1).padStart(4, "0");
         const newId = `${newCounter}_${parsed.name}`;
 
+        // Pin the facade now: a later c64_select_backend must not retarget a running task.
+        const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
+        const backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
+
         const task: BackgroundTask = {
           id: existing && existing.status !== "running" ? existing.id : newId,
           name: parsed.name,
@@ -360,7 +378,9 @@ export const tools: ToolDefinition[] = [
           lastError: null,
           nextRunAt: null,
           folder: getBackgroundTaskFolderRelative(existing && existing.status !== "running" ? existing.id : newId),
+          backendId,
           _timer: null,
+          _facade: pinnedFacade,
         };
 
         TASKS.set(task.name, task);
@@ -371,7 +391,7 @@ export const tools: ToolDefinition[] = [
         await appendTaskLog(task, "started");
         scheduleNextRun(task, ctx);
         await persistTasks();
-        return jsonResult({ started: true, task: { id: task.id, name: task.name, operation: task.operation, intervalMs: task.intervalMs, maxIterations: task.maxIterations ?? null, folder: task.folder } }, { success: true });
+        return jsonResult({ started: true, task: { id: task.id, name: task.name, operation: task.operation, backendId: task.backendId ?? null, intervalMs: task.intervalMs, maxIterations: task.maxIterations ?? null, folder: task.folder } }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
@@ -417,6 +437,7 @@ export const tools: ToolDefinition[] = [
           id: t.id,
           name: t.name,
           type: t.type,
+          backendId: t.backendId ?? null,
           status: t.status,
           iterations: t.iterations,
           intervalMs: t.intervalMs,

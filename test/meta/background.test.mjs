@@ -407,3 +407,46 @@ test("background task tools validate input and reject duplicate running names", 
     else process.env.C64_TASK_STATE_FILE = previous;
   }
 });
+
+test("R-04 a background task stays on the backend it was started against after a backend switch", async () => {
+  const { file, dir } = tmpPath("background-pinned", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    const facadeA = { type: "c64u", id: "A" };
+    const facadeB = { type: "vice", id: "B" };
+    let active = facadeA;
+    const used = [];
+    const ctx = {
+      client: {
+        async pinFacade() { return active; },
+        async getActiveBackendType() { return active.type; },
+        async writeMemory(address, bytes, facade) {
+          used.push((facade ?? active).id);
+          return { success: true };
+        },
+      },
+      logger: createLogger(),
+    };
+
+    const started = await metaModule.invoke("start_background_task", {
+      name: "pinned-writer",
+      operation: "write",
+      arguments: { address: "$0400", bytes: "$41" },
+      intervalMs: 100,
+      maxIterations: 3,
+    }, ctx);
+    assert.equal(started.metadata?.success, true);
+    assert.equal(started.structuredContent?.data?.task?.backendId, "c64u");
+    active = facadeB; // c64_select_backend after the task was started
+
+    const task = await waitForTaskCompletion(metaModule, "pinned-writer", ctx);
+    assert.equal(task?.status, "completed");
+    assert.equal(task?.backendId, "c64u");
+    assert.deepEqual(used, ["A", "A", "A"]);
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
