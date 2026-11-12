@@ -572,12 +572,17 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | --- | --- | --- | --- |
 | `C64_MODE` | c64u | — | Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator) |
 | `C64_TASK_STATE_FILE` | auto | — | Override the path used to persist MCP background-task state |
+| `C64BRIDGE_ACCESS` | full | — | Access mode limiting which operations may be called (full, no-destructive, read-only) |
+| `C64BRIDGE_ALLOWED_DIRS` |  | — | Additional directories allowed for host file paths in tool arguments, separated by the path delimiter; * disables the check |
 | `C64BRIDGE_CONFIG` | ~/.c64bridge.json | config path | Path to configuration JSON |
 | `C64BRIDGE_DIAGNOSTICS_DIR` | ~/.c64bridge/diagnostics | — | Override the directory where persistent MCP diagnostics files are written |
+| `C64BRIDGE_DIAGNOSTICS_KEEP` | 200 | — | Number of diagnostics files kept at startup; files older than 30 days are always removed |
 | `C64BRIDGE_DISABLE_DIAGNOSTICS` | 0 | — | Set to 1 to disable persistent diagnostics logging |
+| `C64BRIDGE_HTTP_TOKEN` |  | — | Bearer token required by the optional HTTP transport (--http) |
 | `C64BRIDGE_POLL_INTERVAL_MS` | 200 | — | Interval between screen polls during program-output validation in normal runtime mode |
 | `C64BRIDGE_POLL_MAX_MS` | 2000 | — | Maximum time to poll for program-output validation before timing out in normal runtime mode |
 | `C64BRIDGE_POLL_STABILIZE_MS` | 100 | — | Extra settle time after a successful poll match before considering output stable |
+| `C64BRIDGE_VERBOSE_SCHEMA` |  | — | Set to 1 to include full per-operation schemas in tools/list |
 | `LOG_LEVEL` | info | — | Logger verbosity (debug, info, warn, error) |
 
 #### C64 Ultimate
