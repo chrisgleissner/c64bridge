@@ -1,4 +1,4 @@
-import type { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
 import { registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
@@ -24,9 +24,45 @@ function redactHeaders(headers: AxiosRequestConfig["headers"] | undefined): Axio
   ])) as AxiosRequestConfig["headers"];
 }
 
+/**
+ * First-in first-out gate that lets one operation run at a time. The Ultimate
+ * firmware serves REST requests on a single thread, so every request to one
+ * device goes through one queue. A failed operation releases the gate like a
+ * successful one, so the queue cannot deadlock.
+ */
+export class RequestQueue {
+  private tail: Promise<void> = Promise.resolve();
+
+  /** Resolves when all earlier holders have released; call the returned function exactly once. */
+  async acquire(): Promise<() => void> {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const previous = this.tail;
+    this.tail = previous.then(() => held);
+    await previous;
+    let released = false;
+    return () => {
+      if (!released) {
+        released = true;
+        release();
+      }
+    };
+  }
+
+  async run<T>(operation: () => Promise<T>): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+}
+
 export function createLoggingHttpClient<SecurityDataType = unknown>(
   config?: ApiConfig<SecurityDataType>,
   logger: PrefixedLogger = loggerFor("c64u"),
+  queue?: RequestQueue,
 ): HttpClient<SecurityDataType> {
   const http = new HttpClient<SecurityDataType>(config);
   registerSecret(readPasswordHeader(config?.headers));
@@ -47,6 +83,32 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
     (request as AxiosRequestConfig & { __c64Meta?: RequestMeta }).__c64Meta = meta;
     return request;
   });
+
+  if (queue) {
+    // Registered after the logging interceptor: axios runs request
+    // interceptors last-registered first, so a request waits for its turn
+    // before its start time is recorded. Axios starts the request timeout when
+    // the adapter is called, so time spent waiting here does not count against
+    // a request's timeout. The gate is released when the adapter settles,
+    // whether the request succeeded, failed or timed out.
+    http.instance.interceptors.request.use(async (request) => {
+      const release = await queue.acquire();
+      try {
+        const inner = axios.getAdapter(request.adapter ?? http.instance.defaults.adapter);
+        request.adapter = async (adapterConfig) => {
+          try {
+            return await inner(adapterConfig);
+          } finally {
+            release();
+          }
+        };
+      } catch (error) {
+        release();
+        throw error;
+      }
+      return request;
+    });
+  }
 
   http.instance.interceptors.response.use(
     (response) => {

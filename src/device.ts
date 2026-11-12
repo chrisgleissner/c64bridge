@@ -9,7 +9,7 @@ import { resolveHostPath, DISK_IMAGE_MAX_READ_BYTES } from "./hostPaths.js";
 import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
-import { createLoggingHttpClient } from "./loggingHttpClient.js";
+import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { ViceClient } from "./vice/viceClient.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
@@ -254,6 +254,8 @@ class C64uBackend implements C64Facade {
   private readonly baseUrl: string;
   private readonly networkPassword?: string;
   private readonly api: Api<unknown>;
+  /** The device serves REST requests on one thread: all requests to it, probes included, run one at a time in arrival order. */
+  private readonly requestQueue = new RequestQueue();
 
   constructor(endpoint: C64uEndpoint, type: "c64u" | "u2" = "c64u") {
     this.type = type;
@@ -263,7 +265,7 @@ class C64uBackend implements C64Facade {
       baseURL: this.baseUrl,
       timeout: 10_000,
       headers: buildC64uHeaders(this.networkPassword),
-    });
+    }, undefined, this.requestQueue);
     this.api = new Api(http);
   }
 
@@ -285,7 +287,7 @@ class C64uBackend implements C64Facade {
   }
 
   async ping(): Promise<boolean> {
-    return probeUltimateReachable(this.baseUrl, 2000, this.networkPassword);
+    return this.requestQueue.run(() => probeUltimateReachable(this.baseUrl, 2000, this.networkPassword));
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {

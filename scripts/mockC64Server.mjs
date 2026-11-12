@@ -88,6 +88,12 @@ function createInitialState() {
     networkPassword: null,
     forcedErrors: null,
     forcedErrorsUrlMatch: null,
+    // Test hooks for request serialisation: every request is counted while it
+    // is being served, optionally delayed so overlap becomes observable.
+    responseDelayMs: 0,
+    inFlight: 0,
+    maxInFlight: 0,
+    requestOrder: [],
     hangOnMachineInputProbe: false,
     lastPrg: null,
     lastLoadedPrg: null,
@@ -404,6 +410,21 @@ export async function startMockC64Server(options = {}) {
 
     // Track last request metadata
     state.lastRequest = { method, url, headers: req.headers };
+
+    state.inFlight += 1;
+    state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
+    if (state.requestOrder.length < 10_000) state.requestOrder.push(`${method} ${url}`);
+    let released = false;
+    const releaseInFlight = () => {
+      if (!released) {
+        released = true;
+        state.inFlight -= 1;
+      }
+    };
+    res.once("close", releaseInFlight);
+    if (state.responseDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, state.responseDelayMs));
+    }
 
     if (state.networkPassword && req.headers["x-password"] !== state.networkPassword) {
       sendJson(res, { message: "Forbidden", errors: ["invalid network password"] }, 403);
