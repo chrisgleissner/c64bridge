@@ -2061,7 +2061,7 @@
           "c64://guide/bootstrap"
         ],
         "prompts": [
-          "drive-management"
+          "drive-manager"
         ],
         "examples": [
           {
