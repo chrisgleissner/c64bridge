@@ -199,7 +199,7 @@ test("read falls back to the requested address when the response omits one", asy
     logger: createLogger(),
   };
 
-  const res = await memoryModule.invoke("read", { address: "0400", length: 1 }, ctx);
+  const res = await memoryModule.invoke("read", { address: "$0400", length: 1 }, ctx);
 
   assert.equal(res.isError, undefined);
   assert.equal(res.metadata.address, "$0400");
@@ -229,7 +229,7 @@ test("read handles failure with scalar details", async () => {
     }),
     logger: createLogger(),
   };
-  const res = await memoryModule.invoke("read", { address: "$FFFF", length: 2 }, ctx);
+  const res = await memoryModule.invoke("read", { address: "$FFF0", length: 2 }, ctx);
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
 });
@@ -316,7 +316,7 @@ test("write handles string address without $ prefix", async () => {
     }),
     logger: createLogger(),
   };
-  const res = await memoryModule.invoke("write", { address: "0400", bytes: "$AA55" }, ctx);
+  const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AA55" }, ctx);
   assert.equal(res.metadata?.success, true);
   assert.ok(res.metadata?.address?.startsWith("$"));
 });
@@ -1299,4 +1299,28 @@ test("disassemble with instructionCount reads 3 bytes per instruction, clamped a
   const near = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$FFFE", instructionCount: 10 }, ctx);
   assert.equal(near.isError, undefined);
   assert.deepEqual(reads[1], [0xfffe, 2]);
+});
+
+test("read and write reject ambiguous or out-of-range addresses as validation errors before any device call", async () => {
+  let calls = 0;
+  const ctx = {
+    client: createMockClient({
+      async readMemory() { calls += 1; return { success: true, data: "$00", details: {} }; },
+      async writeMemory() { calls += 1; return { success: true, details: {} }; },
+    }),
+    logger: createLogger(),
+  };
+  for (const address of ["C000", "0400", "$FFFF", "$10000"]) {
+    const length = address === "$FFFF" ? 2 : 1;
+    const read = await memoryModule.invoke("read", { address, length }, ctx);
+    assert.equal(read.isError, true, `read ${address}`);
+    assert.equal(read.metadata?.error?.kind, "validation", `read ${address}`);
+    const write = await memoryModule.invoke("write", { address, bytes: length === 2 ? "$AABB" : "$AA" }, ctx);
+    assert.equal(write.isError, true, `write ${address}`);
+    assert.equal(write.metadata?.error?.kind, "validation", `write ${address}`);
+  }
+  assert.equal(calls, 0);
+  const ok = await memoryModule.invoke("read", { address: "%1000000000000", length: 1 }, ctx);
+  assert.equal(ok.isError, undefined);
+  assert.equal(calls, 1);
 });

@@ -105,3 +105,28 @@ test("memory_dump_to_file rejects malformed addresses and accepts $, 0x/0X and d
     assert.equal(reads[0], `$${expected.toString(16).toUpperCase().padStart(4, "0")}`, `address ${JSON.stringify(address)}`);
   }
 });
+
+test("shared numeric parser accepts $, 0x, %, decimal and rejects ambiguous forms", async () => {
+  const { parseNumericLiteral, assertNotBareHex } = await import("../src/numericArg.js");
+  assert.equal(parseNumericLiteral("$C000"), 0xc000);
+  assert.equal(parseNumericLiteral("0xc000"), 0xc000);
+  assert.equal(parseNumericLiteral("%1010"), 10);
+  assert.equal(parseNumericLiteral("1024"), 1024);
+  assert.equal(parseNumericLiteral("0"), 0);
+  assert.equal(parseNumericLiteral("screen_ram"), undefined);
+  assert.throws(() => parseNumericLiteral("0400"), (e) => e.kind === "validation" && /leading zero/.test(e.message));
+  assert.throws(() => assertNotBareHex("C000"), (e) => e.kind === "validation" && /\$C000/.test(e.message));
+  assertNotBareHex("screen_ram");
+});
+
+test("c64_memory ops other than read/write accept % binary and reject bare hex", async () => {
+  const { toolRegistry } = await import("../src/tools/registry/index.js");
+  const ctx = { client: { async readMemoryRaw(a, l) { return new Uint8Array(l); } }, logger: createLogger(), platform: { id: "c64u", features: [], limitedFeatures: [] } };
+  const ok = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "%1100000000000000", length: 1 }, ctx);
+  assert.equal(ok.isError, undefined);
+  for (const address of ["C000", "0400"]) {
+    const bad = await toolRegistry.invoke("c64_memory", { op: "disassemble", address, length: 1 }, ctx);
+    assert.equal(bad.isError, true);
+    assert.equal(bad.metadata?.error?.kind, "validation");
+  }
+});

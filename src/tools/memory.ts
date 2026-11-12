@@ -23,6 +23,7 @@ import { getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
 import { resolveHostPath } from "../hostPaths.js";
+import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../numericArg.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -231,6 +232,10 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const parsed = readMemoryArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Reading C64 memory", { address: parsed.address, length: parsed.length });
 
+    // Validate before any device call so a bad address is a validation error.
+    const readStart = parseAddressArg(parsed.address, "$.address");
+    assertAddressRange(readStart, parsed.length ?? 256, "$.length");
+
     const result = await ctx.client.readMemory(parsed.address, String(parsed.length));
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while reading memory", {
@@ -276,6 +281,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     const expectedInfo = parsed.expected ? parseUserHex(parsed.expected, "$.expected") : undefined;
     const maskInfo = parsed.mask ? parseUserHex(parsed.mask, "$.mask") : undefined;
     const shouldVerify = parsed.verify || Boolean(expectedInfo) || Boolean(maskInfo);
+    assertAddressRange(parseAddressArg(parsed.address, "$.address"), writeInfo.bytes.length, "$.bytes");
 
     if (!shouldVerify) {
       const result = await ctx.client.writeMemory(parsed.address, writeInfo.canonical);
@@ -533,23 +539,16 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
 // ---------------------------------------------------------------------------
 function parseAddressArg(raw: string, fieldPath: string): number {
   const trimmed = raw.trim();
-  let addr: number;
-  if (/^\$[0-9A-Fa-f]+$/.test(trimmed)) {
-    addr = parseInt(trimmed.slice(1), 16);
-  } else if (/^0[xX][0-9A-Fa-f]+$/.test(trimmed)) {
-    addr = parseInt(trimmed.slice(2), 16);
-  } else if (/^[0-9]+$/.test(trimmed)) {
-    addr = parseInt(trimmed, 10);
-  } else {
+  let addr = parseNumericLiteral(trimmed, fieldPath);
+  if (addr === undefined) {
     const resolved = resolveAddressSymbol(trimmed);
     if (resolved === undefined) {
+      assertNotBareHex(trimmed, fieldPath);
       throw new ToolValidationError(`Unknown address or symbol: ${trimmed}`, { path: fieldPath });
     }
     addr = resolved;
   }
-  if (!Number.isInteger(addr) || addr < 0 || addr > 0xffff) {
-    throw new ToolValidationError("Address must be in range $0000-$FFFF", { path: fieldPath });
-  }
+  assertAddressRange(addr, undefined, fieldPath);
   return addr;
 }
 

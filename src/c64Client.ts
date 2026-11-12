@@ -18,6 +18,8 @@ import { stripHexByteSeparators } from "./tools/hex.js";
 import { SIDWAVE_PLAY_ADDRESS } from "./sidwaveCompiler.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
+import { assertNotBareHex, parseNumericLiteral } from "./numericArg.js";
+import { ToolValidationError } from "./tools/errors.js";
 import {
   C64Facade,
   createAllFacades,
@@ -2622,42 +2624,14 @@ export class C64Client {
     if (typeof value !== "string") {
       throw new Error("Expected string input");
     }
-
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
+    if (value.trim().length === 0) {
       throw new Error("Empty numeric value");
     }
-
-    const lower = trimmed.toLowerCase();
-    let radix = 10;
-    let literal = lower;
-
-    let pattern: RegExp;
-    if (lower.startsWith("$")) {
-      radix = 16;
-      literal = lower.slice(1);
-      pattern = /^[0-9a-f]+$/;
-    } else if (lower.startsWith("0x")) {
-      radix = 16;
-      literal = lower.slice(2);
-      pattern = /^[0-9a-f]+$/;
-    } else if (lower.startsWith("%")) {
-      radix = 2;
-      literal = lower.slice(1);
-      pattern = /^[01]+$/;
-    } else {
-      pattern = /^[0-9]+$/;
+    const parsed = parseNumericLiteral(value);
+    if (parsed === undefined) {
+      assertNotBareHex(value);
+      throw new ToolValidationError(`Unable to parse numeric value "${value}"`);
     }
-
-    if (!pattern.test(literal)) {
-      throw new Error(`Unable to parse numeric value "${value}"`);
-    }
-
-    const parsed = Number.parseInt(literal, radix);
-    if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) {
-      throw new Error(`Unable to parse numeric value "${value}"`);
-    }
-
     return parsed;
   }
 
