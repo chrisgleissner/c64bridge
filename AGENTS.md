@@ -37,6 +37,16 @@ When Ultimate firmware network protection is enabled, `networkPassword` is sent 
 
 Tool arguments that become host file paths (memory dumps, config snapshots, sprite/charset exports, run artifacts, `symbolsFile`, VICE PRG and disk image paths) must lie inside the working directory (not when it is `~` or `/`), `~/.c64bridge`, or the system temp directory. Other locations are rejected with an error that lists the allowed roots; use a path inside one of them rather than retrying elsewhere. The operator can add roots with `C64BRIDGE_ALLOWED_DIRS` (entries separated by the path delimiter; `*` disables the check).
 
+### Environment Variables
+
+| Variable | Effect |
+| --- | --- |
+| `C64BRIDGE_ALLOWED_DIRS` | Extra directories for host file paths in tool arguments, separated by the path delimiter; `*` disables the check. |
+| `C64BRIDGE_ACCESS` | `full` (default), `no-destructive` or `read-only`. Limits which operations may be called; read on every call. |
+| `C64BRIDGE_HTTP_TOKEN` | Bearer token required (`Authorization: Bearer <token>`) by the optional HTTP transport (`--http`), which also accepts only loopback Host and Origin headers. |
+| `C64BRIDGE_DIAGNOSTICS_KEEP` | Number of diagnostics files kept at startup (default 200; files older than 30 days are always removed). |
+| `C64BRIDGE_VERBOSE_SCHEMA` | Set to `1` to include the full per-operation schemas in `tools/list` (omitted by default to keep it small). |
+
 ### Runtime Backend Switching
 
 When any combination of `c64u`, `u2`, and `vice` is configured, the server can keep the configured backends live at the same time.
@@ -94,15 +104,20 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 
 ## Capabilities
 
-- Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`)
+- Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`). `upload_run_basic` repairs a missing closing quote or parenthesis and reruns once; pass `autoFix: false` for programs with side effects.
 - Fast demo workflow: `c64_program` (`cross_platform_greeting`) for one-call greetings on VICE and/or C64U with screenshot capture and verification
-- Screen & memory: `c64_memory` (`read`, `write`, `read_screen`, `wait_for_text`)
-- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks)
-- Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`)
-- Drives & files: `c64_disk`, `c64_drive`
-- SID / music: `c64_sound` (`play_preset`, playback, generate, analyze)
-- Graphics: `c64_graphics` (PETSCII, sprites)
+- Screen & memory: `c64_memory` (`read`, `write`, `read_screen`, `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory`). `read` accepts `format: "hex"` (default) or `"dump"` (addresses plus a PETSCII column); `list_basic` lists the BASIC program in memory as text.
+- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks). `reset`, `reboot` and `power_cycle` accept `waitForReady` and `readyTimeoutMs` to wait for the BASIC READY. prompt. `pause` and `resume` are not available on VICE.
+- Input: `c64_input` (`write_text`, `key`, `keyboard`, `joystick`, `release_all`, `state`)
+- Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`, `load_flash`, `save_flash`, `reset_defaults`). The flash operations take an optional `category`.
+- Drives & files: `c64_disk` (including `find_paths`, which returns `results` and `truncated`; limit with `maxResults`), `c64_drive`
+- SID / music: `c64_sound` (`play_preset`, playback, generate, analyze, `capture_samples`)
+- Graphics: `c64_graphics` (PETSCII, sprites, `capture_frame`). `capture_frame` omits raw pixels unless `includePixels: true`; `format: "png"` returns viewable images (at most 4 frames; raw output is capped at 2 MiB, as for `capture_samples`).
+- Debugging (VICE): `c64_debug` (checkpoints, registers, stepping, `wait_for_state`), `c64_vice` (resources)
+- Streaming and extraction: `c64_stream` (C64U), `c64_extract` (sprites, charset, memory dump, firmware health)
+- Batching: `c64_batch` runs several tool calls in one request
 - Knowledge & RAG: `c64_rag` (BASIC and ASM lookups)
+- Backend selection: `c64_select_backend`
 
 Tools and parameters are listed dynamically via ListTools.
 

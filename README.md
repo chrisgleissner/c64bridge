@@ -414,6 +414,18 @@ After `c64_system` `poweroff` on C64U/U64, power must be restored at the outlet.
 "env": { "C64BRIDGE_ACCESS": "no-destructive" }
 ```
 
+### Operator Environment Variables
+
+These variables are read by the server itself and are set in the `env` block of the MCP client configuration. `C64BRIDGE_ALLOWED_DIRS` and `C64BRIDGE_ACCESS` are described above.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `C64BRIDGE_ALLOWED_DIRS` | unset | Additional directories for host file paths in tool arguments. Separate entries with the platform path delimiter; `*` disables the confinement. |
+| `C64BRIDGE_ACCESS` | `full` | `full`, `no-destructive` or `read-only`. Limits which operations a client may call. |
+| `C64BRIDGE_HTTP_TOKEN` | unset | When set, the optional HTTP transport (`--http`) requires `Authorization: Bearer <token>`. The transport accepts only loopback `Host` and `Origin` headers regardless of this setting. |
+| `C64BRIDGE_DIAGNOSTICS_KEEP` | `200` | Number of diagnostics files kept in the diagnostics directory. At startup the server deletes older files beyond this count and files older than 30 days. An invalid value is ignored with a warning on stderr. Diagnostics files are created with mode 0600 in a directory created with mode 0700. |
+| `C64BRIDGE_VERBOSE_SCHEMA` | unset | Set to `1` to include the full per-operation schemas in `tools/list`. By default they are omitted to keep the listing small. |
+
 ## VS Code MCP Setup
 
 This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.

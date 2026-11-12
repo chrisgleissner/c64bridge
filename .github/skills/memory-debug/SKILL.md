@@ -16,7 +16,8 @@ Use this skill for RAM inspection, screen reads, polling for output, and careful
 ## Execution
 
 1. For direct memory inspection, use `c64_memory` with `op: "read"`.
-2. For screen output, use `c64_memory` with `op: "read_screen"`.
+   Pass `format: "dump"` for a 16-bytes-per-line listing with addresses and a PETSCII column; the default `"hex"` returns one hex string.
+2. For screen output, use `c64_memory` with `op: "read_screen"`. To see the BASIC program in memory as text, use `op: "list_basic"`.
 3. For polling, use `c64_memory` with `op: "wait_for_text"`.
 4. For writes, use `c64_memory` with `op: "write"` only after confirming the target range and side effects.
 

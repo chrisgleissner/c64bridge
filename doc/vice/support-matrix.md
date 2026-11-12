@@ -21,15 +21,18 @@ This document is the source of truth for VICE support in the public MCP surface.
 
 | Tool | Operations |
 | --- | --- |
-| `c64_program` | `load_prg`, `run_prg`, `upload_run_basic`, `upload_run_asm`, `batch_run` |
-| `c64_memory` | `read`, `read_screen`, `wait_for_text`, `write` |
-| `c64_system` | `reset`, `reboot`, `poweroff`, `start_task`, `stop_task`, `stop_all_tasks`, `list_tasks` |
-| `c64_graphics` | `render_petscii_art`, `render_bitmap`, `render_sprite`, `render_petscii_text` |
+| `c64_program` | `load_prg`, `run_prg`, `upload_run_basic`, `upload_run_asm`, `batch_run`, `bundle_run`, `cross_platform_greeting` |
+| `c64_memory` | `read`, `write`, `read_screen`, `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory` |
+| `c64_system` | `reset`, `reboot`, `poweroff`, `power_cycle`, `start_task`, `stop_task`, `stop_all_tasks`, `list_tasks`, `performance_report` |
+| `c64_graphics` | `capture_frame`, `render_petscii_art`, `render_bitmap`, `render_sprite`, `render_petscii_text`, `get_display_state` |
 | `c64_rag` | `basic`, `asm` |
-| `c64_disk` | `list_drives`, `mount`, `unmount` |
+| `c64_disk` | `list_drives`, `mount` |
 | `c64_drive` | `reset`, `power_on`, `power_off`, `set_mode` |
 | `c64_config` | `list`, `get`, `set`, `batch_update`, `info`, `version`, `snapshot`, `restore`, `diff` |
-| `c64_sound` | `set_volume`, `reset`, `note_on`, `note_off`, `silence_all`, `generate`, `compile_play` |
+| `c64_sound` | `set_volume`, `reset`, `note_on`, `note_off`, `silence_all`, `generate`, `compile_play`, `play_preset`, `pipeline`, `analyze`, `record_analyze` |
+| `c64_input` | `write_text`, `key`, `joystick` |
+| `c64_extract` | `sprites`, `charset`, `memory_dump`, `firmware_health` |
+| `c64_select_backend` | `select` |
 | `c64_debug` | all operations |
 | `c64_vice` | all operations |
 
@@ -37,15 +40,18 @@ This document is the source of truth for VICE support in the public MCP surface.
 
 | Tool | Operations |
 | --- | --- |
-| `c64_program` | `run_crt`, `bundle_run` |
-| `c64_disk` | `file_info`, `create_image`, `find_and_run` |
+| `c64_program` | `run_crt` |
+| `c64_disk` | `unmount`, `file_info`, `create_image`, `find_and_run`, `find_paths` |
 | `c64_drive` | `load_rom` |
-| `c64_sound` | `play_sid_file`, `play_mod_file`, `pipeline`, `analyze`, `record_analyze` |
+| `c64_sound` | `capture_samples`, `play_sid_file`, `play_mod_file` |
 | `c64_config` | `load_flash`, `save_flash`, `reset_defaults`, `read_debugreg`, `write_debugreg`, `shuffle` |
-| `c64_system` | `pause`, `resume`, `menu` |
+| `c64_system` | `pause`, `resume`, `menu`, `read_menu_screen` |
+| `c64_input` | `keyboard`, `release_all`, `state` |
+| `c64_extract` | `fs_stats` |
 | `c64_stream` | all operations |
 | `c64_printer` | all operations |
-| `c64_extract` | all operations |
+
+The per-operation support is declared in `src/tools/registry/*.ts` (`operationPlatforms` and `supportedPlatforms`); the generated tables in `README.md` and `mcp/*.json` reflect it. If this file and the registry differ, the registry is correct.
 
 ## Notes
 

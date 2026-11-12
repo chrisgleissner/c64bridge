@@ -37,6 +37,39 @@
           "default": "~/.c64bridge.json"
         },
         {
+          "name": "C64BRIDGE_ALLOWED_DIRS",
+          "description": "Additional directories allowed for host file paths in tool arguments, separated by the path delimiter; * disables the check.",
+          "format": "string"
+        },
+        {
+          "name": "C64BRIDGE_ACCESS",
+          "description": "Access mode limiting which operations may be called.",
+          "format": "string",
+          "default": "full",
+          "choices": [
+            "full",
+            "no-destructive",
+            "read-only"
+          ]
+        },
+        {
+          "name": "C64BRIDGE_HTTP_TOKEN",
+          "description": "Bearer token required by the optional HTTP transport.",
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "C64BRIDGE_DIAGNOSTICS_KEEP",
+          "description": "Number of diagnostics files kept at startup (files older than 30 days are always removed).",
+          "format": "number",
+          "default": "200"
+        },
+        {
+          "name": "C64BRIDGE_VERBOSE_SCHEMA",
+          "description": "Set to 1 to include full per-operation schemas in tools/list.",
+          "format": "string"
+        },
+        {
           "name": "C64_MODE",
           "description": "Active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator).",
           "format": "string",

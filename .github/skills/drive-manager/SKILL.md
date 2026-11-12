@@ -19,7 +19,8 @@ Use this skill for disk image mounts, blank media creation, drive resets, power 
 2. For image mounts or unmounts, use `c64_disk` with `op: "mount"` or `op: "unmount"`.
 3. For new media, use `c64_disk` with `op: "create_image"` and then verify the result.
 4. For drive hardware state, use `c64_drive` with `op: "reset"`, `op: "power_on"`, `op: "power_off"`, or `op: "set_mode"`.
-5. Use `c64_disk` with `op: "file_info"` or `op: "find_and_run"` when inspection or launch is part of the task.
+5. To locate files by name on the device, use `c64_disk` with `op: "find_paths"` (`nameContains`, optional `root`, `extensions`, `maxResults`); a `truncated: true` result means more matches exist and the search should be narrowed.
+6. Use `c64_disk` with `op: "file_info"` or `op: "find_and_run"` when inspection or launch is part of the task.
 
 ## Validation
 
