@@ -79,8 +79,30 @@ async function runWithBun(entryPath) {
         },
       });
 
-      child.on('error', reject);
+      // Forward termination signals so the server child does not outlive the launcher.
+      const forwardedSignals = ['SIGTERM', 'SIGINT', 'SIGHUP'];
+      const forwarders = new Map();
+      for (const name of forwardedSignals) {
+        const forward = () => {
+          try {
+            child.kill(name);
+          } catch {}
+        };
+        forwarders.set(name, forward);
+        process.on(name, forward);
+      }
+      const removeForwarders = () => {
+        for (const [name, forward] of forwarders) {
+          process.removeListener(name, forward);
+        }
+      };
+
+      child.on('error', (error) => {
+        removeForwarders();
+        reject(error);
+      });
       child.on('exit', (code, signal) => {
+        removeForwarders();
         if (signal) {
           try {
             process.kill(process.pid, signal);
