@@ -25,6 +25,8 @@ import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
 import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
+import { stopAllBackgroundTasks } from "./tools/meta/background.js";
+import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
 import { unknownErrorResult } from "./tools/errors.js";
 import type { ToolRunResult } from "./tools/types.js";
@@ -102,6 +104,52 @@ export function checkHttpRequestAccess(
     }
   }
   return null;
+}
+
+const SHUTDOWN_CLEANUP_TIMEOUT_MS = 2_000;
+
+/**
+ * Installs the single shutdown path. The first trigger stops background
+ * tasks, releases any capture session and stops managed VICE processes, then
+ * exits. Later triggers return the same promise. Stdin end/close is a
+ * trigger only in stdio mode (the client went away).
+ */
+function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
+  delegateViceSignalHandling();
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (reason: string, exitCode: number): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
+    writeDiagnosticEvent("server_shutdown", { reason });
+    console.error(`c64bridge shutting down (${reason})`);
+    shutdownPromise = (async () => {
+      try {
+        const cleanup = Promise.allSettled([
+          stopAllBackgroundTasks(),
+          client.releaseVideoCapture(),
+        ]);
+        await Promise.race([
+          cleanup,
+          new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS).unref()),
+        ]);
+      } catch {
+        // Cleanup is best effort; always continue to exit.
+      }
+      try {
+        stopManagedViceProcessesSync();
+      } catch {
+        // ignore
+      }
+      process.exit(exitCode);
+    })();
+    return shutdownPromise;
+  };
+  process.on("SIGTERM", () => void shutdown("SIGTERM", 143));
+  process.on("SIGINT", () => void shutdown("SIGINT", 130));
+  process.on("SIGHUP", () => void shutdown("SIGHUP", 129));
+  if (mode === "stdio") {
+    process.stdin.once("end", () => void shutdown("stdin end", 0));
+    process.stdin.once("close", () => void shutdown("stdin close", 0));
+  }
 }
 
 function parsePort(raw?: string): number | undefined {
@@ -570,12 +618,14 @@ async function main() {
         });
     });
     await new Promise<void>((resolve, reject) => httpServer.listen(port, "127.0.0.1", resolve).once("error", reject));
+    installShutdown(client, "http");
     writeDiagnosticEvent("mcp_transport_connected", { mode: "http", port });
     console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
   } else {
     const server = createMcpServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
+    installShutdown(client, "stdio");
     writeDiagnosticEvent("mcp_transport_connected", { mode: "stdio" });
     console.error("c64bridge MCP server running on stdio");
   }

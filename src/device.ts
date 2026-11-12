@@ -16,6 +16,18 @@ import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
 
+let signalDelegate = false;
+
+/** Stops every VICE process started by this server, synchronously. */
+export function stopManagedViceProcessesSync(): void {
+  ViceBackend.stopAllSupervisorsSync();
+}
+
+/** Marks that the caller owns signal handling and process exit (see mcp-server shutdown). */
+export function delegateViceSignalHandling(): void {
+  signalDelegate = true;
+}
+
 export type DeviceType = "c64u" | "u2" | "vice";
 
 export interface RunResult {
@@ -447,6 +459,13 @@ export class ViceBackend implements C64Facade {
   private readonly extraArgs: string[];
   private static readonly supervisors = new Map<string, ViceProcessHandle>();
   private static cleanupRegistered = false;
+
+  static stopAllSupervisorsSync(): void {
+    for (const [, handle] of ViceBackend.supervisors) {
+      handle.stopSync();
+    }
+    ViceBackend.supervisors.clear();
+  }
   private readonly debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
   private startupPromise: Promise<void> | null = null;
   private monitorQueue: Promise<void> = Promise.resolve();
@@ -603,15 +622,16 @@ export class ViceBackend implements C64Facade {
       return;
     }
     ViceBackend.cleanupRegistered = true;
-    const cleanupSync = () => {
-      for (const [, handle] of ViceBackend.supervisors) {
-        handle.stopSync();
-      }
-      ViceBackend.supervisors.clear();
-    };
+    const cleanupSync = stopManagedViceProcessesSync;
     process.once("exit", cleanupSync);
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
       process.once(signal, () => {
+        // When the MCP server installed its shutdown handler, it performs the
+        // async cleanup, calls stopManagedViceProcessesSync and exits itself;
+        // exactly one handler per signal may call process.exit.
+        if (signalDelegate) {
+          return;
+        }
         cleanupSync();
         process.exit(signal === "SIGINT" ? 130 : 143);
       });

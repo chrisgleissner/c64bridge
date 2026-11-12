@@ -265,6 +265,8 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
       await persistTasks();
     }
   }, delay);
+  // A pending task timer must never keep the process alive on its own.
+  task._timer.unref?.();
 }
 
 function stopTask(task: BackgroundTask): void {
@@ -274,6 +276,14 @@ function stopTask(task: BackgroundTask): void {
   task._timer = null;
   task.status = task.status === "completed" ? task.status : "stopped";
   task.stoppedAt = new Date();
+}
+
+/** Stops every running task (used at process shutdown) and persists the state. */
+export async function stopAllBackgroundTasks(): Promise<void> {
+  for (const task of TASKS.values()) {
+    if (task.status === "running") stopTask(task);
+  }
+  await persistTasks();
 }
 
 const noArgsSchema = objectSchema<Record<string, never>>({ description: "No arguments", properties: {}, additionalProperties: false });
