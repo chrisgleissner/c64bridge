@@ -1,5 +1,7 @@
 import { defineToolModule } from "./types.js";
-import { objectSchema } from "./schema.js";
+import { booleanSchema, numberSchema, objectSchema, optionalSchema } from "./schema.js";
+import { waitForScreenText, MAX_WAIT_TIMEOUT_MS } from "./meta/screen.js";
+import type { ToolExecutionContext } from "./types.js";
 import { jsonResult, textResult } from "./responses.js";
 import { Buffer } from "node:buffer";
 import {
@@ -41,12 +43,72 @@ function isMissingMenuScreenEndpoint(error: unknown): boolean {
     && (error as { response?: { status?: unknown } }).response?.status === 404;
 }
 
-const resetArgsSchema = createNoArgsSchema("No arguments required to reset the C64.");
-const rebootArgsSchema = createNoArgsSchema("No arguments required to reboot the C64 firmware.");
+function createWaitSchema(description: string) {
+  return objectSchema<{ waitForReady?: boolean; readyTimeoutMs?: number }>({
+    description,
+    properties: {
+      waitForReady: optionalSchema(booleanSchema({
+        description: "Wait until the BASIC READY. prompt is visible before returning. A timeout is reported as ready=false, not as an error.",
+        default: false,
+      }), false),
+      readyTimeoutMs: optionalSchema(numberSchema({
+        description: "Maximum time to wait for READY. when waitForReady is true (1-120000 ms).",
+        integer: true,
+        minimum: 1,
+        maximum: MAX_WAIT_TIMEOUT_MS,
+        default: 15_000,
+      }), 15_000),
+    },
+    additionalProperties: false,
+  });
+}
+
+const READY_SETTLE_MS = 300;
+
+/** Polls reachability and the screen until READY. appears or the timeout elapses. Never throws. */
+async function waitForReadyPrompt(
+  ctx: ToolExecutionContext,
+  timeoutMs: number,
+): Promise<{ ready: boolean; readyElapsedMs: number }> {
+  const start = Date.now();
+  // Give the reset time to clear the old screen so a stale READY. is not mistaken for the new one.
+  await new Promise((resolve) => setTimeout(resolve, Math.min(READY_SETTLE_MS, timeoutMs)));
+  const tolerantClient = {
+    async readScreen(): Promise<string> {
+      try {
+        return await ctx.client.readScreen();
+      } catch {
+        return ""; // device not reachable yet
+      }
+    },
+  };
+  const remaining = Math.max(1, timeoutMs - (Date.now() - start));
+  const outcome = await waitForScreenText(tolerantClient, { pattern: "READY.", timeoutMs: remaining, intervalMs: 250 });
+  return { ready: outcome.matched, readyElapsedMs: Date.now() - start };
+}
+
+async function withReadyResult(
+  ctx: ToolExecutionContext,
+  parsed: { waitForReady?: boolean; readyTimeoutMs?: number },
+  baseMessage: string,
+  details: Record<string, unknown>,
+) {
+  if (parsed.waitForReady !== true) {
+    return textResult(baseMessage, { success: true, details });
+  }
+  const { ready, readyElapsedMs } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000);
+  const message = ready
+    ? `${baseMessage} READY. prompt reached after ${readyElapsedMs} ms.`
+    : `${baseMessage} The READY. prompt was not seen within ${readyElapsedMs} ms; the machine may still be starting.`;
+  return textResult(message, { success: true, details, ready, readyElapsedMs });
+}
+
+const resetArgsSchema = createWaitSchema("Reset the C64. Optionally wait for the READY. prompt.");
+const rebootArgsSchema = createWaitSchema("Reboot the C64 firmware. Optionally wait for the READY. prompt.");
 const pauseArgsSchema = createNoArgsSchema("No arguments required to pause the machine.");
 const resumeArgsSchema = createNoArgsSchema("No arguments required to resume the machine after a pause.");
 const poweroffArgsSchema = createNoArgsSchema("No arguments required to power off the machine.");
-const powerCycleArgsSchema = createNoArgsSchema("No arguments required to power cycle the active system.");
+const powerCycleArgsSchema = createWaitSchema("Power cycle the active system. Optionally wait for the READY. prompt.");
 const menuButtonArgsSchema = createNoArgsSchema("No arguments required to toggle the Ultimate menu button.");
 const readMenuScreenArgsSchema = createNoArgsSchema("No arguments required to read the active Ultimate menu screen matrix.");
 
@@ -79,7 +141,7 @@ export const machineControlModule = defineToolModule({
       supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
-          resetArgsSchema.parse(args ?? {});
+          const parsed = resetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting C64");
 
           const result = await ctx.client.reset();
@@ -91,10 +153,7 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
-          return textResult("C64 reset command issued successfully.", {
-            success: true,
-            details,
-          });
+          return await withReadyResult(ctx, parsed, "C64 reset command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -119,7 +178,7 @@ export const machineControlModule = defineToolModule({
       supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
-          rebootArgsSchema.parse(args ?? {});
+          const parsed = rebootArgsSchema.parse(args ?? {});
           ctx.logger.info("Rebooting C64");
 
           const result = await ctx.client.reboot();
@@ -131,10 +190,7 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
-          return textResult("C64 reboot command issued successfully.", {
-            success: true,
-            details,
-          });
+          return await withReadyResult(ctx, parsed, "C64 reboot command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -285,7 +341,7 @@ export const machineControlModule = defineToolModule({
       supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
-          powerCycleArgsSchema.parse(args ?? {});
+          const parsed = powerCycleArgsSchema.parse(args ?? {});
           ctx.logger.info("Power cycling active backend");
           const result = await ctx.client.powerCycle();
           if (!result.success) {
@@ -294,7 +350,7 @@ export const machineControlModule = defineToolModule({
             });
           }
           const details = toRecord(result.details) ?? {};
-          return textResult("Power-cycle request completed.", { success: true, details });
+          return await withReadyResult(ctx, parsed, "Power-cycle request completed.", details);
         } catch (error) {
           if (error instanceof ToolError) return toolErrorResult(error);
           return unknownErrorResult(error);
