@@ -13,14 +13,17 @@
       "description": "Selects the operation."
     },
     "address": {
-      "type": "string",
-      "description": "Start address ($HHHH or decimal)",
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Start address ($HHHH or decimal) Limits depend on op.",
       "minLength": 1
     },
     "length": {
       "type": "integer",
-      "description": "Number of bytes to scan",
-      "minimum": 63,
+      "description": "Number of bytes to scan Limits depend on op.",
+      "minimum": 1,
       "maximum": 65536
     },
     "stride": {
@@ -103,7 +106,7 @@
         "string",
         "null"
       ],
-      "description": "File path to write charset binary",
+      "description": "File path to write charset binary Limits depend on op.",
       "minLength": 1
     },
     "minNonEmptyChars": {

@@ -34,9 +34,11 @@
       "minLength": 1
     },
     "verify": {
-      "type": "boolean",
-      "description": "Run post-execution polling to ensure the BASIC program executed without errors.",
-      "default": false
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Run post-execution polling to ensure the BASIC program executed without errors. Limits depend on op."
     },
     "programs": {
       "type": "array",
@@ -127,7 +129,7 @@
         "string",
         "null"
       ],
-      "description": "Output directory for test results",
+      "description": "Output directory for test results Limits depend on op.",
       "minLength": 1
     },
     "resetDelayMs": {

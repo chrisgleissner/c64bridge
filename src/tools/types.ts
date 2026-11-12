@@ -31,6 +31,7 @@ export type JsonSchema = {
   readonly minItems?: number;
   readonly maxItems?: number;
   readonly oneOf?: readonly JsonSchema[];
+  readonly anyOf?: readonly JsonSchema[];
   readonly discriminator?: {
     readonly propertyName: string;
   };
@@ -151,6 +152,7 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
   // so we merge all variant properties and use an enum for the discriminator.
   const opValues: string[] = [];
   const mergedProperties: Record<string, JsonSchema> = {};
+  const propertyVariants: Record<string, JsonSchema[]> = {};
   const opDescriptions: string[] = [];
   const operationMetadata: OperationInputMetadata[] = [];
 
@@ -184,10 +186,14 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
 
     for (const [key, propSchema] of Object.entries(variantProps)) {
       if (key === discriminator) continue;
-      if (!mergedProperties[key]) {
-        mergedProperties[key] = propSchema;
-      }
+      (propertyVariants[key] ??= []).push(propSchema);
     }
+  }
+
+  // Variants may declare the same property with different limits. The flattened
+  // property must accept every variant's values; per-op validation stays strict.
+  for (const [key, schemas] of Object.entries(propertyVariants)) {
+    mergedProperties[key] = combinePropertySchemas(schemas);
   }
 
   const opPropertySchema: JsonSchema = opValues.length > 0
@@ -215,6 +221,150 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
   };
 
   return schema;
+}
+
+const OP_LIMITS_NOTE = "Limits depend on op.";
+
+const WIDENABLE_KEYS = new Set([
+  "type", "description", "enum", "const", "default", "minimum", "maximum", "minLength", "maxLength",
+  "minItems", "maxItems", "pattern", "format", "items", "examples",
+]);
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const aKeys = Object.keys(a as object);
+  const bKeys = Object.keys(b as object);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
+
+function withoutDescription(schema: JsonSchema): JsonSchema {
+  const { description: _description, ...rest } = schema;
+  return rest;
+}
+
+function typeSet(schema: JsonSchema): string[] | undefined {
+  if (schema.type === undefined) {
+    return undefined;
+  }
+  const types = Array.isArray(schema.type) ? [...schema.type] : [schema.type as string];
+  return types;
+}
+
+function enumValues(schema: JsonSchema): readonly unknown[] | undefined {
+  if (schema.enum) return schema.enum;
+  if ("const" in schema) return [schema.const];
+  return undefined;
+}
+
+function smallest(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined || b === undefined ? undefined : Math.min(a, b);
+}
+
+function largest(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined || b === undefined ? undefined : Math.max(a, b);
+}
+
+/** Returns a schema accepting everything either input accepts, or undefined when that cannot be expressed safely. */
+function widenPair(a: JsonSchema, b: JsonSchema): JsonSchema | undefined {
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(aRecord), ...Object.keys(bRecord)])) {
+    if (!WIDENABLE_KEYS.has(key) && !deepEqual(aRecord[key], bRecord[key])) {
+      return undefined;
+    }
+  }
+
+  const aTypes = typeSet(a);
+  const bTypes = typeSet(b);
+  let types: string[] | undefined;
+  if (aTypes && bTypes) {
+    types = Array.from(new Set([...aTypes, ...bTypes]));
+    if (types.includes("number")) {
+      types = types.filter((type) => type !== "integer");
+    }
+  }
+
+  // Structured types only widen when their element schema widens.
+  let items: JsonSchema | undefined;
+  if (a.items !== undefined || b.items !== undefined) {
+    if (!a.items || !b.items || Array.isArray(a.items) || Array.isArray(b.items)) {
+      if (!deepEqual(a.items, b.items)) return undefined;
+      items = a.items as JsonSchema | undefined;
+    } else {
+      items = combinePropertySchemas([a.items as JsonSchema, b.items as JsonSchema], false);
+    }
+  }
+
+  const aEnum = enumValues(a);
+  const bEnum = enumValues(b);
+  const enumUnion = aEnum && bEnum
+    ? [...aEnum, ...bEnum.filter((value) => !aEnum.includes(value))]
+    : undefined;
+
+  const minimum = smallest(a.minimum, b.minimum);
+  const maximum = largest(a.maximum, b.maximum);
+  const minLength = smallest(a.minLength, b.minLength);
+  const maxLength = largest(a.maxLength, b.maxLength);
+  const minItems = smallest(a.minItems, b.minItems);
+  const maxItems = largest(a.maxItems, b.maxItems);
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(a)) {
+    if (!WIDENABLE_KEYS.has(key)) result[key] = value;
+  }
+  if (types) result.type = types.length === 1 ? types[0] : types;
+  if (a.description !== undefined || b.description !== undefined) result.description = a.description ?? b.description;
+  if (enumUnion) result.enum = enumUnion;
+  if (minimum !== undefined) result.minimum = minimum;
+  if (maximum !== undefined) result.maximum = maximum;
+  if (minLength !== undefined) result.minLength = minLength;
+  if (maxLength !== undefined) result.maxLength = maxLength;
+  if (minItems !== undefined) result.minItems = minItems;
+  if (maxItems !== undefined) result.maxItems = maxItems;
+  if (items) result.items = items;
+  if (a.pattern !== undefined && a.pattern === b.pattern) result.pattern = a.pattern;
+  if (a.format !== undefined && a.format === b.format) result.format = a.format;
+  if (deepEqual(a.default, b.default) && a.default !== undefined) result.default = a.default;
+  if (deepEqual(a.examples, b.examples) && a.examples !== undefined) result.examples = a.examples;
+  return result as JsonSchema;
+}
+
+/**
+ * Combines the schemas that different operations declare for one property into a
+ * single schema accepting all of their values. Identical schemas are returned untouched.
+ */
+export function combinePropertySchemas(schemas: readonly JsonSchema[], annotate = true): JsonSchema {
+  const first = schemas[0]!;
+  const distinct: JsonSchema[] = [];
+  for (const schema of schemas) {
+    if (!distinct.some((existing) => deepEqual(withoutDescription(existing), withoutDescription(schema)))) {
+      distinct.push(schema);
+    }
+  }
+  if (distinct.length === 1) {
+    return first;
+  }
+
+  let merged: JsonSchema | undefined = distinct[0];
+  for (const schema of distinct.slice(1)) {
+    merged = merged ? widenPair(merged, schema) : undefined;
+  }
+
+  const result: JsonSchema = merged ?? {
+    anyOf: distinct.map(withoutDescription),
+    ...(first.description ? { description: first.description } : {}),
+  };
+  if (!annotate) {
+    return result;
+  }
+  const description = result.description;
+  if (description?.includes(OP_LIMITS_NOTE)) {
+    return result;
+  }
+  return { ...result, description: description ? `${description} ${OP_LIMITS_NOTE}` : OP_LIMITS_NOTE };
 }
 
 export type OperationMap = Record<string, Record<string, unknown>>;

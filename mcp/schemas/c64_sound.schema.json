@@ -56,10 +56,9 @@
     },
     "voice": {
       "type": "integer",
-      "description": "SID voice to trigger (1-3).",
+      "description": "SID voice to trigger (1-3). Limits depend on op.",
       "minimum": 1,
-      "maximum": 3,
-      "default": 1
+      "maximum": 3
     },
     "note": {
       "type": [
@@ -88,14 +87,13 @@
     },
     "waveform": {
       "type": "string",
-      "description": "SID waveform to enable.",
+      "description": "SID waveform to enable. Limits depend on op.",
       "enum": [
         "pulse",
         "saw",
         "tri",
         "noise"
-      ],
-      "default": "pulse"
+      ]
     },
     "pulseWidth": {
       "type": "integer",
@@ -137,8 +135,7 @@
         "boolean",
         "null"
       ],
-      "description": "When true, record audio after silencing to confirm the SID output is quiet.",
-      "default": false
+      "description": "When true, record audio after silencing to confirm the SID output is quiet. Limits depend on op."
     },
     "path": {
       "type": "string",
@@ -184,28 +181,23 @@
         "string",
         "null"
       ],
-      "description": "Optional musical preset to influence timing/expression.",
-      "enum": [
-        "classic",
-        "expression"
-      ],
-      "default": "classic"
+      "description": "Optional musical preset to influence timing/expression. Limits depend on op."
     },
     "sidwave": {
-      "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
       "type": [
         "string",
         "object",
         "null"
-      ]
+      ],
+      "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object. Limits depend on op."
     },
     "cpg": {
-      "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
       "type": [
         "string",
         "object",
         "null"
-      ]
+      ],
+      "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object. Limits depend on op."
     },
     "format": {
       "type": [
@@ -259,20 +251,18 @@
         "number",
         "null"
       ],
-      "description": "Length of the verification recording on analyzable backends.",
+      "description": "Length of the verification recording on analyzable backends. Limits depend on op.",
       "minimum": 0.5,
-      "maximum": 20,
-      "default": 4
+      "maximum": 20
     },
     "waitBeforeCaptureMs": {
       "type": [
         "number",
         "null"
       ],
-      "description": "Delay between starting playback and beginning verification capture.",
+      "description": "Delay between starting playback and beginning verification capture. Limits depend on op.",
       "minimum": 0,
-      "maximum": 5000,
-      "default": 400
+      "maximum": 5000
     },
     "restoreActiveBackend": {
       "type": [
@@ -285,10 +275,10 @@
     "expectedSidwave": {
       "type": [
         "string",
-        "null"
+        "null",
+        "object"
       ],
-      "description": "Optional expected SIDWAVE used to refine analysis comparisons.",
-      "minLength": 1
+      "description": "Optional expected SIDWAVE used to refine analysis comparisons. Limits depend on op."
     },
     "verifySilenceBefore": {
       "type": [
@@ -356,7 +346,7 @@
         "number",
         "null"
       ],
-      "description": "Override capture duration in seconds.",
+      "description": "Override capture duration in seconds. Limits depend on op.",
       "minimum": 0.5,
       "maximum": 30
     }

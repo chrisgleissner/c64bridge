@@ -22,9 +22,8 @@
     },
     "name": {
       "type": "string",
-      "description": "Unique task name (letters, digits, spaces, '_', '-', '.'; must not start with '.' or a space).",
-      "minLength": 1,
-      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_. -]*$"
+      "description": "Unique task name (letters, digits, spaces, '_', '-', '.'; must not start with '.' or a space). Limits depend on op.",
+      "minLength": 1
     },
     "operation": {
       "type": "string",

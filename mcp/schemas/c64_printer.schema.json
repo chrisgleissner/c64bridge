@@ -25,15 +25,11 @@
       "default": "commodore"
     },
     "secondaryAddress": {
-      "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase).",
       "type": [
         "integer",
         "null"
       ],
-      "enum": [
-        0,
-        7
-      ]
+      "description": "Secondary address for device 4 (0 = upper/graphics, 7 = lowercase). Limits depend on op."
     },
     "formFeed": {
       "type": "boolean",

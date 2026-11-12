@@ -53,8 +53,7 @@
         "boolean",
         "null"
       ],
-      "description": "Whether the checkpoint is enabled (default true).",
-      "default": true
+      "description": "Whether the checkpoint is enabled (default true). Limits depend on op."
     },
     "temporary": {
       "type": [

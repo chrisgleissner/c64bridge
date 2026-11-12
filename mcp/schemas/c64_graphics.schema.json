@@ -56,7 +56,7 @@
         "string",
         "null"
       ],
-      "description": "Exact text to render in PETSCII (overrides prompt derivation).",
+      "description": "Exact text to render in PETSCII (overrides prompt derivation). Limits depend on op.",
       "minLength": 1
     },
     "maxWidth": {
@@ -82,7 +82,7 @@
         "integer",
         "null"
       ],
-      "description": "Border colour index (0-15).",
+      "description": "Border colour index (0-15). Limits depend on op.",
       "minimum": 0,
       "maximum": 15
     },
@@ -91,7 +91,7 @@
         "integer",
         "null"
       ],
-      "description": "Background colour index (0-15).",
+      "description": "Background colour index (0-15). Limits depend on op.",
       "minimum": 0,
       "maximum": 15
     },

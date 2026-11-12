@@ -40,10 +40,9 @@
         "integer",
         "null"
       ],
-      "description": "Delay in ms after each queued key press before the next press (default 0 = no delay).",
+      "description": "Delay in ms after each queued key press before the next press (default 0 = no delay). Limits depend on op.",
       "minimum": 0,
-      "maximum": 5000,
-      "default": 0
+      "maximum": 5000
     },
     "count": {
       "type": [

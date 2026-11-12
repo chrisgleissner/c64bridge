@@ -24,10 +24,9 @@
     },
     "length": {
       "type": "integer",
-      "description": "Number of bytes to read starting from the resolved address.",
+      "description": "Number of bytes to read starting from the resolved address. Limits depend on op.",
       "minimum": 1,
-      "maximum": 4096,
-      "default": 256
+      "maximum": 16384
     },
     "bytes": {
       "type": "string",
@@ -65,7 +64,7 @@
     },
     "pattern": {
       "type": "string",
-      "description": "Substring or regex to find",
+      "description": "Substring or regex to find Limits depend on op.",
       "minLength": 1
     },
     "isRegex": {

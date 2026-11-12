@@ -32,7 +32,7 @@
         "string",
         "null"
       ],
-      "description": "Specific configuration item inside the selected category (e.g. 'Volume').",
+      "description": "Specific configuration item inside the selected category (e.g. 'Volume'). Limits depend on op.",
       "minLength": 1
     },
     "includeSecretValues": {
@@ -44,12 +44,12 @@
       "default": false
     },
     "value": {
-      "description": "Primitive configuration value (string, number, or boolean).",
       "type": [
         "string",
         "number",
         "boolean"
-      ]
+      ],
+      "description": "Primitive configuration value (string, number, or boolean). Limits depend on op."
     },
     "path": {
       "type": "string",
