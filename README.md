@@ -833,7 +833,7 @@ Grouped entry point for frame capture and graphics rendering workflows.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=true`, `encoding="base64"` | ✅ |  | ✅ |
+| `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=false`, `format`, `encoding="base64"` | ✅ |  | ✅ |
 | `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. | — | — | ✅ | ✅ | ✅ |
 | `render_bitmap` | Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | ✅ | ✅ | ✅ |
 | `render_petscii_art` | Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | ✅ | ✅ | ✅ |

@@ -28,8 +28,20 @@
         "boolean",
         "null"
       ],
-      "description": "Include pixel payload bytes in the response.",
-      "default": true
+      "description": "Include raw pixel payload bytes in the response. Off by default because a frame is about 100 KB; the response is rejected above 2 MiB, so lower count when it is on.",
+      "default": false
+    },
+    "format": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Set to png to receive each frame as an MCP image block (C64 palette). At most 4 frames per call. Limits depend on op.",
+      "enum": [
+        "png",
+        "hires",
+        "multicolor"
+      ]
     },
     "encoding": {
       "type": [
@@ -194,14 +206,6 @@
       "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
       "minLength": 1
     },
-    "format": {
-      "description": "Bitmap encoding mode to generate for the VIC-II display.",
-      "type": "string",
-      "enum": [
-        "hires",
-        "multicolor"
-      ]
-    },
     "bitmapAddress": {
       "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
       "type": [
@@ -229,6 +233,6 @@
   "required": [
     "op"
   ],
-  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, encoding.\n- render_petscii_art [write]: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap [write]: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. Required inputs: none.",
+  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap [write]: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. Required inputs: none.",
   "additionalProperties": false
 }

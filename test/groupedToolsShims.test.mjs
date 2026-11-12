@@ -1668,7 +1668,7 @@ test("c64_graphics capture_frame returns normalized frame payload", async () => 
 
   const result = await toolRegistry.invoke(
     "c64_graphics",
-    { op: "capture_frame", count: 2 },
+    { op: "capture_frame", count: 2, includePixels: true },
     ctx,
   );
 

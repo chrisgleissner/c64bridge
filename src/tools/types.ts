@@ -77,7 +77,14 @@ export interface ToolResponseContentText {
   readonly text: string;
 }
 
-export type ToolResponseContent = ToolResponseContentText;
+export interface ToolResponseContentImage {
+  readonly type: "image";
+  /** Base64-encoded image bytes. */
+  readonly data: string;
+  readonly mimeType: string;
+}
+
+export type ToolResponseContent = ToolResponseContentText | ToolResponseContentImage;
 
 export interface ToolRunResult {
   readonly content: readonly ToolResponseContent[];

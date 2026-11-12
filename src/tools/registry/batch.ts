@@ -152,7 +152,7 @@ export const batchModuleGroup = defineToolModule({
               });
               const elapsedMs = Date.now() - cmdStart;
               const isError = toolResult.isError === true || toolResult.metadata?.success === false;
-              const text = toolResult.content.map((c) => c.text).join("\n");
+              const text = toolResult.content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n");
               const resultPayload = toolResult.structuredContent?.data ?? text;
               if (isError) {
                 results.push({ index: i, tool: toolName, description: label, success: false, error: text, elapsedMs });
@@ -165,7 +165,7 @@ export const batchModuleGroup = defineToolModule({
             } catch (err) {
               const elapsedMs = Date.now() - cmdStart;
               // Keep the validation detail (allowed values, bounds) that the CallTool error path would show.
-              const message = unknownErrorResult(err).content.map((c) => c.text).join("\n");
+              const message = unknownErrorResult(err).content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n");
               results.push({ index: i, tool: toolName, description: label, success: false, error: message, elapsedMs });
               failed++;
               if (stopOnError) break;
