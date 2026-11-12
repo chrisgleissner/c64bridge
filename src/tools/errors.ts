@@ -52,20 +52,66 @@ export class ToolExecutionError extends ToolError {
   }
 }
 
+export interface UnsupportedPlatformOptions {
+  /** Public (grouped) tool name, for example c64_disk. */
+  readonly toolName?: string;
+  /** Selected operation of the grouped tool. */
+  readonly op?: string;
+  /** Backends that are configured in this server, when known. */
+  readonly configured?: readonly PlatformId[];
+}
+
+function joinBackends(backends: readonly string[]): string {
+  return backends.join(" or ");
+}
+
+export function describeUnsupportedPlatform(
+  subject: string,
+  platform: PlatformId,
+  supported: readonly PlatformId[],
+  configured?: readonly PlatformId[],
+): string {
+  const base = supported.length > 0
+    ? `${subject} requires backend ${joinBackends(supported)} (active: ${platform}).`
+    : `${subject} is not available on backend ${platform}.`;
+  if (supported.length === 0) {
+    return base;
+  }
+  if (configured === undefined) {
+    return base;
+  }
+  const switchable = supported.filter((id) => id !== platform && configured.includes(id));
+  if (switchable.length > 0) {
+    return `${base} Use \`c64_select_backend\` to switch to ${joinBackends(switchable)}.`;
+  }
+  return `${base} None of these backends is configured on this server.`;
+}
+
 export class ToolUnsupportedPlatformError extends ToolExecutionError {
   readonly tool: string;
   readonly platform: PlatformId;
   readonly supported: readonly PlatformId[];
 
-  constructor(tool: string, platform: PlatformId, supported: readonly PlatformId[]) {
+  constructor(
+    tool: string,
+    platform: PlatformId,
+    supported: readonly PlatformId[],
+    options?: UnsupportedPlatformOptions,
+  ) {
+    const subject = options?.toolName
+      ? options.op
+        ? `\`${options.toolName}\` op \`${options.op}\``
+        : `\`${options.toolName}\``
+      : tool;
     super(
-      `Tool ${tool} is not available on platform ${platform}`,
+      describeUnsupportedPlatform(subject, platform, supported, options?.configured),
       {
         code: "unsupported_platform",
         details: {
           tool,
           platform,
           supported,
+          ...(options?.configured ? { configured: options.configured } : {}),
         },
       },
     );

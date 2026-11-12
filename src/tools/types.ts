@@ -388,7 +388,16 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
       const status = ctx.platform ?? getPlatformStatus();
       const setter = ctx.setPlatform ?? setPlatform;
       if (!isPlatformSupported(status.id, platforms)) {
-        throw new ToolUnsupportedPlatformError(resolveUnsupportedToolName(name, tool, args), status.id, platforms);
+        throw new ToolUnsupportedPlatformError(
+          resolveUnsupportedToolName(name, tool, args),
+          status.id,
+          platforms,
+          {
+            toolName: name,
+            op: getSelectedOperation(args),
+            configured: configuredBackends(ctx),
+          },
+        );
       }
 
       const enrichedCtx: ToolExecutionContext = {
@@ -410,6 +419,18 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
       );
     },
   };
+}
+
+function configuredBackends(ctx: ToolExecutionContext): readonly PlatformId[] | undefined {
+  const client = ctx.client as { getAvailableBackends?: () => readonly PlatformId[] } | undefined;
+  if (typeof client?.getAvailableBackends !== "function") {
+    return undefined;
+  }
+  try {
+    return client.getAvailableBackends();
+  } catch {
+    return undefined;
+  }
 }
 
 function resolveSupportedPlatforms(

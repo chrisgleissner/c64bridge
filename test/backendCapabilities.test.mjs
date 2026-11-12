@@ -51,7 +51,8 @@ for (const [name, operations] of Object.entries(restrictions)) {
         const descriptor = toolRegistry.list().find((tool) => tool.name === name);
         assert.deepEqual([...descriptor.metadata.operationPlatforms[op]].sort(), [...supported].sort());
         let accesses = 0;
-        const client = new Proxy({}, { get() { accesses++; throw new Error("unexpected client access"); } });
+        // getAvailableBackends is configuration, not device I/O: the error message uses it to suggest a switch.
+        const client = new Proxy({}, { get(_target, key) { if (key === "getAvailableBackends") return () => [platform]; accesses++; throw new Error("unexpected client access"); } });
         await assert.rejects(() => toolRegistry.invoke(name, { op }, context(platform, client)), (error) => error instanceof ToolUnsupportedPlatformError);
         assert.equal(accesses, 0);
       });
@@ -355,7 +356,7 @@ test("flash save failure after restore is reported honestly", async () => withDi
 for (const op of ["print_text", "print_bitmap", "define_chars"]) {
   test(`c64_printer.${op} rejects vice before device I/O`, async () => {
     let accesses = 0;
-    const client = new Proxy({}, { get() { accesses++; throw new Error("unexpected client access"); } });
+    const client = new Proxy({}, { get(_target, key) { if (key === "getAvailableBackends") return () => ["vice"]; accesses++; throw new Error("unexpected client access"); } });
     await assert.rejects(() => toolRegistry.invoke("c64_printer", { op }, context("vice", client)), (error) => error instanceof ToolUnsupportedPlatformError);
     assert.equal(accesses, 0);
   });

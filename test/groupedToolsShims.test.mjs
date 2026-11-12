@@ -133,7 +133,7 @@ test("c64_system pause is rejected on vice", async () => {
 
   await assert.rejects(
     () => toolRegistry.invoke("c64_system", { op: "pause" }, ctx),
-    /Tool pause is not available on platform vice/,
+    /`c64_system` op `pause` requires backend c64u or u2 \(active: vice\)/,
   );
 });
 
