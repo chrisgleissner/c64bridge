@@ -51,6 +51,21 @@
       ],
       "description": "Primitive configuration value (string, number, or boolean). Limits depend on op."
     },
+    "updates": {
+      "type": "object",
+      "description": "Categories mapped to item/value pairs (primitive values only), for example {\"Audio\": {\"Volume\": 80}}.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Item/value pairs of one category (primitive values only).",
+        "additionalProperties": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        }
+      }
+    },
     "path": {
       "type": "string",
       "description": "Absolute or workspace-relative path where the snapshot file will be written.",
@@ -136,7 +151,7 @@
   "required": [
     "op"
   ],
-  "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item, includeSecretValues.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Required inputs: none.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
+  "description": "Configuration operations available via the c64_config tool.\n\nOperations:\n- list: List configuration categories reported by the firmware. Required inputs: none.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item, includeSecretValues.\n- set: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update: Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime. Required inputs: none. Optional inputs: updates.\n- load_flash: Load configuration from flash storage. Required inputs: none.\n- save_flash: Persist the current configuration to flash storage. Required inputs: none.\n- reset_defaults: Reset firmware configuration to factory defaults. Required inputs: none.\n- read_debugreg: Read the Ultimate debug register ($D7FF). Required inputs: none.\n- write_debugreg: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status. Required inputs: none.\n- version: Fetch firmware version details. Required inputs: none.\n- snapshot: Snapshot configuration to disk for later restore or diff. Required inputs: path.\n- restore: Restore configuration from a snapshot file. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare the current configuration with a snapshot. Required inputs: path.\n- shuffle: Discover PRG/CRT files and run each with optional screen capture. Required inputs: none. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
   "additionalProperties": false,
   "x-c64bridge-operations": [
     {
@@ -250,25 +265,43 @@
     },
     {
       "op": "batch_update",
-      "description": "Apply multiple configuration updates in a single request.",
+      "description": "Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime.",
       "required": [],
-      "optional": [],
+      "optional": [
+        "updates"
+      ],
       "inputSchema": {
-        "description": "Apply multiple configuration updates in a single request.",
+        "description": "Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime.",
         "type": "object",
+        "properties": {
+          "updates": {
+            "type": "object",
+            "description": "Categories mapped to item/value pairs (primitive values only), for example {\"Audio\": {\"Volume\": 80}}.",
+            "additionalProperties": {
+              "type": "object",
+              "description": "Item/value pairs of one category (primitive values only).",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            }
+          },
+          "op": {
+            "const": "batch_update"
+          }
+        },
         "additionalProperties": {
           "type": "object",
+          "description": "Item/value pairs of one category (primitive values only).",
           "additionalProperties": {
             "type": [
               "string",
               "number",
               "boolean"
             ]
-          }
-        },
-        "properties": {
-          "op": {
-            "const": "batch_update"
           }
         },
         "required": [

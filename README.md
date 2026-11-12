@@ -733,7 +733,7 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `batch_update` | Apply multiple configuration updates in a single request. | — | — | ✅ | ✅ | ✅ |
+| `batch_update` | Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime. | — | `updates` | ✅ | ✅ | ✅ |
 | `diff` | Compare the current configuration with a snapshot. | `path` | — | ✅ | ✅ | ✅ |
 | `get` | Read a configuration category or specific item. | `category` | `item`, `includeSecretValues=false` | ✅ | ✅ | ✅ |
 | `info` | Retrieve Ultimate hardware information and status. | — | — | ✅ | ✅ | ✅ |

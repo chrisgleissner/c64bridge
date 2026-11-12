@@ -112,7 +112,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "batch_update",
       ensureDescriptor(developerDescriptorIndex, "config_batch_update").inputSchema,
-      { description: "Apply multiple configuration updates in a single request." },
+      { description: "Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_batch_update", rawArgs, ctx),
   },

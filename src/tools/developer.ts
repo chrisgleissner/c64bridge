@@ -98,16 +98,54 @@ const configGetArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+const BATCH_CATEGORY_SCHEMA = {
+  type: "object",
+  description: "Item/value pairs of one category (primitive values only).",
+  additionalProperties: {
+    type: ["string", "number", "boolean"],
+  },
+} as const;
+
+function isCategoryMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    && Object.values(value as Record<string, unknown>).every(
+      (entry) => typeof entry === "object" && entry !== null && !Array.isArray(entry),
+    );
+}
+
+function parseCategoryMap(
+  input: Record<string, unknown>,
+  resolvedPath: string,
+  into: Record<string, Record<string, PrimitiveValue>>,
+): void {
+  for (const [category, items] of Object.entries(input)) {
+    if (typeof items !== "object" || items === null || Array.isArray(items)) {
+      throw new ToolValidationError("Each category must map to an object of item values", {
+        path: `${resolvedPath}.${category}`,
+      });
+    }
+    const parsedItems: Record<string, PrimitiveValue> = into[category] ?? {};
+    for (const [item, rawValue] of Object.entries(items as Record<string, unknown>)) {
+      parsedItems[item] = primitiveValueSchema.parse(rawValue, `${resolvedPath}.${category}.${item}`);
+    }
+    into[category] = parsedItems;
+  }
+}
+
 const configBatchSchema: Schema<Record<string, Record<string, PrimitiveValue>>> = {
   jsonSchema: {
-    description: "Nested object mapping categories to item/value pairs (primitive values only).",
+    description:
+      "Apply configuration changes. Documented form: `updates`, an object mapping categories to item/value pairs. "
+      + "For backward compatibility the runtime also accepts the categories as top-level keys next to `op`.",
     type: "object",
-    additionalProperties: {
-      type: "object",
-      additionalProperties: {
-        type: ["string", "number", "boolean"],
+    properties: {
+      updates: {
+        type: "object",
+        description: "Categories mapped to item/value pairs (primitive values only), for example {\"Audio\": {\"Volume\": 80}}.",
+        additionalProperties: BATCH_CATEGORY_SCHEMA,
       },
     },
+    additionalProperties: BATCH_CATEGORY_SCHEMA,
   },
   parse(value: unknown, path?: string) {
     const resolvedPath = path ?? "$";
@@ -117,21 +155,17 @@ const configBatchSchema: Schema<Record<string, Record<string, PrimitiveValue>>> 
       });
     }
 
-    const input = value as Record<string, unknown>;
+    const input = { ...(value as Record<string, unknown>) };
     const categories: Record<string, Record<string, PrimitiveValue>> = {};
-    for (const [category, items] of Object.entries(input)) {
-      if (typeof items !== "object" || items === null || Array.isArray(items)) {
-        throw new ToolValidationError("Each category must map to an object of item values", {
-          path: `${resolvedPath}.${category}`,
-        });
-      }
-      const parsedItems: Record<string, PrimitiveValue> = {};
-      for (const [item, rawValue] of Object.entries(items as Record<string, unknown>)) {
-        const parsedValue = primitiveValueSchema.parse(rawValue, `${resolvedPath}.${category}.${item}`);
-        parsedItems[item] = parsedValue;
-      }
-      categories[category] = parsedItems;
+
+    // `updates` is the documented form. A legacy category literally named "updates"
+    // holds primitive values, so it is not a category map and stays a legacy category.
+    if (Object.prototype.hasOwnProperty.call(input, "updates") && isCategoryMap(input.updates)) {
+      const updates = input.updates;
+      delete input.updates;
+      parseCategoryMap(updates, `${resolvedPath}.updates`, categories);
     }
+    parseCategoryMap(input, resolvedPath, categories);
 
     if (Object.keys(categories).length === 0) {
       throw new ToolValidationError("Batch payload must contain at least one category", {
@@ -304,7 +338,7 @@ export const developerModule = defineToolModule({
       relatedResources: ["c64://guide/bootstrap"],
       tags: ["config", "write"],
       examples: [
-        { name: "Batch update", description: "Update multiple settings", arguments: { Audio: { Volume: 80, DACMode: "stereo" } } },
+        { name: "Batch update", description: "Update multiple settings", arguments: { updates: { Audio: { Volume: 80, DACMode: "stereo" } } } },
       ],
       workflowHints: [
         "Use when multiple categories must be updated together; remind the user to review validation errors closely.",
