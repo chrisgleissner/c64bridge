@@ -87,7 +87,9 @@ export function toolErrorResult(error: ToolError): ToolRunResult {
   // Clients often show only the text content, so surface the underlying cause
   // (for example a range check or firmware error string) next to the summary.
   const detailMessage = describeDetailMessage(error.details);
-  const message = detailMessage && !located.includes(detailMessage) ? `${located}: ${detailMessage}` : located;
+  const withDetail = detailMessage && !located.includes(detailMessage) ? `${located}: ${detailMessage}` : located;
+  const limits = describeLimits(error.details);
+  const message = limits ? `${withDetail} [${limits}]` : withDetail;
 
   const base = textResult(message, { error: metadata });
   return { ...base, isError: true };
@@ -99,6 +101,32 @@ function describeDetailMessage(details: unknown): string | undefined {
   }
   const message = (details as { message?: unknown }).message;
   return typeof message === "string" && message.trim().length > 0 ? message.trim() : undefined;
+}
+
+const MAX_LISTED_VALUES = 40;
+
+// Valid values and bounds recorded by validators, so a client sees them without reading the schema.
+function describeLimits(details: unknown): string | undefined {
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+  const record = details as Record<string, unknown>;
+  const parts: string[] = [];
+  if (Array.isArray(record.allowed) && record.allowed.length > 0) {
+    const values = record.allowed.map((value) => String(value));
+    const shown = values.slice(0, MAX_LISTED_VALUES).join(", ");
+    parts.push(values.length > MAX_LISTED_VALUES ? `allowed: ${shown}, ... (${values.length} total)` : `allowed: ${shown}`);
+  }
+  for (const key of ["minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"] as const) {
+    const value = record[key];
+    if (typeof value === "number" || typeof value === "string") {
+      parts.push(`${key}: ${value}`);
+    }
+  }
+  if (parts.length > 0 && record.received !== undefined && typeof record.received !== "object") {
+    parts.push(`received: ${JSON.stringify(record.received)}`);
+  }
+  return parts.length > 0 ? parts.join("; ") : undefined;
 }
 
 export function unknownErrorResult(error: unknown): ToolRunResult {

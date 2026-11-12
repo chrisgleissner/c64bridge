@@ -262,7 +262,7 @@ export function createOperationDispatcher<TMap extends OperationMap>(
     if (!handler) {
       throw new ToolValidationError(
         `${toolName} does not support ${OPERATION_DISCRIMINATOR} "${opValue}"`,
-        { path: `$.${OPERATION_DISCRIMINATOR}`, details: { allowed } },
+        { path: `$.${OPERATION_DISCRIMINATOR}`, details: { allowed, received: opValue } },
       );
     }
 

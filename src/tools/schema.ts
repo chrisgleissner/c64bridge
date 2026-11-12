@@ -75,14 +75,14 @@ export function stringSchema(options: StringSchemaOptions = {}): Schema<string> 
     if (options.minLength !== undefined && stringValue.length < options.minLength) {
       throw new ToolValidationError(
         `String must have length ≥ ${options.minLength}`,
-        { path, details: { minLength: options.minLength } },
+        { path, details: { minLength: options.minLength, received: stringValue.length } },
       );
     }
 
     if (options.maxLength !== undefined && stringValue.length > options.maxLength) {
       throw new ToolValidationError(
         `String must have length ≤ ${options.maxLength}`,
-        { path, details: { maxLength: options.maxLength } },
+        { path, details: { maxLength: options.maxLength, received: stringValue.length } },
       );
     }
 
@@ -96,7 +96,7 @@ export function stringSchema(options: StringSchemaOptions = {}): Schema<string> 
     if (options.enum && !options.enum.includes(stringValue)) {
       throw new ToolValidationError("Value must be one of the allowed options", {
         path,
-        details: { allowed: options.enum },
+        details: { allowed: options.enum, received: stringValue },
       });
     }
 
@@ -142,14 +142,14 @@ export function numberSchema(options: NumberSchemaOptions = {}): Schema<number> 
     if (options.minimum !== undefined && numberValue < options.minimum) {
       throw new ToolValidationError("Value is below minimum", {
         path,
-        details: { minimum: options.minimum },
+        details: { minimum: options.minimum, received: numberValue },
       });
     }
 
     if (options.maximum !== undefined && numberValue > options.maximum) {
       throw new ToolValidationError("Value is above maximum", {
         path,
-        details: { maximum: options.maximum },
+        details: { maximum: options.maximum, received: numberValue },
       });
     }
 
@@ -229,14 +229,14 @@ export function arraySchema<T>(
     if (options.minItems !== undefined && result.length < options.minItems) {
       throw new ToolValidationError("Array has too few items", {
         path,
-        details: { minItems: options.minItems },
+        details: { minItems: options.minItems, received: result.length },
       });
     }
 
     if (options.maxItems !== undefined && result.length > options.maxItems) {
       throw new ToolValidationError("Array has too many items", {
         path,
-        details: { maxItems: options.maxItems },
+        details: { maxItems: options.maxItems, received: result.length },
       });
     }
 
