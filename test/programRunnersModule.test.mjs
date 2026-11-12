@@ -1091,3 +1091,25 @@ test("upload_run_asm reports assembly diagnostics with file and line", async () 
   assert.ok(typeof result.metadata.error.details.line === "number");
   assert.ok(String(result.metadata.error.details.message ?? "").length > 0);
 });
+
+test("upload_run_basic reports BASIC syntax problems as validation errors naming the line", async () => {
+  const ctx = {
+    client: {
+      async uploadAndRunBasic() {
+        throw new Error("should not run");
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const noNumber = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\nPRINT "B"' }, ctx);
+  assert.equal(noNumber.isError, true);
+  assert.equal(noNumber.metadata.error.kind, "validation");
+  assert.equal(noNumber.metadata.error.path, "$.program");
+  assert.match(noNumber.content[0].text, /line 2 of the program/);
+
+  const tooBig = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\n99999 END' }, ctx);
+  assert.equal(tooBig.isError, true);
+  assert.equal(tooBig.metadata.error.kind, "validation");
+  assert.match(tooBig.content[0].text, /Line number out of range: 99999 on line 2/);
+});
