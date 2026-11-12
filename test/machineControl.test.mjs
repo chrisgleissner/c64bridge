@@ -428,3 +428,25 @@ test("reset without waitForReady does not read the screen and reports no ready f
   const bad = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 120001 }, ctx);
   assert.equal(bad.isError, true);
 });
+
+test("waitForReady ignores the READY. still on screen from before the reset", async () => {
+  const stale = "\n READY.\n LIST\n";
+  const ctx = { client: createMockClient({ async readScreen() { return stale; } }), logger: createLogger() };
+  const res = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 1000 }, ctx);
+  assert.equal(res.isError, undefined);
+  assert.equal(res.metadata.ready, false);
+});
+
+test("waitForReady keeps to its timeout when a screen read never returns, and reports the last read error", async () => {
+  const hanging = { client: createMockClient({ readScreen: () => new Promise(() => {}) }), logger: createLogger() };
+  const started = Date.now();
+  const res = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 600 }, hanging);
+  assert.equal(res.metadata.ready, false);
+  assert.ok(Date.now() - started < 600 + 2000 + 1000, `took ${Date.now() - started} ms`);
+
+  const failing = { client: createMockClient({ async readScreen() { throw new Error("Request failed with status code 403"); } }), logger: createLogger() };
+  const denied = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 600 }, failing);
+  assert.equal(denied.metadata.ready, false);
+  assert.match(denied.metadata.readyError, /403/);
+  assert.match(denied.content[0].text, /403/);
+});

@@ -64,43 +64,81 @@ function createWaitSchema(description: string) {
 }
 
 const READY_SETTLE_MS = 300;
+/** After this long, a screen identical to the one before the reset counts as the new boot screen. */
+const READY_UNCHANGED_GRACE_MS = 3_000;
+const SNAPSHOT_TIMEOUT_MS = 2_000;
 
-/** Polls reachability and the screen until READY. appears or the timeout elapses. Never throws. */
+/** Resolves to undefined when the operation does not settle within `ms`; the late result is ignored. */
+async function withinMs<T>(operation: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), Math.max(0, ms)); });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Screen text before the reset, used to tell a stale READY. from the new one. Best effort: undefined when unreadable. */
+async function screenBeforeReset(ctx: ToolExecutionContext, parsed: { waitForReady?: boolean }): Promise<string | undefined> {
+  if (parsed.waitForReady !== true) return undefined;
+  try {
+    return await withinMs(ctx.client.readScreen(), SNAPSHOT_TIMEOUT_MS);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Polls the screen until READY. appears or the timeout elapses. Never throws.
+ * A screen identical to the one read before the reset is ignored for the first
+ * few seconds, so the READY. still visible from before the reset is not taken
+ * for the new one. Each read is bounded by the remaining time.
+ */
 async function waitForReadyPrompt(
   ctx: ToolExecutionContext,
   timeoutMs: number,
-): Promise<{ ready: boolean; readyElapsedMs: number }> {
+  before: string | undefined,
+): Promise<{ ready: boolean; readyElapsedMs: number; lastError?: string }> {
   const start = Date.now();
-  // Give the reset time to clear the old screen so a stale READY. is not mistaken for the new one.
   await new Promise((resolve) => setTimeout(resolve, Math.min(READY_SETTLE_MS, timeoutMs)));
+  let lastError: string | undefined;
   const tolerantClient = {
     async readScreen(): Promise<string> {
+      const remaining = timeoutMs - (Date.now() - start);
       try {
-        return await ctx.client.readScreen();
-      } catch {
+        const screen = await withinMs(ctx.client.readScreen(), remaining);
+        if (screen === undefined) return "";
+        lastError = undefined;
+        if (before !== undefined && screen === before && Date.now() - start < READY_UNCHANGED_GRACE_MS) return "";
+        return screen;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
         return ""; // device not reachable yet
       }
     },
   };
   const remaining = Math.max(1, timeoutMs - (Date.now() - start));
   const outcome = await waitForScreenText(tolerantClient, { pattern: "READY.", timeoutMs: remaining, intervalMs: 250 });
-  return { ready: outcome.matched, readyElapsedMs: Date.now() - start };
+  return { ready: outcome.matched, readyElapsedMs: Date.now() - start, ...(outcome.matched || !lastError ? {} : { lastError }) };
 }
 
 async function withReadyResult(
   ctx: ToolExecutionContext,
   parsed: { waitForReady?: boolean; readyTimeoutMs?: number },
+  before: string | undefined,
   baseMessage: string,
   details: Record<string, unknown>,
 ) {
   if (parsed.waitForReady !== true) {
     return textResult(baseMessage, { success: true, details });
   }
-  const { ready, readyElapsedMs } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000);
+  const { ready, readyElapsedMs, lastError } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000, before);
   const message = ready
     ? `${baseMessage} READY. prompt reached after ${readyElapsedMs} ms.`
-    : `${baseMessage} The READY. prompt was not seen within ${readyElapsedMs} ms; the machine may still be starting.`;
-  return textResult(message, { success: true, details, ready, readyElapsedMs });
+    : `${baseMessage} The READY. prompt was not seen within ${readyElapsedMs} ms; the machine may still be starting.`
+      + (lastError ? ` The last screen read failed: ${lastError}` : "");
+  return textResult(message, { success: true, details, ready, readyElapsedMs, ...(lastError ? { readyError: lastError } : {}) });
 }
 
 const resetArgsSchema = createWaitSchema("Reset the C64. Optionally wait for the READY. prompt.");
@@ -144,6 +182,7 @@ export const machineControlModule = defineToolModule({
           const parsed = resetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting C64");
 
+          const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.reset();
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while resetting", {
@@ -153,7 +192,7 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
-          return await withReadyResult(ctx, parsed, "C64 reset command issued successfully.", details);
+          return await withReadyResult(ctx, parsed, before, "C64 reset command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -181,6 +220,7 @@ export const machineControlModule = defineToolModule({
           const parsed = rebootArgsSchema.parse(args ?? {});
           ctx.logger.info("Rebooting C64");
 
+          const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.reboot();
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while rebooting", {
@@ -190,7 +230,7 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
-          return await withReadyResult(ctx, parsed, "C64 reboot command issued successfully.", details);
+          return await withReadyResult(ctx, parsed, before, "C64 reboot command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -343,6 +383,7 @@ export const machineControlModule = defineToolModule({
         try {
           const parsed = powerCycleArgsSchema.parse(args ?? {});
           ctx.logger.info("Power cycling active backend");
+          const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.powerCycle();
           if (!result.success) {
             throw new ToolExecutionError("Power cycle did not complete", {
@@ -350,7 +391,7 @@ export const machineControlModule = defineToolModule({
             });
           }
           const details = toRecord(result.details) ?? {};
-          return await withReadyResult(ctx, parsed, "Power-cycle request completed.", details);
+          return await withReadyResult(ctx, parsed, before, "Power-cycle request completed.", details);
         } catch (error) {
           if (error instanceof ToolError) return toolErrorResult(error);
           return unknownErrorResult(error);
