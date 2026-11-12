@@ -22,6 +22,16 @@ const configSnapshotAndRestoreArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+// JSON.parse errors can quote the start of the file, so only the path is reported.
+async function readSnapshotFile(path: string): Promise<any> {
+  const text = await fs.readFile(path, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ToolValidationError(`Snapshot file is not valid JSON: ${path}`, { path: "$.path" });
+  }
+}
+
 export const tools: ToolDefinition[] = [
   {
     name: "config_snapshot_and_restore",
@@ -62,8 +72,7 @@ export const tools: ToolDefinition[] = [
         }
 
         if (action === "restore") {
-          const text = await fs.readFile(path, "utf8");
-          const snapshot = JSON.parse(text);
+          const snapshot = await readSnapshotFile(path);
           if (!snapshot || typeof snapshot !== "object") {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
@@ -86,8 +95,7 @@ export const tools: ToolDefinition[] = [
           return jsonResult({ restored: true, categories: Object.keys(payload).length }, { success: true });
         }
 
-        const text = await fs.readFile(path, "utf8");
-        const snapshot = JSON.parse(text);
+        const snapshot = await readSnapshotFile(path);
         const snapCats = validateSnapshotCategories(snapshot.categories ?? {});
         const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true })).categories;
         const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = {};
