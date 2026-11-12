@@ -408,6 +408,8 @@ Set `C64BRIDGE_ACCESS` to restrict what a client may call:
 
 The variable is read on every call. An unknown value is treated as `read-only` and logged to stderr once. A rejected call returns a validation error that names the operation, its effect and the active mode. `c64_batch` checks each command separately, and `c64_system` `start_task` checks the effect of its task operation when the task starts. `c64://platform/status` shows the active mode.
 
+After `c64_system` `poweroff` on C64U/U64, power must be restored at the outlet. The machine starts by itself only if automatic startup on power restoration is enabled in its configuration.
+
 ```json
 "env": { "C64BRIDGE_ACCESS": "no-destructive" }
 ```
@@ -950,7 +952,7 @@ Grouped entry point for power, reset, menu, and background task control.
 | `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ |  |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | ✅ | ✅ | ✅ |
 | `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. | — | — | ✅ | ✅ | ✅ |
-| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. | — | — | ✅ |  | ✅ |
+| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. | — | — | ✅ |  | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). | — | — | ✅ | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | — | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | — | ✅ | ✅ | ✅ |

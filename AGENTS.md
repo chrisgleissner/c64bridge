@@ -159,6 +159,7 @@ For execution details, follow the matching skill rather than duplicating tool st
 
 - Some tools affect device state (power, reboot, drive ops). Use deliberately.
 - Every operation has an effect (`read`, `write`, `destructive`). `C64BRIDGE_ACCESS=full|no-destructive|read-only` (default `full`) limits what may be called; a blocked call returns a validation error naming the operation, effect and mode. Do not try to work around a block; ask the user to change the variable. `c64://platform/status` shows the active mode.
+- `poweroff` does not restore power by software. The machine returns only when power is restored at the outlet, and starts by itself only if automatic startup on power restoration is enabled.
 - Logs emit to stderr; stdout is reserved for the MCP protocol.
 
 ## Personas

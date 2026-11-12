@@ -50,6 +50,8 @@ const powerCycleArgsSchema = createNoArgsSchema("No arguments required to power 
 const menuButtonArgsSchema = createNoArgsSchema("No arguments required to toggle the Ultimate menu button.");
 const readMenuScreenArgsSchema = createNoArgsSchema("No arguments required to read the active Ultimate menu screen matrix.");
 
+const POWER_RESTORE_NOTE = "The machine cannot be restarted by software afterwards: power must be restored at the outlet, and the machine starts by itself only if automatic startup on power restoration is enabled.";
+
 export const machineControlModule = defineToolModule({
   domain: "machine",
   summary: "Power, reset, pause/resume, and diagnostic controls for the C64 and Ultimate hardware.",
@@ -223,7 +225,7 @@ export const machineControlModule = defineToolModule({
     },
     {
       name: "poweroff",
-      description: "Power off the machine via Ultimate firmware. See safety notes in c64://guide/bootstrap.",
+      description: `Power off the machine via Ultimate firmware. See safety notes in c64://guide/bootstrap. ${POWER_RESTORE_NOTE}`,
       summary: "Attempts a controlled shutdown through the Ultimate control interface.",
       inputSchema: poweroffArgsSchema.jsonSchema,
       tags: ["power"],
@@ -249,7 +251,11 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
-          return textResult("Power off command acknowledged.", {
+          const message = ctx.platform?.id === "vice"
+            ? "Power off command acknowledged."
+            : `Power off command acknowledged. ${POWER_RESTORE_NOTE}`;
+
+          return textResult(message, {
             success: true,
             details,
           });

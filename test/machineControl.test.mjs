@@ -359,3 +359,25 @@ if (isVice) {
       );
     }));
 }
+
+// --- poweroff recovery note ---
+
+testC64uOnly("poweroff result and description state that power must be restored at the outlet", async () => {
+  const ctx = { client: createMockClient(), logger: createLogger() };
+  const res = await machineControlModule.invoke("poweroff", {}, ctx);
+  const text = res.content[0].text;
+  assert.match(text, /power must be restored at the outlet/);
+  assert.match(text, /automatic startup on power restoration/);
+
+  const descriptor = machineControlModule.describeTools().find((tool) => tool.name === "poweroff");
+  assert.match(descriptor.description, /power must be restored at the outlet/);
+  assert.match(descriptor.description, /automatic startup on power restoration/);
+});
+
+test("c64_system poweroff operation description states the power restoration requirement", async () => {
+  const { systemModuleGroup } = await import("../src/tools/registry/system.js");
+  const description = systemModuleGroup.describeTools()[0].inputSchema.description;
+  const line = description.split("\n").find((entry) => entry.startsWith("- poweroff "));
+  assert.match(line, /power must be restored at the outlet/);
+  assert.match(line, /automatic startup on power restoration/);
+});
