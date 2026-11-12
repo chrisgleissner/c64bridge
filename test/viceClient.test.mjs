@@ -115,7 +115,7 @@ test("ViceClient encodes requests and decodes protocol responses", async (t) => 
   const memory = await client.memGet(0x1000, 0x1002);
   await client.memSet(0x2000, Buffer.from([0x10, 0x11, 0x12]));
   const beforeEmptyKeyboard = requests.length;
-  await client.keyboardFeed("");
+  await assert.rejects(() => client.keyboardFeed(""), /non-empty/);
   await client.keyboardFeed("RUN\r");
   await client.exitMonitor();
   await client.quit();
@@ -538,3 +538,15 @@ test("R-11 connect gives up after the connect timeout and names host:port", asyn
   assert.equal(destroyed, true);
 });
 
+test("R-12 keyboardFeed splits text longer than 255 bytes into ordered commands", async (t) => {
+  const server = await startViceMockServer();
+  t.after(async () => { await server.stop?.(); });
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(server.port);
+  const text = Array.from({ length: 600 }, (_, index) => String.fromCharCode(0x41 + (index % 26))).join("");
+  await client.keyboardFeed(text);
+  assert.deepEqual(server.keyboardFeeds.map((chunk) => chunk.length), [255, 255, 90]);
+  assert.equal(Buffer.concat(server.keyboardFeeds).toString("ascii"), text);
+  await assert.rejects(() => client.keyboardFeed(""), /non-empty/);
+});

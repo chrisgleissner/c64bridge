@@ -328,10 +328,14 @@ export class ViceClient {
   }
 
   async keyboardFeed(text: string): Promise<void> {
-    if (!text) return;
+    if (!text) throw new Error("keyboardFeed requires non-empty text");
     const bytes = Buffer.from(text, "ascii");
-    const body = Buffer.concat([Buffer.from([bytes.length & 0xff]), bytes]);
-    await this.send(0x72, body);
+    // The command carries its length in one byte, so longer text goes out as
+    // consecutive commands, in order.
+    for (let offset = 0; offset < bytes.length; offset += 255) {
+      const chunk = bytes.subarray(offset, offset + 255);
+      await this.send(0x72, Buffer.concat([Buffer.from([chunk.length]), chunk]));
+    }
   }
 
   /** Set the VICE joyport's active-low control byte (BM command 0xA2). */
