@@ -9,6 +9,7 @@ import { resolveHostPath } from "../../hostPaths.js";
 import { createHash } from "node:crypto";
 import { normalizeErrorDetails } from "./util.js";
 import { stripHexByteSeparators } from "../hex.js";
+import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
   const platformId = ctx.platform?.id ?? ctx.client?.type;
@@ -102,17 +103,18 @@ export const tools: ToolDefinition[] = [
 
         const canPause = supportsMachinePause(ctx as any);
         let paused = false;
+        const owned = await acquireOwnedPause(ctx.client, canPause);
+        const pinned = owned.facade;
         if (canPause) {
-          const pauseResult = await (ctx.client as any).pause();
-          if (!pauseResult.success) {
-            throw new ToolExecutionError("C64 backend reported failure while pausing", { details: normalizeErrorDetails(pauseResult.details) });
+          if (!owned.result.success) {
+            throw new ToolExecutionError("C64 backend reported failure while pausing", { details: normalizeErrorDetails(owned.result.details) });
           }
           paused = true;
         }
 
         let preReadHex: string | undefined;
         try {
-          const pre = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, readLen)));
+          const pre = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, readLen)), pinned);
           if (!pre.success) {
             throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normalizeErrorDetails(pre.details) });
           }
@@ -134,12 +136,12 @@ export const tools: ToolDefinition[] = [
             }
           }
 
-          const write = await (ctx.client as any).writeMemory(parsed.address, bytesToHex(writeBytes));
+          const write = await (ctx.client as any).writeMemory(parsed.address, bytesToHex(writeBytes), pinned);
           if (!write.success) {
             throw new ToolExecutionError("C64 backend reported failure while writing memory", { details: normalizeErrorDetails(write.details) });
           }
 
-          const post = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, writeBytes.length)));
+          const post = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, writeBytes.length)), pinned);
           if (!post.success) {
             throw new ToolExecutionError("C64 backend reported failure while reading back memory", { details: normalizeErrorDetails(post.details) });
           }
@@ -159,16 +161,27 @@ export const tools: ToolDefinition[] = [
             throw new ToolExecutionError("Post-write verification failed", { details: { address: parsed.address, diffs } });
           }
 
+          let warnings: string[] | undefined;
+          if (paused) {
+            paused = false; // released here, so the finally block must not release again
+            const released = await owned.release();
+            if (!released.success) {
+              warnings = [resumeWarning(released.details)];
+              ctx.logger.warn("C64 resume reported failure after verified write", { details: released.details });
+            }
+          }
           return jsonResult({
             address: parsed.address,
             wrote: bytesToHex(writeBytes),
             preRead: preReadHex,
             postRead: (post.data as string) ?? "",
             paused,
+            ...(warnings ? { warnings } : {}),
           }, { success: true });
         } finally {
           if (paused) {
-            await (ctx.client as any).resume();
+            const released = await owned.release();
+            if (!released.success) ctx.logger.warn("C64 resume reported failure after verified write", { details: released.details });
           }
         }
       } catch (error) {
@@ -195,15 +208,15 @@ export const tools: ToolDefinition[] = [
         await fs.mkdir(outDir, { recursive: true });
 
         const canPause = pause && supportsMachinePause(ctx as any);
-        if (canPause) {
-          const res = await (ctx.client as any).pause();
-          if (!res.success) {
-            throw new ToolExecutionError("Pause failed before dump", { details: normalizeErrorDetails(res.details) });
-          }
+        const owned = await acquireOwnedPause(ctx.client, canPause);
+        const pinned = owned.facade;
+        if (canPause && !owned.result.success) {
+          throw new ToolExecutionError("Pause failed before dump", { details: normalizeErrorDetails(owned.result.details) });
         }
 
         const buf = Buffer.allocUnsafe(length);
         let offset = 0;
+        let released = false;
         try {
           while (offset < length) {
             const remaining = length - offset;
@@ -219,7 +232,7 @@ export const tools: ToolDefinition[] = [
             while (!success && attempts <= (parsed.retries ?? 1)) {
               attempts += 1;
               try {
-                const r = await (ctx.client as any).readMemory(`$${formatAddressHex(addr)}`, String(take));
+                const r = await (ctx.client as any).readMemory(`$${formatAddressHex(addr)}`, String(take), pinned);
                 if (!r.success || typeof r.data !== "string") {
                   throw new ToolExecutionError("Firmware returned failure for chunk", { details: normalizeErrorDetails(r.details) });
                 }
@@ -258,10 +271,20 @@ export const tools: ToolDefinition[] = [
             createdAt: new Date().toISOString(),
           };
           await fs.writeFile(`${outputPath}.json`, JSON.stringify(manifest, null, 2), "utf8");
-          return jsonResult({ manifest }, { success: true });
-        } finally {
+          let warnings: string[] | undefined;
           if (canPause) {
-            await (ctx.client as any).resume();
+            released = true;
+            const result = await owned.release();
+            if (!result.success) {
+              warnings = [resumeWarning(result.details)];
+              ctx.logger.warn("C64 resume reported failure after dump", { details: result.details });
+            }
+          }
+          return jsonResult({ manifest, ...(warnings ? { warnings } : {}) }, { success: true });
+        } finally {
+          if (canPause && !released) {
+            const result = await owned.release();
+            if (!result.success) ctx.logger.warn("C64 resume reported failure after dump", { details: result.details });
           }
         }
       } catch (error) {

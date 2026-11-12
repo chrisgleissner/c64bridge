@@ -167,3 +167,108 @@ test("R-06 time spent waiting in the queue does not count against a request time
   const settled = await Promise.allSettled([slow.instance.get("/x"), slow.instance.get("/x")]);
   assert.deepEqual(settled.map((entry) => entry.status), ["rejected", "rejected"]);
 });
+
+// ---- R-07 pause ownership -------------------------------------------------
+
+// ---- R-07 pause ownership -------------------------------------------------
+
+import { metaModule } from "../src/tools/meta/index.js";
+import { machineControlModule } from "../src/tools/machineControl.js";
+
+const quietLogger = () => ({ debug() {}, info() {}, warn(...args) { quietLogger.warnings.push(args); }, error() {} });
+quietLogger.warnings = [];
+
+function deviceCalls(mock, suffix) {
+  return mock.state.requestOrder.filter((entry) => entry === `PUT /v1/machine:${suffix}`).length;
+}
+
+async function writeCall(ctx, address, byte) {
+  return metaModule.invoke("verify_and_write_memory", { address, bytes: `$${byte}` }, ctx);
+}
+
+test("R-07 overlapping tool calls send one device pause and one device resume", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+  mock.state.responseDelayMs = 10;
+  mock.state.requestOrder.length = 0;
+  const results = await Promise.all([writeCall(ctx, "$0400", "AA"), writeCall(ctx, "$0410", "BB"), writeCall(ctx, "$0420", "CC")]);
+  for (const result of results) assert.equal(result.metadata?.success, true, JSON.stringify(result.content));
+  assert.equal(deviceCalls(mock, "pause"), 1);
+  assert.equal(deviceCalls(mock, "resume"), 1);
+  assert.equal(mock.state.paused, false);
+});
+
+test("R-07 an explicit pause survives a tool call that pauses and resumes", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+
+  const paused = await machineControlModule.invoke("pause", {}, ctx);
+  assert.equal(paused.isError, undefined);
+  mock.state.requestOrder.length = 0;
+  const written = await writeCall(ctx, "$0400", "AA");
+  assert.equal(written.metadata?.success, true);
+  assert.equal(deviceCalls(mock, "resume"), 0);
+  assert.equal(mock.state.paused, true);
+
+  const resumed = await machineControlModule.invoke("resume", {}, ctx);
+  assert.equal(resumed.isError, undefined);
+  assert.equal(mock.state.paused, false);
+});
+
+test("R-07 an explicit resume during a tool call leaves the device resume to the call", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const facade = await client.pinFacade();
+  assert.equal((await client.acquirePause(facade)).success, true);
+  await client.explicitPause(facade);
+  await client.explicitResume(facade);
+  assert.equal(mock.state.paused, true);
+  assert.equal((await client.releasePause(facade)).success, true);
+  assert.equal(mock.state.paused, false);
+});
+
+test("R-07 the resume goes to the facade pinned at the start even if the backend switches", async () => {
+  const calls = [];
+  const makeFacade = (name) => ({
+    pause: async () => { calls.push(`${name}:pause`); return { success: true }; },
+    resume: async () => { calls.push(`${name}:resume`); return { success: true }; },
+  });
+  const a = makeFacade("a");
+  const b = makeFacade("b");
+  let active = a;
+  const real = new C64Client("http://127.0.0.1:9", { forceC64uFacade: true });
+  const client = {
+    pinFacade: async () => active,
+    acquirePause: (f) => real.acquirePause(f),
+    releasePause: (f) => real.releasePause(f),
+    pause: async () => ({ success: true }),
+    resume: async () => ({ success: true }),
+    async readMemory() { active = b; return { success: true, data: "$AA" }; },
+    async writeMemory() { return { success: true }; },
+  };
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+  const result = await writeCall(ctx, "$0400", "AA");
+  assert.equal(result.metadata?.success, true, JSON.stringify(result.content));
+  assert.deepEqual(calls, ["a:pause", "a:resume"]);
+});
+
+test("R-07 a failed resume is reported as a warning in the result", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const logger = quietLogger();
+  quietLogger.warnings.length = 0;
+  const ctx = { platform: { id: "c64u" }, client, logger };
+  mock.state.forcedErrors = ["resume refused"];
+  mock.state.forcedErrorsUrlMatch = "machine:resume";
+  const result = await writeCall(ctx, "$0400", "AA");
+  assert.equal(result.metadata?.success, true, JSON.stringify(result.content));
+  const payload = JSON.stringify(result.structuredContent ?? result.content);
+  assert.match(payload, /could not be resumed/);
+  assert.ok(quietLogger.warnings.length >= 1);
+});

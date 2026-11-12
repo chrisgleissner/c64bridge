@@ -162,7 +162,8 @@ export const machineControlModule = defineToolModule({
           pauseArgsSchema.parse(args ?? {});
           ctx.logger.info("Pausing C64 execution");
 
-          const result = await ctx.client.pause();
+          // An explicit pause stays in effect until an explicit resume, even if tool calls pause and resume meanwhile.
+          const result = ctx.client.explicitPause ? await ctx.client.explicitPause(await ctx.client.pinFacade?.()) : await ctx.client.pause();
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while pausing", {
               details: normaliseFailure(result.details),
@@ -202,7 +203,7 @@ export const machineControlModule = defineToolModule({
           resumeArgsSchema.parse(args ?? {});
           ctx.logger.info("Resuming C64 execution");
 
-          const result = await ctx.client.resume();
+          const result = ctx.client.explicitResume ? await ctx.client.explicitResume(await ctx.client.pinFacade?.()) : await ctx.client.resume();
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while resuming", {
               details: normaliseFailure(result.details),

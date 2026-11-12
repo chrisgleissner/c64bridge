@@ -303,7 +303,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     let paused = false;
     try {
       if (canPause) {
-        const pauseResult = await ctx.client.pause(pinnedFacade);
+        const pauseResult = ctx.client.acquirePause ? await ctx.client.acquirePause(pinnedFacade) : await ctx.client.pause(pinnedFacade);
         if (!pauseResult.success) {
           throw new ToolExecutionError("C64 backend reported failure while pausing", {
             details: normaliseFailure(pauseResult.details),
@@ -411,7 +411,8 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       }
 
       if (paused) { // A failed resume here leaves the machine paused: a recoverable operation failure, not a log.
-        const resumeResult = await ctx.client.resume(pinnedFacade);
+        const resumeResult = ctx.client.releasePause ? await ctx.client.releasePause(pinnedFacade) : await ctx.client.resume(pinnedFacade);
+        paused = false; // released once, whatever the outcome: the finally block must not release again
         if (!resumeResult.success) {
           throw new ToolExecutionError("Write completed but the machine could not be resumed", {
             details: {
@@ -437,7 +438,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     } finally {
       if (paused) {
         try {
-          const resumeResult = await ctx.client.resume(pinnedFacade);
+          const resumeResult = ctx.client.releasePause ? await ctx.client.releasePause(pinnedFacade) : await ctx.client.resume(pinnedFacade);
           if (!resumeResult.success) {
             ctx.logger.warn("C64 resume reported failure after write", {
               details: normaliseFailure(resumeResult.details),

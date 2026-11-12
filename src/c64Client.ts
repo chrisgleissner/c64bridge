@@ -1165,6 +1165,85 @@ export class C64Client {
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
+  /**
+   * Pause bookkeeping per facade. Tools that pause for their own purpose
+   * (acquirePause/releasePause) share one device pause: it is sent when the
+   * owned depth goes 0 -> 1 and the machine is not already explicitly paused,
+   * and the device resume is sent only when the depth returns to 0 and no
+   * explicit `c64_system pause` is in effect. An explicit pause is cleared
+   * only by an explicit resume.
+   */
+  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult> }>();
+
+  private pauseStateFor(facade: C64Facade) {
+    let state = this.pauseStates.get(facade);
+    if (!state) {
+      state = { depth: 0, explicit: false };
+      this.pauseStates.set(facade, state);
+    }
+    return state;
+  }
+
+  /** Owned pause for one tool call. Pass the facade pinned at call start; pair with releasePause. A failed result holds no pause and needs no release. */
+  async acquirePause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      state.depth += 1;
+      if (state.depth === 1 && !state.explicit) {
+        const pending = facade.pause().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+        state.devicePause = pending;
+      }
+      const result = state.devicePause ? await state.devicePause : { success: true } as RunBasicResult;
+      if (!result.success) {
+        state.depth -= 1;
+        if (state.depth === 0) state.devicePause = undefined;
+        return result;
+      }
+      return result;
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** Release one owned pause. The device resume is sent only by the last release and not while an explicit pause is in effect. */
+  async releasePause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      if (state.depth === 0) return { success: true, details: { resumed: false, reason: "no owned pause" } };
+      state.depth -= 1;
+      if (state.depth > 0) return { success: true, details: { resumed: false, reason: "pause still held by another call" } };
+      state.devicePause = undefined;
+      if (state.explicit) return { success: true, details: { resumed: false, reason: "machine was paused explicitly" } };
+      return await facade.resume();
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** `c64_system pause`: stays in effect until an explicit resume, whatever tools acquire or release meanwhile. */
+  async explicitPause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      if (state.depth > 0 && !state.explicit) {
+        state.explicit = true; // the device is already paused by a running tool call
+        return { success: true, details: { alreadyPaused: true } };
+      }
+      const result = await facade.pause();
+      if (result.success) state.explicit = true;
+      return result;
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** `c64_system resume`: clears the explicit pause. While a tool call still holds an owned pause, the device resume is left to its release. */
+  async explicitResume(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+    try {
+      const facade = pinnedFacade ?? await this.facadePromise;
+      const state = this.pauseStateFor(facade);
+      state.explicit = false;
+      if (state.depth > 0) return { success: true, details: { resumed: false, reason: "a running tool call still holds a pause; it resumes the machine when it finishes" } };
+      return await facade.resume();
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
   async poweroff(): Promise<RunBasicResult> {
     try { const facade = await this.facadePromise; return await facade.poweroff(); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
