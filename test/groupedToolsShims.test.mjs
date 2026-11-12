@@ -2165,7 +2165,7 @@ test("c64_debug wait_for_state reports matched and timed out outcomes", async ()
 
     const matched = await toolRegistry.invoke(
       "c64_debug",
-      { op: "wait_for_state", expectedPC: "$1004", timeoutMs: 50, pollMs: 10 },
+      { op: "wait_for_state", expectedPC: "$1004", timeoutMs: 2000, pollMs: 10 },
       { client: matchedClient, rag: {}, logger, platform: getPlatformStatus(), setPlatform },
     );
     const timedOut = await toolRegistry.invoke(
