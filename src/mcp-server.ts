@@ -137,7 +137,11 @@ async function main() {
   const getPromptRegistry = createPromptRegistryGetter();
   const implementationInfo = getMcpServerImplementationInfo();
 
-  // Create MCP server
+  // Create MCP server. Stateless HTTP mode needs a fresh Server and transport
+  // per request (the SDK rejects reuse of a stateless transport), so server
+  // creation and handler registration live in this factory. The handler bodies
+  // below are unchanged and intentionally not re-indented.
+  const createMcpServer = (): Server => {
   const server = new Server(
     implementationInfo,
     {
@@ -490,10 +494,11 @@ async function main() {
     }
   });
 
+  return server;
+  };
+
   const cli = parseCliOptions(process.argv.slice(2));
   if (cli.mode === "http") {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await server.connect(transport);
     const port = cli.port ?? 3000;
     const httpServer = createServer((request, response) => {
       if (request.url?.split("?")[0] !== "/mcp") {
@@ -501,15 +506,26 @@ async function main() {
         response.end("Not found");
         return;
       }
-      void transport.handleRequest(request, response).catch((error) => {
-        if (!response.headersSent) response.statusCode = 500;
-        response.end(error instanceof Error ? error.message : "MCP transport error");
+      // Stateless mode: one Server and one transport per request.
+      const server = createMcpServer();
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      response.once("close", () => {
+        void transport.close().catch(() => {});
+        void server.close().catch(() => {});
       });
+      void server
+        .connect(transport)
+        .then(() => transport.handleRequest(request, response))
+        .catch((error) => {
+          if (!response.headersSent) response.statusCode = 500;
+          response.end(error instanceof Error ? error.message : "MCP transport error");
+        });
     });
     await new Promise<void>((resolve, reject) => httpServer.listen(port, "127.0.0.1", resolve).once("error", reject));
     writeDiagnosticEvent("mcp_transport_connected", { mode: "http", port });
     console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
   } else {
+    const server = createMcpServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
     writeDiagnosticEvent("mcp_transport_connected", { mode: "stdio" });
