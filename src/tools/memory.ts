@@ -23,6 +23,7 @@ import { getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
 import { resolveHostPath } from "../hostPaths.js";
+import { petsciiToAscii } from "../petscii.js";
 import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../numericArg.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
@@ -158,6 +159,11 @@ const readMemoryArgsSchema = objectSchema({
       maximum: 4096,
       default: 256,
     }),
+    format: optionalSchema(stringSchema({
+      description: "Output layout. hex (default) returns one hex string; dump adds a 16-bytes-per-line listing with addresses and a printable PETSCII column.",
+      enum: ["hex", "dump"],
+      default: "hex",
+    }), "hex"),
   },
   required: ["address"],
   additionalProperties: false,
@@ -235,6 +241,23 @@ async function executeReadScreen(rawArgs: unknown, ctx: ToolExecutionContext): P
   }
 }
 
+/** 16 bytes per line: `$ADDR: HH HH ... |text|`. Bytes with no printable PETSCII glyph show as `.`. */
+export function formatHexDump(start: number, bytes: Uint8Array): string[] {
+  const lines: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += 16) {
+    const row = bytes.subarray(offset, offset + 16);
+    const hex = Array.from(row, (b) => b.toString(16).toUpperCase().padStart(2, "0")).join(" ").padEnd(16 * 3 - 1, " ");
+    const text = Array.from(row, (b) => {
+      if (b === 0x20 || b === 0xa0) return " ";
+      const ch = petsciiToAscii(Uint8Array.of(b));
+      return ch.length === 1 && ch > " " && ch <= "~" ? ch : ".";
+    }).join("");
+    const address = ((start + offset) & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+    lines.push(`$${address}: ${hex}  |${text}|`);
+  }
+  return lines;
+}
+
 async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = readMemoryArgsSchema.parse(rawArgs ?? {});
@@ -254,16 +277,22 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const detailRecord = toRecord(result.details) ?? {};
     const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
     const resolvedLength = resolveLength(detailRecord) ?? parsed.length;
+    const dumpLines = parsed.format === "dump" && typeof result.data === "string"
+      ? formatHexDump(readStart, parseFirmwareHex(result.data, "memory read").bytes)
+      : undefined;
     const data = {
       success: true,
       address: resolvedAddress,
       length: resolvedLength,
       hexData: result.data ?? null,
+      ...(dumpLines ? { dump: dumpLines } : {}),
       details: detailRecord,
     };
 
     // Many clients show only the text content, so it carries the bytes too.
-    const hexSummary = typeof result.data === "string" && result.data.length > 0 ? `\n${result.data}` : "";
+    const hexSummary = dumpLines
+      ? `\n${dumpLines.join("\n")}`
+      : typeof result.data === "string" && result.data.length > 0 ? `\n${result.data}` : "";
     const base = textResult(`Read ${resolvedLength} bytes starting at ${resolvedAddress}.${hexSummary}`, data);
     return {
       ...base,

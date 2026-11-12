@@ -1345,3 +1345,34 @@ test("search_memory and compare_memory report truncated:false when nothing was c
   assert.equal(compare.structuredContent?.data.diffCount, 1);
   assert.equal(compare.structuredContent?.data.truncated, false);
 });
+
+// --- F-05: read format dump ---
+test("read format dump lists 16 bytes per line with address and PETSCII column", async () => {
+  const bytes = Buffer.from([...Buffer.from("HELLO WORLD!"), 0x00, 0x0d, 0xff, 0x20, 0x41, 0x42, 0x43]);
+  const ctx = {
+    client: createMockClient({
+      async readMemory() {
+        return { success: true, data: `$${bytes.toString("hex").toUpperCase()}`, details: { address: "0400", length: bytes.length } };
+      },
+    }),
+    logger: createLogger(),
+  };
+  const res = await memoryModule.invoke("read", { address: "$0400", length: bytes.length, format: "dump" }, ctx);
+  assert.equal(res.isError, undefined);
+  const dump = res.structuredContent.data.dump;
+  assert.equal(dump.length, 2);
+  assert.equal(dump[0], "$0400: 48 45 4C 4C 4F 20 57 4F 52 4C 44 21 00 0D FF 20  |HELLO WORLD!... |");
+  assert.ok(dump[1].startsWith("$0410: 41 42 43"));
+  assert.ok(dump[1].endsWith("|ABC|"));
+  assert.ok(res.content[0].text.includes(dump[0]));
+  assert.equal(res.structuredContent.data.hexData, `$${bytes.toString("hex").toUpperCase()}`);
+});
+
+test("read defaults to the unchanged hex output and rejects unknown formats", async () => {
+  const ctx = { client: createMockClient(), logger: createLogger() };
+  const res = await memoryModule.invoke("read", { address: "$0400", length: 4 }, ctx);
+  assert.equal(res.structuredContent.data.dump, undefined);
+  assert.ok(res.content[0].text.endsWith("$AABBCCDD"));
+  const bad = await memoryModule.invoke("read", { address: "$0400", length: 4, format: "xxd" }, ctx);
+  assert.equal(bad.isError, true);
+});
