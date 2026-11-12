@@ -66,7 +66,7 @@ test("background tasks persist and complete iterations", async () => {
       logger: createLogger(),
     };
 
-  const start = await metaModule.invoke("start_background_task", { name: "t1", operation: "read", arguments: { address: "$0400", length: 1 }, intervalMs: 5, maxIterations: 2 }, ctx);
+  const start = await metaModule.invoke("start_background_task", { name: "t1", operation: "read", arguments: { address: "$0400", length: 1 }, intervalMs: 100, maxIterations: 2 }, ctx);
     assert.equal(start.metadata?.success, true);
 
     const t1 = await waitForTaskCompletion(metaModule, "t1", ctx);
@@ -92,7 +92,7 @@ test("background tasks reject names that would escape the task folder", async ()
   try {
     const ctx = { client: {}, logger: createLogger() };
     for (const name of ["x/../../../../escaped", "..", "../escaped", "a\\b", ".hidden", " leading-space"]) {
-      const res = await metaModule.invoke("start_background_task", { name, operation: "unknown_op", intervalMs: 5, maxIterations: 1 }, ctx);
+      const res = await metaModule.invoke("start_background_task", { name, operation: "unknown_op", intervalMs: 100, maxIterations: 1 }, ctx);
       assert.equal(res.isError, true, `name ${JSON.stringify(name)} was accepted`);
       assert.equal(res.metadata?.error?.path, "$.name");
     }
@@ -108,8 +108,8 @@ test("background task names may contain spaces", async () => {
   const previous = process.env.C64_TASK_STATE_FILE;
   process.env.C64_TASK_STATE_FILE = file;
   try {
-    const ctx = { client: {}, logger: createLogger() };
-    const res = await metaModule.invoke("start_background_task", { name: "screen poll", operation: "unknown_op", intervalMs: 5, maxIterations: 1 }, ctx);
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
+    const res = await metaModule.invoke("start_background_task", { name: "screen poll", operation: "read_screen", intervalMs: 100, maxIterations: 1 }, ctx);
     assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
     await waitForTaskCompletion(metaModule, "screen poll", ctx);
   } finally {
@@ -118,15 +118,15 @@ test("background task names may contain spaces", async () => {
   }
 });
 
-test("background tasks handle unknown operation and stop all", async () => {
+test("background tasks stop all", async () => {
   const { file, dir } = tmpPath("background2", "tasks.json");
   await fs.mkdir(dir, { recursive: true });
   const previous = process.env.C64_TASK_STATE_FILE;
   process.env.C64_TASK_STATE_FILE = file;
   try {
-    const ctx = { client: {}, logger: createLogger() };
+    const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
 
-    let res = await metaModule.invoke("start_background_task", { name: "noop", operation: "unknown_op", intervalMs: 5, maxIterations: 1 }, ctx);
+    let res = await metaModule.invoke("start_background_task", { name: "noop", operation: "read_screen", intervalMs: 100, maxIterations: 1 }, ctx);
     assert.equal(res.metadata?.success, true);
     await waitForTaskCompletion(metaModule, "noop", ctx);
     res = await metaModule.invoke("stop_all_background_tasks", {}, ctx);
@@ -168,19 +168,19 @@ test("background tasks support write/read_screen/menu_button and stop missing ta
       name: "writer",
       operation: "write_memory",
       arguments: { address: "$0400", bytes: "$41" },
-      intervalMs: 5,
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
     const screenTask = await metaModule.invoke("start_background_task", {
       name: "screen",
       operation: "read_screen",
-      intervalMs: 5,
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
     const menuTask = await metaModule.invoke("start_background_task", {
       name: "menu",
       operation: "menu_button",
-      intervalMs: 5,
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
 
@@ -227,7 +227,7 @@ test("background tasks persist task errors and reuse ids when restarted", async 
     const first = await metaModule.invoke("start_background_task", {
       name: "flaky",
       operation: "read",
-      intervalMs: 5,
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
     assert.equal(first.metadata?.success, true);
@@ -238,7 +238,7 @@ test("background tasks persist task errors and reuse ids when restarted", async 
     const second = await metaModule.invoke("start_background_task", {
       name: "flaky",
       operation: "read",
-      intervalMs: 5,
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
     assert.equal(second.metadata?.success, true);
@@ -271,7 +271,7 @@ test("HARD01-028 a background iteration that resolves {success:false} is recorde
     const started = await metaModule.invoke("start_background_task", {
       name: "resolved-failure",
       operation: "read",
-      intervalMs: 5,
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
     assert.equal(started.metadata?.success, true);
@@ -305,6 +305,7 @@ test("background tasks stop active timers and support write_memory alias default
     const started = await metaModule.invoke("start_background_task", {
       name: "alias-writer",
       operation: "write_memory",
+      arguments: { address: "$0400", bytes: "$00" },
       // Long enough that the stop below always lands before the first run, even under load.
       intervalMs: 10_000,
       maxIterations: 5,
@@ -330,7 +331,7 @@ test("background tasks stop active timers and support write_memory alias default
   }
 });
 
-test("background tasks run write_memory alias with default address and bytes", async () => {
+test("T-02 write tasks require address and bytes and the write_memory alias runs with them", async () => {
   const { file, dir } = tmpPath("background6", "tasks.json");
   await fs.mkdir(dir, { recursive: true });
   const previous = process.env.C64_TASK_STATE_FILE;
@@ -347,17 +348,78 @@ test("background tasks run write_memory alias with default address and bytes", a
       logger: createLogger(),
     };
 
+    const noArgs = await metaModule.invoke("start_background_task", { name: "writer-noargs", operation: "write_memory", intervalMs: 100, maxIterations: 1 }, ctx);
+    assert.equal(noArgs.isError, true);
+    assert.equal(noArgs.metadata?.error?.path, "$.arguments.address");
+    const noBytes = await metaModule.invoke("start_background_task", { name: "writer-nobytes", operation: "write", arguments: { address: "$0400" }, intervalMs: 100, maxIterations: 1 }, ctx);
+    assert.equal(noBytes.isError, true);
+    assert.equal(noBytes.metadata?.error?.path, "$.arguments.bytes");
+
     const started = await metaModule.invoke("start_background_task", {
-      name: "writer-defaults",
+      name: "writer-args",
       operation: "write_memory",
-      intervalMs: 5,
+      arguments: { address: "$0400", bytes: "$41" },
+      intervalMs: 100,
       maxIterations: 1,
     }, ctx);
     assert.equal(started.metadata?.success, true);
-
-    const task = await waitForTaskCompletion(metaModule, "writer-defaults", ctx);
+    const task = await waitForTaskCompletion(metaModule, "writer-args", ctx);
     assert.equal(task?.status, "completed");
-    assert.deepEqual(calls, [["$0400", "$00"]]);
+    assert.deepEqual(calls, [["$0400", "$41"]]);
+    assert.equal(calls.length, 1);
+    // A rejected start must not leave a registry entry behind.
+    const list = await metaModule.invoke("list_background_tasks", {}, ctx);
+    assert.ok(!list.structuredContent.data.tasks.some((entry) => entry.name === "writer-noargs"));
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
+
+test("T-02 start_task rejects unknown operations and lists the allowed ones", async () => {
+  const { file, dir } = tmpPath("background-unknown-op", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    const ctx = { client: {}, logger: createLogger() };
+    const res = await metaModule.invoke("start_background_task", { name: "bogus", operation: "unknown_op", intervalMs: 100, maxIterations: 1 }, ctx);
+    assert.equal(res.isError, true);
+    assert.equal(res.metadata?.error?.path, "$.operation");
+    const text = JSON.stringify(res.content);
+    for (const op of ["read", "write", "read_screen", "menu_button"]) {
+      assert.ok(text.includes(op), `allowed operation ${op} not listed in: ${text}`);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});
+
+test("T-02 list_tasks returns the last result and last error of each task", async () => {
+  const { file, dir } = tmpPath("background-results", "tasks.json");
+  await fs.mkdir(dir, { recursive: true });
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = file;
+  try {
+    let calls = 0;
+    const ctx = {
+      client: {
+        async readMemory() {
+          calls += 1;
+          if (calls < 3) return { success: true, data: `$0${calls}` };
+          throw new Error("third read failed");
+        },
+      },
+      logger: createLogger(),
+    };
+    const started = await metaModule.invoke("start_background_task", { name: "results", operation: "read", arguments: { address: "$0400", length: 1 }, intervalMs: 100 }, ctx);
+    assert.equal(started.metadata?.success, true);
+    const task = await waitForTaskCompletion(metaModule, "results", ctx);
+    assert.equal(task?.status, "error");
+    assert.equal(task?.iterations, 2);
+    assert.deepEqual(task?.lastResult, { success: true, data: "$02" });
+    assert.ok(String(task?.lastError).includes("third read failed"));
   } finally {
     if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
     else process.env.C64_TASK_STATE_FILE = previous;
@@ -380,7 +442,8 @@ test("background task tools validate input and reject duplicate running names", 
     const started = await metaModule.invoke("start_background_task", {
       name: "duplicate-check",
       operation: "read",
-      intervalMs: 100,
+      // Long enough that the task is still running when the duplicate start arrives.
+      intervalMs: 10_000,
       maxIterations: 1,
     }, ctx);
     assert.equal(started.metadata?.success, true);

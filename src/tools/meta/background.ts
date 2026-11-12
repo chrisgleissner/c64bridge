@@ -26,6 +26,7 @@ interface BackgroundTask {
   updatedAt: Date;
   stoppedAt?: Date | null;
   lastError?: string | null;
+  lastResult?: unknown;
   nextRunAt?: Date | null;
   folder: string; // e.g. tasks/background/0001_read
   backendId?: string | null; // backend the task was pinned to at start
@@ -34,6 +35,23 @@ interface BackgroundTask {
 }
 
 const TASKS: Map<string, BackgroundTask> = new Map();
+
+// Operations runOperation implements, including the *_memory aliases.
+const SUPPORTED_OPERATIONS = ["read", "write", "read_screen", "menu_button", "read_memory", "write_memory"] as const;
+const MAX_STORED_RESULT_CHARS = 4096;
+
+function summariseResult(result: unknown): unknown {
+  let text: string;
+  try {
+    text = JSON.stringify(result) ?? "null";
+  } catch {
+    return String(result).slice(0, MAX_STORED_RESULT_CHARS);
+  }
+  if (text.length <= MAX_STORED_RESULT_CHARS) {
+    return JSON.parse(text);
+  }
+  return { truncated: true, preview: text.slice(0, MAX_STORED_RESULT_CHARS) };
+}
 
 function normaliseOperation(op: string): string {
   switch (op) {
@@ -60,6 +78,7 @@ type PersistedTask = {
   updatedAt: string;
   stoppedAt?: string | null;
   lastError?: string | null;
+  lastResult?: unknown;
   nextRunAt?: string | null;
   folder: string;
   backendId?: string | null;
@@ -80,6 +99,7 @@ function toPersistedTask(t: BackgroundTask): PersistedTask {
     updatedAt: formatTimestampSpec(t.updatedAt),
     stoppedAt: t.stoppedAt ? formatTimestampSpec(t.stoppedAt) : null,
     lastError: t.lastError ?? null,
+    lastResult: t.lastResult ?? null,
     nextRunAt: t.nextRunAt ? formatTimestampSpec(t.nextRunAt) : null,
     folder: t.folder,
     backendId: t.backendId ?? null,
@@ -101,6 +121,7 @@ function fromPersistedTask(p: PersistedTask): BackgroundTask {
     updatedAt: parseTimestampSpec(p.updatedAt) ?? new Date(),
     stoppedAt: parseTimestampSpec(p.stoppedAt ?? null),
     lastError: p.lastError ?? null,
+    lastResult: p.lastResult ?? null,
     nextRunAt: parseTimestampSpec(p.nextRunAt ?? null),
     folder: p.folder,
     backendId: p.backendId ?? null,
@@ -258,6 +279,7 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
         throw new Error(`Operation returned failure: ${JSON.stringify((result as { details?: unknown }).details ?? result)}`);
       }
       task.iterations += 1;
+      task.lastResult = summariseResult(result);
       task.updatedAt = new Date();
       if (task.maxIterations && task.iterations >= task.maxIterations) {
         task.status = "completed";
@@ -300,6 +322,23 @@ export async function stopAllBackgroundTasks(): Promise<void> {
   await persistTasks();
 }
 
+function validateTaskOperation(operation: string, args: Record<string, unknown>): void {
+  if (!(SUPPORTED_OPERATIONS as readonly string[]).includes(operation)) {
+    throw new ToolValidationError(
+      `Unsupported background task operation '${operation}'. Allowed operations: ${SUPPORTED_OPERATIONS.join(", ")}.`,
+      { path: "$.operation" },
+    );
+  }
+  if (normaliseOperation(operation) === "write") {
+    for (const key of ["address", "bytes"] as const) {
+      const value = args[key];
+      if (value === undefined || value === null || String(value).trim() === "") {
+        throw new ToolValidationError(`Background task operation 'write' requires arguments.${key}.`, { path: `$.arguments.${key}` });
+      }
+    }
+  }
+}
+
 const noArgsSchema = objectSchema<Record<string, never>>({ description: "No arguments", properties: {}, additionalProperties: false });
 
 const startBackgroundTaskArgsSchema = objectSchema({
@@ -311,7 +350,7 @@ const startBackgroundTaskArgsSchema = objectSchema({
       minLength: 1,
       pattern: /^[A-Za-z0-9_][A-Za-z0-9_. -]*$/,
     }),
-    operation: stringSchema({ description: "Operation name (e.g., read, read_screen)", minLength: 1 }),
+    operation: stringSchema({ description: "Operation name: read, write, read_screen or menu_button (read_memory and write_memory are aliases). write requires arguments.address and arguments.bytes.", minLength: 1 }),
     arguments: optionalSchema(objectSchema({ description: "Operation-specific arguments", properties: {}, additionalProperties: true }), {} as any),
     intervalMs: optionalSchema(numberSchema({ description: "Interval milliseconds", integer: true, minimum: 1, default: 1000 }), 1000),
     maxIterations: optionalSchema(numberSchema({ description: "Maximum number of iterations (omit for indefinite)", integer: true, minimum: 1 }), undefined),
@@ -341,6 +380,7 @@ export const tools: ToolDefinition[] = [
       try {
         await ensureTasksLoaded();
         const parsed = startBackgroundTaskArgsSchema.parse(args ?? {});
+        validateTaskOperation(parsed.operation, (parsed.arguments as Record<string, unknown> | undefined) ?? {});
         const now = new Date();
         const existing = TASKS.get(parsed.name);
         if (existing && existing.status === "running") {
@@ -447,6 +487,7 @@ export const tools: ToolDefinition[] = [
           updatedAt: formatTimestampSpec(t.updatedAt),
           stoppedAt: t.stoppedAt ? formatTimestampSpec(t.stoppedAt) : null,
           lastError: t.lastError ?? null,
+          lastResult: t.lastResult ?? null,
           folder: t.folder,
         }));
         return jsonResult({ tasks }, { success: true, count: tasks.length });
