@@ -103,24 +103,23 @@ Timing facts:
 
 ## Case light and keyboard LEDs (C64U)
 
-Measured 2026-11-13, C64U fw 1.2.1, by camera. Two groups, set with `c64_config` (immediate; lost at power-off unless saved to flash):
+Measured 2026-11-13, C64U fw 1.2.1, by camera (stills and video). Set with `c64_config` (immediate; lost at power-off unless saved):
 
 | Group | Category | LEDs |
 |---|---|---|
-| Case light | `LED Strip Settings` | 84: 30 bottom, 30 top, 24 between key rows |
-| Keyboard | `Keyboard Lighting` | 71, one per key position (plus shift lock) |
+| Case light | `LED Strip Settings` | 84: 0-29 bottom, 30-59 top, 60-83 between key rows (keyboard left end to function keys) |
+| Keyboard | `Keyboard Lighting` | 71 under the keys (0-4 space bar, 70 shift lock; the rest snake row by row) |
 
-- Both have: `LedStrip Mode` (`Off`, `Fixed Color`, `SID Music`, `Rainbow`, `Rainbow Sparkle`, `Sparkle` (case only), `Default`, `Programmatic`), `LedStrip Pattern`, `Strip Intensity` 0-31, `Fixed Color` (25 hues `Red`..`White`), `Color tint` (`Pure`/`Bright`/`Pastel`/`Whisper`), `LedStrip SID Select`, `LedStrip Auto SID Mode`.
-- One colour: `LedStrip Mode` = `Fixed Color` (`PUT /v1/configs/LED%20Strip%20Settings/LedStrip%20Mode?value=Fixed%20Color`), then `Fixed Color`, `Strip Intensity`. Verified: Red, Blue, Amber at intensity 4, 12, 31 clearly differ. Free RGB needs `Programmatic`. Keyboard default intensity 2 is very dim.
-- Per-key/per-LED colour: mode `Programmatic` in that category; the C64 program writes the data (REST cannot):
-  1. Write `$11` to `$D037` once (C64 must do it): `$D200-$D3FF` switches from VIC mirrors to the LED controllers.
-  2. `$D200-$D2FF` = case, `$D300-$D3FF` = keyboard; same layout: `$xx00-$xxFB` LED n at offset 3n (3 bytes); `$xxFE` global intensity 0-255 (firmware uses item x 4; 64 and 32 visible); `$xxFF` write any value to latch and refresh, after the colours each update.
-  3. Keyboard byte order **G, R, B** (verified: `00 FF 00` red, `FF 00 00` green, `00 00 FF` blue, `FF FF FF` white). Case order not verified.
-  4. Not measured (FPGA design only): a CPU reset clears the `$D037` switch; writes go through a small FIFO, so rewrite whole pages about once per frame.
-- Verified: LED 5 red, 20 green, 40 blue, 60 white, rest off, one update. One white LED at each index 0-70 lit exactly one key. Serpentine order: 0-4 front edge (space bar side), 5-11 front row, 24-47 main block by column, 48-59 back, 60-69 left-most column; 70 = shift lock (red or dim). No key-name table: light indices one by one.
-- Data persists until overwritten, also after program end or C64 reset (verified); power-off not tested (loss expected). In `Programmatic` a group is not animated and ignores SID.
-- Hazard (measured, fw 1.2.1): after a keyboard session in `Programmatic`, the firmware stopped changing the keyboard LEDs. Config changes in "Keyboard Lighting" (mode, pattern, colour, intensity), C64 reset and clearing `$D037` had no effect; case light kept responding. Direct C64 register writes still worked (reproduced a Fixed Color): the firmware's updates no longer reach a working controller. No recovery without an Ultimate restart found (config values restore; key LEDs keep the last C64 write). Avoid keyboard `Programmatic` on shared/unattended machines; prefer `Fixed Color`/`Rainbow` for games.
-- Not possible: per-key control via REST/UCI, read-back, per-key brightness except via colour bytes (global intensity covers the group).
+- Both have `LedStrip Mode` (`Off`, `Fixed Color`, `SID Music`, `Rainbow`, `Rainbow Sparkle`, `Sparkle` (case), `Default`, `Programmatic`), `LedStrip Pattern`, `Strip Intensity` 0-31, `Fixed Color` (25 hues `Red`..`White`), `Color tint`, `LedStrip SID Select`, `LedStrip Auto SID Mode`. Free RGB needs `Programmatic`.
+- Per-LED colour: mode `Programmatic` in that category, then in C64 address space (a program, or REST DMA, see below):
+  1. `$D037` <- `$11` once: `$D200-$D3FF` switches from VIC mirrors to the LED controllers (`$D2xx` case, `$D3xx` keyboard). Without it writes do nothing; a C64 reset clears it.
+  2. Per window: `$xx00-$xxFB` LED n at 3n, 3 bytes; `$xxFE` global intensity; `$xxFF` any write latches and refreshes, send it after the colours.
+  3. Byte order: keyboard **G, R, B**; case **R, G, B** (verified with `FF 00 00` and `00 FF 00`).
+- No resident program needed (verified): `PUT /v1/machine:writemem?address=D037&data=11`, then `address=D300&data=<hex>` for colours and `address=D3FE&data=3000` for intensity and latch. PUT with hex in the URL takes about 17 ms and works up to 128 bytes (200 failed); POST with a body takes about 195 ms whatever the size. Each request pauses the C64 briefly. Measured: moving one LED (6 bytes plus latch, 2 requests) 30 updates/s; full frame (213 or 252 bytes, 3 requests) 13/s. A 6502 loop wrote 600 colour-plus-latch sequences in at most 4 jiffies; LED refresh rate not measured.
+- Verified by camera: LED 5 red, 20 green, 40 blue, 60 white, rest off in one update; a single LED raced through all 71 keyboard and all 84 case indices in order with colours red, green, blue, yellow, cyan, magenta, white cycling; every index lit one position. Keyboard index 35 was too dim to see. Amber case plastic tints case colours.
+- Data persists until overwritten, also after the program ends or the C64 is reset; power-off not tested. `Programmatic` groups are not animated.
+- Hazard (fw 1.2.1): after a keyboard session in `Programmatic`, the firmware stopped changing the keyboard LEDs. Config changes (mode, pattern, colour, intensity), C64 reset and clearing `$D037` had no effect, but direct register writes still worked, so the firmware's updates no longer reach the controller. No recovery without an Ultimate restart was found; config values restore, key LEDs keep the last write. The case light had no such problem. Avoid keyboard `Programmatic` on shared or unattended machines; for games prefer `Fixed Color` or `Rainbow`.
+- Not possible: per-LED control through UCI or the config API, LED read-back, per-key brightness except via colour bytes.
 
 ## VICE versus an Ultimate
 
