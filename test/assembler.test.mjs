@@ -561,3 +561,12 @@ test("overlapping .org blocks are an error naming both ranges", () => {
   assert.deepEqual([...assemblyToPrg("*=$c000\n nop\n*=$c001\n nop")], [0x00, 0xc0, 0xea, 0xea]);
   assert.doesNotThrow(() => assemblyToPrg("*=$c000\n nop\n*=$c000\nlabel:\n*=$c002\n nop"));
 });
+
+test("string directives count characters the same way in both passes for non-BMP text", () => {
+  // Pass 0 used UTF-16 length and pass 1 iterated by code point, which moved the entry address.
+  const emoji = "a\u{1F600}";
+  assert.throws(() => assemblyToPrg(`.word "${emoji}"\n lda #1\n rts`), /does not fit in one word/);
+  assert.throws(() => assemblyToPrg(`.byte "${emoji}"\n lda #1\n rts`), /does not fit in one byte|outside/);
+  const ok = assemblyToPrgDetailed('.word "ab"\nstart: lda #1\n rts');
+  assert.equal(ok.symbols.get("start"), prgEntryAddress(ok.prg));
+});

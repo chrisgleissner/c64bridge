@@ -1173,7 +1173,7 @@ class Assembler {
                 this.writeByte(code, location);
               }
             } else {
-              this.pc += arg.value.length;
+              this.pc += Array.from(arg.value).length;
             }
           } else {
             const value = this.evaluate(arg.expr, pass, location);
@@ -1197,10 +1197,15 @@ class Assembler {
           if (arg.kind === "string") {
             if (pass === 1) {
               for (const char of arg.value) {
-                this.writeWord(char.charCodeAt(0), location);
+                const code = char.codePointAt(0)!;
+                if (code > 0xffff) {
+                  throw new AssemblyError(`word directive character '${char}' (code ${code}) does not fit in one word`, location);
+                }
+                this.writeWord(code, location);
               }
             } else {
-              this.pc += arg.value.length * 2;
+              // Count code points, as pass 1 iterates, so both passes agree for characters above $FFFF.
+              this.pc += Array.from(arg.value).length * 2;
             }
           } else {
             const value = this.evaluate(arg.expr, pass, location);
