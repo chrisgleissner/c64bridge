@@ -16,7 +16,7 @@
     },
     "drive": {
       "type": "string",
-      "description": "Drive identifier (for example drive8).",
+      "description": "Drive identifier (for example drive8). Limits depend on op.",
       "minLength": 1
     },
     "image": {
