@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { C64Client } from "../src/c64Client.js";
+import { ViceBackend } from "../src/device.js";
 import { startViceMockServer } from "../src/vice/mockServer.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { getPlatformStatus, setPlatform } from "../src/platform.js";
@@ -266,4 +267,81 @@ test("a tool call's pause does not end a debugger stop", async () => {
     await client.viceExitMonitor();
     assert.equal(server.running, true);
   });
+});
+
+async function withBackend(body, serverOptions = {}) {
+  const saved = { warp: process.env.VICE_WARP, visible: process.env.VICE_VISIBLE };
+  process.env.VICE_WARP = "true"; // short first boot check
+  await withClient(async (_client, server) => {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    await body(backend, server);
+  }, serverOptions);
+  for (const [name, value] of [["VICE_WARP", saved.warp], ["VICE_VISIBLE", saved.visible]]) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+}
+
+async function armBreakpointAt(backend, pc) {
+  const created = await backend.checkpointOperation(async (c) => {
+    await c.registersSet([{ name: "PC", value: pc }]);
+    return c.checkpointCreate({ start: pc, stopOnHit: true });
+  });
+  return created.id;
+}
+
+async function hitWhenRunning(server, id) {
+  const deadline = Date.now() + 3_000;
+  while (!server.hitCheckpoint(id)) {
+    if (Date.now() > deadline) assert.fail("the CPU never ran to the checkpoint");
+    await delay(1);
+  }
+}
+
+test("feedKeyboard stops at a checkpoint hit and does not resume the CPU past it", async () => {
+  await withBackend(async (backend, server) => {
+    const id = await armBreakpointAt(backend, 0xc000);
+    const feeding = backend.feedKeyboard(new TextEncoder().encode("SYS49152\r"));
+    await waitUntil(() => server.keyboardFeeds.length === 1, "the keys were fed");
+    await hitWhenRunning(server, id);
+    const result = await feeding;
+    assert.equal(result.status, "stopped");
+    assert.equal(result.stoppedAt, 0xc000, "the real PC is reported");
+    assert.equal(server.running, false, "the CPU is still stopped at the breakpoint");
+    const exitsAfterFeed = server.commands.slice(server.commands.findIndex(([cmd]) => cmd === 0x72)).filter(([cmd]) => cmd === 0xaa);
+    assert.equal(exitsAfterFeed.length, 1, "the monitor was exited once, before the hit, and never again");
+    assert.equal(backend.sessionInfo().debugStop, true);
+  });
+});
+
+test("run_prg that meets a checkpoint during the reset leaves the CPU stopped and does not start the program", async () => {
+  await withBackend(async (backend, server) => {
+    const id = await armBreakpointAt(backend, 0xe000);
+    const prg = Buffer.from([0x01, 0x08, 0x0b, 0x08, 0x0a, 0x00, 0x99, 0x22, 0x48, 0x49, 0x22, 0x00, 0x00, 0x00]);
+    const running = backend.runPrg(prg);
+    const settled = running.then(() => null, (error) => error);
+    await waitUntil(() => server.commands.some(([cmd]) => cmd === 0xcc), "the reset was sent");
+    await hitWhenRunning(server, id);
+    const error = await settled;
+    assert.match(String(error?.message), /checkpoint stopped the CPU at \$[0-9A-F]{4}/);
+    assert.equal(server.running, false, "the CPU was not resumed past the checkpoint");
+    assert.equal(server.keyboardFeeds.length, 0, "RUN was not typed");
+    assert.equal(backend.sessionInfo().debugStop, true);
+  });
+});
+
+test("shutdown deletes stopping checkpoints even while a monitor operation is in flight", async () => {
+  await withBackend(async (backend, server) => {
+    await armBreakpointAt(backend, 0xc000);
+    assert.equal(server.stoppingCheckpoints, 1);
+    const prg = Buffer.from([0x01, 0x08, 0x0b, 0x08, 0x0a, 0x00, 0x99, 0x22, 0x48, 0x49, 0x22, 0x00, 0x00, 0x00]);
+    const inflight = backend.runPrg(prg).then(() => null, (error) => error); // waits for the 4 s boot
+    await waitUntil(() => server.commands.some(([cmd]) => cmd === 0xcc), "the reset is in flight");
+    const started = Date.now();
+    await ViceBackend.endAllSessions();
+    assert.ok(Date.now() - started < 1_500, `shutdown did not wait for the operation (${Date.now() - started} ms)`);
+    assert.equal(server.stoppingCheckpoints, 0, "the stopping checkpoint was deleted");
+    assert.equal(server.unsafeCloses, 0, "the connection was closed only after the delete");
+    await inflight;
+  }, { bootMs: 4_000, wedgeOnUnsafeClose: true });
 });

@@ -70,6 +70,18 @@ export class ViceSessionLostError extends Error {
   }
 }
 
+/** The program counter of a CPU that is stopped in the monitor, or undefined when it cannot be read. */
+async function readProgramCounter(client: ViceClient): Promise<number | undefined> {
+  try {
+    const meta = await client.registersAvailable();
+    const id = meta.find((m) => m.name === "PC")?.id;
+    if (id === undefined) return undefined;
+    return (await client.registersGet()).find((r) => r.id === id)?.value;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Ends every VICE monitor session cleanly (stopping checkpoints deleted, CPU running). */
 export function endViceSessions(): Promise<void> {
   return ViceBackend.endAllSessions();
@@ -91,8 +103,10 @@ export type MachineInputState = InputStateResponse;
 
 export interface KeyboardFeedResult {
   readonly delivered: number;
-  readonly status: "drained" | "queued" | "timeout";
+  readonly status: "drained" | "queued" | "timeout" | "stopped";
   readonly pending: number;
+  /** With status "stopped": the program counter at the stop. The CPU is left stopped there. */
+  readonly stoppedAt?: number;
 }
 
 export interface ScreenState {
@@ -715,9 +729,12 @@ export class ViceBackend implements C64Facade {
   }
 
   /** Resets and waits for READY. with few monitor reads; the CPU is left stopped on success. */
-  private resetToBasicPrompt(client: ViceClient, timeoutMs: number): Promise<{ pointersOk: boolean; promptOk: boolean }> {
+  private resetToBasicPrompt(client: ViceClient, timeoutMs: number): Promise<{ pointersOk: boolean; promptOk: boolean; stopped?: boolean }> {
+    const s = this.session;
+    const stopsBefore = s?.stopEvents ?? 0;
     return resetAndWaitForBasic(client, {
       timeoutMs,
+      ...(s ? { stopped: () => s.stopEvents !== stopsBefore } : {}),
       firstCheckMs: this.bootFirstCheckMs(),
       ...(this.debugEnabled ? { onSample: (p) => console.error("[vice-backend] BASIC pointers", p) } : {}),
     });
@@ -1152,7 +1169,12 @@ export class ViceBackend implements C64Facade {
     const loadAddress = buffer.readUInt16LE(0);
     const body = buffer.subarray(2);
     await this.withClient(async (client) => {
-      await this.resetToBasicPrompt(client, 10_000);
+      const readiness = await this.resetToBasicPrompt(client, 10_000);
+      if (readiness.stopped) {
+        // A checkpoint stopped the CPU during the boot. Leave it there: no load, no RUN, no exit.
+        const pc = await readProgramCounter(client);
+        throw new Error(`A checkpoint stopped the CPU${pc === undefined ? "" : ` at $${pc.toString(16).toUpperCase().padStart(4, "0")}`} during the reset; the program was not loaded. Resume to continue.`);
+      }
       if (body.length > 0) await client.memSet(loadAddress, body);
       await finish(client, loadAddress, loadAddress + body.length);
       await client.exitMonitor();
@@ -1228,13 +1250,23 @@ export class ViceBackend implements C64Facade {
       if (delivered === 0) return { delivered, status: "drained", pending: 0 };
       if (this.isCpuStopped()) return { delivered, status: "queued", pending: delivered };
       const start = Date.now();
+      const session = this.session;
+      const stopsBefore = session?.stopEvents ?? 0;
+      const hit = () => session !== null && session.stopEvents !== stopsBefore;
+      const stoppedResult = async (pending: number): Promise<KeyboardFeedResult> => {
+        const stoppedAt = await readProgramCounter(client);
+        return { delivered, status: "stopped", pending, ...(stoppedAt === undefined ? {} : { stoppedAt }) };
+      };
       let gap = 30;
       let emptyReads = 0;
       let pending = delivered;
       for (;;) {
         await client.exitMonitor();
         await delay(gap);
+        // A checkpoint hit stopped the CPU while it ran: never resume it again.
+        if (!client.cpuRunning || hit()) return await stoppedResult(pending);
         pending = (await client.memGet(0x00c6, 0x00c6))[0] ?? 0;
+        if (hit()) return await stoppedResult(pending);
         emptyReads = pending === 0 ? emptyReads + 1 : 0;
         if (emptyReads >= 2) return { delivered, status: "drained", pending: 0 };
         if (Date.now() - start >= timeoutMs) return { delivered, status: "timeout", pending };
@@ -1287,16 +1319,27 @@ export class ViceBackend implements C64Facade {
   }
 
   async reset(): Promise<RunResult> {
-    let readiness: { pointersOk: boolean; promptOk: boolean } | undefined;
+    let readiness: { pointersOk: boolean; promptOk: boolean; stopped?: boolean } | undefined;
     // Overridable only for deterministic tests of the readiness-failure path;
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
+    let stoppedAt: number | undefined;
     const warning = await this.endSessionBeforeRestart();
     await this.withClient(async (client) => {
       readiness = await this.resetToBasicPrompt(client, resetReadinessTimeoutMs);
+      if (readiness.stopped) {
+        stoppedAt = await readProgramCounter(client);
+        return; // a checkpoint stopped the CPU; leave it stopped
+      }
       try { await client.exitMonitor(); } catch {}
       if (this.debugEnabled) console.error("[vice-backend] BASIC readiness result", readiness);
     });
+    if (readiness?.stopped) {
+      return ViceBackend.withWarning({
+        success: false,
+        details: { readiness, stopped: true, ...(stoppedAt === undefined ? {} : { pc: stoppedAt }), message: "A checkpoint stopped the CPU during the reset. The CPU stays stopped; resume to continue." },
+      }, warning);
+    }
     const ready = Boolean(readiness?.pointersOk && readiness?.promptOk);
     return ViceBackend.withWarning(ready
       ? { success: true, details: readiness }
@@ -1406,9 +1449,45 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  /** Ends every backend's session cleanly; used at server shutdown. */
-  static async endAllSessions(): Promise<void> {
-    await Promise.allSettled([...ViceBackend.instances].map((backend) => backend.endSessionBeforeRestart()));
+  /**
+   * Shutdown path: deletes the stopping checkpoints, lets the CPU run and closes the session
+   * without waiting for the operation that may hold the monitor queue. The commands go out on
+   * the session connection next to the operation's own (requests carry ids, so they do not mix
+   * up). The operation then fails with a closed connection, which is acceptable while shutting
+   * down. Bounded by `timeoutMs`; the connection is closed even when VICE does not answer in time.
+   */
+  private async endSessionForShutdown(timeoutMs: number): Promise<void> {
+    const s = this.session;
+    if (!s || s.lost !== null || !s.client.isOpen) return;
+    const client = s.client;
+    const cleanup = async (): Promise<void> => {
+      const ids = new Set(s.stopping);
+      // The operation in flight may have created a checkpoint that was not counted yet.
+      const listing = client.checkpointList().then((list) => { for (const c of list) if (c.stopOnHit) ids.add(c.id); }, () => {});
+      await Promise.allSettled([...ids].map((id) => client.checkpointDelete(id)));
+      await listing;
+      const extra = [...ids].filter((id) => !s.stopping.has(id));
+      await Promise.allSettled(extra.map((id) => client.checkpointDelete(id)));
+      s.stopping.clear();
+      try { await client.exitMonitor(); } catch { /* closing resumes the CPU as well */ }
+    };
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        cleanup().catch(() => {}),
+        new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs); timer.unref?.(); }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (this.session === s) this.session = null;
+      client.close();
+      this.wakeWaiters(s);
+    }
+  }
+
+  /** Ends every backend's session cleanly; used at server shutdown. Does not wait for operations in flight. */
+  static async endAllSessions(timeoutMs = 1_500): Promise<void> {
+    await Promise.allSettled([...ViceBackend.instances].map((backend) => backend.endSessionForShutdown(timeoutMs)));
   }
   async poweroff(): Promise<RunResult> {
     const warning = await this.endSessionBeforeRestart();

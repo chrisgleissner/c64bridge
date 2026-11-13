@@ -193,6 +193,11 @@ export type BootWaitOptions = {
   initialGapMs?: number;
   maxGapMs?: number;
   onSample?: (v: { tx: number; va: number; ar: number; st: number }) => void;
+  /**
+   * Returns true once a checkpoint hit has stopped the CPU. The wait then ends at once and
+   * leaves the CPU stopped, so it never resumes a machine that stopped at a breakpoint.
+   */
+  stopped?: () => boolean;
 };
 
 /**
@@ -221,7 +226,7 @@ export function evaluateBootState(state: Uint8Array): { pointersOk: boolean; pro
 export async function resetAndWaitForBasic(
   bm: ViceClient,
   options: BootWaitOptions,
-): Promise<{ pointersOk: boolean; promptOk: boolean }> {
+): Promise<{ pointersOk: boolean; promptOk: boolean; stopped?: boolean }> {
   const timeoutMs = Math.max(1, options.timeoutMs);
   const maxGapMs = Math.max(1, options.maxGapMs ?? 400);
   await bm.memSet(BOOT_MARKER_ADDRESS, Buffer.from([BOOT_MARKER_VALUE]));
@@ -233,7 +238,10 @@ export async function resetAndWaitForBasic(
   let last = { pointersOk: false, promptOk: false };
   for (;;) {
     await new Promise((r) => setTimeout(r, gap));
+    // The CPU stopped while it ran: a checkpoint was hit. Resuming would run past it.
+    if (!bm.cpuRunning || options.stopped?.()) return { ...last, stopped: true };
     const state = await bm.memGet(BASIC_STATE_START, BASIC_STATE_END);
+    if (options.stopped?.()) return { ...last, stopped: true };
     const result = evaluateBootState(state);
     if (result.pointers) options.onSample?.(result.pointers);
     last = { pointersOk: result.pointersOk, promptOk: result.promptOk };

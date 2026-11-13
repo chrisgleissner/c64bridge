@@ -301,7 +301,7 @@ export class ViceMockServer {
         if (type >= 8 && type <= 11) {
           this.driveResets.push(type);
         } else {
-          this.resetState();
+          this.resetState(true);
           if (this.bootMs > 0) this.startBoot();
         }
         return buildResponse(cmd, reqId);
@@ -637,13 +637,16 @@ export class ViceMockServer {
     }
   }
 
-  private resetState(): void {
+  /** A machine reset keeps the monitor's checkpoints, as VICE does. */
+  private resetState(keepCheckpoints = false): void {
     this.memory.fill(0);
     this.initBasic();
     this.helloReady = false;
     this.heartbeat = null;
-    this.checkpoints.clear();
-    this.nextCheckpointId = 1;
+    if (!keepCheckpoints) {
+      this.checkpoints.clear();
+      this.nextCheckpointId = 1;
+    }
     this.registerValues.clear();
     for (const meta of this.registerMetadata) {
       this.registerValues.set(meta.id, 0);
