@@ -543,3 +543,11 @@ test(".text and .ascii map ASCII letters to PETSCII upper case", () => {
   ]);
   assert.match(assemblyError('*=$C000\n.text "café€"'), /:2: .*no PETSCII mapping/);
 });
+
+test(".org, *= and the loadAddress option reject values outside $0000-$FFFF", () => {
+  assert.match(assemblyError("*=$10000\n nop"), /:1: .*outside \$0000-\$FFFF/);
+  assert.match(assemblyError(".org -1\n nop"), /:1: .*outside \$0000-\$FFFF/);
+  assert.match(assemblyError("* = $12345\n nop"), /:1: .*outside/);
+  assert.throws(() => assemblyToPrg(" nop", { loadAddress: 0x10000 }), /outside \$0000-\$FFFF/);
+  assert.deepEqual([...assemblyToPrg("*=$FFFF\n .byte 1")], [0xff, 0xff, 1]);
+});

@@ -252,6 +252,9 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   const normalized = normalizeSource(source);
   const loadAddress = options?.loadAddress ?? DEFAULT_LOAD_ADDRESS;
   const rootFile = options?.fileName ?? "(input)";
+  if (!Number.isInteger(loadAddress) || loadAddress < 0 || loadAddress > MAX_ADDRESS) {
+    throw new AssemblyError(`loadAddress ${loadAddress} is outside $0000-$FFFF`, { file: rootFile, line: 0, text: "" });
+  }
   const resolver = options?.resolveInclude;
 
   const parser = new Parser(resolver);
@@ -1009,7 +1012,7 @@ class Assembler {
 
   runPass(pass: 0 | 1): void {
     // Code before the first org directive is assembled at the load address.
-    this.pc = this.defaultLoadAddress & 0xffff;
+    this.pc = this.defaultLoadAddress;
     if (pass === 0) {
       this.symbolTable.reset();
       this.lowestWritten = MAX_ADDRESS;
@@ -1039,6 +1042,13 @@ class Assembler {
         throw new AssemblyError(message, line.location);
       }
     }
+  }
+
+  private checkOrigin(value: number, what: string, location: SourceLocation): number {
+    if (!Number.isInteger(value) || value < 0 || value > MAX_ADDRESS) {
+      throw new AssemblyError(`${what} value ${value} is outside $0000-$FFFF`, location);
+    }
+    return value;
   }
 
   private emitsBeforeFirstOrg(): boolean {
@@ -1122,7 +1132,7 @@ class Assembler {
       throw this.undefinedError(statement.expr, location, "Assignment depends on an undefined symbol");
     }
     if (statement.isLocationCounter) {
-      this.pc = value & 0xffff;
+      this.pc = this.checkOrigin(value, "* =", location);
     } else if (pass === 0) {
       this.symbolTable.setAssignment(statement.target, value, location);
     } else {
@@ -1140,7 +1150,7 @@ class Assembler {
         if (value === undefined) {
           throw this.undefinedError(statement.args[0].expr, location, "org directive requires a defined value");
         }
-        this.pc = value & 0xffff;
+        this.pc = this.checkOrigin(value, "org directive", location);
         break;
       }
       case "byte":
