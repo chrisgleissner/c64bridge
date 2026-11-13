@@ -93,7 +93,9 @@ function normalize(input: string): string {
 }
 
 function tokenize(content: string): Uint8Array {
-  const upper = content.toUpperCase();
+  // ASCII-only folding keeps every index aligned with content; full Unicode
+  // upper-casing changes the length for characters such as the German sharp s.
+  const upper = content.replace(/[a-z]/g, (letter) => letter.toUpperCase());
   const bytes: number[] = [];
   let index = 0;
   let inString = false;

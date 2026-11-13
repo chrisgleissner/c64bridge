@@ -126,3 +126,14 @@ test("basicToPrg folds only ASCII letters in REM text", () => {
   const rem2 = body.indexOf(0x8f, rem1 + 1);
   assert.deepEqual(body.slice(rem2 + 1, rem2 + 3), [0x20, 0xb5]);
 });
+
+test("basicToPrg keeps token positions after characters whose upper-case form is longer", () => {
+  // "ß".toUpperCase() is "SS", which used to shift every later index by one.
+  const withSharpS = basicToPrg('10 PRINT "ß":GOTO 10');
+  const control = basicToPrg('10 PRINT "a":GOTO 10');
+  const tail = (prg) => [...prg.subarray(prg.length - 8, prg.length - 3)];
+  assert.deepEqual(tail(withSharpS), [0x3a, 0x89, 0x20, 0x31, 0x30]);
+  assert.deepEqual(tail(control), [0x3a, 0x89, 0x20, 0x31, 0x30]);
+  // Outside a string the character is passed through, and the GOTO target stays intact.
+  assert.deepEqual(tail(basicToPrg("10 PRINT \u00df:GOTO 10")), [0x3a, 0x89, 0x20, 0x31, 0x30]);
+});
