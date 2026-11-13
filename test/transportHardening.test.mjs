@@ -219,6 +219,7 @@ test("R-06 a request that fails before it is sent releases the queue", async (t)
 
 import { metaModule } from "../src/tools/meta/index.js";
 import { machineControlModule } from "../src/tools/machineControl.js";
+import { toolRegistry } from "../src/tools/registry/index.js";
 
 const quietLogger = () => ({ debug() {}, info() {}, warn(...args) { quietLogger.warnings.push(args); }, error() {} });
 quietLogger.warnings = [];
@@ -505,4 +506,21 @@ test("a failed resume after a reset is reported and keeps the explicit pause rec
   assert.equal((await machineControlModule.invoke("resume", {}, ctx)).isError, undefined);
   assert.equal(deviceCalls(mock, "resume"), 1);
   assert.equal(mock.state.paused, false);
+});
+
+// ---- c64_disk create_image on an existing path -----------------------------
+
+test("c64_disk create_image on an existing path reports that the file exists", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u", features: [], limitedFeatures: [] }, client, rag: {}, logger: quietLogger() };
+  const args = { op: "create_image", format: "d64", path: "//USB0/exists.d64" };
+  mock.state.existingFiles = ["//USB0/exists.d64"];
+  const result = await toolRegistry.invoke("c64_disk", args, ctx);
+  assert.equal(result.isError, true);
+  const text = JSON.stringify(result.structuredContent ?? result.content);
+  assert.match(text, /already exists at \/\/USB0\/exists\.d64/);
+  assert.match(text, /does not overwrite/);
+  assert.equal(mock.state.createdImages.length, 0);
 });

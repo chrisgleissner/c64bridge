@@ -812,7 +812,7 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `create_image` | Create a blank disk image of the specified format. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
+| `create_image` | Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
 | `file_info` | Inspect metadata for a file on the Ultimate filesystem. | `path` | — | ✅ | ✅ |  |
 | `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
 | `find_paths` | Search Ultimate storage for paths whose names contain a substring, without running anything. | `nameContains` | `root="/"`, `extensions`, `maxResults=100`, `caseInsensitive=true` | ✅ | ✅ |  |

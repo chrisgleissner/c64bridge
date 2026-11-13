@@ -9,6 +9,7 @@ import { textResult } from "./responses.js";
 import {
   ToolError,
   ToolExecutionError,
+  ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
@@ -36,6 +37,29 @@ function normaliseFailure(details: unknown): Record<string, unknown> | undefined
     return details as Record<string, unknown>;
   }
   return { value: details };
+}
+
+/**
+ * The Ultimate firmware does not overwrite an existing disk image. It answers
+ * HTTP 500 with an error text containing FILE EXISTS. Report that case as a
+ * user-correctable error instead of a generic backend failure.
+ */
+function failCreateImage(format: string, path: string, details: unknown): never {
+  let text = "";
+  try {
+    text = typeof details === "string" ? details : JSON.stringify(details) ?? "";
+  } catch {
+    text = String(details);
+  }
+  if (/FILE\s+EXISTS/i.test(text)) {
+    throw new ToolValidationError(
+      `A file already exists at ${path}. The device does not overwrite disk images; choose another path or delete the existing file first.`,
+      { path: "$.path", details: { code: "file_exists", path, format, ...(normaliseFailure(details) ?? {}) } },
+    );
+  }
+  throw new ToolExecutionError(`C64 backend reported failure while creating ${format.toUpperCase()} image`, {
+    details: normaliseFailure(details),
+  });
 }
 
 const drivesListArgsSchema = createNoArgsSchema(
@@ -579,7 +603,7 @@ export const storageModule = defineToolModule({
     },
     {
       name: "create_d64",
-      description: "Create a blank D64 disk image on the Ultimate filesystem.",
+      description: "Create a blank D64 disk image on the Ultimate filesystem. An existing file at the path is not overwritten and causes an error.",
       summary: "Allocates a 35 to 41 track D64 image with an optional disk name.",
       inputSchema: createD64ArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
@@ -609,9 +633,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while creating D64 image", {
-              details: normaliseFailure(result.details),
-            });
+            failCreateImage("d64", parsed.path, result.details);
           }
 
           const firmwareTracks = toRecord(result.details)?.tracks;
@@ -633,7 +655,7 @@ export const storageModule = defineToolModule({
     },
     {
       name: "create_d71",
-      description: "Create a blank D71 disk image on the Ultimate filesystem.",
+      description: "Create a blank D71 disk image on the Ultimate filesystem. An existing file at the path is not overwritten and causes an error.",
       summary: "Allocates a 1571-compatible disk image with optional labelling.",
       inputSchema: createD71ArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
@@ -661,9 +683,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while creating D71 image", {
-              details: normaliseFailure(result.details),
-            });
+            failCreateImage("d71", parsed.path, result.details);
           }
 
           return textResult(`Created D71 image at ${parsed.path}.`, {
@@ -682,7 +702,7 @@ export const storageModule = defineToolModule({
     },
     {
       name: "create_d81",
-      description: "Create a blank D81 disk image on the Ultimate filesystem.",
+      description: "Create a blank D81 disk image on the Ultimate filesystem. An existing file at the path is not overwritten and causes an error.",
       summary: "Allocates a 1581-compatible disk image with optional labelling.",
       inputSchema: createD81ArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
@@ -710,9 +730,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while creating D81 image", {
-              details: normaliseFailure(result.details),
-            });
+            failCreateImage("d81", parsed.path, result.details);
           }
 
           return textResult(`Created D81 image at ${parsed.path}.`, {
@@ -731,7 +749,7 @@ export const storageModule = defineToolModule({
     },
     {
       name: "create_dnp",
-      description: "Create a blank DNP disk image on the Ultimate filesystem.",
+      description: "Create a blank DNP disk image on the Ultimate filesystem. An existing file at the path is not overwritten and causes an error.",
       summary: "Allocates a CMD-native DNP image with custom track count and optional label.",
       inputSchema: createDnpArgsSchema.jsonSchema,
       relatedResources: ["c64://guide/bootstrap"],
@@ -762,9 +780,7 @@ export const storageModule = defineToolModule({
             diskname: parsed.diskname,
           });
           if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while creating DNP image", {
-              details: normaliseFailure(result.details),
-            });
+            failCreateImage("dnp", parsed.path, result.details);
           }
 
           return textResult(`Created DNP image at ${parsed.path}.`, {

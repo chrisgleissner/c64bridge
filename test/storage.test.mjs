@@ -592,3 +592,19 @@ test("create_dnp handles exception", async () => {
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "unknown");
 });
+
+test("create_d64 reports an existing file as a user-correctable error", async () => {
+  const ctx = {
+    client: createMockClient({
+      async filesCreateD64() {
+        return { success: false, details: { message: "Request failed with status code 500", status: 500, data: { errors: ["FILE EXISTS"] } } };
+      },
+    }),
+    logger: createLogger(),
+  };
+  const res = await storageModule.invoke("create_d64", { path: "/tmp/new.d64" }, ctx);
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "validation");
+  assert.match(JSON.stringify(res.content), /already exists at \/tmp\/new\.d64/);
+  assert.match(JSON.stringify(res.content), /does not overwrite/);
+});

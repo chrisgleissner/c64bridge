@@ -1046,6 +1046,13 @@ export async function startMockC64Server(options = {}) {
             return;
           }
 
+          // The firmware never overwrites: creating an image at an existing path is HTTP 500 with FILE EXISTS.
+          if (action.startsWith("create_") && method === "PUT"
+            && (state.createdImages.some((image) => image.path === decodedPath) || (state.existingFiles ?? []).includes(decodedPath))) {
+            sendJson(res, { errors: ["FILE EXISTS"] }, 500);
+            return;
+          }
+
           if (action === "create_d64" && method === "PUT") {
             const tracks = Number.parseInt(routeUrl.searchParams.get("tracks") ?? "35", 10);
             const diskname = routeUrl.searchParams.get("diskname") ?? null;
