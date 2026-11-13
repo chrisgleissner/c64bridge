@@ -122,3 +122,18 @@ test("config snapshot file redacts credentials, other values unchanged, restore 
   const plain = JSON.parse(await fs.readFile(plainFile, "utf8"));
   assert.equal(plain.categories["Network settings"]["Network Password"]["Network settings"]["Network Password"], NET_PW);
 });
+
+test("config snapshot files are readable only by the owner, including a pre-existing file", async () => {
+  if (process.platform === "win32") return;
+  const ctx = { platform: { id: "c64u" }, client: makeClient([]), logger: createLogger() };
+  const { file, dir } = tmpPath("config", "config-snapshot-mode-new.json");
+  await fs.mkdir(dir, { recursive: true });
+  await metaModule.invoke("config_snapshot_and_restore", { action: "snapshot", path: file, includeSecretValues: true }, ctx);
+  assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
+
+  const { file: existing } = tmpPath("config", "config-snapshot-mode-existing.json");
+  await fs.writeFile(existing, "{}", { mode: 0o644 });
+  await fs.chmod(existing, 0o644);
+  await metaModule.invoke("config_snapshot_and_restore", { action: "snapshot", path: existing }, ctx);
+  assert.equal((await fs.stat(existing)).mode & 0o777, 0o600);
+});

@@ -50,7 +50,8 @@ export const tools: ToolDefinition[] = [
         const path = resolveHostPath(String(parsed.path), { purpose: action === "snapshot" ? "write" : "read" });
 
         if (action === "snapshot") {
-          await fs.mkdir(dirname(path), { recursive: true });
+          // A newly created directory is private to the user; an existing directory keeps its mode.
+          await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
           const [version, info, snapshotData] = await Promise.all([
             (ctx.client as any).version(),
             (ctx.client as any).info(),
@@ -63,7 +64,9 @@ export const tools: ToolDefinition[] = [
             inventory: snapshotData.inventory,
             categories: snapshotData.categories,
           };
-          await fs.writeFile(path, JSON.stringify(snapshot, null, 2), "utf8");
+          // The mode applies only when the file is created, so an existing file is tightened as well.
+          await fs.writeFile(path, JSON.stringify(snapshot, null, 2), { encoding: "utf8", mode: 0o600 });
+          await fs.chmod(path, 0o600);
           return jsonResult({
             path,
             categoryCount: Object.keys(snapshotData.categories).length,
