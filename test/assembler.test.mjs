@@ -570,3 +570,13 @@ test("string directives count characters the same way in both passes for non-BMP
   const ok = assemblyToPrgDetailed('.word "ab"\nstart: lda #1\n rts');
   assert.equal(ok.symbols.get("start"), prgEntryAddress(ok.prg));
 });
+
+test("shift counts and bitwise operands outside 32 bits are errors", () => {
+  assert.match(assemblyError(" lda #1<<32"), /Shift count 32/);
+  assert.match(assemblyError(" lda #1<<40"), /Shift count 40/);
+  assert.match(assemblyError(" lda #1>>-1"), /Shift count -1/);
+  assert.match(assemblyError(" lda #$100000000 & $ff"), /outside the 32-bit range/);
+  assert.match(assemblyError(" lda #1<<31"), /outside|too large|range/i); // 2147483648 does not fit a byte
+  assert.match(assemblyError(".word 1<<31"), /2147483648/);
+  assert.deepEqual([...assemblyToPrg("*=$c000\n lda #1<<7\n lda #$ff & $0f\n lda #256>>8")], [0x00, 0xc0, 0xa9, 0x80, 0xa9, 0x0f, 0xa9, 0x01]);
+});

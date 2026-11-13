@@ -174,6 +174,9 @@ export function prgEntryAddress(prg: Uint8Array): number {
   return digits.length > 0 && target <= 0xffff ? target : loadAddress;
 }
 const MAX_ADDRESS = 0xffff;
+const INT32_MIN = -0x80000000;
+const INT32_MAX = 0x7fffffff;
+const UINT32_MAX = 0xffffffff;
 
 const SINGLE_CHAR_TOKENS = new Set<string>([",", ":", "#", "(", ")", "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "=", "!", "~"]);
 
@@ -1050,6 +1053,13 @@ class Assembler {
     }
   }
 
+  /** Bitwise operators work on 32-bit values; anything wider would be silently truncated. */
+  private checkBitOperand(value: number, op: string, location: SourceLocation): void {
+    if (!Number.isInteger(value) || value < INT32_MIN || value > UINT32_MAX) {
+      throw new AssemblyError(`Operand ${value} of ${op} is outside the 32-bit range ${INT32_MIN}..${UINT32_MAX}`, location);
+    }
+  }
+
   private checkOrigin(value: number, what: string, location: SourceLocation): number {
     if (!Number.isInteger(value) || value < 0 || value > MAX_ADDRESS) {
       throw new AssemblyError(`${what} value ${value} is outside $0000-$FFFF`, location);
@@ -1401,6 +1411,7 @@ class Assembler {
           case "!":
             return value ? 0 : 1;
           case "~":
+            this.checkBitOperand(value, "~", location);
             return ~value;
           case "<":
             return value & 0xff;
@@ -1430,15 +1441,28 @@ class Assembler {
             if (right === 0) throw new AssemblyError("Modulo by zero", location);
             return left % right;
           case "<<":
-            return left << right;
-          case ">>":
-            return left >> right;
+          case ">>": {
+            this.checkBitOperand(left, expr.op, location);
+            if (!Number.isInteger(right) || right < 0 || right > 31) {
+              throw new AssemblyError(`Shift count ${right} for ${expr.op} is outside 0..31`, location);
+            }
+            const shifted = expr.op === "<<" ? left * 2 ** right : Math.floor(left / 2 ** right);
+            if (shifted < INT32_MIN || shifted > UINT32_MAX) {
+              throw new AssemblyError(`Result ${shifted} of ${left} << ${right} is outside the 32-bit range ${INT32_MIN}..${UINT32_MAX}`, location);
+            }
+            return shifted;
+          }
           case "&":
-            return left & right;
           case "|":
-            return left | right;
-          case "^":
-            return left ^ right;
+          case "^": {
+            this.checkBitOperand(left, expr.op, location);
+            this.checkBitOperand(right, expr.op, location);
+            if ((left < 0 && right > INT32_MAX) || (right < 0 && left > INT32_MAX)) {
+              throw new AssemblyError(`Operands ${left} and ${right} of ${expr.op} mix a negative value with one above ${INT32_MAX}`, location);
+            }
+            const bits = expr.op === "&" ? left & right : expr.op === "|" ? left | right : left ^ right;
+            return left < 0 || right < 0 ? bits : bits >>> 0;
+          }
           case "==":
             return left === right ? 1 : 0;
           case "!=":
