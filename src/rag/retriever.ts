@@ -174,92 +174,79 @@ function applyLexicalBoost(
   });
 }
 
-function deduplicateAndDiversify<T extends { snippet: string; origin?: string; uri?: string; score: number }>(
+const DUPLICATE_SIMILARITY = 0.85;
+
+function normaliseForComparison(snippet: string): { text: string; words: Set<string> } {
+  const text = snippet.toLowerCase().replace(/\s+/g, " ").trim();
+  return { text, words: new Set(text.split(" ")) };
+}
+
+function wordSimilarity(a: Set<string>, b: Set<string>): number {
+  let intersection = 0;
+  for (const word of a) {
+    if (b.has(word)) intersection++;
+  }
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 1 : intersection / union;
+}
+
+/**
+ * Keeps the best-scoring candidates, skipping near-duplicates. Two snippets are duplicates
+ * when their whitespace-normalised full text is equal or their word sets have a Jaccard
+ * similarity above DUPLICATE_SIMILARITY. Candidates rejected as duplicates are never added back
+ * by the diversity or fill passes.
+ */
+export function deduplicateAndDiversify<T extends { snippet: string; origin?: string; uri?: string; score: number }>(
   candidates: T[],
   topK: number,
 ): T[] {
-  // Step 1: Remove near-duplicates based on snippet similarity
+  const normalised = new Map<T, { text: string; words: Set<string> }>();
+  const rejected = new Set<T>();
   const results: T[] = [];
-  const seenSnippets = new Set<string>();
-  
+
   for (const candidate of candidates) {
-    // Normalize snippet for comparison (lowercase, trim whitespace)
-    const normalizedSnippet = candidate.snippet
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 100); // Compare first 100 chars
-    
-    // Skip if we've seen this snippet before
-    if (seenSnippets.has(normalizedSnippet)) {
-      continue;
-    }
-    
-    // Check for high similarity with existing results
+    if (results.length >= topK) break;
+    const current = normaliseForComparison(candidate.snippet);
+    normalised.set(candidate, current);
     let isDuplicate = false;
     for (const existing of results) {
-      const existingNormalized = existing.snippet
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 100);
-      
-      // Simple Jaccard similarity on words
-      const words1 = new Set(normalizedSnippet.split(/\s+/));
-      const words2 = new Set(existingNormalized.split(/\s+/));
-      const intersection = new Set([...words1].filter((w) => words2.has(w)));
-      const union = new Set([...words1, ...words2]);
-      const similarity = intersection.size / union.size;
-      
-      if (similarity > 0.85) {
+      const other = normalised.get(existing)!;
+      if (other.text === current.text || wordSimilarity(current.words, other.words) > DUPLICATE_SIMILARITY) {
         isDuplicate = true;
         break;
       }
     }
-    
-    if (!isDuplicate) {
-      results.push(candidate);
-      seenSnippets.add(normalizedSnippet);
-    }
-    
-    // Stop if we have enough results
-    if (results.length >= topK) {
-      break;
-    }
+    if (isDuplicate) rejected.add(candidate);
+    else results.push(candidate);
   }
-  
-  // Step 2: Ensure diversity in origins/resources
-  // If we have fewer results than topK, try to add more from different origins
-  if (results.length < topK && results.length < candidates.length) {
+
+  // Fewer than topK unique results: prefer candidates from other origins, then fill,
+  // but only with candidates that were not rejected as duplicates and are not
+  // duplicates of anything added meanwhile.
+  if (results.length < topK) {
     const usedOrigins = new Set(results.map((r) => r.origin || r.uri || "unknown"));
-    const remaining = candidates.filter((c) => !results.includes(c));
-    
-    for (const candidate of remaining) {
-      const candidateOrigin = candidate.origin || candidate.uri || "unknown";
-      
-      // Prefer candidates from different origins
-      if (!usedOrigins.has(candidateOrigin)) {
+    const remaining = candidates.filter((c) => !results.includes(c) && !rejected.has(c));
+    const isDuplicateOfResults = (candidate: T): boolean => {
+      const current = normalised.get(candidate) ?? normaliseForComparison(candidate.snippet);
+      normalised.set(candidate, current);
+      return results.some((existing) => {
+        const other = normalised.get(existing)!;
+        return other.text === current.text || wordSimilarity(current.words, other.words) > DUPLICATE_SIMILARITY;
+      });
+    };
+    for (const pass of [true, false]) {
+      for (const candidate of remaining) {
+        if (results.length >= topK) break;
+        if (results.includes(candidate)) continue;
+        const origin = candidate.origin || candidate.uri || "unknown";
+        if (pass && usedOrigins.has(origin)) continue;
+        if (isDuplicateOfResults(candidate)) continue;
         results.push(candidate);
-        usedOrigins.add(candidateOrigin);
-        
-        if (results.length >= topK) {
-          break;
-        }
-      }
-    }
-    
-    // Fill remaining slots if still under topK
-    for (const candidate of remaining) {
-      if (!results.includes(candidate)) {
-        results.push(candidate);
-        
-        if (results.length >= topK) {
-          break;
-        }
+        usedOrigins.add(origin);
       }
     }
   }
-  
+
   return results.slice(0, topK);
 }
 
