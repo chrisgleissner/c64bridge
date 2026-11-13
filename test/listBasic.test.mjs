@@ -73,13 +73,17 @@ test("list_basic treats an end pointer below the start pointer as an empty progr
   assert.equal(res.metadata.lineCount, 0);
 });
 
-test("list_basic reports a program whose last link points to the end pointer as corrupt", async () => {
+test("list_basic returns parsed lines when the terminator is missing", async () => {
   const prg = basicToPrg('10 PRINT "A"\n20 PRINT "B"');
   // Place the end pointer exactly after the last line, so the 00 00 terminator is outside the image read.
   const memory = loadPrg(prg, 0x0801 + prg.length - 2 - 4);
   const res = await toolRegistry.invoke("c64_memory", { op: "list_basic" }, ctxFor(memory));
-  assert.equal(res.isError, true);
-  assert.match(res.content[0].text, /Corrupt BASIC program: no 00 00 terminator/);
+  assert.equal(res.isError, undefined);
+  assert.equal(res.structuredContent.data.corrupt, true);
+  assert.equal(res.structuredContent.data.lines.length, 2);
+  const warning = res.structuredContent.data.warnings.join(" ");
+  assert.match(warning, /\$[0-9A-F]{4}/);
+  assert.match(warning, /00 00 terminator/);
 });
 
 test("list_basic holds one owned pause for the whole read on c64u and none on vice", async () => {

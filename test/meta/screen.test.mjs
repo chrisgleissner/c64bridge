@@ -286,7 +286,8 @@ function screenCtx(screenText, counter) {
 }
 
 test("wait_for_screen_text rejects catastrophic, backreference, oversized and invalid patterns without reading the screen", async () => {
-  const bad = ["(a+)+$", "(a*)*b", "(x+y?){2,}", "(a|b+)*c", "(a)\\1", "(?<n>a)\\k<n>", "a".repeat(201), "(unclosed"];
+  const bun = typeof globalThis.Bun !== "undefined";
+  const bad = [...(bun ? ["(a+)+$", "(a*)*b", "(x+y?){2,}", "(a|b+)*c", "(a)\\1", "(?<n>a)\\k<n>"] : []), "a".repeat(201), "(unclosed"];
   for (const pattern of bad) {
     const counter = { reads: 0 };
     const res = await metaModule.invoke("wait_for_screen_text", { pattern, isRegex: true, timeoutMs: 100, intervalMs: 20 }, screenCtx("A".repeat(1000), counter));
@@ -294,6 +295,24 @@ test("wait_for_screen_text rejects catastrophic, backreference, oversized and in
     assert.equal(res.metadata?.error?.kind, "validation", pattern);
     assert.equal(counter.reads, 0, pattern);
   }
+});
+
+test("wait_for_screen_text runs backreference patterns on Node", async () => {
+  if (typeof globalThis.Bun !== "undefined") return;
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "(a)\\1", isRegex: true, timeoutMs: 100, intervalMs: 20 }, screenCtx("xaay"));
+  assert.equal(res.isError, undefined);
+  assert.equal(res.structuredContent?.data?.match?.text, "aa");
+});
+
+test("wait_for_screen_text stops a catastrophic pattern with the timeout error", async () => {
+  if (typeof globalThis.Bun !== "undefined") return;
+  const started = Date.now();
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "^(a+)+$", isRegex: true, timeoutMs: 1000 }, screenCtx("a".repeat(40) + "!"));
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /\^\(a\+\)\+\$.*250 ms/);
+  assert.ok(Date.now() - started < 1500);
+  const second = await metaModule.invoke("wait_for_screen_text", { pattern: "x", timeoutMs: 100 }, screenCtx("x"));
+  assert.equal(second.metadata?.success, true);
 });
 
 test("wait_for_screen_text accepts ordinary regular expressions and literal text that looks like a regex", async () => {
@@ -308,6 +327,14 @@ test("wait_for_screen_text bounds timeoutMs and intervalMs", async () => {
   assert.equal(tooLong.metadata?.error?.kind, "validation");
   const tooFast = await metaModule.invoke("wait_for_screen_text", { pattern: "x", intervalMs: 19 }, screenCtx("x"));
   assert.equal(tooFast.metadata?.error?.kind, "validation");
+});
+
+test("wait_for_screen_text clamps intervalMs above 5000 and warns", async () => {
+  const timedOut = await metaModule.invoke("wait_for_screen_text", { pattern: "yes", timeoutMs: 150, intervalMs: 9000 }, screenCtx("never"));
+  assert.equal(timedOut.metadata?.error?.kind, "execution");
+  assert.match(timedOut.metadata?.error?.details?.warnings?.[0] ?? "", /9000.*5000/);
+  const matched = await metaModule.invoke("wait_for_screen_text", { pattern: "yes", timeoutMs: 150, intervalMs: 9000 }, screenCtx("yes"));
+  assert.match(matched.structuredContent?.data?.warnings?.[0] ?? "", /9000.*5000/);
 });
 
 test("wait_for_screen_text timeout result includes the last screen text", async () => {
@@ -328,14 +355,19 @@ test("waitForScreenText is exported for reuse and does not throw on timeout", as
 });
 
 test("wait_for_screen_text rejects overlapping alternation under a quantifier instead of hanging", async () => {
+  const bun = typeof globalThis.Bun !== "undefined";
   const screen = "a".repeat(28);
   const ctx = { client: { async readScreen() { return screen; } }, logger: createLogger() };
   for (const pattern of ["(a|a)+c", "(.|.)+X", "(a|aa)+$", "(?:a|[ab])*c"]) {
     const started = Date.now();
     const res = await metaModule.invoke("wait_for_screen_text", { pattern, isRegex: true, timeoutMs: 200, intervalMs: 20 }, ctx);
-    assert.equal(res.isError, true, pattern);
-    assert.equal(res.metadata?.error?.kind, "validation", pattern);
-    assert.ok(Date.now() - started < 2000, pattern);
+    if (bun) {
+      assert.equal(res.isError, true, pattern);
+      assert.equal(res.metadata?.error?.kind, "validation", pattern);
+    } else {
+      assert.ok(Date.now() - started < 2000, pattern);
+      assert.ok(res.isError === undefined || /250 ms/.test(res.content?.[0]?.text ?? ""), pattern);
+    }
   }
 });
 
@@ -347,10 +379,17 @@ test("wait_for_screen_text still accepts a repeated group of distinct literal al
 });
 
 test("screen patterns are limited to three unbounded repeats", async () => {
+  const bun = typeof globalThis.Bun !== "undefined";
+  const started = Date.now();
   const ctx = { client: { async readScreen() { return "x".repeat(1000); } }, logger: createLogger() };
   const res = await metaModule.invoke("wait_for_screen_text", { pattern: "a*a*a*a*c", isRegex: true, timeoutMs: 200 }, ctx);
-  assert.equal(res.isError, true);
-  assert.equal(res.metadata?.error?.kind, "validation");
+  if (bun) {
+    assert.equal(res.isError, true);
+    assert.equal(res.metadata?.error?.kind, "validation");
+  } else {
+    assert.ok(Date.now() - started < 2000);
+    assert.ok(res.isError === undefined || res.metadata?.error?.kind === "execution");
+  }
 });
 
 test("createScreenMatcher stops a pattern that the static checks cannot classify", async () => {

@@ -307,10 +307,11 @@ async function executeListBasic(rawArgs: unknown, ctx: ToolExecutionContext): Pr
     if (end <= start) {
       return jsonResult({ start: fmt(start), end: fmt(end), lines: [], listing: "", ...(warnings ? { warnings } : {}) }, { success: true, lineCount: 0 });
     }
-    const lines = listBasicProgram(image, start);
+    const { lines, corrupt } = listBasicProgram(image, start);
     const listing = lines.map((line) => `${line.number} ${line.text}`).join("\n");
+    const allWarnings = [...(warnings ?? []), ...(corrupt ? [corrupt.message] : [])];
     return jsonResult(
-      { start: fmt(start), end: fmt(end), lines, listing, ...(warnings ? { warnings } : {}) },
+      { start: fmt(start), end: fmt(end), lines, listing, ...(corrupt ? { corrupt: true } : {}), ...(allWarnings.length ? { warnings: allWarnings } : {}) },
       { success: true, lineCount: lines.length },
     );
   } catch (error) {
