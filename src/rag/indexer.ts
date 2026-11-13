@@ -16,6 +16,10 @@ const BASIC_DIR = path.join(ASSET_ROOT, "data/basic/examples");
 const ASM_DIR = path.join(ASSET_ROOT, "data/assembly/examples");
 const EXTERNAL_DIR = path.join(ASSET_ROOT, "external");
 const DOC_ROOT = path.join(ASSET_ROOT, "doc");
+// Curated reference specs (memory map, VIC-II, SID, game development, Ultimate devices ...).
+// Example sources and the context files are indexed through their own paths.
+const DATA_ROOT = path.join(ASSET_ROOT, "data");
+const DATA_DOC_EXCLUDE_DIRS = new Set(["context", "basic/examples", "assembly/examples"]);
 // Plans and reviews are internal engineering notes, not C64 reference material.
 const DOC_EXCLUDE_DIRS = new Set(["plans", "reviews"]);
 const CONTEXT_DIR = path.join(ASSET_ROOT, "data/context");
@@ -41,6 +45,14 @@ function shouldExcludeDocFile(file: string): boolean {
   }
   const [firstSegment] = relativeToDoc.split(path.sep);
   return firstSegment !== undefined && DOC_EXCLUDE_DIRS.has(firstSegment);
+}
+
+function isCuratedDataDoc(file: string): boolean {
+  const relative = toPosixRelative(DATA_ROOT, path.resolve(file));
+  if (relative.startsWith("..") || path.isAbsolute(relative) || !relative.includes("/")) {
+    return false;
+  }
+  return ![...DATA_DOC_EXCLUDE_DIRS].some((dir) => relative === dir || relative.startsWith(`${dir}/`));
 }
 
 function resolveEmbeddingsDir(override?: string): string {
@@ -571,6 +583,14 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
         }
       }
     } catch {}
+    try {
+      const dataMdFiles = await collectFiles(DATA_ROOT, [".md"]);
+      for (const f of dataMdFiles) {
+        if (isCuratedDataDoc(f)) {
+          docCandidates.push(f);
+        }
+      }
+    } catch {}
     for (const f of ENV_DOC_FILES) {
       if (!shouldExcludeDocFile(f)) {
         docCandidates.push(f);
@@ -647,7 +667,10 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
     const ext = path.extname(absoluteFile).toLowerCase();
     const isMarkdown = ext === ".md";
     const isContext = contextSet.has(absoluteFile);
-    const isDocFile = isMarkdown && absoluteFile.startsWith(path.resolve(DOC_ROOT) + path.sep);
+    const isDocFile =
+      isMarkdown &&
+      (absoluteFile.startsWith(path.resolve(DOC_ROOT) + path.sep) ||
+        (absoluteFile.startsWith(path.resolve(DATA_ROOT) + path.sep) && isCuratedDataDoc(absoluteFile)));
     const isExternalFile = externalRoots.some((root) => absoluteFile === root || absoluteFile.startsWith(root + path.sep));
     const isPlainText = ext === ".txt" || ext === ".text";
 

@@ -1778,8 +1778,8 @@
     },
     {
       "name": "c64_rag",
-      "title": "Returns curated knowledge references for BASIC or 6502/6510 assembly queries.",
-      "description": "Grouped entry point for BASIC and assembly RAG lookups.",
+      "title": "Returns knowledge references for BASIC (basic), 6502/6510 assembly (asm) or all curated docs including game development and Ultimate features (docs).",
+      "description": "Grouped entry point for BASIC, assembly and curated-docs RAG lookups.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1787,7 +1787,8 @@
             "type": "string",
             "enum": [
               "basic",
-              "asm"
+              "asm",
+              "docs"
             ],
             "description": "Selects the operation."
           },
@@ -1810,7 +1811,7 @@
         "required": [
           "op"
         ],
-        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.",
+        "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.\n- docs: Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. Required inputs: q. Optional inputs: k.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1821,16 +1822,18 @@
       },
       "_meta": {
         "domain": "rag",
-        "summary": "Returns curated knowledge references for BASIC or 6502/6510 assembly queries.",
+        "summary": "Returns knowledge references for BASIC (basic), 6502/6510 assembly (asm) or all curated docs including game development and Ultimate features (docs).",
         "lifecycle": "request-response",
         "resources": [
           "c64://basic/spec",
           "c64://assembly/6510-spec",
-          "c64://guide/bootstrap"
+          "c64://guide/bootstrap",
+          "c64://gamedev/index"
         ],
         "prompts": [
           "basic-program",
-          "assembly-program"
+          "assembly-program",
+          "game-development"
         ],
         "examples": [
           {
@@ -1847,6 +1850,14 @@
             "arguments": {
               "op": "asm",
               "q": "stable raster irq"
+            }
+          },
+          {
+            "name": "Search curated docs",
+            "description": "Search Ultimate and game development docs",
+            "arguments": {
+              "op": "docs",
+              "q": "REU streaming"
             }
           }
         ],
@@ -1867,7 +1878,8 @@
         ],
         "operationEffects": {
           "basic": "read",
-          "asm": "read"
+          "asm": "read",
+          "docs": "read"
         }
       }
     },

@@ -5,7 +5,8 @@
       "type": "string",
       "enum": [
         "basic",
-        "asm"
+        "asm",
+        "docs"
       ],
       "description": "Selects the operation."
     },
@@ -28,6 +29,6 @@
   "required": [
     "op"
   ],
-  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.",
+  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.\n- docs: Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. Required inputs: q. Optional inputs: k.",
   "additionalProperties": false
 }

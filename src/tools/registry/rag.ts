@@ -35,6 +35,15 @@ const ragOperations: GroupedOperationConfig[] = [
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(ragModule, "rag_retrieve_asm", rawArgs, ctx),
   },
+  {
+    op: "docs",
+    schema: extendSchemaWithOp(
+      "docs",
+      ensureDescriptor(ragDescriptorIndex, "rag_retrieve_docs").inputSchema,
+      { description: "Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(ragModule, "rag_retrieve_docs", rawArgs, ctx),
+  },
 ];
 
 const ragOperationHandlers = createOperationHandlers(ragOperations);
@@ -42,8 +51,8 @@ const ragOperationHandlers = createOperationHandlers(ragOperations);
 export const ragModuleGroup = defineToolModule({
   domain: "rag",
   summary: "Grouped retrieval helpers for BASIC and assembly references.",
-  resources: ["c64://basic/spec", "c64://assembly/6510-spec", "c64://guide/bootstrap"],
-  prompts: ["basic-program", "assembly-program"],
+  resources: ["c64://basic/spec", "c64://assembly/6510-spec", "c64://guide/bootstrap", "c64://gamedev/index"],
+  prompts: ["basic-program", "assembly-program", "game-development"],
   defaultTags: ["rag", "search"],
   workflowHints: [
     "Use BASIC retrieval before synthesising new BASIC code and mention primary resources in responses.",
@@ -53,13 +62,13 @@ export const ragModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_rag",
-      description: "Grouped entry point for BASIC and assembly RAG lookups.",
-      summary: "Returns curated knowledge references for BASIC or 6502/6510 assembly queries.",
+      description: "Grouped entry point for BASIC, assembly and curated-docs RAG lookups.",
+      summary: "Returns knowledge references for BASIC (basic), 6502/6510 assembly (asm) or all curated docs including game development and Ultimate features (docs).",
       inputSchema: discriminatedUnionSchema({
         description: "RAG operations available via the c64_rag tool.",
         variants: ragOperations.map((operation) => operation.schema),
       }),
-      operationEffects: { basic: "read", asm: "read" },
+      operationEffects: { basic: "read", asm: "read", docs: "read" },
       tags: ["rag", "reference", "grouped"],
       examples: [
         {
@@ -71,6 +80,11 @@ export const ragModuleGroup = defineToolModule({
           name: "Retrieve assembly snippet",
           description: "Search for raster IRQ examples",
           arguments: { op: "asm", q: "stable raster irq" },
+        },
+        {
+          name: "Search curated docs",
+          description: "Search Ultimate and game development docs",
+          arguments: { op: "docs", q: "REU streaming" },
         },
       ],
       execute: createOperationDispatcher<GenericOperationMap>(

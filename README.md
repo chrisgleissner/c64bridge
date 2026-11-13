@@ -915,12 +915,13 @@ Grouped entry point for program upload, execution, and batch workflows.
 
 #### c64_rag
 
-Grouped entry point for BASIC and assembly RAG lookups.
+Grouped entry point for BASIC, assembly and curated-docs RAG lookups.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `asm` | Retrieve 6502/6510 assembly references from the local knowledge base. | `q` | `k=3` | ✅ | ✅ | ✅ |
 | `basic` | Retrieve BASIC references and snippets from the local knowledge base. | `q` | `k=3` | ✅ | ✅ | ✅ |
+| `docs` | Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. | `q` | `k=3` | ✅ | ✅ | ✅ |
 
 #### c64_select_backend
 

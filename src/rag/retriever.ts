@@ -113,6 +113,10 @@ export class LocalRagRetriever implements IRagRetriever {
     if (!normalized || normalized === "hardware") push(this.hardware);
     if (!normalized || normalized === "other") push(this.other);
 
+    if (!normalized) {
+      applyLexicalBoost(query, candidates);
+    }
+
     candidates.sort((a, b) => b.score - a.score);
     
     // Apply duplicate suppression and diversity
@@ -130,6 +134,44 @@ export class LocalRagRetriever implements IRagRetriever {
       attribution: candidate.record.attribution,
     }));
   }
+}
+
+const LEXICAL_WEIGHT = 1.0;
+const COSINE_WEIGHT_WITH_LEXICAL = 0.25;
+
+/**
+ * Unfiltered (docs) searches rank long documentation chunks, where hashed bag-of-words
+ * cosine similarity is dominated by hash collisions. Rank mainly by a term-overlap score (weighted 4:1 over cosine): query
+ * terms weighted by rarity across the candidates, with extra weight for terms that
+ * appear in the chunk's origin (file and heading).
+ */
+function applyLexicalBoost(
+  query: string,
+  candidates: Array<{ score: number; record: EmbeddingRecord; snippet: string; origin?: string }>,
+): void {
+  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9$_]+/g) ?? []).filter((t) => t.length >= 2))];
+  if (terms.length === 0 || candidates.length === 0) return;
+
+  const haystacks = candidates.map((c) => c.snippet.toLowerCase());
+  const origins = candidates.map((c) => (c.origin ?? "").toLowerCase());
+  const df = terms.map((term) => haystacks.filter((h, i) => h.includes(term) || origins[i].includes(term)).length);
+  const weights = df.map((count) => (count === 0 ? 0 : Math.log(1 + candidates.length / count)));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  if (totalWeight === 0) return;
+
+  candidates.forEach((candidate, i) => {
+    let matched = 0;
+    terms.forEach((term, t) => {
+      if (weights[t] === 0) return;
+      let occurrences = 0;
+      for (let at = haystacks[i].indexOf(term); at >= 0 && occurrences < 2; at = haystacks[i].indexOf(term, at + term.length)) {
+        occurrences++;
+      }
+      const inOrigin = origins[i].includes(term) ? 1 : 0;
+      matched += weights[t] * Math.min(1, occurrences / 2 + 0.5 * inOrigin);
+    });
+    candidate.score = COSINE_WEIGHT_WITH_LEXICAL * candidate.score + LEXICAL_WEIGHT * (matched / totalWeight);
+  });
 }
 
 function deduplicateAndDiversify<T extends { snippet: string; origin?: string; uri?: string; score: number }>(
