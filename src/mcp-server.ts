@@ -35,6 +35,7 @@ import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
 import { publishedInputSchema, type ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
+import { RequestQueue } from "./loggingHttpClient.js";
 import axios, { type AxiosResponse } from "axios";
 import { redactValue, registerSecret } from "./redact.js";
 import { loggerFor, payloadByteLength, formatPayloadForDebug, formatErrorMessage } from "./logger.js";
@@ -740,7 +741,7 @@ export function connectivityProbeUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/v1/info`;
 }
 
-async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
+export async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
   const backendType = await client.getBackendType();
   if (backendType === "vice") {
     writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, reason: "vice_backend" });
@@ -771,10 +772,11 @@ async function logConnectivity(client: C64Client, baseUrl: string, networkPasswo
   try {
     // Send the network password like every other request, or a protected device answers 403.
     registerSecret(networkPassword);
-    const probeResponse = await axios.get(infoUrl, {
+    // Share the per-device queue so the probe never overlaps a tool request.
+    const probeResponse = await RequestQueue.forDevice(baseUrl).run(() => axios.get(infoUrl, {
       timeout: 2000,
       ...(networkPassword ? { headers: { "X-Password": networkPassword } } : {}),
-    });
+    }));
     response = probeResponse;
     const latency = Date.now() - startedAt;
     const bytes = payloadByteLength(probeResponse.data);

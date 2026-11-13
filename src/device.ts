@@ -251,6 +251,16 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
 }
 
 /**
+ * probeUltimateReachable behind the per-device request queue, for callers that
+ * are not a backend yet. C64uBackend.ping() already holds that queue around
+ * probeUltimateReachable, so it must not use this variant (the queue is not
+ * re-entrant).
+ */
+export function probeUltimateReachableQueued(baseUrl: string, timeout: number, networkPassword?: string): Promise<boolean> {
+  return RequestQueue.forDevice(baseUrl).run(() => probeUltimateReachable(baseUrl, timeout, networkPassword));
+}
+
+/**
  * Resources that the VICE config inventory (configsList) advertises and that
  * snapshot/restore round-trip. They are vetted here and are not host file
  * names, so c64_config accepts them in addition to the shared c64_vice policy.
@@ -1513,7 +1523,7 @@ export async function createFacade(logger?: { info: (...a: any[]) => void }, opt
   }
   // No configuration
   const probeBase = cfg.endpoints.c64u.baseUrl;
-  if (await probeUltimateReachable(probeBase, 1500, cfg.endpoints.c64u.networkPassword)) {
+  if (await probeUltimateReachableQueued(probeBase, 1500, cfg.endpoints.c64u.networkPassword)) {
     const backend = new C64uBackend(cfg.endpoints.c64u);
     logger?.info?.("Active backend: c64u (fallback – hardware reachable)");
     return { facade: backend, selected: "c64u", reason: "fallback (reachable)", details: { baseUrl: probeBase } };
