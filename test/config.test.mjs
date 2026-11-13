@@ -560,3 +560,55 @@ test("loadConfig still falls through a malformed ./.c64bridge.json", (t) => {
   });
   assert.doesNotThrow(() => loadConfig());
 });
+
+test("C64U_* environment variables do not retarget a configured u2 section", (t) => {
+  const keys = ["C64BRIDGE_CONFIG", "C64_MODE", "C64U_HOST", "C64U_PASSWORD", "U2_HOST", "U2_PASSWORD"];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  const { dir, file } = writeTempConfig({
+    c64u: { host: "c64host", networkPassword: "A" },
+    u2: { host: "u2host", networkPassword: "B" },
+  });
+  t.after(() => {
+    __resetConfigCacheForTests();
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+  for (const key of keys) delete process.env[key];
+  process.env.C64BRIDGE_CONFIG = file;
+  process.env.C64U_HOST = "other";
+  process.env.C64U_PASSWORD = "SECRET";
+  __resetConfigCacheForTests();
+
+  let config = loadConfig();
+  assert.equal(config.ultimate.u2.baseUrl, "http://u2host");
+  assert.equal(config.ultimate.u2.networkPassword, "B");
+  assert.equal(config.ultimate.c64u.baseUrl, "http://other");
+
+  process.env.U2_HOST = "u2env";
+  __resetConfigCacheForTests();
+  config = loadConfig();
+  assert.equal(config.ultimate.u2.baseUrl, "http://u2env");
+});
+
+test("C64_MODE=u2 without a u2 section still uses the C64U_* variables", (t) => {
+  const keys = ["C64BRIDGE_CONFIG", "C64_MODE", "C64U_HOST", "U2_HOST"];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  const { dir, file } = writeTempConfig({});
+  t.after(() => {
+    __resetConfigCacheForTests();
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+  for (const key of keys) delete process.env[key];
+  process.env.C64BRIDGE_CONFIG = file;
+  process.env.C64_MODE = "u2";
+  process.env.C64U_HOST = "only-c64u-vars";
+  __resetConfigCacheForTests();
+  assert.equal(loadConfig().baseUrl, "http://only-c64u-vars");
+});

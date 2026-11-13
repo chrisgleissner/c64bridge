@@ -492,7 +492,7 @@ You can add `env` entries in `.vscode/mcp.json` to select a config file, overrid
 
 - `C64BRIDGE_CONFIG` points to a specific config file
 - `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD` override the C64 Ultimate connection without editing config files
-- `C64_MODE` forces the initial backend to `c64u`, `u2`, or `vice`; `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override the selected U2 profile.
+- `C64_MODE` forces the initial backend to `c64u`, `u2`, or `vice`; `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override the selected U2 profile. `C64U_*` variables apply to the U2 profile only when the configuration has no `u2` section.
 - `LOG_LEVEL=debug` enables verbose logging
 
 For VICE-specific overrides such as `VICE_ARGS=-minimized`, `VICE_VISIBLE=false`, or custom VICE paths, use the patterns in [Backend Configuration: VICE](#backend-configuration-vice).
