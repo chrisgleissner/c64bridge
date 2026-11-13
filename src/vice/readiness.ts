@@ -239,7 +239,7 @@ export async function resetAndWaitForBasic(
   for (;;) {
     await new Promise((r) => setTimeout(r, gap));
     // The CPU stopped while it ran: a checkpoint was hit. Resuming would run past it.
-    if (!bm.cpuRunning || options.stopped?.()) return { ...last, stopped: true };
+    if (bm.cpuRunning === false || options.stopped?.()) return { ...last, stopped: true };
     const state = await bm.memGet(BASIC_STATE_START, BASIC_STATE_END);
     if (options.stopped?.()) return { ...last, stopped: true };
     const result = evaluateBootState(state);
