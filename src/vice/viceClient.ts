@@ -91,6 +91,13 @@ interface SendOptions {
 /** How long a TCP connect to the monitor may take before it is abandoned. */
 export const VICE_CONNECT_TIMEOUT_MS = 5_000;
 
+/** Per-request timeout. C64BRIDGE_VICE_REQUEST_TIMEOUT_MS overrides it, for tests of the timeout path. */
+function viceRequestTimeoutMs(cmd: number): number {
+  const override = Number(process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS);
+  if (Number.isFinite(override) && override > 0) return override;
+  return cmd === 0x84 ? 30_000 : 10_000;
+}
+
 export interface ViceConnectOptions {
   /** Connect timeout in milliseconds (default 5000). */
   readonly connectTimeoutMs?: number;
@@ -105,9 +112,25 @@ export class ViceClient {
   private pending: Map<number, PendingRequest> = new Map();
   private closing = false;
   private onUnsolicitedHandler?: (type: number, frame: Buffer) => void;
+  private onCloseHandler?: (error?: Error) => void;
+  private cpuRunningState = false;
 
   setUnsolicitedHandler(handler: (type: number, frame: Buffer) => void): void {
     this.onUnsolicitedHandler = handler;
+  }
+
+  /** Called once when VICE or the network closes the connection; not called for close(). */
+  setCloseHandler(handler: (error?: Error) => void): void {
+    this.onCloseHandler = handler;
+  }
+
+  /**
+   * Whether the CPU is believed to be running because of this connection: true after an
+   * exit (0xAA) or a 0x63 resumed event, false after any other command (VICE enters the
+   * monitor on every command) or a 0x62 stopped event.
+   */
+  get cpuRunning(): boolean {
+    return this.cpuRunningState;
   }
 
   async connect(port: number, host = "127.0.0.1", options: ViceConnectOptions = {}): Promise<void> {
@@ -137,12 +160,20 @@ export class ViceClient {
       this.socket.once("connect", onConnect);
       this.socket.once("error", onError);
     });
+    this.cpuRunningState = true; // VICE enters the monitor on the first command, not on connect
     this.socket.on("data", (chunk: ViceDataChunk) => this.onData(chunk));
     this.socket.on("error", (err) => {
       this.rejectAllPending(err);
     });
     this.socket.on("close", (hadError) => {
-      if (this.pending.size === 0 || this.closing) {
+      if (this.closing) {
+        return;
+      }
+      const handler = this.onCloseHandler;
+      if (handler) {
+        try { handler(hadError ? new Error("VICE monitor connection closed due to error") : undefined); } catch {}
+      }
+      if (this.pending.size === 0) {
         return;
       }
       const reason = hadError ? new Error("VICE monitor connection closed due to error") : new Error("VICE monitor connection closed");
@@ -198,6 +229,8 @@ export class ViceClient {
       const err = frame[7];
       const reqId = frame.readUInt32LE(8);
       if (reqId === 0xffffffff) {
+        if (responseType === 0x62) this.cpuRunningState = false;
+        else if (responseType === 0x63) this.cpuRunningState = true;
         this.onUnsolicitedHandler?.(responseType, frame);
         continue;
       }
@@ -262,7 +295,7 @@ export class ViceClient {
         reject,
         onFrame: options?.onFrame,
       };
-      const timeoutMs = options?.timeoutMs ?? (cmd === 0x84 ? 30_000 : 10_000);
+      const timeoutMs = options?.timeoutMs ?? viceRequestTimeoutMs(cmd);
       pending.timer = setTimeout(() => {
         if (!this.pending.delete(reqId)) return;
         reject(new Error(`VICE monitor request 0x${cmd.toString(16)} timed out after ${timeoutMs}ms`));
@@ -271,6 +304,7 @@ export class ViceClient {
       this.pending.set(reqId, pending);
     });
 
+    this.cpuRunningState = cmd === 0xaa;
     this.socket.write(packet);
     return promise;
   }
@@ -517,6 +551,11 @@ export class ViceClient {
     }
 
     await this.send(0x52, body);
+  }
+
+  /** Decodes a 0x11 checkpoint info frame, including unsolicited ones sent when a checkpoint is hit. */
+  decodeCheckpoint(frame: Buffer): ViceCheckpoint {
+    return this.parseCheckpoint(frame);
   }
 
   private parseCheckpoint(frame: Buffer): ViceCheckpoint {

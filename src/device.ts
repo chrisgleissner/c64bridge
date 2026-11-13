@@ -10,7 +10,7 @@ import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
-import { ViceClient } from "./vice/viceClient.js";
+import { ViceClient, type ViceCheckpoint } from "./vice/viceClient.js";
 import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { waitForBasicReady } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
@@ -30,6 +30,50 @@ export function delegateViceSignalHandling(): void {
 }
 
 export type DeviceType = "c64u" | "u2" | "vice";
+
+/**
+ * The long-lived VICE monitor connection and what keeps it open. `cpu` is the logical CPU
+ * state: operations leave it as they found it. The session exists while the CPU is stopped,
+ * an explicit pause or debugger stop is held, or a stop-on-hit checkpoint exists (closing
+ * the connection with one set can wedge VICE 3.10's monitor).
+ */
+interface ViceSession {
+  readonly client: ViceClient;
+  cpu: "running" | "stopped";
+  /** `c64_system pause` (or a tool's owned pause) is in effect. */
+  explicitPause: boolean;
+  /** The CPU was stopped by a checkpoint hit or by stepping. */
+  debugStop: boolean;
+  /** Ids of checkpoints with stop-on-hit set. */
+  stopping: Set<number>;
+  /** An operation is running on the session client. */
+  busy: boolean;
+  lost: string | null;
+  /** Counts debugger stops, so an operation can tell that one happened while it ran. */
+  stopEvents: number;
+  readonly waiters: Set<() => void>;
+}
+
+export interface ViceSessionInfo {
+  readonly open: boolean;
+  readonly cpu: "running" | "stopped";
+  readonly explicitPause: boolean;
+  readonly debugStop: boolean;
+  readonly stoppingCheckpoints: number;
+}
+
+/** The monitor session was lost (connection closed or a command timed out) since the previous operation. */
+export class ViceSessionLostError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ViceSessionLostError";
+  }
+}
+
+/** Ends every VICE monitor session cleanly (stopping checkpoints deleted, CPU running). */
+export function endViceSessions(): Promise<void> {
+  return ViceBackend.endAllSessions();
+}
 
 export interface RunResult {
   success: boolean;
@@ -520,15 +564,18 @@ export class ViceBackend implements C64Facade {
   private monitorQueue: Promise<void> = Promise.resolve();
   private lastProcessStart = 0;
   /**
-   * Monitor connection held open by `c64_system pause`. VICE stops the CPU while a
-   * client is in the monitor and lets it run again on exit (0xAA) or when the client
-   * disconnects, so the pause lasts exactly as long as this connection stays open.
-   * While it is set, every monitor operation runs on it instead of opening its own.
+   * The long-lived monitor session, or null. See ViceSession. Without one, every
+   * operation connects, runs its commands, lets the CPU run (exit) and disconnects.
    */
-  private pausedClient: ViceClient | null = null;
+  private session: ViceSession | null = null;
+  /** Set when a session was lost; the next operation reports it once. */
+  private lostNotice: string | null = null;
+  private pauseClearedListener?: () => void;
+  private static readonly instances = new Set<ViceBackend>();
 
   constructor(config: ViceConfig) {
     ViceBackend.ensureCleanupRegistration();
+    ViceBackend.instances.add(this);
     const envBinary = configuredString(process.env.VICE_BINARY);
     const configBinary = config.exe !== undefined
       ? configuredString(config.exe) ?? (typeof config.exe === "string" ? config.exe : String(config.exe))
@@ -709,46 +756,257 @@ export class ViceBackend implements C64Facade {
     }
   }
 
-  /** The held pause connection, or null when there is none or VICE closed it (the CPU then runs again). */
-  private heldPauseClient(): ViceClient | null {
-    if (this.pausedClient && !this.pausedClient.isOpen) {
-      this.pausedClient.close();
-      this.pausedClient = null;
-    }
-    return this.pausedClient;
+  // ---------------------------------------------------------------- monitor session
+
+  /** Registers the callback run when an explicit pause ends for any reason other than `resume`. */
+  setPauseClearedListener(listener: (() => void) | undefined): void {
+    this.pauseClearedListener = listener;
   }
 
-  /** Ends a held pause. Call only inside `exclusive`. */
-  private async releaseHeldPause(): Promise<boolean> {
-    const held = this.pausedClient;
-    if (!held) return false;
-    this.pausedClient = null;
+  /** Snapshot of the monitor session, for diagnostics and tests. */
+  sessionInfo(): ViceSessionInfo {
+    const s = this.session;
+    if (!s) return { open: false, cpu: "running", explicitPause: false, debugStop: false, stoppingCheckpoints: 0 };
+    return { open: true, cpu: s.cpu, explicitPause: s.explicitPause, debugStop: s.debugStop, stoppingCheckpoints: s.stopping.size };
+  }
+
+  /** True while the session holds the CPU stopped (explicit pause or debugger stop). */
+  isCpuStopped(): boolean {
+    const s = this.liveSession();
+    return s !== null && s.cpu === "stopped";
+  }
+
+  private sessionNeeded(s: ViceSession): boolean {
+    return s.cpu === "stopped" || s.explicitPause || s.debugStop || s.stopping.size > 0;
+  }
+
+  /** The session when its connection is still usable. A dead one is dropped and recorded as lost. */
+  private liveSession(): ViceSession | null {
+    const s = this.session;
+    if (!s) return null;
+    if (s.lost === null && !s.client.isOpen) this.markLost(s, "the monitor connection closed");
+    return this.session;
+  }
+
+  private markLost(s: ViceSession, reason: string): void {
+    if (s.lost !== null) return;
+    s.lost = reason;
+    if (this.session === s) this.session = null;
+    try { s.client.close(); } catch { /* already closed */ }
+    const held: string[] = [];
+    if (s.explicitPause) held.push("an explicit pause");
+    if (s.debugStop) held.push("a debugger stop");
+    if (s.stopping.size > 0) held.push(`${s.stopping.size} stop-on-hit checkpoint${s.stopping.size === 1 ? "" : "s"}`);
+    const handle = this.manageProcess ? ViceBackend.supervisors.get(this.supervisorKey()) : undefined;
+    const exited = this.manageProcess && (!handle || handle.process.exitCode !== null || handle.process.signalCode !== null);
+    this.lostNotice = `The VICE debug session was lost (${reason}).`
+      + (held.length > 0 ? ` It held ${held.join(", ")}.` : "")
+      + " The CPU state is unknown: it may be running or stopped, and checkpoints may still exist."
+      + (exited
+        ? " VICE has exited; the next call starts a new instance, which resets the machine and removes all checkpoints."
+        : " The next call uses a fresh monitor connection.");
+    for (const wake of [...s.waiters]) wake();
+    if (s.explicitPause) this.pauseClearedListener?.();
+  }
+
+  private takeLostNotice(): string | null {
+    const notice = this.lostNotice;
+    this.lostNotice = null;
+    return notice;
+  }
+
+  private static withWarning(result: RunResult, warning: string | null): RunResult {
+    if (!warning) return result;
+    const details = result.details && typeof result.details === "object" && !Array.isArray(result.details)
+      ? { ...(result.details as Record<string, unknown>), warning }
+      : result.details === undefined ? { warning } : { result: result.details, warning };
+    return { ...result, details };
+  }
+
+  private wakeWaiters(s: ViceSession): void {
+    for (const wake of [...s.waiters]) wake();
+  }
+
+  private enterDebugStop(s: ViceSession): void {
+    s.cpu = "stopped";
+    s.debugStop = true;
+    s.stopEvents += 1;
+    this.wakeWaiters(s);
+  }
+
+  /** Tracks the CPU state from VICE's unsolicited events (checkpoint hits and stopped events). */
+  private onSessionEvent(s: ViceSession, type: number, frame: Buffer): void {
+    if (this.session !== s) return;
+    if (type === 0x11) {
+      let checkpoint: ViceCheckpoint;
+      try { checkpoint = s.client.decodeCheckpoint(frame); } catch { return; }
+      if (!checkpoint.hit) return;
+      if (checkpoint.temporary) s.stopping.delete(checkpoint.id); // VICE deletes a temporary checkpoint when it is hit
+      if (checkpoint.stopOnHit) this.enterDebugStop(s);
+    } else if (type === 0x62 || type === 0x61) {
+      // Between operations nothing but a checkpoint, a jam or similar stops the CPU, so a stop here is a debugger stop.
+      if (!s.busy && s.cpu === "running") this.enterDebugStop(s);
+      else this.wakeWaiters(s);
+    }
+  }
+
+  /** Connects the long-lived session client. The CPU keeps running until the first command. Call only inside `exclusive`. */
+  private async openSession(): Promise<ViceSession> {
+    if (!this.mockMode) await this.ensureProcess();
+    const client = new ViceClient();
+    await client.connect(this.port, this.host);
+    if (this.manageProcess && this.lastProcessStart > 0) {
+      const settleDelay = 500 - (Date.now() - this.lastProcessStart);
+      if (settleDelay > 0) await delay(settleDelay);
+    }
+    const s: ViceSession = {
+      client,
+      cpu: "running",
+      explicitPause: false,
+      debugStop: false,
+      stopping: new Set<number>(),
+      busy: false,
+      lost: null,
+      stopEvents: 0,
+      waiters: new Set<() => void>(),
+    };
+    client.setUnsolicitedHandler((type, frame) => this.onSessionEvent(s, type, frame));
+    client.setCloseHandler((error) => this.markLost(s, error ? error.message : "VICE closed the monitor connection"));
+    this.session = s;
+    return s;
+  }
+
+  /** Closes a session that no reason keeps open. The CPU must be running and no stopping checkpoint may exist. */
+  private endSession(s: ViceSession): void {
+    if (this.session === s) this.session = null;
+    s.client.close();
+    this.wakeWaiters(s);
+  }
+
+  /**
+   * Brings the CPU back to the state the operation found it in: stopped stays stopped
+   * (re-entering the monitor if the operation sent exit), running runs again (exit), and a
+   * session nothing needs any more is closed.
+   */
+  private async settle(s: ViceSession): Promise<void> {
+    if (s.cpu === "stopped") {
+      if (s.client.cpuRunning) await s.client.info();
+      return;
+    }
+    if (!s.client.cpuRunning) await s.client.exitMonitor();
+    if (!this.sessionNeeded(s)) this.endSession(s);
+  }
+
+  /** Re-reads which checkpoints stop the CPU, so the session is never closed while one exists. */
+  private async recountStopping(s: ViceSession): Promise<void> {
+    const list = await s.client.checkpointList();
+    s.stopping = new Set(list.filter((c) => c.stopOnHit).map((c) => c.id));
+  }
+
+  /** Runs `fn` on the session client. Call only inside `exclusive`. */
+  private async operate<T>(
+    s: ViceSession,
+    fn: (client: ViceClient) => Promise<T>,
+    options?: { recount?: boolean; leaveStopped?: boolean },
+  ): Promise<T> {
+    s.busy = true;
     try {
-      if (held.isOpen) await held.exitMonitor();
-    } catch {
-      // Closing the connection resumes the CPU as well.
+      const result = await fn(s.client);
+      if (options?.recount) await this.recountStopping(s);
+      if (options?.leaveStopped) {
+        s.cpu = "stopped";
+        s.debugStop = true;
+      }
+      await this.settle(s);
+      return result;
+    } catch (error) {
+      if (this.session === s) {
+        if (!s.client.isOpen) this.markLost(s, error instanceof Error ? error.message : String(error));
+        else await this.settle(s).catch(() => {});
+      }
+      throw error;
     } finally {
-      held.close();
+      s.busy = false;
     }
-    return true;
   }
 
-  private async withClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
+  /** Throws when a session was lost since the last operation; the error is reported once. */
+  private throwIfSessionLost(): void {
+    const notice = this.takeLostNotice();
+    if (notice) throw new ViceSessionLostError(notice);
+  }
+
+  private async withClient<T>(
+    fn: (client: ViceClient) => Promise<T>,
+    options?: { resumeOnClose?: boolean; keepLostNotice?: boolean },
+  ): Promise<T> {
     return this.exclusive(async () => {
-      const held = this.heldPauseClient();
-      if (held) {
-        try {
-          return await fn(held);
-        } finally {
-          // An operation may have sent exit itself (for example continue_execution), which lets
-          // the CPU run. Any command enters the monitor again, so the pause still holds afterwards.
-          if (this.pausedClient === held && held.isOpen) {
-            try { await held.info(); } catch { /* the next operation detects a closed connection */ }
-          }
-        }
-      }
+      const session = this.liveSession();
+      if (!options?.keepLostNotice) this.throwIfSessionLost();
+      if (session) return await this.operate(session, fn);
       return await this.withNewClient(fn, options);
     });
+  }
+
+  /**
+   * Runs `fn` on the session, opening one when there is none, and leaves the CPU stopped
+   * (a debugger stop) afterwards. Used by single-stepping.
+   */
+  async debugStopOperation<T>(fn: (client: ViceClient) => Promise<T>, options?: { waitForStopMs?: number }): Promise<T> {
+    return this.exclusive(async () => {
+      const existing = this.liveSession();
+      this.throwIfSessionLost();
+      const s = existing ?? await this.openSession();
+      return await this.operate(s, async (client) => {
+        const result = await fn(client);
+        if (options?.waitForStopMs) await this.waitForClientStopped(s, options.waitForStopMs);
+        return result;
+      }, { leaveStopped: true });
+    });
+  }
+
+  /**
+   * Runs a checkpoint operation on the session, opening one when there is none, then
+   * re-reads which checkpoints stop the CPU. The session stays open while one exists, so the
+   * connection is never closed with a stopping checkpoint set.
+   */
+  async checkpointOperation<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {
+    return this.exclusive(async () => {
+      const existing = this.liveSession();
+      this.throwIfSessionLost();
+      const s = existing ?? await this.openSession();
+      return await this.operate(s, fn, { recount: true });
+    });
+  }
+
+  private waitForClientStopped(s: ViceSession, timeoutMs: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (!s.client.cpuRunning) { resolve(); return; }
+      const finish = () => { clearTimeout(timer); s.waiters.delete(check); resolve(); };
+      const check = () => { if (!s.client.cpuRunning || s.lost !== null) finish(); };
+      const timer = setTimeout(finish, timeoutMs);
+      s.waiters.add(check);
+    });
+  }
+
+  /**
+   * Waits until the tracked CPU state is stopped, for at most `timeoutMs`. With no session
+   * nothing can stop the CPU by itself, so it returns at once with `session: false`.
+   */
+  async waitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const s = this.liveSession();
+      if (!s) return { session: false, stopped: false };
+      if (s.cpu === "stopped") return { session: true, stopped: true };
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return { session: true, stopped: false };
+      await new Promise<void>((resolve) => {
+        const wake = () => { clearTimeout(timer); s.waiters.delete(wake); resolve(); };
+        const timer = setTimeout(wake, remaining);
+        s.waiters.add(wake);
+      });
+    }
   }
 
   private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
@@ -783,9 +1041,10 @@ export class ViceBackend implements C64Facade {
     const attempts = 8;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
+        // A lost session is reported by the next real operation, not swallowed by the retries here.
         await this.withClient(async (client) => {
           await client.info();
-        });
+        }, { keepLostNotice: true });
         return true;
       } catch (error) {
         if (this.debugEnabled) {
@@ -903,7 +1162,7 @@ export class ViceBackend implements C64Facade {
     // Overridable only for deterministic tests of the readiness-failure path;
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
-    await this.endPauseBeforeRestart();
+    const warning = await this.endSessionBeforeRestart();
     await this.withClient(async (client) => {
       await client.reset();
       const opts = this.debugEnabled
@@ -919,49 +1178,124 @@ export class ViceBackend implements C64Facade {
       if (this.debugEnabled) console.error("[vice-backend] waitForBasicReady result", readiness);
     });
     const ready = Boolean(readiness?.pointersOk && readiness?.promptOk);
-    return ready
+    return ViceBackend.withWarning(ready
       ? { success: true, details: readiness }
-      : { success: false, details: { readiness, message: "VICE reset completed but BASIC READY was not observed. Reset again or inspect the emulator monitor." } };
+      : { success: false, details: { readiness, message: "VICE reset completed but BASIC READY was not observed. Reset again or inspect the emulator monitor." } }, warning);
   }
 
   async reboot(): Promise<RunResult> { return this.reset(); }
 
   /**
-   * Stops the CPU until `resume`: enters the monitor on a connection that stays open.
-   * Other operations run on the same connection meanwhile. A reset, reboot, power
-   * cycle or power-off ends the pause.
+   * Stops the CPU until `resume` (explicit pause): the session client enters the monitor and
+   * stays connected. Other operations run on the same connection and leave the CPU stopped.
+   * A reset, reboot, power cycle or power-off ends the pause.
    */
   async pause(): Promise<RunResult> {
     return this.exclusive(async () => {
-      if (this.heldPauseClient()) return { success: true, details: { alreadyPaused: true } };
-      if (!this.mockMode) await this.ensureProcess();
-      const client = new ViceClient();
-      await client.connect(this.port, this.host);
+      let s = this.liveSession();
+      const warning = this.takeLostNotice();
+      if (s?.explicitPause) return ViceBackend.withWarning({ success: true, details: { alreadyPaused: true } }, warning);
+      if (!s) s = await this.openSession();
+      const session = s;
+      session.busy = true;
       try {
-        await client.info(); // any command enters the monitor, which stops the CPU
+        if (session.cpu === "running" || session.client.cpuRunning) await session.client.info(); // any command enters the monitor, which stops the CPU
+        session.cpu = "stopped";
+        session.explicitPause = true;
       } catch (error) {
-        client.close();
+        if (this.session === session) {
+          if (!session.client.isOpen) this.markLost(session, error instanceof Error ? error.message : String(error));
+          else if (!this.sessionNeeded(session)) this.endSession(session);
+        }
         throw error;
+      } finally {
+        session.busy = false;
       }
-      this.pausedClient = client;
-      return { success: true, details: { paused: true, mechanism: "monitor connection held open" } };
+      return ViceBackend.withWarning({ success: true, details: { paused: true, mechanism: "monitor connection held open" } }, warning);
     });
+  }
+
+  /**
+   * Lets the CPU run: clears the explicit pause and any debugger stop. The session stays open
+   * while a stopping checkpoint exists, and is closed otherwise.
+   */
+  private async resumeCpu(): Promise<{ resumed: boolean; warning: string | null }> {
+    const s = this.liveSession();
+    const warning = this.takeLostNotice();
+    if (!s) return { resumed: false, warning };
+    const wasStopped = s.cpu === "stopped";
+    const hadExplicitPause = s.explicitPause;
+    const stopEvents = s.stopEvents;
+    s.busy = true;
+    try {
+      if (!s.client.cpuRunning) await s.client.exitMonitor();
+      s.explicitPause = false;
+      if (s.stopEvents === stopEvents) { // a checkpoint hit while exiting keeps the debugger stop
+        s.cpu = "running";
+        s.debugStop = false;
+      }
+      if (!this.sessionNeeded(s)) this.endSession(s);
+    } catch (error) {
+      if (this.session === s && !s.client.isOpen) this.markLost(s, error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      s.busy = false;
+    }
+    if (hadExplicitPause) this.pauseClearedListener?.();
+    return { resumed: wasStopped, warning };
   }
 
   async resume(): Promise<RunResult> {
     return this.exclusive(async () => {
-      const resumed = await this.releaseHeldPause();
-      return { success: true, details: resumed ? { resumed: true } : { resumed: false, reason: "not paused" } };
+      const { resumed, warning } = await this.resumeCpu();
+      return ViceBackend.withWarning({ success: true, details: resumed ? { resumed: true } : { resumed: false, reason: "not paused" } }, warning);
     });
   }
 
-  /** Ends a held pause before an operation that restarts or stops the machine. */
-  private async endPauseBeforeRestart(): Promise<void> {
-    await this.exclusive(() => this.releaseHeldPause());
+  /** `c64_debug continue_execution`: the same as `resume`, including the session rules. */
+  async continueExecution(): Promise<RunResult> {
+    return this.resume();
   }
 
+  /**
+   * Ends the session before an operation that restarts or stops the machine. The stopping
+   * checkpoints are deleted first, so closing the connection cannot wedge VICE's monitor.
+   * Returns the notice of a session that had been lost, if any.
+   */
+  private async endSessionBeforeRestart(): Promise<string | null> {
+    return await this.exclusive(async () => {
+      const s = this.liveSession();
+      const warning = this.takeLostNotice();
+      if (!s) return warning;
+      const hadExplicitPause = s.explicitPause;
+      s.busy = true;
+      try {
+        for (const id of s.stopping) {
+          try { await s.client.checkpointDelete(id); } catch { /* already gone */ }
+        }
+        s.stopping.clear();
+        try { if (!s.client.cpuRunning) await s.client.exitMonitor(); } catch { /* closing resumes the CPU as well */ }
+      } finally {
+        s.busy = false;
+        if (this.session === s) this.session = null;
+        s.client.close();
+        this.wakeWaiters(s);
+      }
+      if (hadExplicitPause) this.pauseClearedListener?.();
+      return warning;
+    });
+  }
+
+  /** Ends every backend's session cleanly; used at server shutdown. */
+  static async endAllSessions(): Promise<void> {
+    await Promise.allSettled([...ViceBackend.instances].map((backend) => backend.endSessionBeforeRestart()));
+  }
   async poweroff(): Promise<RunResult> {
-    await this.endPauseBeforeRestart();
+    const warning = await this.endSessionBeforeRestart();
+    return ViceBackend.withWarning(await this.poweroffAfterSession(), warning);
+  }
+
+  private async poweroffAfterSession(): Promise<RunResult> {
     const key = this.supervisorKey();
     const managedHandle = this.manageProcess ? ViceBackend.supervisors.get(key) : null;
     try {
@@ -987,8 +1321,8 @@ export class ViceBackend implements C64Facade {
     }
   }
   async powerCycle(): Promise<RunResult> {
-    await this.endPauseBeforeRestart();
-    return this.nuclearReset();
+    const warning = await this.endSessionBeforeRestart();
+    return ViceBackend.withWarning(await this.nuclearReset(), warning);
   }
   async nuclearReset(): Promise<RunResult> {
     if (!this.manageProcess) {

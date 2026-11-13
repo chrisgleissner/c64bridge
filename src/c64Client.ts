@@ -1248,13 +1248,17 @@ export class C64Client {
    * explicit `c64_system pause` is in effect. An explicit pause is cleared
    * only by an explicit resume.
    */
-  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult> }>();
+  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean }>();
 
   private pauseStateFor(facade: C64Facade) {
     let state = this.pauseStates.get(facade);
     if (!state) {
-      state = { depth: 0, explicit: false };
+      const created: { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean } = { depth: 0, explicit: false };
+      state = created;
       this.pauseStates.set(facade, state);
+      // The VICE session can end the pause by itself (c64_debug continue_execution, a lost
+      // session, a restart); the explicit flag must follow or tools would skip their own pause.
+      if (facade instanceof ViceBackend) facade.setPauseClearedListener(() => { created.explicit = false; });
     }
     return state;
   }
@@ -1266,8 +1270,12 @@ export class C64Client {
       const state = this.pauseStateFor(facade);
       state.depth += 1;
       if (state.depth === 1 && !state.explicit) {
-        const pending = facade.pause().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
-        state.devicePause = pending;
+        // A debugger stop already holds the CPU; the tool call must neither add a pause nor end that stop on release.
+        state.skippedDevicePause = facade instanceof ViceBackend && facade.isCpuStopped();
+        if (!state.skippedDevicePause) {
+          const pending = facade.pause().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+          state.devicePause = pending;
+        }
       }
       const result = state.devicePause ? await state.devicePause : { success: true } as RunBasicResult;
       if (!result.success) {
@@ -1288,6 +1296,10 @@ export class C64Client {
       state.depth -= 1;
       if (state.depth > 0) return { success: true, details: { resumed: false, reason: "pause still held by another call" } };
       state.devicePause = undefined;
+      if (state.skippedDevicePause) {
+        state.skippedDevicePause = false;
+        return { success: true, details: { resumed: false, reason: "the CPU was already stopped by the debugger" } };
+      }
       if (state.explicit) return { success: true, details: { resumed: false, reason: "machine was paused explicitly" } };
       return await facade.resume();
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
@@ -2497,8 +2509,18 @@ export class C64Client {
     return { delivered };
   }
 
+    /** `continue_execution`: lets the CPU run and ends the explicit pause and any debugger stop. */
     async viceExitMonitor(): Promise<void> {
-      await this.withViceMonitor((client) => client.exitMonitor());
+      const backend = await this.requireViceBackend();
+      const result = await backend.continueExecution();
+      const warning = (result.details as { warning?: string } | undefined)?.warning;
+      if (warning) throw new Error(warning);
+    }
+
+    /** Waits until the VICE session tracks the CPU as stopped (a checkpoint hit or step). */
+    async viceWaitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+      const backend = await this.requireViceBackend();
+      return backend.waitForStop(timeoutMs);
     }
 
     async viceKeyboardFeed(text: string): Promise<void> {
@@ -2576,19 +2598,19 @@ export class C64Client {
         options.memspace === undefined
           ? options
           : { ...options, memspace: this.normaliseMemspace(options.memspace) };
-      return this.withViceMonitor((client) => client.checkpointCreate(payload));
+      return (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointCreate(payload));
     }
 
     async viceCheckpointDelete(id: number): Promise<void> {
-      await this.withViceMonitor((client) => client.checkpointDelete(id));
+      await (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointDelete(id));
     }
 
     async viceCheckpointToggle(id: number, enabled: boolean): Promise<void> {
-      await this.withViceMonitor((client) => client.checkpointToggle(id, enabled));
+      await (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointToggle(id, enabled));
     }
 
     async viceCheckpointSetCondition(id: number, expression: string): Promise<void> {
-      await this.withViceMonitor((client) => client.checkpointSetCondition(id, expression));
+      await (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointSetCondition(id, expression));
     }
 
     async viceRegistersAvailable(memspace: number = 0): Promise<ViceRegisterMetadata[]> {
@@ -2616,11 +2638,11 @@ export class C64Client {
     }
 
     async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
-      await this.withViceMonitor((client) => client.stepInstructions(count, options));
+      await (await this.requireViceBackend()).debugStopOperation((client) => client.stepInstructions(count, options));
     }
 
     async viceStepReturn(): Promise<void> {
-      await this.withViceMonitor((client) => client.stepReturn());
+      await (await this.requireViceBackend()).debugStopOperation((client) => client.stepReturn(), { waitForStopMs: 2_000 });
     }
 
     async viceResourceGet(name: string): Promise<ViceResourceValue> {

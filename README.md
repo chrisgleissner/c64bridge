@@ -804,7 +804,7 @@ Grouped entry point for VICE debugger operations (breakpoints, registers, steppi
 | `step` | Single-step CPU execution. | — | `count=1`, `mode` |  |  | ✅ |
 | `step_return` | Continue execution until the current routine returns. | — | — |  |  | ✅ |
 | `toggle_checkpoint` | Enable or disable a checkpoint by id. | `id`, `enabled` | — |  |  | ✅ |
-| `wait_for_state` | Poll CPU registers until PC equals expectedPC or timeout elapses. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` |  |  | ✅ |
+| `wait_for_state` | Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` |  |  | ✅ |
 
 #### c64_disk
 

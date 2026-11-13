@@ -2130,7 +2130,9 @@ test("c64_debug wait_for_state reports matched and timed out outcomes", async ()
   setPlatform("vice");
   try {
     let reads = 0;
+    const noSession = async () => ({ session: false, stopped: false });
     const matchedClient = {
+      viceWaitForStop: noSession,
       async viceRegistersAvailable(memspace) {
         assert.equal(memspace, 0);
         return [{ id: 0, name: "PC", bits: 16, size: 2 }];
@@ -2142,6 +2144,7 @@ test("c64_debug wait_for_state reports matched and timed out outcomes", async ()
       },
     };
     const timedOutClient = {
+      viceWaitForStop: noSession,
       async viceRegistersAvailable() {
         return [{ id: 0, name: "PC", bits: 16, size: 2 }];
       },

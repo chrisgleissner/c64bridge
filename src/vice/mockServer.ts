@@ -44,7 +44,14 @@ function buildDefaultRegisterMetadata(): readonly MockRegisterMetadata[] {
 export interface ViceMockServerOptions {
   host?: string;
   port?: number;
+  /**
+   * Emulates VICE 3.10: after a client closes its connection while a stop-on-hit
+   * checkpoint exists, the monitor accepts connections but never answers.
+   */
+  wedgeOnUnsafeClose?: boolean;
 }
+
+const UNSOLICITED = 0xffffffff;
 
 function buildResponse(cmd: number, reqId: number, body: Buffer = Buffer.alloc(0), err = 0): Buffer {
   const header = Buffer.alloc(12 + body.length);
@@ -85,8 +92,75 @@ export class ViceMockServer {
    * connection lets it run again.
    */
   running = true;
+  /** Test hook: connections closed by the client while a stop-on-hit checkpoint existed. */
+  unsafeCloses = 0;
+  /** Test hook: every command received, as `[cmd, connection number]`. */
+  readonly commands: Array<[number, number]> = [];
+  private readonly wedgeOnUnsafeClose: boolean;
+  private wedged = false;
+  /** Test hook: while true, commands are received but never answered (a command that times out). */
+  hang = false;
+
+  /** Test hook: checkpoints with the stop flag set. */
+  get stoppingCheckpoints(): number {
+    return [...this.checkpoints.values()].filter((c) => c.stopOnHit).length;
+  }
+
+  /** Test hook: monitor connections currently open. */
+  get openConnections(): number {
+    return this.sockets.size;
+  }
+
+  /** Test hook: clears a simulated wedge. */
+  unwedge(): void {
+    this.wedged = false;
+  }
+
+  /** Test hook: closes every connection from the server side, as a crashing VICE would. */
+  dropConnections(): void {
+    for (const socket of this.sockets) socket.destroy();
+  }
+
+  /**
+   * Test hook: the CPU reaches the checkpoint. Connected clients receive the checkpoint
+   * info (hit = 1), and, when the checkpoint stops the CPU, the register info and a
+   * stopped event. A temporary checkpoint is deleted. Returns false when the CPU is not
+   * running or the checkpoint does not exist.
+   */
+  hitCheckpoint(id: number): boolean {
+    const checkpoint = this.checkpoints.get(id);
+    if (!checkpoint || !this.running || !checkpoint.enabled) return false;
+    checkpoint.hitCount += 1;
+    const info = this.encodeCheckpoint(checkpoint);
+    info[4] = 1;
+    for (const socket of this.sockets) socket.write(buildResponse(0x11, UNSOLICITED, info));
+    if (checkpoint.temporary) this.checkpoints.delete(id);
+    if (checkpoint.stopOnHit) {
+      this.running = false;
+      for (const socket of this.sockets) this.emitStopped(socket);
+    }
+    return true;
+  }
+
+  private pc(): number {
+    return this.registerValues.get(0) ?? 0;
+  }
+
+  private emitStopped(socket: net.Socket): void {
+    socket.write(buildResponse(0x31, UNSOLICITED, this.encodeRegisterValues()));
+    const body = Buffer.alloc(2);
+    body.writeUInt16LE(this.pc(), 0);
+    socket.write(buildResponse(0x62, UNSOLICITED, body));
+  }
+
+  private emitResumed(socket: net.Socket): void {
+    const body = Buffer.alloc(2);
+    body.writeUInt16LE(this.pc(), 0);
+    socket.write(buildResponse(0x63, UNSOLICITED, body));
+  }
 
   constructor(options?: ViceMockServerOptions) {
+    this.wedgeOnUnsafeClose = options?.wedgeOnUnsafeClose === true;
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
     this.resetState();
@@ -113,23 +187,34 @@ export class ViceMockServer {
     return { port: address.port };
   }
 
+  private stopping = false;
+
   async stop(): Promise<void> {
     if (!this.server) return;
+    this.stopping = true;
     for (const socket of this.sockets) {
       socket.destroy();
     }
     this.sockets.clear();
     await new Promise<void>((resolve) => this.server!.close(() => resolve()));
     this.server = null;
+    this.stopping = false;
   }
 
   private handleSocket(socket: net.Socket): void {
     this.sockets.add(socket);
     this.connectionsOpened += 1;
+    const connection = this.connectionsOpened;
+    (socket as net.Socket & { mockConnection?: number }).mockConnection = connection;
     let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    socket.on("error", () => {});
     socket.once("close", () => {
       this.sockets.delete(socket);
       this.running = true;
+      if (this.stoppingCheckpoints > 0 && !this.stopping) {
+        this.unsafeCloses += 1;
+        if (this.wedgeOnUnsafeClose) this.wedged = true;
+      }
       buffer = Buffer.alloc(0);
     });
     socket.on("data", (chunk: string | Uint8Array<ArrayBufferLike>) => {
@@ -154,6 +239,8 @@ export class ViceMockServer {
       const body = buffer.slice(11, frameLen);
       buffer = buffer.slice(frameLen);
 
+      if (this.wedged || this.hang) continue;
+      this.commands.push([cmd, (socket as net.Socket & { mockConnection?: number }).mockConnection ?? 0]);
       const response = this.handleCommand(cmd, reqId, body, socket);
       if (response) {
         socket.write(response);
@@ -163,7 +250,16 @@ export class ViceMockServer {
   }
 
   private handleCommand(cmd: number, reqId: number, body: Buffer, socket: net.Socket): Buffer | null {
-    this.running = cmd === 0xAA;
+    // As in VICE: any command enters the monitor (stopped event), exit leaves it (resumed event).
+    if (cmd === 0xAA) {
+      if (!this.running) {
+        this.running = true;
+        this.emitResumed(socket);
+      }
+    } else if (this.running) {
+      this.running = false;
+      this.emitStopped(socket);
+    }
     switch (cmd) {
       case 0x85: // info
         return buildResponse(cmd, reqId);
@@ -303,8 +399,13 @@ export class ViceMockServer {
         const payload = this.encodeRegisterValues();
         return buildResponse(0x31, reqId, payload);
       }
-      case 0x71: // step instructions
+      case 0x71: { // step instructions: each step advances the PC by 3 bytes
+        const count = body.readUInt16LE(1) || 1;
+        this.registerValues.set(0, (this.pc() + 3 * count) & 0xffff);
+        this.emitResumed(socket);
+        this.emitStopped(socket);
         return buildResponse(cmd, reqId);
+      }
       case 0x73: // step return
         return buildResponse(cmd, reqId);
       case 0x83: { // registers metadata

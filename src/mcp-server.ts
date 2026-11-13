@@ -28,7 +28,7 @@ import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
-import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
+import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
 import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
@@ -130,6 +130,7 @@ function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
         const cleanup = Promise.allSettled([
           stopAllBackgroundTasks(),
           client.releaseVideoCapture(),
+          endViceSessions(), // deletes stopping checkpoints and exits the monitor before the sockets close
         ]);
         await Promise.race([
           cleanup,
