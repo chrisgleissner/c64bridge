@@ -382,6 +382,16 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     const runBasic = async (source: string) => ctx.client.uploadAndRunBasic(source);
 
+    // The screen before the run lets verification tell a program that cleared the screen from one that never ran.
+    let screenBeforeRun: string | undefined;
+    if (shouldVerify) {
+      try {
+        screenBeforeRun = await ctx.client.readScreen();
+      } catch (beforeError) {
+        ctx.logger.warn("Unable to read screen before BASIC execution", toRecord(beforeError));
+      }
+    }
+
     let result = await runBasic(activeProgram);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
@@ -504,7 +514,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     if (shouldVerify) {
       try {
-        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger);
+        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, undefined, screenBeforeRun);
         if (outcome.status === "error") {
           ctx.logger.warn("BASIC verification detected error", {
             ...(outcome.message ? { message: outcome.message } : {}),

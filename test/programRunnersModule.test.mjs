@@ -577,10 +577,10 @@ test("upload_run_basic verify true annotates metadata", async () => {
         },
         async readScreen() {
           screenReads += 1;
-          // First read is the immediate post-run screen check in
-          // executeUploadRunBasic; the poll loop's first read then observes
-          // the firmware's own RUN echo, matching real backend behavior.
-          return screenReads === 1 ? "READY.\n" : "RUN\n";
+          // Reads 1 and 2 are the screen before the run and the immediate
+          // post-run check in executeUploadRunBasic; the poll loop's first
+          // read then observes the firmware's own RUN echo.
+          return screenReads <= 2 ? "READY.\n" : "RUN\n";
         },
       },
       logger: createLogger(),
@@ -626,8 +626,8 @@ test("upload_run_basic verify reports BASIC runtime error details", async () => 
         },
         async readScreen() {
           screenReads += 1;
-          if (screenReads === 1) {
-            return "RUN\n";
+          if (screenReads <= 2) {
+            return "READY.\n"; // before the run, then the immediate post-run check
           }
           return "?TYPE MISMATCH ERROR IN 30\nREADY.\n";
         },
