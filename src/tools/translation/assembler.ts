@@ -999,6 +999,9 @@ class Assembler {
   private readonly symbolTable = new SymbolTable();
   private readonly memory = new Uint8Array(0x10000);
   private readonly written = new Uint8Array(0x10000);
+  /** Index into blocks (plus one) of the contiguous run that wrote each address in the current pass. */
+  private readonly owner = new Uint32Array(0x10000);
+  private blocks: Array<{ start: number; end: number; line: number }> = [];
   private pc = 0;
   private lowestWritten = MAX_ADDRESS;
   private highestWritten = 0;
@@ -1020,6 +1023,9 @@ class Assembler {
       this.firstInstructionAddress = undefined;
     }
     this.reserved = [];
+    this.written.fill(0);
+    this.owner.fill(0);
+    this.blocks = [];
     // Loading a PRG at $0801 makes BASIC relink the bytes there as program
     // lines, which corrupts raw machine code. Code that starts at $0801
     // without its own org therefore gets a "10 SYS" stub that jumps to the
@@ -1457,6 +1463,20 @@ class Assembler {
       );
     }
     const masked = value & 0xff;
+    let block = this.blocks[this.blocks.length - 1];
+    if (!block || block.end + 1 !== this.pc) {
+      block = { start: this.pc, end: this.pc, line: location.line };
+      this.blocks.push(block);
+    }
+    if (this.written[this.pc]) {
+      const earlier = this.blocks[this.owner[this.pc]! - 1]!;
+      throw new AssemblyError(
+        `Overlapping output: the block starting at ${formatHex(block.start)} (line ${block.line}) writes ${formatHex(this.pc)}, which the block ${formatHex(earlier.start)}-${formatHex(earlier.end)} (line ${earlier.line}) already wrote`,
+        location,
+      );
+    }
+    block.end = this.pc;
+    this.owner[this.pc] = this.blocks.length;
     this.memory[this.pc] = masked;
     this.written[this.pc] = 1;
     this.lowestWritten = Math.min(this.lowestWritten, this.pc);

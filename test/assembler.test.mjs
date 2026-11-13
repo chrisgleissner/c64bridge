@@ -551,3 +551,13 @@ test(".org, *= and the loadAddress option reject values outside $0000-$FFFF", ()
   assert.throws(() => assemblyToPrg(" nop", { loadAddress: 0x10000 }), /outside \$0000-\$FFFF/);
   assert.deepEqual([...assemblyToPrg("*=$FFFF\n .byte 1")], [0xff, 0xff, 1]);
 });
+
+test("overlapping .org blocks are an error naming both ranges", () => {
+  const message = assemblyError("*=$c000\n nop\n nop\n*=$c000\n lda #1");
+  assert.match(message, /:5: Overlapping output/);
+  assert.match(message, /\$C000 \(line 5\)/i);
+  assert.match(message, /\$C000-\$C001 \(line 2\)/i);
+  // Blocks that only touch, or reuse an address without writing, are fine.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n nop\n*=$c001\n nop")], [0x00, 0xc0, 0xea, 0xea]);
+  assert.doesNotThrow(() => assemblyToPrg("*=$c000\n nop\n*=$c000\nlabel:\n*=$c002\n nop"));
+});
