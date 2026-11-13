@@ -1000,11 +1000,11 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://gamedev/index` | Target decision, reading plan by game type, resource table with sizes, and the c64bridge dev loop for games. |
 | `c64://gamedev/architecture` | Frame-synchronous loop, state machine, frame and cycle budgets, memory-map templates for stock and REU-streaming games. |
 | `c64://gamedev/techniques` | Compact 6502 recipes for the techniques most C64 games need, each with reference projects to study. |
-| `c64://gamedev/toolchain` | Assembler and compiler choice, Makefile build, Exomizer packing, VICE and hardware test loop, open-source games to study. |
+| `c64://gamedev/toolchain` | Assembler and compiler choice, Makefile build, Exomizer packing, VICE and hardware test loop, .cfg and REU image for modern releases. |
 | `c64://gamedev/references` | Modern Ultimate projects and classic C64 games mapped to techniques, with licence cautions for reuse. |
 | `c64://ultimate/hardware` | Turbo, SID layout, video and palette, REU/UCI presence, model detection and config settings, with fallbacks for stock machines. |
 | `c64://ultimate/uci` | UCI register protocol, command targets, file and REU loading, network, palette, safe use and detection. |
-| `c64://ultimate/reu` | REU registers, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples. |
+| `c64://ultimate/reu` | REU registers, tested level-load and detection routines, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples. |
 | `c64://ultimate/upic` | Cycle-exact border-colour technique for 384x256 16-colour graphics, framebuffer, palette use and limits. |
 | `c64://ultimate/multisid` | Verified control recipe per owner configuration (8 to 12 SIDs), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences. |
 | `c64://ultimate/bench` | Benchmark programs, result block layout, decoding formulas and a step-by-step rerun recipe using only c64bridge tools. |

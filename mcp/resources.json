@@ -47,7 +47,7 @@
     {
       "name": "Game Techniques",
       "uri": "c64://gamedev/techniques",
-      "description": "Read when implementing raster IRQs, sprite multiplexing, scrolling, collision, joystick input, music/SFX, random numbers or PAL/NTSC handling in a C64 game (stock C64 and modern Ultimate).",
+      "description": "Read when implementing raster IRQs, sprite multiplexing, scrolling, collision, joystick input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling or Ultimate start-up checks (turbo probe) in a C64 game (stock C64 and modern Ultimate).",
       "mimeType": "text/markdown",
       "_meta": {
         "domain": "gamedev",

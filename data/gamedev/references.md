@@ -16,9 +16,9 @@ Read for technique only. Write fresh code: c64bridge is GPL-2.0-only, so do not 
 | c64u-radar, https://github.com/k6lcm/c64u-radar | GPL-3.0 | UCI TCP, REST mailbox | gateway server for TLS/JSON, binary record feed, host test harness with fake 64 KB RAM, build guard on memory block | 8 sprites, poll about 10 s |
 | ReadyOS, https://github.com/ReadyOS-C64/ReadyOs | MIT | REU suspend/resume, UCI, Ultimate DOS | visible REU-missing state, whole-program stash/fetch, acceptance at 1, 16, 64 MHz | none |
 | ultimate-uci-sdk, https://github.com/barryw/ultimate-uci-sdk | MIT | UCI, REU, Audio, network, palette, turbo | capability probing, asm/C/BASIC bindings; status "early" | none |
-- Doom frame-rate disagreement: README and a press article say 16.7 fps for E1M1; `pipeline.md` says 25.05 fps (502 frames in 20.04 s) and elsewhere 16.63 fps. Documents date from different points; current HEAD value unverified. Rates quantise to 50/25/16.7/12.5 fps (flip on raster frames).
+- Doom frame rate is disputed: README and a press article say 16.7 fps for E1M1, `pipeline.md` 25.05 fps (502 frames in 20.04 s); HEAD value unverified. Rates quantise to 50/25/16.7/12.5 fps (flips on raster frames).
 - Also seen: UltimateDemo2026 (https://github.com/xahmol/UltimateDemo2026, start-up detection screen, one `.cfg` naming both Turbo Control values), UE2-C64U-Emulator (GPL-3.0, UCI tests without hardware), GordonOS binaries (derive time from CIA/raster, not CPU speed), Mappy REU port (1 MB REU overlays, article only, unverified); Carrion's "C64 Ultimate Game Engine" (Oscar64, 16 virtual sprites, 16 MB REU, about 2 MB PCM; no repo, press only, unverified); bbence84/VibeC64 (MIT, AI game creator, prior art for LLM-built games).
-- Ultimate game projects with source are rare; libraries and demos above are the best primary documentation. Device facts: `c64://ultimate/hardware`, `c64://ultimate/reu`, `c64://ultimate/uci`, `c64://ultimate/upic`.
+- Official configuration reference: https://1541u-documentation.readthedocs.io. Ultimate game projects with source are rare; libraries and demos above are the best primary documentation. Device facts: `c64://ultimate/hardware`, `c64://ultimate/reu`, `c64://ultimate/uci`, `c64://ultimate/upic`.
 
 ## 2. Stock-C64 games (AUTHENTIC target)
 | Game (year) | Zzap!64 | Known for | Best source |
@@ -35,9 +35,19 @@ Read for technique only. Write fresh code: c64bridge is GPL-2.0-only, so do not 
 | Steel Ranger demo (Cadaver) | n/a | same engine plus relocatable code chunks | https://github.com/cadaver/steelranger-demo (MIT code) |
 | Cadaver game framework | n/a | actors every 2nd frame with interpolation, colour per char/block, SD2IEC/EasyFlash/GMod2 mastering | https://github.com/cadaver/c64gameframework (MIT, per README) |
 | Corescape (2024), Tetris, Tony, SquareDoom | n/a | see toolchain table | `c64://gamedev/toolchain` |
+Open-source projects used as "Seen in" examples in `c64://gamedev/techniques` (licences from the repositories on 2026-11-13):
+| Project, URL | Licence | Study |
+|---|---|---|
+| Oscar64 (samples hscrollshmup, breakout, lander, maze3d, snake), https://github.com/drmortalwombat/oscar64 | GPL-3.0 | raster IRQ chain library, virtual sprites, memory-map and overlay pragmas, scroll game in C |
+| Corescape, https://github.com/drmortalwombat/corescape | GPL-3.0 | complete vertical shooter: parallax, 24 virtual sprites, waves and levels as data |
+| Tony: Born for Adventure, https://github.com/maciejmalecki/tony-demo | MIT | flip-screen platformer, Gradle+Kick build, Exomizer parts, VIC bank 3, raster lists |
+| Tetris C64, https://github.com/wiebow/tetris.c64 | MIT (README) | one file per state, SID tune at `$1000`, hi-score file I/O |
+| SquareDoom, https://github.com/Kweepa/SquareDoom | none stated | per-kilobyte memory map, `$01=$34` play state, IRQ trampolines, disk streaming, ACME |
+| Cadaver sprite multiplexer, https://github.com/AlanPBourke/CadaverSpriteMultiplexer ; https://cadaver.github.io/rants/sprite.html | GPL-3.0 | 24-sprite multiplexer, insertion sort, double-buffered table |
+| Gridrunner (llamaSource), https://github.com/mwenge/gridrunner | none stated | classic arcade loop, 64tass rebuild checked by md5 |
+| CROSS-LIB, https://github.com/Fabrizio-Caruso/CROSS-LIB | none stated | portable game logic over platform shims, cc65 |
 - Also: Paradroid (97%), Wizball (96% Sizzler), Maniac Mansion (https://github.com/pditincho/mm-explained script engine), Lode Runner (https://github.com/Piddewitt/Loderunner). No public source found for Turrican, Wizball, IK+, Armalyte, Last Ninja, Impossible Mission.
 - Codebase64 pages (`https://codebase64.net/doku.php?id=<id>`): `base:rant4` scrolling and world, `base:rant9` frameskip/interpolation, `base:rant11` Metal Warrior 4 tricks, `base:4_ways_scroll`, `base:decoding_tile_based_maps`, `base:sprite_collision_detection`, `base:simple_parallax_shifting`, `base:high_score_detection`.
-- Cadaver lessons (read): shifting about 1000 screen bytes takes over half a frame, so split across frames; colour RAM cannot be double-buffered, so update it while off-screen or use per-block colours; frameskip with interpolation keeps 50 Hz scroll; inactive objects stay compact records and become actors near the view.
 
 ## 3. Technique, exemplar, where to read
 | Technique | Exemplar | Read |

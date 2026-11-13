@@ -19,6 +19,26 @@ raster IRQ chain (per frame)           main loop (per frame)
 - Missed frame policy: if logic overruns, skip the commit (game slows) rather than tearing; never let the IRQ chain wait on the main loop.
 - Run music from the IRQ at a fixed line, so jitter from logic never changes tempo.
 
+Frame loop that plays identically at 1 MHz and at turbo (assembled with 64tass; the IRQ at line 250 does `inc frame` and acknowledges `$D019`):
+```
+loop:   lda frame
+        sec
+        sbc seen            ; frames elapsed, wraps correctly
+        beq loop            ; nothing new: idle (turbo only shortens this wait)
+        cmp #4
+        bcc +
+        lda #4              ; never more than 4 catch-up steps
++       sta steps
+        lda frame
+        sta seen
+-       jsr update          ; one fixed-size game step per elapsed frame
+        dec steps
+        bne -
+        jsr render          ; once per loop: fill the back buffer, then set the ready flag
+        jmp loop
+```
+Game speed then depends on frames, not on CPU speed. Turbo only raises how much `update` and `render` may do per frame (budgets in section 3).
+
 ## 2. State machine
 - One byte `state`, jump table of `init/update/exit` per state: BOOT, TITLE (attract), MENU, PLAY, PAUSE, GAMEOVER, HISCORE.
 - State change = set `next_state`; apply at frame start (never mid-frame): run `exit`, reset VIC/IRQ list for the new state, run `init`.
@@ -35,7 +55,7 @@ raster IRQ chain (per frame)           main loop (per frame)
 | Frame rate | 50.125 Hz | 59.826 Hz |
 | Visible text rows | 25 badlines in lines `$30`-`$F7` | same |
 - Older NTSC 6567R56A: 64 x 262 = 16,768 cycles (rare). Detect machine type at runtime (see techniques).
-- Badline: the VIC takes about 43 cycles, the CPU keeps about 20 of 63. 25 badlines cost 1,081 cycles per PAL frame (measured 2026-11-13 on an Ultimate 64 Elite and a C64U at 1 MHz, matches VICE). Eight double-height sprites cost a further 802 cycles per frame (about 19 per line over 42 lines). Border/vblank lines are fully free (about 112 lines PAL).
+- Badline: the VIC takes about 43 cycles, the CPU keeps about 20 of 63. 25 badlines cost 1,081 cycles per PAL frame (measured 2026-11-13 on an Ultimate 64 Elite and a C64U, `c64://ultimate/bench`; matches VICE). Eight double-height sprites cost a further 802 cycles per frame (about 19 per line over 42 lines). Border/vblank lines are fully free (about 112 lines PAL).
 - Practical free time for a 1 MHz game: PAL about 17,800 cycles with a full text screen and 8 double-height sprites (measured); NTSC about 15,000. Budget the slower NTSC and let PAL idle, or scale by frame count.
 - Typical per-frame costs (estimates, unverified): music player 500-1,500; 8-sprite update 800; software scroll column copy 1,500-3,000; 24-sprite multiplexer sort 1,000-2,500.
 - Measure instead of guessing: set `$D020` to a colour when entering a routine, restore when leaving; the border band height is its cost in raster lines (1 line = 63 cycles PAL). Do this in VICE and capture the frame (`c64_graphics` `capture_frame`).
@@ -53,10 +73,11 @@ raster IRQ chain (per frame)           main loop (per frame)
 | C64U 64 MHz | 1,238,387 | 1,170,907 | 1,121,520 | 1,236,708 |
 
 - Reading the table: delivered speed is the setting minus one VIC sub-slot at the top entries (47 of 48, 63 of 64 cycles per PHI2). Badlines cost 5.5% and eight sprites 4.1% at every speed. `$D031` bit 7 set removes both (loss below 0.2%); see hardware for the register. Per PAL line with the screen on: 2,801 cycles at 48 MHz, 3,753 at 64 MHz. Reads of `$D012` run slower than RAM at high speed (42 of 47 at 48 MHz), CIA reads much slower (about 8.8 per PHI2 cycle), `$D020` writes at full speed.
-- REU DMA does not scale like the CPU: 1 B/us at 1 MHz, about 5.1 (stash) / 3.6 (fetch) B/us at 48 MHz on the U64 and 7.8 / 4.3 at 64 MHz on the C64U (see `c64://ultimate/reu`). Cartridge-bus devices and external SID sockets stay at 1 MHz pace.
+- REU DMA does not scale like the CPU: 1 B/us at 1 MHz, 5.1 (stash) / 3.6 (fetch) at 48 MHz on the U64, 7.8 / 4.3 at 64 MHz on the C64U (full table: `c64://ultimate/reu`). Cartridge-bus devices and external SID sockets stay at 1 MHz pace.
 - A display-heavy Upic renderer at top speed left about 268,000 CPU cycles per frame for game logic (240 rows). Use that order of magnitude only for Upic designs; for ordinary VIC games turbo mostly buys software rendering, bigger worlds and pre-shifted data built at runtime.
 - Design rule: make game speed depend on frame count, not on instruction count, so the game plays identically at 1 MHz and turbo. Offer turbo as headroom for effects, never as a requirement (unless the Upic target says so).
 - Never do blocking UCI calls inside a frame; run them as a state machine (one step per frame). Details: `c64://ultimate/uci`.
+- Detect turbo and REU at start, then enable turbo: `c64://gamedev/techniques` section 10. Several SIDs (8-10 on a C64U): `c64://ultimate/multisid`.
 
 ## 4. VIC bank and `$01` choices
 | VIC bank | `$DD00` bits 0-1 | Range | Notes |
@@ -98,7 +119,7 @@ Check: sprite shape addresses must be multiples of 64 and pointer value (addr-ba
 | VIC data (screen, charset, sprites) | VIC bank 3 as in A, refilled from REU between frames |
 | Overlay window | fixed RAM window (for example `$D000-$DFFF`) filled by REU fetch; overlay never calls overlay |
 | Levels, maps, tilesets, sprite sets, text, SID register streams, samples | REU, one frozen layout file with every offset |
-| Config checks at start | UCI present, REU enabled and size sufficient; show a message and halt otherwise |
+| Config checks at start | UCI present, REU enabled and size sufficient (`c64://ultimate/reu`); show a message and halt otherwise |
 - One header file/module (`reu_layout`) defines all REU offsets and sizes. First block carries magic, version, per-block CRC; check at boot, abort loudly on mismatch (stale or empty REU looks like valid data).
 - Keep each DMA within one 512 KB-aligned REU block (VICE wraps at 512 KB) and guard length 0, which means 64 KB. Streaming one 256-byte scroll column per frame is cheap.
 - An IRQ that touches REU registers must save and restore them if the main loop also uses REU. Register map, loading paths (UCI load, stash stub) and pitfalls: `c64://ultimate/reu`.
@@ -108,13 +129,9 @@ Check: sprite shape addresses must be multiples of 64 and pointer value (addr-ba
 Resident engine `$0900-$4FFF`, text/data banks loaded into a fixed window (for example `$5000-$9FFF`) on demand from disk (fastloader recommended, see toolchain); keep save game as one small file; keep a RAM copy of the directory map. On MODERN replace disk streaming by REU fetches.
 
 ## 6. Architecture checklist
-1. Target chosen and stated; features detected with fallback message (MODERN) or absent (AUTHENTIC).
-2. Memory map written first, all addresses in one include file, build asserts on overlaps.
-3. VIC bank, `$01` play state, vector setup decided; NMI neutralised.
-4. IRQ list designed: lines, order, who acknowledges `$D019`, music line, no two entries closer than the worst-case handler time.
-5. Frame budget measured on NTSC timing (authentic) or by frame-count independence (modern).
-6. Double-buffered hand-over between main loop and IRQ.
-7. State machine with init/update/exit per state; hi-score and settings persistence (disk file or UCI file write) designed up front.
-8. Loader/packer plan (single PRG, multipart, cartridge, REU preload); a golden checksum per release build.
-9. Both PAL and NTSC tested (VICE: set machine model), music speed and gameplay tempo corrected.
-10. Test tiers: logic in VICE, then hardware gate; capture a frame per milestone.
+1. Target stated; features detected with a fallback message (MODERN) or absent (AUTHENTIC).
+2. Memory map in one include file, build asserts on overlaps; VIC bank, `$01` play state, vectors and NMI decided.
+3. IRQ list: lines, order, who acknowledges `$D019`, music line, no entry closer than the worst-case handler time; double-buffered hand-over to the main loop.
+4. State machine with init/update/exit; hi-score and settings persistence designed up front (disk file or UCI file write).
+5. Frame budget measured on NTSC timing (authentic) or independent of CPU speed (modern); PAL and NTSC both tested (VICE: set the machine model).
+6. Loader/packer plan (single PRG, multipart, cartridge, REU preload), golden checksum per build; logic tested in VICE, then a hardware gate with a captured frame per milestone.

@@ -1,5 +1,8 @@
 # Turbo benchmark results
 
+**Summary:** Measured CPU cycles per PAL frame, I/O speed and REU DMA rates at every turbo index on an Ultimate 64 Elite (fw 3.15a) and a C64U (fw 1.2.1), 2026-11-13. Quote these figures; do not remeasure for a game.
+**Read when:** you need an exact figure behind c64://gamedev/architecture, c64://ultimate/hardware or c64://ultimate/reu.
+
 Measured 2026-11-13 with `scripts/turbo-bench.mjs --suite full` (programs and method: `data/ultimate/bench/README.md`).
 Raw decoded data, including every repetition's CIA tick count, is in `ultimate-64-2026-11-13.json` and `c64u-2026-11-13.json`.
 Both machines were PAL, with the REU enabled (16 MB), interrupts off, `$01 = $35`. The frame-length records read 19657 ticks

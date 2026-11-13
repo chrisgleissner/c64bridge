@@ -1,7 +1,7 @@
 # C64 Game Toolchain, Build, Test and Reference Games
 
-**Summary:** Pick one assembler or compiler, keep every address in one include file, build PRG/D64/CRT with a Makefile, pack with Exomizer, test in VICE first and on hardware second through c64bridge. Includes open-source games to study.
-**Read when:** setting up a game project, choosing a language, producing release files, or looking for reference code.
+**Summary:** Pick one assembler or compiler, keep every address in one include file, build PRG/D64/CRT with a Makefile, pack with Exomizer, test in VICE first and on hardware second through c64bridge. MODERN releases add a `.cfg` and an REU image.
+**Read when:** setting up a game project, choosing a language, producing release files (PRG, D64, CRT, `.cfg`, `.reu`).
 
 Marks: "(unverified)" = flag or command not confirmed against current docs here; check `--help`.
 
@@ -12,7 +12,7 @@ Marks: "(unverified)" = flag or command not confirmed against current docs here;
 | ACME | asm | small, fast, simple; no scripting | https://sourceforge.net/projects/acme-crossass/ |
 | 64tass | asm | macros, listings, labels file | https://tass64.sourceforge.net |
 | ca65/cc65 | asm + C | mature linker configs; cc65 C code is slow | https://cc65.github.io |
-| Oscar64 | C/C++ | best C64 libraries (raster IRQ chain, virtual sprites, memory-map control, overlays); good optimiser; hazards: reordered constant I/O stores, DMA targets invisible to the optimiser (use inline asm/volatile) | https://github.com/drmortalwombat/oscar64 |
+| Oscar64 (GPL-3.0 repo) | C/C++ | best C64 libraries (raster IRQ chain, virtual sprites, memory-map control, overlays); good optimiser; hazards: reordered constant I/O stores, DMA targets invisible to the optimiser (use inline asm/volatile) | https://github.com/drmortalwombat/oscar64 |
 | llvm-mos | C/C++ (LLVM) | modern codegen, `mos-c64-clang`; fewer game libraries | https://github.com/llvm-mos/llvm-mos-sdk |
 | c64bridge `upload_run_asm` | asm (basic subset) | zero setup, good for snippets and tests; no macros/segments | built in |
 Rule of thumb: IRQ chains, multiplexer, scroll copy and music glue in assembly; game logic, data tables and tools in assembly or Oscar64. Pin tool versions; check KickAssembler redistribution terms before bundling.
@@ -57,7 +57,7 @@ run: build/game.prg
 | `.crt` | `cartconv` (VICE) from a binary (Magic Desk, EasyFlash types) | cartridge conflicts: EasyFlash/FC-III vs REU at `$DF00` (MODERN) |
 | `.sid` | tracker export | input for the player, not an output |
 - Loaders: KERNAL `LOAD` (slow, always works, safe with IRQs off only with care); Krill's Loader and other fastloaders for real drives (never call `IOINIT` while the drive code is installed; set `$01=$35` around loader calls when ROMs are off); Ultimate devices: REU preload or UCI file load is far faster (`c64://ultimate/reu`, `c64://ultimate/uci`). Disk handling: `c64_disk`, `c64_drive`.
-- Release set: `.prg` + `.d64` (+ `.crt`), `.cfg` for MODERN (`c64://ultimate/hardware`), checksums, README naming target and Ultimate settings.
+- Release set: `.prg` + `.d64` (+ `.crt`), `.cfg` and `.reu` for MODERN (section 7), checksums, README naming target and Ultimate settings.
 
 ## 5. Asset tools
 CharPad (charsets, maps), SpritePad (sprites), GoatTracker or SID-Wizard (music, `.sid` export), Python scripts (PNG to charset/tiles, TMX to map bytes). Convert at build time; commit sources.
@@ -71,20 +71,29 @@ CharPad (charsets, maps), SpritePad (sprites), GoatTracker or SID-Wizard (music,
 6. Keep a hardware log: firmware/core version, result, frame capture.
 7. Do not interrupt another user's running program or flash on a shared device; power operations need explicit user authorisation.
 
-## 7. Games and projects to study
-Licences vary (MIT, GPL, unknown): read for technique, write fresh code; never copy GPL-3.0 or unlicensed code.
-| Title | Target | URL | What to study |
-|---|---|---|---|
-| Oscar64 samples (hscrollshmup, breakout, lander, maze3d, snake) | authentic | https://github.com/drmortalwombat/oscar64 | IRQ chain library, virtual sprites, memory map and overlay pragmas, scroll game in C |
-| Corescape | authentic | https://github.com/drmortalwombat/corescape | complete vertical shooter: parallax scroll, 24 virtual sprites, waves/levels as data |
-| Tony: Born for Adventure | authentic | https://github.com/maciejmalecki/tony-demo | flip-screen platformer (MIT): Gradle+Kick build, Exomizer parts, VIC bank 3 map, raster lists |
-| Tetris C64 | authentic | https://github.com/wiebow/tetris.c64 | small game (MIT): one file per state, SID tune at `$1000`, hi-score file I/O |
-| SquareDoom | authentic | https://github.com/Kweepa/SquareDoom | per-kilobyte memory map, `$01=$34` play state, IRQ trampolines, disk streaming, ACME |
-| Cadaver sprite multiplexer | authentic | https://github.com/AlanPBourke/CadaverSpriteMultiplexer ; https://cadaver.github.io/rants/sprite.html | 24-sprite multiplexer, insertion sort, double-buffered table |
-| Gridrunner (llamaSource) | authentic | https://github.com/mwenge/gridrunner | classic arcade loop, 64tass rebuild with md5 against the original |
-| Elite C64 source (commented) | authentic | https://github.com/markmoxon/elite-source-code-commodore-64 | multi-part disk layout, reproducible byte-accurate build |
-| CROSS-LIB | authentic | https://github.com/Fabrizio-Caruso/CROSS-LIB | portable game logic over platform shims, cc65 across many targets |
-| Doom C64U | modern | https://github.com/slesinger/doom | 64 MHz plus 16 MB REU streaming, block-oriented REU format with CRC, hardware measurements |
-| Mandelbrot Upic | modern | https://github.com/chrisgleissner/mandelbrot-upic | Upic renderer, turbo probe, palette via UCI, Oscar64 build |
-| ultimate-uci-oscar64 | modern | https://github.com/xahmol/ultimate-uci-oscar64 | UCI, turbo and Upic helper library (Oscar64 C) |
-| Ultimate docs | modern | https://1541u-documentation.readthedocs.io | official config reference |
+## 7. MODERN packaging: `.cfg` and REU image
+A `.cfg` beside the PRG (same base name, started from the file browser) applies settings before the program runs; sections the machine lacks are skipped. Values are the labels shown by `c64_config get`; check them on the target.
+```
+[U64 Specific Settings]
+Turbo Control=U64 Turbo Registers
+CPU Speed=64
+[C64 and Cartridge Settings]
+RAM Expansion Unit=Enabled
+REU Size=16 MB
+```
+- Other machines may use a different label for registers mode (`C64U Turbo Registers`, unverified) or lack `64`: list both Turbo Control lines only if the loader tolerates the unknown one, and always keep the 1 MHz path.
+- REU image: `REU Preload=Enabled` and `REU Preload Image=/Usb0/preload.reu` are read at firmware boot only (`c64://ultimate/reu`); games that must work without a reboot load the same file with UCI LOAD_REU. Build it from level files:
+```python
+import struct, zlib
+blocks = [open(f, "rb").read() for f in ("level1.bin", "level2.bin")]  # each at most 64 KB
+img = bytearray(256)                     # header: magic, version, count, table (20 rows fit)
+img[0:6] = b"GREU\x01" + bytes([len(blocks)])
+for i, b in enumerate(blocks):           # row: offset, crc32, length (little endian)
+    img[8 + 12*i : 20 + 12*i] = struct.pack("<III", len(img), zlib.crc32(b), len(b))
+    img += b + bytes(-len(b) % 256)      # next block on a page boundary
+open("preload.reu", "wb").write(img)
+```
+- Emit the same offsets as an include file for the game (`reu_layout`); the game checks magic and CRCs after loading.
+
+## 8. Reference projects
+Open-source games, libraries and licences (read for technique, never copy GPL-3.0 or unlicensed code): `c64://gamedev/references`.

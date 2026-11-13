@@ -1,9 +1,12 @@
 # Ultimate turbo benchmark (CPU budget, badlines, sprites, I/O, REU DMA)
 
+**Summary:** Three c64bridge-assembler programs measure CPU cycles per frame, badline and sprite cost, I/O speed and REU DMA rate at every turbo index. Results (2026-11-13, Ultimate 64 Elite fw 3.15a and C64U fw 1.2.1) are in `results/summary.md`; game budgets derived from them are in c64://gamedev/architecture.
+**Read when:** you need a measured figure's source, want to rerun or extend the benchmark, or must decode a result block. For game budgets read architecture, not this file.
+
 Measures how many CPU cycles a game really gets per frame on an Ultimate 64 or C64 Ultimate at each turbo setting, and how
 fast REU DMA runs. The programs are written for the c64bridge assembler (`c64_program` op `upload_run_asm`): one call, no
 toolchain. Measured results are in `results/` (`summary.md`, one JSON file per device and date). The knowledge resources
-c64://ultimate/hardware, c64://ultimate/reu and c64://gamedev/architecture quote them.
+c64://ultimate/hardware, c64://ultimate/reu, c64://ultimate/upic and c64://gamedev/architecture quote them.
 
 Raw per-point JSON results are in the GitHub repository under data/ultimate/bench/results/; the npm package ships only results/summary.md.
 
@@ -163,7 +166,6 @@ node scripts/turbo-bench.mjs --decode out/dev/cpu-regs-all.bin          # decode
 The script reads the category before it changes anything, sets Turbo Control (and enables the REU if it is off), runs the
 programs, restores every changed item in a `finally` block and compares the categories before and after (`RESTORE VERIFIED`
 or `RESTORE DIFF`). It never writes flash, resets power or reboots. It reads C64 memory once per run, after the computed time.
-Under a shared device use `with_device_locks.py --wait 600 <device> -- node scripts/turbo-bench.mjs ...` so that one
-invocation holds the lock for the whole sequence. Set `C64U_PASSWORD` when network protection is enabled. Options:
+On a shared device run one invocation for the whole sequence and do not let another user's program or flash overlap. Set `C64U_PASSWORD` when network protection is enabled. Options:
 `--set NAME=VALUE` (parameter override), `--cfg Item=Value`, `--program cpu|reu|window`, `--assemble-only`, `--no-restore`.
 
