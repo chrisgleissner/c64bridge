@@ -750,7 +750,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **27 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **35 resources**, and **10 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -996,6 +996,14 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://guide/index` | Explains how to approach each knowledge bundle and when to consult it. |
 | `c64://guide/bootstrap` | Step-by-step rules for safe automation, verification, and rollback on the C64. |
 | `c64://guide/fast-paths` | Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition. |
+| `c64://gamedev/index` | Target decision, reading plan by game type, resource table with sizes, and the c64bridge dev loop for games. |
+| `c64://gamedev/architecture` | Frame-synchronous loop, state machine, frame and cycle budgets, memory-map templates for stock and REU-streaming games. |
+| `c64://gamedev/techniques` | Compact 6502 recipes for the techniques most C64 games need, each with reference projects to study. |
+| `c64://gamedev/toolchain` | Assembler and compiler choice, Makefile build, Exomizer packing, VICE and hardware test loop, open-source games to study. |
+| `c64://ultimate/hardware` | Turbo, SID layout, video and palette, REU/UCI presence, model detection and config settings, with fallbacks for stock machines. |
+| `c64://ultimate/uci` | UCI register protocol, command targets, file and REU loading, network, palette, safe use and detection. |
+| `c64://ultimate/reu` | REU registers, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples. |
+| `c64://ultimate/upic` | Cycle-exact border-colour technique for 384x256 16-colour graphics, framebuffer, palette use and limits. |
 | `c64://vice/binary-monitor-spec` | Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations. |
 | `c64://basic/spec` | Token definitions, syntax rules, and device I/O guidance for BASIC v2. |
 | `c64://basic/pitfalls` | Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps. |
