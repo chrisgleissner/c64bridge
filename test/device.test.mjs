@@ -1860,3 +1860,28 @@ test("device: ViceBackend reports unsupported operations and emulator metadata",
     assert.equal(configs.categories[0].name, "VICE");
   });
 });
+
+test("ViceBackend PRG file readers enforce the size limit on the opened file, not on an earlier stat", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-prg-limit-"));
+  const file = path.join(dir, "big.prg");
+  const fd = fs.openSync(file, "w");
+  fs.ftruncateSync(fd, 17 * 1024 * 1024); // sparse; above the 16 MiB read limit
+  fs.closeSync(fd);
+  const realStatSync = fs.statSync;
+  const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  const sent = [];
+  backend.withClient = async (fn) => fn({ async memSet(address) { sent.push(address); }, async memGet() { return Buffer.alloc(4); }, async keyboardFeed() {}, async reset() {} });
+  try {
+    // Simulate a file that was small when it was checked and grew before it was read.
+    fs.statSync = (target, ...rest) => {
+      const stat = realStatSync(target, ...rest);
+      return String(target) === fs.realpathSync(file) ? Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { size: 4 }) : stat;
+    };
+    await assert.rejects(() => backend.loadPrgFile(file), /too large/);
+    await assert.rejects(() => backend.runPrgFile(file), /too large/);
+    assert.deepEqual(sent, [], "nothing may be sent to VICE for an oversized file");
+  } finally {
+    fs.statSync = realStatSync;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

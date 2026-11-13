@@ -5,7 +5,7 @@
 import axios from "axios";
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
-import { resolveHostPath, DISK_IMAGE_MAX_READ_BYTES } from "./hostPaths.js";
+import { readHostFile, resolveHostPath, DISK_IMAGE_MAX_READ_BYTES } from "./hostPaths.js";
 import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
@@ -1186,12 +1186,12 @@ export class ViceBackend implements C64Facade {
   }
 
   async loadPrgFile(prgPath: string): Promise<RunResult> {
-    const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));
+    const data = await readHostFile(prgPath);
     return this.loadPrg(data);
   }
 
   async runPrgFile(prgPath: string): Promise<RunResult> {
-    const data = fs.readFileSync(resolveHostPath(prgPath, { purpose: "read" }));
+    const data = await readHostFile(prgPath);
     await this.injectPrg(data);
     return { success: true };
   }
