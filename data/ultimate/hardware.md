@@ -69,7 +69,7 @@ Full control recipe, address map, mixer and detection: c64://ultimate/multisid (
 - Two UltiSID (FPGA) and two sockets; `UltiSID Range Split` `1/4 (A7,A8)` makes 8 UltiSID parts (24 voices), sockets add 1 each (10, or 12 with dual-SID chips). Items: `SID Socket 1/2 Address`, `UltiSID 1/2 Address`, `Ext DualSID Range Split`, `Auto Address Mirroring` (default Enabled: every decoder at `$D400` answers all of `$D400-$D7FF`, so all chips hear every write).
 - Addresses: `Unmapped`, `$D400`..`$D7E0`, `$DE00`..`$DFE0`, steps `$20`. Keep SIDs out of `$DE00-$DFFF` (REU, UCI). Access only to mapped windows: an undecoded `$D400-$D7FF` address hangs the CPU or the device (Elite fw 3.15; assume the same on the C64U).
 - Mixer: Vol/Pan per UltiSID 1, UltiSID 2, Socket 1, Socket 2; split parts share their parent's pan. The UDP audio stream carries the mixer output, so pan and volume are in it. Per-UltiSID: filter curve, resonance, combined waveforms, digi level.
-- Run-time setup: UCI `LOAD_CONFIG` (fw 1.2.1 verified). Detection: UCI `GET_HWINFO` sub 1 lists the four decoders (not parts); test each mapped window with ENV3. Host: REST `GET /v1/configs/SID Addressing`, `SID Sockets Configuration`.
+- Run-time setup: UCI `LOAD_CONFIG` (fw 1.2.1 verified). Detection: UCI `GET_HWINFO` sub 1 lists the two UltiSIDs and each enabled socket (not parts); test each mapped window with ENV3. Host: REST `GET /v1/configs/SID Addressing`, `SID Sockets Configuration`.
 
 ## Detecting an Ultimate and its model
 
