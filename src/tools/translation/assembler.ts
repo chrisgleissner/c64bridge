@@ -16,7 +16,9 @@ export interface AssembleOptions {
    * Defaults to $0801 (the conventional BASIC-adjacent origin for standalone
    * machine code). Code assembled at $0801 without an org directive gets a
    * `10 SYS` BASIC stub to its first instruction; callers find the entry with {@link prgEntryAddress}
-   * and run it via a typed `SYS <entry>`, not `RUN`.
+   * and run it via a typed `SYS <entry>`, not `RUN`. The stub is added only when an instruction
+   * is assembled at the load address before any org; data-only source, or data at $0801 followed
+   * by code at an explicit origin, has no entry point there and is emitted without a stub.
    */
   loadAddress?: number;
   /**
@@ -1067,16 +1069,18 @@ class Assembler {
     return value;
   }
 
+  /**
+   * True when the source has an instruction that is assembled at the load
+   * address, before any org or `* =`. Only then is there an entry point for
+   * the BASIC stub to jump to; data-only source stays a plain data image.
+   */
   private emitsBeforeFirstOrg(): boolean {
     for (const line of this.lines) {
       const statement = line.statement;
       if (!statement) continue;
       if (statement.kind === "instruction") return true;
       if (statement.kind === "assignment" && statement.isLocationCounter) return false;
-      if (statement.kind === "directive") {
-        if (statement.name === "org") return false;
-        if (statement.name !== "include") return true;
-      }
+      if (statement.kind === "directive" && statement.name === "org") return false;
     }
     return false;
   }

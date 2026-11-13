@@ -580,3 +580,14 @@ test("shift counts and bitwise operands outside 32 bits are errors", () => {
   assert.match(assemblyError(".word 1<<31"), /2147483648/);
   assert.deepEqual([...assemblyToPrg("*=$c000\n lda #1<<7\n lda #$ff & $0f\n lda #256>>8")], [0x00, 0xc0, 0xa9, 0x80, 0xa9, 0x0f, 0xa9, 0x01]);
 });
+
+test("data-only source at the default address gets no BASIC stub", () => {
+  assert.deepEqual([...assemblyToPrg('.text "Hi"')], [0x01, 0x08, 0x48, 0x49]);
+  assert.deepEqual([...assemblyToPrg(".byte 1,2,3")], [0x01, 0x08, 1, 2, 3]);
+  // Data followed by code at the default address keeps the stub, which jumps to the first instruction.
+  const mixed = assemblyToPrgDetailed(".byte 1\nstart: lda #1\n rts");
+  assert.equal(mixed.prg.subarray(2, 6).toString("hex"), "0c080a00");
+  assert.equal(mixed.entryAddress, mixed.symbols.get("start"));
+  // Data at the default address followed by code at an explicit origin has no entry point at $0801.
+  assert.deepEqual([...assemblyToPrg(".byte 1\n*=$c000\n nop")].slice(0, 3), [0x01, 0x08, 1]);
+});
