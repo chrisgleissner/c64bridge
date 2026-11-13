@@ -319,3 +319,32 @@ test("C64U drive ids that are not a, b, softiec or a bus number are rejected bef
   }
   assert.deepEqual(server.requests, [], "no request may reach the device for an invalid drive id");
 });
+
+test("writeMemoryBlocks stops at the first failed block and names it", async (t) => {
+  const writes = [];
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      if (req.url.includes(":writemem")) {
+        writes.push(new URL(req.url, "http://x").searchParams.get("address"));
+        // The first write fails; a later one would succeed.
+        if (writes.length === 1) { res.writeHead(500, { "content-type": "application/json" }); return res.end(JSON.stringify({ errors: ["boom"] })); }
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ errors: [] }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const facade = await facadeFor({ baseUrl: `http://127.0.0.1:${server.address().port}` });
+
+  await assert.rejects(
+    () => facade.writeMemoryBlocks([
+      { address: 0x0400, bytes: Uint8Array.of(1, 2) },
+      { address: 0xD020, bytes: Uint8Array.of(3) },
+    ]),
+    /block 1 of 2 \(\$0400/,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(writes.length, 1, "no later block may be sent after a block failed");
+});

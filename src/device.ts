@@ -479,7 +479,19 @@ class C64uBackend implements C64Facade {
   }
   async writeMemoryBlocks(blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void> {
     const mergedBlocks = coalesceMemoryWriteBlocks(blocks);
-    await Promise.all(mergedBlocks.map(({ address, bytes }) => this.writeMemory(address, bytes)));
+    // Write one block at a time. With parallel writes a failed block rejected
+    // while later blocks were still queued, and those writes landed after the
+    // caller had been told the whole write failed.
+    for (const [index, { address, bytes }] of mergedBlocks.entries()) {
+      try {
+        await this.writeMemory(address, bytes);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Memory write failed at block ${index + 1} of ${mergedBlocks.length} ($${address.toString(16).toUpperCase().padStart(4, "0")}, ${bytes.length} byte(s)); later blocks were not written: ${reason}`,
+        );
+      }
+    }
   }
   async reset(): Promise<RunResult> { const res = await this.api.v1.machineResetUpdate(":reset"); return this.actionResult(res.data); }
   async reboot(): Promise<RunResult> { const res = await this.api.v1.machineRebootUpdate(":reboot"); return this.actionResult(res.data); }
