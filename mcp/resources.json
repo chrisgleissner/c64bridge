@@ -115,6 +115,7 @@
           "c64://gamedev/architecture",
           "c64://gamedev/techniques",
           "c64://gamedev/toolchain",
+          "c64://gamedev/references",
           "c64://ultimate/hardware",
           "c64://graphics/vic/spec",
           "c64://graphics/sprite-charset/best-practices",
@@ -248,6 +249,44 @@
           "c64://assembly/6510-spec",
           "c64://vice/binary-monitor-spec",
           "c64://kernal/rom-routines"
+        ]
+      }
+    },
+    {
+      "name": "Game References",
+      "uri": "c64://gamedev/references",
+      "description": "Read to find real games and projects to learn from, with the technique each is known for and where to read it: modern Ultimate (UCI, REU, Upic, turbo) projects and classic stock C64 games.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "gamedev",
+        "priority": "supplemental",
+        "summary": "Modern Ultimate projects and classic C64 games mapped to techniques, with licence cautions for reuse.",
+        "prompts": [
+          "game-development"
+        ],
+        "tools": [
+          "c64_program",
+          "c64_memory",
+          "c64_graphics",
+          "c64_select_backend"
+        ],
+        "tags": [
+          "game",
+          "references",
+          "examples"
+        ],
+        "bundle": {
+          "id": "gamedev",
+          "title": "C64 Game Development",
+          "summary": "Start at c64://gamedev/index for any game request; it picks the target (modern Ultimate by default, or stock C64) and lists which other resources to read.",
+          "order": 1
+        },
+        "order": 4,
+        "relatedResources": [
+          "c64://gamedev/index",
+          "c64://gamedev/techniques",
+          "c64://gamedev/toolchain",
+          "c64://ultimate/hardware"
         ]
       }
     },
@@ -1300,6 +1339,7 @@
           "c64://gamedev/architecture",
           "c64://gamedev/techniques",
           "c64://gamedev/toolchain",
+          "c64://gamedev/references",
           "c64://ultimate/hardware",
           "c64://ultimate/uci",
           "c64://ultimate/reu",

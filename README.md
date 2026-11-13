@@ -750,7 +750,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **35 resources**, and **11 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **36 resources**, and **11 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -1000,6 +1000,7 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://gamedev/architecture` | Frame-synchronous loop, state machine, frame and cycle budgets, memory-map templates for stock and REU-streaming games. |
 | `c64://gamedev/techniques` | Compact 6502 recipes for the techniques most C64 games need, each with reference projects to study. |
 | `c64://gamedev/toolchain` | Assembler and compiler choice, Makefile build, Exomizer packing, VICE and hardware test loop, open-source games to study. |
+| `c64://gamedev/references` | Modern Ultimate projects and classic C64 games mapped to techniques, with licence cautions for reuse. |
 | `c64://ultimate/hardware` | Turbo, SID layout, video and palette, REU/UCI presence, model detection and config settings, with fallbacks for stock machines. |
 | `c64://ultimate/uci` | UCI register protocol, command targets, file and REU loading, network, palette, safe use and detection. |
 | `c64://ultimate/reu` | REU registers, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples. |

@@ -9,6 +9,7 @@ export const RESOURCE_URIS = {
     architecture: "c64://gamedev/architecture",
     techniques: "c64://gamedev/techniques",
     toolchain: "c64://gamedev/toolchain",
+    references: "c64://gamedev/references",
   },
   ultimate: {
     hardware: "c64://ultimate/hardware",
@@ -85,6 +86,7 @@ export const CANONICAL_KNOWLEDGE_RESOURCE_URIS: readonly string[] = Object.freez
   RESOURCE_URIS.gamedev.architecture,
   RESOURCE_URIS.gamedev.techniques,
   RESOURCE_URIS.gamedev.toolchain,
+  RESOURCE_URIS.gamedev.references,
   RESOURCE_URIS.ultimate.hardware,
   RESOURCE_URIS.ultimate.uci,
   RESOURCE_URIS.ultimate.reu,
