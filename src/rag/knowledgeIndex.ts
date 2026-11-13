@@ -250,7 +250,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Turbo, SID layout, video and palette, REU/UCI presence, model detection and config settings, with fallbacks for stock machines.",
         prompts: ["game-development"],
         tools: ["c64_config", "c64_program", "c64_memory", "c64_system"],
-        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.ultimate.upic, RESOURCE_URIS.io.spec, RESOURCE_URIS.memory.map, RESOURCE_URIS.sound.sid.spec],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.ultimate.upic, RESOURCE_URIS.ultimate.multisid, RESOURCE_URIS.io.spec, RESOURCE_URIS.memory.map, RESOURCE_URIS.sound.sid.spec],
         tags: ["ultimate", "turbo", "hardware", "modern"],
       },
       {
@@ -288,6 +288,18 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         tools: ["c64_config", "c64_program", "c64_memory", "c64_system"],
         relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.gamedev.index],
         tags: ["ultimate", "upic", "graphics", "modern"],
+      },
+      {
+        uri: RESOURCE_URIS.ultimate.multisid,
+        name: "Ultimate Multi-SID Control",
+        description: "Read when a modern C64U/Ultimate game uses more than one SID, sets SID addresses, range splits, pan or the mixer at run time, or must work with empty sockets, one or two real SIDs or SID replacements; not on a stock C64.",
+        relativePath: "data/ultimate/multisid.md",
+        priority: "reference",
+        summary: "Verified control recipe per owner configuration (8 to 12 SIDs), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_sound"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.gamedev.index],
+        tags: ["ultimate", "sid", "multisid", "modern"],
       },
       {
         uri: RESOURCE_URIS.ultimate.bench,

@@ -64,14 +64,12 @@ Timing facts:
 
 ## Multiple SIDs
 
-- Two UltiSID (FPGA), two sockets (SID Socket 1/2; user-accessible on the C64U unverified). Items: `SID Socket 1/2 Address`, `UltiSID 1/2 Address`.
-- Address options: `Unmapped`, `$D400`..`$D7E0`, `$DE00`..`$DEE0`, `$DF00`..`$DFE0` (steps of `$20`). Default: all four `$D400`.
-- `Auto Address Mirroring` (default Enabled) mirrors the available SIDs over `$D400-$D7FF`, so a write to "the second SID" at `$D420` can hit the same chip on mono setups. Real stereo needs distinct addresses and panning.
-- Range split (`UltiSID Range Split`, up to 8 SIDs): `1/2 (A5)` second half at +`$20` (A6 +`$40`, A7 +`$80`, A8 +`$100`), `1/4 (A5,A6)`, `(A5,A8)`, `(A7,A8)`. Sockets: `Ext DualSID Range Split` Off, A5..A9.
-- SIDs at `$DE00`/`$DF00` collide with REU, UCI, Audio, ACIA (arbitration unverified).
-- Per UltiSID (config only): filter curve, resonance, combined waveforms, digi level; user-selectable, so no exact 6581/8580 digi level.
-- Mixer settings affect HDMI/analog out only; a built-in SID player may override SID config (`SID Player Autoconfig`).
-- Detection: no SID count register for C64 code; probe each candidate base with ordinary SID probing (c64://sound/sid/spec), bounded. Deprecated UCI GET_HWINFO sub 1 lists configured SID bases (c64://ultimate/uci). Host: REST `GET /v1/configs/SID Addressing`, `SID Sockets Configuration`.
+Full control recipe, address map, mixer and detection: c64://ultimate/multisid (verified on a C64U, fw 1.2.1).
+
+- Two UltiSID (FPGA) and two sockets; `UltiSID Range Split` `1/4 (A7,A8)` makes 8 UltiSID parts (24 voices), sockets add 1 each (10, or 12 with dual-SID chips). Items: `SID Socket 1/2 Address`, `UltiSID 1/2 Address`, `Ext DualSID Range Split`, `Auto Address Mirroring` (default Enabled: every decoder at `$D400` answers all of `$D400-$D7FF`, so all chips hear every write).
+- Addresses: `Unmapped`, `$D400`..`$D7E0`, `$DE00`..`$DFE0`, steps `$20`. Keep SIDs out of `$DE00-$DFFF` (REU, UCI). Access only to mapped windows: an undecoded `$D400-$D7FF` address hangs the CPU or the device (Elite fw 3.15; assume the same on the C64U).
+- Mixer: Vol/Pan per UltiSID 1, UltiSID 2, Socket 1, Socket 2; split parts share their parent's pan. The UDP audio stream carries the mixer output, so pan and volume are in it. Per-UltiSID: filter curve, resonance, combined waveforms, digi level.
+- Run-time setup: UCI `LOAD_CONFIG` (fw 1.2.1 verified). Detection: UCI `GET_HWINFO` sub 1 lists the four decoders (not parts); test each mapped window with ENV3. Host: REST `GET /v1/configs/SID Addressing`, `SID Sockets Configuration`.
 
 ## Detecting an Ultimate and its model
 

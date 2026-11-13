@@ -24,6 +24,7 @@ const GAMEDEV_URIS = [
   RESOURCE_URIS.ultimate.reu,
   RESOURCE_URIS.ultimate.upic,
   RESOURCE_URIS.ultimate.bench,
+  RESOURCE_URIS.ultimate.multisid,
 ];
 
 test("game development and Ultimate resources are listed with usable descriptions", () => {

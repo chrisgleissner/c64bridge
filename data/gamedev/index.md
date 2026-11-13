@@ -26,7 +26,7 @@ State the chosen target in your first reply.
 | Puzzle / board / card | architecture (state machine), techniques (input, RNG), `c64://graphics/sprite-charset/best-practices` |
 | RPG / adventure, lots of data | architecture (REU and loader sections), toolchain (crunching), `c64://ultimate/reu`, `c64://ultimate/uci` |
 | Hi-colour Upic game | `c64://ultimate/upic`, `c64://ultimate/hardware`, `c64://ultimate/reu`, architecture, toolchain; no hardware sprites |
-| Music/sound-heavy | techniques (music), `c64://sound/sid/spec`, `c64://sound/sid/file-format` |
+| Music/sound-heavy | techniques (music), `c64://sound/sid/spec`, `c64://sound/sid/file-format`; MODERN adds `c64://ultimate/multisid` (8-12 SIDs) |
 
 ## Resource table (KB, decimal; other rows approximate)
 | URI | Content | KB |
@@ -37,6 +37,7 @@ State the chosen target in your first reply.
 | `c64://gamedev/toolchain` | assemblers, build, crunchers, test loop, games to study | 8.0 |
 | `c64://gamedev/references` | Games to learn from | 8.9 |
 | `c64://ultimate/hardware` | turbo, SIDs, video, detection, config | 11.9 |
+| `c64://ultimate/multisid` | 8-12 SIDs: address map, split, mixer, LOAD_CONFIG, detection | 10.0 |
 | `c64://ultimate/reu` | REU registers, loading paths, streaming | 12.0 |
 | `c64://ultimate/uci` | UCI commands, DOS, safe use in a game | 16.0 |
 | `c64://ultimate/upic` | Upic technique, framebuffer, palette, limits | 11.7 |

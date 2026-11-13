@@ -110,16 +110,16 @@ Instances 1 and 2 are independent (own current dir, own open file): use 2 for a 
 | 06 | REBOOT | - | full C64 reboot, UCI reset, no reply |
 | 08 / 09 | LOAD_REU / SAVE_REU | `<filename>` | wedged the interface on firmware 3.14d; prefer DOS 21/22 |
 | 0F | U64_SAVEMEM | `[<filename>]` | U64-class; saves 64 KB RAM to `/temp/c64_memory.bin`; C64 halted |
-| 28 | GET_HWINFO | `[sub]` | deprecated; 0 = model string, 1 = SID frames |
+| 28 | GET_HWINFO | `[sub]` | 0 = model string, 1 = SID decoder list (count, 5 bytes each; c64://ultimate/multisid) |
 | 29 | GET_DRVINFO | `[1]` | count, then 3 bytes per drive: type (`00` 1541, `01` 1571, `02` 1581, `0F` SoftwareIEC, `50` printer), IEC addr, power |
 | 30-35 | drive A/B power | - | `30` A on, `31` A off, `32` B on, `33` B off, `34`/`35` read power (`off`/`on `) |
-| 50 | LOAD_CONFIG | `[<filename>]` | applies a `.cfg`; firmware 2026-08 on |
+| 50 | LOAD_CONFIG | `[<filename>]` | applies a `.cfg`; verified on C64U 1.2.1 |
 | 51 | GET_PALETTE | - | 48 bytes: 16 x R,G,B |
 | 52 | SET_PALETTE | 48 bytes | length 50 total |
 | 53 | SET_PALETTE_COLOR | `<idx 0-15> <r> <g> <b>` | length 6 |
 | 54 | RESET_PALETTE | - | built-in colours |
 
-Not available: reset without reboot, run PRG, change CPU speed, single config get/set, SID/mixer control, input injection, power off. READ_RTC `02` answers `21`.
+Not available: reset without reboot, run PRG, change CPU speed, single config get/set, SID/mixer control except by LOAD_CONFIG, input injection, power off. READ_RTC `02` answers `21`.
 
 **Palette `$51-$54`** (U64-class only; U2 answers `21`; firmware 2026-09-03 on; wrong length gives `81`): 8 bits per channel, takes effect on the whole display at once, live only (reset restores defaults; nothing saved). Whole palette costs about a quarter of a frame at 1 MHz, one colour about an eighth; per-frame changes are fine, per-raster-line are not. A blocking write can take 12-58 ms (measured on a C64U), so in a time-critical display issue it as a non-blocking step per frame (push command, poll status once per frame, finish later, one command in flight) or under a fade. Send `04 54` on exit. Raw: `04 53 02 FF FF FF` colour 2 to white. See also c64://ultimate/upic.
 
