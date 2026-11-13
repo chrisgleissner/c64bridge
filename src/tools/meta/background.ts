@@ -7,7 +7,6 @@ import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } f
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
 import os from "node:os";
-import { addMilliseconds } from "date-fns";
 import type { C64Facade } from "../../device.js";
 import { screenCodesToAscii } from "../../petscii.js";
 import { loggerFor } from "../../logger.js";
@@ -354,7 +353,7 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
 function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]): void {
   if (task.status !== "running") return;
   const delay = Math.max(0, task.intervalMs);
-  task.nextRunAt = addMilliseconds(new Date(), delay);
+  task.nextRunAt = new Date(Date.now() + delay);
   task._timer = setTimeout(async () => {
     if (task.status !== "running") return;
     try {
