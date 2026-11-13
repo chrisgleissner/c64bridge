@@ -98,8 +98,8 @@ test("continue resumes the CPU and a later checkpoint hit is observed by wait_fo
     assert.equal(server.openConnections, 1, "the connection that holds a stopping checkpoint stays open");
 
     const waiting = waitForState(client, { timeoutMs: 3_000 });
-    await delay(50);
-    assert.equal(server.hitCheckpoint(created.id), true);
+    // The CPU is only running between the tool's own monitor commands; hit it as soon as it runs.
+    await waitUntil(() => server.hitCheckpoint(created.id), "the CPU runs and reaches the checkpoint");
     const first = await waiting;
     assert.equal(first.matched, true);
     assert.equal(server.running, false);
@@ -111,8 +111,7 @@ test("continue resumes the CPU and a later checkpoint hit is observed by wait_fo
     assert.equal(server.running, true);
 
     const again = waitForState(client, { timeoutMs: 3_000 });
-    await delay(50);
-    assert.equal(server.hitCheckpoint(created.id), true);
+    await waitUntil(() => server.hitCheckpoint(created.id), "the CPU runs and reaches the checkpoint again");
     assert.equal((await again).matched, true, "the second hit is observed too");
 
     const timedOut = await (async () => {
