@@ -886,3 +886,24 @@ export function readKnowledgeResource(
     text,
   };
 }
+
+const PUBLISHED_RESOURCE_META_KEYS = ["domain", "priority", "order"] as const;
+
+/**
+ * Returns the resource _meta published in resources/list. The summary, prompts,
+ * tools, tags, bundle and relatedResources fields are about 17 KB over 36 resources and
+ * are published only with C64BRIDGE_VERBOSE_SCHEMA=1.
+ */
+export function publishedResourceMeta<T extends object>(
+  metadata: T,
+  options: { verbose?: boolean } = {},
+): Partial<T> {
+  const verbose = options.verbose ?? process.env.C64BRIDGE_VERBOSE_SCHEMA === "1";
+  if (verbose) return metadata;
+  const source = metadata as Record<string, unknown>;
+  const published: Record<string, unknown> = {};
+  for (const key of PUBLISHED_RESOURCE_META_KEYS) {
+    if (source[key] !== undefined) published[key] = source[key];
+  }
+  return published as Partial<T>;
+}

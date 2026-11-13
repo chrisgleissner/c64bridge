@@ -251,6 +251,30 @@ export function publishedInputSchema(
   return published;
 }
 
+const PUBLISHED_TOOL_META_KEYS = [
+  "domain", "lifecycle", "platforms", "operationPlatforms", "effect", "operationEffects",
+] as const;
+
+/**
+ * Returns the tool _meta published in tools/list. Clients need the platforms and
+ * effects; the descriptive fields (summary, examples, workflowHints, resources,
+ * prompts, tags, prerequisites) cost about 20 KB per listing and are published only with
+ * C64BRIDGE_VERBOSE_SCHEMA=1. The registry keeps them for documentation generators.
+ */
+export function publishedToolMeta<T extends object>(
+  metadata: T,
+  options: { verbose?: boolean } = {},
+): Partial<T> {
+  const verbose = options.verbose ?? process.env.C64BRIDGE_VERBOSE_SCHEMA === "1";
+  if (verbose) return metadata;
+  const source = metadata as Record<string, unknown>;
+  const published: Record<string, unknown> = {};
+  for (const key of PUBLISHED_TOOL_META_KEYS) {
+    if (source[key] !== undefined) published[key] = source[key];
+  }
+  return published as Partial<T>;
+}
+
 const OP_LIMITS_NOTE = "Limits depend on op.";
 
 const WIDENABLE_KEYS = new Set([

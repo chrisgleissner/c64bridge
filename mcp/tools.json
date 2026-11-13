@@ -279,52 +279,7 @@
       },
       "_meta": {
         "domain": "programs",
-        "summary": "Runs PRG/CRT files, uploads BASIC or ASM, and coordinates batch test flows.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap",
-          "c64://basic/spec",
-          "c64://assembly/6510-spec"
-        ],
-        "prompts": [
-          "basic-program",
-          "assembly-program"
-        ],
-        "examples": [
-          {
-            "name": "Run PRG from storage",
-            "description": "Load and execute a PRG in one call",
-            "arguments": {
-              "op": "run_prg",
-              "path": "//USB0/demo.prg"
-            }
-          },
-          {
-            "name": "Upload BASIC source",
-            "description": "Send inline BASIC to the C64 and run it",
-            "arguments": {
-              "op": "upload_run_basic",
-              "program": "10 PRINT \"HELLO\"\n20 GOTO 10"
-            }
-          },
-          {
-            "name": "Show greeting on both backends",
-            "description": "Render a platform-specific greeting on VICE and C64U with screenshot verification",
-            "arguments": {
-              "op": "cross_platform_greeting"
-            }
-          }
-        ],
-        "tags": [
-          "programs",
-          "execution",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Choose BASIC or assembly uploaders based on the language you just generated for the user.",
-          "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on hardware.",
-          "For a quick visible confirmation on VICE, C64U/U64, or U2-family hardware, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -556,106 +511,7 @@
       },
       "_meta": {
         "domain": "memory",
-        "summary": "Reads or writes RAM, captures the screen, or waits for text matches in one tool.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap",
-          "c64://basic/spec",
-          "c64://assembly/6510-spec"
-        ],
-        "prompts": [
-          "memory-debug",
-          "basic-program",
-          "assembly-program"
-        ],
-        "examples": [
-          {
-            "name": "Read colour RAM",
-            "description": "Read 16 bytes starting at $D800",
-            "arguments": {
-              "op": "read",
-              "address": "$D800",
-              "length": 16
-            }
-          },
-          {
-            "name": "Wait for READY prompt",
-            "description": "Poll until the READY. prompt appears",
-            "arguments": {
-              "op": "wait_for_text",
-              "pattern": "READY."
-            }
-          },
-          {
-            "name": "Disassemble entry point",
-            "description": "Disassemble 20 instructions starting at $0810",
-            "arguments": {
-              "op": "disassemble",
-              "address": "$0810",
-              "instructionCount": 20
-            }
-          },
-          {
-            "name": "Copy screen RAM",
-            "description": "Copy 1000 bytes of screen RAM to a scratch area",
-            "arguments": {
-              "op": "copy_memory",
-              "source": "$0400",
-              "dest": "$C000",
-              "length": 1000
-            }
-          },
-          {
-            "name": "Clear screen RAM",
-            "description": "Fill screen RAM with space character ($20)",
-            "arguments": {
-              "op": "fill_memory",
-              "address": "$0400",
-              "length": 1000,
-              "pattern": "20"
-            }
-          },
-          {
-            "name": "Search for RTS",
-            "description": "Find RTS ($60) instructions in BASIC ROM",
-            "arguments": {
-              "op": "search_memory",
-              "startAddress": "$A000",
-              "endAddress": "$BFFF",
-              "pattern": "60"
-            }
-          },
-          {
-            "name": "Compare two buffers",
-            "description": "Check whether two 256-byte regions differ",
-            "arguments": {
-              "op": "compare_memory",
-              "address1": "$C000",
-              "address2": "$C100",
-              "length": 256
-            }
-          },
-          {
-            "name": "Save PRG dump",
-            "description": "Save $0801-$CFFF as a PRG file",
-            "arguments": {
-              "op": "save_memory",
-              "startAddress": "$0801",
-              "endAddress": "$CFFF",
-              "filePath": "/tmp/dump.prg"
-            }
-          }
-        ],
-        "tags": [
-          "memory",
-          "debug",
-          "screen",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Pair memory operations with documentation snippets so addresses and symbols stay meaningful to the user.",
-          "Confirm intent before mutating RAM and explain how the change affects the running program."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -1047,60 +903,7 @@
       },
       "_meta": {
         "domain": "audio",
-        "summary": "Adjusts SID registers, plays files, composes music, and runs verification captures.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://sound/sid/spec",
-          "c64://sound/sidwave/spec",
-          "c64://sound/sid/file-format"
-        ],
-        "prompts": [
-          "sid-music"
-        ],
-        "examples": [
-          {
-            "name": "Capture samples",
-            "description": "Grab 256 stereo sample pairs from the Ultimate audio stream",
-            "arguments": {
-              "op": "capture_samples"
-            }
-          },
-          {
-            "name": "Trigger SID voice",
-            "description": "Start voice 1 on C4 with a triangle waveform",
-            "arguments": {
-              "op": "note_on",
-              "voice": 1,
-              "note": "C4",
-              "waveform": "tri"
-            }
-          },
-          {
-            "name": "Play Für Elise",
-            "description": "Compile and play the built-in Für Elise preset on the active backend",
-            "arguments": {
-              "op": "play_preset",
-              "preset": "fuer_elise"
-            }
-          },
-          {
-            "name": "Verify silence",
-            "description": "Stop all voices and confirm the SID output is quiet",
-            "arguments": {
-              "op": "silence_all",
-              "verify": true
-            }
-          }
-        ],
-        "tags": [
-          "sid",
-          "audio",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Trigger note_on or generate when the user wants immediate SID playback.",
-          "Follow up playback changes with analyze or silence verification to provide confident audio feedback."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -1279,50 +1082,7 @@
       },
       "_meta": {
         "domain": "system",
-        "summary": "Manages machine state (pause, reset, power) and schedules recurring background tasks.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap"
-        ],
-        "prompts": [
-          "memory-debug"
-        ],
-        "examples": [
-          {
-            "name": "Soft reset",
-            "description": "Issue a soft reset without cutting power",
-            "arguments": {
-              "op": "reset"
-            }
-          },
-          {
-            "name": "Start background screen capture",
-            "description": "Launch a recurring read_screen task",
-            "arguments": {
-              "op": "start_task",
-              "name": "screen_poll",
-              "operation": "read_screen",
-              "intervalMs": 2000
-            }
-          },
-          {
-            "name": "Inspect performance trace",
-            "description": "Summarize the current session diagnostics for profiling",
-            "arguments": {
-              "op": "performance_report",
-              "scope": "current"
-            }
-          }
-        ],
-        "tags": [
-          "system",
-          "control",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Use pause/resume around invasive memory changes, and explain the impact of resets or power changes.",
-          "Combine background task operations with list_tasks to monitor long-running diagnostics."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -1397,32 +1157,7 @@
       },
       "_meta": {
         "domain": "platform",
-        "summary": "Changes the active backend without restarting the MCP server and reports resulting tool availability.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://platform/status",
-          "c64://guide/bootstrap"
-        ],
-        "prompts": [],
-        "examples": [
-          {
-            "name": "Switch to VICE",
-            "description": "Move subsequent tool calls to the emulator backend",
-            "arguments": {
-              "op": "select",
-              "backend": "vice"
-            }
-          }
-        ],
-        "tags": [
-          "platform",
-          "backend",
-          "grouped",
-          "switch"
-        ],
-        "workflowHints": [
-          "Switch backends before invoking backend-specific tools so platform gating stays accurate."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -1683,78 +1418,7 @@
       },
       "_meta": {
         "domain": "graphics",
-        "summary": "Captures frames, renders PETSCII text or art, previews sprites, and displays bitmap images from one tool.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://graphics/vic/spec",
-          "c64://basic/spec",
-          "c64://assembly/6510-spec"
-        ],
-        "prompts": [
-          "graphics-demo",
-          "basic-program",
-          "assembly-program"
-        ],
-        "examples": [
-          {
-            "name": "Capture one frame",
-            "description": "Grab the current framebuffer from the active backend",
-            "arguments": {
-              "op": "capture_frame"
-            }
-          },
-          {
-            "name": "Create PETSCII art (dry run)",
-            "description": "Synthesize art without uploading to the C64",
-            "arguments": {
-              "op": "render_petscii_art",
-              "prompt": "duck on a pond",
-              "dryRun": true
-            }
-          },
-          {
-            "name": "Render PETSCII text",
-            "description": "Print HELLO with blue border",
-            "arguments": {
-              "op": "render_petscii_text",
-              "text": "HELLO",
-              "borderColor": 6
-            }
-          },
-          {
-            "name": "Display sprite",
-            "description": "Show sprite data at coordinates",
-            "arguments": {
-              "op": "render_sprite",
-              "sprite": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-            }
-          },
-          {
-            "name": "Import bitmap image",
-            "description": "Convert a PNG into VIC bitmap memory and display it",
-            "arguments": {
-              "op": "render_bitmap",
-              "imagePath": "./artifacts/sample.png",
-              "format": "hires"
-            }
-          },
-          {
-            "name": "Read VIC-II state",
-            "description": "Decode graphics mode, memory layout, and colours from VIC-II registers (cross-platform)",
-            "arguments": {
-              "op": "get_display_state"
-            }
-          }
-        ],
-        "tags": [
-          "graphics",
-          "vic",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Use render helpers for PETSCII text, PETSCII art, sprites, and bitmaps; clarify whether PETSCII art executed or stayed a dry run.",
-          "Mention sprite positions/colours so follow-up memory inspection stays grounded."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -1822,55 +1486,7 @@
       },
       "_meta": {
         "domain": "rag",
-        "summary": "Returns knowledge references for BASIC (basic), 6502/6510 assembly (asm) or all curated docs including game development and Ultimate features (docs).",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://basic/spec",
-          "c64://assembly/6510-spec",
-          "c64://guide/bootstrap",
-          "c64://gamedev/index"
-        ],
-        "prompts": [
-          "basic-program",
-          "assembly-program",
-          "game-development"
-        ],
-        "examples": [
-          {
-            "name": "Retrieve BASIC snippet",
-            "description": "Search for device 4 printing guidance",
-            "arguments": {
-              "op": "basic",
-              "q": "basic print device 4"
-            }
-          },
-          {
-            "name": "Retrieve assembly snippet",
-            "description": "Search for raster IRQ examples",
-            "arguments": {
-              "op": "asm",
-              "q": "stable raster irq"
-            }
-          },
-          {
-            "name": "Search curated docs",
-            "description": "Search Ultimate and game development docs",
-            "arguments": {
-              "op": "docs",
-              "q": "REU streaming"
-            }
-          }
-        ],
-        "tags": [
-          "rag",
-          "search",
-          "reference",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Use BASIC retrieval before synthesising new BASIC code and mention primary resources in responses.",
-          "For assembly, note registers or addresses surfaced so the user can inspect them further."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -2102,51 +1718,7 @@
       },
       "_meta": {
         "domain": "storage",
-        "summary": "Mount or unmount images, create new disks, list drives, and find programs from one tool.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap"
-        ],
-        "prompts": [
-          "drive-manager"
-        ],
-        "examples": [
-          {
-            "name": "Mount image with verification",
-            "description": "Power on drive8, mount image, and verify",
-            "arguments": {
-              "op": "mount",
-              "drive": "drive8",
-              "image": "/tmp/demo.d64",
-              "verify": true
-            }
-          },
-          {
-            "name": "Create D81",
-            "description": "Create blank D81 image",
-            "arguments": {
-              "op": "create_image",
-              "format": "d81",
-              "path": "/tmp/new.d81"
-            }
-          },
-          {
-            "name": "List drives",
-            "description": "Fetch drive status",
-            "arguments": {
-              "op": "list_drives"
-            }
-          }
-        ],
-        "tags": [
-          "storage",
-          "drive",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Summarise drive state before and after mounts so the user can confirm hardware changes.",
-          "Call out when verification retries succeed or fail so follow-up actions are clear."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -2237,40 +1809,7 @@
       },
       "_meta": {
         "domain": "drive",
-        "summary": "Power cycle drive slots, reset IEC state, switch emulation modes, or load custom ROMs.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap"
-        ],
-        "prompts": [],
-        "examples": [
-          {
-            "name": "Power on drive",
-            "description": "Enable drive8",
-            "arguments": {
-              "op": "power_on",
-              "drive": "drive8"
-            }
-          },
-          {
-            "name": "Set 1581 mode",
-            "description": "Switch emulation mode",
-            "arguments": {
-              "op": "set_mode",
-              "drive": "drive8",
-              "mode": "1581"
-            }
-          }
-        ],
-        "tags": [
-          "drive",
-          "hardware",
-          "grouped"
-        ],
-        "workflowHints": [
-          "State the resulting power/mode/ROM so the user can reconcile IEC behaviour.",
-          "Suggest running c64_disk (op list_drives) to confirm status when appropriate."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -2463,48 +2002,7 @@
       },
       "_meta": {
         "domain": "printer",
-        "summary": "Print text or bitmaps and define custom characters for Commodore or Epson printers.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap"
-        ],
-        "prompts": [],
-        "examples": [
-          {
-            "name": "Print text",
-            "description": "Generate BASIC for device 4",
-            "arguments": {
-              "op": "print_text",
-              "text": "HELLO",
-              "target": "commodore",
-              "formFeed": true
-            }
-          },
-          {
-            "name": "Print bitmap",
-            "description": "Send Epson graphics row",
-            "arguments": {
-              "op": "print_bitmap",
-              "printer": "epson",
-              "columns": [
-                0,
-                255,
-                0
-              ],
-              "mode": "*",
-              "density": 3
-            }
-          }
-        ],
-        "tags": [
-          "printer",
-          "device",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Mention device/secondary addresses so the user knows which printer workflow ran.",
-          "When defining characters, remind the user to send the BASIC program returned in the payload."
-        ],
         "platforms": [
           "c64u",
           "u2"
@@ -2687,52 +2185,7 @@
       },
       "_meta": {
         "domain": "config",
-        "summary": "List or update settings, access firmware info, take snapshots, and run program shuffle workflows.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap",
-          "c64://guide/index"
-        ],
-        "prompts": [
-          "memory-debug"
-        ],
-        "examples": [
-          {
-            "name": "List categories",
-            "description": "Enumerate configuration categories",
-            "arguments": {
-              "op": "list"
-            }
-          },
-          {
-            "name": "Set volume",
-            "description": "Adjust audio volume to 70",
-            "arguments": {
-              "op": "set",
-              "category": "Audio",
-              "item": "Volume",
-              "value": 70
-            }
-          },
-          {
-            "name": "Snapshot config",
-            "description": "Write configuration snapshot to disk",
-            "arguments": {
-              "op": "snapshot",
-              "path": "./snapshots/c64.json"
-            }
-          }
-        ],
-        "tags": [
-          "config",
-          "diagnostics",
-          "grouped"
-        ],
-        "workflowHints": [
-          "List categories before changing values so users can confirm firmware-provided names.",
-          "Mention when operations persist to flash or modify debug registers to highlight impacts.",
-          "Call out snapshot file paths so users can version-control or reuse them later."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -3000,44 +2453,7 @@
       },
       "_meta": {
         "domain": "extract",
-        "summary": "Export sprites or charsets, dump RAM, compute filesystem stats, or run firmware health checks.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap",
-          "c64://basic/spec",
-          "c64://assembly/6510-spec"
-        ],
-        "prompts": [],
-        "examples": [
-          {
-            "name": "Dump RAM to file",
-            "description": "Write $0400-$07FF to hex file",
-            "arguments": {
-              "op": "memory_dump",
-              "address": "$0400",
-              "length": 1024,
-              "outputPath": "./dumps/screen.hex"
-            }
-          },
-          {
-            "name": "Scan sprites",
-            "description": "Scan $2000 for sprites",
-            "arguments": {
-              "op": "sprites",
-              "address": "$2000",
-              "length": 2048
-            }
-          }
-        ],
-        "tags": [
-          "extract",
-          "diagnostics",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Pause the machine when advised so dumps and sprite scans remain stable.",
-          "Summarise output file paths or sample counts so users can inspect artifacts quickly."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -3102,43 +2518,7 @@
       },
       "_meta": {
         "domain": "stream",
-        "summary": "Start or stop audio/video/debug streaming in a single tool.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/index",
-          "c64://sound/sid/spec"
-        ],
-        "prompts": [
-          "sid-music"
-        ],
-        "examples": [
-          {
-            "name": "Start audio stream",
-            "description": "Send audio to localhost",
-            "arguments": {
-              "op": "start",
-              "stream": "audio",
-              "target": "127.0.0.1:9000"
-            }
-          },
-          {
-            "name": "Stop audio stream",
-            "description": "Stop streaming",
-            "arguments": {
-              "op": "stop",
-              "stream": "audio"
-            }
-          }
-        ],
-        "tags": [
-          "stream",
-          "monitor",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Confirm stream targets for the user so they can connect their tooling.",
-          "Remind users to stop streams when capture completes to free resources."
-        ],
         "platforms": [
           "c64u"
         ],
@@ -3400,90 +2780,7 @@
       },
       "_meta": {
         "domain": "debug",
-        "summary": "Manage breakpoints, inspect registers, and step through code on the VICE backend.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://assembly/6510-spec",
-          "c64://memory/map"
-        ],
-        "prompts": [
-          "assembly-program",
-          "memory-debug"
-        ],
-        "examples": [
-          {
-            "name": "List checkpoints",
-            "description": "Show all breakpoints defined in the emulator.",
-            "arguments": {
-              "op": "list_checkpoints"
-            }
-          },
-          {
-            "name": "Step over instruction",
-            "description": "Advance one instruction without entering subroutines.",
-            "arguments": {
-              "op": "step",
-              "mode": "over"
-            }
-          },
-          {
-            "name": "Inspect registers",
-            "description": "Read CPU registers from memspace 0 (default).",
-            "arguments": {
-              "op": "get_registers"
-            }
-          },
-          {
-            "name": "Create labelled breakpoint",
-            "description": "Set a breakpoint at $0810 with a descriptive label.",
-            "arguments": {
-              "op": "create_checkpoint",
-              "address": "$0810",
-              "label": "entry_point"
-            }
-          },
-          {
-            "name": "Get monitor state",
-            "description": "Read current CPU state including all registers and PC.",
-            "arguments": {
-              "op": "get_monitor_state"
-            }
-          },
-          {
-            "name": "Wait for PC",
-            "description": "Poll until PC reaches $0810 or 5 s elapses.",
-            "arguments": {
-              "op": "wait_for_state",
-              "expectedPC": "$0810",
-              "timeoutMs": 5000
-            }
-          },
-          {
-            "name": "Nuclear reset",
-            "description": "Kill and restart the VICE process, clearing all state.",
-            "arguments": {
-              "op": "nuclear_reset"
-            }
-          },
-          {
-            "name": "Continue execution",
-            "description": "Exit the BM monitor and let the CPU run freely.",
-            "arguments": {
-              "op": "continue_execution"
-            }
-          }
-        ],
-        "tags": [
-          "debug",
-          "vice",
-          "breakpoint",
-          "registers",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Use debugger tools after pausing execution so memory and screen reads remain stable.",
-          "Communicate breakpoint effects clearly and restore original state when toggling them."
-        ],
         "platforms": [
           "vice"
         ],
@@ -3550,44 +2847,7 @@
       },
       "_meta": {
         "domain": "vice",
-        "summary": "Reads or updates selected VICE resources that are safe to expose through MCP.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://memory/map"
-        ],
-        "prompts": [
-          "assembly-program",
-          "memory-debug"
-        ],
-        "examples": [
-          {
-            "name": "Read SID engine",
-            "description": "Inspect the active SID emulation mode.",
-            "arguments": {
-              "op": "resource_get",
-              "name": "SidEngine"
-            }
-          },
-          {
-            "name": "Set SID engine",
-            "description": "Switch SID emulation to resid-fp (value 2).",
-            "arguments": {
-              "op": "resource_set",
-              "name": "SidEngine",
-              "value": 2
-            }
-          }
-        ],
-        "tags": [
-          "vice",
-          "emulator",
-          "resource",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Use emulator helpers when running on VICE to inspect or tweak safe runtime resources.",
-          "Explain that resource changes only persist for the current emulator session unless saved in VICE manually."
-        ],
         "platforms": [
           "vice"
         ],
@@ -3791,82 +3051,7 @@
       },
       "_meta": {
         "domain": "input",
-        "summary": "Types text, sends physical key combinations, and controls joysticks.",
         "lifecycle": "request-response",
-        "resources": [
-          "c64://guide/bootstrap",
-          "c64://memory/map",
-          "c64://io/cia/spec"
-        ],
-        "prompts": [],
-        "examples": [
-          {
-            "name": "Type BASIC line",
-            "description": "Enter a BASIC line and press RETURN",
-            "arguments": {
-              "op": "write_text",
-              "text": "PRINT \"HELLO\"{RETURN}"
-            }
-          },
-          {
-            "name": "Press F1",
-            "description": "Send the F1 function key",
-            "arguments": {
-              "op": "key",
-              "key": "F1"
-            }
-          },
-          {
-            "name": "Tap joystick right",
-            "description": "Brief rightward tap on joystick port 2",
-            "arguments": {
-              "op": "joystick",
-              "port": 2,
-              "controls": [
-                "right"
-              ],
-              "action": "tap",
-              "durationMs": 80
-            }
-          },
-          {
-            "name": "Type an uppercase A",
-            "description": "Tap a physical key chord through Ultimate REST input",
-            "arguments": {
-              "op": "keyboard",
-              "inputs": [
-                "left_shift",
-                "a"
-              ],
-              "transition": "tap"
-            }
-          },
-          {
-            "name": "Press fire on port 1",
-            "description": "Hold fire button on joystick port 1",
-            "arguments": {
-              "op": "joystick",
-              "port": 1,
-              "controls": [
-                "fire"
-              ],
-              "action": "press"
-            }
-          }
-        ],
-        "tags": [
-          "input",
-          "keyboard",
-          "joystick"
-        ],
-        "workflowHints": [
-          "Use write_text with {RETURN} tokens to automate BASIC entry; use key for one PETSCII/KERNAL queue key. Neither is for navigating Ultimate firmware menus.",
-          "write_text and key inject through the KERNAL keyboard queue ($0277/$00C6) so they work on both C64U and VICE.",
-          "Use keyboard for physical C64 key combinations (including modifiers) on machine:input, and release_all to recover from interrupted holds. It requires a C64U firmware version that provides the endpoint, or U64 3.15+.",
-          "Before native input, read c64://platform/status. If machine:input is unavailable or unknown, use key or write_text for ordinary C64 input instead of attempting physical matrix events.",
-          "Change C64U/U64/U2 configuration through c64_config REST operations, never by keyboard menu navigation. Use keyboard navigation only where REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.",
-          "Joystick uses machine:input on a C64U firmware version that provides the endpoint or U64 3.15+; VICE supports up/down/left/right/fire through its monitor."
-        ],
         "platforms": [
           "c64u",
           "u2",
@@ -3963,75 +3148,7 @@
       },
       "_meta": {
         "domain": "batch",
-        "summary": "Runs an ordered list of tool commands and returns all results with per-command timing.",
         "lifecycle": "request-response",
-        "resources": [],
-        "prompts": [],
-        "examples": [
-          {
-            "name": "Read registers then step",
-            "description": "Get registers, step one instruction, get registers again",
-            "arguments": {
-              "commands": [
-                {
-                  "tool": "c64_debug",
-                  "args": {
-                    "op": "get_registers"
-                  },
-                  "description": "before"
-                },
-                {
-                  "tool": "c64_debug",
-                  "args": {
-                    "op": "step",
-                    "count": 1
-                  },
-                  "description": "step"
-                },
-                {
-                  "tool": "c64_debug",
-                  "args": {
-                    "op": "get_registers"
-                  },
-                  "description": "after"
-                }
-              ]
-            }
-          },
-          {
-            "name": "Clear screen and type text",
-            "description": "Fill screen RAM then feed keyboard",
-            "arguments": {
-              "commands": [
-                {
-                  "tool": "c64_memory",
-                  "args": {
-                    "op": "fill_memory",
-                    "address": "$0400",
-                    "length": 1000,
-                    "pattern": "20"
-                  }
-                },
-                {
-                  "tool": "c64_input",
-                  "args": {
-                    "op": "write_text",
-                    "text": "HELLO{RETURN}"
-                  }
-                }
-              ]
-            }
-          }
-        ],
-        "tags": [
-          "batch",
-          "orchestration",
-          "grouped"
-        ],
-        "workflowHints": [
-          "Use execute_batch when you need to run 3 or more sequential operations — it eliminates per-call network overhead.",
-          "Each command must include 'tool' and 'args'; grouped tools require 'op' inside args."
-        ],
         "platforms": [
           "c64u",
           "u2",

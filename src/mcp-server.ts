@@ -21,6 +21,7 @@ import { loadConfig } from "./config.js";
 import { C64Client } from "./c64Client.js";
 import {
   listKnowledgeResources,
+  publishedResourceMeta,
   readKnowledgeResource,
 } from "./rag/knowledgeIndex.js";
 import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
@@ -32,7 +33,7 @@ import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSy
 import { toolRegistry } from "./tools/registry/index.js";
 import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
-import { publishedInputSchema } from "./tools/types.js";
+import { publishedInputSchema, publishedToolMeta } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import { RequestQueue } from "./loggingHttpClient.js";
@@ -254,7 +255,7 @@ async function main() {
         name: resource.name,
         description: resource.description,
         mimeType: resource.mimeType,
-        _meta: resource.metadata,
+        _meta: publishedResourceMeta(resource.metadata),
       }));
 
       const platformResource = createPlatformResourceDescriptor();
@@ -357,7 +358,7 @@ async function main() {
           description: tool.description,
           inputSchema: publishedInputSchema(tool.inputSchema),
           ...(tool.annotations ? { annotations: tool.annotations } : {}),
-          _meta: tool.metadata,
+          _meta: publishedToolMeta(tool.metadata),
         })),
       };
       const latency = Date.now() - startedAt;
@@ -653,7 +654,7 @@ function createPlatformResourceDescriptor() {
     name: "Active Platform Status",
     description: "Reports the active MCP platform and tool compatibility snapshot.",
     mimeType: "text/markdown",
-    _meta: {
+    _meta: publishedResourceMeta({
       domain: "platform",
       priority: "critical",
       summary: "Current platform (c64u or vice), feature flags, and tool support overview.",
@@ -661,7 +662,7 @@ function createPlatformResourceDescriptor() {
       tools: [],
       tags: ["platform", "compatibility"],
       relatedResources: [],
-    },
+    }),
   };
 }
 
