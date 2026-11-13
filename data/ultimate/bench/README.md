@@ -5,6 +5,8 @@ fast REU DMA runs. The programs are written for the c64bridge assembler (`c64_pr
 toolchain. Measured results are in `results/` (`summary.md`, one JSON file per device and date). The knowledge resources
 c64://ultimate/hardware, c64://ultimate/reu and c64://gamedev/architecture quote them.
 
+Raw per-point JSON results are in the GitHub repository under data/ultimate/bench/results/; the npm package ships only results/summary.md.
+
 Files: `turbo-cpu.asm`, `turbo-reu.asm`, `turbo-window.asm` (this directory), host script `scripts/turbo-bench.mjs`
 (`npm run bench:turbo`).
 

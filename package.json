@@ -103,6 +103,7 @@
     "dist/**",
     "!dist/.tsbuildinfo",
     "data/**",
+    "!data/ultimate/bench/results/*.json",
     "doc/developer.md",
     "doc/troubleshooting-mcp.md",
     "doc/c64u/**",
