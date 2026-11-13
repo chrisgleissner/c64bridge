@@ -584,7 +584,7 @@ export const tools: ToolDefinition[] = [
           const candidates: string[] = [];
 
           for (const ext of extensions) {
-            const pattern = buildSearchPattern(root, ext, needle);
+            const pattern = buildSearchPattern(root, ext, parsed.nameContains as string);
             try {
               const info = await (ctx.client as any).filesInfo(pattern);
               const paths = extractPaths(info);

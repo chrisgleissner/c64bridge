@@ -834,3 +834,19 @@ test("find_paths and find_and_run match nameContains against the file name only"
   assert.equal(res.isError, true);
   assert.deepEqual(ran, []);
 });
+
+test("find_paths and find_and_run send the device glob with the original nameContains case", async () => {
+  for (const tool of ["find_paths_by_name", "find_and_run_program_by_name"]) {
+    const patterns = [];
+    const ctx = {
+      client: {
+        async filesInfo(pattern) { patterns.push(pattern); return ["/x/my game.prg"]; },
+        async runPrgFile() { return { success: true }; },
+      },
+      logger: createLogger(),
+    };
+    await metaModule.invoke(tool, { nameContains: "Game", caseInsensitive: true, extensions: ["prg"] }, ctx).catch(() => {});
+    assert.ok(patterns.length > 0, tool);
+    assert.ok(patterns.every((p) => p.includes("*Game*")), `${tool}: ${patterns.join(",")}`);
+  }
+});
