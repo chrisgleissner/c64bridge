@@ -1,3 +1,4 @@
+import { wireMeta } from "../helpers/wireMeta.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -103,11 +104,11 @@ function toolIsAvailable(ctx, toolName) {
 
 function assertUnsupportedOperation(result, platform, expectedTool) {
   assert.equal(result.isError, true);
-  assert.equal(result.metadata?.error?.kind, "execution");
-  assert.equal(result.metadata?.error?.code, "unsupported_platform");
-  assert.equal(result.metadata?.error?.details?.platform, platform);
+  assert.equal(wireMeta(result)?.error?.kind, "execution");
+  assert.equal(wireMeta(result)?.error?.code, "unsupported_platform");
+  assert.equal(wireMeta(result)?.error?.details?.platform, platform);
   if (expectedTool) {
-    assert.equal(result.metadata?.error?.details?.tool, expectedTool);
+    assert.equal(wireMeta(result)?.error?.details?.tool, expectedTool);
   }
 }
 
@@ -146,7 +147,7 @@ async function callToolUntil(ctx, toolName, args, predicate, {
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error(
-    `Timed out waiting for ${description}; lastMetadata=${JSON.stringify(last?.result?.metadata ?? null)}`,
+    `Timed out waiting for ${description}; lastMetadata=${JSON.stringify(wireMeta(last?.result) ?? null)}`,
   );
 }
 
@@ -172,9 +173,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.match(first.text, /Unknown tool/i);
       assert.match(first.text, /allowed: .*c64_memory/);
 
-      assert.ok(result.metadata, "CallTool result should include metadata for errors");
-      assert.ok(result.metadata?.error, "Metadata should expose error details");
-      assert.equal(result.metadata?.error?.kind, "validation");
+      assert.ok(Object.keys(wireMeta(result)).length > 0, "CallTool result should include metadata for errors");
+      assert.ok(wireMeta(result)?.error, "Metadata should expose error details");
+      assert.equal(wireMeta(result)?.error?.kind, "validation");
     });
   });
 
@@ -197,8 +198,8 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.ok(textContent, "Expected text response content");
       assert.match(textContent.text, /BASIC program uploaded/i);
 
-      assert.ok(result.metadata?.success, "metadata should flag success");
-      assert.equal(result.metadata?.details?.result ?? "ok", "ok");
+      assert.ok(wireMeta(result)?.success, "metadata should flag success");
+      assert.equal(wireMeta(result)?.details?.result ?? "ok", "ok");
       if (ctx.platform === "vice") {
         assert.equal(mockServer.state.runCount, runCountBefore, "vice mode must not run programs on the C64U mock");
         return;
@@ -230,7 +231,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.ok(textContent, "Expected text response content");
       assert.match(textContent.text, /Assembly program assembled/i);
 
-      assert.ok(result.metadata?.success, "metadata should flag success");
+      assert.ok(wireMeta(result)?.success, "metadata should flag success");
       if (ctx.platform === "vice") {
         assert.equal(mockServer.state.loadCount, loadCountBefore, "vice mode must not load via the C64U mock");
         assert.equal(result.structuredContent?.data?.kind, "upload_run_asm");
@@ -257,8 +258,8 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       }
       const { result: listResult } = listCall;
 
-      assert.equal(listResult.metadata?.success, true, "list_drives operation should succeed");
-      assert.ok(listResult.metadata?.drives, "drives_list should include drive metadata");
+      assert.equal(wireMeta(listResult)?.success, true, "list_drives operation should succeed");
+      assert.ok(wireMeta(listResult)?.drives, "drives_list should include drive metadata");
 
       if (ctx.platform === "vice") {
         // VICE auto-detects the image type; explicit overrides must be rejected, not ignored.
@@ -269,7 +270,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
           type: "d64",
           attachmentMode: "readwrite",
         });
-        assert.notEqual(overrideResult.metadata?.success, true, "VICE mount type/mode override should be rejected");
+        assert.notEqual(wireMeta(overrideResult)?.success, true, "VICE mount type/mode override should be rejected");
       }
 
       // VICE attaches an image from the host file system, so it must exist there.
@@ -281,10 +282,10 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         ...(ctx.platform === "vice" ? {} : { type: "d64", attachmentMode: "readwrite" }),
       });
 
-      assert.equal(mountResult.metadata?.success, true, "mount operation should succeed");
+      assert.equal(wireMeta(mountResult)?.success, true, "mount operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(mountResult.metadata?.drive, "drive8");
-        assert.equal(mountResult.metadata?.image, viceImage);
+        assert.equal(wireMeta(mountResult)?.drive, "drive8");
+        assert.equal(wireMeta(mountResult)?.image, viceImage);
       } else {
       assert.equal(mockServer.state.lastDriveOperation?.action, "mount");
       assert.deepEqual(mockServer.state.drives.a.mountedImage, {
@@ -304,9 +305,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       }
       const { result: modeResult } = modeCall;
 
-      assert.equal(modeResult.metadata?.success, true, "set_mode operation should succeed");
+      assert.equal(wireMeta(modeResult)?.success, true, "set_mode operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(modeResult.metadata?.mode, "1571");
+        assert.equal(wireMeta(modeResult)?.mode, "1571");
       } else {
         assert.equal(mockServer.state.drives.a.mode, "1571");
       }
@@ -316,9 +317,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         drive: "drive8",
       });
 
-      assert.equal(onResult.metadata?.success, true, "power_on operation should succeed");
+      assert.equal(wireMeta(onResult)?.success, true, "power_on operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(onResult.metadata?.power, "on");
+        assert.equal(wireMeta(onResult)?.power, "on");
       } else {
         assert.equal(mockServer.state.drives.a.power, "on");
       }
@@ -328,9 +329,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         drive: "drive8",
       });
 
-      assert.equal(offResult.metadata?.success, true, "power_off operation should succeed");
+      assert.equal(wireMeta(offResult)?.success, true, "power_off operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(offResult.metadata?.power, "off");
+        assert.equal(wireMeta(offResult)?.power, "off");
       } else {
         assert.equal(mockServer.state.drives.a.power, "off");
       }
@@ -340,9 +341,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         drive: "drive8",
       });
 
-      assert.equal(resetResult.metadata?.success, true, "reset operation should succeed");
+      assert.equal(wireMeta(resetResult)?.success, true, "reset operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(resetResult.metadata?.drive, "drive8");
+        assert.equal(wireMeta(resetResult)?.drive, "drive8");
       } else {
         assert.equal(mockServer.state.drives.a.resetCount, 1);
       }
@@ -357,7 +358,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assertUnsupportedOperation(romResult, ctx.platform, "drive_load_rom");
       } else {
-        assert.equal(romResult.metadata?.success, true, "load_rom operation should succeed");
+        assert.equal(wireMeta(romResult)?.success, true, "load_rom operation should succeed");
         assert.equal(mockServer.state.drives.a.lastRom, "/roms/custom.rom");
       }
 
@@ -369,7 +370,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assertUnsupportedOperation(removeResult, ctx.platform, "drive_remove");
       } else {
-        assert.equal(removeResult.metadata?.success, true, "unmount operation should succeed");
+        assert.equal(wireMeta(removeResult)?.success, true, "unmount operation should succeed");
         assert.equal(mockServer.state.drives.a.mountedImage, null);
       }
 
@@ -381,7 +382,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assertUnsupportedOperation(infoResult, ctx.platform, "file_info");
       } else {
-        assert.equal(infoResult.metadata?.success, true, "file_info operation should succeed");
+        assert.equal(wireMeta(infoResult)?.success, true, "file_info operation should succeed");
         assert.equal(mockServer.state.lastFileInfo, "/tmp/demo.d64");
       }
 
@@ -398,7 +399,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
 
-      assert.equal(createD64Result.metadata?.success, true, "create_image (d64) should succeed");
+      assert.equal(wireMeta(createD64Result)?.success, true, "create_image (d64) should succeed");
 
       const { result: createD71Result } = await callTool(ctx, "c64_disk", {
         op: "create_image",
@@ -407,7 +408,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         diskname: "DISK2",
       });
 
-      assert.equal(createD71Result.metadata?.success, true, "create_image (d71) should succeed");
+      assert.equal(wireMeta(createD71Result)?.success, true, "create_image (d71) should succeed");
 
       const { result: createD81Result } = await callTool(ctx, "c64_disk", {
         op: "create_image",
@@ -416,7 +417,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         diskname: "DISK3",
       });
 
-      assert.equal(createD81Result.metadata?.success, true, "create_image (d81) should succeed");
+      assert.equal(wireMeta(createD81Result)?.success, true, "create_image (d81) should succeed");
 
       const { result: createDnpResult } = await callTool(ctx, "c64_disk", {
         op: "create_image",
@@ -426,7 +427,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         diskname: "DISK4",
       });
 
-      assert.equal(createDnpResult.metadata?.success, true, "create_image (dnp) should succeed");
+      assert.equal(wireMeta(createDnpResult)?.success, true, "create_image (dnp) should succeed");
       assert.equal(mockServer.state.createdImages.length, 4, "All disk creations should be tracked");
       const createdTypes = mockServer.state.createdImages.map((entry) => entry.type).sort();
       assert.deepEqual(createdTypes, ["d64", "d71", "d81", "dnp"], "Disk creation types should match requests");
@@ -479,7 +480,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         ctx,
         "c64_graphics",
         { op: "capture_frame" },
-        (candidate) => candidate.metadata?.success === true,
+        (candidate) => wireMeta(candidate)?.success === true,
         {
           timeoutMs: 20_000,
           intervalMs: 500,
@@ -491,7 +492,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
 
-      assert.equal(result.metadata?.success, true, "capture_frame should succeed");
+      assert.equal(wireMeta(result)?.success, true, "capture_frame should succeed");
       assert.equal(result.structuredContent?.type, "json");
       const frame = result.structuredContent?.data?.frames?.[0];
       assert.ok(frame, "capture_frame should return at least one frame");
@@ -527,7 +528,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
 
-      assert.equal(result.metadata?.success, true, "capture_samples should succeed");
+      assert.equal(wireMeta(result)?.success, true, "capture_samples should succeed");
       assert.equal(result.structuredContent?.type, "json");
       assert.equal(result.structuredContent?.data?.backend, "c64u");
       assert.equal(result.structuredContent?.data?.samplePairs, 256);
@@ -547,9 +548,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       });
 
       if (audioSupported) {
-        assert.equal(audioResult.metadata?.success, true);
-        assert.equal(audioResult.metadata?.dryRun, true);
-        assert.equal(audioResult.metadata?.ranOnC64, false);
+        assert.equal(wireMeta(audioResult)?.success, true);
+        assert.equal(wireMeta(audioResult)?.dryRun, true);
+        assert.equal(wireMeta(audioResult)?.ranOnC64, false);
       }
 
       const { result: graphicsResult, supported: graphicsSupported } = await callTool(ctx, "c64_graphics", {
@@ -564,8 +565,8 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
 
-      assert.equal(graphicsResult.metadata?.dryRun, true);
-      assert.equal(graphicsResult.metadata?.ranOnC64, false);
+      assert.equal(wireMeta(graphicsResult)?.dryRun, true);
+      assert.equal(wireMeta(graphicsResult)?.ranOnC64, false);
       assert.equal(graphicsResult.structuredContent?.type, "json");
       assert.ok(Array.isArray(graphicsResult.structuredContent?.data?.rowHex));
       assert.equal(graphicsResult.structuredContent?.data?.ranOnC64, false);
@@ -589,7 +590,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       assert.ok(textContent, "Expected text response content");
       assert.match(textContent.text, /Primary knowledge resources/i);
 
-      assert.ok(result.metadata?.success, "metadata should flag success");
+      assert.ok(wireMeta(result)?.success, "metadata should flag success");
       assert.ok(result.structuredContent?.data?.refs, "should return structured refs");
       assert.ok(result.structuredContent?.data?.refs.length <= 2);
     });
@@ -603,7 +604,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
       const listResult = list.result;
-      assert.equal(listResult.metadata?.success, true, "list operation should succeed");
+      assert.equal(wireMeta(listResult)?.success, true, "list operation should succeed");
       const listContent = getTextContent(listResult);
       assert.ok(listContent, "config_list should return text content");
       const categories = JSON.parse(listContent.text)?.categories ?? [];
@@ -650,9 +651,9 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         item,
       });
 
-      assert.equal(getItemResult.metadata?.success, true, "get operation should succeed");
-      assert.equal(getItemResult.metadata?.category, category);
-      assert.equal(getItemResult.metadata?.item, item);
+      assert.equal(wireMeta(getItemResult)?.success, true, "get operation should succeed");
+      assert.equal(wireMeta(getItemResult)?.category, category);
+      assert.equal(wireMeta(getItemResult)?.item, item);
 
       const { result: setResult } = await callTool(ctx, "c64_config", {
         op: "set",
@@ -661,11 +662,11 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         value: setValue,
       });
 
-      assert.equal(setResult.metadata?.success, true, "set operation should succeed");
+      assert.equal(wireMeta(setResult)?.success, true, "set operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(setResult.metadata?.category, "VICE");
-        assert.equal(setResult.metadata?.item, "SoundVolume");
-        assert.equal(setResult.metadata?.value, 11);
+        assert.equal(wireMeta(setResult)?.category, "VICE");
+        assert.equal(wireMeta(setResult)?.item, "SoundVolume");
+        assert.equal(wireMeta(setResult)?.value, 11);
       } else {
         assert.equal(mockServer.state.configs.Audio.Volume, "11");
       }
@@ -675,12 +676,12 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         ...batchPayload,
       });
 
-      assert.equal(batchResult.metadata?.success, true, "batch_update operation should succeed");
+      assert.equal(wireMeta(batchResult)?.success, true, "batch_update operation should succeed");
       if (ctx.platform === "vice") {
-        assert.equal(batchResult.metadata?.categoryCount, 1);
-        assert.ok(Array.isArray(batchResult.metadata?.details?.results));
-        assert.equal(batchResult.metadata?.details?.results.length, 2);
-        assert.ok(batchResult.metadata?.details?.results.every((entry) => entry.success === true));
+        assert.equal(wireMeta(batchResult)?.categoryCount, 1);
+        assert.ok(Array.isArray(wireMeta(batchResult)?.details?.results));
+        assert.equal(wireMeta(batchResult)?.details?.results.length, 2);
+        assert.ok(wireMeta(batchResult)?.details?.results.every((entry) => entry.success === true));
       } else {
         assert.equal(mockServer.state.configs.Audio.Balance, "left");
         assert.equal(mockServer.state.configs.Video.Mode, "NTSC");
@@ -691,7 +692,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assertUnsupportedOperation(saveResult, ctx.platform, "config_save_to_flash");
       } else {
-        assert.equal(saveResult.metadata?.success, true, "save_flash operation should succeed");
+        assert.equal(wireMeta(saveResult)?.success, true, "save_flash operation should succeed");
         assert.ok(mockServer.state.flashSnapshot, "flash snapshot should be captured after save");
       }
 
@@ -700,7 +701,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assertUnsupportedOperation(resetResult, ctx.platform, "config_reset_to_default");
       } else {
-        assert.equal(resetResult.metadata?.success, true, "reset_defaults operation should succeed");
+        assert.equal(wireMeta(resetResult)?.success, true, "reset_defaults operation should succeed");
         assert.equal(mockServer.state.configs.Audio.Volume, "6", "reset should restore default volume");
       }
 
@@ -709,7 +710,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
       if (ctx.platform === "vice") {
         assertUnsupportedOperation(loadResult, ctx.platform, "config_load_from_flash");
       } else {
-        assert.equal(loadResult.metadata?.success, true, "load_flash operation should succeed");
+        assert.equal(wireMeta(loadResult)?.success, true, "load_flash operation should succeed");
         assert.equal(mockServer.state.configs.Video.Mode, "NTSC", "load should restore saved snapshot");
       }
     });
@@ -728,7 +729,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         return;
       }
 
-      assert.equal(startResult.metadata?.success, true, "start operation should succeed");
+      assert.equal(wireMeta(startResult)?.success, true, "start operation should succeed");
       assert.equal(mockServer.state.streams.audio.active, true);
       assert.equal(mockServer.state.streams.audio.target, "127.0.0.1:9000");
 
@@ -737,7 +738,7 @@ export function registerMcpServerCallToolTests(withSharedMcpClient) {
         stream: "audio",
       });
 
-      assert.equal(stopResult.metadata?.success, true, "stop operation should succeed");
+      assert.equal(wireMeta(stopResult)?.success, true, "stop operation should succeed");
       assert.equal(mockServer.state.streams.audio.active, false);
     });
   });

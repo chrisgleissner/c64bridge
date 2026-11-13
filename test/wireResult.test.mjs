@@ -19,11 +19,11 @@ test("WIRE-001 a memory read sends its hex payload in content and structuredCont
   assert.equal(wire.structuredContent.data.success, true, "small metadata stays available in structuredContent");
 });
 
-test("WIRE-002 a json result is serialized compactly and not duplicated in metadata", () => {
+test("WIRE-002 a json result is serialized compactly and keeps only small metadata", () => {
   const data = { items: [1, 2, 3], note: HEX };
   const result = jsonResult(data, { success: true });
   assert.equal(result.content[0].text, JSON.stringify(data), "text is compact JSON");
   const wire = toCallToolResult(result);
-  assert.equal("metadata" in wire, false);
+  assert.deepEqual(wire.metadata, { success: true }, "small metadata that structuredContent lacks is kept");
   assert.equal(JSON.stringify(wire).split(HEX).length - 1, 2);
 });
