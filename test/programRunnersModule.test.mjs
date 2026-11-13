@@ -1194,3 +1194,37 @@ test("upload_run_basic words an unverified run as started, not executed successf
   assert.match(result.content[0].text, /uploaded and started/);
   assert.ok(!/executed successfully/.test(result.content[0].text));
 });
+
+test("run_prg keeps the previous VICE symbols when the symbols file is rejected or the run fails", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-symbols-keep-"));
+  const symbolsPath = path.join(tempDir, "new.vs");
+  fs.writeFileSync(symbolsPath, "add_label 0x0900 .newlabel\n", "utf8");
+  const makeCtx = (runResult) => ({
+    client: { async runPrgFile() { return runResult; } },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  });
+  try {
+    // Missing symbols file: the old table survives.
+    setViceSymbols([["old", 0x0810]]);
+    let result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: path.join(tempDir, "missing.vs") }, makeCtx({ success: true }));
+    assert.equal(result.isError, true);
+    assert.equal(getViceSymbol(0x0810), "old");
+
+    // Failed run: the new labels are not registered and the old ones stay.
+    result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: symbolsPath }, makeCtx({ success: false, details: { error: "no" } }));
+    assert.equal(result.isError, true);
+    assert.equal(getViceSymbol(0x0900), undefined);
+    assert.equal(getViceSymbol(0x0810), "old");
+
+    // Successful run replaces them.
+    result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: symbolsPath }, makeCtx({ success: true }));
+    assert.equal(result.isError, undefined);
+    assert.equal(getViceSymbol(0x0900), "newlabel");
+    assert.equal(getViceSymbol(0x0810), undefined);
+  } finally {
+    clearViceSymbols();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

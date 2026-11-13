@@ -746,22 +746,20 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     const parsed = prgFileArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Running PRG file", { path: parsed.path });
 
+    // Validate and parse the symbols file before touching the registered
+    // symbols, and replace them only after the PRG has started. A bad path or a
+    // failed run then leaves the previous symbol table as it was.
     let symbolsLoaded = 0;
-    if (ctx.platform.id === "vice") {
-      clearViceSymbols();
-      if (parsed.symbolsFile) {
-        const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
-        try {
-          const content = (await readHostFile(symbolsPath)).toString("utf8");
-          const syms = parseViceSymbolFile(content);
-          setViceSymbols(syms.entries());
-          symbolsLoaded = syms.size;
-          ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
-        } catch (fileError) {
-          throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
-            details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
-          });
-        }
+    let newSymbols: Map<string, number> | undefined;
+    if (ctx.platform.id === "vice" && parsed.symbolsFile) {
+      const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
+      try {
+        const content = (await readHostFile(symbolsPath)).toString("utf8");
+        newSymbols = parseViceSymbolFile(content);
+      } catch (fileError) {
+        throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
+          details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
+        });
       }
     }
 
@@ -770,6 +768,15 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       throw new ToolExecutionError("C64 backend reported failure while running PRG", {
         details: extractFailureDetails(result.details),
       });
+    }
+
+    if (ctx.platform.id === "vice") {
+      clearViceSymbols();
+      if (newSymbols) {
+        setViceSymbols(newSymbols.entries());
+        symbolsLoaded = newSymbols.size;
+        ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
+      }
     }
 
     const data = {
