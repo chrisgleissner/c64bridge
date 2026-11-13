@@ -114,6 +114,7 @@ Environment knobs: `RAG_EMBEDDINGS_DIR`, `RAG_BUILD_ON_START`, `RAG_REINDEX_INTE
 - **HTTP bridge**: Disabled by default; enable with `npm start -- --http [port]` for manual curl experiments (the MCP server start is not managed by `./build`). Details in [`doc/troubleshooting-mcp.md`](troubleshooting-mcp.md).
 - **Docker image**: [`Dockerfile`](../Dockerfile) builds Ubuntu 24.04 + Node 24 + Bun for reproducible environments.
 - **Audio pipeline**: SID analysis uses [`naudiodon`](https://www.npmjs.com/package/naudiodon); see [`src/audio/`](../src/audio/) and tests like [`test/audioAnalysis.test.mjs`](../test/audioAnalysis.test.mjs).
+- **Ultimate turbo benchmark**: `npm run bench:turbo -- --host <ip> --suite quick|full --out <dir>` assembles the programs in [`data/ultimate/bench/`](../data/ultimate/bench/), runs them on an Ultimate 64 or C64U over REST, decodes the result block and restores every configuration item it changed (it reports `RESTORE VERIFIED` or `RESTORE DIFF`). It needs `npm run build` first. Use `--probe` to list the Turbo Control, CPU Speed and Badline Timing values the device offers, and `--collect` to merge a run directory into `data/ultimate/bench/results/`. It never writes flash or power-cycles a device. Method, result layout and the MCP-only rerun recipe are in [`data/ultimate/bench/README.md`](../data/ultimate/bench/README.md); measured values are in [`data/ultimate/bench/results/summary.md`](../data/ultimate/bench/results/summary.md).
 
 ## 8. Release & Packaging
 

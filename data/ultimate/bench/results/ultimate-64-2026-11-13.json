@@ -1,0 +1,9373 @@
+{
+ "device": "Ultimate 64",
+ "date": "2026-11-13",
+ "firmware": {
+  "product": "Ultimate 64 Elite",
+  "firmware": "3.15a",
+  "fpga": "126",
+  "core": "1.50"
+ },
+ "phi2KHz": 985.248,
+ "runs": {
+  "cpu-badlinecfg-Disabled": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 33025,
+    "condMask": 3,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 1,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19650,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     8,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     15
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     48
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416606,
+      416604
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416606,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 44.4516,
+     "cyclesPerFrame": 873784,
+     "cyclesPerLine": 2800.59,
+     "spreadPct": 0.091,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      425058,
+      425445,
+      425101
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 39.8186,
+     "cyclesPerFrame": 782714,
+     "cyclesPerLine": 2508.7,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      474304,
+      474562,
+      474562
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 42.1321,
+     "cyclesPerFrame": 828190,
+     "cyclesPerLine": 2654.46,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      448504,
+      448504,
+      448504
+     ]
+    }
+   ]
+  },
+  "cpu-badlinecfg-Enabled": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 33025,
+    "condMask": 3,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 1,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     8,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     15
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     48
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416261,
+      416606,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416260,
+      416605,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 44.4516,
+     "cyclesPerFrame": 873784,
+     "cyclesPerLine": 2800.59,
+     "spreadPct": 0.091,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      425058,
+      425445,
+      425101
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 39.8186,
+     "cyclesPerFrame": 782714,
+     "cyclesPerLine": 2508.7,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      474304,
+      474562,
+      474562
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 42.1321,
+     "cyclesPerFrame": 828190,
+     "cyclesPerLine": 2654.46,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      448504,
+      448504,
+      448504
+     ]
+    }
+   ]
+  },
+  "cpu-enablebit-12MHz": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 1,
+    "speedTable": 1,
+    "nominalM": 12,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19650,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 511.505,
+     "interference": 1,
+     "status": 1,
+     "ticks": [
+      2547505,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 10.8577,
+     "cyclesPerFrame": 213429,
+     "cyclesPerLine": 684.07,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435093
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 10.8577,
+     "cyclesPerFrame": 213429,
+     "cyclesPerLine": 684.07,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435093
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 11.5101,
+     "cyclesPerFrame": 226254,
+     "cyclesPerLine": 725.17,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 11.5101,
+     "cyclesPerFrame": 226254,
+     "cyclesPerLine": 725.17,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    }
+   ]
+  },
+  "cpu-enablebit-1MHz": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 1,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416604,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416606,
+      416604
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9047,
+     "cyclesPerFrame": 17783,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435151
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9048,
+     "cyclesPerFrame": 17785,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435108
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    }
+   ]
+  },
+  "cpu-enablebit-48MHz": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 1,
+    "speedTable": 1,
+    "nominalM": 48,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     48,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 44.4156,
+     "cyclesPerFrame": 873078,
+     "cyclesPerLine": 2798.33,
+     "spreadPct": 538.154,
+     "interference": 1,
+     "status": 1,
+     "ticks": [
+      2712798,
+      425445,
+      425101
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 39.8186,
+     "cyclesPerFrame": 782714,
+     "cyclesPerLine": 2508.7,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      474304,
+      474562,
+      474562
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 42.1321,
+     "cyclesPerFrame": 828190,
+     "cyclesPerLine": 2654.46,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      448504,
+      448504,
+      448504
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 42.5484,
+     "cyclesPerFrame": 836375,
+     "cyclesPerLine": 2680.69,
+     "spreadPct": 0.257,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      444115,
+      444868,
+      443726
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 38.1198,
+     "cyclesPerFrame": 749321,
+     "cyclesPerLine": 2401.67,
+     "spreadPct": 0.248,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      495324,
+      496551,
+      495711
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 45.1198,
+     "cyclesPerFrame": 886920,
+     "cyclesPerLine": 2842.69,
+     "spreadPct": 0.191,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      418805,
+      419603,
+      418805
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 40.4071,
+     "cyclesPerFrame": 794281,
+     "cyclesPerLine": 2545.77,
+     "spreadPct": 0.171,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      467651,
+      467651,
+      466853
+     ]
+    }
+   ]
+  },
+  "cpu-manual-12MHz": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 12,
+    "d031Before": 255,
+    "reuPresent": 0,
+    "frameTicks": [
+     19650,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 508.802,
+     "interference": 1,
+     "status": 1,
+     "ticks": [
+      2536245,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 10.8577,
+     "cyclesPerFrame": 213429,
+     "cyclesPerLine": 684.07,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435093
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 10.8577,
+     "cyclesPerFrame": 213429,
+     "cyclesPerLine": 684.07,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435093
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 11.5101,
+     "cyclesPerFrame": 226254,
+     "cyclesPerLine": 725.17,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 11.5101,
+     "cyclesPerFrame": 226254,
+     "cyclesPerLine": 725.17,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    }
+   ]
+  },
+  "cpu-manual-1MHz": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 255,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19650,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416606,
+      416604
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416606,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9047,
+     "cyclesPerFrame": 17783,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434891,
+      435992,
+      435150
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9048,
+     "cyclesPerFrame": 17785,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435108
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    }
+   ]
+  },
+  "cpu-manual-48MHz": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 48,
+    "d031Before": 255,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     48,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 44.4156,
+     "cyclesPerFrame": 873078,
+     "cyclesPerLine": 2798.33,
+     "spreadPct": 534.779,
+     "interference": 1,
+     "status": 1,
+     "ticks": [
+      2698453,
+      425445,
+      425101
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 39.8186,
+     "cyclesPerFrame": 782714,
+     "cyclesPerLine": 2508.7,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      474304,
+      474562,
+      474562
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 42.1321,
+     "cyclesPerFrame": 828190,
+     "cyclesPerLine": 2654.46,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      448504,
+      448504,
+      448504
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 42.5484,
+     "cyclesPerFrame": 836375,
+     "cyclesPerLine": 2680.69,
+     "spreadPct": 0.257,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      444115,
+      444868,
+      443726
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 38.1198,
+     "cyclesPerFrame": 749321,
+     "cyclesPerLine": 2401.67,
+     "spreadPct": 0.248,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      495324,
+      496551,
+      495711
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 45.1198,
+     "cyclesPerFrame": 886920,
+     "cyclesPerLine": 2842.69,
+     "spreadPct": 0.191,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      418805,
+      419603,
+      418805
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 40.4071,
+     "cyclesPerFrame": 794281,
+     "cyclesPerLine": 2545.77,
+     "spreadPct": 0.171,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      467651,
+      467651,
+      466853
+     ]
+    }
+   ]
+  },
+  "cpu-off": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 1,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 255,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416261,
+      416606,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416260,
+      416605,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9048,
+     "cyclesPerFrame": 17785,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435108
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9047,
+     "cyclesPerFrame": 17783,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434892,
+      435992,
+      435150
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    }
+   ]
+  },
+  "cpu-regs-all": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 65535,
+    "condMask": 15,
+    "varMask": 15,
+    "nrep": 3,
+    "useD031": 1,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "readback": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "mUsed": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     8,
+     10,
+     12,
+     14,
+     16,
+     20,
+     24,
+     32,
+     40,
+     48
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416606,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 0.9451,
+     "cyclesPerFrame": 18577,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.082,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416220,
+      416562,
+      416563
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416260,
+      416605,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 0.945,
+     "cyclesPerFrame": 18575,
+     "cyclesPerLine": 59.54,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416262,
+      416604,
+      416606
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9047,
+     "cyclesPerFrame": 17783,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435151
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 0.905,
+     "cyclesPerFrame": 17790,
+     "cyclesPerLine": 57.02,
+     "spreadPct": 0.25,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434791,
+      435876,
+      434997
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9048,
+     "cyclesPerFrame": 17785,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435108
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 0.9047,
+     "cyclesPerFrame": 17783,
+     "cyclesPerLine": 57,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434893,
+      435992,
+      435151
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 0.9595,
+     "cyclesPerFrame": 18861,
+     "cyclesPerLine": 60.45,
+     "spreadPct": 0.115,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410286,
+      410290,
+      409820
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 0.9591,
+     "cyclesPerFrame": 18854,
+     "cyclesPerLine": 60.43,
+     "spreadPct": 0.097,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410445,
+      410445,
+      410046
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 1.8899,
+     "cyclesPerFrame": 37151,
+     "cyclesPerLine": 119.07,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416256,
+      416600,
+      416600
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 1.8901,
+     "cyclesPerFrame": 37153,
+     "cyclesPerLine": 119.08,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416225,
+      416568,
+      416571
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 1.8899,
+     "cyclesPerFrame": 37151,
+     "cyclesPerLine": 119.07,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416256,
+      416600,
+      416600
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 1.8564,
+     "cyclesPerFrame": 36492,
+     "cyclesPerLine": 116.96,
+     "spreadPct": 0.112,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      423995,
+      424468,
+      424124
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 2,
+     "cyclesPerFrame": 39313,
+     "cyclesPerLine": 126,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393681,
+      393681,
+      393681
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 2,
+     "cyclesPerFrame": 39313,
+     "cyclesPerLine": 126,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393681,
+      393681,
+      393681
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 2,
+     "cyclesPerFrame": 39313,
+     "cyclesPerLine": 126,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393681,
+      393681,
+      393681
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 1.9631,
+     "cyclesPerFrame": 38589,
+     "cyclesPerLine": 123.68,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      401076,
+      401076,
+      401076
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 1.8096,
+     "cyclesPerFrame": 35571,
+     "cyclesPerLine": 114.01,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434887,
+      435986,
+      435102
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 1.8098,
+     "cyclesPerFrame": 35575,
+     "cyclesPerLine": 114.02,
+     "spreadPct": 0.254,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434825,
+      435928,
+      435051
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 1.8096,
+     "cyclesPerFrame": 35571,
+     "cyclesPerLine": 114.01,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434887,
+      435985,
+      435102
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 1.7783,
+     "cyclesPerFrame": 34956,
+     "cyclesPerLine": 112.04,
+     "spreadPct": 0.307,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      442540,
+      443897,
+      442755
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 1.9183,
+     "cyclesPerFrame": 37708,
+     "cyclesPerLine": 120.86,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410439,
+      410439,
+      410020
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 1.9189,
+     "cyclesPerFrame": 37720,
+     "cyclesPerLine": 120.9,
+     "spreadPct": 0.114,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410310,
+      410312,
+      409843
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 1.9183,
+     "cyclesPerFrame": 37708,
+     "cyclesPerLine": 120.86,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410439,
+      410439,
+      410020
+     ]
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 1.8844,
+     "cyclesPerFrame": 37041,
+     "cyclesPerLine": 118.72,
+     "spreadPct": 0.191,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      417834,
+      418632,
+      417834
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 2.8349,
+     "cyclesPerFrame": 55726,
+     "cyclesPerLine": 178.61,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416254,
+      416598,
+      416598
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 2.8351,
+     "cyclesPerFrame": 55730,
+     "cyclesPerLine": 178.62,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416227,
+      416570,
+      416571
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 2.8349,
+     "cyclesPerFrame": 55726,
+     "cyclesPerLine": 178.61,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416254,
+      416598,
+      416598
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 2.5055,
+     "cyclesPerFrame": 49250,
+     "cyclesPerLine": 157.85,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      471376,
+      471376,
+      471376
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 3,
+     "cyclesPerFrame": 58970,
+     "cyclesPerLine": 189.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393679,
+      393679,
+      393679
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 3,
+     "cyclesPerFrame": 58970,
+     "cyclesPerLine": 189.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393679,
+      393679,
+      393679
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 3,
+     "cyclesPerFrame": 58970,
+     "cyclesPerLine": 189.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393679,
+      393679,
+      393679
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 2.6503,
+     "cyclesPerFrame": 52097,
+     "cyclesPerLine": 166.98,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      445619,
+      445619,
+      445619
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 2.7144,
+     "cyclesPerFrame": 53356,
+     "cyclesPerLine": 171.01,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434885,
+      435984,
+      435100
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 2.7146,
+     "cyclesPerFrame": 53362,
+     "cyclesPerLine": 171.03,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434840,
+      435938,
+      435057
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 2.7144,
+     "cyclesPerFrame": 53356,
+     "cyclesPerLine": 171.01,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434885,
+      435984,
+      435100
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 2.3979,
+     "cyclesPerFrame": 47135,
+     "cyclesPerLine": 151.07,
+     "spreadPct": 0.127,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      492444,
+      493067,
+      492530
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 2.8775,
+     "cyclesPerFrame": 56563,
+     "cyclesPerLine": 181.29,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410437,
+      410437,
+      410019
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 2.8784,
+     "cyclesPerFrame": 56581,
+     "cyclesPerLine": 181.35,
+     "spreadPct": 0.113,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410308,
+      410302,
+      409845
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 2.8775,
+     "cyclesPerFrame": 56563,
+     "cyclesPerLine": 181.29,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410437,
+      410437,
+      410019
+     ]
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 2.5412,
+     "cyclesPerFrame": 49952,
+     "cyclesPerLine": 160.1,
+     "spreadPct": 0.172,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      464751,
+      464771,
+      463973
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 3.7799,
+     "cyclesPerFrame": 74302,
+     "cyclesPerLine": 238.15,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 3.7801,
+     "cyclesPerFrame": 74306,
+     "cyclesPerLine": 238.16,
+     "spreadPct": 0.082,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416231,
+      416574,
+      416573
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 3.7799,
+     "cyclesPerFrame": 74302,
+     "cyclesPerLine": 238.15,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 3.579,
+     "cyclesPerFrame": 70352,
+     "cyclesPerLine": 225.49,
+     "spreadPct": 0.147,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      439513,
+      440158,
+      439986
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 4,
+     "cyclesPerFrame": 78627,
+     "cyclesPerLine": 252.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 4,
+     "cyclesPerFrame": 78627,
+     "cyclesPerLine": 252.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 4,
+     "cyclesPerFrame": 78627,
+     "cyclesPerLine": 252.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 3.7866,
+     "cyclesPerFrame": 74433,
+     "cyclesPerLine": 238.57,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      415863,
+      415863,
+      415863
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 3.6192,
+     "cyclesPerFrame": 71143,
+     "cyclesPerLine": 228.02,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434879,
+      435978,
+      435094
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 3.6196,
+     "cyclesPerFrame": 71150,
+     "cyclesPerLine": 228.05,
+     "spreadPct": 0.254,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434827,
+      435930,
+      435049
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 3.6192,
+     "cyclesPerFrame": 71143,
+     "cyclesPerLine": 228.02,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434879,
+      435978,
+      435094
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 3.4277,
+     "cyclesPerFrame": 67378,
+     "cyclesPerLine": 215.95,
+     "spreadPct": 0.333,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      458935,
+      460465,
+      459408
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 3.8367,
+     "cyclesPerFrame": 75418,
+     "cyclesPerLine": 241.72,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410431,
+      410431,
+      410013
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 3.837,
+     "cyclesPerFrame": 75424,
+     "cyclesPerLine": 241.74,
+     "spreadPct": 0.106,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410399,
+      410401,
+      409965
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 3.8367,
+     "cyclesPerFrame": 75418,
+     "cyclesPerLine": 241.72,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410431,
+      410431,
+      410013
+     ]
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 3.6332,
+     "cyclesPerFrame": 71419,
+     "cyclesPerLine": 228.91,
+     "spreadPct": 0.096,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      433415,
+      433831,
+      433415
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 4.7249,
+     "cyclesPerFrame": 92877,
+     "cyclesPerLine": 297.68,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 4.7251,
+     "cyclesPerFrame": 92881,
+     "cyclesPerLine": 297.69,
+     "spreadPct": 0.082,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416243,
+      416581,
+      416583
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 4.7249,
+     "cyclesPerFrame": 92877,
+     "cyclesPerLine": 297.68,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 3.8549,
+     "cyclesPerFrame": 75776,
+     "cyclesPerLine": 242.87,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      510615,
+      510615,
+      510615
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 5,
+     "cyclesPerFrame": 98284,
+     "cyclesPerLine": 315.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 5,
+     "cyclesPerFrame": 98284,
+     "cyclesPerLine": 315.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 5,
+     "cyclesPerFrame": 98284,
+     "cyclesPerLine": 315.01,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 4.0778,
+     "cyclesPerFrame": 80157,
+     "cyclesPerLine": 256.91,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      482708,
+      482708,
+      482708
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 4.524,
+     "cyclesPerFrame": 88929,
+     "cyclesPerLine": 285.03,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434879,
+      435978,
+      435094
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 4.5242,
+     "cyclesPerFrame": 88932,
+     "cyclesPerLine": 285.04,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434863,
+      435959,
+      435078
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 4.524,
+     "cyclesPerFrame": 88929,
+     "cyclesPerLine": 285.03,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434879,
+      435978,
+      435094
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 3.6893,
+     "cyclesPerFrame": 72520,
+     "cyclesPerLine": 232.44,
+     "spreadPct": 0.206,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      533279,
+      534378,
+      533537
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 4.7959,
+     "cyclesPerFrame": 94272,
+     "cyclesPerLine": 302.15,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410432,
+      410432,
+      410014
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 4.7959,
+     "cyclesPerFrame": 94273,
+     "cyclesPerLine": 302.16,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410429,
+      410429,
+      410012
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 4.7959,
+     "cyclesPerFrame": 94272,
+     "cyclesPerLine": 302.15,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410432,
+      410432,
+      410014
+     ]
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 3.9121,
+     "cyclesPerFrame": 76900,
+     "cyclesPerLine": 246.47,
+     "spreadPct": 0.159,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      503152,
+      503456,
+      502658
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 5.6699,
+     "cyclesPerFrame": 111453,
+     "cyclesPerLine": 357.22,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 5.6701,
+     "cyclesPerFrame": 111457,
+     "cyclesPerLine": 357.23,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416239,
+      416583,
+      416582
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 5.6699,
+     "cyclesPerFrame": 111453,
+     "cyclesPerLine": 357.22,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 3.8541,
+     "cyclesPerFrame": 75759,
+     "cyclesPerLine": 242.82,
+     "spreadPct": 0.049,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      612573,
+      612874,
+      612874
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 6,
+     "cyclesPerFrame": 117941,
+     "cyclesPerLine": 378.02,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 6,
+     "cyclesPerFrame": 117941,
+     "cyclesPerLine": 378.02,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 6,
+     "cyclesPerFrame": 117941,
+     "cyclesPerLine": 378.02,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 4.0778,
+     "cyclesPerFrame": 80157,
+     "cyclesPerLine": 256.91,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      579248,
+      579248,
+      579248
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 5.4288,
+     "cyclesPerFrame": 106714,
+     "cyclesPerLine": 342.03,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434880,
+      435979,
+      435095
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 5.4292,
+     "cyclesPerFrame": 106722,
+     "cyclesPerLine": 342.06,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434851,
+      435950,
+      435063
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 5.4288,
+     "cyclesPerFrame": 106714,
+     "cyclesPerLine": 342.03,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434880,
+      435979,
+      435095
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 3.6927,
+     "cyclesPerFrame": 72588,
+     "cyclesPerLine": 232.65,
+     "spreadPct": 0.179,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      639653,
+      640797,
+      639653
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 5.755,
+     "cyclesPerFrame": 113127,
+     "cyclesPerLine": 362.59,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410432,
+      410432,
+      410014
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 5.7569,
+     "cyclesPerFrame": 113163,
+     "cyclesPerLine": 362.7,
+     "spreadPct": 0.114,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410299,
+      410299,
+      409831
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 5.755,
+     "cyclesPerFrame": 113127,
+     "cyclesPerLine": 362.59,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410432,
+      410432,
+      410014
+     ]
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 3.9108,
+     "cyclesPerFrame": 76875,
+     "cyclesPerLine": 246.39,
+     "spreadPct": 0.132,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      603981,
+      603981,
+      603183
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 7.5598,
+     "cyclesPerFrame": 148604,
+     "cyclesPerLine": 476.29,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 7.56,
+     "cyclesPerFrame": 148607,
+     "cyclesPerLine": 476.3,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416244,
+      416587,
+      416588
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 7.5598,
+     "cyclesPerFrame": 148604,
+     "cyclesPerLine": 476.29,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 7.1561,
+     "cyclesPerFrame": 140667,
+     "cyclesPerLine": 450.86,
+     "spreadPct": 0.156,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      439628,
+      440316,
+      440101
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 8,
+     "cyclesPerFrame": 157255,
+     "cyclesPerLine": 504.02,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 8,
+     "cyclesPerFrame": 157255,
+     "cyclesPerLine": 504.02,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 8,
+     "cyclesPerFrame": 157255,
+     "cyclesPerLine": 504.02,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 7.5711,
+     "cyclesPerFrame": 148825,
+     "cyclesPerLine": 477,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      415978,
+      415978,
+      415978
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 7.2385,
+     "cyclesPerFrame": 142287,
+     "cyclesPerLine": 456.05,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 7.2387,
+     "cyclesPerFrame": 142291,
+     "cyclesPerLine": 456.06,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434864,
+      435959,
+      435078
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 7.2385,
+     "cyclesPerFrame": 142287,
+     "cyclesPerLine": 456.05,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 6.8535,
+     "cyclesPerFrame": 134720,
+     "cyclesPerLine": 431.79,
+     "spreadPct": 0.333,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      459057,
+      460586,
+      459530
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 7.6734,
+     "cyclesPerFrame": 150836,
+     "cyclesPerLine": 483.45,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 7.6736,
+     "cyclesPerFrame": 150840,
+     "cyclesPerLine": 483.46,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410421,
+      410421,
+      409984
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 7.6734,
+     "cyclesPerFrame": 150836,
+     "cyclesPerLine": 483.45,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.2645,
+     "cyclesPerFrame": 142798,
+     "cyclesPerLine": 457.69,
+     "spreadPct": 0.105,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      433534,
+      433990,
+      433534
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 9.4498,
+     "cyclesPerFrame": 185754,
+     "cyclesPerLine": 595.37,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 9.4502,
+     "cyclesPerFrame": 185763,
+     "cyclesPerLine": 595.4,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416233,
+      416577,
+      416577
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 9.4498,
+     "cyclesPerFrame": 185754,
+     "cyclesPerLine": 595.37,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416253,
+      416597,
+      416597
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 7.1611,
+     "cyclesPerFrame": 140766,
+     "cyclesPerLine": 451.17,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      549740,
+      549740,
+      549740
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 9.9999,
+     "cyclesPerFrame": 196569,
+     "cyclesPerLine": 630.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 9.9999,
+     "cyclesPerFrame": 196569,
+     "cyclesPerLine": 630.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 9.9999,
+     "cyclesPerFrame": 196569,
+     "cyclesPerLine": 630.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393678,
+      393678,
+      393678
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 7.5753,
+     "cyclesPerFrame": 148907,
+     "cyclesPerLine": 477.27,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      519683,
+      519683,
+      519683
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 9.048,
+     "cyclesPerFrame": 177857,
+     "cyclesPerLine": 570.06,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434879,
+      435978,
+      435094
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 9.0484,
+     "cyclesPerFrame": 177864,
+     "cyclesPerLine": 570.08,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434865,
+      435964,
+      435078
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 9.048,
+     "cyclesPerFrame": 177857,
+     "cyclesPerLine": 570.06,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434879,
+      435978,
+      435094
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 6.8538,
+     "cyclesPerFrame": 134726,
+     "cyclesPerLine": 431.81,
+     "spreadPct": 0.214,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      574000,
+      575228,
+      574387
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 9.5917,
+     "cyclesPerFrame": 188545,
+     "cyclesPerLine": 604.31,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410431,
+      410431,
+      410013
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 9.5918,
+     "cyclesPerFrame": 188547,
+     "cyclesPerLine": 604.32,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410427,
+      410427,
+      409990
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 9.5917,
+     "cyclesPerFrame": 188545,
+     "cyclesPerLine": 604.31,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410431,
+      410431,
+      410013
+     ]
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.2714,
+     "cyclesPerFrame": 142934,
+     "cyclesPerLine": 458.12,
+     "spreadPct": 0.147,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      541400,
+      542027,
+      541229
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222907,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416250,
+      416594,
+      416594
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 11.3398,
+     "cyclesPerFrame": 222906,
+     "cyclesPerLine": 714.44,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 7.1624,
+     "cyclesPerFrame": 140792,
+     "cyclesPerLine": 451.26,
+     "spreadPct": 0.078,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      659395,
+      659911,
+      659567
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 7.5753,
+     "cyclesPerFrame": 148908,
+     "cyclesPerLine": 477.27,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      623619,
+      623619,
+      623619
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 10.8577,
+     "cyclesPerFrame": 213429,
+     "cyclesPerLine": 684.07,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435093
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 10.8578,
+     "cyclesPerFrame": 213432,
+     "cyclesPerLine": 684.08,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434872,
+      435971,
+      435087
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 10.8577,
+     "cyclesPerFrame": 213429,
+     "cyclesPerLine": 684.07,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435976,
+      435093
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 6.8536,
+     "cyclesPerFrame": 134721,
+     "cyclesPerLine": 431.8,
+     "spreadPct": 0.11,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      689161,
+      689921,
+      689290
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 11.5101,
+     "cyclesPerFrame": 226254,
+     "cyclesPerLine": 725.17,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 11.5103,
+     "cyclesPerFrame": 226257,
+     "cyclesPerLine": 725.18,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410425,
+      410425,
+      409988
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 11.5101,
+     "cyclesPerFrame": 226254,
+     "cyclesPerLine": 725.17,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.2684,
+     "cyclesPerFrame": 142874,
+     "cyclesPerLine": 457.93,
+     "spreadPct": 0.085,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      649953,
+      650504,
+      649953
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 13.2297,
+     "cyclesPerFrame": 260057,
+     "cyclesPerLine": 833.51,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 13.2299,
+     "cyclesPerFrame": 260060,
+     "cyclesPerLine": 833.53,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416247,
+      416592,
+      416591
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 13.2297,
+     "cyclesPerFrame": 260057,
+     "cyclesPerLine": 833.51,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.351,
+     "cyclesPerFrame": 164157,
+     "cyclesPerLine": 526.14,
+     "spreadPct": 0.072,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      659842,
+      660315,
+      659971
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 13.9999,
+     "cyclesPerFrame": 275197,
+     "cyclesPerLine": 882.04,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 13.9999,
+     "cyclesPerFrame": 275197,
+     "cyclesPerLine": 882.04,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 13.9999,
+     "cyclesPerFrame": 275197,
+     "cyclesPerLine": 882.04,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8321,
+     "cyclesPerFrame": 173613,
+     "cyclesPerLine": 556.45,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      624023,
+      624023,
+      624023
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 12.6673,
+     "cyclesPerFrame": 249001,
+     "cyclesPerLine": 798.08,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435977,
+      435093
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 12.6676,
+     "cyclesPerFrame": 249007,
+     "cyclesPerLine": 798.1,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434869,
+      435965,
+      435083
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 12.6673,
+     "cyclesPerFrame": 249001,
+     "cyclesPerLine": 798.08,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434878,
+      435977,
+      435093
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9905,
+     "cyclesPerFrame": 157069,
+     "cyclesPerLine": 503.43,
+     "spreadPct": 0.144,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      689578,
+      690572,
+      689750
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 13.4284,
+     "cyclesPerFrame": 263963,
+     "cyclesPerLine": 846.04,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410431,
+      410431,
+      410012
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 13.4287,
+     "cyclesPerFrame": 263969,
+     "cyclesPerLine": 846.05,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410422,
+      410422,
+      409985
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 13.4284,
+     "cyclesPerFrame": 263963,
+     "cyclesPerLine": 846.04,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410431,
+      410431,
+      410012
+     ]
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4745,
+     "cyclesPerFrame": 166583,
+     "cyclesPerLine": 533.92,
+     "spreadPct": 0.111,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      650357,
+      651079,
+      650357
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 15.1197,
+     "cyclesPerFrame": 297208,
+     "cyclesPerLine": 952.59,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 15.1198,
+     "cyclesPerFrame": 297210,
+     "cyclesPerLine": 952.6,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416249,
+      416593,
+      416593
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 15.1197,
+     "cyclesPerFrame": 297208,
+     "cyclesPerLine": 952.59,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.3484,
+     "cyclesPerFrame": 164104,
+     "cyclesPerLine": 525.98,
+     "spreadPct": 0.086,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      754019,
+      754664,
+      754492
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 15.9999,
+     "cyclesPerFrame": 314510,
+     "cyclesPerLine": 1008.05,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 15.9999,
+     "cyclesPerFrame": 314510,
+     "cyclesPerLine": 1008.05,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 15.9999,
+     "cyclesPerFrame": 314510,
+     "cyclesPerLine": 1008.05,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8321,
+     "cyclesPerFrame": 173613,
+     "cyclesPerLine": 556.45,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      713169,
+      713169,
+      713169
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 14.4769,
+     "cyclesPerFrame": 284573,
+     "cyclesPerLine": 912.09,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434877,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 14.4771,
+     "cyclesPerFrame": 284576,
+     "cyclesPerLine": 912.1,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434872,
+      435972,
+      435088
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 14.4769,
+     "cyclesPerFrame": 284573,
+     "cyclesPerLine": 912.09,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434877,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9908,
+     "cyclesPerFrame": 157074,
+     "cyclesPerLine": 503.44,
+     "spreadPct": 0.134,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      788089,
+      789145,
+      788261
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 15.3469,
+     "cyclesPerFrame": 301673,
+     "cyclesPerLine": 966.9,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410429,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 15.3472,
+     "cyclesPerFrame": 301679,
+     "cyclesPerLine": 966.92,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410422,
+      410421,
+      409984
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 15.3469,
+     "cyclesPerFrame": 301673,
+     "cyclesPerLine": 966.9,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410429,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4719,
+     "cyclesPerFrame": 166532,
+     "cyclesPerLine": 533.76,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      743493,
+      743492,
+      742695
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 18.8996,
+     "cyclesPerFrame": 371510,
+     "cyclesPerLine": 1190.74,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 18.8999,
+     "cyclesPerFrame": 371515,
+     "cyclesPerLine": 1190.75,
+     "spreadPct": 0.082,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416247,
+      416590,
+      416590
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 18.8996,
+     "cyclesPerFrame": 371510,
+     "cyclesPerLine": 1190.74,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.3548,
+     "cyclesPerFrame": 164229,
+     "cyclesPerLine": 526.38,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      942398,
+      942398,
+      942398
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 19.9999,
+     "cyclesPerFrame": 393138,
+     "cyclesPerLine": 1260.06,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 19.9999,
+     "cyclesPerFrame": 393138,
+     "cyclesPerLine": 1260.06,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 19.9999,
+     "cyclesPerFrame": 393138,
+     "cyclesPerLine": 1260.06,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8379,
+     "cyclesPerFrame": 173726,
+     "cyclesPerLine": 556.81,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      890884,
+      890884,
+      890884
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 18.0962,
+     "cyclesPerFrame": 355716,
+     "cyclesPerLine": 1140.12,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434877,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 18.0965,
+     "cyclesPerFrame": 355723,
+     "cyclesPerLine": 1140.14,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434869,
+      435968,
+      435084
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 18.0962,
+     "cyclesPerFrame": 355716,
+     "cyclesPerLine": 1140.12,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434877,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9958,
+     "cyclesPerFrame": 157173,
+     "cyclesPerLine": 503.76,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      984534,
+      985590,
+      984706
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 19.1835,
+     "cyclesPerFrame": 377091,
+     "cyclesPerLine": 1208.62,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 19.1837,
+     "cyclesPerFrame": 377095,
+     "cyclesPerLine": 1208.64,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410426,
+      410426,
+      409989
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 19.1835,
+     "cyclesPerFrame": 377091,
+     "cyclesPerLine": 1208.62,
+     "spreadPct": 0.102,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410430,
+      410012
+     ]
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4808,
+     "cyclesPerFrame": 166707,
+     "cyclesPerLine": 534.32,
+     "spreadPct": 0.086,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      928390,
+      929188,
+      928390
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 22.6795,
+     "cyclesPerFrame": 445811,
+     "cyclesPerLine": 1428.88,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 22.6796,
+     "cyclesPerFrame": 445814,
+     "cyclesPerLine": 1428.89,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416250,
+      416594,
+      416594
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 22.5413,
+     "cyclesPerFrame": 443094,
+     "cyclesPerLine": 1420.17,
+     "spreadPct": 0.134,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      418678,
+      419237,
+      419151
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.3553,
+     "cyclesPerFrame": 164239,
+     "cyclesPerLine": 526.41,
+     "spreadPct": 0.049,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1130593,
+      1131152,
+      1130808
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 23.9999,
+     "cyclesPerFrame": 471766,
+     "cyclesPerLine": 1512.07,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 23.9999,
+     "cyclesPerFrame": 471766,
+     "cyclesPerLine": 1512.07,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 23.8529,
+     "cyclesPerFrame": 468876,
+     "cyclesPerLine": 1502.81,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      396103,
+      396103,
+      396103
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8379,
+     "cyclesPerFrame": 173726,
+     "cyclesPerLine": 556.81,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1069060,
+      1069060,
+      1069060
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 21.7154,
+     "cyclesPerFrame": 426860,
+     "cyclesPerLine": 1368.14,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434877,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 21.7156,
+     "cyclesPerFrame": 426863,
+     "cyclesPerLine": 1368.15,
+     "spreadPct": 0.252,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434875,
+      435973,
+      435089
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 21.5823,
+     "cyclesPerFrame": 424243,
+     "cyclesPerLine": 1359.75,
+     "spreadPct": 0.3,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      437303,
+      438617,
+      437776
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9957,
+     "cyclesPerFrame": 157172,
+     "cyclesPerLine": 503.76,
+     "spreadPct": 0.089,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1181440,
+      1182496,
+      1181655
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 23.0203,
+     "cyclesPerFrame": 452510,
+     "cyclesPerLine": 1450.35,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410430,
+      410429,
+      409993
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 23.0204,
+     "cyclesPerFrame": 452511,
+     "cyclesPerLine": 1450.36,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410428,
+      410428,
+      409991
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 22.885,
+     "cyclesPerFrame": 449850,
+     "cyclesPerLine": 1441.83,
+     "spreadPct": 0.004,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      412856,
+      412874,
+      412856
+     ]
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4772,
+     "cyclesPerFrame": 166636,
+     "cyclesPerLine": 534.09,
+     "spreadPct": 0.072,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1114546,
+      1114546,
+      1113748
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 30.2394,
+     "cyclesPerFrame": 594415,
+     "cyclesPerLine": 1905.18,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416252,
+      416596,
+      416596
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 30.2396,
+     "cyclesPerFrame": 594420,
+     "cyclesPerLine": 1905.19,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      416249,
+      416593,
+      416593
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 28.6394,
+     "cyclesPerFrame": 562965,
+     "cyclesPerLine": 1804.38,
+     "spreadPct": 0.147,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      439396,
+      440041,
+      439869
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.3554,
+     "cyclesPerFrame": 164243,
+     "cyclesPerLine": 526.42,
+     "spreadPct": 0.014,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1507711,
+      1507926,
+      1507711
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 31.9998,
+     "cyclesPerFrame": 629021,
+     "cyclesPerLine": 2016.09,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 31.9998,
+     "cyclesPerFrame": 629021,
+     "cyclesPerLine": 2016.09,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 30.3012,
+     "cyclesPerFrame": 595631,
+     "cyclesPerLine": 1909.07,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      415746,
+      415746,
+      415746
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8379,
+     "cyclesPerFrame": 173726,
+     "cyclesPerLine": 556.82,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1425409,
+      1425409,
+      1425409
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 28.9539,
+     "cyclesPerFrame": 569146,
+     "cyclesPerLine": 1824.19,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434877,
+      435976,
+      435092
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 28.954,
+     "cyclesPerFrame": 569149,
+     "cyclesPerLine": 1824.2,
+     "spreadPct": 0.253,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      434874,
+      435973,
+      435090
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 27.4283,
+     "cyclesPerFrame": 539158,
+     "cyclesPerLine": 1728.07,
+     "spreadPct": 0.324,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      458819,
+      460305,
+      459292
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9959,
+     "cyclesPerFrame": 157175,
+     "cyclesPerLine": 503.77,
+     "spreadPct": 0.072,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1575249,
+      1576391,
+      1575507
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 30.6937,
+     "cyclesPerFrame": 603347,
+     "cyclesPerLine": 1933.8,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410429,
+      410429,
+      409992
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 30.694,
+     "cyclesPerFrame": 603353,
+     "cyclesPerLine": 1933.82,
+     "spreadPct": 0.107,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      410425,
+      410425,
+      409988
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 29.0739,
+     "cyclesPerFrame": 571505,
+     "cyclesPerLine": 1831.75,
+     "spreadPct": 0.083,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      433296,
+      433657,
+      433296
+     ]
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4794,
+     "cyclesPerFrame": 166679,
+     "cyclesPerLine": 534.23,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1485677,
+      1486057,
+      1485259
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 36.8827,
+     "cyclesPerFrame": 725003,
+     "cyclesPerLine": 2323.73,
+     "spreadPct": 0.05,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      426948,
+      427163,
+      426948
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 36.8827,
+     "cyclesPerFrame": 725003,
+     "cyclesPerLine": 2323.73,
+     "spreadPct": 0.05,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      426948,
+      427163,
+      426948
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 33.7783,
+     "cyclesPerFrame": 663980,
+     "cyclesPerLine": 2128.14,
+     "spreadPct": 0.046,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      466187,
+      466402,
+      466187
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.3548,
+     "cyclesPerFrame": 164230,
+     "cyclesPerLine": 526.38,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1884789,
+      1884789,
+      1884789
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 38.9998,
+     "cyclesPerFrame": 766620,
+     "cyclesPerLine": 2457.11,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      403771,
+      403771,
+      403771
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 38.9998,
+     "cyclesPerFrame": 766620,
+     "cyclesPerLine": 2457.11,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      403771,
+      403771,
+      403771
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 35.7188,
+     "cyclesPerFrame": 702125,
+     "cyclesPerLine": 2250.4,
+     "spreadPct": 0.188,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      440860,
+      440860,
+      441690
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8379,
+     "cyclesPerFrame": 173726,
+     "cyclesPerLine": 556.82,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1781761,
+      1781761,
+      1781761
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 35.2778,
+     "cyclesPerFrame": 693456,
+     "cyclesPerLine": 2222.62,
+     "spreadPct": 0.247,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      446371,
+      446586,
+      445487
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 35.2782,
+     "cyclesPerFrame": 693464,
+     "cyclesPerLine": 2222.64,
+     "spreadPct": 0.246,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      446366,
+      446581,
+      445483
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 32.3125,
+     "cyclesPerFrame": 635168,
+     "cyclesPerLine": 2035.79,
+     "spreadPct": 0.199,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      487334,
+      487420,
+      486450
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9958,
+     "cyclesPerFrame": 157174,
+     "cyclesPerLine": 503.76,
+     "spreadPct": 0.06,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1969061,
+      1970246,
+      1969405
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 37.4461,
+     "cyclesPerFrame": 736079,
+     "cyclesPerLine": 2359.23,
+     "spreadPct": 0.19,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      420524,
+      421321,
+      420524
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 37.4466,
+     "cyclesPerFrame": 736087,
+     "cyclesPerLine": 2359.25,
+     "spreadPct": 0.19,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      420519,
+      421316,
+      420519
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 34.2322,
+     "cyclesPerFrame": 672903,
+     "cyclesPerLine": 2156.74,
+     "spreadPct": 0.181,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      459208,
+      460005,
+      460037
+     ]
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4808,
+     "cyclesPerFrame": 166708,
+     "cyclesPerLine": 534.32,
+     "spreadPct": 0.043,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      1856773,
+      1857571,
+      1856773
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 44.4516,
+     "cyclesPerFrame": 873784,
+     "cyclesPerLine": 2800.59,
+     "spreadPct": 0.091,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      425058,
+      425445,
+      425101
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC sta $D020",
+     "multiple": 44.4517,
+     "cyclesPerFrame": 873786,
+     "cyclesPerLine": 2800.6,
+     "spreadPct": 0.091,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      425057,
+      425444,
+      425100
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 39.8186,
+     "cyclesPerFrame": 782714,
+     "cyclesPerLine": 2508.7,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      474304,
+      474562,
+      474562
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "CIA lda $DC05",
+     "multiple": 8.3543,
+     "cyclesPerFrame": 164221,
+     "cyclesPerLine": 526.35,
+     "spreadPct": 0.006,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      2261738,
+      2261867,
+      2261867
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC sta $D020",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 42.1321,
+     "cyclesPerFrame": 828190,
+     "cyclesPerLine": 2654.46,
+     "spreadPct": 0.183,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      449325,
+      448504,
+      448504
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "CIA lda $DC05",
+     "multiple": 8.8379,
+     "cyclesPerFrame": 173726,
+     "cyclesPerLine": 556.82,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      2138113,
+      2138113,
+      2138113
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 42.5484,
+     "cyclesPerFrame": 836375,
+     "cyclesPerLine": 2680.69,
+     "spreadPct": 0.257,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      444115,
+      444868,
+      443726
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 42.5488,
+     "cyclesPerFrame": 836382,
+     "cyclesPerLine": 2680.71,
+     "spreadPct": 0.257,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      444111,
+      444864,
+      443723
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 38.1198,
+     "cyclesPerFrame": 749321,
+     "cyclesPerLine": 2401.67,
+     "spreadPct": 0.248,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      495324,
+      496551,
+      495711
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 7.9959,
+     "cyclesPerFrame": 157175,
+     "cyclesPerLine": 503.77,
+     "spreadPct": 0.054,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      2362873,
+      2364144,
+      2363260
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 45.1198,
+     "cyclesPerFrame": 886920,
+     "cyclesPerLine": 2842.69,
+     "spreadPct": 0.387,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      418805,
+      420425,
+      418805
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "VIC sta $D020",
+     "multiple": 45.12,
+     "cyclesPerFrame": 886924,
+     "cyclesPerLine": 2842.71,
+     "spreadPct": 0.191,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      418803,
+      419601,
+      418803
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 40.4071,
+     "cyclesPerFrame": 794281,
+     "cyclesPerLine": 2545.77,
+     "spreadPct": 0.171,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      467651,
+      467651,
+      466853
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "CIA lda $DC05",
+     "multiple": 8.4802,
+     "cyclesPerFrame": 166696,
+     "cyclesPerLine": 534.28,
+     "spreadPct": 0.036,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      2228287,
+      2229085,
+      2228287
+     ]
+    }
+   ]
+  },
+  "cpu-regs-badbit80": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 1,
+    "idxMask": 33025,
+    "condMask": 15,
+    "varMask": 5,
+    "nrep": 3,
+    "useD031": 1,
+    "badbit": 128,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1
+    ],
+    "readback": [
+     128,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     136,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     143
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     48
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 1,
+     "cyclesPerFrame": 19656,
+     "cyclesPerLine": 63,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393687,
+      393687,
+      393687
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 11.9999,
+     "cyclesPerFrame": 235883,
+     "cyclesPerLine": 756.03,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      393677,
+      393677,
+      393677
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "RAM lda",
+     "multiple": 46.949,
+     "cyclesPerFrame": 922876,
+     "cyclesPerLine": 2957.94,
+     "spreadPct": 0.003,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402483,
+      402494,
+      402488
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "load": "VIC lda $D012",
+     "multiple": 42.0637,
+     "cyclesPerFrame": 826846,
+     "cyclesPerLine": 2650.15,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      449233,
+      449233,
+      449233
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "RAM lda",
+     "multiple": 46.9998,
+     "cyclesPerFrame": 923875,
+     "cyclesPerLine": 2961.14,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402053,
+      402053,
+      402053
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "load": "VIC lda $D012",
+     "multiple": 42.1321,
+     "cyclesPerFrame": 828190,
+     "cyclesPerLine": 2654.46,
+     "spreadPct": 0,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      448504,
+      448504,
+      448504
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "RAM lda",
+     "multiple": 46.9149,
+     "cyclesPerFrame": 922207,
+     "cyclesPerLine": 2955.79,
+     "spreadPct": 0.006,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402775,
+      402801,
+      402780
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "on+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 42.0191,
+     "cyclesPerFrame": 825969,
+     "cyclesPerLine": 2647.34,
+     "spreadPct": 0.002,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      449710,
+      449710,
+      449700
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "RAM lda",
+     "multiple": 46.9664,
+     "cyclesPerFrame": 923218,
+     "cyclesPerLine": 2959.03,
+     "spreadPct": 0.003,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      402339,
+      402353,
+      402339
+     ]
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "blank+8 sprites",
+     "load": "VIC lda $D012",
+     "multiple": 42.0881,
+     "cyclesPerFrame": 827325,
+     "cyclesPerLine": 2651.68,
+     "spreadPct": 0.003,
+     "interference": 0,
+     "status": 1,
+     "ticks": [
+      448974,
+      448973,
+      448960
+     ]
+    }
+   ]
+  },
+  "reu-regs-all": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 2,
+    "idxMask": 65535,
+    "condMask": 3,
+    "varMask": 0,
+    "nrep": 3,
+    "useD031": 1,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 1,
+    "frameTicks": [
+     19657,
+     19657,
+     19657
+    ],
+    "status": [
+     1,
+     12,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "readback": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15
+    ],
+    "mUsed": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     8,
+     10,
+     12,
+     14,
+     16,
+     20,
+     24,
+     32,
+     40,
+     48
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 34422,
+      "stash 16K": 17218,
+      "stash 1B": 15,
+      "fetch 32K": 34422,
+      "fetch 16K": 17218,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 0.9523,
+     "fetchBperTick": 0.9523,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 34586,
+      "stash 16K": 17218,
+      "stash 1B": 15,
+      "fetch 32K": 34586,
+      "fetch 16K": 17218,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 0.9433,
+     "fetchBperTick": 0.9433,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 34422,
+      "stash 16K": 17218,
+      "stash 1B": 15,
+      "fetch 32K": 34422,
+      "fetch 16K": 17218,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 0.9523,
+     "fetchBperTick": 0.9523,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 17212,
+      "stash 16K": 8323,
+      "stash 1B": 9,
+      "fetch 32K": 17212,
+      "fetch 16K": 8323,
+      "fetch 1B": 9
+     },
+     "stashBperTick": 1.8432,
+     "fetchBperTick": 1.8432,
+     "status": 12
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 17212,
+      "stash 16K": 8938,
+      "stash 1B": 9,
+      "fetch 32K": 17212,
+      "fetch 16K": 8938,
+      "fetch 1B": 9
+     },
+     "stashBperTick": 1.9802,
+     "fetchBperTick": 1.9802,
+     "status": 12
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 17212,
+      "stash 16K": 8651,
+      "stash 1B": 9,
+      "fetch 32K": 17212,
+      "fetch 16K": 8651,
+      "fetch 1B": 9
+     },
+     "stashBperTick": 1.9138,
+     "fetchBperTick": 1.9138,
+     "status": 12
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 16392,
+      "stash 16K": 8200,
+      "stash 1B": 9,
+      "fetch 32K": 16392,
+      "fetch 16K": 8200,
+      "fetch 1B": 9
+     },
+     "stashBperTick": 2,
+     "fetchBperTick": 2,
+     "status": 12
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 16392,
+      "stash 16K": 8200,
+      "stash 1B": 9,
+      "fetch 32K": 16392,
+      "fetch 16K": 8200,
+      "fetch 1B": 9
+     },
+     "stashBperTick": 2,
+     "fetchBperTick": 2,
+     "status": 12
+    },
+    {
+     "idx": 1,
+     "mhz": 2,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 16392,
+      "stash 16K": 8200,
+      "stash 1B": 9,
+      "fetch 32K": 16392,
+      "fetch 16K": 8200,
+      "fetch 1B": 9
+     },
+     "stashBperTick": 2,
+     "fetchBperTick": 2,
+     "status": 12
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 11269,
+      "stash 16K": 5472,
+      "stash 1B": 7,
+      "fetch 32K": 11385,
+      "fetch 16K": 5511,
+      "fetch 1B": 7
+     },
+     "stashBperTick": 2.8263,
+     "fetchBperTick": 2.7892,
+     "status": 1
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 11719,
+      "stash 16K": 5964,
+      "stash 1B": 7,
+      "fetch 32K": 11794,
+      "fetch 16K": 6002,
+      "fetch 1B": 7
+     },
+     "stashBperTick": 2.8469,
+     "fetchBperTick": 2.8287,
+     "status": 1
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 11391,
+      "stash 16K": 5923,
+      "stash 1B": 7,
+      "fetch 32K": 11475,
+      "fetch 16K": 5960,
+      "fetch 1B": 7
+     },
+     "stashBperTick": 2.9963,
+     "fetchBperTick": 2.9708,
+     "status": 1
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 10942,
+      "stash 16K": 5474,
+      "stash 1B": 7,
+      "fetch 32K": 11018,
+      "fetch 16K": 5512,
+      "fetch 1B": 7
+     },
+     "stashBperTick": 2.9963,
+     "fetchBperTick": 2.9757,
+     "status": 1
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 10938,
+      "stash 16K": 5472,
+      "stash 1B": 7,
+      "fetch 32K": 11014,
+      "fetch 16K": 5511,
+      "fetch 1B": 7
+     },
+     "stashBperTick": 2.9974,
+     "fetchBperTick": 2.9773,
+     "status": 1
+    },
+    {
+     "idx": 2,
+     "mhz": 3,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 10941,
+      "stash 16K": 5471,
+      "stash 1B": 7,
+      "fetch 32K": 11015,
+      "fetch 16K": 5509,
+      "fetch 1B": 7
+     },
+     "stashBperTick": 2.9952,
+     "fetchBperTick": 2.9757,
+     "status": 1
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8563,
+      "stash 16K": 4222,
+      "stash 1B": 5,
+      "fetch 32K": 17209,
+      "fetch 16K": 8320,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.7742,
+     "fetchBperTick": 1.8432,
+     "status": 1
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 9178,
+      "stash 16K": 4593,
+      "stash 1B": 5,
+      "fetch 32K": 17209,
+      "fetch 16K": 8935,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.5734,
+     "fetchBperTick": 1.9802,
+     "status": 1
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8891,
+      "stash 16K": 4590,
+      "stash 1B": 5,
+      "fetch 32K": 17209,
+      "fetch 16K": 8648,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.8093,
+     "fetchBperTick": 1.9138,
+     "status": 1
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8440,
+      "stash 16K": 4223,
+      "stash 1B": 5,
+      "fetch 32K": 16389,
+      "fetch 16K": 8197,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.8852,
+     "fetchBperTick": 2,
+     "status": 1
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8441,
+      "stash 16K": 4223,
+      "stash 1B": 5,
+      "fetch 32K": 16389,
+      "fetch 16K": 8197,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.8843,
+     "fetchBperTick": 2,
+     "status": 1
+    },
+    {
+     "idx": 3,
+     "mhz": 4,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8439,
+      "stash 16K": 4223,
+      "stash 1B": 5,
+      "fetch 32K": 16389,
+      "fetch 16K": 8197,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.8861,
+     "fetchBperTick": 2,
+     "status": 1
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 7007,
+      "stash 16K": 3496,
+      "stash 1B": 5,
+      "fetch 32K": 13701,
+      "fetch 16K": 6587,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 4.6665,
+     "fetchBperTick": 2.3031,
+     "status": 1
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7820,
+      "stash 16K": 3833,
+      "stash 1B": 5,
+      "fetch 32K": 13952,
+      "fetch 16K": 7159,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 4.1094,
+     "fetchBperTick": 2.4119,
+     "status": 1
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 7466,
+      "stash 16K": 3842,
+      "stash 1B": 5,
+      "fetch 32K": 13705,
+      "fetch 16K": 7043,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 4.521,
+     "fetchBperTick": 2.4593,
+     "status": 1
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 7061,
+      "stash 16K": 3572,
+      "stash 1B": 5,
+      "fetch 32K": 13175,
+      "fetch 16K": 6588,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 4.6959,
+     "fetchBperTick": 2.4873,
+     "status": 1
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7032,
+      "stash 16K": 3494,
+      "stash 1B": 5,
+      "fetch 32K": 13168,
+      "fetch 16K": 6585,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 4.6309,
+     "fetchBperTick": 2.4888,
+     "status": 1
+    },
+    {
+     "idx": 4,
+     "mhz": 5,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6974,
+      "stash 16K": 3509,
+      "stash 1B": 5,
+      "fetch 32K": 13169,
+      "fetch 16K": 6590,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 4.7284,
+     "fetchBperTick": 2.4903,
+     "status": 1
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 11175,
+      "stash 16K": 5429,
+      "stash 1B": 5,
+      "fetch 32K": 11344,
+      "fetch 16K": 5492,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 2.8514,
+     "fetchBperTick": 2.7997,
+     "status": 1
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 11628,
+      "stash 16K": 5919,
+      "stash 1B": 5,
+      "fetch 32K": 11757,
+      "fetch 16K": 5980,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 2.8699,
+     "fetchBperTick": 2.8361,
+     "status": 1
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 11298,
+      "stash 16K": 5873,
+      "stash 1B": 5,
+      "fetch 32K": 11423,
+      "fetch 16K": 5939,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.0201,
+     "fetchBperTick": 2.9876,
+     "status": 1
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 10848,
+      "stash 16K": 5428,
+      "stash 1B": 5,
+      "fetch 32K": 10974,
+      "fetch 16K": 5489,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.0229,
+     "fetchBperTick": 2.9871,
+     "status": 1
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 10850,
+      "stash 16K": 5429,
+      "stash 1B": 5,
+      "fetch 32K": 10976,
+      "fetch 16K": 5491,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.0223,
+     "fetchBperTick": 2.9871,
+     "status": 1
+    },
+    {
+     "idx": 5,
+     "mhz": 6,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 10852,
+      "stash 16K": 5428,
+      "stash 1B": 5,
+      "fetch 32K": 10976,
+      "fetch 16K": 5492,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.0206,
+     "fetchBperTick": 2.9876,
+     "status": 1
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8364,
+      "stash 16K": 4124,
+      "stash 1B": 5,
+      "fetch 32K": 12767,
+      "fetch 16K": 6162,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.8642,
+     "fetchBperTick": 2.4805,
+     "status": 1
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8982,
+      "stash 16K": 4494,
+      "stash 1B": 5,
+      "fetch 32K": 13096,
+      "fetch 16K": 6693,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.6506,
+     "fetchBperTick": 2.5588,
+     "status": 1
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8698,
+      "stash 16K": 4492,
+      "stash 1B": 5,
+      "fetch 32K": 12767,
+      "fetch 16K": 6612,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.8954,
+     "fetchBperTick": 2.6619,
+     "status": 1
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8241,
+      "stash 16K": 4124,
+      "stash 1B": 5,
+      "fetch 32K": 12318,
+      "fetch 16K": 6160,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.9796,
+     "fetchBperTick": 2.6606,
+     "status": 1
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8240,
+      "stash 16K": 4124,
+      "stash 1B": 5,
+      "fetch 32K": 12315,
+      "fetch 16K": 6160,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.9806,
+     "fetchBperTick": 2.6619,
+     "status": 1
+    },
+    {
+     "idx": 6,
+     "mhz": 8,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8242,
+      "stash 16K": 4122,
+      "stash 1B": 5,
+      "fetch 32K": 12315,
+      "fetch 16K": 6160,
+      "fetch 1B": 5
+     },
+     "stashBperTick": 3.9767,
+     "fetchBperTick": 2.6619,
+     "status": 1
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6819,
+      "stash 16K": 3410,
+      "stash 1B": 4,
+      "fetch 32K": 10380,
+      "fetch 16K": 5050,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.8061,
+     "fetchBperTick": 3.0739,
+     "status": 1
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7429,
+      "stash 16K": 3695,
+      "stash 1B": 5,
+      "fetch 32K": 10889,
+      "fetch 16K": 5505,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.3878,
+     "fetchBperTick": 3.0431,
+     "status": 1
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 7234,
+      "stash 16K": 3681,
+      "stash 1B": 4,
+      "fetch 32K": 10540,
+      "fetch 16K": 5497,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.6113,
+     "fetchBperTick": 3.2489,
+     "status": 1
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6796,
+      "stash 16K": 3402,
+      "stash 1B": 4,
+      "fetch 32K": 10090,
+      "fetch 16K": 5054,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.8273,
+     "fetchBperTick": 3.2534,
+     "status": 1
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6821,
+      "stash 16K": 3421,
+      "stash 1B": 4,
+      "fetch 32K": 10083,
+      "fetch 16K": 5051,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.8188,
+     "fetchBperTick": 3.256,
+     "status": 1
+    },
+    {
+     "idx": 7,
+     "mhz": 10,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6787,
+      "stash 16K": 3390,
+      "stash 1B": 5,
+      "fetch 32K": 10098,
+      "fetch 16K": 5052,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.8231,
+     "fetchBperTick": 3.2469,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8237,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 11338,
+      "fetch 16K": 5488,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 3.9394,
+     "fetchBperTick": 2.8007,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8890,
+      "stash 16K": 4448,
+      "stash 1B": 4,
+      "fetch 32K": 11748,
+      "fetch 16K": 5981,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 3.6884,
+     "fetchBperTick": 2.841,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8604,
+      "stash 16K": 4447,
+      "stash 1B": 4,
+      "fetch 32K": 11417,
+      "fetch 16K": 5937,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 3.9413,
+     "fetchBperTick": 2.9898,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8150,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 10972,
+      "fetch 16K": 5488,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0236,
+     "fetchBperTick": 2.9876,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8153,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 10970,
+      "fetch 16K": 5487,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0206,
+     "fetchBperTick": 2.9881,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8153,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 10970,
+      "fetch 16K": 5487,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0206,
+     "fetchBperTick": 2.9881,
+     "status": 1
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 7129,
+      "stash 16K": 3565,
+      "stash 1B": 4,
+      "fetch 32K": 9870,
+      "fetch 16K": 4814,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.5971,
+     "fetchBperTick": 3.2405,
+     "status": 1
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7753,
+      "stash 16K": 3902,
+      "stash 1B": 4,
+      "fetch 32K": 10406,
+      "fetch 16K": 5235,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.2545,
+     "fetchBperTick": 3.1684,
+     "status": 1
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 7586,
+      "stash 16K": 3903,
+      "stash 1B": 4,
+      "fetch 32K": 10086,
+      "fetch 16K": 5296,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.4485,
+     "fetchBperTick": 3.4205,
+     "status": 1
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 7244,
+      "stash 16K": 3612,
+      "stash 1B": 4,
+      "fetch 32K": 9627,
+      "fetch 16K": 4823,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.511,
+     "fetchBperTick": 3.4105,
+     "status": 1
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7145,
+      "stash 16K": 3568,
+      "stash 1B": 4,
+      "fetch 32K": 9670,
+      "fetch 16K": 4816,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.5804,
+     "fetchBperTick": 3.3754,
+     "status": 1
+    },
+    {
+     "idx": 9,
+     "mhz": 14,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 7140,
+      "stash 16K": 3570,
+      "stash 1B": 4,
+      "fetch 32K": 9655,
+      "fetch 16K": 4833,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.5894,
+     "fetchBperTick": 3.3978,
+     "status": 1
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6459,
+      "stash 16K": 3236,
+      "stash 1B": 4,
+      "fetch 32K": 10620,
+      "fetch 16K": 5170,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 5.0835,
+     "fetchBperTick": 3.0062,
+     "status": 1
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7036,
+      "stash 16K": 3518,
+      "stash 1B": 4,
+      "fetch 32K": 11114,
+      "fetch 16K": 5617,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.6572,
+     "fetchBperTick": 2.9805,
+     "status": 1
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6915,
+      "stash 16K": 3516,
+      "stash 1B": 4,
+      "fetch 32K": 10785,
+      "fetch 16K": 5627,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.8202,
+     "fetchBperTick": 3.1764,
+     "status": 1
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6458,
+      "stash 16K": 3226,
+      "stash 1B": 4,
+      "fetch 32K": 10332,
+      "fetch 16K": 5169,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 5.0693,
+     "fetchBperTick": 3.1733,
+     "status": 1
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6459,
+      "stash 16K": 3231,
+      "stash 1B": 4,
+      "fetch 32K": 10333,
+      "fetch 16K": 5167,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 5.0756,
+     "fetchBperTick": 3.1715,
+     "status": 1
+    },
+    {
+     "idx": 10,
+     "mhz": 16,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6467,
+      "stash 16K": 3230,
+      "stash 1B": 4,
+      "fetch 32K": 10330,
+      "fetch 16K": 5167,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 5.0615,
+     "fetchBperTick": 3.1733,
+     "status": 1
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6678,
+      "stash 16K": 3338,
+      "stash 1B": 3,
+      "fetch 32K": 10204,
+      "fetch 16K": 4985,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.9054,
+     "fetchBperTick": 3.1393,
+     "status": 1
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7311,
+      "stash 16K": 3631,
+      "stash 1B": 3,
+      "fetch 32K": 10742,
+      "fetch 16K": 5431,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.4522,
+     "fetchBperTick": 3.0849,
+     "status": 1
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 7162,
+      "stash 16K": 3627,
+      "stash 1B": 3,
+      "fetch 32K": 10415,
+      "fetch 16K": 5437,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.6348,
+     "fetchBperTick": 3.2913,
+     "status": 1
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6686,
+      "stash 16K": 3347,
+      "stash 1B": 3,
+      "fetch 32K": 9969,
+      "fetch 16K": 4980,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.9069,
+     "fetchBperTick": 3.284,
+     "status": 1
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6684,
+      "stash 16K": 3345,
+      "stash 1B": 3,
+      "fetch 32K": 9960,
+      "fetch 16K": 4980,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.9069,
+     "fetchBperTick": 3.29,
+     "status": 1
+    },
+    {
+     "idx": 11,
+     "mhz": 20,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6700,
+      "stash 16K": 3343,
+      "stash 1B": 3,
+      "fetch 32K": 9961,
+      "fetch 16K": 4980,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.8805,
+     "fetchBperTick": 3.2893,
+     "status": 1
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6879,
+      "stash 16K": 3440,
+      "stash 1B": 3,
+      "fetch 32K": 9923,
+      "fetch 16K": 4844,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.7642,
+     "fetchBperTick": 3.2258,
+     "status": 1
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 7482,
+      "stash 16K": 3726,
+      "stash 1B": 3,
+      "fetch 32K": 10460,
+      "fetch 16K": 5292,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.3621,
+     "fetchBperTick": 3.1703,
+     "status": 1
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 7318,
+      "stash 16K": 3727,
+      "stash 1B": 3,
+      "fetch 32K": 10133,
+      "fetch 16K": 5289,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.5625,
+     "fetchBperTick": 3.3823,
+     "status": 1
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6872,
+      "stash 16K": 3445,
+      "stash 1B": 3,
+      "fetch 32K": 9693,
+      "fetch 16K": 4843,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.7809,
+     "fetchBperTick": 3.3781,
+     "status": 1
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6870,
+      "stash 16K": 3440,
+      "stash 1B": 3,
+      "fetch 32K": 9676,
+      "fetch 16K": 4842,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.7767,
+     "fetchBperTick": 3.3893,
+     "status": 1
+    },
+    {
+     "idx": 12,
+     "mhz": 24,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6870,
+      "stash 16K": 3437,
+      "stash 1B": 3,
+      "fetch 32K": 9682,
+      "fetch 16K": 4842,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.7725,
+     "fetchBperTick": 3.3851,
+     "status": 1
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6386,
+      "stash 16K": 3195,
+      "stash 1B": 3,
+      "fetch 32K": 9572,
+      "fetch 16K": 4690,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1344,
+     "fetchBperTick": 3.356,
+     "status": 1
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6969,
+      "stash 16K": 3481,
+      "stash 1B": 3,
+      "fetch 32K": 10144,
+      "fetch 16K": 5098,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.6972,
+     "fetchBperTick": 3.2469,
+     "status": 1
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6840,
+      "stash 16K": 3482,
+      "stash 1B": 3,
+      "fetch 32K": 9822,
+      "fetch 16K": 5097,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.8791,
+     "fetchBperTick": 3.4675,
+     "status": 1
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6388,
+      "stash 16K": 3195,
+      "stash 1B": 3,
+      "fetch 32K": 9368,
+      "fetch 16K": 4691,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1312,
+     "fetchBperTick": 3.5031,
+     "status": 1
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6387,
+      "stash 16K": 3195,
+      "stash 1B": 3,
+      "fetch 32K": 9364,
+      "fetch 16K": 4692,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1328,
+     "fetchBperTick": 3.5068,
+     "status": 1
+    },
+    {
+     "idx": 13,
+     "mhz": 32,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6390,
+      "stash 16K": 3198,
+      "stash 1B": 3,
+      "fetch 32K": 9362,
+      "fetch 16K": 4686,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1328,
+     "fetchBperTick": 3.5038,
+     "status": 1
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6404,
+      "stash 16K": 3202,
+      "stash 1B": 3,
+      "fetch 32K": 9415,
+      "fetch 16K": 4607,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1168,
+     "fetchBperTick": 3.4077,
+     "status": 1
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6977,
+      "stash 16K": 3489,
+      "stash 1B": 3,
+      "fetch 32K": 9989,
+      "fetch 16K": 5018,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.6972,
+     "fetchBperTick": 3.2959,
+     "status": 1
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6855,
+      "stash 16K": 3491,
+      "stash 1B": 3,
+      "fetch 32K": 9657,
+      "fetch 16K": 5014,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.8704,
+     "fetchBperTick": 3.5288,
+     "status": 1
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6406,
+      "stash 16K": 3203,
+      "stash 1B": 3,
+      "fetch 32K": 9209,
+      "fetch 16K": 4604,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1152,
+     "fetchBperTick": 3.5579,
+     "status": 1
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6406,
+      "stash 16K": 3203,
+      "stash 1B": 3,
+      "fetch 32K": 9208,
+      "fetch 16K": 4602,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1152,
+     "fetchBperTick": 3.5571,
+     "status": 1
+    },
+    {
+     "idx": 14,
+     "mhz": 40,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6399,
+      "stash 16K": 3202,
+      "stash 1B": 3,
+      "fetch 32K": 9206,
+      "fetch 16K": 4605,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1248,
+     "fetchBperTick": 3.561,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6361,
+      "stash 16K": 3182,
+      "stash 1B": 3,
+      "fetch 32K": 9212,
+      "fetch 16K": 4524,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1538,
+     "fetchBperTick": 3.4949,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6944,
+      "stash 16K": 3472,
+      "stash 1B": 3,
+      "fetch 32K": 9823,
+      "fetch 16K": 4948,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.7189,
+     "fetchBperTick": 3.3608,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6818,
+      "stash 16K": 3469,
+      "stash 1B": 3,
+      "fetch 32K": 9491,
+      "fetch 16K": 4939,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 4.8922,
+     "fetchBperTick": 3.5993,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6363,
+      "stash 16K": 3184,
+      "stash 1B": 3,
+      "fetch 32K": 9050,
+      "fetch 16K": 4522,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1538,
+     "fetchBperTick": 3.6184,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6363,
+      "stash 16K": 3181,
+      "stash 1B": 3,
+      "fetch 32K": 9050,
+      "fetch 16K": 4527,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.149,
+     "fetchBperTick": 3.6224,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6362,
+      "stash 16K": 3184,
+      "stash 1B": 3,
+      "fetch 32K": 9039,
+      "fetch 16K": 4524,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1554,
+     "fetchBperTick": 3.6288,
+     "status": 1
+    }
+   ]
+  },
+  "reu-regs-badbit80": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 2,
+    "idxMask": 33025,
+    "condMask": 3,
+    "varMask": 0,
+    "nrep": 3,
+    "useD031": 1,
+    "badbit": 128,
+    "d030Write": 0,
+    "speedTable": 1,
+    "nominalM": 1,
+    "d031Before": 0,
+    "reuPresent": 1,
+    "frameTicks": [
+     19657,
+     19650,
+     19657
+    ],
+    "status": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1
+    ],
+    "readback": [
+     128,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     136,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     143
+    ],
+    "mUsed": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     12,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     48
+    ]
+   },
+   "frameTicksMedian": 19657,
+   "points": [
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 0,
+     "mhz": 1,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 32782,
+      "stash 16K": 16398,
+      "stash 1B": 15,
+      "fetch 32K": 32782,
+      "fetch 16K": 16398,
+      "fetch 1B": 15
+     },
+     "stashBperTick": 1,
+     "fetchBperTick": 1,
+     "status": 1
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8153,
+      "stash 16K": 4079,
+      "stash 1B": 4,
+      "fetch 32K": 10975,
+      "fetch 16K": 5488,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0216,
+     "fetchBperTick": 2.986,
+     "status": 12
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8153,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 10973,
+      "fetch 16K": 5488,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0206,
+     "fetchBperTick": 2.9871,
+     "status": 12
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8153,
+      "stash 16K": 4079,
+      "stash 1B": 4,
+      "fetch 32K": 10972,
+      "fetch 16K": 5489,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0216,
+     "fetchBperTick": 2.9881,
+     "status": 12
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 8154,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 10967,
+      "fetch 16K": 5486,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0196,
+     "fetchBperTick": 2.9892,
+     "status": 12
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 8154,
+      "stash 16K": 4079,
+      "stash 1B": 4,
+      "fetch 32K": 10969,
+      "fetch 16K": 5490,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0206,
+     "fetchBperTick": 2.9903,
+     "status": 12
+    },
+    {
+     "idx": 8,
+     "mhz": 12,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 8153,
+      "stash 16K": 4078,
+      "stash 1B": 4,
+      "fetch 32K": 10971,
+      "fetch 16K": 5488,
+      "fetch 1B": 4
+     },
+     "stashBperTick": 4.0206,
+     "fetchBperTick": 2.9881,
+     "status": 12
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6357,
+      "stash 16K": 3176,
+      "stash 1B": 3,
+      "fetch 32K": 9049,
+      "fetch 16K": 4529,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1506,
+     "fetchBperTick": 3.6248,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6356,
+      "stash 16K": 3181,
+      "stash 1B": 3,
+      "fetch 32K": 9051,
+      "fetch 16K": 4527,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1603,
+     "fetchBperTick": 3.6216,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen on",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6360,
+      "stash 16K": 3181,
+      "stash 1B": 3,
+      "fetch 32K": 9064,
+      "fetch 16K": 4525,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1538,
+     "fetchBperTick": 3.6096,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "rep": 0,
+     "ticks": {
+      "stash 32K": 6356,
+      "stash 16K": 3182,
+      "stash 1B": 3,
+      "fetch 32K": 9043,
+      "fetch 16K": 4529,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1619,
+     "fetchBperTick": 3.6296,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "rep": 1,
+     "ticks": {
+      "stash 32K": 6357,
+      "stash 16K": 3179,
+      "stash 1B": 3,
+      "fetch 32K": 9052,
+      "fetch 16K": 4526,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1554,
+     "fetchBperTick": 3.62,
+     "status": 1
+    },
+    {
+     "idx": 15,
+     "mhz": 48,
+     "cond": "screen blank",
+     "rep": 2,
+     "ticks": {
+      "stash 32K": 6359,
+      "stash 16K": 3182,
+      "stash 1B": 3,
+      "fetch 32K": 9042,
+      "fetch 16K": 4523,
+      "fetch 1B": 3
+     },
+     "stashBperTick": 5.1571,
+     "fetchBperTick": 3.6256,
+     "status": 1
+    }
+   ]
+  },
+  "window": {
+   "header": {
+    "version": 1,
+    "done": true,
+    "program": 3,
+    "idxMask": 0,
+    "condMask": 0,
+    "varMask": 0,
+    "nrep": 0,
+    "useD031": 0,
+    "badbit": 0,
+    "d030Write": 0,
+    "speedTable": 15,
+    "nominalM": 0,
+    "d031Before": 0,
+    "reuPresent": 0,
+    "frameTicks": [
+     4294967295,
+     4294967295,
+     4294959585
+    ],
+    "status": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "readback": [
+     15,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "mUsed": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "attempts": 30,
+    "firstFast": 30
+   },
+   "frameTicksMedian": 4294967295,
+   "points": [
+    {
+     "attempt": 1,
+     "probeTicks": 85891,
+     "sinceStartMs": 87.4,
+     "fast": false
+    },
+    {
+     "attempt": 2,
+     "probeTicks": 86407,
+     "sinceStartMs": 175.5,
+     "fast": false
+    },
+    {
+     "attempt": 3,
+     "probeTicks": 85977,
+     "sinceStartMs": 263.1,
+     "fast": false
+    },
+    {
+     "attempt": 4,
+     "probeTicks": 86235,
+     "sinceStartMs": 351,
+     "fast": false
+    },
+    {
+     "attempt": 5,
+     "probeTicks": 86321,
+     "sinceStartMs": 438.9,
+     "fast": false
+    },
+    {
+     "attempt": 6,
+     "probeTicks": 85891,
+     "sinceStartMs": 526.4,
+     "fast": false
+    },
+    {
+     "attempt": 7,
+     "probeTicks": 86450,
+     "sinceStartMs": 614.8,
+     "fast": false
+    },
+    {
+     "attempt": 8,
+     "probeTicks": 85977,
+     "sinceStartMs": 702.1,
+     "fast": false
+    },
+    {
+     "attempt": 9,
+     "probeTicks": 86277,
+     "sinceStartMs": 790,
+     "fast": false
+    },
+    {
+     "attempt": 10,
+     "probeTicks": 86321,
+     "sinceStartMs": 877.9,
+     "fast": false
+    },
+    {
+     "attempt": 11,
+     "probeTicks": 85934,
+     "sinceStartMs": 965.4,
+     "fast": false
+    },
+    {
+     "attempt": 12,
+     "probeTicks": 86450,
+     "sinceStartMs": 1053.5,
+     "fast": false
+    },
+    {
+     "attempt": 13,
+     "probeTicks": 85977,
+     "sinceStartMs": 1141.1,
+     "fast": false
+    },
+    {
+     "attempt": 14,
+     "probeTicks": 86278,
+     "sinceStartMs": 1229,
+     "fast": false
+    },
+    {
+     "attempt": 15,
+     "probeTicks": 86321,
+     "sinceStartMs": 1316.9,
+     "fast": false
+    },
+    {
+     "attempt": 16,
+     "probeTicks": 85934,
+     "sinceStartMs": 1404.4,
+     "fast": false
+    },
+    {
+     "attempt": 17,
+     "probeTicks": 86450,
+     "sinceStartMs": 1492.5,
+     "fast": false
+    },
+    {
+     "attempt": 18,
+     "probeTicks": 85934,
+     "sinceStartMs": 1580.1,
+     "fast": false
+    },
+    {
+     "attempt": 19,
+     "probeTicks": 86278,
+     "sinceStartMs": 1668,
+     "fast": false
+    },
+    {
+     "attempt": 20,
+     "probeTicks": 86278,
+     "sinceStartMs": 1755.9,
+     "fast": false
+    },
+    {
+     "attempt": 21,
+     "probeTicks": 85934,
+     "sinceStartMs": 1843.4,
+     "fast": false
+    },
+    {
+     "attempt": 22,
+     "probeTicks": 86407,
+     "sinceStartMs": 1931.5,
+     "fast": false
+    },
+    {
+     "attempt": 23,
+     "probeTicks": 85934,
+     "sinceStartMs": 2019.1,
+     "fast": false
+    },
+    {
+     "attempt": 24,
+     "probeTicks": 86278,
+     "sinceStartMs": 2107,
+     "fast": false
+    },
+    {
+     "attempt": 25,
+     "probeTicks": 86278,
+     "sinceStartMs": 2194.9,
+     "fast": false
+    },
+    {
+     "attempt": 26,
+     "probeTicks": 85934,
+     "sinceStartMs": 2282.4,
+     "fast": false
+    },
+    {
+     "attempt": 27,
+     "probeTicks": 86407,
+     "sinceStartMs": 2370.6,
+     "fast": false
+    },
+    {
+     "attempt": 28,
+     "probeTicks": 85934,
+     "sinceStartMs": 2458.1,
+     "fast": false
+    },
+    {
+     "attempt": 29,
+     "probeTicks": 86278,
+     "sinceStartMs": 2546,
+     "fast": false
+    },
+    {
+     "attempt": 30,
+     "probeTicks": 4695,
+     "sinceStartMs": 2551,
+     "fast": true
+    }
+   ]
+  }
+ }
+}

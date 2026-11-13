@@ -39,6 +39,7 @@
     "check:run-npm": "bash scripts/run-mcp-check.sh npm 5",
     "check": "npm run build && npm test",
     "check:node-compat": "node scripts/check-node-compat.mjs",
+    "bench:turbo": "node scripts/turbo-bench.mjs",
     "build:rag": "node scripts/invoke-bun.mjs scripts/rag-rebuild.mjs",
     "api:generate": "npm run api:generate:c64u && npm run api:generate:u2",
     "api:generate:c64u": "npx --yes swagger-typescript-api@12.0.4 -p doc/c64u/c64-openapi.yaml -o generated/openapi/c64u -n index.ts --axios --single-http-client --module-name-index 0",
