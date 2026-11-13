@@ -49,6 +49,12 @@ export interface ViceMockServerOptions {
    * checkpoint exists, the monitor accepts connections but never answers.
    */
   wedgeOnUnsafeClose?: boolean;
+  /**
+   * Emulated KERNAL boot time after a machine reset, counted only while the CPU runs (a stopped
+   * CPU does not boot). Until it has passed, the screen is blank and the BASIC pointers are zero,
+   * as on VICE. Default 0: the READY prompt is there immediately.
+   */
+  bootMs?: number;
 }
 
 const UNSOLICITED = 0xffffffff;
@@ -98,6 +104,9 @@ export class ViceMockServer {
   readonly commands: Array<[number, number]> = [];
   private readonly wedgeOnUnsafeClose: boolean;
   private wedged = false;
+  private readonly bootMs: number;
+  private bootRemainingMs = 0;
+  private bootTick = 0;
   /** Test hook: while true, commands are received but never answered (a command that times out). */
   hang = false;
 
@@ -163,6 +172,7 @@ export class ViceMockServer {
     this.wedgeOnUnsafeClose = options?.wedgeOnUnsafeClose === true;
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
+    this.bootMs = Math.max(0, options?.bootMs ?? 0);
     this.resetState();
     this.resetResources();
   }
@@ -210,7 +220,9 @@ export class ViceMockServer {
     socket.on("error", () => {});
     socket.once("close", () => {
       this.sockets.delete(socket);
+      this.advanceBoot();
       this.running = true;
+      this.bootTick = Date.now();
       if (this.stoppingCheckpoints > 0 && !this.stopping) {
         this.unsafeCloses += 1;
         if (this.wedgeOnUnsafeClose) this.wedged = true;
@@ -249,7 +261,28 @@ export class ViceMockServer {
     return buffer;
   }
 
+  /** Counts the time the CPU ran since the last command towards the boot after a reset. */
+  private advanceBoot(): void {
+    if (this.bootRemainingMs <= 0) return;
+    const now = Date.now();
+    if (this.running) this.bootRemainingMs -= now - this.bootTick;
+    this.bootTick = now;
+    if (this.bootRemainingMs <= 0) {
+      this.bootRemainingMs = 0;
+      this.initBasic();
+    }
+  }
+
   private handleCommand(cmd: number, reqId: number, body: Buffer, socket: net.Socket): Buffer | null {
+    this.advanceBoot();
+    try {
+      return this.handleCommandNow(cmd, reqId, body, socket);
+    } finally {
+      this.bootTick = Date.now();
+    }
+  }
+
+  private handleCommandNow(cmd: number, reqId: number, body: Buffer, socket: net.Socket): Buffer | null {
     // As in VICE: any command enters the monitor (stopped event), exit leaves it (resumed event).
     if (cmd === 0xAA) {
       if (!this.running) {
@@ -269,6 +302,7 @@ export class ViceMockServer {
           this.driveResets.push(type);
         } else {
           this.resetState();
+          if (this.bootMs > 0) this.startBoot();
         }
         return buildResponse(cmd, reqId);
       }
@@ -605,20 +639,7 @@ export class ViceMockServer {
 
   private resetState(): void {
     this.memory.fill(0);
-    // Fill screen with spaces and READY.
-    this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + SCREEN_SIZE);
-    const ready = asciiToScreenCodes("READY.");
-    ready.copy(Buffer.from(this.memory.buffer, SCREEN_BASE, ready.length));
-    // Initialise BASIC zero-page pointers so waitForBasicReady() succeeds
-    // immediately instead of spinning for 20 s on all-zero memory.
-    //   $002B-$002C  TXTTAB  = $0801  (start of BASIC text)
-    //   $002D-$002E  VARTAB  = $0803  (start of variables)
-    //   $002F-$0030  ARYTAB  = $0803  (start of arrays)
-    //   $0031-$0032  STREND  = $0803  (end of BASIC storage)
-    this.memory[0x2B] = 0x01; this.memory[0x2C] = 0x08;
-    this.memory[0x2D] = 0x03; this.memory[0x2E] = 0x08;
-    this.memory[0x2F] = 0x03; this.memory[0x30] = 0x08;
-    this.memory[0x31] = 0x03; this.memory[0x32] = 0x08;
+    this.initBasic();
     this.helloReady = false;
     this.heartbeat = null;
     this.checkpoints.clear();
@@ -628,6 +649,31 @@ export class ViceMockServer {
       this.registerValues.set(meta.id, 0);
     }
     this.joyportOutput = [0, 0];
+  }
+
+  /** The screen shows READY. and the BASIC pointers are initialised, as when the KERNAL has booted. */
+  private initBasic(): void {
+    // Fill screen with spaces and READY.
+    this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + SCREEN_SIZE);
+    const ready = asciiToScreenCodes("READY.");
+    ready.copy(Buffer.from(this.memory.buffer, SCREEN_BASE, ready.length));
+    // BASIC zero-page pointers, so waitForBasicReady() succeeds on an all-zero machine.
+    //   $002B-$002C  TXTTAB  = $0801  (start of BASIC text)
+    //   $002D-$002E  VARTAB  = $0803  (start of variables)
+    //   $002F-$0030  ARYTAB  = $0803  (start of arrays)
+    //   $0031-$0032  STREND  = $0803  (end of BASIC storage)
+    this.memory[0x2B] = 0x01; this.memory[0x2C] = 0x08;
+    this.memory[0x2D] = 0x03; this.memory[0x2E] = 0x08;
+    this.memory[0x2F] = 0x03; this.memory[0x30] = 0x08;
+    this.memory[0x31] = 0x03; this.memory[0x32] = 0x08;
+  }
+
+  /** A reset with a boot time: blank screen and zero pointers until the CPU has run bootMs. */
+  private startBoot(): void {
+    this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + SCREEN_SIZE);
+    this.memory.fill(0, 0x2B, 0x33);
+    this.bootRemainingMs = this.bootMs;
+    this.bootTick = Date.now();
   }
 
   // Resources survive a machine reset in VICE. Only resources that exist in

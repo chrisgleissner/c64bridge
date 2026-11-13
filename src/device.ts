@@ -12,7 +12,7 @@ import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { ViceClient, type ViceCheckpoint } from "./vice/viceClient.js";
 import { resourceNameProblem } from "./vice/resourcePolicy.js";
-import { waitForBasicReady } from "./vice/readiness.js";
+import { resetAndWaitForBasic } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
@@ -539,6 +539,10 @@ class C64uBackend implements C64Facade {
   async modplayFile(pathStr: string): Promise<RunResult> { const res = await (this.api as any).v1.runnersModplayUpdate(":modplay", { file: pathStr }); return this.actionResult(res.data); }
 }
 
+/** Measured on x64sc: the KERNAL boot takes about 0.5 s in warp mode and 2.5 s at normal speed. */
+const BOOT_FIRST_CHECK_WARP_MS = 450;
+const BOOT_FIRST_CHECK_MS = 2200;
+
 export class ViceBackend implements C64Facade {
   readonly type = "vice" as const;
   private readonly exe: string;
@@ -645,12 +649,26 @@ export class ViceBackend implements C64Facade {
       : new Error(`VICE monitor at ${this.host}:${this.port} did not become responsive within ${timeoutMs}ms`);
   }
 
+  /** How long a freshly reset machine is left alone before its first readiness check. */
+  private bootFirstCheckMs(): number {
+    return this.warp ? BOOT_FIRST_CHECK_WARP_MS : BOOT_FIRST_CHECK_MS;
+  }
+
+  /** Resets and waits for READY. with few monitor reads; the CPU is left stopped on success. */
+  private resetToBasicPrompt(client: ViceClient, timeoutMs: number): Promise<{ pointersOk: boolean; promptOk: boolean }> {
+    return resetAndWaitForBasic(client, {
+      timeoutMs,
+      firstCheckMs: this.bootFirstCheckMs(),
+      ...(this.debugEnabled ? { onSample: (p) => console.error("[vice-backend] BASIC pointers", p) } : {}),
+    });
+  }
+
   private async waitForUsableMachine(timeoutMs = 20_000): Promise<void> {
     const client = new ViceClient();
     try {
       await client.connect(this.port, this.host);
-      await client.reset();
-      const readiness = await waitForBasicReady(client, { timeoutMs, ensurePrompt: true });
+      const readiness = await this.resetToBasicPrompt(client, timeoutMs);
+      try { await client.exitMonitor(); } catch {}
       if (!readiness.pointersOk || !readiness.promptOk) {
         throw new Error(
           `VICE machine at ${this.host}:${this.port} did not reach the BASIC prompt within ${timeoutMs}ms`,
@@ -1074,8 +1092,7 @@ export class ViceBackend implements C64Facade {
     const loadAddress = buffer.readUInt16LE(0);
     const body = buffer.subarray(2);
     await this.withClient(async (client) => {
-      await client.reset();
-      await waitForBasicReady(client, { timeoutMs: 10_000, ensurePrompt: true });
+      await this.resetToBasicPrompt(client, 10_000);
       if (body.length > 0) await client.memSet(loadAddress, body);
       await finish(client, loadAddress, loadAddress + body.length);
       await client.exitMonitor();
@@ -1158,24 +1175,15 @@ export class ViceBackend implements C64Facade {
   }
 
   async reset(): Promise<RunResult> {
-    let readiness: Awaited<ReturnType<typeof waitForBasicReady>> | undefined;
+    let readiness: { pointersOk: boolean; promptOk: boolean } | undefined;
     // Overridable only for deterministic tests of the readiness-failure path;
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
     const warning = await this.endSessionBeforeRestart();
     await this.withClient(async (client) => {
-      await client.reset();
-      const opts = this.debugEnabled
-        ? {
-            timeoutMs: resetReadinessTimeoutMs,
-            ensurePrompt: true,
-            onPointersSample: (p: { tx: number; va: number; ar: number; st: number }) => {
-              console.error("[vice-backend] BASIC pointers", p);
-            },
-          }
-        : { timeoutMs: resetReadinessTimeoutMs, ensurePrompt: true };
-      readiness = await waitForBasicReady(client, opts);
-      if (this.debugEnabled) console.error("[vice-backend] waitForBasicReady result", readiness);
+      readiness = await this.resetToBasicPrompt(client, resetReadinessTimeoutMs);
+      try { await client.exitMonitor(); } catch {}
+      if (this.debugEnabled) console.error("[vice-backend] BASIC readiness result", readiness);
     });
     const ready = Boolean(readiness?.pointersOk && readiness?.promptOk);
     return ViceBackend.withWarning(ready

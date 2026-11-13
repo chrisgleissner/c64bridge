@@ -176,3 +176,73 @@ export function asciiToScreenCodes(text: string): Buffer {
   }
   return Buffer.from(out);
 }
+
+/** Marker byte written before a reset; the KERNAL's RAMTAS clears $0200-$03FF, so it vanishes once the boot is under way. */
+const BOOT_MARKER_ADDRESS = 0x03ff;
+const BOOT_MARKER_VALUE = 0xa5;
+const BASIC_STATE_START = 0x002b;
+const BASIC_STATE_END = 0x07e7;
+const SCREEN_OFFSET = 0x0400 - BASIC_STATE_START;
+
+export type BootWaitOptions = {
+  /** Total time to wait for the prompt. */
+  timeoutMs: number;
+  /** Time to leave the machine alone after the reset before the first check. */
+  firstCheckMs: number;
+  /** Gap after the first check; it grows by half each time up to `maxGapMs`. */
+  initialGapMs?: number;
+  maxGapMs?: number;
+  onSample?: (v: { tx: number; va: number; ar: number; st: number }) => void;
+};
+
+/**
+ * Evaluates one read of $002B-$07E7: the BASIC pointers, the boot marker and the text screen.
+ * The prompt counts only when the marker is gone (the reset has really run) and the screen shows
+ * READY., so a screen left over from before the reset is never mistaken for the new boot.
+ */
+export function evaluateBootState(state: Uint8Array): { pointersOk: boolean; promptOk: boolean; pointers?: { tx: number; va: number; ar: number; st: number } } {
+  if (state.length < BASIC_STATE_END - BASIC_STATE_START + 1) return { pointersOk: false, promptOk: false };
+  const word = (i: number) => state[i] | (state[i + 1] << 8);
+  const pointers = { tx: word(0), va: word(2), ar: word(4), st: word(6) };
+  const pointersOk = pointers.tx === 0x0801 && pointers.va >= 0x0801 && pointers.ar >= 0x0801 && pointers.st >= 0x0801;
+  const booted = state[BOOT_MARKER_ADDRESS - BASIC_STATE_START] !== BOOT_MARKER_VALUE;
+  const screen = Buffer.from(state.subarray(SCREEN_OFFSET, SCREEN_OFFSET + 1000));
+  const promptOk = pointersOk && booted && screen.indexOf(buildReadyPattern()) >= 0;
+  return { pointersOk: pointersOk && booted, promptOk, pointers };
+}
+
+/**
+ * Resets the machine and waits for the BASIC prompt with as little monitor traffic as possible.
+ * Every monitor command stops the CPU, so polling during the KERNAL boot slows the boot itself.
+ * This lets the machine run undisturbed for `firstCheckMs`, then checks with one memory read per
+ * attempt and lengthens the gap between attempts. On success the CPU is left stopped in the
+ * monitor, so the caller can continue without another stop.
+ */
+export async function resetAndWaitForBasic(
+  bm: ViceClient,
+  options: BootWaitOptions,
+): Promise<{ pointersOk: boolean; promptOk: boolean }> {
+  const timeoutMs = Math.max(1, options.timeoutMs);
+  const maxGapMs = Math.max(1, options.maxGapMs ?? 400);
+  await bm.memSet(BOOT_MARKER_ADDRESS, Buffer.from([BOOT_MARKER_VALUE]));
+  await bm.reset();
+  await exitMonitorIfNeeded(bm);
+  const start = nowNs();
+  let gap = Math.max(1, options.firstCheckMs);
+  let nextGapMs = Math.max(1, options.initialGapMs ?? 120);
+  let last = { pointersOk: false, promptOk: false };
+  for (;;) {
+    await new Promise((r) => setTimeout(r, gap));
+    const state = await bm.memGet(BASIC_STATE_START, BASIC_STATE_END);
+    const result = evaluateBootState(state);
+    if (result.pointers) options.onSample?.(result.pointers);
+    last = { pointersOk: result.pointersOk, promptOk: result.promptOk };
+    if (result.promptOk) return last;
+    if (msSince(start) >= timeoutMs) break;
+    await exitMonitorIfNeeded(bm);
+    gap = Math.min(nextGapMs, Math.max(1, timeoutMs - msSince(start)));
+    nextGapMs = Math.min(maxGapMs, Math.ceil(nextGapMs * 1.5));
+  }
+  await exitMonitorIfNeeded(bm);
+  return last;
+}
