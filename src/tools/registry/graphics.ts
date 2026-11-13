@@ -67,6 +67,35 @@ const captureFrameArgsSchema = objectSchema({
 export const MAX_CAPTURE_PAYLOAD_BYTES = 2 * 1024 * 1024;
 export const MAX_PNG_FRAMES = 4;
 
+/**
+ * What the PNG rendering changes silently: frameToPngContent masks every pixel
+ * with 0x0f, so an index above 15 is drawn in the colour of its low four bits,
+ * and the pixels of an incomplete frame are not all captured data.
+ */
+export function pngRenderingWarnings(frames: ReadonlyArray<{ readonly pixels: Uint8Array; readonly width: number; readonly height: number; readonly complete: boolean }>): {
+  outOfPalettePixels: number;
+  incompleteFrames: number;
+  warnings: string[];
+} {
+  let outOfPalettePixels = 0;
+  let incompleteFrames = 0;
+  for (const frame of frames) {
+    if (!frame.complete) incompleteFrames += 1;
+    const count = Math.min(frame.pixels.length, frame.width * frame.height);
+    for (let i = 0; i < count; i += 1) {
+      if (frame.pixels[i]! > 0x0f) outOfPalettePixels += 1;
+    }
+  }
+  const warnings: string[] = [];
+  if (outOfPalettePixels > 0) {
+    warnings.push(`${outOfPalettePixels} pixel(s) have a palette index above 15 and are drawn with their low four bits; the PNG colours for them are wrong.`);
+  }
+  if (incompleteFrames > 0) {
+    warnings.push(`${incompleteFrames} frame(s) are incomplete; missing pixels are drawn as palette index 0 (black).`);
+  }
+  return { outOfPalettePixels, incompleteFrames, warnings };
+}
+
 /** Renders one captured frame (one palette index per byte) as a PNG image content block. */
 export async function frameToPngContent(frame: {
   readonly width: number;
@@ -194,6 +223,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
         const images = parsed.format === "png"
           ? await Promise.all(capture.frames.map((frame) => frameToPngContent(frame)))
           : [];
+        const pngWarnings = parsed.format === "png" ? pngRenderingWarnings(capture.frames) : undefined;
         const frames = capture.frames.map((frame, index) => {
           const pixels = includePixels
             ? {
@@ -221,6 +251,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
             backend: capture.backend,
             count: frames.length,
             frames,
+            ...(pngWarnings && pngWarnings.warnings.length > 0 ? { warnings: pngWarnings.warnings } : {}),
           },
           {
             success: true,
@@ -229,6 +260,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
             includePixels,
             encoding: includePixels ? encoding : null,
             format: parsed.format ?? null,
+            ...(pngWarnings ? { outOfPalettePixels: pngWarnings.outOfPalettePixels, incompleteFrames: pngWarnings.incompleteFrames } : {}),
           },
         );
         return images.length > 0 ? { ...result, content: [...result.content, ...images] } : result;
