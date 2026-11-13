@@ -73,7 +73,11 @@ export function parseCliOptions(argv: string[]): CliOptions {
     return { mode: "stdio" };
   }
   const portCandidate = argv[httpIndex + 1];
-  return { mode: "http", port: parsePort(portCandidate) };
+  const port = parsePort(portCandidate);
+  if (port === undefined && portCandidate !== undefined && !portCandidate.startsWith("--")) {
+    throw new Error(`Invalid --http port '${portCandidate}': expected an integer from 1 to 65535`);
+  }
+  return { mode: "http", port };
 }
 
 /**
@@ -163,7 +167,7 @@ function parsePort(raw?: string): number | undefined {
   if (!raw || raw.startsWith("--")) {
     return undefined;
   }
-  const parsed = Number(raw);
+  const parsed = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
   if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65_535) {
     return parsed;
   }

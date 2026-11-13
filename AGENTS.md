@@ -43,7 +43,7 @@ Tool arguments that become host file paths (memory dumps, config snapshots, spri
 | --- | --- |
 | `C64BRIDGE_ALLOWED_DIRS` | Extra directories for host file paths in tool arguments, separated by the path delimiter; `*` disables the check. |
 | `C64BRIDGE_ACCESS` | `full` (default), `no-destructive` or `read-only`. Limits which operations may be called; read on every call. |
-| `C64BRIDGE_HTTP_TOKEN` | Bearer token required (`Authorization: Bearer <token>`) by the optional HTTP transport (`--http`), which also accepts only loopback Host and Origin headers. |
+| `C64BRIDGE_HTTP_TOKEN` | Bearer token required (`Authorization: Bearer <token>`) by the optional HTTP transport (`--http`), which also accepts only loopback Host and Origin headers. Without a token, any local process that can reach 127.0.0.1 on the port can call every tool. |
 | `C64BRIDGE_DIAGNOSTICS_KEEP` | Number of diagnostics files kept at startup (default 200; files older than 30 days are always removed). |
 | `C64BRIDGE_VERBOSE_SCHEMA` | Set to `1` to include the full per-operation schemas in `tools/list` (omitted by default to keep it small). |
 
