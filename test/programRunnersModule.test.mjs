@@ -1228,3 +1228,27 @@ test("run_prg keeps the previous VICE symbols when the symbols file is rejected 
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("upload_run_asm keeps the previous VICE symbols when the run fails", async () => {
+  const makeCtx = (result) => ({
+    client: { async uploadAndRunAsm() { return result; } },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  });
+  const program = ".org $0801\nnewlabel: rts";
+  try {
+    setViceSymbols([["old", 0x0810]]);
+    let result = await programRunnersModule.invoke("upload_run_asm", { program }, makeCtx({ success: false, details: { error: "no" } }));
+    assert.equal(result.isError, true);
+    assert.equal(getViceSymbol(0x0810), "old");
+    assert.equal(getViceSymbol(0x0801), undefined, "labels of a program that did not run must not be registered");
+
+    result = await programRunnersModule.invoke("upload_run_asm", { program }, makeCtx({ success: true }));
+    assert.equal(result.isError, undefined);
+    assert.equal(getViceSymbol(0x0801), "newlabel");
+    assert.equal(getViceSymbol(0x0810), undefined);
+  } finally {
+    clearViceSymbols();
+  }
+});

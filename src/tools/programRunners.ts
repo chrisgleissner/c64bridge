@@ -601,9 +601,6 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const asmResult = assemblyToPrgDetailed(parsed.program);
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
-    if (ctx.platform.id === "vice") {
-      setViceSymbols(asmResult.symbols.entries());
-    }
 
     const result = await ctx.client.uploadAndRunAsm(parsed.program);
     if (!result.success) {
@@ -612,6 +609,11 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
           details: extractFailureDetails(result.details),
         }),
       );
+    }
+    // Replace the registered symbols only once the program has started, so a
+    // failed run keeps the previous table.
+    if (ctx.platform.id === "vice") {
+      setViceSymbols(asmResult.symbols.entries());
     }
 
     // Read back the program bytes (load evidence), then poll for signs of execution.
