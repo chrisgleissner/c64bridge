@@ -4,6 +4,7 @@ import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { sleep } from "./util.js";
+import vm from "node:vm";
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -12,6 +13,45 @@ function escapeRegex(s: string): string {
 export const MAX_PATTERN_LENGTH = 200;
 export const MAX_WAIT_TIMEOUT_MS = 120_000;
 export const MIN_POLL_INTERVAL_MS = 20;
+/** Upper bound for one pattern evaluation against one screen. */
+export const PATTERN_EVAL_TIMEOUT_MS = 250;
+/** Unbounded repeats (*, +, {n,}) allowed per pattern; each one adds a power to the worst-case backtracking cost. */
+export const MAX_UNBOUNDED_REPEATS = 3;
+
+/** Splits a group body at its top-level "|" characters, skipping escapes, classes and nested groups. */
+function splitAlternatives(body: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inClass = false;
+  let start = 0;
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index]!;
+    if (char === "\\") { index += 1; continue; }
+    if (inClass) { if (char === "]") inClass = false; continue; }
+    if (char === "[") inClass = true;
+    else if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "|" && depth === 0) { parts.push(body.slice(start, index)); start = index + 1; }
+  }
+  parts.push(body.slice(start));
+  return parts;
+}
+
+/**
+ * True when the alternatives of a repeated group cannot match the same text in
+ * two ways: each is a run of plain literal characters and no two start with the
+ * same character (compared without case, which covers the i flag).
+ */
+function alternativesAreDisjointLiterals(alternatives: string[]): boolean {
+  const first = new Set<string>();
+  for (const alternative of alternatives) {
+    if (alternative.length === 0 || /[\\[\](){}.*+?|^$]/.test(alternative)) return false;
+    const key = alternative[0]!.toLowerCase();
+    if (first.has(key)) return false;
+    first.add(key);
+  }
+  return true;
+}
 
 /**
  * Checks a user regular expression before it runs on the event loop. A pattern
@@ -26,6 +66,8 @@ export function assertSafeScreenPattern(pattern: string): void {
   }
   // One entry per open group: whether it contains a quantifier.
   const groups: boolean[] = [];
+  const groupStarts: number[] = [];
+  let unboundedRepeats = 0;
   let inClass = false;
   let previousWasGroupWithQuantifier = false;
   for (let index = 0; index < pattern.length; index += 1) {
@@ -51,11 +93,23 @@ export function assertSafeScreenPattern(pattern: string): void {
     }
     if (char === "(") {
       groups.push(false);
+      groupStarts.push(index);
       previousWasGroupWithQuantifier = false;
       continue;
     }
     if (char === ")") {
       previousWasGroupWithQuantifier = groups.pop() ?? false;
+      const groupStart = groupStarts.pop();
+      const rest = pattern.slice(index + 1);
+      if (groupStart !== undefined && (/^[*+]/.test(rest) || /^\{\d+(,\d*)?\}/.test(rest))) {
+        const alternatives = splitAlternatives(pattern.slice(groupStart + 1, index).replace(/^\?:/, ""));
+        if (alternatives.length > 1 && !alternativesAreDisjointLiterals(alternatives)) {
+          throw new ToolValidationError(
+            "A repeated group with alternatives that can match the same text (for example (a|a)+ or (.|.)+) is not supported in screen patterns",
+            { path },
+          );
+        }
+      }
       continue;
     }
     if (isQuantifier) {
@@ -70,12 +124,45 @@ export function assertSafeScreenPattern(pattern: string): void {
           );
         }
         if (groups.length > 0) groups[groups.length - 1] = true;
+        if (char === "*" || char === "+" || (char === "{" && /^\{\d+,\}/.test(pattern.slice(index)))) {
+          unboundedRepeats += 1;
+          if (unboundedRepeats > MAX_UNBOUNDED_REPEATS) {
+            throw new ToolValidationError(
+              `Screen patterns may contain at most ${MAX_UNBOUNDED_REPEATS} unbounded repeats (*, +, {n,})`,
+              { path },
+            );
+          }
+        }
       }
       previousWasGroupWithQuantifier = false;
       continue;
     }
     previousWasGroupWithQuantifier = false;
   }
+}
+
+/**
+ * Runs a pattern against screen text with a hard time limit. V8 interrupts a
+ * running regular expression when the vm timeout expires, so a pattern that the
+ * static checks above miss cannot freeze the event loop on Node. (Bun does not
+ * enforce the vm timeout; the static checks bound the cost there.)
+ */
+export function createScreenMatcher(regex: RegExp, timeoutMs: number = PATTERN_EVAL_TIMEOUT_MS) {
+  const sandbox = vm.createContext({ source: regex.source, flags: regex.flags, screen: "", result: null as unknown });
+  vm.runInContext("var re = new RegExp(source, flags);", sandbox);
+  return (screen: string): { index: number; text: string } | null => {
+    sandbox.screen = screen;
+    try {
+      vm.runInContext("var m = re.exec(screen); result = m ? [m.index, m[0]] : null;", sandbox, { timeout: timeoutMs });
+    } catch (error) {
+      if ((error as { code?: string }).code === "ERR_SCRIPT_EXECUTION_TIMEOUT") {
+        throw new ToolValidationError(`Pattern evaluation took longer than ${timeoutMs} ms and was stopped; use a simpler pattern`, { path: "$.pattern" });
+      }
+      throw error;
+    }
+    const found = sandbox.result as [number, string] | null;
+    return found ? { index: found[0], text: found[1] } : null;
+  };
 }
 
 export function compileScreenPattern(pattern: string, isRegex: boolean, caseInsensitive: boolean): RegExp {
@@ -111,16 +198,17 @@ export async function waitForScreenText(
   const timeoutMs = Math.min(options.timeoutMs ?? 3000, MAX_WAIT_TIMEOUT_MS);
   const intervalMs = Math.max(options.intervalMs ?? 100, MIN_POLL_INTERVAL_MS);
   const regex = compileScreenPattern(options.pattern, options.isRegex ?? false, options.caseInsensitive ?? true);
+  const matchScreen = createScreenMatcher(regex);
   const start = Date.now();
   let lastScreen: string | undefined;
   while (Date.now() - start < timeoutMs) {
     const screen = await client.readScreen();
     lastScreen = screen;
-    const match = screen.match(regex);
-    if (match && match.index !== undefined) {
+    const match = matchScreen(screen);
+    if (match) {
       return {
         matched: true,
-        match: { index: match.index, length: match[0]?.length ?? 0, text: match[0] ?? "" },
+        match: { index: match.index, length: match.text.length, text: match.text },
         elapsedMs: Date.now() - start,
         screen,
       };

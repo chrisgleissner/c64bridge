@@ -326,3 +326,40 @@ test("waitForScreenText is exported for reuse and does not throw on timeout", as
   assert.equal(hit.matched, true);
   assert.equal(hit.match.index, 1);
 });
+
+test("wait_for_screen_text rejects overlapping alternation under a quantifier instead of hanging", async () => {
+  const screen = "a".repeat(28);
+  const ctx = { client: { async readScreen() { return screen; } }, logger: createLogger() };
+  for (const pattern of ["(a|a)+c", "(.|.)+X", "(a|aa)+$", "(?:a|[ab])*c"]) {
+    const started = Date.now();
+    const res = await metaModule.invoke("wait_for_screen_text", { pattern, isRegex: true, timeoutMs: 200, intervalMs: 20 }, ctx);
+    assert.equal(res.isError, true, pattern);
+    assert.equal(res.metadata?.error?.kind, "validation", pattern);
+    assert.ok(Date.now() - started < 2000, pattern);
+  }
+});
+
+test("wait_for_screen_text still accepts a repeated group of distinct literal alternatives", async () => {
+  const ctx = { client: { async readScreen() { return "ABABAB"; } }, logger: createLogger() };
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "(a|b)+", isRegex: true, timeoutMs: 200, intervalMs: 20 }, ctx);
+  assert.equal(res.metadata?.success, true);
+  assert.equal(res.structuredContent?.data?.match?.text, "ABABAB");
+});
+
+test("screen patterns are limited to three unbounded repeats", async () => {
+  const ctx = { client: { async readScreen() { return "x".repeat(1000); } }, logger: createLogger() };
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "a*a*a*a*c", isRegex: true, timeoutMs: 200 }, ctx);
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "validation");
+});
+
+test("createScreenMatcher stops a pattern that the static checks cannot classify", async () => {
+  // V8 enforces the vm timeout inside the regular expression engine; Bun does not.
+  if (typeof globalThis.Bun !== "undefined") return;
+  const { createScreenMatcher } = await import("../../src/tools/meta/screen.js");
+  const match = createScreenMatcher(/a*a*a*a*a*a*a*a*c/, 100);
+  const started = Date.now();
+  assert.throws(() => match("a".repeat(1000)), /longer than 100 ms/);
+  assert.ok(Date.now() - started < 2000);
+  assert.deepEqual(createScreenMatcher(/b+/)("aabbb"), { index: 2, text: "bbb" });
+});
