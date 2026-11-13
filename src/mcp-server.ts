@@ -32,12 +32,13 @@ import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSy
 import { toolRegistry } from "./tools/registry/index.js";
 import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
-import { publishedInputSchema, type ToolRunResult } from "./tools/types.js";
+import { publishedInputSchema } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import { RequestQueue } from "./loggingHttpClient.js";
 import axios, { type AxiosResponse } from "axios";
 import { redactValue, registerSecret } from "./redact.js";
+import { toCallToolResult } from "./mcp/callToolResult.js";
 import { loggerFor, payloadByteLength, formatPayloadForDebug, formatErrorMessage } from "./logger.js";
 import { getDiagnosticsSessionInfo, installProcessDiagnostics, withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
 
@@ -822,32 +823,6 @@ export async function logConnectivity(client: C64Client, baseUrl: string, networ
   }
 }
 
-export function toCallToolResult(result: ToolRunResult): {
-  content: ToolRunResult["content"];
-  structuredContent?: ToolRunResult["structuredContent"];
-  metadata?: ToolRunResult["metadata"];
-  isError?: boolean;
-} {
-  const base: {
-    content: ToolRunResult["content"];
-    structuredContent?: ToolRunResult["structuredContent"];
-    metadata?: ToolRunResult["metadata"];
-    isError?: boolean;
-  } = { content: redactValue(result.content) as ToolRunResult["content"] };
-
-  if (result.structuredContent !== undefined) {
-    base.structuredContent = redactValue(result.structuredContent) as ToolRunResult["structuredContent"];
-  }
-  if (result.metadata !== undefined) {
-    base.metadata = redactValue(result.metadata) as ToolRunResult["metadata"];
-  }
-  if (result.isError !== undefined) {
-    base.isError = result.isError;
-  }
-
-  return base;
-}
-
 function toPromptMessage(segment: PromptSegment): {
   role: "assistant" | "user";
   content: { type: "text"; text: string };
@@ -880,3 +855,5 @@ if (process.env.C64BRIDGE_SKIP_AUTO_START !== "1") {
     process.exit(1);
   });
 }
+
+export { toCallToolResult };

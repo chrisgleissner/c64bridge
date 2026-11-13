@@ -37,7 +37,7 @@ export function jsonResult(
       ? data
       : (() => {
           try {
-            return JSON.stringify(data, null, 2);
+            return JSON.stringify(data);
           } catch {
             return String(data);
           }
