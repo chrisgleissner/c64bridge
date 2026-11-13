@@ -946,11 +946,46 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.reset();
-      if (res.success) this.clearExplicitPause(facade);
-      return { success: res.success, details: res.details };
+      if (!res.success) return { success: res.success, details: res.details };
+      if (facade.type === "vice" || !this.pauseStateFor(facade).explicit) {
+        this.clearExplicitPause(facade);
+        return { success: res.success, details: res.details };
+      }
+      return await this.resumeAfterUltimateReset(facade, res);
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
+  }
+
+  /**
+   * On Ultimate hardware a reset issued while the machine is paused leaves the
+   * CPU stopped until a resume is sent (a reboot does not). Send the resume so
+   * the machine runs again, then clear the explicit-pause flag. If a running
+   * tool call still holds an owned pause, the machine stays paused for that
+   * call and its release sends the resume. If the resume fails, the explicit
+   * pause stays recorded because the CPU is still stopped, and the result
+   * carries a warning.
+   */
+  private async resumeAfterUltimateReset(facade: C64Facade, res: RunBasicResult): Promise<{ success: boolean; details?: unknown }> {
+    const state = this.pauseStateFor(facade);
+    if (state.depth > 0) {
+      state.explicit = false;
+      return { success: res.success, details: res.details };
+    }
+    const resumed = await facade.resume().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+    if (resumed.success) {
+      state.explicit = false;
+      return { success: res.success, details: res.details };
+    }
+    const base = res.details && typeof res.details === "object" && !Array.isArray(res.details) ? res.details as Record<string, unknown> : { response: res.details };
+    return {
+      success: res.success,
+      details: {
+        ...base,
+        warning: "The reset succeeded, but the machine was paused and could not be resumed afterwards, so the CPU may still be stopped. Run c64_system resume.",
+        resumeError: resumed.details,
+      },
+    };
   }
 
   async reboot(): Promise<{ success: boolean; details?: unknown }> {

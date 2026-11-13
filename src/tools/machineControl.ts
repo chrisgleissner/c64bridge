@@ -192,6 +192,10 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
+          if (typeof details.warning === "string") {
+            // The CPU may still be stopped, so a READY. wait would only time out.
+            return textResult(`C64 reset command issued. Warning: ${details.warning}`, { success: true, details, warning: details.warning });
+          }
           return await withReadyResult(ctx, parsed, before, "C64 reset command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
