@@ -1006,7 +1006,7 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://ultimate/uci` | UCI register protocol, command targets, file and REU loading, network, palette, safe use and detection. |
 | `c64://ultimate/reu` | REU registers, tested level-load and detection routines, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples. |
 | `c64://ultimate/upic` | Cycle-exact border-colour technique for 384x256 16-colour graphics, framebuffer, palette use and limits. |
-| `c64://ultimate/multisid` | Verified control recipe per owner configuration (8 to 12 SIDs), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences. |
+| `c64://ultimate/multisid` | Verified control recipe per owner configuration (8 SIDs, or 10 with a chip in each socket), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences. |
 | `c64://ultimate/bench` | Benchmark programs, result block layout, decoding formulas and a step-by-step rerun recipe using only c64bridge tools. |
 | `c64://vice/binary-monitor-spec` | Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations. |
 | `c64://basic/spec` | Token definitions, syntax rules, and device I/O guidance for BASIC v2. |

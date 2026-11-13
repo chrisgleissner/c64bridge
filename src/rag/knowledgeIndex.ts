@@ -295,7 +295,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         description: "Read when a modern C64U/Ultimate game uses more than one SID, sets SID addresses, range splits, pan or the mixer at run time, or must work with empty sockets, one or two real SIDs or SID replacements; not on a stock C64.",
         relativePath: "data/ultimate/multisid.md",
         priority: "reference",
-        summary: "Verified control recipe per owner configuration (8 to 12 SIDs), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences.",
+        summary: "Verified control recipe per owner configuration (8 SIDs, or 10 with a chip in each socket), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences.",
         prompts: ["game-development"],
         tools: ["c64_config", "c64_program", "c64_memory", "c64_sound"],
         relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.gamedev.index],

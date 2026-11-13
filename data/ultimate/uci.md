@@ -3,7 +3,7 @@
 **Summary:** UCI is a polled register interface at `$DF1B-$DF1F` through which a C64 program asks the Ultimate to read/write files, open sockets, make HTTP requests, load files straight into RAM or REU, change the palette and reboot. It is off by default. Commands are `<target> <command> <args>`; replies are data bytes plus a status string. Targets: 1/2 DOS, 3 Network, 4 Control, 5 SoftwareIEC, 6 HTTP.
 **Read when:** a game must load levels or data from the Ultimate's storage, save high scores, change the palette, use the network, or detect an Ultimate.
 
-Marks: "(unverified)" = inferred. Dates = when added to public firmware master (github.com/GideonZ/1541ultimate); a device may be older. No UCI version command exists: try the command, check for `21,UNKNOWN COMMAND`. Docs: https://1541u-documentation.readthedocs.io/en/latest/uci/index.html. SDK (MIT): https://github.com/chrisgleissner/ultimate-uci-sdk. Enable with `c64_config` ("C64 and Cartridge Settings" / `Command Interface` = Enabled).
+Marks: "(unverified)" = inferred. Dates = when added to public firmware master (github.com/GideonZ/1541ultimate); a device may be older. No UCI version command exists: try the command, check for `21,UNKNOWN COMMAND`. Docs: https://1541u-documentation.readthedocs.io/en/latest/uci/index.html. SDK (MIT): https://github.com/barryw/ultimate-uci-sdk. Enable with `c64_config` ("C64 and Cartridge Settings" / `Command Interface` = Enabled).
 
 ## Registers (all polled; I/O must be visible, `$01` bit 2 set)
 

@@ -11,7 +11,7 @@ Marks: "(unverified)" = secondary or inferred; "measured" = 2026-11-13, Ultimate
 |---|---|---|---|
 | FPGA | Cyclone V | Artix-7 | Artix-7 |
 | Turbo top speed | 48 MHz | 64 MHz | 64 MHz (measured) |
-| Turbo Control value for registers | `U64 Turbo Registers` | `U64 Turbo Registers` | `C64U Turbo Registers` (config dumps; public source: U64 name only) |
+| Turbo Control value for registers | `U64 Turbo Registers` | `U64 Turbo Registers` | `U64 Turbo Registers` (measured, C64U fw 1.2.1; public source has only this name) |
 | Internal speaker | yes | no | no |
 | Programmatic LED (`$D2xx`/`$D3xx`) | no | yes (2026-05) | yes, fw 1.2.1 (measured) |
 
@@ -75,7 +75,7 @@ Full control recipe, address map, mixer and detection: c64://ultimate/multisid (
 
 1. UCI: read `$DF1D`, mask `$7F`, compare `$49` (`$C9` when no interrupt pending). Needs `Command Interface` enabled (default Disabled); when off it looks like no Ultimate.
 2. Turbo probe: `$D031` not `$FF` = turbo registers on; `$FF` proves nothing.
-3. Model: UCI IDENTIFY on target 4 answers `CONTROL TARGET V1.1`; GET_HWINFO (deprecated, `$04 $28`) returns a mixed-case product string (fold case). Measured on a C64U: GET_HWINFO reported plain "Ultimate 64", same as a 48 MHz U64; tell 48 from 64 MHz by the speed probe.
+3. Model: UCI IDENTIFY on target 4 answers `CONTROL TARGET V1.1`; GET_HWINFO (deprecated, `$04 $28`) returns a mixed-case product string (fold case). The string comes from `getProductString()`: "C64 Ultimate" on a C64U fw 1.2.1 (measured), "Ultimate 64" style on a U64; match on "ultimate" and tell 48 from 64 MHz by the speed probe.
 4. Host: `GET /v1/info` returns `product`, `firmware_version`, `fpga_version`, `core_version`; `c64://platform/status` reports the active backend.
 5. Probe features by trying them (unknown UCI command: `21,UNKNOWN COMMAND`).
 
