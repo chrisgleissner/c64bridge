@@ -32,6 +32,49 @@ async function readSnapshotFile(path: string): Promise<any> {
   }
 }
 
+function valuesEqual(wanted: unknown, actual: unknown): boolean {
+  if (wanted !== null && typeof wanted === "object") return JSON.stringify(wanted) === JSON.stringify(actual);
+  if (actual !== null && typeof actual === "object") return false;
+  return String(wanted) === String(actual);
+}
+
+/** Items of the snapshot payload ({ category: { item: value } }) whose value differs from the device. */
+function changedConfigItems(payload: Record<string, object>, current: Record<string, unknown>): Record<string, Record<string, unknown>> {
+  const changes: Record<string, Record<string, unknown>> = {};
+  for (const [category, items] of Object.entries(payload)) {
+    if (!items || typeof items !== "object" || Array.isArray(items)) continue;
+    const live = current[category];
+    const liveItems = live && typeof live === "object" && !Array.isArray(live) ? live as Record<string, unknown> : {};
+    for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
+      if (!Object.prototype.hasOwnProperty.call(liveItems, item) || !valuesEqual(value, liveItems[item])) {
+        (changes[category] ??= {})[item] = value;
+      }
+    }
+  }
+  return changes;
+}
+
+function countItems(changes: Record<string, Record<string, unknown>>): number {
+  return Object.values(changes).reduce((sum, items) => sum + Object.keys(items).length, 0);
+}
+
+function describeWriteFailure(details: unknown): { status?: number; message: string } {
+  const d = (details && typeof details === "object" ? details : {}) as Record<string, any>;
+  const status = typeof d.status === "number" ? d.status : undefined;
+  if (status === 403) {
+    return { status, message: "the firmware does not accept REST writes to this category" };
+  }
+  const failedItems = Array.isArray(d.results)
+    ? d.results.filter((r: any) => r && r.success === false).map((r: any) => `${r.item}: ${r.error ?? "failed"}`)
+    : [];
+  const message = failedItems.length > 0
+    ? failedItems.join("; ")
+    : typeof d.message === "string" ? d.message
+    : Array.isArray(d.errors) && d.errors.length > 0 ? d.errors.map(String).join("; ")
+    : "write failed";
+  return status === undefined ? { message } : { status, message };
+}
+
 export const tools: ToolDefinition[] = [
   {
     name: "config_snapshot_and_restore",
@@ -85,17 +128,41 @@ export const tools: ToolDefinition[] = [
           } catch {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
-          const result = await (ctx.client as any).configBatchUpdate(payload);
-          if (!result.success) {
-            throw new ToolExecutionError("Batch update failed", { details: normalizeErrorDetails(result.details) });
+          const client = ctx.client as any;
+          const current = (await captureConfigSnapshot(client, { includeSecretValues: true })).categories;
+          const changes = changedConfigItems(payload, current);
+          const changedItems = countItems(changes);
+          const categories = Object.keys(changes);
+          if (categories.length === 0) {
+            return jsonResult({ restored: true, changedItems: 0, categories: 0 }, { success: true });
+          }
+          const failedCategories: Array<{ category: string; status?: number; message: string }> = [];
+          let restoredCategories: string[] = categories;
+          const batch = await client.configBatchUpdate(changes);
+          if (!batch.success) {
+            restoredCategories = [];
+            for (const category of categories) {
+              const single = await client.configBatchUpdate({ [category]: changes[category] });
+              if (single.success) {
+                restoredCategories.push(category);
+              } else {
+                failedCategories.push({ category, ...describeWriteFailure(single.details) });
+              }
+            }
+          }
+          if (failedCategories.length > 0) {
+            throw new ToolExecutionError(
+              `Configuration restore failed for ${failedCategories.length} of ${categories.length} categories`,
+              { details: { restoredCategories, failedCategories, changedItems } },
+            );
           }
           if (parsed.applyToFlash) {
-            const saved = await (ctx.client as any).configSaveToFlash();
+            const saved = await client.configSaveToFlash();
             if (!saved.success) {
               throw new ToolExecutionError("Configuration restored, but saving to flash failed", { details: normalizeErrorDetails(saved.details) });
             }
           }
-          return jsonResult({ restored: true, categories: Object.keys(payload).length }, { success: true });
+          return jsonResult({ restored: true, changedItems, categories: categories.length, restoredCategories }, { success: true });
         }
 
         const snapshot = await readSnapshotFile(path);
