@@ -1272,6 +1272,14 @@ export class C64Client {
     return state;
   }
 
+  /** A failed resume leaves the CPU possibly paused: keep that visible as an explicit pause so later tools do not assume a running machine, and warn. */
+  private afterResume(state: { explicit: boolean }, result: RunBasicResult): RunBasicResult {
+    if (result.success) return result;
+    state.explicit = true;
+    const details = (result.details && typeof result.details === "object" ? result.details : { message: String(result.details ?? "") }) as Record<string, unknown>;
+    return { ...result, details: { ...details, warning: "The resume failed; the machine may still be paused. Call c64_system resume once the device is reachable." } };
+  }
+
   /** Owned pause for one tool call. Pass the facade pinned at call start; pair with releasePause. A failed result holds no pause and needs no release. */
   async acquirePause(pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
@@ -1310,7 +1318,7 @@ export class C64Client {
         return { success: true, details: { resumed: false, reason: "the CPU was already stopped by the debugger" } };
       }
       if (state.explicit) return { success: true, details: { resumed: false, reason: "machine was paused explicitly" } };
-      return await facade.resume();
+      return this.afterResume(state, await facade.resume());
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
@@ -1319,8 +1327,15 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       const state = this.pauseStateFor(facade);
-      if (state.depth > 0 && !state.explicit) {
-        state.explicit = true; // the device is already paused by a running tool call
+      if (state.depth > 0 && !state.explicit && state.devicePause) {
+        // Wait for the tool call's own pause: it may still fail, and then nothing holds the CPU.
+        const pending = await state.devicePause;
+        if (pending.success) {
+          state.explicit = true;
+          return { success: true, details: { alreadyPaused: true } };
+        }
+      } else if (state.depth > 0 && !state.explicit) {
+        state.explicit = true; // a debugger stop already holds the CPU
         return { success: true, details: { alreadyPaused: true } };
       }
       const result = await facade.pause();
@@ -1336,7 +1351,7 @@ export class C64Client {
       const state = this.pauseStateFor(facade);
       state.explicit = false;
       if (state.depth > 0) return { success: true, details: { resumed: false, reason: "a running tool call still holds a pause; it resumes the machine when it finishes" } };
-      return await facade.resume();
+      return this.afterResume(state, await facade.resume());
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 

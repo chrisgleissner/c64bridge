@@ -115,6 +115,11 @@ export class RequestQueue {
   }
 }
 
+function isPauseControlRequest(requestConfig: AxiosRequestConfig): boolean {
+  const url = typeof requestConfig.url === "string" ? requestConfig.url : "";
+  return /machine:(pause|resume)(\?|$)/.test(url);
+}
+
 export function createLoggingHttpClient<SecurityDataType = unknown>(
   config?: ApiConfig<SecurityDataType>,
   logger: PrefixedLogger = loggerFor("c64u"),
@@ -159,7 +164,9 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
     const baseUrl = typeof config?.baseURL === "string" ? config.baseURL : undefined;
     instance.request = ((requestConfig: AxiosRequestConfig) =>
       queue.run(async () => {
-        queue.assertUp();
+        // Pause and resume bypass the down state. A resume is the recovery action for a machine an
+        // owned pause froze, and a pause that is refused would leave its paired resume unmatched.
+        if (!isPauseControlRequest(requestConfig)) queue.assertUp();
         try {
           const response = await sendRequest(requestConfig);
           queue.markUp();

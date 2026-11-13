@@ -309,6 +309,8 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = []): Promise<voi
       await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
       // Only the changed tasks get their per-task files rewritten.
       for (const t of changedTasks) {
+        // A stopped task that was restarted under its name shares the folder with its successor; its stale object must not overwrite the successor's task.json.
+        if (TASKS.get(t.name) !== t) continue;
         await writeTaskJson(t);
         await ensureResultAndLog(t);
       }
@@ -523,19 +525,22 @@ export const tools: ToolDefinition[] = [
           const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
           task._facade = pinnedFacade;
           task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
-        } catch (pinError) {
+          // Ensure per-task structure and seed files
+          await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
+          await writeTaskJson(task);
+          await ensureResultAndLog(task);
+          await appendTaskLog(task, "started");
+          scheduleNextRun(task, ctx);
+        } catch (startError) {
+          // Undo the reservation so the failed start neither blocks its name nor holds a running slot.
+          if (task._timer) clearTimeout(task._timer);
+          task._timer = null;
           if (TASKS.get(task.name) === task) {
             if (existing) TASKS.set(existing.name, existing);
             else TASKS.delete(task.name);
           }
-          throw pinError;
+          throw startError;
         }
-        // Ensure per-task structure and seed files
-        await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
-        await writeTaskJson(task);
-        await ensureResultAndLog(task);
-        await appendTaskLog(task, "started");
-        scheduleNextRun(task, ctx);
         await persistTasks([task]);
         return jsonResult({ started: true, task: { id: task.id, name: task.name, operation: task.operation, backendId: task.backendId ?? null, intervalMs: task.intervalMs, maxIterations: task.maxIterations ?? null, folder: task.folder } }, { success: true });
       } catch (error) {
