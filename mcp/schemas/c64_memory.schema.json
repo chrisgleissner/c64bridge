@@ -111,8 +111,9 @@
         "integer",
         "null"
       ],
-      "description": "Poll interval in milliseconds (at least 20)",
+      "description": "Poll interval in milliseconds (20-5000)",
       "minimum": 20,
+      "maximum": 5000,
       "default": 100
     },
     "instructionCount": {
