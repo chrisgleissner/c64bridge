@@ -1329,8 +1329,10 @@ export class C64Client {
       const state = this.pauseStateFor(facade);
       if (state.depth > 0 && !state.explicit && state.devicePause) {
         // Wait for the tool call's own pause: it may still fail, and then nothing holds the CPU.
-        const pending = await state.devicePause;
-        if (pending.success) {
+        const devicePause = state.devicePause;
+        const pending = await devicePause;
+        // The owning call may have released (and resumed) while this call waited; then pause the device here.
+        if (pending.success && state.depth > 0 && state.devicePause === devicePause) {
           state.explicit = true;
           return { success: true, details: { alreadyPaused: true } };
         }

@@ -84,6 +84,31 @@ test("c64_system pause waits for a pending owned pause and does not record an ex
   assert.equal((await client.acquirePause(facade)).success, true);
 });
 
+test("c64_system pause pauses the device itself when the owning call released while it waited", async () => {
+  const client = new C64Client("http://127.0.0.1:9");
+  const calls = [];
+  let finishFirst;
+  const facade = {
+    pause: () => {
+      calls.push("pause");
+      if (calls.length === 1) return new Promise((resolve) => { finishFirst = resolve; });
+      return Promise.resolve({ success: true });
+    },
+    resume: async () => { calls.push("resume"); return { success: true }; },
+  };
+  const acquireA = client.acquirePause(facade);
+  const explicit = client.explicitPause(facade);
+  const releaseA = client.releasePause(facade); // the owner finishes before its pause response arrives
+  finishFirst({ success: true });
+  await acquireA;
+  await releaseA;
+  const result = await explicit;
+  assert.equal(result.success, true);
+  assert.equal(result.details?.alreadyPaused, undefined);
+  // The owner's resume ran, so the explicit pause had to send a pause of its own afterwards.
+  assert.deepEqual(calls, ["pause", "resume", "pause"]);
+});
+
 test("a failed background task start undoes its reservation", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-bgstart-"));
   const previous = process.env.C64_TASK_STATE_FILE;
