@@ -112,7 +112,7 @@ test("config snapshot file redacts credentials, other values unchanged, restore 
   FIRMWARE["Network settings"].Hostname = "c64u";
   assert.equal(restore.metadata?.success, true);
   assert.equal(JSON.stringify(batches[0]).includes("***"), false, "placeholder must never be written to the device");
-  assert.deepEqual(batches[0], { "Network settings": { Hostname: { "Network settings": { Hostname: "c64u" } } } });
+  assert.deepEqual(batches[0], { "Network settings": { Hostname: "c64u" } });
 
   const { file: plainFile } = tmpPath("config", "config-secret-snapshot-plain.json");
   await metaModule.invoke(
@@ -137,4 +137,29 @@ test("config snapshot files are readable only by the owner, including a pre-exis
   await fs.chmod(existing, 0o644);
   await metaModule.invoke("config_snapshot_and_restore", { action: "snapshot", path: existing }, ctx);
   assert.equal((await fs.stat(existing)).mode & 0o777, 0o600);
+});
+
+test("restore never sends a redacted credential, also when the batch falls back to per-category writes", async () => {
+  const { file, dir } = tmpPath("config", "config-secret-fallback.json");
+  await fs.mkdir(dir, { recursive: true });
+  const batches = [];
+  const client = makeClient(batches);
+  client.configBatchUpdate = async (payload) => {
+    batches.push(payload);
+    return Object.keys(payload).length > 1 ? { success: false, details: { status: 400 } } : { success: true };
+  };
+  const ctx = { platform: { id: "c64u" }, client, logger: createLogger() };
+  await metaModule.invoke("config_snapshot_and_restore", { action: "snapshot", path: file }, ctx);
+  FIRMWARE["Network settings"].Hostname = "changed-host";
+  FIRMWARE.Audio.Volume = "3";
+  try {
+    const restore = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file }, ctx);
+    assert.equal(restore.metadata?.success, true);
+  } finally {
+    FIRMWARE["Network settings"].Hostname = "c64u";
+    FIRMWARE.Audio.Volume = "10";
+  }
+  assert.equal(batches.length, 3, "one batch and two per-category retries");
+  assert.equal(JSON.stringify(batches).includes("***"), false);
+  assert.equal(JSON.stringify(batches).includes("Password"), false);
 });

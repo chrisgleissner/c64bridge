@@ -8,6 +8,7 @@ import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
 import { readHostFile, resolveHostPath } from "../../hostPaths.js";
 import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
+import { REDACTED_PLACEHOLDER } from "../../redact.js";
 import { normalizeErrorDetails } from "./util.js";
 
 const configSnapshotAndRestoreArgsSchema = objectSchema({
@@ -32,6 +33,33 @@ async function readSnapshotFile(path: string): Promise<any> {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * The firmware answers a category read as { "<category>": { "<item>": value } } and an item read as
+ * { "<category>": { "<item>": value | { current, values, default } } }. The write endpoint expects the
+ * flat form { "<category>": { "<item>": value } }, so the wrapper is removed on both sides.
+ */
+function flattenCategory(category: string, value: unknown): Record<string, unknown> {
+  let items: Record<string, unknown> = isPlainObject(value) ? value : {};
+  // Firmware responses carry an "errors" array next to the category.
+  if (isPlainObject(items[category]) && Object.keys(items).every((key) => key === category || key === "errors")) {
+    items = items[category] as Record<string, unknown>;
+  }
+  const flat: Record<string, unknown> = {};
+  for (const [item, entry] of Object.entries(items)) {
+    let inner: unknown = entry;
+    if (isPlainObject(inner) && isPlainObject(inner[category]) && Object.keys(inner).every((key) => key === category || key === "errors")) {
+      inner = (inner[category] as Record<string, unknown>)[item];
+    }
+    if (isPlainObject(inner) && "current" in inner && !("_error" in inner)) inner = inner.current;
+    flat[item] = inner;
+  }
+  return flat;
+}
+
 function valuesEqual(wanted: unknown, actual: unknown): boolean {
   if (wanted !== null && typeof wanted === "object") return JSON.stringify(wanted) === JSON.stringify(actual);
   if (actual !== null && typeof actual === "object") return false;
@@ -46,14 +74,14 @@ function changedConfigItems(
 ): Record<string, Record<string, unknown>> {
   const changes: Record<string, Record<string, unknown>> = {};
   for (const [category, items] of Object.entries(payload)) {
-    if (!items || typeof items !== "object" || Array.isArray(items)) continue;
-    const live = current[category];
-    const liveItems = live && typeof live === "object" && !Array.isArray(live) ? live as Record<string, unknown> : {};
-    const originalCategory = original[category] as Record<string, unknown> | undefined;
-    for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
+    const wanted = flattenCategory(category, items);
+    const live = flattenCategory(category, current[category]);
+    const originalItems = flattenCategory(category, original[category]);
+    for (const [item, value] of Object.entries(wanted)) {
       // A redacted credential was removed from the payload; it is never compared or written.
-      if (originalCategory && JSON.stringify(originalCategory[item]) !== JSON.stringify(value)) continue;
-      if (!Object.prototype.hasOwnProperty.call(liveItems, item) || !valuesEqual(value, liveItems[item])) {
+      if (JSON.stringify(originalItems[item]) !== JSON.stringify(value)) continue;
+      if (value === undefined || value === REDACTED_PLACEHOLDER) continue;
+      if (!Object.prototype.hasOwnProperty.call(live, item) || !valuesEqual(value, live[item])) {
         (changes[category] ??= {})[item] = value;
       }
     }
@@ -69,7 +97,7 @@ function describeWriteFailure(details: unknown): { status?: number; message: str
   const d = (details && typeof details === "object" ? details : {}) as Record<string, any>;
   const status = typeof d.status === "number" ? d.status : undefined;
   if (status === 403) {
-    return { status, message: "the firmware does not accept REST writes to this category" };
+    return { status, message: "the device refused the write with 403 Forbidden: the network password is missing or wrong" };
   }
   const failedItems = Array.isArray(d.results)
     ? d.results.filter((r: any) => r && r.success === false).map((r: any) => `${r.item}: ${r.error ?? "failed"}`)

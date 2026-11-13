@@ -102,7 +102,7 @@ test("restore with applyToFlash reports the refused category and skips the flash
     assert.equal(failed.length, 1);
     assert.equal(failed[0].category, "Video");
     assert.equal(failed[0].status, 403);
-    assert.match(failed[0].message, /does not accept REST writes/);
+    assert.match(failed[0].message, /network password is missing or wrong/);
     assert.deepEqual(error.details.restoredCategories, ["Audio"]);
 
     // The allowed category is restored; the refused one keeps its changed value.
@@ -115,5 +115,32 @@ test("restore with applyToFlash reports the refused category and skips the flash
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     await mock.close();
+  }
+});
+
+test("restore of firmware-style category reads writes the flat { category: { item: value } } form", async () => {
+  const dir = makeTempDir();
+  const file = path.join(dir, "snapshot.json");
+  const device = { "Audio Mixer": { "Vol Master": " 0 dB", "Vol Drive 1": "-13 dB" }, "Network Settings": { "Network Password": "secret-pw", Hostname: "u64" } };
+  const batches = [];
+  const client = {
+    async version() { return {}; },
+    async info() { return {}; },
+    async configsList() { return { categories: Object.keys(device) }; },
+    // The firmware wraps a category read as { "<category>": { items } }.
+    async configGet(category) { return { [category]: { ...device[category] }, errors: [] }; },
+    async configBatchUpdate(payload) { batches.push(payload); return { success: true }; },
+  };
+  const ctx = { platform: { id: "c64u" }, client, logger };
+  try {
+    await metaModule.invoke("config_snapshot_and_restore", { action: "snapshot", path: file }, ctx);
+    device["Audio Mixer"]["Vol Master"] = "-6 dB";
+    device["Network Settings"].Hostname = "other";
+    const res = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file }, ctx);
+    assert.notEqual(res.isError, true, res.content[0].text);
+    assert.deepEqual(batches, [{ "Audio Mixer": { "Vol Master": " 0 dB" }, "Network Settings": { Hostname: "u64" } }]);
+    assert.equal(JSON.stringify(batches).includes("***"), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

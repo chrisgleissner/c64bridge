@@ -200,7 +200,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "restore",
       configRestoreArgsSchema.jsonSchema as JsonSchema,
-      { description: "Restore configuration from a snapshot file. Writes only the items that differ from the device; if a category is refused (firmware 3.15a answers 403 for some), the other categories are still restored and the result is an error naming the failed categories." },
+      { description: "Restore configuration from a snapshot file. Writes only the items that differ from the device; if the device refuses a category (for example 403 when the network password is missing or wrong), the other categories are still restored and the result is an error naming the failed categories." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
