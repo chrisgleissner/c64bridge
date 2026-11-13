@@ -77,7 +77,7 @@
     },
     "pattern": {
       "type": "string",
-      "description": "Substring or regex to find (at most 200 characters; regex with nested quantifiers or backreferences is rejected) Limits depend on op.",
+      "description": "Substring or regex to find (at most 200 characters; on runtimes without evaluation timeout, backreferences and nested quantifiers are rejected) Limits depend on op.",
       "minLength": 1
     },
     "isRegex": {
@@ -111,9 +111,8 @@
         "integer",
         "null"
       ],
-      "description": "Poll interval in milliseconds (20-5000)",
+      "description": "Poll interval in milliseconds (minimum 20; values above 5000 are clamped to 5000)",
       "minimum": 20,
-      "maximum": 5000,
       "default": 100
     },
     "instructionCount": {
