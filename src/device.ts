@@ -328,6 +328,7 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
       timeout,
       headers: buildC64uHeaders(networkPassword),
       validateStatus: () => true,
+      proxy: false,
     });
     return true;
   } catch {

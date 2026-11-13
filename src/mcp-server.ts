@@ -778,12 +778,27 @@ export async function logConnectivity(client: C64Client, baseUrl: string, networ
     // Share the per-device queue so the probe never overlaps a tool request.
     const probeResponse = await RequestQueue.forDevice(baseUrl).run(() => axios.get(infoUrl, {
       timeout: 2000,
+      // Any HTTP answer shows the device is reachable; a 401/403 is reported as an authentication problem below.
+      validateStatus: () => true,
+      // Device requests go straight to the LAN address, not through HTTP_PROXY.
+      proxy: false,
       ...(networkPassword ? { headers: { "X-Password": networkPassword } } : {}),
     }));
     response = probeResponse;
     const latency = Date.now() - startedAt;
     const bytes = payloadByteLength(probeResponse.data);
-    c64Logger.info(`GET ${infoUrl} status=${probeResponse.status} bytes=${bytes} latencyMs=${latency}`);
+    const logProbe = probeResponse.status >= 200 && probeResponse.status < 300 ? c64Logger.info : c64Logger.warn;
+    logProbe.call(c64Logger, `GET ${infoUrl} status=${probeResponse.status} bytes=${bytes} latencyMs=${latency}`);
+    if (probeResponse.status === 401 || probeResponse.status === 403) {
+      writeDiagnosticEvent("connectivity_probe_auth_failed", { baseUrl, status: probeResponse.status, latencyMs: latency });
+      console.error(`Device at ${baseUrl} is reachable but rejected the request (HTTP ${probeResponse.status}): authentication failed. Check the network password (X-Password) in the configuration.`);
+      return;
+    }
+    if (probeResponse.status < 200 || probeResponse.status >= 300) {
+      writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, latencyMs: latency, status: probeResponse.status });
+      console.error(`Skipping direct REST connectivity probe (device at ${baseUrl} answered HTTP ${probeResponse.status})`);
+      return;
+    }
   } catch (error) {
     const latency = Date.now() - startedAt;
     if (axios.isAxiosError(error)) {

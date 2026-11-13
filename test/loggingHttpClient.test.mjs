@@ -408,3 +408,8 @@ test("the device is probed again after the back-off period", async () => {
   queue.assertUp();
   assert.ok(DEVICE_DOWN_BACKOFF_MS >= 1_000 && DEVICE_DOWN_BACKOFF_MS <= 5_000);
 });
+
+test("device requests bypass HTTP proxies", () => {
+  const client = createLoggingHttpClient({ baseURL: "http://127.0.0.1" }, createMockLogger());
+  assert.equal(client.instance.defaults.proxy, false);
+});

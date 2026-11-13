@@ -120,7 +120,8 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
   logger: PrefixedLogger = loggerFor("c64u"),
   queue?: RequestQueue,
 ): HttpClient<SecurityDataType> {
-  const http = new HttpClient<SecurityDataType>(config);
+  // Device requests go straight to the LAN address; HTTP_PROXY must not apply.
+  const http = new HttpClient<SecurityDataType>({ proxy: false, ...config } as ApiConfig<SecurityDataType>);
   registerSecret(readPasswordHeader(config?.headers));
 
   http.instance.interceptors.request.use((request) => {
