@@ -122,6 +122,17 @@
       }
     },
     {
+      "name": "Ultimate Turbo Benchmark",
+      "uri": "c64://ultimate/bench",
+      "description": "Read when you need to measure CPU cycles per frame, badline or sprite cost, REU DMA speed or the reset 1 MHz window on a modern C64U/Ultimate, or to rerun the published measurements.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "supplemental",
+        "order": 4
+      }
+    },
+    {
       "name": "VICE Binary Monitor Specification",
       "uri": "c64://vice/binary-monitor-spec",
       "description": "Critical VICE Binary Monitor reference for emulator-backed workflows and debugger operations.",
