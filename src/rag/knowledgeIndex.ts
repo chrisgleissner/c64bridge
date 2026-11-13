@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CANONICAL_KNOWLEDGE_RESOURCE_URIS, PLATFORM_RESOURCE_URI, RESOURCE_URIS } from "./resourceUris.js";
 
-function generateCharsetQuickref(): string {
-  const csvPath = join(process.cwd(), "data/graphics/character-set.csv");
+export function generateCharsetQuickref(): string {
+  const csvPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data/graphics/character-set.csv");
   const csvContent = readFileSync(csvPath, "utf-8");
   const lines = csvContent.trim().split("\n");
   const headers = lines[0].split(",");
