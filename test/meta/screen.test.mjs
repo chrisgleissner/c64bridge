@@ -363,3 +363,27 @@ test("createScreenMatcher stops a pattern that the static checks cannot classify
   assert.ok(Date.now() - started < 2000);
   assert.deepEqual(createScreenMatcher(/b+/)("aabbb"), { index: 2, text: "bbb" });
 });
+
+test("wait_for_screen_text returns within timeoutMs even with a long interval", async () => {
+  const ctx = { client: { async readScreen() { return "never"; } }, logger: createLogger() };
+  const started = Date.now();
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 150, intervalMs: 5000 }, ctx);
+  assert.equal(res.isError, true);
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+});
+
+test("wait_for_screen_text gives up on a stalled screen read at the deadline", async () => {
+  const ctx = { client: { readScreen: () => new Promise(() => {}) }, logger: createLogger() };
+  const started = Date.now();
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 150 }, ctx);
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+});
+
+test("wait_for_screen_text matches on a read made just before the deadline", async () => {
+  let calls = 0;
+  const ctx = { client: { async readScreen() { calls += 1; return calls >= 2 ? "READY." : "x"; } }, logger: createLogger() };
+  const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 300, intervalMs: 5000 }, ctx);
+  assert.equal(res.metadata?.success, true);
+});

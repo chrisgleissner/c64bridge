@@ -13,6 +13,9 @@ function escapeRegex(s: string): string {
 export const MAX_PATTERN_LENGTH = 200;
 export const MAX_WAIT_TIMEOUT_MS = 120_000;
 export const MIN_POLL_INTERVAL_MS = 20;
+export const MAX_POLL_INTERVAL_MS = 5000;
+/** A read that starts at the deadline may take this long, so the call returns within timeoutMs plus this margin. */
+const FINAL_READ_GRACE_MS = 250;
 /** Upper bound for one pattern evaluation against one screen. */
 export const PATTERN_EVAL_TIMEOUT_MS = 250;
 /** Unbounded repeats (*, +, {n,}) allowed per pattern; each one adds a power to the worst-case backtracking cost. */
@@ -190,19 +193,34 @@ export type WaitForScreenTextResult =
   | { matched: true; match: { index: number; length: number; text: string }; elapsedMs: number; screen: string }
   | { matched: false; elapsedMs: number; screen: string | undefined };
 
+/** Reads the screen, giving up after limitMs. Resolves undefined when the read did not finish in time. */
+async function readWithin(client: { readScreen(): Promise<string> }, limitMs: number): Promise<string | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), Math.max(1, limitMs)); });
+  const read = client.readScreen();
+  read.catch(() => undefined); // a read that fails after the deadline must not become an unhandled rejection
+  try {
+    return await Promise.race([read, timedOut]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Polls the screen until the pattern matches or the timeout elapses. Does not throw on timeout. */
 export async function waitForScreenText(
   client: { readScreen(): Promise<string> },
   options: WaitForScreenTextOptions,
 ): Promise<WaitForScreenTextResult> {
   const timeoutMs = Math.min(options.timeoutMs ?? 3000, MAX_WAIT_TIMEOUT_MS);
-  const intervalMs = Math.max(options.intervalMs ?? 100, MIN_POLL_INTERVAL_MS);
+  const intervalMs = Math.min(Math.max(options.intervalMs ?? 100, MIN_POLL_INTERVAL_MS), MAX_POLL_INTERVAL_MS);
   const regex = compileScreenPattern(options.pattern, options.isRegex ?? false, options.caseInsensitive ?? true);
   const matchScreen = createScreenMatcher(regex);
   const start = Date.now();
   let lastScreen: string | undefined;
-  while (Date.now() - start < timeoutMs) {
-    const screen = await client.readScreen();
+  for (;;) {
+    // The last read happens at the deadline, after the final sleep. A stalled read must not outlast the deadline: it counts as a miss.
+    const screen = await readWithin(client, Math.max(timeoutMs - (Date.now() - start), FINAL_READ_GRACE_MS));
+    if (screen === undefined) break;
     lastScreen = screen;
     const match = matchScreen(screen);
     if (match) {
@@ -213,7 +231,9 @@ export async function waitForScreenText(
         screen,
       };
     }
-    await sleep(intervalMs);
+    const remaining = timeoutMs - (Date.now() - start);
+    if (remaining <= 0) break;
+    await sleep(Math.min(intervalMs, remaining));
   }
   return { matched: false, elapsedMs: Date.now() - start, screen: lastScreen };
 }
@@ -225,7 +245,7 @@ const waitForScreenTextArgsSchema = objectSchema({
     isRegex: optionalSchema(booleanSchema({ description: "Interpret pattern as regular expression", default: false }), false),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive search", default: true }), true),
     timeoutMs: optionalSchema(numberSchema({ description: "Overall timeout in milliseconds (1-120000)", integer: true, minimum: 1, maximum: 120000, default: 3000 }), 3000),
-    intervalMs: optionalSchema(numberSchema({ description: "Poll interval in milliseconds (at least 20)", integer: true, minimum: 20, default: 100 }), 100),
+    intervalMs: optionalSchema(numberSchema({ description: "Poll interval in milliseconds (20-5000)", integer: true, minimum: 20, maximum: 5000, default: 100 }), 100),
   },
   required: ["pattern"],
   additionalProperties: false,
