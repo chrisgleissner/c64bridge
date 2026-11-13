@@ -29,6 +29,7 @@
     "test:node": "node scripts/run-tests.mjs",
     "test:vice:mock": "npm run test -- --platform=vice --target=mock",
     "test:vice:device": "FORCE_XVFB=1 VICE_VISIBLE=false VICE_WARP=true npm run test -- --platform=vice --target=device",
+    "test:vice:soak": "node scripts/vice-soak.mjs",
     "coverage": "node scripts/run-coverage.mjs",
     "coverage:single": "node scripts/invoke-bun.mjs scripts/run-tests.ts --coverage",
     "test:matrix": "npm run test -- --platform=c64u --target=mock && npm run test:vice:mock && npm run test:vice:device",

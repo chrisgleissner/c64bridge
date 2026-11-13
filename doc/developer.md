@@ -161,6 +161,13 @@ Env knobs:
 - `DISABLE_XVFB=1` — skip Xvfb and use the current `$DISPLAY` even in headless environments
 - `VICE_XVFB_DISPLAY=:nn` — override the Xvfb display number (defaults to `:99`)
 
+### VICE soak test (long-running, real VICE)
+
+`npm run test:vice:soak -- --duration 10m --out /tmp/vice-soak` starts the built MCP server (`npm run build` first) with a real `x64sc` on a free port and drives it through tool calls: steady load, idle gaps, a held `c64_system` pause, a long keyboard feed, debugger cycles (checkpoints, stepping, overlapping calls) and recovery when VICE is killed or its port is taken.
+The duration can also be set with `C64BRIDGE_SOAK_DURATION` (for example `90s` or `10m`, default 2 minutes); scenario shares scale with it.
+It writes `ops.jsonl` (one line per call) and `summary.json` (counts, latency p50/p95/max, resources) to `--out`, and exits non-zero on any tool error, failed check, leaked checkpoint, or growth of server RSS or open file descriptors above `C64BRIDGE_SOAK_MAX_RSS_GROWTH_MB` (80) or `C64BRIDGE_SOAK_MAX_FD_GROWTH` (8).
+It needs a VICE binary and is not part of `npm test`; only the VICE processes it started are killed on exit, including on SIGINT.
+
 Implementation tip: programmatic shutdown
 
 - The internal `ViceClient` supports a graceful emulator quit via the Binary Monitor `0xBB Quit` command (`await client.quit()`), and a monitor exit (`0xAA`) if needed. Prefer this over sending signals when integrating VICE control into production code; retain a short SIGTERM fallback.
