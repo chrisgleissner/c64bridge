@@ -156,7 +156,7 @@ function createRagTool(scope: RagScope, options: { description: string; summary:
                 name: entry.name,
                 summary: entry.metadata.summary,
               })),
-              refs: refs.map(serializeReference),
+              refs: refs.map((ref) => serializeReference(ref, snippetBudget(refs.length))),
             },
           },
         };
@@ -198,11 +198,26 @@ function summariseSnippet(snippet: string, limit = 240): string {
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
 }
 
-function serializeReference(ref: RagReference): Record<string, unknown> {
+const MAX_SNIPPET_CHARS = 1200;
+const MIN_SNIPPET_CHARS = 300;
+const TOTAL_SNIPPET_CHARS = 6000;
+
+/** Per-hit snippet limit: at most MAX_SNIPPET_CHARS, shrinking so that all hits together stay near TOTAL_SNIPPET_CHARS. */
+export function snippetBudget(hitCount: number): number {
+  if (hitCount <= 0) return MAX_SNIPPET_CHARS;
+  return Math.max(MIN_SNIPPET_CHARS, Math.min(MAX_SNIPPET_CHARS, Math.floor(TOTAL_SNIPPET_CHARS / hitCount)));
+}
+
+export function serializeReference(ref: RagReference, snippetLimit = MAX_SNIPPET_CHARS): Record<string, unknown> {
+  const truncated = ref.snippet.length > snippetLimit;
   const payload: Record<string, unknown> = {
-    snippet: ref.snippet,
+    snippet: truncated ? `${ref.snippet.slice(0, snippetLimit - 1).trimEnd()}…` : ref.snippet,
     score: ref.score,
   };
+  if (truncated) {
+    payload.truncated = true;
+    payload.snippetChars = ref.snippet.length;
+  }
   if (ref.origin) payload.origin = ref.origin;
   if (ref.uri) payload.uri = ref.uri;
   if (ref.sourcePath) payload.sourcePath = ref.sourcePath;
