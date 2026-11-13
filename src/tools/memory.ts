@@ -24,7 +24,8 @@ import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { petsciiToAscii } from "../petscii.js";
-import { listBasicProgram, MAX_BASIC_IMAGE_BYTES } from "./translation/basicDetokenizer.js";
+import { acquireOwnedPause, resumeWarning } from "./pauseGuard.js";
+import { listBasicProgram } from "./translation/basicDetokenizer.js";
 import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../numericArg.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
@@ -248,12 +249,12 @@ const listBasicArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
-async function readRange(ctx: ToolExecutionContext, start: number, length: number): Promise<Uint8Array> {
+async function readRange(ctx: ToolExecutionContext, start: number, length: number, facade?: unknown): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for (let offset = 0; offset < length; offset += 4096) {
     const count = Math.min(4096, length - offset);
     const address = `$${(start + offset).toString(16).toUpperCase().padStart(4, "0")}`;
-    const result = await ctx.client.readMemory(address, String(count));
+    const result = await ctx.client.readMemory(address, String(count), facade as any);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normaliseFailure(result.details) });
     }
@@ -269,22 +270,39 @@ async function readRange(ctx: ToolExecutionContext, start: number, length: numbe
 async function executeListBasic(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     listBasicArgsSchema.parse(rawArgs ?? {});
-    const pointers = await readRange(ctx, 0x002b, 4);
-    const start = pointers[0]! | (pointers[1]! << 8);
-    const end = pointers[2]! | (pointers[3]! << 8);
+    // The pointers and the program are read under one owned pause so the program cannot change between the two reads.
+    const canPause = supportsMachinePause(ctx);
+    const owned = await acquireOwnedPause(ctx.client, canPause);
+    if (canPause && !owned.result.success) {
+      throw new ToolExecutionError("C64 backend reported failure while pausing", { details: normaliseFailure(owned.result.details) });
+    }
+    let image: Uint8Array;
+    let start: number;
+    let end: number;
+    let resumeFailure: { success: boolean; details?: unknown } | undefined;
+    try {
+      const pointers = await readRange(ctx, 0x002b, 4, owned.facade);
+      start = pointers[0]! | (pointers[1]! << 8);
+      end = pointers[2]! | (pointers[3]! << 8);
+      image = end <= start ? new Uint8Array() : await readRange(ctx, start, end - start, owned.facade);
+    } finally {
+      if (canPause) {
+        const released = await owned.release();
+        if (!released.success) {
+          resumeFailure = released;
+          ctx.logger.warn("C64 resume reported failure after BASIC listing", { details: released.details });
+        }
+      }
+    }
+    const warnings = resumeFailure ? [resumeWarning(resumeFailure.details)] : undefined;
     const fmt = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
     if (end <= start) {
-      return jsonResult({ start: fmt(start), end: fmt(end), lines: [], listing: "" }, { success: true, lineCount: 0 });
+      return jsonResult({ start: fmt(start), end: fmt(end), lines: [], listing: "", ...(warnings ? { warnings } : {}) }, { success: true, lineCount: 0 });
     }
-    const length = end - start;
-    if (length > MAX_BASIC_IMAGE_BYTES) {
-      throw new ToolExecutionError("BASIC end pointer is implausible", { details: { start: fmt(start), end: fmt(end) } });
-    }
-    const image = await readRange(ctx, start, length);
     const lines = listBasicProgram(image, start);
     const listing = lines.map((line) => `${line.number} ${line.text}`).join("\n");
     return jsonResult(
-      { start: fmt(start), end: fmt(end), lines, listing },
+      { start: fmt(start), end: fmt(end), lines, listing, ...(warnings ? { warnings } : {}) },
       { success: true, lineCount: lines.length },
     );
   } catch (error) {

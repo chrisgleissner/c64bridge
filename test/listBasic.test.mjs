@@ -8,6 +8,8 @@ const logger = { debug() {}, info() {}, warn() {}, error() {} };
 /** Stub client whose RAM is the 64 KiB array `memory`. */
 function clientWith(memory) {
   return {
+    async pause() { return { success: true }; },
+    async resume() { return { success: true }; },
     async readMemory(address, length) {
       const start = Number.parseInt(String(address).replace("$", ""), 16);
       const bytes = memory.subarray(start, start + Number(length));
@@ -69,4 +71,46 @@ test("list_basic treats an end pointer below the start pointer as an empty progr
   const res = await toolRegistry.invoke("c64_memory", { op: "list_basic" }, ctxFor(memory));
   assert.equal(res.isError, undefined);
   assert.equal(res.metadata.lineCount, 0);
+});
+
+test("list_basic reports a program whose last link points to the end pointer as corrupt", async () => {
+  const prg = basicToPrg('10 PRINT "A"\n20 PRINT "B"');
+  // Place the end pointer exactly after the last line, so the 00 00 terminator is outside the image read.
+  const memory = loadPrg(prg, 0x0801 + prg.length - 2 - 4);
+  const res = await toolRegistry.invoke("c64_memory", { op: "list_basic" }, ctxFor(memory));
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /Corrupt BASIC program: no 00 00 terminator/);
+});
+
+test("list_basic holds one owned pause for the whole read on c64u and none on vice", async () => {
+  const memory = loadPrg(basicToPrg('10 PRINT "A"'));
+  const make = (platformId) => {
+    const calls = [];
+    const client = {
+      ...clientWith(memory),
+      async pinFacade() { return "facade"; },
+      async acquirePause(facade) { calls.push(["acquire", facade]); return { success: true }; },
+      async releasePause(facade) { calls.push(["release", facade]); return { success: true }; },
+    };
+    const reads = client.readMemory;
+    client.readMemory = async (address, length, facade) => { calls.push(["read", facade]); return reads(address, length); };
+    return { calls, ctx: { client, rag: {}, logger, platform: { id: platformId, features: [], limitedFeatures: [] }, setPlatform() {} } };
+  };
+
+  const c64u = make("c64u");
+  const res = await toolRegistry.invoke("c64_memory", { op: "list_basic" }, c64u.ctx);
+  assert.equal(res.isError, undefined);
+  assert.deepEqual(c64u.calls.map((c) => c[0]), ["acquire", "read", "read", "release"]);
+  assert.ok(c64u.calls.every((c) => c[1] === "facade"));
+
+  const vice = make("vice");
+  await toolRegistry.invoke("c64_memory", { op: "list_basic" }, vice.ctx);
+  assert.deepEqual(vice.calls.map((c) => c[0]), ["read", "read"]);
+
+  // The pause is released even when a read fails.
+  const failing = make("c64u");
+  failing.ctx.client.readMemory = async () => ({ success: false, details: {} });
+  const bad = await toolRegistry.invoke("c64_memory", { op: "list_basic" }, failing.ctx);
+  assert.equal(bad.isError, true);
+  assert.deepEqual(failing.calls.map((c) => c[0]), ["acquire", "release"]);
 });
