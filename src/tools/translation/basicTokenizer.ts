@@ -16,6 +16,11 @@ const DATA_TOKEN = 0x83;
 const PRINT_TOKEN = 0x99;
 // Highest line number the BASIC V2 line parser (LINGET) accepts; larger values give ?SYNTAX ERROR.
 const MAX_LINE_NUMBER = 63999;
+// BASIC text and variables live below the BASIC ROM at $A000.
+const BASIC_RAM_END = 0xa000;
+// The 80-character (two screen line) limit of the C64 line editor is not
+// enforced: basicToPrg builds a PRG that the firmware loads directly, and LIST
+// and RUN handle tokenised lines longer than the editor accepts.
 
 type TokenEntry = {
   text: string;
@@ -69,6 +74,13 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
     const tokenised = programLines.get(lineNumber)!;
     const lineLength = 2 + 2 + tokenised.length + 1;
     const nextAddress = currentAddress + lineLength;
+    const endLimit = startAddress < BASIC_RAM_END ? BASIC_RAM_END : 0x10000;
+    if (nextAddress + 2 > endLimit) {
+      throw new ToolValidationError(
+        `BASIC program is too large: line ${lineNumber} would end at $${(nextAddress + 2).toString(16).toUpperCase()}, past the end of BASIC memory ($${(endLimit - 1).toString(16).toUpperCase()}) when loaded at $${startAddress.toString(16).toUpperCase()}`,
+        { path: "$.program" },
+      );
+    }
 
     const lineBuffer = Buffer.alloc(lineLength);
     lineBuffer.writeUInt16LE(nextAddress, 0);

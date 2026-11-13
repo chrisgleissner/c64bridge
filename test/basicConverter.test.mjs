@@ -137,3 +137,10 @@ test("basicToPrg keeps token positions after characters whose upper-case form is
   // Outside a string the character is passed through, and the GOTO target stays intact.
   assert.deepEqual(tail(basicToPrg("10 PRINT \u00df:GOTO 10")), [0x3a, 0x89, 0x20, 0x31, 0x30]);
 });
+
+test("basicToPrg reports a program that does not fit in BASIC memory as a validation error", () => {
+  const source = Array.from({ length: 3000 }, (_, i) => `${i + 1} PRINT "${"A".repeat(60)}"`).join("\n");
+  assert.throws(() => basicToPrg(source), (error) => error.name === "ToolValidationError" && /too large/.test(error.message));
+  const fits = Array.from({ length: 100 }, (_, i) => `${i + 1} PRINT "${"A".repeat(60)}"`).join("\n");
+  assert.ok(basicToPrg(fits).length > 6000);
+});
