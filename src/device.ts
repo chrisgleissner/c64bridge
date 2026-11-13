@@ -89,6 +89,12 @@ export type MachineInputBatch = {
 };
 export type MachineInputState = InputStateResponse;
 
+export interface KeyboardFeedResult {
+  readonly delivered: number;
+  readonly status: "drained" | "queued" | "timeout";
+  readonly pending: number;
+}
+
 export interface ScreenState {
   readonly bytes: Uint8Array;
   readonly baseAddress: number;
@@ -132,6 +138,13 @@ export interface C64Facade {
    * operation. Optional: a backend without it is read register by register.
    */
   readScreenState?(): Promise<ScreenState>;
+  /**
+   * Types PETSCII bytes through the backend's own keyboard feed and waits until the KERNAL has
+   * consumed them. Optional: a backend without it is driven through the KERNAL keyboard queue in
+   * memory. `status` is "drained" once consumed, "queued" when the CPU is stopped so the text
+   * waits until it runs, and "timeout" when the KERNAL still had `pending` bytes at the deadline.
+   */
+  feedKeyboard?(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult>;
   writeMemoryBlocks?(blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void>;
   // System control
   reset(): Promise<RunResult>;
@@ -1178,6 +1191,36 @@ export class ViceBackend implements C64Facade {
     return await this.withClient(async (client) => {
       const buf = await client.memGet(address, end);
       return buf.subarray(0, Math.min(buf.length, length));
+    });
+  }
+
+  /**
+   * Feeds PETSCII bytes with one keyboard-feed command per 255 bytes on one monitor connection.
+   * VICE moves them into the KERNAL buffer as it empties, so the 10-byte buffer limit is VICE's
+   * to respect. Afterwards the CPU runs and $00C6 is polled with growing gaps until the buffer
+   * has been empty on two reads about one frame apart (VICE's own queue is not visible, and it
+   * refills the buffer on a timer). With the CPU stopped by a pause or debugger stop nothing can
+   * be consumed, so the bytes stay queued and the CPU stays stopped.
+   */
+  async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult> {
+    const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, bytes.length * 150));
+    return await this.withClient(async (client) => {
+      const delivered = await client.keyboardFeedBytes(bytes);
+      if (delivered === 0) return { delivered, status: "drained", pending: 0 };
+      if (this.isCpuStopped()) return { delivered, status: "queued", pending: delivered };
+      const start = Date.now();
+      let gap = 30;
+      let emptyReads = 0;
+      let pending = delivered;
+      for (;;) {
+        await client.exitMonitor();
+        await delay(gap);
+        pending = (await client.memGet(0x00c6, 0x00c6))[0] ?? 0;
+        emptyReads = pending === 0 ? emptyReads + 1 : 0;
+        if (emptyReads >= 2) return { delivered, status: "drained", pending: 0 };
+        if (Date.now() - start >= timeoutMs) return { delivered, status: "timeout", pending };
+        gap = Math.min(150, Math.ceil(gap * 1.5));
+      }
     });
   }
 

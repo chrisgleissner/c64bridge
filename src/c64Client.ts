@@ -2484,6 +2484,13 @@ export class C64Client {
     const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
 
     const facade = options?.pinnedFacade ?? await this.facadePromise;
+    if (facade.feedKeyboard) {
+      const fed = await facade.feedKeyboard(data, options?.drainTimeoutMs === undefined ? undefined : { drainTimeoutMs: options.drainTimeoutMs });
+      if (fed.status === "timeout") {
+        throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
+      }
+      return { delivered: fed.delivered };
+    }
     const KEYD = 0x0277; // KERNAL keyboard buffer base
     const NDX = 0x00C6;  // pending byte count
 

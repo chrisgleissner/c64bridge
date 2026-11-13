@@ -97,3 +97,50 @@ test("readScreen follows the VIC registers to a relocated screen", async () => {
     assert.ok(detailed.text.startsWith("HI"));
   });
 });
+
+test("injecting 40 characters uses one connection and one keyboard-feed command", async () => {
+  await withClient(async (client, server) => {
+    const text = Buffer.from("0123456789ABCDEFGHIJ0123456789ABCDEFGHIJ", "ascii");
+    const commandsBefore = server.commands.length;
+    const connectionsBefore = server.connectionsOpened;
+    const result = await client.injectKeyboardQueue(text);
+    assert.equal(result.delivered, 40);
+    assert.equal(server.connectionsOpened - connectionsBefore, 1, "one connection");
+    assert.equal(count(server, commandsBefore, CMD_KEYBOARD_FEED), 1, "one keyboard-feed command");
+    assert.deepEqual(server.keyboardFeeds.at(-1), text);
+    // Typing is not done by writing the KERNAL buffer ($0277) and the key count ($00C6).
+    assert.equal(count(server, commandsBefore, 0x02), 0, "no memory writes");
+  });
+});
+
+test("long input goes out as one command per 255 bytes, PETSCII bytes unchanged, NUL dropped", async () => {
+  await withClient(async (client, server) => {
+    const bytes = Buffer.alloc(300, 0x41);
+    bytes[10] = 0x93; // clear screen
+    bytes[20] = 0xc1; // shifted A
+    bytes[30] = 0x00; // cannot be sent
+    const feedsBefore = server.keyboardFeeds.length;
+    const connectionsBefore = server.connectionsOpened;
+    const result = await client.injectKeyboardQueue(bytes);
+    assert.equal(result.delivered, 299);
+    assert.equal(server.connectionsOpened - connectionsBefore, 1);
+    const feeds = server.keyboardFeeds.slice(feedsBefore);
+    assert.deepEqual(feeds.map((f) => f.length), [255, 44]);
+    const all = Buffer.concat(feeds);
+    assert.equal(all[10], 0x93);
+    assert.equal(all[20], 0xc1);
+    assert.ok(!all.includes(0x00));
+  });
+});
+
+test("typing while the CPU is paused queues the text and leaves the CPU stopped", async () => {
+  await withClient(async (client, server) => {
+    await client.pause();
+    assert.equal(server.running, false);
+    const result = await client.injectKeyboardQueue(Buffer.from("PRINT 1\r", "ascii"));
+    assert.equal(result.delivered, 8);
+    assert.equal(server.running, false, "the pause stays in effect");
+    assert.equal(server.keyboardFeeds.at(-1).toString("ascii"), "PRINT 1\r");
+    await client.resume();
+  });
+});

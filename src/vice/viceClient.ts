@@ -377,6 +377,21 @@ export class ViceClient {
     }
   }
 
+  /**
+   * Feed raw PETSCII bytes to VICE's keyboard buffer, which hands them to the KERNAL buffer as
+   * it empties. VICE reads the command's text as a C string, so a 0x00 byte cannot be sent and is
+   * dropped (the KERNAL ignores it anyway). Longer input goes out as consecutive commands, in order.
+   * Returns the number of bytes fed.
+   */
+  async keyboardFeedBytes(bytes: Uint8Array | readonly number[]): Promise<number> {
+    const data = Buffer.from(Uint8Array.from(bytes).filter((b) => b !== 0));
+    for (let offset = 0; offset < data.length; offset += 255) {
+      const chunk = data.subarray(offset, offset + 255);
+      await this.send(0x72, Buffer.concat([Buffer.from([chunk.length]), chunk]));
+    }
+    return data.length;
+  }
+
   /** Set the VICE joyport's active-low control byte (BM command 0xA2). */
   async joyportSet(port: 1 | 2, activeLowMask: number): Promise<void> {
     const body = Buffer.alloc(4);
