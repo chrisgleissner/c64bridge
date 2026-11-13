@@ -2,7 +2,7 @@
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath, dirname } from "node:path";
 import { formatTimestampSpec } from "./util.js";
@@ -351,6 +351,20 @@ function extensionKey(path: string): { raw: string; normalised: string } {
   return { raw, normalised: raw.length > 0 ? raw : "(none)" };
 }
 
+const GLOB_UNSAFE = /[*?[\]/\\]/;
+
+/** nameContains and extension are spliced into a device glob, so a glob metacharacter or path separator would change what is searched. */
+function assertGlobSafe(field: string, value: string): void {
+  if (GLOB_UNSAFE.test(value)) {
+    throw new ToolValidationError(`${field} must not contain any of * ? [ ] / or a backslash`, { path: field, details: { field, value } });
+  }
+}
+
+/** The file name of a returned path; for a file inside a container image ("disk.d64#GAME.PRG") only the part after the last "#". */
+function baseName(candidate: string): string {
+  return candidate.split(/[\\/#]/).pop() ?? candidate;
+}
+
 function buildSearchPattern(root: string, extension?: string, nameContains?: string): string {
   const trimmed = root.replace(/\/+$/, "");
   const name = nameContains ? `*${nameContains}*` : "*";
@@ -368,6 +382,8 @@ export const tools: ToolDefinition[] = [
       try {
         const parsed = findPathsByNameArgsSchema.parse(args ?? {});
         const root = parsed.root ?? "/";
+        assertGlobSafe("nameContains", parsed.nameContains as string);
+        for (const e of (parsed.extensions ?? []) as string[]) assertGlobSafe("extensions", e);
         const needle = parsed.caseInsensitive ? (parsed.nameContains as string).toLowerCase() : (parsed.nameContains as string);
 
         const exts = (parsed.extensions ?? []) as string[];
@@ -383,7 +399,7 @@ export const tools: ToolDefinition[] = [
           if (Array.isArray(info)) {
             for (const p of info) {
               if (typeof p !== "string") continue;
-              const name = parsed.caseInsensitive ? p.toLowerCase() : p;
+              const name = parsed.caseInsensitive ? baseName(p).toLowerCase() : baseName(p);
               if (name.includes(needle) && !seen.has(p)) {
                 seen.add(p);
                 results.push(p);
@@ -393,7 +409,7 @@ export const tools: ToolDefinition[] = [
           } else if (info && typeof info === "object" && Array.isArray((info as any).paths)) {
             for (const p of (info as any).paths) {
               if (typeof p !== "string") continue;
-              const name = parsed.caseInsensitive ? p.toLowerCase() : p;
+              const name = parsed.caseInsensitive ? baseName(p).toLowerCase() : baseName(p);
               if (name.includes(needle) && !seen.has(p)) {
                 seen.add(p);
                 results.push(p);
@@ -560,6 +576,8 @@ export const tools: ToolDefinition[] = [
           const parsed = findAndRunProgramArgsSchema.parse(args ?? {});
           const root = parsed.root ?? "/";
           const caseInsensitive = parsed.caseInsensitive !== false;
+          assertGlobSafe("nameContains", parsed.nameContains as string);
+          for (const e of (parsed.extensions ?? []) as string[]) assertGlobSafe("extensions", e);
           const extensions = ((parsed.extensions && parsed.extensions.length > 0) ? parsed.extensions : ["prg", "crt"]) as string[];
           const needle = caseInsensitive ? (parsed.nameContains as string).toLowerCase() : parsed.nameContains as string;
           const seen = new Set<string>();
@@ -572,7 +590,7 @@ export const tools: ToolDefinition[] = [
               const paths = extractPaths(info);
               for (const raw of paths) {
                 if (typeof raw !== "string" || raw.length === 0) continue;
-                const normalised = normalisePath(raw, caseInsensitive);
+                const normalised = normalisePath(baseName(raw), caseInsensitive);
                 if (!normalised.includes(needle)) continue;
                 if (seen.has(raw)) continue;
                 const extCandidate = extractExtension(raw);
