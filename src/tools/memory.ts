@@ -267,6 +267,9 @@ async function readRange(ctx: ToolExecutionContext, start: number, length: numbe
   return Buffer.concat(chunks);
 }
 
+/** BASIC text lives below the BASIC ROM at $A000, so a longer program range cannot be real. */
+const MAX_BASIC_PROGRAM_BYTES = 0xa000;
+
 async function executeListBasic(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     listBasicArgsSchema.parse(rawArgs ?? {});
@@ -284,6 +287,11 @@ async function executeListBasic(rawArgs: unknown, ctx: ToolExecutionContext): Pr
       const pointers = await readRange(ctx, 0x002b, 4, owned.facade);
       start = pointers[0]! | (pointers[1]! << 8);
       end = pointers[2]! | (pointers[3]! << 8);
+      if (end - start > MAX_BASIC_PROGRAM_BYTES) {
+        // Checked before the image read so a garbage pointer does not cost many paused REST reads.
+        const fmtPointer = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+        throw new ToolExecutionError("BASIC end pointer is implausible", { details: { start: fmtPointer(start), end: fmtPointer(end) } });
+      }
       image = end <= start ? new Uint8Array() : await readRange(ctx, start, end - start, owned.facade);
     } finally {
       if (canPause) {

@@ -114,3 +114,22 @@ test("list_basic holds one owned pause for the whole read on c64u and none on vi
   assert.equal(bad.isError, true);
   assert.deepEqual(failing.calls.map((c) => c[0]), ["acquire", "release"]);
 });
+
+test("list_basic rejects an implausible end pointer before reading the program and still resumes", async () => {
+  const memory = new Uint8Array(0x10000);
+  memory[0x2b] = 0x01; memory[0x2c] = 0x08; // start $0801
+  memory[0x2d] = 0x01; memory[0x2e] = 0xf0; // end $F001, a 60 KB range
+  const reads = [];
+  const events = [];
+  const base = clientWith(memory);
+  const client = {
+    async pause() { events.push("pause"); return { success: true }; },
+    async resume() { events.push("resume"); return { success: true }; },
+    async readMemory(address, length) { reads.push(address); return base.readMemory(address, length); },
+  };
+  const res = await toolRegistry.invoke("c64_memory", { op: "list_basic" }, { client, rag: {}, logger, platform: { id: "c64u", features: [], limitedFeatures: [] }, setPlatform() {} });
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /end pointer is implausible/);
+  assert.deepEqual(reads, ["$002B"]);
+  assert.deepEqual(events, ["pause", "resume"]);
+});
