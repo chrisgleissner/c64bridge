@@ -31,7 +31,7 @@ Marks: "(unverified)" = inferred or untested. Credit: Upic by Aleksi Eeben (http
 
 - Per picture line: wait for the raster line, resync turbo by writing `$D031` = `$80` then `$8F` (so the CPU resumes at the same sub-slot on every line), then call a generated, page-aligned routine: patch-list loads, a delay loop, then per byte column: load byte, store to `$D020` (low nybble), table lookup `nyb[i] = i >> 4`, store to `$D020` (high nybble). End with two NOPs (without them pixel 383 is lost) and `$D020` = 0.
 - 64 MHz: 63 CPU cycles per phi2 (VIC takes one of 64 sub-slots), 3,969 per PAL line; two pixels per 16 cycles, 16 pixels in 126 cycles; all 384 pixels one dot wide.
-- 48 MHz: 47 cycles per phi2, 2,961 per line; 3 of every 4 pixels are shown (288 effective), some pixels 2 dots wide or off by one dot; free CPU time about three quarters of 64 MHz (ratio estimate, unverified).
+- 48 MHz: 47 cycles per phi2, 2,961 per line; 3 of every 4 pixels are shown (288 effective), some pixels 2 dots wide or off by one dot; free CPU time about three quarters of 64 MHz (measured ratio 0.75: 2,961 against 3,969 cycles per PAL line blanked, 2026-11-13).
 - Never use indexed stores to I/O in the renderer (extra dummy read changes timing); a VIC register read costs one extra sub-slot, a write none.
 - Renderer takes about 82% of a frame at 256 rows. Free CPU cycles per 64 MHz frame, measured on a C64U (50 samples, with a status marker row on):
 

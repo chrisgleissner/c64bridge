@@ -16,6 +16,7 @@ export const RESOURCE_URIS = {
     uci: "c64://ultimate/uci",
     reu: "c64://ultimate/reu",
     upic: "c64://ultimate/upic",
+    bench: "c64://ultimate/bench",
   },
   vice: {
     binaryMonitorSpec: "c64://vice/binary-monitor-spec",
@@ -91,6 +92,7 @@ export const CANONICAL_KNOWLEDGE_RESOURCE_URIS: readonly string[] = Object.freez
   RESOURCE_URIS.ultimate.uci,
   RESOURCE_URIS.ultimate.reu,
   RESOURCE_URIS.ultimate.upic,
+  RESOURCE_URIS.ultimate.bench,
   RESOURCE_URIS.vice.binaryMonitorSpec,
   RESOURCE_URIS.basic.spec,
   RESOURCE_URIS.basic.pitfalls,

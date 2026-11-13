@@ -248,6 +248,18 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.gamedev.index],
         tags: ["ultimate", "upic", "graphics", "modern"],
       },
+      {
+        uri: RESOURCE_URIS.ultimate.bench,
+        name: "Ultimate Turbo Benchmark",
+        description: "Read when you need to measure CPU cycles per frame, badline or sprite cost, REU DMA speed or the reset 1 MHz window on a modern C64U/Ultimate, or to rerun the published measurements.",
+        relativePath: "data/ultimate/bench/README.md",
+        priority: "supplemental",
+        summary: "Benchmark programs, result block layout, decoding formulas and a step-by-step rerun recipe using only c64bridge tools.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.gamedev.architecture, RESOURCE_URIS.io.cia.spec],
+        tags: ["ultimate", "turbo", "benchmark", "measurement"],
+      },
     ],
   },
   {

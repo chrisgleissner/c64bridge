@@ -35,14 +35,25 @@ raster IRQ chain (per frame)           main loop (per frame)
 | Frame rate | 50.125 Hz | 59.826 Hz |
 | Visible text rows | 25 badlines in lines `$30`-`$F7` | same |
 - Older NTSC 6567R56A: 64 x 262 = 16,768 cycles (rare). Detect machine type at runtime (see techniques).
-- Badline: the VIC takes about 40 cycles, CPU keeps about 23 of 63. 25 badlines cost roughly 1,000 cycles per frame. Sprite DMA: about 2 cycles per active sprite per line (21 lines per sprite shape). Border/vblank lines are fully free (about 112 lines PAL).
-- Practical free time for a 1 MHz game: PAL about 17,000-18,000 cycles after badlines and sprites; NTSC about 15,000. Budget the slower NTSC and let PAL idle, or scale by frame count.
+- Badline: the VIC takes about 43 cycles, the CPU keeps about 20 of 63. 25 badlines cost 1,081 cycles per PAL frame (measured 2026-11-13 on an Ultimate 64 Elite and a C64U at 1 MHz, matches VICE). Eight double-height sprites cost a further 802 cycles per frame (about 19 per line over 42 lines). Border/vblank lines are fully free (about 112 lines PAL).
+- Practical free time for a 1 MHz game: PAL about 17,800 cycles with a full text screen and 8 double-height sprites (measured); NTSC about 15,000. Budget the slower NTSC and let PAL idle, or scale by frame count.
 - Typical per-frame costs (estimates, unverified): music player 500-1,500; 8-sprite update 800; software scroll column copy 1,500-3,000; 24-sprite multiplexer sort 1,000-2,500.
 - Measure instead of guessing: set `$D020` to a colour when entering a routine, restore when leaving; the border band height is its cost in raster lines (1 line = 63 cycles PAL). Do this in VICE and capture the frame (`c64_graphics` `capture_frame`).
 
 ### MODERN budget
 - Turbo speeds up the CPU only; VIC, SID and CIA stay on C64 time. Frame cycle count above is unchanged in real time, but the CPU can run many instructions per line. Settings and registers: `c64://ultimate/hardware`.
-- Measured by others at 4 MHz: 3.99x work per frame for RAM-only code; suppressing badline timing adds roughly 6%. Access to cartridge-bus devices and external SID sockets stays at 1 MHz pace. REU DMA time does not shrink with turbo.
+- Measured cycle budgets (CPU cycles per PAL frame, RAM-only loop; measured 2026-11-13 on Ultimate 64 Elite fw 3.15a and C64U fw 1.2.1; rerun: c64://ultimate/hardware#rerun or data/ultimate/bench/README.md):
+
+| Setting | Screen blanked | Screen on | On + 8 dbl-height sprites | On + sprites, `$D031` bit 7 set |
+|---|---|---|---|---|
+| 1 MHz | 19,656 | 18,575 | 17,783 | 19,656 |
+| U64 12 MHz | 235,883 | 222,906 | 213,429 | 235,883 |
+| U64 48 MHz | 923,875 | 873,784 | 836,375 | 922,207 |
+| C64U 14 MHz | 275,197 | 260,057 | 249,001 | 275,197 |
+| C64U 64 MHz | 1,238,387 | 1,170,907 | 1,121,520 | 1,236,708 |
+
+- Reading the table: delivered speed is the setting minus one VIC sub-slot at the top entries (47 of 48, 63 of 64 cycles per PHI2). Badlines cost 5.5% and eight sprites 4.1% at every speed. `$D031` bit 7 set removes both (loss below 0.2%); see hardware for the register. Per PAL line with the screen on: 2,801 cycles at 48 MHz, 3,753 at 64 MHz. Reads of `$D012` run slower than RAM at high speed (42 of 47 at 48 MHz), CIA reads much slower (about 8.8 per PHI2 cycle), `$D020` writes at full speed.
+- REU DMA does not scale like the CPU: 1 B/us at 1 MHz, about 5.1 (stash) / 3.6 (fetch) B/us at 48 MHz on the U64 and 7.8 / 4.3 at 64 MHz on the C64U (see `c64://ultimate/reu`). Cartridge-bus devices and external SID sockets stay at 1 MHz pace.
 - A display-heavy Upic renderer at top speed left about 268,000 CPU cycles per frame for game logic (240 rows). Use that order of magnitude only for Upic designs; for ordinary VIC games turbo mostly buys software rendering, bigger worlds and pre-shifted data built at runtime.
 - Design rule: make game speed depend on frame count, not on instruction count, so the game plays identically at 1 MHz and turbo. Offer turbo as headroom for effects, never as a requirement (unless the Upic target says so).
 - Never do blocking UCI calls inside a frame; run them as a state machine (one step per frame). Details: `c64://ultimate/uci`.

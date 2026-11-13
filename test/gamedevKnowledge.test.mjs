@@ -23,6 +23,7 @@ const GAMEDEV_URIS = [
   RESOURCE_URIS.ultimate.uci,
   RESOURCE_URIS.ultimate.reu,
   RESOURCE_URIS.ultimate.upic,
+  RESOURCE_URIS.ultimate.bench,
 ];
 
 test("game development and Ultimate resources are listed with usable descriptions", () => {
