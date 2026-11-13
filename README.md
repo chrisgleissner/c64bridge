@@ -750,7 +750,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **35 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **35 resources**, and **11 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -1037,6 +1037,7 @@ Grouped entry point for reading and updating selected VICE resources.
 | `basic-program` | Route bespoke Commodore BASIC v2 requests to the canonical BASIC skill. |
 | `cross-platform-demo` | Route quick visible demo requests to the cross-platform demo skill. |
 | `drive-manager` | Route disk-image and drive-state requests to the canonical drive skill. |
+| `game-development` | Route requests to write, port or extend a C64 game to the game development skill and the c64://gamedev/index reading plan. |
 | `graphics-demo` | Route graphics requests to the canonical graphics skill. |
 | `hello-world` | Route ultra-fast hello-world and smoke-test requests to the canonical greeting skill. |
 | `memory-debug` | Route reversible memory inspection or patching work to the canonical memory skill. |

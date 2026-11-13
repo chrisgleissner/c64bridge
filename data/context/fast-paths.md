@@ -19,6 +19,10 @@ Use these routing shortcuts when the user wants a quick visible or audible resul
 - Treat requests such as `vice: write a small BASIC program that clears the screen and prints HELLO VICE` as unambiguous; do not spend extra turns re-reading README sections, MCP manifests, or BASIC references before executing.
 - Fall back to `.github/skills/basic-program/SKILL.md` only when the user asks for custom program logic, hardware-specific behavior, or deeper debugging.
 
+## Game Development
+
+- Route requests to write, port or extend a C64 game to `.github/skills/game-development/SKILL.md`; read `c64://gamedev/index` first (modern Ultimate by default, or stock C64) and only the resources it lists.
+
 ## Quick Music Demo
 
 - Route recognizable demo-tune requests to `.github/skills/sid-music/SKILL.md`.

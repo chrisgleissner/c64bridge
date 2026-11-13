@@ -140,6 +140,7 @@ Keyboard menu navigation is reserved for device features with no REST equivalent
 | Graphics workflow | `.github/skills/graphics-demo/SKILL.md` |
 | Memory inspection or patching | `.github/skills/memory-debug/SKILL.md` |
 | Disk and drive management | `.github/skills/drive-manager/SKILL.md` |
+| Game development (modern Ultimate by default, or stock C64) | `.github/skills/game-development/SKILL.md` |
 | Existing software launch | `.github/skills/software-launch/SKILL.md` |
 | Printer workflow | `.github/skills/printer-job/SKILL.md` |
 | Streaming workflow | `.github/skills/stream-control/SKILL.md` |
@@ -149,6 +150,7 @@ Keyboard menu navigation is reserved for device features with no REST equivalent
 
 Use ListResources to discover built-in knowledge, then read specific URIs to enrich context before coding:
 
+- `c64://gamedev/index` — start here for any C64 game request (modern Ultimate by default, or stock C64); it lists which of `c64://gamedev/{architecture,techniques,toolchain}` and `c64://ultimate/{hardware,uci,reu,upic}` to read
 - `c64://basic/spec` — BASIC v2 tokens, syntax, device I/O
 - `c64://basic/rom-routines` — BASIC ROM routines, parser/evaluator helpers, numeric/string machinery
 - `c64://assembly/6510-spec` — 6510 opcodes, addressing, zero-page strategy
