@@ -10,7 +10,6 @@ import { resolve as resolvePath, join as joinPath } from "node:path";
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { sleep, formatTimestampSpec } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
-import { Jimp } from "jimp";
 import type { CapturedFrame } from "../../streamCapture.js";
 import { withDiagnosticSpan } from "../../diagnostics.js";
 import { stripHexByteSeparators } from "../hex.js";
@@ -173,6 +172,7 @@ function rgbaToJimpColour(red: number, green: number, blue: number, alpha = 255)
 }
 
 async function writeCapturedFramePng(frame: CapturedFrame, filePath: string): Promise<void> {
+  const { Jimp } = await import("jimp");
   const image = new Jimp({ width: frame.width, height: frame.height, color: C64_SCREENSHOT_PALETTE[0] });
   const totalPixels = frame.width * frame.height;
 

@@ -21,7 +21,6 @@ import {
   type GroupedOperationConfig,
   type GenericOperationMap,
 } from "./utils.js";
-import { Jimp } from "jimp";
 import { jsonResult } from "../responses.js";
 import { VIC_PALETTE } from "../../vicBitmap.js";
 import type { ToolResponseContentImage } from "../types.js";
@@ -118,6 +117,7 @@ export async function frameToPngContent(frame: {
     rgba[i * 4 + 2] = b;
     rgba[i * 4 + 3] = 0xff;
   }
+  const { Jimp } = await import("jimp");
   const image = new Jimp({ width, height, data: rgba });
   const png = await image.getBuffer("image/png");
   return { type: "image", data: Buffer.from(png).toString("base64"), mimeType: "image/png" };
