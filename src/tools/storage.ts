@@ -67,8 +67,9 @@ const drivesListArgsSchema = createNoArgsSchema(
 );
 
 const driveIdentifierSchema = stringSchema({
-  description: "Drive identifier such as drive8, drive9, or unit name defined in the Ultimate UI.",
+  description: "Drive identifier: a, b, softiec (or \"IEC Drive\"), or a bus number such as 8 or drive8.",
   minLength: 1,
+  pattern: /^\s*(?:[Aa]|[Bb]|[Ss][Oo][Ff][Tt][Ii][Ee][Cc]|[Ii][Ee][Cc] [Dd][Rr][Ii][Vv][Ee]|(?:[Dd][Rr][Ii][Vv][Ee])?\s*[0-9]+)\s*$/,
 });
 
 const diskImagePathSchema = stringSchema({

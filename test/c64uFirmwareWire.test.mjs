@@ -307,3 +307,15 @@ test("the C64U backend endpoint is the endpoint loadConfig resolves", async () =
     assert.equal(facade.getBaseUrl(), loadConfig().baseUrl);
   });
 });
+
+test("C64U drive ids that are not a, b, softiec or a bus number are rejected before any request", async (t) => {
+  const server = await startFirmwareWireServer();
+  t.after(() => server.close());
+  const facade = await facadeFor(server);
+  const hostile = ["x/../../machine:poweroff?", "../machine", "a/b", "a?x=1", "a%2F..", "foo"];
+  for (const id of hostile) {
+    await assert.rejects(() => facade.driveMount(id, "/Usb0/demo.d64"), /Invalid drive/, `mount ${id}`);
+    await assert.rejects(() => facade.driveReset(id), /Invalid drive/, `reset ${id}`);
+  }
+  assert.deepEqual(server.requests, [], "no request may reach the device for an invalid drive id");
+});

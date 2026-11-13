@@ -523,7 +523,7 @@ class C64uBackend implements C64Facade {
     if (FIRMWARE_DRIVE_IDS.has(lower)) return lower;
     if (lower === SOFT_IEC_LISTING_ID) return "softiec";
     const match = /^(?:drive)?\s*(\d+)$/.exec(lower);
-    if (!match) return drive;
+    if (!match) throw new Error(`Invalid drive '${drive}': use a, b, softiec or a bus number such as drive8`);
     const busId = Number(match[1]);
     let listed: Array<{ id: string; busId: number; enabled: boolean }> = [];
     try {
@@ -541,7 +541,7 @@ class C64uBackend implements C64Facade {
       const known = listed.length > 0 ? listed.map((entry) => `${entry.id}=${entry.busId}`).join(", ") : "a=8, b=9";
       throw new Error(`No drive found for '${drive}' (bus IDs: ${known})`);
     }
-    return resolved;
+    return encodeURIComponent(resolved);
   }
   async drivesList(): Promise<unknown> {
     const entries = await this.driveEntries();
