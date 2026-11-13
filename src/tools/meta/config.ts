@@ -39,13 +39,20 @@ function valuesEqual(wanted: unknown, actual: unknown): boolean {
 }
 
 /** Items of the snapshot payload ({ category: { item: value } }) whose value differs from the device. */
-function changedConfigItems(payload: Record<string, object>, current: Record<string, unknown>): Record<string, Record<string, unknown>> {
+function changedConfigItems(
+  payload: Record<string, object>,
+  current: Record<string, unknown>,
+  original: Record<string, unknown>,
+): Record<string, Record<string, unknown>> {
   const changes: Record<string, Record<string, unknown>> = {};
   for (const [category, items] of Object.entries(payload)) {
     if (!items || typeof items !== "object" || Array.isArray(items)) continue;
     const live = current[category];
     const liveItems = live && typeof live === "object" && !Array.isArray(live) ? live as Record<string, unknown> : {};
+    const originalCategory = original[category] as Record<string, unknown> | undefined;
     for (const [item, value] of Object.entries(items as Record<string, unknown>)) {
+      // A redacted credential was removed from the payload; it is never compared or written.
+      if (originalCategory && JSON.stringify(originalCategory[item]) !== JSON.stringify(value)) continue;
       if (!Object.prototype.hasOwnProperty.call(liveItems, item) || !valuesEqual(value, liveItems[item])) {
         (changes[category] ??= {})[item] = value;
       }
@@ -130,7 +137,7 @@ export const tools: ToolDefinition[] = [
           }
           const client = ctx.client as any;
           const current = (await captureConfigSnapshot(client, { includeSecretValues: true })).categories;
-          const changes = changedConfigItems(payload, current);
+          const changes = changedConfigItems(payload, current, validateSnapshotCategories(snapshot.categories));
           const changedItems = countItems(changes);
           const categories = Object.keys(changes);
           if (categories.length === 0) {

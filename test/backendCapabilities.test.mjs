@@ -360,6 +360,7 @@ test("flash save failure after restore is reported honestly", async () => withDi
   const file = path.join(dir, "snapshot.json");
   await fs.writeFile(file, JSON.stringify({ categories: { Audio: { Volume: 80 } } }));
   const result = await toolRegistry.invoke("c64_config", { op: "restore", path: file, applyToFlash: true }, context("c64u", {
+    async configsList() { return { categories: ["Audio"] }; }, async configGet() { return { Volume: 10 }; },
     async configBatchUpdate() { return { success: true }; }, async configSaveToFlash() { return { success: false, details: { reason: "flash failed" } }; },
   }));
   assert.equal(result.isError, true);

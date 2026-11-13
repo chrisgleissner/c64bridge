@@ -776,7 +776,7 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 | `load_flash` | Load configuration from flash storage. | — | `category` | ✅ | ✅ |  |
 | `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |  |
 | `reset_defaults` | Reset firmware configuration to factory defaults. | — | `category` | ✅ | ✅ |  |
-| `restore` | Restore configuration from a snapshot file. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
+| `restore` | Restore configuration from a snapshot file. Writes only the items that differ from the device; if a category is refused (firmware 3.15a answers 403 for some), the other categories are still restored and the result is an error naming the failed categories. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
 | `save_flash` | Persist the current configuration to flash storage. | — | `category` | ✅ | ✅ |  |
 | `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | ✅ | ✅ | ✅ |
 | `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ |  |

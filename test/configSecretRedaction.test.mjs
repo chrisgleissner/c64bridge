@@ -107,11 +107,12 @@ test("config snapshot file redacts credentials, other values unchanged, restore 
   });
   assert.deepEqual(content.categories.Audio, { Volume: { Audio: { Volume: "10" } } });
 
+  FIRMWARE["Network settings"].Hostname = "changed-host";
   const restore = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file }, ctx);
+  FIRMWARE["Network settings"].Hostname = "c64u";
   assert.equal(restore.metadata?.success, true);
   assert.equal(JSON.stringify(batches[0]).includes("***"), false, "placeholder must never be written to the device");
-  assert.deepEqual(batches[0]["Network settings"].Hostname, { "Network settings": { Hostname: "c64u" } });
-  assert.deepEqual(batches[0]["Network settings"]["Network Password"], { "Network settings": {} });
+  assert.deepEqual(batches[0], { "Network settings": { Hostname: { "Network settings": { Hostname: "c64u" } } } });
 
   const { file: plainFile } = tmpPath("config", "config-secret-snapshot-plain.json");
   await metaModule.invoke(
