@@ -658,14 +658,21 @@ test("R-05 log.txt is capped, only changed tasks are rewritten and no temporary 
     assert.equal(started.metadata?.success, true);
     assert.equal(started.structuredContent.data.task.id, "0002_big");
     await waitForTaskCompletion({ invoke: (name, args, c) => tool(name).execute(args, c) }, "big", ctx);
-    // The task is marked completed before its final log line and task.json are written,
-    // so wait until those writes have finished (no .tmp file and the final log line present).
+    // The task is marked completed before its final log line and task.json are written.
+    // The last file written is task.json (after the log line and tasks.json), so its
+    // completed status on disk means every write, including the rename, has finished.
     const tmpFiles = async () => (await fs.readdir(`${dir}/tasks/background/0002_big`)).concat(await fs.readdir(dir)).filter((name) => name.endsWith(".tmp"));
-    for (let waited = 0; waited < 2000; waited += 20) {
-      const done = (await tmpFiles()).length === 0
-        && (await fs.readFile(`${dir}/tasks/background/0002_big/log.txt`, "utf8")).includes("completed iterations=1");
-      if (done) break;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    const taskJsonCompleted = async () => {
+      try {
+        return JSON.parse(await fs.readFile(`${dir}/tasks/background/0002_big/task.json`, "utf8")).status === "completed";
+      } catch {
+        return false; // not written yet
+      }
+    };
+    const deadline = Date.now() + 10_000;
+    while (!(await taskJsonCompleted())) {
+      assert.ok(Date.now() < deadline, "task.json never reached the completed state");
+      await new Promise((resolve) => setImmediate(resolve));
     }
 
     const log = await fs.readFile(`${dir}/tasks/background/0002_big/log.txt`, "utf8");
