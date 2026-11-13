@@ -1,4 +1,4 @@
-import { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
 import { registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
@@ -24,6 +24,30 @@ function redactHeaders(headers: AxiosRequestConfig["headers"] | undefined): Axio
   ])) as AxiosRequestConfig["headers"];
 }
 
+/** How long requests fail immediately after a transport-level failure before the next one probes the device again. */
+export const DEVICE_DOWN_BACKOFF_MS = 3_000;
+
+/** Raised without sending a request while a device is marked down after a transport failure. */
+export class DeviceUnreachableError extends Error {
+  readonly retryInMs: number;
+  constructor(baseUrl: string | undefined, retryInMs: number) {
+    super(`Device unreachable${baseUrl ? ` at ${baseUrl}` : ""}: the previous request got no response; not sending more requests for ${Math.max(1, Math.ceil(retryInMs / 1000))} s`);
+    this.name = "DeviceUnreachableError";
+    this.retryInMs = retryInMs;
+  }
+}
+
+const TRANSPORT_FAILURE_CODES = new Set([
+  "ECONNABORTED", "ETIMEDOUT", "ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH",
+  "ENOTFOUND", "EAI_AGAIN", "EPIPE", "ERR_NETWORK", "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+/** True for a failure where the device sent no HTTP response (timeout, refused, reset). HTTP error statuses are not transport failures. */
+export function isTransportFailure(error: unknown): boolean {
+  if (!axios.isAxiosError(error) || error.response) return false;
+  return typeof error.code === "string" && TRANSPORT_FAILURE_CODES.has(error.code);
+}
+
 /**
  * First-in first-out gate that lets one operation run at a time. The Ultimate
  * firmware serves REST requests on a single thread, so every request to one
@@ -45,6 +69,25 @@ export class RequestQueue {
   }
 
   private tail: Promise<void> = Promise.resolve();
+  private downUntil = 0;
+  private downBaseUrl: string | undefined;
+
+  /** Mark the device down for the back-off period after a transport-level failure. */
+  markDown(baseUrl?: string, backoffMs = DEVICE_DOWN_BACKOFF_MS): void {
+    this.downUntil = Date.now() + backoffMs;
+    this.downBaseUrl = baseUrl;
+  }
+
+  /** Clear the down state after a response or a successful probe. */
+  markUp(): void {
+    this.downUntil = 0;
+  }
+
+  /** Throws DeviceUnreachableError while the back-off period lasts. */
+  assertUp(): void {
+    const remaining = this.downUntil - Date.now();
+    if (remaining > 0) throw new DeviceUnreachableError(this.downBaseUrl, remaining);
+  }
 
   /** Resolves when all earlier holders have released; call the returned function exactly once. */
   async acquire(): Promise<() => void> {
@@ -107,8 +150,25 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
     // serialised).
     const instance = http.instance;
     const sendRequest = instance.request.bind(instance);
+    //
+    // After a transport failure the device is marked down for a short back-off
+    // period. Requests that reach the front of the queue in that period fail at
+    // once instead of each waiting for its own timeout. A response of any HTTP
+    // status shows the device is up.
+    const baseUrl = typeof config?.baseURL === "string" ? config.baseURL : undefined;
     instance.request = ((requestConfig: AxiosRequestConfig) =>
-      queue.run(() => sendRequest(requestConfig))) as typeof instance.request;
+      queue.run(async () => {
+        queue.assertUp();
+        try {
+          const response = await sendRequest(requestConfig);
+          queue.markUp();
+          return response;
+        } catch (error) {
+          if (isTransportFailure(error)) queue.markDown(baseUrl);
+          else if (axios.isAxiosError(error) && error.response) queue.markUp();
+          throw error;
+        }
+      })) as typeof instance.request;
   }
 
   http.instance.interceptors.response.use(

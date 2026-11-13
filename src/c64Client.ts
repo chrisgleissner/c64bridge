@@ -343,6 +343,9 @@ function validateMemoryRange(address: number, length: number): void {
   }
 }
 
+/** Capability probes use a short timeout so an offline device does not hold the request queue for a full request timeout. */
+const CAPABILITY_PROBE_TIMEOUT_MS = 2_000;
+
 export class C64Client {
   private readonly baseUrl: string;
   private readonly http: HttpClient<unknown>;
@@ -437,7 +440,7 @@ export class C64Client {
 
     let probe = this.machineInputCapabilityProbes.get(facade.type);
     if (!probe) {
-      probe = facade.getInputState()
+      probe = facade.getInputState({ timeoutMs: CAPABILITY_PROBE_TIMEOUT_MS })
         .then(() => "available" as const)
         .catch((error) => isMissingEndpoint(error) ? "unavailable" as const : "unknown" as const);
       this.machineInputCapabilityProbes.set(facade.type, probe);

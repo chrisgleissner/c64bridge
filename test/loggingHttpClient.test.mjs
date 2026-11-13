@@ -355,3 +355,56 @@ test("resolvePath prefers url over baseURL", () => {
   assert.ok(logMsg.includes("/specific"));
   assert.ok(!logMsg.includes("http://base") || logMsg.includes("/specific"));
 });
+
+test("an unresponsive device fails queued requests fast instead of one timeout each", async () => {
+  const http = await import("node:http");
+  const { RequestQueue, DeviceUnreachableError } = await import("../src/loggingHttpClient.js");
+  const sockets = new Set();
+  let received = 0;
+  const server = http.createServer(() => { received += 1; /* never answer */ });
+  server.on("connection", (socket) => { sockets.add(socket); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseURL = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const client = createLoggingHttpClient({ baseURL, timeout: 400 }, createMockLogger(), new RequestQueue());
+    const startedAt = Date.now();
+    const results = await Promise.allSettled([1, 2, 3, 4].map(() => client.instance.request({ url: "/v1/version", method: "GET" })));
+    const elapsed = Date.now() - startedAt;
+    assert.equal(results.every((result) => result.status === "rejected"), true);
+    assert.equal(received, 1, "only the first request may be sent to the unresponsive device");
+    assert.ok(results.slice(1).every((result) => result.reason instanceof DeviceUnreachableError), "later requests fail with the device unreachable error");
+    assert.match(String(results[1].reason.message), /unreachable/i);
+    assert.ok(elapsed < 1_000, `4 requests took ${elapsed} ms, expected about one timeout`);
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("HTTP error statuses do not mark the device down", async () => {
+  const http = await import("node:http");
+  const { RequestQueue } = await import("../src/loggingHttpClient.js");
+  let received = 0;
+  const server = http.createServer((_req, res) => { received += 1; res.writeHead(500); res.end("{}"); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseURL = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const client = createLoggingHttpClient({ baseURL, timeout: 400 }, createMockLogger(), new RequestQueue());
+    for (let i = 0; i < 3; i += 1) {
+      await assert.rejects(() => client.instance.request({ url: "/x", method: "GET" }), (error) => error.response?.status === 500);
+    }
+    assert.equal(received, 3);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("the device is probed again after the back-off period", async () => {
+  const { RequestQueue, DEVICE_DOWN_BACKOFF_MS } = await import("../src/loggingHttpClient.js");
+  const queue = new RequestQueue();
+  queue.markDown("http://x", 20);
+  assert.throws(() => queue.assertUp(), /unreachable/i);
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  queue.assertUp();
+  assert.ok(DEVICE_DOWN_BACKOFF_MS >= 1_000 && DEVICE_DOWN_BACKOFF_MS <= 5_000);
+});

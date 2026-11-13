@@ -155,7 +155,7 @@ export interface C64Facade {
   powerCycle(): Promise<RunResult>;
   menuButton(): Promise<RunResult>;
   readMenuScreen(): Promise<Uint8Array>;
-  getInputState(): Promise<MachineInputState>;
+  getInputState(options?: { timeoutMs?: number }): Promise<MachineInputState>;
   sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState>;
   debugregRead(): Promise<{ success: boolean; value?: string; details?: unknown }>;
   debugregWrite(value: string): Promise<{ success: boolean; value?: string; details?: unknown }>;
@@ -401,7 +401,13 @@ class C64uBackend implements C64Facade {
   }
 
   async ping(): Promise<boolean> {
-    return this.requestQueue.run(() => probeUltimateReachable(this.baseUrl, 2000, this.networkPassword));
+    // A probe always goes out, even during the back-off period, and updates the down state.
+    return this.requestQueue.run(async () => {
+      const reachable = await probeUltimateReachable(this.baseUrl, 2000, this.networkPassword);
+      if (reachable) this.requestQueue.markUp();
+      else this.requestQueue.markDown(this.baseUrl);
+      return reachable;
+    });
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
@@ -489,9 +495,9 @@ class C64uBackend implements C64Facade {
     const body = response.data as unknown;
     return body instanceof ArrayBuffer ? new Uint8Array(body) : extractBytes(body);
   }
-  async getInputState(): Promise<MachineInputState> {
+  async getInputState(options?: { timeoutMs?: number }): Promise<MachineInputState> {
     this.requireC64u("getInputState");
-    const response = await this.api.v1.machineInputList(":input");
+    const response = await this.api.v1.machineInputList(":input", options?.timeoutMs ? { timeout: options.timeoutMs } as never : {});
     return response.data;
   }
   async sendInputEvents(batch: MachineInputBatch): Promise<MachineInputState> {
