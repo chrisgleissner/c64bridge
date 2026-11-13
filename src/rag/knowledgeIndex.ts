@@ -3,31 +3,70 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CANONICAL_KNOWLEDGE_RESOURCE_URIS, PLATFORM_RESOURCE_URI, RESOURCE_URIS } from "./resourceUris.js";
 
+const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/** Splits one CSV record, honouring RFC 4180 quoting (commas and doubled quotes inside quoted fields). */
+export function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i]!;
+    if (quoted) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      fields.push(field);
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  return fields;
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|");
+}
+
+let charsetQuickrefCache: string | undefined;
+
 export function generateCharsetQuickref(): string {
-  const csvPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data/graphics/character-set.csv");
+  if (charsetQuickrefCache !== undefined) return charsetQuickrefCache;
+  const csvPath = join(PACKAGE_ROOT, "data/graphics/character-set.csv");
   const csvContent = readFileSync(csvPath, "utf-8");
-  const lines = csvContent.trim().split("\n");
-  const headers = lines[0].split(",");
-  
+  const lines = csvContent.trim().split(/\r?\n/);
+
   let markdown = "# PETSCII Character Set Reference\n\n";
   markdown += "Complete reference of C64 character codes, screen codes, and glyphs.\n\n";
   markdown += "## Character Code Table\n\n";
   markdown += "| Screen Code | PETSCII | Char | Name | Keyboard |\n";
   markdown += "|-------------|---------|------|------|----------|\n";
-  
+
   for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(",");
+    const parts = parseCsvLine(lines[i]!);
     if (parts.length < 8) continue;
-    
+
     const screenCode = parts[0];
     const petsciiCode = parts[2];
     const char = parts[4] || " ";
     const name = parts[6] || "";
     const keyboard = parts[7] || "";
-    
-    markdown += `| ${screenCode} | ${petsciiCode} | ${char} | ${name} | ${keyboard} |\n`;
+
+    markdown += `| ${markdownCell(screenCode!)} | ${markdownCell(petsciiCode!)} | ${markdownCell(char)} | ${markdownCell(name)} | ${markdownCell(keyboard)} |\n`;
   }
-  
+
   markdown += "\n## Usage Notes\n\n";
   markdown += "- **Screen Code**: Value used in screen memory ($0400-$07E7)\n";
   markdown += "- **PETSCII Code**: Value used in BASIC strings and CHR$() function\n";
@@ -38,6 +77,7 @@ export function generateCharsetQuickref(): string {
   markdown += "- Digits: PETSCII $30-$39 (0-9)\n";
   markdown += "- Graphics characters: Screen codes $60-$7F and $E0-$FF\n";
   
+  charsetQuickrefCache = markdown;
   return markdown;
 }
 
