@@ -494,10 +494,6 @@ export const tools: ToolDefinition[] = [
         const newCounter = String(currentMax + 1).padStart(4, "0");
         const newId = `${newCounter}_${parsed.name}`;
 
-        // Pin the facade now: a later c64_select_backend must not retarget a running task.
-        const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
-        const backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
-
         const task: BackgroundTask = {
           id: existing && existing.status !== "running" ? existing.id : newId,
           name: parsed.name,
@@ -514,12 +510,26 @@ export const tools: ToolDefinition[] = [
           lastError: null,
           nextRunAt: null,
           folder: getBackgroundTaskFolderRelative(existing && existing.status !== "running" ? existing.id : newId),
-          backendId,
+          backendId: null,
           _timer: null,
-          _facade: pinnedFacade,
+          _facade: undefined,
         };
 
+        // Reserve the name and id before the first await below. Everything above is synchronous,
+        // so a concurrent start sees this task as running and cannot reuse its name or id.
         TASKS.set(task.name, task);
+        try {
+          // Pin the facade now: a later c64_select_backend must not retarget a running task.
+          const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
+          task._facade = pinnedFacade;
+          task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
+        } catch (pinError) {
+          if (TASKS.get(task.name) === task) {
+            if (existing) TASKS.set(existing.name, existing);
+            else TASKS.delete(task.name);
+          }
+          throw pinError;
+        }
         // Ensure per-task structure and seed files
         await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
         await writeTaskJson(task);

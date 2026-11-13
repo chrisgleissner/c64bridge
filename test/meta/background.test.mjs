@@ -716,3 +716,50 @@ test("stop_all_background_tasks counts only the tasks that were running", async 
     restore();
   }
 });
+
+test("concurrent starts of the same name create one task, and distinct names get distinct ids", async () => {
+  const { tool, restore } = await freshBackground("concurrent-start", "background-concurrent-start");
+  try {
+    const ctx = {
+      client: {
+        async pinFacade() { await new Promise((resolve) => setTimeout(resolve, 20)); return undefined; },
+        async readScreen() { return "READY."; },
+      },
+      logger: createLogger(),
+    };
+    const start = (name) => tool("start_background_task").execute({ name, operation: "read_screen", intervalMs: 60_000 }, ctx);
+    const same = await Promise.all([start("dup"), start("dup"), start("dup")]);
+    assert.equal(same.filter((res) => res.metadata?.success === true).length, 1);
+    assert.equal(same.filter((res) => res.isError === true).length, 2);
+    const distinct = await Promise.all([start("a"), start("b"), start("c")]);
+    const ids = distinct.map((res) => res.structuredContent.data.task.id);
+    assert.equal(new Set(ids).size, 3, ids.join(","));
+    const list = await tool("list_background_tasks").execute({}, ctx);
+    assert.equal(list.structuredContent.data.tasks.filter((entry) => entry.name === "dup").length, 1);
+    await tool("stop_all_background_tasks").execute({}, ctx);
+  } finally {
+    restore();
+  }
+});
+
+test("a failed facade pin releases the reserved task name", async () => {
+  const { tool, restore } = await freshBackground("pin-fail", "background-pin-fail");
+  try {
+    let fail = true;
+    const ctx = {
+      client: {
+        async pinFacade() { if (fail) throw new Error("no backend"); return undefined; },
+        async readScreen() { return "READY."; },
+      },
+      logger: createLogger(),
+    };
+    const first = await tool("start_background_task").execute({ name: "pin", operation: "read_screen", intervalMs: 60_000 }, ctx);
+    assert.equal(first.isError, true);
+    fail = false;
+    const second = await tool("start_background_task").execute({ name: "pin", operation: "read_screen", intervalMs: 60_000 }, ctx);
+    assert.equal(second.metadata?.success, true);
+    await tool("stop_all_background_tasks").execute({}, ctx);
+  } finally {
+    restore();
+  }
+});
