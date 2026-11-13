@@ -120,11 +120,52 @@ export function resolveHostPath(input: string, options: ResolveHostPathOptions):
   }
   if (options.purpose === "read") {
     const limit = options.maxBytes ?? DEFAULT_MAX_READ_BYTES;
-    let size: number | undefined;
-    try { size = fs.statSync(real).size; } catch { size = undefined; }
-    if (size !== undefined && size > limit) {
-      throw new ToolValidationError(`Host file is too large to read: ${resolved} is ${size} bytes, limit is ${limit} bytes.`, { path: resolved });
+    let stat: fs.Stats | undefined;
+    try { stat = fs.statSync(real); } catch { stat = undefined; }
+    if (stat && !stat.isFile()) {
+      throw new ToolValidationError(`Host path is not a regular file: ${resolved}`, { path: resolved });
+    }
+    if (stat && stat.size > limit) {
+      throw new ToolValidationError(`Host file is too large to read: ${resolved} is ${stat.size} bytes, limit is ${limit} bytes.`, { path: resolved });
     }
   }
   return real;
+}
+
+/**
+ * Resolve a tool-supplied path and read it as a regular file. The file is
+ * opened first (without following a final symbolic link and without blocking
+ * on a FIFO) and the type and size are checked on the opened handle, so the
+ * file cannot be swapped between the check and the read. The size limit is
+ * enforced on the bytes actually read.
+ */
+export async function readHostFile(input: string, options: Omit<ResolveHostPathOptions, "purpose"> = {}): Promise<Buffer> {
+  const real = resolveHostPath(input, { ...options, purpose: "read" });
+  const limit = options.maxBytes ?? DEFAULT_MAX_READ_BYTES;
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+  const handle = await fs.promises.open(real, flags);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      throw new ToolValidationError(`Host path is not a regular file: ${real}`, { path: real });
+    }
+    if (stat.size > limit) {
+      throw new ToolValidationError(`Host file is too large to read: ${real} is ${stat.size} bytes, limit is ${limit} bytes.`, { path: real });
+    }
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for (;;) {
+      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, limit + 1 - total));
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > limit) {
+        throw new ToolValidationError(`Host file is too large to read: ${real} grew beyond the limit of ${limit} bytes.`, { path: real });
+      }
+      chunks.push(chunk.subarray(0, bytesRead));
+    }
+    return Buffer.concat(chunks, total);
+  } finally {
+    await handle.close();
+  }
 }

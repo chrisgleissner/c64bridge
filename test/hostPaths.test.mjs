@@ -214,3 +214,30 @@ test("defaultHostOutputDir falls back to ~/.c64bridge when the working directory
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
+
+test("host reads accept only regular files and read through the opened handle", async () => {
+  if (process.platform === "win32") return;
+  const { execFileSync } = await import("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hostpaths-fifo-"));
+  try {
+    const fifo = path.join(dir, "pipe");
+    execFileSync("mkfifo", [fifo]);
+    // A FIFO reports size 0, so only a file-type check rejects it before a read would block.
+    assert.throws(() => resolveHostPath(fifo, { purpose: "read" }), /not a regular file/);
+    assert.throws(() => resolveHostPath(dir, { purpose: "read" }), /not a regular file/);
+
+    const { readHostFile } = await import("../src/hostPaths.js");
+    await assert.rejects(() => readHostFile(fifo), /not a regular file/);
+
+    const file = path.join(dir, "data.bin");
+    fs.writeFileSync(file, Buffer.from([1, 2, 3, 4]));
+    assert.deepEqual(Array.from(await readHostFile(file)), [1, 2, 3, 4]);
+    await assert.rejects(() => readHostFile(file, { maxBytes: 3 }), /too large/);
+    // Symlinks to regular files inside the allowed roots still resolve to the real file.
+    const link = path.join(dir, "link.bin");
+    fs.symlinkSync(file, link);
+    assert.deepEqual(Array.from(await readHostFile(link)), [1, 2, 3, 4]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

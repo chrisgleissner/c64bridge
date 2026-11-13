@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { resolveHostPath } from "../hostPaths.js";
+import { readHostFile, resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
 import { basicToPrg } from "./translation/basicTokenizer.js";
 import {
@@ -752,7 +752,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       if (parsed.symbolsFile) {
         const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
         try {
-          const content = await fs.promises.readFile(symbolsPath, "utf8");
+          const content = (await readHostFile(symbolsPath)).toString("utf8");
           const syms = parseViceSymbolFile(content);
           setViceSymbols(syms.entries());
           symbolsLoaded = syms.size;

@@ -6,7 +6,7 @@ import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValida
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
-import { resolveHostPath } from "../../hostPaths.js";
+import { readHostFile, resolveHostPath } from "../../hostPaths.js";
 import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
 import { normalizeErrorDetails } from "./util.js";
 
@@ -24,7 +24,7 @@ const configSnapshotAndRestoreArgsSchema = objectSchema({
 
 // JSON.parse errors can quote the start of the file, so only the path is reported.
 async function readSnapshotFile(path: string): Promise<any> {
-  const text = await fs.readFile(path, "utf8");
+  const text = (await readHostFile(path)).toString("utf8");
   try {
     return JSON.parse(text);
   } catch {
