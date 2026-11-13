@@ -168,7 +168,7 @@ export const systemModuleGroup = defineToolModule({
       },
       effectOf: (op, args) => (op === "start_task" ? taskOperationEffect((args as { operation?: unknown }).operation) : undefined),
       tags: ["system", "control", "grouped"],
-      operationPlatforms: { poweroff: ["c64u", "vice"], pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
+      operationPlatforms: { poweroff: ["c64u", "vice"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"] },
       operationToolNames: { poweroff: "poweroff", pause: "pause", resume: "resume", menu: "menu_button", read_menu_screen: "read_menu_screen" },
       examples: [
         {

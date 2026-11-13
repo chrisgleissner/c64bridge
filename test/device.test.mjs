@@ -336,13 +336,34 @@ viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUI
     assert.deepEqual(Array.from(data), Array.from(READY_PATTERN));
   });
 
-  await t.test("pause/resume report unsupported", async () => {
+  await t.test("pause holds the CPU stopped across operations until resume", async () => {
     const pause = await facade.pause();
+    assert.equal(pause.success, true, JSON.stringify(pause));
+    if (server) assert.equal(server.running, false);
+    const connectionsWhilePaused = server?.connectionsOpened;
+    // The jiffy clock at $A0-$A2 does not advance while the CPU is stopped.
+    const first = await facade.readMemory(0xa0, 3);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const second = await facade.readMemory(0xa0, 3);
+    assert.deepEqual(Array.from(second), Array.from(first));
+    if (server) {
+      assert.equal(server.running, false, "operations reuse the held connection and keep the CPU stopped");
+      assert.equal(server.connectionsOpened, connectionsWhilePaused, "no new monitor connection while paused");
+    }
+    assert.equal((await facade.pause()).details?.alreadyPaused, true);
+
     const resume = await facade.resume();
-    assert.equal(pause.success, false);
-    assert.equal(resume.success, false);
-    assert.equal(pause.details?.code, "UNSUPPORTED");
-    assert.equal(resume.details?.code, "UNSUPPORTED");
+    assert.equal(resume.success, true);
+    assert.equal(resume.details?.resumed, true);
+    if (server) assert.equal(server.running, true);
+    assert.equal((await facade.resume()).details?.resumed, false);
+  });
+
+  await t.test("a reset ends a held pause", async () => {
+    assert.equal((await facade.pause()).success, true);
+    await facade.reset();
+    if (server) assert.equal(server.running, true);
+    assert.equal((await facade.resume()).details?.resumed, false);
   });
 
   await t.test("loadPrgFile throws unsupported", async () => {
@@ -1806,13 +1827,6 @@ test("device: ViceBackend reports unsupported operations and emulator metadata",
         return { type: "string", value: name };
       },
     });
-
-    const pause = await backend.pause();
-    const resume = await backend.resume();
-    assert.equal(pause.success, false);
-    assert.equal(resume.success, false);
-    assert.match(String(pause.details?.message ?? ""), /not implemented/i);
-    assert.match(String(resume.details?.message ?? ""), /unavailable/i);
 
     await assert.rejects(() => backend.menuButton(), /not supported/);
     await assert.rejects(() => backend.debugregRead(), /not supported/);

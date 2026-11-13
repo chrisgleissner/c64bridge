@@ -150,6 +150,11 @@ export class ViceClient {
     });
   }
 
+  /** True while the connection is usable: connected, not closed locally and not closed by VICE. */
+  get isOpen(): boolean {
+    return !!this.socket && !this.closing && !this.socket.destroyed && this.socket.readyState === "open";
+  }
+
   close(): void {
     const reason = new Error("VICE monitor connection closed");
     try {

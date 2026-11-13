@@ -968,14 +968,14 @@ Grouped entry point for power, reset, menu, and background task control.
 | --- | --- | --- | --- | --- | --- | --- |
 | `list_tasks` | List known background tasks with status metadata. | — | — | ✅ | ✅ | ✅ |
 | `menu` | Toggle the Ultimate menu button for navigation. | — | — | ✅ | ✅ |  |
-| `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ |  |
+| `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ | ✅ |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | ✅ | ✅ | ✅ |
 | `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. | — | — | ✅ |  | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). | — | — | ✅ | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
-| `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ |  |
+| `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ | ✅ |
 | `start_task` | Start a named background task that runs on an interval. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
 | `stop_all_tasks` | Stop every running background task and persist state. | — | — | ✅ | ✅ | ✅ |
 | `stop_task` | Stop a specific background task and clear its timer. | `name` | — | ✅ | ✅ | ✅ |

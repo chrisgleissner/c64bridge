@@ -77,6 +77,14 @@ export class ViceMockServer {
   /** Output lines of VICE's I/O simulation joyport device per port (0 = port 1). */
   private joyportOutput = [0, 0];
   private readonly sockets = new Set<net.Socket>();
+  /** Test hook: number of monitor connections accepted. */
+  connectionsOpened = 0;
+  /**
+   * Test hook: whether the emulated CPU runs. As in VICE, any command stops it
+   * (the emulator enters the monitor), and exit (0xAA) or closing the
+   * connection lets it run again.
+   */
+  running = true;
 
   constructor(options?: ViceMockServerOptions) {
     this.host = options?.host ?? "127.0.0.1";
@@ -117,9 +125,11 @@ export class ViceMockServer {
 
   private handleSocket(socket: net.Socket): void {
     this.sockets.add(socket);
+    this.connectionsOpened += 1;
     let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     socket.once("close", () => {
       this.sockets.delete(socket);
+      this.running = true;
       buffer = Buffer.alloc(0);
     });
     socket.on("data", (chunk: string | Uint8Array<ArrayBufferLike>) => {
@@ -153,6 +163,7 @@ export class ViceMockServer {
   }
 
   private handleCommand(cmd: number, reqId: number, body: Buffer, socket: net.Socket): Buffer | null {
+    this.running = cmd === 0xAA;
     switch (cmd) {
       case 0x85: // info
         return buildResponse(cmd, reqId);

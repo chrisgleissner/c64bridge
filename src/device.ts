@@ -509,6 +509,13 @@ export class ViceBackend implements C64Facade {
   private startupPromise: Promise<void> | null = null;
   private monitorQueue: Promise<void> = Promise.resolve();
   private lastProcessStart = 0;
+  /**
+   * Monitor connection held open by `c64_system pause`. VICE stops the CPU while a
+   * client is in the monitor and lets it run again on exit (0xAA) or when the client
+   * disconnects, so the pause lasts exactly as long as this connection stays open.
+   * While it is set, every monitor operation runs on it instead of opening its own.
+   */
+  private pausedClient: ViceClient | null = null;
 
   constructor(config: ViceConfig) {
     ViceBackend.ensureCleanupRegistration();
@@ -677,38 +684,84 @@ export class ViceBackend implements C64Facade {
     }
   }
 
-  private async withClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
+  /** Runs `fn` after every earlier monitor operation has finished; operations never overlap. */
+  private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
     const previous = this.monitorQueue;
     let releaseQueue: () => void = () => {};
     this.monitorQueue = new Promise<void>((resolve) => {
       releaseQueue = resolve;
     });
-
     await previous;
     try {
-      if (!this.mockMode) await this.ensureProcess();
-      const client = new ViceClient();
-      if (this.debugEnabled) console.error("[vice-backend] connecting to VICE monitor", { host: this.host, port: this.port });
-      await client.connect(this.port, this.host);
-      if (this.manageProcess && this.lastProcessStart > 0) {
-        const sinceStart = Date.now() - this.lastProcessStart;
-        const settleDelay = 500 - sinceStart;
-        if (settleDelay > 0) {
-          await delay(settleDelay);
-        }
-      }
-      try {
-        if (this.debugEnabled) console.error("[vice-backend] connected to VICE monitor");
-        return await fn(client);
-      } finally {
-        if (options?.resumeOnClose !== false) {
-          await resumeViceMonitor(client);
-        }
-        if (this.debugEnabled) console.error("[vice-backend] closing VICE monitor connection");
-        client.close();
-      }
+      return await fn();
     } finally {
       releaseQueue();
+    }
+  }
+
+  /** The held pause connection, or null when there is none or VICE closed it (the CPU then runs again). */
+  private heldPauseClient(): ViceClient | null {
+    if (this.pausedClient && !this.pausedClient.isOpen) {
+      this.pausedClient.close();
+      this.pausedClient = null;
+    }
+    return this.pausedClient;
+  }
+
+  /** Ends a held pause. Call only inside `exclusive`. */
+  private async releaseHeldPause(): Promise<boolean> {
+    const held = this.pausedClient;
+    if (!held) return false;
+    this.pausedClient = null;
+    try {
+      if (held.isOpen) await held.exitMonitor();
+    } catch {
+      // Closing the connection resumes the CPU as well.
+    } finally {
+      held.close();
+    }
+    return true;
+  }
+
+  private async withClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
+    return this.exclusive(async () => {
+      const held = this.heldPauseClient();
+      if (held) {
+        try {
+          return await fn(held);
+        } finally {
+          // An operation may have sent exit itself (for example continue_execution), which lets
+          // the CPU run. Any command enters the monitor again, so the pause still holds afterwards.
+          if (this.pausedClient === held && held.isOpen) {
+            try { await held.info(); } catch { /* the next operation detects a closed connection */ }
+          }
+        }
+      }
+      return await this.withNewClient(fn, options);
+    });
+  }
+
+  private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
+    if (!this.mockMode) await this.ensureProcess();
+    const client = new ViceClient();
+    if (this.debugEnabled) console.error("[vice-backend] connecting to VICE monitor", { host: this.host, port: this.port });
+    await client.connect(this.port, this.host);
+    if (this.manageProcess && this.lastProcessStart > 0) {
+      const sinceStart = Date.now() - this.lastProcessStart;
+      const settleDelay = 500 - sinceStart;
+      if (settleDelay > 0) {
+        await delay(settleDelay);
+      }
+    }
+    try {
+      if (this.debugEnabled) console.error("[vice-backend] connected to VICE monitor");
+      return await fn(client);
+    } finally {
+      if (options?.resumeOnClose !== false) {
+        await resumeViceMonitor(client);
+      }
+      if (this.debugEnabled) console.error("[vice-backend] closing VICE monitor connection");
+      client.close();
     }
   }
 
@@ -840,6 +893,7 @@ export class ViceBackend implements C64Facade {
     // Overridable only for deterministic tests of the readiness-failure path;
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
+    await this.endPauseBeforeRestart();
     await this.withClient(async (client) => {
       await client.reset();
       const opts = this.debugEnabled
@@ -862,26 +916,42 @@ export class ViceBackend implements C64Facade {
 
   async reboot(): Promise<RunResult> { return this.reset(); }
 
+  /**
+   * Stops the CPU until `resume`: enters the monitor on a connection that stays open.
+   * Other operations run on the same connection meanwhile. A reset, reboot, power
+   * cycle or power-off ends the pause.
+   */
   async pause(): Promise<RunResult> {
-    return {
-      success: false,
-      details: {
-        code: "UNSUPPORTED",
-        message: "VICE pause is not implemented as a durable machine stop; use per-operation monitor access instead.",
-      },
-    };
+    return this.exclusive(async () => {
+      if (this.heldPauseClient()) return { success: true, details: { alreadyPaused: true } };
+      if (!this.mockMode) await this.ensureProcess();
+      const client = new ViceClient();
+      await client.connect(this.port, this.host);
+      try {
+        await client.info(); // any command enters the monitor, which stops the CPU
+      } catch (error) {
+        client.close();
+        throw error;
+      }
+      this.pausedClient = client;
+      return { success: true, details: { paused: true, mechanism: "monitor connection held open" } };
+    });
   }
 
   async resume(): Promise<RunResult> {
-    return {
-      success: false,
-      details: {
-        code: "UNSUPPORTED",
-        message: "VICE resume is unavailable because durable pause is not supported.",
-      },
-    };
+    return this.exclusive(async () => {
+      const resumed = await this.releaseHeldPause();
+      return { success: true, details: resumed ? { resumed: true } : { resumed: false, reason: "not paused" } };
+    });
   }
+
+  /** Ends a held pause before an operation that restarts or stops the machine. */
+  private async endPauseBeforeRestart(): Promise<void> {
+    await this.exclusive(() => this.releaseHeldPause());
+  }
+
   async poweroff(): Promise<RunResult> {
+    await this.endPauseBeforeRestart();
     const key = this.supervisorKey();
     const managedHandle = this.manageProcess ? ViceBackend.supervisors.get(key) : null;
     try {
@@ -906,7 +976,10 @@ export class ViceBackend implements C64Facade {
       return { success: false, details };
     }
   }
-  async powerCycle(): Promise<RunResult> { return this.nuclearReset(); }
+  async powerCycle(): Promise<RunResult> {
+    await this.endPauseBeforeRestart();
+    return this.nuclearReset();
+  }
   async nuclearReset(): Promise<RunResult> {
     if (!this.manageProcess) {
       return {
