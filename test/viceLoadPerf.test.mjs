@@ -72,3 +72,28 @@ test("a reset reports the prompt only after the KERNAL boot has run", async () =
     assert.ok(screen.includes("READY."), "the prompt is on the screen when reset returns");
   }, { bootMs: 700 });
 });
+
+test("readScreen uses one connection and two memory reads", async () => {
+  await withClient(async (client, server) => {
+    const commandsBefore = server.commands.length;
+    const connectionsBefore = server.connectionsOpened;
+    const screen = await client.readScreen();
+    assert.ok(screen.includes("READY."));
+    assert.equal(server.connectionsOpened - connectionsBefore, 1, "one connection");
+    assert.equal(count(server, commandsBefore, CMD_MEM_GET), 2, "one read for the VIC registers and one for the screen");
+  });
+});
+
+test("readScreen follows the VIC registers to a relocated screen", async () => {
+  await withClient(async (client) => {
+    // $D018 = $24 puts the screen at $0800; $DD00 = $03 selects VIC bank 0.
+    await client.writeMemoryRaw(0xd018, Uint8Array.of(0x24));
+    await client.writeMemoryRaw(0xdd00, Uint8Array.of(0x03));
+    await client.writeMemoryRaw(0x0800, Uint8Array.of(0x08, 0x09)); // "HI" in screen codes
+    const detailed = await client.readScreenDetailed();
+    assert.equal(detailed.baseAddress, 0x0800);
+    assert.equal(detailed.charset, "upper");
+    assert.deepEqual(detailed.registers, { d018: 0x24, dd00: 0x03 });
+    assert.ok(detailed.text.startsWith("HI"));
+  });
+});

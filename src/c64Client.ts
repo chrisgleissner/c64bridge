@@ -28,6 +28,7 @@ import {
   type MachineInputBatch,
   type MachineInputState,
   ViceBackend,
+  screenLayoutFromRegisters,
 } from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
@@ -921,17 +922,22 @@ export class C64Client {
    */
   async readScreenDetailed(): Promise<{ text: string; baseAddress: number; charset: "upper" | "lower"; registers?: { d018: number; dd00: number } }> {
     return withDiagnosticSpan("client", "read_screen", {}, async () => {
+      const facade = await this.facadePromise;
+      if (facade.readScreenState) {
+        const state = await facade.readScreenState();
+        const text = screenCodesToAscii(state.bytes, { columns: 40, rows: 25, charset: state.charset });
+        return { text, baseAddress: state.baseAddress, charset: state.charset, ...(state.registers ? { registers: { ...state.registers } } : {}) };
+      }
       let baseAddress = 0x0400;
       let charset: "upper" | "lower" = "upper";
       let registers: { d018: number; dd00: number } | undefined;
       try {
         const d018 = (await this.readMemoryRaw(0xd018, 1))[0];
         const dd00 = (await this.readMemoryRaw(0xdd00, 1))[0];
-        if (d018 !== undefined && dd00 !== undefined && !(d018 === 0 && dd00 === 0)) {
-          registers = { d018, dd00 };
-          baseAddress = (3 - (dd00 & 0x03)) * 0x4000 + ((d018 >> 4) & 0x0f) * 0x0400;
-          charset = (d018 & 0x02) !== 0 ? "lower" : "upper";
-        }
+        const layout = screenLayoutFromRegisters(d018, dd00);
+        baseAddress = layout.baseAddress;
+        charset = layout.charset;
+        if (layout.registers) registers = { ...layout.registers };
       } catch {
         // Keep the defaults when the VIC registers cannot be read.
       }

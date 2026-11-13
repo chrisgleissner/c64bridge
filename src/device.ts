@@ -89,6 +89,29 @@ export type MachineInputBatch = {
 };
 export type MachineInputState = InputStateResponse;
 
+export interface ScreenState {
+  readonly bytes: Uint8Array;
+  readonly baseAddress: number;
+  readonly charset: "upper" | "lower";
+  readonly registers?: { readonly d018: number; readonly dd00: number };
+}
+
+/**
+ * Where the VIC-II shows the text screen: the base comes from $D018 bits 4-7 and the VIC bank
+ * from $DD00 bits 0-1; $D018 bit 1 selects the lower-case set. Registers that are missing, or
+ * both $00 (not a usable VIC state), give the default $0400 and the upper-case set.
+ */
+export function screenLayoutFromRegisters(d018: number | undefined, dd00: number | undefined): Omit<ScreenState, "bytes"> {
+  if (d018 === undefined || dd00 === undefined || (d018 === 0 && dd00 === 0)) {
+    return { baseAddress: 0x0400, charset: "upper" };
+  }
+  return {
+    baseAddress: (3 - (dd00 & 0x03)) * 0x4000 + ((d018 >> 4) & 0x0f) * 0x0400,
+    charset: (d018 & 0x02) !== 0 ? "lower" : "upper",
+    registers: { d018, dd00 },
+  };
+}
+
 export interface C64Facade {
   readonly type: DeviceType;
   ping(): Promise<boolean>;
@@ -104,6 +127,11 @@ export interface C64Facade {
   // Memory/register access
   readMemory(address: number, length: number): Promise<Uint8Array>;
   writeMemory(address: number, bytes: Uint8Array): Promise<void>;
+  /**
+   * Reads the VIC-II registers that place the text screen, and the screen bytes, in one backend
+   * operation. Optional: a backend without it is read register by register.
+   */
+  readScreenState?(): Promise<ScreenState>;
   writeMemoryBlocks?(blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void>;
   // System control
   reset(): Promise<RunResult>;
@@ -1150,6 +1178,28 @@ export class ViceBackend implements C64Facade {
     return await this.withClient(async (client) => {
       const buf = await client.memGet(address, end);
       return buf.subarray(0, Math.min(buf.length, length));
+    });
+  }
+
+  /**
+   * One monitor connection (one CPU stop) and two commands: a read from $D018 to $DD00, which
+   * holds both VIC registers (peeks have no side effects), and the screen itself.
+   */
+  async readScreenState(): Promise<ScreenState> {
+    return await this.withClient(async (client) => {
+      let d018: number | undefined;
+      let dd00: number | undefined;
+      try {
+        const registers = await client.memGet(0xd018, 0xdd00);
+        d018 = registers[0];
+        dd00 = registers[0xdd00 - 0xd018];
+      } catch {
+        // Keep the defaults when the VIC registers cannot be read.
+      }
+      const layout = screenLayoutFromRegisters(d018, dd00);
+      const end = Math.min(0xffff, layout.baseAddress + 0x03e8 - 1);
+      const bytes = await client.memGet(layout.baseAddress, end);
+      return { ...layout, bytes: Uint8Array.from(bytes) };
     });
   }
 
