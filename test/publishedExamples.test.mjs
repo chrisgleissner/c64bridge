@@ -2,6 +2,22 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { graphicsModule } from "../src/tools/graphics.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+// The examples run against a stub client but still write host files (snapshots, exports): keep them out of the checkout.
+async function inScratchDirectory(fn) {
+  const previous = process.cwd();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-examples-"));
+  process.chdir(dir);
+  try {
+    return await fn();
+  } finally {
+    process.chdir(previous);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 // Variants of a grouped tool schema: oneOf/anyOf entries, or the schema itself.
 function variantsOf(schema) {
@@ -45,7 +61,7 @@ test("every published example names only parameters its operation accepts and su
   assert.deepEqual(problems, []);
 });
 
-test("every published example passes the runtime argument parser of its operation", async () => {
+test("every published example passes the runtime argument parser of its operation", () => inScratchDirectory(async () => {
   const noop = () => {};
   const logger = { debug: noop, info: noop, warn: noop, error: noop };
   const harmless = async () => ({ success: true, details: {} });
@@ -77,9 +93,9 @@ test("every published example passes the runtime argument parser of its operatio
     }
   }
   assert.deepEqual(problems, []);
-});
+}));
 
-test("every example of the legacy graphics module passes its runtime parser", async () => {
+test("every example of the legacy graphics module passes its runtime parser", () => inScratchDirectory(async () => {
   const noop = () => {};
   const harmless = async () => ({ success: true, details: {} });
   const client = new Proxy({}, { get: (_target, prop) => (prop === "then" ? undefined : harmless) });
@@ -94,4 +110,4 @@ test("every example of the legacy graphics module passes its runtime parser", as
     }
   }
   assert.deepEqual(problems, []);
-});
+}));
