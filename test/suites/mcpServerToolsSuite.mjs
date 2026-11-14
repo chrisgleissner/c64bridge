@@ -18,28 +18,6 @@ function stripUndefinedDeep(value) {
   );
 }
 
-function assertDescriptorMetadata(metadata) {
-  assert.ok(metadata, "tool metadata should exist");
-  assert.equal(typeof metadata.domain, "string", "metadata.domain should be string");
-  assert.ok(metadata.domain.length > 0, "metadata.domain should not be empty");
-  assert.equal(typeof metadata.summary, "string", "metadata.summary should be string");
-  assert.ok(metadata.summary.length > 0, "metadata.summary should not be empty");
-  assert.ok(Array.isArray(metadata.resources), "metadata.resources should be array");
-  assert.ok(Array.isArray(metadata.prompts), "metadata.prompts should be array");
-  assert.ok(Array.isArray(metadata.tags), "metadata.tags should be array");
-  assert.ok(Array.isArray(metadata.platforms), "metadata.platforms should be array");
-  assert.ok(metadata.platforms.length > 0, "metadata.platforms should not be empty");
-  if (metadata.examples !== undefined) {
-    assert.ok(Array.isArray(metadata.examples), "metadata.examples should be array when present");
-  }
-  if (metadata.workflowHints !== undefined) {
-    assert.ok(Array.isArray(metadata.workflowHints), "metadata.workflowHints should be array when present");
-  }
-  if (metadata.prerequisites !== undefined) {
-    assert.ok(Array.isArray(metadata.prerequisites), "metadata.prerequisites should be array when present");
-  }
-}
-
 export function registerMcpServerToolsTests(withSharedMcpClient) {
   test("MCP server exposes tool descriptors from registry", async () => {
     await withSharedMcpClient(async ({ client }) => {
@@ -77,53 +55,29 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
           );
         }
 
-        assertDescriptorMetadata(metadata);
+        assert.ok(metadata, "tool metadata should exist");
         assert.equal(metadata.domain, descriptor.metadata.domain);
-        assert.equal(metadata.summary, descriptor.metadata.summary);
         assert.equal(metadata.lifecycle, descriptor.metadata.lifecycle);
-        assert.deepEqual(metadata.resources, descriptor.metadata.resources);
-        assert.deepEqual(metadata.prompts, descriptor.metadata.prompts);
-        assert.deepEqual(metadata.tags, descriptor.metadata.tags);
         assert.deepEqual(metadata.platforms, descriptor.metadata.platforms);
-
-        if (descriptor.metadata.workflowHints) {
-          assert.deepEqual(metadata.workflowHints, descriptor.metadata.workflowHints);
-        } else {
-          assert.ok(
-            metadata.workflowHints === undefined || metadata.workflowHints === null,
-            "workflowHints should be absent when registry omits them",
-          );
-        }
-
-        if (descriptor.metadata.prerequisites) {
-          assert.deepEqual(metadata.prerequisites, descriptor.metadata.prerequisites);
-        } else {
-          assert.ok(
-            metadata.prerequisites === undefined || metadata.prerequisites === null,
-            "prerequisites should be absent when registry omits them",
-          );
-        }
-
-        if (descriptor.metadata.examples) {
-          assert.deepEqual(metadata.examples, descriptor.metadata.examples);
-        } else {
-          assert.ok(
-            metadata.examples === undefined || metadata.examples === null,
-            "examples should be absent when registry omits them",
-          );
+        assert.deepEqual(metadata.operationEffects, descriptor.metadata.operationEffects);
+        assert.equal(metadata.effect, descriptor.metadata.effect);
+        if (!process.env.C64BRIDGE_VERBOSE_SCHEMA) {
+          for (const key of ["summary", "examples", "workflowHints", "resources", "prompts", "tags", "prerequisites"]) {
+            assert.ok(!(key in metadata), `${descriptor.name} should not publish _meta.${key} unless C64BRIDGE_VERBOSE_SCHEMA=1`);
+          }
         }
       }
     });
   });
 
-  test("tools/list stays below 90 KB and omits the duplicated per-op schemas", async () => {
+  test("tools/list stays below 70 KB and omits the duplicated per-op schemas", async () => {
     await withSharedMcpClient(async ({ client }) => {
       const listResult = await client.request(
         { method: "tools/list", params: {} },
         ListToolsResultSchema,
       );
       const bytes = Buffer.byteLength(JSON.stringify(listResult));
-      assert.ok(bytes < 90_000, `tools/list is ${bytes} bytes`);
+      assert.ok(bytes < 70_000, `tools/list is ${bytes} bytes`);
       for (const tool of listResult.tools) {
         assert.ok(
           !("x-c64bridge-operations" in (tool.inputSchema ?? {})),

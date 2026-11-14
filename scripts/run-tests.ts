@@ -15,6 +15,8 @@ const DEFAULT_VICE_MOCK_TEST_FILES = [
   "test/device.test.mjs",
   "test/viceIntegration.test.mjs",
   "test/viceModule.test.mjs",
+  "test/viceSession.test.mjs",
+  "test/viceLoadPerf.test.mjs",
   "test/groupedToolsShims.test.mjs",
   "test/inputModule.test.mjs",
   "test/batchAndDisplayState.test.mjs",

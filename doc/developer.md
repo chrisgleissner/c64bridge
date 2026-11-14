@@ -114,6 +114,7 @@ Environment knobs: `RAG_EMBEDDINGS_DIR`, `RAG_BUILD_ON_START`, `RAG_REINDEX_INTE
 - **HTTP bridge**: Disabled by default; enable with `npm start -- --http [port]` for manual curl experiments (the MCP server start is not managed by `./build`). Details in [`doc/troubleshooting-mcp.md`](troubleshooting-mcp.md).
 - **Docker image**: [`Dockerfile`](../Dockerfile) builds Ubuntu 24.04 + Node 24 + Bun for reproducible environments.
 - **Audio pipeline**: SID analysis uses [`naudiodon`](https://www.npmjs.com/package/naudiodon); see [`src/audio/`](../src/audio/) and tests like [`test/audioAnalysis.test.mjs`](../test/audioAnalysis.test.mjs).
+- **Ultimate turbo benchmark**: `npm run bench:turbo -- --host <ip> --suite quick|full --out <dir>` assembles the programs in [`data/ultimate/bench/`](../data/ultimate/bench/), runs them on an Ultimate 64 or C64U over REST, decodes the result block and restores every configuration item it changed (it reports `RESTORE VERIFIED` or `RESTORE DIFF`). It needs `npm run build` first. Use `--probe` to list the Turbo Control, CPU Speed and Badline Timing values the device offers, and `--collect` to merge a run directory into `data/ultimate/bench/results/`. It never writes flash or power-cycles a device. Method, result layout and the MCP-only rerun recipe are in [`data/ultimate/bench/README.md`](../data/ultimate/bench/README.md); measured values are in [`data/ultimate/bench/results/summary.md`](../data/ultimate/bench/results/summary.md).
 
 ## 8. Release & Packaging
 
@@ -160,6 +161,13 @@ Env knobs:
 - `FORCE_XVFB=1` — run headless via Xvfb even if a display is detected (default on CI)
 - `DISABLE_XVFB=1` — skip Xvfb and use the current `$DISPLAY` even in headless environments
 - `VICE_XVFB_DISPLAY=:nn` — override the Xvfb display number (defaults to `:99`)
+
+### VICE soak test (long-running, real VICE)
+
+`npm run test:vice:soak -- --duration 10m --out /tmp/vice-soak` starts the built MCP server (`npm run build` first) with a real `x64sc` on a free port and drives it through tool calls: steady load, idle gaps, a held `c64_system` pause, a long keyboard feed, debugger cycles (checkpoints, stepping, overlapping calls) and recovery when VICE is killed or its port is taken.
+The duration can also be set with `C64BRIDGE_SOAK_DURATION` (for example `90s` or `10m`, default 2 minutes); scenario shares scale with it.
+It writes `ops.jsonl` (one line per call) and `summary.json` (counts, latency p50/p95/max, resources) to `--out`, and exits non-zero on any tool error, failed check, leaked checkpoint, or growth of server RSS or open file descriptors above `C64BRIDGE_SOAK_MAX_RSS_GROWTH_MB` (80) or `C64BRIDGE_SOAK_MAX_FD_GROWTH` (8).
+It needs a VICE binary and is not part of `npm test`; only the VICE processes it started are killed on exit, including on SIGINT.
 
 Implementation tip: programmatic shutdown
 

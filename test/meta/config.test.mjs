@@ -13,13 +13,14 @@ test("config_snapshot_and_restore snapshot and restore", async () => {
   const { file, dir } = tmpPath("config", "config-snapshot.json");
   await fs.mkdir(dir, { recursive: true });
   let batchUpdated = false;
+  let volume = "10";
   const ctx = {
     platform: { id: "c64u" },
     client: {
       async version() { return { version: "1.0.0" }; },
       async info() { return { device: "u64" }; },
       async configsList() { return { categories: ["Audio"] }; },
-      async configGet(cat) { return cat === "Audio" ? { Volume: "10" } : {}; },
+      async configGet(cat) { return cat === "Audio" ? { Volume: volume } : {}; },
       async configBatchUpdate() { batchUpdated = true; return { success: true }; },
       async configSaveToFlash() { return { success: true }; },
     },
@@ -30,6 +31,7 @@ test("config_snapshot_and_restore snapshot and restore", async () => {
   assert.equal(snap.metadata?.success, true);
   const content = JSON.parse(await fs.readFile(file, "utf8"));
   assert.ok(content.categories?.Audio);
+  volume = "3"; // the device differs from the snapshot, so restore writes
 
   const restore = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file, applyToFlash: true }, ctx);
   assert.equal(restore.metadata?.success, true);
@@ -67,6 +69,7 @@ test("config_snapshot_and_restore supports vice-style config inventory", async (
   const { file, dir } = tmpPath("config", "config-vice-snapshot.json");
   await fs.mkdir(dir, { recursive: true });
   let batchPayload = null;
+  let warp = "0";
 
   const ctx = {
     client: {
@@ -78,7 +81,7 @@ test("config_snapshot_and_restore supports vice-style config inventory", async (
       },
       async configGet(category, item) {
         if (category !== "VICE") return { value: "" };
-        if (item === "WarpMode") return { value: "0" };
+        if (item === "WarpMode") return { value: warp };
         if (item === "SoundVolume") return { value: "80" };
         return { value: "" };
       },
@@ -98,9 +101,10 @@ test("config_snapshot_and_restore supports vice-style config inventory", async (
   assert.deepEqual(content.inventory, [{ category: "VICE", item: "WarpMode" }, { category: "VICE", item: "SoundVolume" }]);
   assert.deepEqual(content.categories?.VICE, { WarpMode: "0", SoundVolume: "80" });
 
+  warp = "1";
   const restore = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file }, ctx);
   assert.equal(restore.metadata?.success, true);
-  assert.deepEqual(batchPayload, { VICE: { WarpMode: "0", SoundVolume: "80" } });
+  assert.deepEqual(batchPayload, { VICE: { WarpMode: "0" } });
 });
 
 test("config_snapshot_and_restore validates snapshot input", async () => {

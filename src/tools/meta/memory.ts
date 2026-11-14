@@ -201,6 +201,12 @@ export const tools: ToolDefinition[] = [
         const parsed = memoryDumpToFileArgsSchema.parse(args ?? {});
         const startAddr = parseAddressNumeric(parsed.address);
         const length = parsed.length as number;
+        if (startAddr + length > 0x10000) {
+          throw new ToolValidationError(
+            `Dump of ${length} bytes from $${formatAddressHex(startAddr)} would pass $FFFF (at most ${0x10000 - startAddr} bytes can be read from there)`,
+            { path: "$.length" },
+          );
+        }
         const chunk = Math.min(Math.max(1, parsed.chunkSize ?? 512), 4096);
         const pause = parsed.pauseDuringRead !== false;
         const outputPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
@@ -214,14 +220,14 @@ export const tools: ToolDefinition[] = [
           throw new ToolExecutionError("Pause failed before dump", { details: normalizeErrorDetails(owned.result.details) });
         }
 
-        const buf = Buffer.allocUnsafe(length);
+        const buf = Buffer.alloc(length);
         let offset = 0;
         let released = false;
         try {
           while (offset < length) {
             const remaining = length - offset;
             const take = Math.min(chunk, remaining);
-            const addr = (startAddr + offset) & 0xFFFF;
+            const addr = startAddr + offset;
             if (addr + take > 0x10000) {
               throw new ToolExecutionError("Dump would wrap past end of address space", { details: { address: `$${formatAddressHex(addr)}`, remaining: take } });
             }
@@ -237,6 +243,9 @@ export const tools: ToolDefinition[] = [
                   throw new ToolExecutionError("Firmware returned failure for chunk", { details: normalizeErrorDetails(r.details) });
                 }
                 const bytes = hexToBytes(r.data);
+                if (bytes.length !== take) {
+                  throw new ToolExecutionError(`Firmware returned ${bytes.length} bytes for a ${take}-byte chunk at $${formatAddressHex(addr)}`);
+                }
                 Buffer.from(bytes).copy(buf, offset, 0, take);
                 success = true;
               } catch (e) {

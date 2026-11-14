@@ -671,3 +671,86 @@ test("pollForProgramOutcome ASM treats jiffy clock progress as activity even whe
   assert.equal(result.status, "ok");
   assert.equal(result.type, "ASM");
 });
+
+test("BASIC verification succeeds for a program that cleared the screen and finished", async () => {
+  let reads = 0;
+  const client = { async readScreen() { reads += 1; return `HI\n\nREADY.\n${"\n".repeat(20)}`; } };
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 1000, intervalMs: 20, stabilizeMs: 0 }, undefined, "READY.\n");
+  assert.equal(result.status, "ok");
+});
+
+test("BASIC verification of a finished program returns after the first poll", async () => {
+  let reads = 0;
+  const client = {
+    async readScreen() { reads += 1; return "RUN\nHI\n\nREADY.\n"; },
+    async readMemoryRaw() { return Uint8Array.of(0xff); }, // CURLIN high byte: direct mode
+  };
+  const started = Date.now();
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 2000, intervalMs: 200, stabilizeMs: 0 }, undefined, "READY.\n");
+  assert.equal(result.status, "ok");
+  assert.equal(reads, 1);
+  assert.ok(Date.now() - started < 150, `took ${Date.now() - started} ms`);
+});
+
+test("BASIC verification still reports no execution when the screen never changed", async () => {
+  const client = { async readScreen() { return "READY.\n"; } };
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, undefined, "READY.\n");
+  assert.equal(result.status, "error");
+  assert.match(result.message, /No execution activity/);
+});
+
+test("BASIC verification keeps watching a running program for an error", async () => {
+  const screens = ["RUN\n", "RUN\nTICK\n", "RUN\nTICK\n?SYNTAX ERROR IN 20\nREADY.\n"];
+  const client = { async readScreen() { return screens.length > 1 ? screens.shift() : screens[0]; } };
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 1000, intervalMs: 20, stabilizeMs: 0 }, undefined, "READY.\n");
+  assert.equal(result.status, "error");
+  assert.equal(result.line, 20);
+});
+
+test("pollForProgramOutcome BASIC keeps polling when the program prints READY. and is still running", async () => {
+  const screens = [
+    "READY.\n",
+    "RUN\nREADY.\n",
+    "RUN\nREADY.\n",
+    "RUN\nREADY.\n?UNDEF'D STATEMENT ERROR IN 50\nREADY.\n",
+  ];
+  const memory = [0x00, 0x00, 0x00, 0xff];
+  let screenIndex = 0;
+  const client = {
+    async readScreen() {
+      return screens[Math.min(screenIndex++, screens.length - 1)];
+    },
+    async readMemoryRaw(address, length) {
+      assert.equal(address, 0x3a);
+      assert.equal(length, 1);
+      return Uint8Array.of(memory.shift() ?? 0xff);
+    },
+  };
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 500, intervalMs: 5, stabilizeMs: 0 });
+  assert.equal(result.status, "error");
+  assert.equal(result.line, 50);
+});
+
+test("pollForProgramOutcome BASIC without memory access needs READY. on two consecutive polls", async () => {
+  const screens = [
+    "READY.\n",
+    "RUN\nREADY.\n",
+    "RUN\nREADY.\n?UNDEF'D STATEMENT ERROR IN 50\nREADY.\n",
+  ];
+  let screenIndex = 0;
+  const client = {
+    async readScreen() {
+      return screens[Math.min(screenIndex++, screens.length - 1)];
+    },
+  };
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 500, intervalMs: 5, stabilizeMs: 0 });
+  assert.equal(result.status, "error");
+});
+
+test("BASIC verification without memory access returns once READY. is stable on two polls", async () => {
+  let reads = 0;
+  const client = { async readScreen() { reads += 1; return "RUN\nHI\n\nREADY.\n"; } };
+  const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 1000, intervalMs: 5, stabilizeMs: 0 }, undefined, "READY.\n");
+  assert.equal(result.status, "ok");
+  assert.equal(reads, 2);
+});

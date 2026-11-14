@@ -16,7 +16,9 @@ export interface AssembleOptions {
    * Defaults to $0801 (the conventional BASIC-adjacent origin for standalone
    * machine code). Code assembled at $0801 without an org directive gets a
    * `10 SYS` BASIC stub to its first instruction; callers find the entry with {@link prgEntryAddress}
-   * and run it via a typed `SYS <entry>`, not `RUN`.
+   * and run it via a typed `SYS <entry>`, not `RUN`. The stub is added only when an instruction
+   * is assembled at the load address before any org; data-only source, or data at $0801 followed
+   * by code at an explicit origin, has no entry point there and is emitted without a stub.
    */
   loadAddress?: number;
   /**
@@ -174,6 +176,8 @@ export function prgEntryAddress(prg: Uint8Array): number {
   return digits.length > 0 && target <= 0xffff ? target : loadAddress;
 }
 const MAX_ADDRESS = 0xffff;
+const INT32_MIN = -0x80000000;
+const UINT32_MAX = 0xffffffff;
 
 const SINGLE_CHAR_TOKENS = new Set<string>([",", ":", "#", "(", ")", "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "=", "!", "~"]);
 
@@ -252,6 +256,9 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   const normalized = normalizeSource(source);
   const loadAddress = options?.loadAddress ?? DEFAULT_LOAD_ADDRESS;
   const rootFile = options?.fileName ?? "(input)";
+  if (!Number.isInteger(loadAddress) || loadAddress < 0 || loadAddress > MAX_ADDRESS) {
+    throw new AssemblyError(`loadAddress ${loadAddress} is outside $0000-$FFFF`, { file: rootFile, line: 0, text: "" });
+  }
   const resolver = options?.resolveInclude;
 
   const parser = new Parser(resolver);
@@ -996,6 +1003,9 @@ class Assembler {
   private readonly symbolTable = new SymbolTable();
   private readonly memory = new Uint8Array(0x10000);
   private readonly written = new Uint8Array(0x10000);
+  /** Index into blocks (plus one) of the contiguous run that wrote each address in the current pass. */
+  private readonly owner = new Uint32Array(0x10000);
+  private blocks: Array<{ start: number; end: number; line: number }> = [];
   private pc = 0;
   private lowestWritten = MAX_ADDRESS;
   private highestWritten = 0;
@@ -1009,7 +1019,7 @@ class Assembler {
 
   runPass(pass: 0 | 1): void {
     // Code before the first org directive is assembled at the load address.
-    this.pc = this.defaultLoadAddress & 0xffff;
+    this.pc = this.defaultLoadAddress;
     if (pass === 0) {
       this.symbolTable.reset();
       this.lowestWritten = MAX_ADDRESS;
@@ -1017,6 +1027,9 @@ class Assembler {
       this.firstInstructionAddress = undefined;
     }
     this.reserved = [];
+    this.written.fill(0);
+    this.owner.fill(0);
+    this.blocks = [];
     // Loading a PRG at $0801 makes BASIC relink the bytes there as program
     // lines, which corrupts raw machine code. Code that starts at $0801
     // without its own org therefore gets a "10 SYS" stub that jumps to the
@@ -1041,16 +1054,32 @@ class Assembler {
     }
   }
 
+  /** Bitwise operators work on 32-bit values; anything wider would be silently truncated. */
+  private checkBitOperand(value: number, op: string, location: SourceLocation): void {
+    if (!Number.isInteger(value) || value < INT32_MIN || value > UINT32_MAX) {
+      throw new AssemblyError(`Operand ${value} of ${op} is outside the 32-bit range ${INT32_MIN}..${UINT32_MAX}`, location);
+    }
+  }
+
+  private checkOrigin(value: number, what: string, location: SourceLocation): number {
+    if (!Number.isInteger(value) || value < 0 || value > MAX_ADDRESS) {
+      throw new AssemblyError(`${what} value ${value} is outside $0000-$FFFF`, location);
+    }
+    return value;
+  }
+
+  /**
+   * True when the source has an instruction that is assembled at the load
+   * address, before any org or `* =`. Only then is there an entry point for
+   * the BASIC stub to jump to; data-only source stays a plain data image.
+   */
   private emitsBeforeFirstOrg(): boolean {
     for (const line of this.lines) {
       const statement = line.statement;
       if (!statement) continue;
       if (statement.kind === "instruction") return true;
       if (statement.kind === "assignment" && statement.isLocationCounter) return false;
-      if (statement.kind === "directive") {
-        if (statement.name === "org") return false;
-        if (statement.name !== "include") return true;
-      }
+      if (statement.kind === "directive" && statement.name === "org") return false;
     }
     return false;
   }
@@ -1122,7 +1151,7 @@ class Assembler {
       throw this.undefinedError(statement.expr, location, "Assignment depends on an undefined symbol");
     }
     if (statement.isLocationCounter) {
-      this.pc = value & 0xffff;
+      this.pc = this.checkOrigin(value, "* =", location);
     } else if (pass === 0) {
       this.symbolTable.setAssignment(statement.target, value, location);
     } else {
@@ -1140,7 +1169,7 @@ class Assembler {
         if (value === undefined) {
           throw this.undefinedError(statement.args[0].expr, location, "org directive requires a defined value");
         }
-        this.pc = value & 0xffff;
+        this.pc = this.checkOrigin(value, "org directive", location);
         break;
       }
       case "byte":
@@ -1157,7 +1186,7 @@ class Assembler {
                 this.writeByte(code, location);
               }
             } else {
-              this.pc += arg.value.length;
+              this.pc += Array.from(arg.value).length;
             }
           } else {
             const value = this.evaluate(arg.expr, pass, location);
@@ -1181,10 +1210,15 @@ class Assembler {
           if (arg.kind === "string") {
             if (pass === 1) {
               for (const char of arg.value) {
-                this.writeWord(char.charCodeAt(0), location);
+                const code = char.codePointAt(0)!;
+                if (code > 0xffff) {
+                  throw new AssemblyError(`word directive character '${char}' (code ${code}) does not fit in one word`, location);
+                }
+                this.writeWord(code, location);
               }
             } else {
-              this.pc += arg.value.length * 2;
+              // Count code points, as pass 1 iterates, so both passes agree for characters above $FFFF.
+              this.pc += Array.from(arg.value).length * 2;
             }
           } else {
             const value = this.evaluate(arg.expr, pass, location);
@@ -1380,6 +1414,7 @@ class Assembler {
           case "!":
             return value ? 0 : 1;
           case "~":
+            this.checkBitOperand(value, "~", location);
             return ~value;
           case "<":
             return value & 0xff;
@@ -1409,15 +1444,20 @@ class Assembler {
             if (right === 0) throw new AssemblyError("Modulo by zero", location);
             return left % right;
           case "<<":
-            return left << right;
-          case ">>":
-            return left >> right;
+          case ">>": {
+            this.checkBitOperand(left, expr.op, location);
+            if (!Number.isInteger(right) || right < 0 || right > 31) {
+              throw new AssemblyError(`Shift count ${right} for ${expr.op} is outside 0..31`, location);
+            }
+            return expr.op === "<<" ? left << right : left >> right;
+          }
           case "&":
-            return left & right;
           case "|":
-            return left | right;
-          case "^":
-            return left ^ right;
+          case "^": {
+            this.checkBitOperand(left, expr.op, location);
+            this.checkBitOperand(right, expr.op, location);
+            return expr.op === "&" ? left & right : expr.op === "|" ? left | right : left ^ right;
+          }
           case "==":
             return left === right ? 1 : 0;
           case "!=":
@@ -1447,6 +1487,20 @@ class Assembler {
       );
     }
     const masked = value & 0xff;
+    let block = this.blocks[this.blocks.length - 1];
+    if (!block || block.end + 1 !== this.pc) {
+      block = { start: this.pc, end: this.pc, line: location.line };
+      this.blocks.push(block);
+    }
+    if (this.written[this.pc]) {
+      const earlier = this.blocks[this.owner[this.pc]! - 1]!;
+      throw new AssemblyError(
+        `Overlapping output: the block starting at ${formatHex(block.start)} (line ${block.line}) writes ${formatHex(this.pc)}, which the block ${formatHex(earlier.start)}-${formatHex(earlier.end)} (line ${earlier.line}) already wrote`,
+        location,
+      );
+    }
+    block.end = this.pc;
+    this.owner[this.pc] = this.blocks.length;
     this.memory[this.pc] = masked;
     this.written[this.pc] = 1;
     this.lowestWritten = Math.min(this.lowestWritten, this.pc);

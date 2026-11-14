@@ -28,6 +28,7 @@ import {
   type MachineInputBatch,
   type MachineInputState,
   ViceBackend,
+  screenLayoutFromRegisters,
 } from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
@@ -342,6 +343,9 @@ function validateMemoryRange(address: number, length: number): void {
   }
 }
 
+/** Capability probes use a short timeout so an offline device does not hold the request queue for a full request timeout. */
+const CAPABILITY_PROBE_TIMEOUT_MS = 2_000;
+
 export class C64Client {
   private readonly baseUrl: string;
   private readonly http: HttpClient<unknown>;
@@ -436,7 +440,7 @@ export class C64Client {
 
     let probe = this.machineInputCapabilityProbes.get(facade.type);
     if (!probe) {
-      probe = facade.getInputState()
+      probe = facade.getInputState({ timeoutMs: CAPABILITY_PROBE_TIMEOUT_MS })
         .then(() => "available" as const)
         .catch((error) => isMissingEndpoint(error) ? "unavailable" as const : "unknown" as const);
       this.machineInputCapabilityProbes.set(facade.type, probe);
@@ -921,17 +925,22 @@ export class C64Client {
    */
   async readScreenDetailed(): Promise<{ text: string; baseAddress: number; charset: "upper" | "lower"; registers?: { d018: number; dd00: number } }> {
     return withDiagnosticSpan("client", "read_screen", {}, async () => {
+      const facade = await this.facadePromise;
+      if (facade.readScreenState) {
+        const state = await facade.readScreenState();
+        const text = screenCodesToAscii(state.bytes, { columns: 40, rows: 25, charset: state.charset });
+        return { text, baseAddress: state.baseAddress, charset: state.charset, ...(state.registers ? { registers: { ...state.registers } } : {}) };
+      }
       let baseAddress = 0x0400;
       let charset: "upper" | "lower" = "upper";
       let registers: { d018: number; dd00: number } | undefined;
       try {
         const d018 = (await this.readMemoryRaw(0xd018, 1))[0];
         const dd00 = (await this.readMemoryRaw(0xdd00, 1))[0];
-        if (d018 !== undefined && dd00 !== undefined && !(d018 === 0 && dd00 === 0)) {
-          registers = { d018, dd00 };
-          baseAddress = (3 - (dd00 & 0x03)) * 0x4000 + ((d018 >> 4) & 0x0f) * 0x0400;
-          charset = (d018 & 0x02) !== 0 ? "lower" : "upper";
-        }
+        const layout = screenLayoutFromRegisters(d018, dd00);
+        baseAddress = layout.baseAddress;
+        charset = layout.charset;
+        if (layout.registers) registers = { ...layout.registers };
       } catch {
         // Keep the defaults when the VIC registers cannot be read.
       }
@@ -946,11 +955,51 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.reset();
-      if (res.success) this.clearExplicitPause(facade);
-      return { success: res.success, details: res.details };
+      if (!res.success) return { success: res.success, details: res.details };
+      if (facade.type === "vice" || !this.pauseStateFor(facade).explicit) {
+        this.clearExplicitPause(facade);
+        return { success: res.success, details: res.details };
+      }
+      return await this.resumeAfterUltimateReset(facade, res);
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
+  }
+
+  /**
+   * On Ultimate hardware a reset issued while the machine is paused leaves the
+   * CPU stopped until a resume is sent (a reboot does not). Send the resume so
+   * the machine runs again, then clear the explicit-pause flag. If a running
+   * tool call still holds an owned pause, the machine stays paused for that
+   * call and its release sends the resume. If the resume fails, the explicit
+   * pause stays recorded because the CPU is still stopped, and the result
+   * carries a warning.
+   */
+  private async resumeAfterUltimateReset(facade: C64Facade, res: RunBasicResult): Promise<{ success: boolean; details?: unknown }> {
+    const state = this.pauseStateFor(facade);
+    if (state.depth > 0) {
+      state.explicit = false;
+      return { success: res.success, details: res.details };
+    }
+    // Pause acquisition and explicit pause wait on resetResume, so no pause can be skipped
+    // against the explicit flag while this resume is pending and then lose it when the flag clears.
+    const pendingResume = facade.resume().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+    state.resetResume = pendingResume;
+    let resumed: RunBasicResult;
+    try { resumed = await pendingResume; } finally { if (state.resetResume === pendingResume) state.resetResume = undefined; }
+    if (resumed.success) {
+      state.explicit = false;
+      return { success: res.success, details: res.details };
+    }
+    const base = res.details && typeof res.details === "object" && !Array.isArray(res.details) ? res.details as Record<string, unknown> : { response: res.details };
+    return {
+      success: res.success,
+      details: {
+        ...base,
+        warning: "The reset succeeded, but the machine was paused and could not be resumed afterwards, so the CPU may still be stopped. Run c64_system resume.",
+        resumeError: resumed.details,
+      },
+    };
   }
 
   async reboot(): Promise<{ success: boolean; details?: unknown }> {
@@ -1213,15 +1262,27 @@ export class C64Client {
    * explicit `c64_system pause` is in effect. An explicit pause is cleared
    * only by an explicit resume.
    */
-  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult> }>();
+  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean; resetResume?: Promise<unknown> }>();
 
   private pauseStateFor(facade: C64Facade) {
     let state = this.pauseStates.get(facade);
     if (!state) {
-      state = { depth: 0, explicit: false };
+      const created: { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean; resetResume?: Promise<unknown> } = { depth: 0, explicit: false };
+      state = created;
       this.pauseStates.set(facade, state);
+      // The VICE session can end the pause by itself (c64_debug continue_execution, a lost
+      // session, a restart); the explicit flag must follow or tools would skip their own pause.
+      if (facade instanceof ViceBackend) facade.setPauseClearedListener(() => { created.explicit = false; });
     }
     return state;
+  }
+
+  /** A failed resume leaves the CPU possibly paused: keep that visible as an explicit pause so later tools do not assume a running machine, and warn. */
+  private afterResume(state: { explicit: boolean }, result: RunBasicResult): RunBasicResult {
+    if (result.success) return result;
+    state.explicit = true;
+    const details = (result.details && typeof result.details === "object" ? result.details : { message: String(result.details ?? "") }) as Record<string, unknown>;
+    return { ...result, details: { ...details, warning: "The resume failed; the machine may still be paused. Call c64_system resume once the device is reachable." } };
   }
 
   /** Owned pause for one tool call. Pass the facade pinned at call start; pair with releasePause. A failed result holds no pause and needs no release. */
@@ -1229,10 +1290,21 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       const state = this.pauseStateFor(facade);
+      // A reset's post-reset resume decides the explicit flag; wait for it so the pause below is sent when needed.
+      while (state.resetResume) await state.resetResume;
       state.depth += 1;
       if (state.depth === 1 && !state.explicit) {
-        const pending = facade.pause().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
-        state.devicePause = pending;
+        // A debugger stop already holds the CPU; the tool call must neither add a pause nor end that stop on release.
+        state.skippedDevicePause = facade instanceof ViceBackend && facade.isCpuStopped();
+        if (!state.skippedDevicePause) {
+          const request = facade instanceof ViceBackend ? facade.pauseOwned() : facade.pause();
+          const pending = request.catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) })).then((result) => {
+            // A debugger stop arrived while the pause waited its turn: it is that stop that holds the CPU, so release must not resume.
+            if (result.success && (result.details as { debugStop?: boolean } | undefined)?.debugStop === true) state.skippedDevicePause = true;
+            return result;
+          });
+          state.devicePause = pending;
+        }
       }
       const result = state.devicePause ? await state.devicePause : { success: true } as RunBasicResult;
       if (!result.success) {
@@ -1253,8 +1325,12 @@ export class C64Client {
       state.depth -= 1;
       if (state.depth > 0) return { success: true, details: { resumed: false, reason: "pause still held by another call" } };
       state.devicePause = undefined;
+      if (state.skippedDevicePause) {
+        state.skippedDevicePause = false;
+        return { success: true, details: { resumed: false, reason: "the CPU was already stopped by the debugger" } };
+      }
       if (state.explicit) return { success: true, details: { resumed: false, reason: "machine was paused explicitly" } };
-      return await facade.resume();
+      return this.afterResume(state, await facade.resume());
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
@@ -1263,8 +1339,18 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       const state = this.pauseStateFor(facade);
-      if (state.depth > 0 && !state.explicit) {
-        state.explicit = true; // the device is already paused by a running tool call
+      while (state.resetResume) await state.resetResume;
+      if (state.depth > 0 && !state.explicit && state.devicePause) {
+        // Wait for the tool call's own pause: it may still fail, and then nothing holds the CPU.
+        const devicePause = state.devicePause;
+        const pending = await devicePause;
+        // The owning call may have released (and resumed) while this call waited; then pause the device here.
+        if (pending.success && state.depth > 0 && state.devicePause === devicePause) {
+          state.explicit = true;
+          return { success: true, details: { alreadyPaused: true } };
+        }
+      } else if (state.depth > 0 && !state.explicit) {
+        state.explicit = true; // a debugger stop already holds the CPU
         return { success: true, details: { alreadyPaused: true } };
       }
       const result = await facade.pause();
@@ -1280,7 +1366,7 @@ export class C64Client {
       const state = this.pauseStateFor(facade);
       state.explicit = false;
       if (state.depth > 0) return { success: true, details: { resumed: false, reason: "a running tool call still holds a pause; it resumes the machine when it finishes" } };
-      return await facade.resume();
+      return this.afterResume(state, await facade.resume());
     } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
@@ -2431,6 +2517,13 @@ export class C64Client {
     const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
 
     const facade = options?.pinnedFacade ?? await this.facadePromise;
+    if (facade.feedKeyboard) {
+      const fed = await facade.feedKeyboard(data, options?.drainTimeoutMs === undefined ? undefined : { drainTimeoutMs: options.drainTimeoutMs });
+      if (fed.status === "timeout") {
+        throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
+      }
+      return { delivered: fed.delivered };
+    }
     const KEYD = 0x0277; // KERNAL keyboard buffer base
     const NDX = 0x00C6;  // pending byte count
 
@@ -2462,8 +2555,18 @@ export class C64Client {
     return { delivered };
   }
 
+    /** `continue_execution`: lets the CPU run and ends the explicit pause and any debugger stop. */
     async viceExitMonitor(): Promise<void> {
-      await this.withViceMonitor((client) => client.exitMonitor());
+      const backend = await this.requireViceBackend();
+      const result = await backend.continueExecution();
+      const warning = (result.details as { warning?: string } | undefined)?.warning;
+      if (warning) throw new Error(warning);
+    }
+
+    /** Waits until the VICE session tracks the CPU as stopped (a checkpoint hit or step). */
+    async viceWaitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+      const backend = await this.requireViceBackend();
+      return backend.waitForStop(timeoutMs);
     }
 
     async viceKeyboardFeed(text: string): Promise<void> {
@@ -2541,19 +2644,19 @@ export class C64Client {
         options.memspace === undefined
           ? options
           : { ...options, memspace: this.normaliseMemspace(options.memspace) };
-      return this.withViceMonitor((client) => client.checkpointCreate(payload));
+      return (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointCreate(payload));
     }
 
     async viceCheckpointDelete(id: number): Promise<void> {
-      await this.withViceMonitor((client) => client.checkpointDelete(id));
+      await (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointDelete(id));
     }
 
     async viceCheckpointToggle(id: number, enabled: boolean): Promise<void> {
-      await this.withViceMonitor((client) => client.checkpointToggle(id, enabled));
+      await (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointToggle(id, enabled));
     }
 
     async viceCheckpointSetCondition(id: number, expression: string): Promise<void> {
-      await this.withViceMonitor((client) => client.checkpointSetCondition(id, expression));
+      await (await this.requireViceBackend()).checkpointOperation((client) => client.checkpointSetCondition(id, expression));
     }
 
     async viceRegistersAvailable(memspace: number = 0): Promise<ViceRegisterMetadata[]> {
@@ -2581,11 +2684,11 @@ export class C64Client {
     }
 
     async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
-      await this.withViceMonitor((client) => client.stepInstructions(count, options));
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
     }
 
     async viceStepReturn(): Promise<void> {
-      await this.withViceMonitor((client) => client.stepReturn());
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepReturn({ waitForStopMs: 2_000 }); });
     }
 
     async viceResourceGet(name: string): Promise<ViceResourceValue> {

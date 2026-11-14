@@ -1,0 +1,167 @@
+# REU (RAM Expansion Unit) on Ultimate Devices
+
+**Summary:** Ultimate devices emulate a 1750-compatible REU (128 KB to 16 MB) in SDRAM, registers at `$DF00-$DF0A`. DMA stalls the CPU, REU contents survive C64 resets, and the REU is disabled by default. No REST endpoint writes REU memory: data gets in through boot-time preload, UCI LOAD_REU from game code, or a stash stub. Games use it for level data, charset/sprite/bitmap streaming and sample storage.
+**Read when:** storing or streaming game data via the REU, writing DMA routines, or deciding how to load an REU image.
+
+Marks: "(unverified)" = inferred or single secondary source; "Measured" = benchmark. Related: c64://ultimate/uci (LOAD_REU commands), c64://ultimate/hardware (turbo, `$DE00-$DFFF` map), c64://memory/map, c64://io/spec.
+
+## Configuration
+
+Category "C64 and Cartridge Settings" (set with `c64_config`; changing it re-initialises the cartridge, a reset follows):
+
+| Item | Values | Default |
+|---|---|---|
+| `RAM Expansion Unit` | Disabled, Enabled, GeoRAM Mode (mutually exclusive with REU) | Disabled |
+| `REU Size` | 128 KB, 256 KB, 512 KB, 1 MB, 2 MB, 4 MB, 8 MB, 16 MB | 2 MB |
+| `REU Preload` | Disabled, Enabled | Disabled |
+| `REU Preload Image` | path, max 31 characters | `/Usb0/preload.reu` |
+| `REU Preload Offset` | 0 KB, 128 KB ... 16 MB | 0 KB |
+
+- An active REU disables cartridges that use `$DF00-$DFFF` (EasyFlash, Final Cartridge III).
+- Reads beyond the configured size wrap and return plausible wrong data. Check the size at startup; a program should refuse to start with a text message naming the setting if the REU is missing or too small.
+- REU contents survive C64 reset, `machine:reset` and `run_prg`; assume they are lost at power off.
+
+## Registers (`$DF00-$DF0A`)
+
+| Addr | Name | Meaning |
+|---|---|---|
+| `$DF00` | Status (R) | b7 IRQ pending, b6 END OF BLOCK, b5 FAULT (verify mismatch), b4 size >= 256 KB (not a size probe), b3-0 version. **Reading clears b6, b5 and the IRQ**: read once, keep a copy. |
+| `$DF01` | Command | b7 EXECUTE, b5 AUTOLOAD, b4 FF00 (1 = run at once, 0 = wait for a write to `$FF00`), b1-0 type: 00 stash (C64 to REU), 01 fetch (REU to C64), 10 swap, 11 verify |
+| `$DF02/03` | C64 address lo/hi | reads return the advancing address |
+| `$DF04/05/06` | REU address lo/mid/bank | bank = 64 KB units |
+| `$DF07/08` | Length lo/hi | 0 = 65536 bytes; reads return remaining count |
+| `$DF09` | IRQ mask | b7 enable, b6 on END OF BLOCK, b5 on FAULT |
+| `$DF0A` | Address control | b7 fix C64 address, b6 fix REU address (not cleared by transfers) |
+
+Command bytes: `$90` stash, `$91` fetch, `$92` swap, `$93` verify (execute, immediate, no autoload); `$B0-$B3` same with autoload; `$80-$83` wait for `$FF00` write.
+- Without autoload, after a transfer both base addresses point past the last byte and length reads 1: consecutive blocks can continue without rewriting REU address, but length and C64 address must be set again as needed. With autoload the base values are restored (repeat the same transfer with only `$DF01`).
+- Swap: both memories read, then both written. Verify: stops at first mismatch, FAULT set, END OF BLOCK not set; the address registers point at the mismatching byte on Ultimate devices (real REUs differ). Clear FAULT first by reading `$DF00`.
+- C64 address wraps at `$FFFF`. `$DF0A = $80` (fix C64 address): a fetch writes every REU byte to one location, at DMA speed (too fast to play samples). `$40` (fix REU address): a fetch fills memory with one byte.
+- Extended registers on some FPGA builds (existence on U64/C64U cores unverified): `$DF0C` size mask (`$01` 128 KB ... `$FF` 16 MB), `$DF0D` start delay, `$DF0E` rate divider, `$DF0F` length bits 23-16 (write-only, allows over 64 KB per transfer). Probe `$DF0C` before use; do not depend on it.
+- `$DF1B-$DF1F` are UCI (the REU logic aliases `$DF10-$DF1F`): use only `$DF00-$DF0A`.
+
+## Timing, stall, size, wrap
+
+- The CPU is halted for the whole transfer (no wait loop needed; the status is valid on the next instruction). A raster/CIA IRQ falling inside it fires late. Menu freeze pauses a running transfer.
+- Measured 2026-11-13 on Ultimate 64 Elite fw 3.15a and C64U fw 1.2.1, PAL, 16 MB REU; rerun: c64://ultimate/hardware#rerun or c64://ultimate/bench. The rate depends on the CPU turbo setting (1 byte per microsecond holds only at 1-3 MHz). Bytes per microsecond, stash / fetch, screen blanked: 1 MHz 0.99 / 0.99, 2 MHz 1.97 / 1.97, 3 MHz 2.96 / 2.93. Top speed: U64 48 MHz 5.1 / 3.6, C64U 64 MHz 7.8 / 4.3. Not monotonic: U64 4 MHz fetch 2.0 and 6 MHz stash 3.0; C64U 10 MHz stash 4.9 against 7.7 at 8 MHz. Floors from 6 MHz up: U64 3.0 / 2.6, C64U 4.9 / 2.9.
+- Screen on with badlines costs about 5 percent of the rate; none with `$D031` bit 7 set. Each transfer has a fixed overhead of 3 to 15 PHI2 ticks (1-byte transfers: 15 at 1 MHz, 3 at top speed).
+- At top speed a CPU store loop (derived: about 12 B/us at 64 MHz) outruns REU stash: do not DMA-fill then.
+- **512 KB wrap:** on builds without the extended registers, and in VICE, a transfer that crosses a 512 KB boundary (REU address multiple of `$080000`) wraps inside that block. Rule: split every DMA so `(addr & $07FFFF) + len <= $080000`; guard length 0 (it means 64 KB). Extended builds mask the address to the configured size instead.
+- **Size detection** (no UCI command reports it): fetch the byte at REU offset 0, stash back `a^$A5`, fetch again (no REU if it does not hold; restore it). Then for s = 64 KB, 128 KB, ... 8 MB: save bytes at 0 and s, write `a^$A5` at 0 and `a^$5A` at s; if offset 0 now holds the second value the REU aliases at s, so size = s. Restore the bytes. No wrap up to 8 MB means 16 MB. Also verify a magic header and block checksums after loading: a missing or stale REU returns valid-looking stale data without error.
+- **`$FF00` trigger** (b4 = 0): set the command, change `$01` (e.g. to `$34` for RAM under I/O), then store to `$FF00`. Whether this reaches RAM under I/O on the C64U is unverified; the safe route is DMA into a normal-RAM bounce buffer then CPU copy. DMA writes to colour RAM (`$D800`) need I/O visible.
+- Turbo: starting a transfer must halt the CPU in the same cycle as the `$DF01` write. Firmware before 2026-08-28 could run instructions after the command write while DMA was in flight on U64-class cores. Put no instruction after `sta $DF01` that depends on the transfer or on stable REU registers, add `nop nop`, and disable interrupts from first register write to the trigger.
+
+## Recipes (assemble with ca65 and 64tass; the first one ran in VICE 3.10 x64sc with `-reu -reusize 128`)
+
+Load a level from the REU into `$4000` (8192 bytes at REU offset `$010000`): write every register first, `$DF01` last.
+```
+load_level:
+        php
+        sei
+        lda #$00
+        sta $DF02         ; C64 address lo
+        lda #$40
+        sta $DF03         ; C64 address hi: $4000
+        lda #$00
+        sta $DF04         ; REU address lo
+        sta $DF05         ; REU address mid
+        sta $DF07         ; length lo
+        sta $DF09         ; no REU interrupt
+        sta $DF0A         ; both addresses count up
+        lda #$01
+        sta $DF06         ; REU bank (64 KB units): offset $010000
+        lda #$20
+        sta $DF08         ; length hi: $2000 bytes
+        lda #$91          ; fetch, execute now, no autoload
+        sta $DF01         ; MUST be the last register write
+        nop
+        nop
+        plp
+        rts
+```
+For several levels keep one table row per level (REU lo/mid/bank, length lo/hi, indexed by level number) and load `$DF04-$DF08` with `lda tab,x`. The shipped data must not cross a 512 KB boundary and must be at most 64 KB per call (length 0 = 64 KB). Stash is `$90`, swap `$92`, verify `$93`.
+
+Detect an enabled REU (carry set = present; REU byte 0 is restored). A disabled REU does not answer, so this is also the "enabled" check. For the size see "Size detection".
+```
+reu_present:
+        lda #$91
+        jsr one           ; tmp = REU[0]
+        lda tmp
+        sta orig
+        eor #$a5
+        sta tmp
+        lda #$90
+        jsr one           ; REU[0] = orig xor $a5
+        lda orig
+        sta tmp           ; a missing REU leaves tmp = orig, which cannot pass the test
+        lda #$91
+        jsr one           ; tmp = REU[0] again
+        lda tmp
+        eor #$a5
+        cmp orig          ; equal = the byte came back from REU memory
+        php
+        lda orig
+        sta tmp
+        lda #$90
+        jsr one           ; restore REU[0]
+        plp
+        beq yes
+        clc
+        rts
+yes:    sec
+        rts
+one:    php               ; 1-byte DMA between zero-page byte tmp and REU offset 0
+        sei
+        ldx #tmp          ; tmp, orig: two free zero-page bytes
+        stx $DF02
+        ldx #0
+        stx $DF03
+        stx $DF04
+        stx $DF05
+        stx $DF06
+        stx $DF08
+        stx $DF09
+        stx $DF0A
+        inx
+        stx $DF07
+        sta $DF01         ; A = command
+        nop
+        nop
+        plp
+        rts
+```
+- In C compilers (Oscar64 reordered stores to constant I/O addresses once) write the register sequence as one inline-assembly block, and re-read the first byte of a fetched buffer through a volatile pointer.
+
+## Getting data into the REU
+
+| Path | Works from host? | Notes |
+|---|---|---|
+| UCI DOS LOAD_REU (`01 21`, open file first) | by a running program | recommended for shipped games; file to REU without the C64; chunk at 32 KB or less; see c64://ultimate/uci |
+| Menu: file browser, `.reu` file, load into REU | no (menu) | whole file to offset 0 |
+| `REU Preload` (config) | partly | **boot only** (see below) |
+| Stash stub + `machine:writemem` | yes | slow but scriptable |
+| `runners:modplay` (PUT file / POST body) | yes | loads a MOD into REU offset 0 and plays it; overwrites the REU; needs the sampler |
+| UCI control LOAD_REU `04 08` | avoid | wedged the interface on firmware 3.14d |
+
+- There is no REST endpoint that writes REU memory. `machine:writemem`/`readmem` cover only C64 `$0000-$FFFF` (DMA on the cartridge bus, CPU stalls briefly).
+- **Preload runs once at firmware boot.** It starts only if `REU Preload` is already enabled at boot and the image file appears (volume mounted), waits about 125 ms (25 ticks at 200 Hz), loads `min(file size, REU size - offset)` bytes, then never runs again. `machine:reset`, C64 reboot and `run_prg` do not reload it; setting it by REST after boot does not arm it; a power cycle or menu reboot does. The image need not equal the REU size (VICE `-reuimage` does require exactly that size).
+- **Stash stub pattern:** a small resident PRG with a mailbox (REU address, C64 address, length, command, trigger byte written last). The host writes a 16 KB chunk to C64 RAM with `machine:writemem`, fills the mailbox, trigger last; the stub stashes it and clears the trigger; the host polls the trigger, then verifies by fetching back. Do not send a "terminate" command after every chunk (an early stub hung). Hash chunks to skip unchanged ones (REU survives resets).
+- `.reu` files are raw REU dumps without header. "Save REU Memory" writes the configured size. LOAD_REU/SAVE_REU assume 16 MB.
+- Image layout: header (magic, version, block table of id/flags/24-bit offset/length), per-block checksums checked at boot.
+
+## Patterns for games
+
+- **Level/map streaming:** keep tile maps in the REU page-aligned; once per frame, after the raster IRQ passed the visible area, fetch one 256-byte column or row into an off-screen buffer. Measured on a C64U at 64 MHz: one 256-byte fetch per frame for 500 frames, no glitches.
+- **Charset/sprite swap into a VIC bank** between frames: fetch the new 2 KB charset or sprite blocks into the inactive part of the VIC bank, then flip `$D018`/`$DD00` in the next IRQ. Fetching 2 KB costs about 2,000 phi2 at the conservative rate.
+- **Bitmap/screen swap:** 8000 + 1000 + 1000 bytes is about 10,000 phi2 (half a PAL frame at the slow rate): start after the bottom IRQ, flip in the next top IRQ, or hide it under a fade. Colour RAM needs I/O visible.
+- **Digi samples (design, unverified):** 4-bit samples in the REU, a 256-byte ring in RAM, a CIA timer IRQ writing one byte to `$D418` per tick (about 8 kHz), and a 64-byte fetch each time 64 samples were consumed. Let the IRQ own the REU or wrap access in `sei`. `$D418` bits 4-7 are filter/voice-3 bits: write the whole value. Alternative: the Ultimate Audio sampler (`$DF20-$DFFF`, `Map Ultimate Audio $DF20-DFFF`) plays from REU without the CPU (layout unverified).
+- A raster IRQ and the main loop must not both program the REU: one owner, or `sei`/`cli` around main-loop use. Overlays: architecture section 5C.
+
+## Pitfalls (most often violated)
+
+1. REU is disabled by default; a stale or absent REU returns valid-looking data: check presence, magic, checksum at boot.
+2. `$DF01` is the last register write; no compiler reordering; clear `$DF0A` fix bits after use.
+3. Split DMAs at 512 KB boundaries; length 0 means 64 KB; autoload restores base values (use no-autoload for consecutive blocks).
+4. Reading `$DF00` clears flags and IRQ; `$FF00` mode leaves a pending command until `$FF00` is written.
+5. VICE charges DMA at about 1 cycle per byte (3.10, measured) and an image must equal the configured size; test streaming budgets on hardware.
+6. GeoRAM mode replaces the REU (window `$DE00`, banks `$DFFE/$DFFF`; layout unverified).

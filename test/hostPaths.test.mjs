@@ -214,3 +214,58 @@ test("defaultHostOutputDir falls back to ~/.c64bridge when the working directory
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
+
+test("host reads accept only regular files and read through the opened handle", async () => {
+  if (process.platform === "win32") return;
+  const { execFileSync } = await import("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hostpaths-fifo-"));
+  try {
+    const fifo = path.join(dir, "pipe");
+    execFileSync("mkfifo", [fifo]);
+    // A FIFO reports size 0, so only a file-type check rejects it before a read would block.
+    assert.throws(() => resolveHostPath(fifo, { purpose: "read" }), /not a regular file/);
+    assert.throws(() => resolveHostPath(dir, { purpose: "read" }), /not a regular file/);
+
+    const { readHostFile } = await import("../src/hostPaths.js");
+    await assert.rejects(() => readHostFile(fifo), /not a regular file/);
+
+    const file = path.join(dir, "data.bin");
+    fs.writeFileSync(file, Buffer.from([1, 2, 3, 4]));
+    assert.deepEqual(Array.from(await readHostFile(file)), [1, 2, 3, 4]);
+    await assert.rejects(() => readHostFile(file, { maxBytes: 3 }), /too large/);
+    // Symlinks to regular files inside the allowed roots still resolve to the real file.
+    const link = path.join(dir, "link.bin");
+    fs.symlinkSync(file, link);
+    assert.deepEqual(Array.from(await readHostFile(link)), [1, 2, 3, 4]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveHostPath expands a leading ~ to the home directory", () => {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-home-")));
+  const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-cwd-")));
+  const savedCwd = process.cwd();
+  try {
+    fs.mkdirSync(path.join(home, ".c64bridge"));
+    fs.writeFileSync(path.join(home, ".c64bridge", "x.json"), "{}");
+    process.chdir(cwd);
+    withEnv({ HOME: home, C64BRIDGE_ALLOWED_DIRS: undefined }, () => {
+      const write = resolveHostPath("~/.c64bridge/x.json", { purpose: "write" });
+      assert.equal(write, path.join(home, ".c64bridge", "x.json"));
+      assert.ok(isWithin(home, write));
+      const read = resolveHostPath("~/.c64bridge/x.json", { purpose: "read" });
+      assert.equal(read, path.join(home, ".c64bridge", "x.json"));
+      assert.ok(!fs.existsSync(path.join(cwd, "~")));
+      assert.equal(resolveHostPath("~", { purpose: "write", roots: [home] }), home);
+      let error;
+      try { resolveHostPath("~other/x", { purpose: "write", roots: [home] }); } catch (e) { error = e; }
+      assert.ok(error instanceof ToolValidationError);
+      assert.ok(error.message.includes(path.join(cwd, "~other", "x")), error.message);
+    });
+  } finally {
+    process.chdir(savedCwd);
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});

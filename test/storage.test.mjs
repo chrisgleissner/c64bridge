@@ -592,3 +592,31 @@ test("create_dnp handles exception", async () => {
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "unknown");
 });
+
+test("create_d64 reports an existing file as a user-correctable error", async () => {
+  const ctx = {
+    client: createMockClient({
+      async filesCreateD64() {
+        return { success: false, details: { message: "Request failed with status code 500", status: 500, data: { errors: ["FILE EXISTS"] } } };
+      },
+    }),
+    logger: createLogger(),
+  };
+  const res = await storageModule.invoke("create_d64", { path: "/tmp/new.d64" }, ctx);
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "validation");
+  assert.match(JSON.stringify(res.content), /already exists at \/tmp\/new\.d64/);
+  assert.match(JSON.stringify(res.content), /does not overwrite/);
+});
+
+test("drive tools reject a drive id that is not a, b, softiec or a bus number", async () => {
+  const ctx = { client: createMockClient(), rag: {}, logger: createLogger() };
+  for (const drive of ["x/../../machine:poweroff?", "a/b", "foo"]) {
+    const res = await storageModule.invoke("drive_reset", { drive }, ctx);
+    assert.equal(res.isError, true, `${drive} must be rejected`);
+  }
+  for (const drive of ["a", "B", "softiec", "IEC Drive", "8", "drive9"]) {
+    const res = await storageModule.invoke("drive_reset", { drive }, ctx);
+    assert.notEqual(res.isError, true, `${drive} must be accepted`);
+  }
+});

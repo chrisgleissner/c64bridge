@@ -1,32 +1,72 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CANONICAL_KNOWLEDGE_RESOURCE_URIS, PLATFORM_RESOURCE_URI, RESOURCE_URIS } from "./resourceUris.js";
 
-function generateCharsetQuickref(): string {
-  const csvPath = join(process.cwd(), "data/graphics/character-set.csv");
+const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/** Splits one CSV record, honouring RFC 4180 quoting (commas and doubled quotes inside quoted fields). */
+export function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i]!;
+    if (quoted) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ",") {
+      fields.push(field);
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field);
+  return fields;
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/\|/g, "\\|");
+}
+
+let charsetQuickrefCache: string | undefined;
+
+export function generateCharsetQuickref(): string {
+  if (charsetQuickrefCache !== undefined) return charsetQuickrefCache;
+  const csvPath = join(PACKAGE_ROOT, "data/graphics/character-set.csv");
   const csvContent = readFileSync(csvPath, "utf-8");
-  const lines = csvContent.trim().split("\n");
-  const headers = lines[0].split(",");
-  
+  const lines = csvContent.trim().split(/\r?\n/);
+
   let markdown = "# PETSCII Character Set Reference\n\n";
   markdown += "Complete reference of C64 character codes, screen codes, and glyphs.\n\n";
   markdown += "## Character Code Table\n\n";
   markdown += "| Screen Code | PETSCII | Char | Name | Keyboard |\n";
   markdown += "|-------------|---------|------|------|----------|\n";
-  
+
   for (let i = 1; i < lines.length; i++) {
-    const parts = lines[i].split(",");
+    const parts = parseCsvLine(lines[i]!);
     if (parts.length < 8) continue;
-    
+
     const screenCode = parts[0];
     const petsciiCode = parts[2];
     const char = parts[4] || " ";
     const name = parts[6] || "";
     const keyboard = parts[7] || "";
-    
-    markdown += `| ${screenCode} | ${petsciiCode} | ${char} | ${name} | ${keyboard} |\n`;
+
+    markdown += `| ${markdownCell(screenCode!)} | ${markdownCell(petsciiCode!)} | ${markdownCell(char)} | ${markdownCell(name)} | ${markdownCell(keyboard)} |\n`;
   }
-  
+
   markdown += "\n## Usage Notes\n\n";
   markdown += "- **Screen Code**: Value used in screen memory ($0400-$07E7)\n";
   markdown += "- **PETSCII Code**: Value used in BASIC strings and CHR$() function\n";
@@ -37,6 +77,7 @@ function generateCharsetQuickref(): string {
   markdown += "- Digits: PETSCII $30-$39 (0-9)\n";
   markdown += "- Graphics characters: Screen codes $60-$7F and $E0-$FF\n";
   
+  charsetQuickrefCache = markdown;
   return markdown;
 }
 
@@ -125,6 +166,156 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     ],
   },
   {
+    id: "gamedev",
+    title: "C64 Game Development",
+    summary: "Start at c64://gamedev/index for any game request; it picks the target (modern Ultimate by default, or stock C64) and lists which other resources to read.",
+    prompts: ["game-development", "assembly-program"],
+    tools: ["c64_program", "c64_memory", "c64_graphics", "c64_debug", "c64_select_backend", "c64_config"],
+    resources: [
+      {
+        uri: RESOURCE_URIS.gamedev.index,
+        name: "Game Development Index (read first)",
+        description: "CRITICAL: Read first when asked to write, port or extend a C64 game; chooses modern C64U/Ultimate (default) or stock C64 and lists which resources to read by game type.",
+        relativePath: "data/gamedev/index.md",
+        priority: "critical",
+        summary: "Target decision, reading plan by game type, resource table with sizes, and the c64bridge dev loop for games.",
+        prompts: ["game-development"],
+        tools: ["c64_program", "c64_memory", "c64_graphics", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.gamedev.architecture, RESOURCE_URIS.gamedev.techniques, RESOURCE_URIS.gamedev.toolchain, RESOURCE_URIS.gamedev.references, RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.spriteCharset.bestPractices, RESOURCE_URIS.memory.map, RESOURCE_URIS.io.cia.spec, RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.guide.bootstrap],
+        tags: ["game", "workflow", "routing", "modern", "authentic"],
+      },
+      {
+        uri: RESOURCE_URIS.gamedev.architecture,
+        name: "Game Architecture",
+        description: "Read before choosing addresses, VIC bank, loader or IRQ layout for a C64 game (stock C64 and modern Ultimate): frame loop, state machine, cycle budgets and memory-map templates.",
+        relativePath: "data/gamedev/architecture.md",
+        priority: "critical",
+        summary: "Frame-synchronous loop, state machine, frame and cycle budgets, memory-map templates for stock and REU-streaming games.",
+        prompts: ["game-development"],
+        tools: ["c64_program", "c64_memory", "c64_graphics", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.gamedev.techniques, RESOURCE_URIS.memory.map, RESOURCE_URIS.memory.zeroPageAndWorkspace, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.ultimate.multisid],
+        tags: ["game", "architecture", "memory"],
+      },
+      {
+        uri: RESOURCE_URIS.gamedev.techniques,
+        name: "Game Techniques",
+        description: "Read when implementing raster IRQs, sprite multiplexing, scrolling, collision, joystick input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling or Ultimate start-up checks (turbo probe) in a C64 game (stock C64 and modern Ultimate).",
+        relativePath: "data/gamedev/techniques.md",
+        priority: "critical",
+        summary: "Compact 6502 recipes for the techniques most C64 games need, each with reference projects to study.",
+        prompts: ["game-development"],
+        tools: ["c64_program", "c64_memory", "c64_graphics", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.gamedev.architecture, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.spriteCharset.bestPractices, RESOURCE_URIS.io.cia.spec, RESOURCE_URIS.io.spec, RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.sound.sid.fileFormat, RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.ultimate.multisid, RESOURCE_URIS.ultimate.hardware],
+        tags: ["game", "irq", "sprites", "scrolling", "input", "sound"],
+      },
+      {
+        uri: RESOURCE_URIS.gamedev.toolchain,
+        name: "Game Toolchain",
+        description: "Read when setting up a C64 game project, choosing an assembler or compiler, building PRG/D64/CRT files, or testing on VICE and hardware through c64bridge (stock C64 and modern Ultimate).",
+        relativePath: "data/gamedev/toolchain.md",
+        priority: "reference",
+        summary: "Assembler and compiler choice, Makefile build, Exomizer packing, VICE and hardware test loop, .cfg and REU image for modern releases.",
+        prompts: ["game-development"],
+        tools: ["c64_program", "c64_memory", "c64_graphics", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.gamedev.architecture, RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.vice.binaryMonitorSpec, RESOURCE_URIS.kernal.romRoutines],
+        tags: ["game", "toolchain", "build"],
+      },
+      {
+        uri: RESOURCE_URIS.gamedev.references,
+        name: "Game References",
+        description: "Read to find real games and projects to learn from, with the technique each is known for and where to read it: modern Ultimate (UCI, REU, Upic, turbo) projects and classic stock C64 games.",
+        relativePath: "data/gamedev/references.md",
+        priority: "supplemental",
+        summary: "Modern Ultimate projects and classic C64 games mapped to techniques, with licence cautions for reuse.",
+        prompts: ["game-development"],
+        tools: ["c64_program", "c64_memory", "c64_graphics", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.gamedev.techniques, RESOURCE_URIS.gamedev.toolchain, RESOURCE_URIS.ultimate.hardware],
+        tags: ["game", "references", "examples"],
+      },
+    ],
+  },
+  {
+    id: "ultimate",
+    title: "Ultimate Device Features",
+    summary: "Features of Ultimate 64 / C64 Ultimate hardware that a modern-target game can use after detection; absent on a stock C64 and in VICE.",
+    prompts: ["game-development"],
+    tools: ["c64_config", "c64_program", "c64_memory", "c64_select_backend"],
+    resources: [
+      {
+        uri: RESOURCE_URIS.ultimate.hardware,
+        name: "Ultimate Hardware Features",
+        description: "Read for modern C64U/Ultimate 64 features (CPU turbo via D031, multiple SIDs, video, config, detection); not applicable to a stock C64.",
+        relativePath: "data/ultimate/hardware.md",
+        priority: "critical",
+        summary: "Turbo, SID layout, video and palette, REU/UCI presence, model detection and config settings, with fallbacks for stock machines.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_system"],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.ultimate.upic, RESOURCE_URIS.ultimate.multisid, RESOURCE_URIS.io.spec, RESOURCE_URIS.memory.map, RESOURCE_URIS.sound.sid.spec],
+        tags: ["ultimate", "turbo", "hardware", "modern"],
+      },
+      {
+        uri: RESOURCE_URIS.ultimate.uci,
+        name: "Ultimate Command Interface (UCI)",
+        description: "Read when a modern C64U/Ultimate game must load files from the Ultimate, save data, use the network, change the palette or detect the device via the UCI registers at DF1B; not on a stock C64.",
+        relativePath: "data/ultimate/uci.md",
+        priority: "reference",
+        summary: "UCI register protocol, command targets, file and REU loading, network, palette, safe use and detection.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_system"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.gamedev.index, RESOURCE_URIS.io.spec],
+        tags: ["ultimate", "uci", "files", "modern"],
+      },
+      {
+        uri: RESOURCE_URIS.ultimate.reu,
+        name: "Ultimate REU",
+        description: "Read when a modern C64U/Ultimate game streams or stores data in the REU (registers DF00, DMA, preload, sizes); not on a stock C64 unless a real REU is fitted.",
+        relativePath: "data/ultimate/reu.md",
+        priority: "reference",
+        summary: "REU registers, tested level-load and detection routines, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_system"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.gamedev.architecture, RESOURCE_URIS.memory.map, RESOURCE_URIS.io.spec],
+        tags: ["ultimate", "reu", "dma", "modern"],
+      },
+      {
+        uri: RESOURCE_URIS.ultimate.upic,
+        name: "Ultimate Upic Graphics",
+        description: "Read when a request mentions Upic or a 384x256 16-colour attribute-free full-screen game on a modern C64U/Ultimate at turbo speed; not for a stock C64.",
+        relativePath: "data/ultimate/upic.md",
+        priority: "supplemental",
+        summary: "Cycle-exact border-colour technique for 384x256 16-colour graphics, framebuffer, palette use and limits.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_system"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.gamedev.index],
+        tags: ["ultimate", "upic", "graphics", "modern"],
+      },
+      {
+        uri: RESOURCE_URIS.ultimate.multisid,
+        name: "Ultimate Multi-SID Control",
+        description: "Read when a modern C64U/Ultimate game uses more than one SID, sets SID addresses, range splits, pan or the mixer at run time, or must work with empty sockets, one or two real SIDs or SID replacements; not on a stock C64.",
+        relativePath: "data/ultimate/multisid.md",
+        priority: "reference",
+        summary: "Verified control recipe per owner configuration (8 SIDs, or 10 with a chip in each socket), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_sound"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.uci, RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.gamedev.index],
+        tags: ["ultimate", "sid", "multisid", "modern"],
+      },
+      {
+        uri: RESOURCE_URIS.ultimate.bench,
+        name: "Ultimate Turbo Benchmark",
+        description: "Read when you need to measure CPU cycles per frame, badline or sprite cost, REU DMA speed or the reset 1 MHz window on a modern C64U/Ultimate, or to rerun the published measurements.",
+        relativePath: "data/ultimate/bench/README.md",
+        priority: "supplemental",
+        summary: "Benchmark programs, result block layout, decoding formulas and a step-by-step rerun recipe using only c64bridge tools.",
+        prompts: ["game-development"],
+        tools: ["c64_config", "c64_program", "c64_memory", "c64_select_backend"],
+        relatedResources: [RESOURCE_URIS.ultimate.hardware, RESOURCE_URIS.ultimate.reu, RESOURCE_URIS.gamedev.architecture, RESOURCE_URIS.io.cia.spec],
+        tags: ["ultimate", "turbo", "benchmark", "measurement"],
+      },
+    ],
+  },
+  {
     id: "vice",
     title: "VICE Emulator",
     summary: "Critical Binary Monitor protocol guidance for any workflow that targets the VICE backend.",
@@ -209,7 +400,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU.",
         prompts: ["assembly-program"],
   tools: ["upload_run_asm", "read"],
-        relatedResources: [RESOURCE_URIS.guide.bootstrap],
+        relatedResources: [RESOURCE_URIS.gamedev.techniques, RESOURCE_URIS.guide.bootstrap],
         tags: ["assembly", "language"],
       },
     ],
@@ -230,7 +421,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Register map, waveform behaviour, and ADSR envelopes for expressive SID playback.",
         prompts: ["sid-music"],
         tools: ["c64_sound"],
-        relatedResources: [RESOURCE_URIS.sound.sidwave.spec, RESOURCE_URIS.sound.sid.fileFormat],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.sound.sidwave.spec, RESOURCE_URIS.sound.sid.fileFormat],
         tags: ["sid", "audio"],
       },
       {
@@ -287,7 +478,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Covers raster timing, sprite control, colour RAM, and bitmap modes on the VIC-II.",
         prompts: ["graphics-demo"],
         tools: ["c64_graphics", "c64_memory"],
-        relatedResources: [RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.assembly.spec6510, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide],
         tags: ["vic", "graphics"],
       },
       {
@@ -323,7 +514,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics.",
         prompts: ["graphics-demo"],
         tools: ["c64_graphics", "c64_memory", "c64_program"],
-        relatedResources: [RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide, RESOURCE_URIS.memory.map],
+        relatedResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.graphics.vic.spec, RESOURCE_URIS.graphics.characterSet, RESOURCE_URIS.graphics.petscii.styleGuide, RESOURCE_URIS.memory.map],
         tags: ["sprites", "charset", "graphics", "workflows"],
       },
     ],
@@ -344,7 +535,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory"],
-        relatedResources: [
+        relatedResources: [RESOURCE_URIS.gamedev.index, 
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
           RESOURCE_URIS.basic.romRoutines,
           RESOURCE_URIS.kernal.romRoutines,
@@ -416,7 +607,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory", "debugreg_read", "debugreg_write"],
-        relatedResources: [
+        relatedResources: [RESOURCE_URIS.gamedev.index, 
           RESOURCE_URIS.memory.map,
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
           RESOURCE_URIS.io.cia.spec,
@@ -433,7 +624,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         summary: "Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout.",
         prompts: ["memory-debug", "assembly-program"],
   tools: ["read", "write", "verify_and_write_memory", "debugreg_read"],
-        relatedResources: [
+        relatedResources: [RESOURCE_URIS.gamedev.index, 
           RESOURCE_URIS.io.spec,
           RESOURCE_URIS.memory.map,
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
@@ -706,4 +897,25 @@ export function readKnowledgeResource(
     mimeType: resource.mimeType,
     text,
   };
+}
+
+const PUBLISHED_RESOURCE_META_KEYS = ["domain", "priority", "order"] as const;
+
+/**
+ * Returns the resource _meta published in resources/list. The summary, prompts,
+ * tools, tags, bundle and relatedResources fields are about 17 KB over 36 resources and
+ * are published only with C64BRIDGE_VERBOSE_SCHEMA=1.
+ */
+export function publishedResourceMeta<T extends object>(
+  metadata: T,
+  options: { verbose?: boolean } = {},
+): Partial<T> {
+  const verbose = options.verbose ?? process.env.C64BRIDGE_VERBOSE_SCHEMA === "1";
+  if (verbose) return metadata;
+  const source = metadata as Record<string, unknown>;
+  const published: Record<string, unknown> = {};
+  for (const key of PUBLISHED_RESOURCE_META_KEYS) {
+    if (source[key] !== undefined) published[key] = source[key];
+  }
+  return published as Partial<T>;
 }

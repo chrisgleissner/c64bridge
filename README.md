@@ -422,7 +422,7 @@ These variables are read by the server itself and are set in the `env` block of 
 | --- | --- | --- |
 | `C64BRIDGE_ALLOWED_DIRS` | unset | Additional directories for host file paths in tool arguments. Separate entries with the platform path delimiter; `*` disables the confinement. |
 | `C64BRIDGE_ACCESS` | `full` | `full`, `no-destructive` or `read-only`. Limits which operations a client may call. |
-| `C64BRIDGE_HTTP_TOKEN` | unset | When set, the optional HTTP transport (`--http`) requires `Authorization: Bearer <token>`. The transport accepts only loopback `Host` and `Origin` headers regardless of this setting. |
+| `C64BRIDGE_HTTP_TOKEN` | unset | When set, the optional HTTP transport (`--http`) requires `Authorization: Bearer <token>`. The transport binds to 127.0.0.1 and accepts only loopback `Host` and `Origin` headers regardless of this setting. Without a token, any process that can reach 127.0.0.1 on that port can call every tool. An invalid `--http` port is a startup error. |
 | `C64BRIDGE_DIAGNOSTICS_KEEP` | `200` | Number of diagnostics files kept in the diagnostics directory. At startup the server deletes older files beyond this count and files older than 30 days. An invalid value is ignored with a warning on stderr. Diagnostics files are created with mode 0600 in a directory created with mode 0700. |
 | `C64BRIDGE_VERBOSE_SCHEMA` | unset | Set to `1` to include the full per-operation schemas in `tools/list`. By default they are omitted to keep the listing small. |
 
@@ -492,7 +492,7 @@ You can add `env` entries in `.vscode/mcp.json` to select a config file, overrid
 
 - `C64BRIDGE_CONFIG` points to a specific config file
 - `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD` override the C64 Ultimate connection without editing config files
-- `C64_MODE` forces the initial backend to `c64u`, `u2`, or `vice`; `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override the selected U2 profile.
+- `C64_MODE` forces the initial backend to `c64u`, `u2`, or `vice`; `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override the selected U2 profile. `C64U_*` variables apply to the U2 profile only when the configuration has no `u2` section.
 - `LOG_LEVEL=debug` enables verbose logging
 
 For VICE-specific overrides such as `VICE_ARGS=-minimized`, `VICE_VISIBLE=false`, or custom VICE paths, use the patterns in [Backend Configuration: VICE](#backend-configuration-vice).
@@ -750,7 +750,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **27 resources**, and **10 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **38 resources**, and **11 prompts** for controlling your Commodore 64.
 
 ### Tools
 
@@ -776,7 +776,7 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 | `load_flash` | Load configuration from flash storage. | — | `category` | ✅ | ✅ |  |
 | `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |  |
 | `reset_defaults` | Reset firmware configuration to factory defaults. | — | `category` | ✅ | ✅ |  |
-| `restore` | Restore configuration from a snapshot file. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
+| `restore` | Restore configuration from a snapshot file. Writes only the items that differ from the device; if the device refuses a category (for example 403 when the network password is missing or wrong), the other categories are still restored and the result is an error naming the failed categories. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
 | `save_flash` | Persist the current configuration to flash storage. | — | `category` | ✅ | ✅ |  |
 | `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | ✅ | ✅ | ✅ |
 | `shuffle` | Discover PRG/CRT files and run each with optional screen capture. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ |  |
@@ -804,7 +804,7 @@ Grouped entry point for VICE debugger operations (breakpoints, registers, steppi
 | `step` | Single-step CPU execution. | — | `count=1`, `mode` |  |  | ✅ |
 | `step_return` | Continue execution until the current routine returns. | — | — |  |  | ✅ |
 | `toggle_checkpoint` | Enable or disable a checkpoint by id. | `id`, `enabled` | — |  |  | ✅ |
-| `wait_for_state` | Poll CPU registers until PC equals expectedPC or timeout elapses. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` |  |  | ✅ |
+| `wait_for_state` | Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` |  |  | ✅ |
 
 #### c64_disk
 
@@ -812,7 +812,7 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `create_image` | Create a blank disk image of the specified format. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
+| `create_image` | Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
 | `file_info` | Inspect metadata for a file on the Ultimate filesystem. | `path` | — | ✅ | ✅ |  |
 | `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
 | `find_paths` | Search Ultimate storage for paths whose names contain a substring, without running anything. | `nameContains` | `root="/"`, `extensions`, `maxResults=100`, `caseInsensitive=true` | ✅ | ✅ |  |
@@ -915,12 +915,13 @@ Grouped entry point for program upload, execution, and batch workflows.
 
 #### c64_rag
 
-Grouped entry point for BASIC and assembly RAG lookups.
+Grouped entry point for BASIC, assembly and curated-docs RAG lookups.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `asm` | Retrieve 6502/6510 assembly references from the local knowledge base. | `q` | `k=3` | ✅ | ✅ | ✅ |
 | `basic` | Retrieve BASIC references and snippets from the local knowledge base. | `q` | `k=3` | ✅ | ✅ | ✅ |
+| `docs` | Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. | `q` | `k=3` | ✅ | ✅ | ✅ |
 
 #### c64_select_backend
 
@@ -968,14 +969,14 @@ Grouped entry point for power, reset, menu, and background task control.
 | --- | --- | --- | --- | --- | --- | --- |
 | `list_tasks` | List known background tasks with status metadata. | — | — | ✅ | ✅ | ✅ |
 | `menu` | Toggle the Ultimate menu button for navigation. | — | — | ✅ | ✅ |  |
-| `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ |  |
+| `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ | ✅ |
 | `performance_report` | Summarize diagnostics spans and tool latencies from the current or latest MCP session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | ✅ | ✅ | ✅ |
 | `power_cycle` | Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. | — | — | ✅ |  | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). | — | — | ✅ | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
-| `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ |  |
+| `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ | ✅ |
 | `start_task` | Start a named background task that runs on an interval. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
 | `stop_all_tasks` | Stop every running background task and persist state. | — | — | ✅ | ✅ | ✅ |
 | `stop_task` | Stop a specific background task and clear its timer. | `name` | — | ✅ | ✅ | ✅ |
@@ -996,6 +997,17 @@ Grouped entry point for reading and updating selected VICE resources.
 | `c64://guide/index` | Explains how to approach each knowledge bundle and when to consult it. |
 | `c64://guide/bootstrap` | Step-by-step rules for safe automation, verification, and rollback on the C64. |
 | `c64://guide/fast-paths` | Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition. |
+| `c64://gamedev/index` | Target decision, reading plan by game type, resource table with sizes, and the c64bridge dev loop for games. |
+| `c64://gamedev/architecture` | Frame-synchronous loop, state machine, frame and cycle budgets, memory-map templates for stock and REU-streaming games. |
+| `c64://gamedev/techniques` | Compact 6502 recipes for the techniques most C64 games need, each with reference projects to study. |
+| `c64://gamedev/toolchain` | Assembler and compiler choice, Makefile build, Exomizer packing, VICE and hardware test loop, .cfg and REU image for modern releases. |
+| `c64://gamedev/references` | Modern Ultimate projects and classic C64 games mapped to techniques, with licence cautions for reuse. |
+| `c64://ultimate/hardware` | Turbo, SID layout, video and palette, REU/UCI presence, model detection and config settings, with fallbacks for stock machines. |
+| `c64://ultimate/uci` | UCI register protocol, command targets, file and REU loading, network, palette, safe use and detection. |
+| `c64://ultimate/reu` | REU registers, tested level-load and detection routines, DMA behaviour, enabling and preloading an image, streaming levels, graphics and samples. |
+| `c64://ultimate/upic` | Cycle-exact border-colour technique for 384x256 16-colour graphics, framebuffer, palette use and limits. |
+| `c64://ultimate/multisid` | Verified control recipe per owner configuration (8 SIDs, or 10 with a chip in each socket), address map, range split and mirroring, mixer and pan, UCI LOAD_CONFIG setup and restore, ENV3 detection, sound differences. |
+| `c64://ultimate/bench` | Benchmark programs, result block layout, decoding formulas and a step-by-step rerun recipe using only c64bridge tools. |
 | `c64://vice/binary-monitor-spec` | Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations. |
 | `c64://basic/spec` | Token definitions, syntax rules, and device I/O guidance for BASIC v2. |
 | `c64://basic/pitfalls` | Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps. |
@@ -1029,6 +1041,7 @@ Grouped entry point for reading and updating selected VICE resources.
 | `basic-program` | Route bespoke Commodore BASIC v2 requests to the canonical BASIC skill. |
 | `cross-platform-demo` | Route quick visible demo requests to the cross-platform demo skill. |
 | `drive-manager` | Route disk-image and drive-state requests to the canonical drive skill. |
+| `game-development` | Route requests to write, port or extend a C64 game to the game development skill and the c64://gamedev/index reading plan. |
 | `graphics-demo` | Route graphics requests to the canonical graphics skill. |
 | `hello-world` | Route ultra-fast hello-world and smoke-test requests to the canonical greeting skill. |
 | `memory-debug` | Route reversible memory inspection or patching work to the canonical memory skill. |

@@ -50,9 +50,10 @@ export function detokenizeLine(bytes: Uint8Array): string {
 /**
  * Walks the link pointers of a tokenised BASIC program held in `image`, which
  * starts at memory address `base`. Throws when a link does not move forward or
- * leaves the image, so a corrupt program cannot loop.
+ * leaves the image, so a corrupt program cannot loop, and when the image ends
+ * without the 00 00 terminator, which is returned as corruption metadata.
  */
-export function listBasicProgram(image: Uint8Array, base: number): BasicListingLine[] {
+export function listBasicProgram(image: Uint8Array, base: number): { lines: BasicListingLine[]; corrupt?: { address: string; message: string } } {
   if (image.length > MAX_BASIC_IMAGE_BYTES) {
     throw new ToolExecutionError("BASIC program image is larger than 64 KiB", { details: { length: image.length } });
   }
@@ -60,7 +61,7 @@ export function listBasicProgram(image: Uint8Array, base: number): BasicListingL
   let offset = 0;
   while (offset + 2 <= image.length) {
     const link = image[offset]! | (image[offset + 1]! << 8);
-    if (link === 0) return lines;
+    if (link === 0) return { lines };
     const linkOffset = link - base;
     const address = hex16(base + offset);
     if (linkOffset <= offset + 4) {
@@ -84,5 +85,7 @@ export function listBasicProgram(image: Uint8Array, base: number): BasicListingL
     lines.push({ number, text: detokenizeLine(image.subarray(offset + 4, end)) });
     offset = linkOffset;
   }
-  return lines;
+  // The loop only ends here when the last link pointed at the end of the image, so the 00 00 terminator is absent.
+  const address = hex16(base + offset);
+  return { lines, corrupt: { address, message: `BASIC program has no 00 00 terminator after the last line at ${address}; the lines parsed so far are returned` } };
 }

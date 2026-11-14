@@ -31,9 +31,10 @@ test("HARD01-001 parseCliOptions honours --http and its optional port", () => {
   assert.deepEqual(parseCliOptions(["--http"]), { mode: "http", port: undefined });
   assert.deepEqual(parseCliOptions(["--http", "8080"]), { mode: "http", port: 8080 });
   assert.deepEqual(parseCliOptions(["--http", "--other-flag"]), { mode: "http", port: undefined });
-  assert.deepEqual(parseCliOptions(["--http", "not-a-port"]), { mode: "http", port: undefined });
-  assert.deepEqual(parseCliOptions(["--http", "0"]), { mode: "http", port: undefined });
-  assert.deepEqual(parseCliOptions(["--http", "70000"]), { mode: "http", port: undefined });
+  // A supplied but invalid port is a startup error, not a silent fall back to 3000.
+  for (const bad of ["not-a-port", "0", "70000", "99999", "80a", "8e3", "-1", "1.5"]) {
+    assert.throws(() => parseCliOptions(["--http", bad]), /Invalid --http port/, bad);
+  }
 });
 
 async function reserveLoopbackPort() {

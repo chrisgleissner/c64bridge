@@ -132,6 +132,53 @@
       }
     },
     {
+      "name": "game-development",
+      "title": "Game Development Workflow",
+      "description": "Route requests to write, port or extend a C64 game to the game development skill and the c64://gamedev/index reading plan.",
+      "arguments": [
+        {
+          "name": "target",
+          "description": "Hardware target: modern (C64U / Ultimate 64 family, default) or authentic (stock C64)."
+        },
+        {
+          "name": "genre",
+          "description": "Optional game genre, for example shooter, platformer, puzzle or RPG."
+        },
+        {
+          "name": "idea",
+          "description": "Optional one-line game idea."
+        }
+      ],
+      "_meta": {
+        "requiredResources": [
+          "c64://gamedev/index",
+          "c64://guide/bootstrap"
+        ],
+        "optionalResources": [],
+        "tools": [
+          "c64_program",
+          "c64_memory",
+          "c64_graphics",
+          "c64_debug",
+          "c64_select_backend",
+          "c64_config"
+        ],
+        "tags": [
+          "game",
+          "development",
+          "assembly",
+          "modern",
+          "authentic"
+        ],
+        "argumentOptions": {
+          "target": [
+            "modern",
+            "authentic"
+          ]
+        }
+      }
+    },
+    {
       "name": "sid-music",
       "title": "SID Composition Workflow",
       "description": "Route SID playback and composition work to the canonical SID skill.",

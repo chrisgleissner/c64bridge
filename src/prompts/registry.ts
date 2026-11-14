@@ -61,6 +61,16 @@ export interface PromptRegistry {
 type AssemblyHardware = "sid" | "vic" | "cia" | "multi";
 type GraphicsMode = "text" | "multicolour" | "bitmap" | "sprite";
 type PrinterType = "commodore" | "epson";
+type GameTarget = "modern" | "authentic";
+
+const GAME_TARGET_NOTES: Record<GameTarget, readonly string[]> = {
+  modern: [
+    "Target is modern: a C64U / Ultimate 64 family device. Turbo, REU, UCI and Upic are available only after detection and enabling them with `c64_config`; always keep a fallback message.",
+  ],
+  authentic: [
+    "Target is authentic: a stock PAL/NTSC C64 at 1 MHz. Do not use turbo (`$D030/$D031`), UCI, REU or a second SID, and count cycles; verify on VICE first.",
+  ],
+};
 
 const ASSEMBLY_HARDWARE_NOTES: Record<AssemblyHardware, readonly string[]> = {
   sid: [
@@ -164,6 +174,36 @@ function prepareGraphicsArgs(args: Record<string, unknown>): Record<string, unkn
     );
   }
   return { mode: normalized };
+}
+
+function prepareGameDevArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const prepared: Record<string, unknown> = {};
+  const target = args.target;
+  if (target !== undefined && target !== null && typeof target !== "string") {
+    throw new Error("game-development prompt argument \"target\" must be a string");
+  }
+  const normalized = typeof target === "string" && target.trim() ? target.trim().toLowerCase() : "modern";
+  const allowed: GameTarget[] = ["modern", "authentic"];
+  if (!allowed.includes(normalized as GameTarget)) {
+    throw new Error(
+      `game-development prompt does not support target \"${String(target)}\". Expected one of: ${allowed.join(", ")}`,
+    );
+  }
+  prepared.target = normalized;
+  for (const key of ["genre", "idea"] as const) {
+    const value = args[key];
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value !== "string") {
+      throw new Error(`game-development prompt argument \"${key}\" must be a string`);
+    }
+    const trimmed = value.trim();
+    if (trimmed) {
+      prepared[key] = trimmed;
+    }
+  }
+  return prepared;
 }
 
 function preparePrinterArgs(args: Record<string, unknown>): Record<string, unknown> {
@@ -293,6 +333,54 @@ export function createPromptRegistry(): PromptRegistry {
               ...ASSEMBLY_HARDWARE_NOTES[hardware],
             ]
           : [];
+      },
+    },
+    {
+      descriptor: {
+        name: "game-development",
+        title: "Game Development Workflow",
+        description: "Route requests to write, port or extend a C64 game to the game development skill and the c64://gamedev/index reading plan.",
+        requiredResources: [RESOURCE_URIS.gamedev.index, RESOURCE_URIS.guide.bootstrap],
+        optionalResources: [],
+        tools: ["c64_program", "c64_memory", "c64_graphics", "c64_debug", "c64_select_backend", "c64_config"],
+        tags: ["game", "development", "assembly", "modern", "authentic"],
+      },
+      skillPath: ".github/skills/game-development/SKILL.md",
+      routingNotes: [
+        `Read \`${RESOURCE_URIS.gamedev.index}\` first. It is small, sets the target decision, and lists which topic resources to read for the game type; read only those.`,
+        "The target is `modern` (C64U / Ultimate 64 family, the default) or `authentic` (stock C64). State the chosen target in the first reply.",
+        "Use this prompt for any game request, whatever the language or genre; plain assembly questions without a game go to `assembly-program`.",
+      ],
+      arguments: [
+        {
+          name: "target",
+          description: "Hardware target: modern (C64U / Ultimate 64 family, default) or authentic (stock C64).",
+          options: ["modern", "authentic"],
+        },
+        {
+          name: "genre",
+          description: "Optional game genre, for example shooter, platformer, puzzle or RPG.",
+        },
+        {
+          name: "idea",
+          description: "Optional one-line game idea.",
+        },
+      ],
+      prepareArgs: prepareGameDevArgs,
+      selectOptionalResources: (args) =>
+        args.target === "authentic"
+          ? [RESOURCE_URIS.graphics.spriteCharset.bestPractices]
+          : [RESOURCE_URIS.ultimate.hardware],
+      renderRoutingNotes: (args) => {
+        const target = (args.target as GameTarget | undefined) ?? "modern";
+        const notes = [`Prompt argument target is \`${target}\`; keep it for the whole task.`, ...GAME_TARGET_NOTES[target]];
+        if (typeof args.genre === "string") {
+          notes.push(`Prompt argument genre is \`${args.genre}\`; use it to pick the reading plan row in the index.`);
+        }
+        if (typeof args.idea === "string") {
+          notes.push(`Prompt argument idea: ${args.idea}`);
+        }
+        return notes;
       },
     },
     {

@@ -15,6 +15,23 @@ async function waitForTaskStatus(listTool, ctx, name, status, timeoutMs = 5000) 
   }
 }
 
+// The task flips to "completed" in memory before its state file is written. The write resolves
+// C64_TASK_STATE_FILE when it runs, so a test that returns earlier lets it land in the next test's
+// state file. Wait until the file on disk shows the status before ending the test.
+async function waitForPersistedStatus(file, name, status, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const state = JSON.parse(await fs.readFile(file, "utf8"));
+      if (state.tasks?.some((entry) => entry.name === name && entry.status === status)) return;
+    } catch {
+      // The file may be missing or mid-rename; retry.
+    }
+    if (Date.now() > deadline) throw new Error(`state file ${file} never showed ${name} as ${status}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 function createLogger() {
   return {
     debug() {},
@@ -187,6 +204,7 @@ describe("meta/background state loading", () => {
     expect(result.metadata?.success).toBe(true);
     const listed = await waitForTaskStatus(listTool, ctx, "alias", "completed");
     expect(listed.structuredContent?.data?.tasks?.[0]?.status).toBe("completed");
+    await waitForPersistedStatus(file, "alias", "completed");
     expect(calls).toEqual([{ address: "$0400", length: "16" }]);
   });
 
@@ -275,6 +293,7 @@ describe("meta/background state loading", () => {
     const listed = await waitForTaskStatus(listTool, ctx, "task-files", "completed");
     const task = listed.structuredContent?.data?.tasks?.find((entry) => entry.name === "task-files");
     const taskDir = path.join(dir, "tasks", "background", task.id);
+    await waitForPersistedStatus(file, "task-files", "completed");
 
     expect(task?.status).toBe("completed");
     expect(JSON.parse(await fs.readFile(file, "utf8")).tasks).toHaveLength(1);

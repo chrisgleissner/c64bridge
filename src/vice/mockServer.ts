@@ -44,7 +44,26 @@ function buildDefaultRegisterMetadata(): readonly MockRegisterMetadata[] {
 export interface ViceMockServerOptions {
   host?: string;
   port?: number;
+  /**
+   * Emulates VICE 3.10: after a client closes its connection while a stop-on-hit
+   * checkpoint exists, the monitor accepts connections but never answers.
+   */
+  wedgeOnUnsafeClose?: boolean;
+  /**
+   * Emulated KERNAL boot time after a machine reset, counted only while the CPU runs (a stopped
+   * CPU does not boot). Until it has passed, the screen is blank and the BASIC pointers are zero,
+   * as on VICE. Default 0: the READY prompt is there immediately.
+   */
+  bootMs?: number;
+  /**
+   * Emulates VICE acknowledging step (0x71) and step-return (0x73) before the code runs: the
+   * acknowledgement is sent first, and the resumed and stopped events follow after this many
+   * milliseconds. Without it the events are sent before the acknowledgement.
+   */
+  stepEventDelayMs?: number;
 }
+
+const UNSOLICITED = 0xffffffff;
 
 function buildResponse(cmd: number, reqId: number, body: Buffer = Buffer.alloc(0), err = 0): Buffer {
   const header = Buffer.alloc(12 + body.length);
@@ -77,10 +96,91 @@ export class ViceMockServer {
   /** Output lines of VICE's I/O simulation joyport device per port (0 = port 1). */
   private joyportOutput = [0, 0];
   private readonly sockets = new Set<net.Socket>();
+  /** Test hook: number of monitor connections accepted. */
+  connectionsOpened = 0;
+  /**
+   * Test hook: whether the emulated CPU runs. As in VICE, any command stops it
+   * (the emulator enters the monitor), and exit (0xAA) or closing the
+   * connection lets it run again.
+   */
+  running = true;
+  /** Test hook: connections closed by the client while a stop-on-hit checkpoint existed. */
+  unsafeCloses = 0;
+  /** Test hook: every command received, as `[cmd, connection number]`. */
+  readonly commands: Array<[number, number]> = [];
+  private readonly wedgeOnUnsafeClose: boolean;
+  private readonly stepEventDelayMs: number | undefined;
+  private wedged = false;
+  private readonly bootMs: number;
+  private bootRemainingMs = 0;
+  private bootTick = 0;
+  /** Test hook: while true, commands are received but never answered (a command that times out). */
+  hang = false;
+
+  /** Test hook: checkpoints with the stop flag set. */
+  get stoppingCheckpoints(): number {
+    return [...this.checkpoints.values()].filter((c) => c.stopOnHit).length;
+  }
+
+  /** Test hook: monitor connections currently open. */
+  get openConnections(): number {
+    return this.sockets.size;
+  }
+
+  /** Test hook: clears a simulated wedge. */
+  unwedge(): void {
+    this.wedged = false;
+  }
+
+  /** Test hook: closes every connection from the server side, as a crashing VICE would. */
+  dropConnections(): void {
+    for (const socket of this.sockets) socket.destroy();
+  }
+
+  /**
+   * Test hook: the CPU reaches the checkpoint. Connected clients receive the checkpoint
+   * info (hit = 1), and, when the checkpoint stops the CPU, the register info and a
+   * stopped event. A temporary checkpoint is deleted. Returns false when the CPU is not
+   * running or the checkpoint does not exist.
+   */
+  hitCheckpoint(id: number): boolean {
+    const checkpoint = this.checkpoints.get(id);
+    if (!checkpoint || !this.running || !checkpoint.enabled) return false;
+    checkpoint.hitCount += 1;
+    const info = this.encodeCheckpoint(checkpoint);
+    info[4] = 1;
+    for (const socket of this.sockets) socket.write(buildResponse(0x11, UNSOLICITED, info));
+    if (checkpoint.temporary) this.checkpoints.delete(id);
+    if (checkpoint.stopOnHit) {
+      this.running = false;
+      for (const socket of this.sockets) this.emitStopped(socket);
+    }
+    return true;
+  }
+
+  private pc(): number {
+    return this.registerValues.get(0) ?? 0;
+  }
+
+  private emitStopped(socket: net.Socket): void {
+    socket.write(buildResponse(0x31, UNSOLICITED, this.encodeRegisterValues()));
+    const body = Buffer.alloc(2);
+    body.writeUInt16LE(this.pc(), 0);
+    socket.write(buildResponse(0x62, UNSOLICITED, body));
+  }
+
+  private emitResumed(socket: net.Socket): void {
+    const body = Buffer.alloc(2);
+    body.writeUInt16LE(this.pc(), 0);
+    socket.write(buildResponse(0x63, UNSOLICITED, body));
+  }
 
   constructor(options?: ViceMockServerOptions) {
+    this.wedgeOnUnsafeClose = options?.wedgeOnUnsafeClose === true;
+    this.stepEventDelayMs = options?.stepEventDelayMs;
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
+    this.bootMs = Math.max(0, options?.bootMs ?? 0);
     this.resetState();
     this.resetResources();
   }
@@ -105,21 +205,36 @@ export class ViceMockServer {
     return { port: address.port };
   }
 
+  private stopping = false;
+
   async stop(): Promise<void> {
     if (!this.server) return;
+    this.stopping = true;
     for (const socket of this.sockets) {
       socket.destroy();
     }
     this.sockets.clear();
     await new Promise<void>((resolve) => this.server!.close(() => resolve()));
     this.server = null;
+    this.stopping = false;
   }
 
   private handleSocket(socket: net.Socket): void {
     this.sockets.add(socket);
+    this.connectionsOpened += 1;
+    const connection = this.connectionsOpened;
+    (socket as net.Socket & { mockConnection?: number }).mockConnection = connection;
     let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    socket.on("error", () => {});
     socket.once("close", () => {
       this.sockets.delete(socket);
+      this.advanceBoot();
+      this.running = true;
+      this.bootTick = Date.now();
+      if (this.stoppingCheckpoints > 0 && !this.stopping) {
+        this.unsafeCloses += 1;
+        if (this.wedgeOnUnsafeClose) this.wedged = true;
+      }
       buffer = Buffer.alloc(0);
     });
     socket.on("data", (chunk: string | Uint8Array<ArrayBufferLike>) => {
@@ -144,6 +259,8 @@ export class ViceMockServer {
       const body = buffer.slice(11, frameLen);
       buffer = buffer.slice(frameLen);
 
+      if (this.wedged || this.hang) continue;
+      this.commands.push([cmd, (socket as net.Socket & { mockConnection?: number }).mockConnection ?? 0]);
       const response = this.handleCommand(cmd, reqId, body, socket);
       if (response) {
         socket.write(response);
@@ -152,7 +269,38 @@ export class ViceMockServer {
     return buffer;
   }
 
+  /** Counts the time the CPU ran since the last command towards the boot after a reset. */
+  private advanceBoot(): void {
+    if (this.bootRemainingMs <= 0) return;
+    const now = Date.now();
+    if (this.running) this.bootRemainingMs -= now - this.bootTick;
+    this.bootTick = now;
+    if (this.bootRemainingMs <= 0) {
+      this.bootRemainingMs = 0;
+      this.initBasic();
+    }
+  }
+
   private handleCommand(cmd: number, reqId: number, body: Buffer, socket: net.Socket): Buffer | null {
+    this.advanceBoot();
+    try {
+      return this.handleCommandNow(cmd, reqId, body, socket);
+    } finally {
+      this.bootTick = Date.now();
+    }
+  }
+
+  private handleCommandNow(cmd: number, reqId: number, body: Buffer, socket: net.Socket): Buffer | null {
+    // As in VICE: any command enters the monitor (stopped event), exit leaves it (resumed event).
+    if (cmd === 0xAA) {
+      if (!this.running) {
+        this.running = true;
+        this.emitResumed(socket);
+      }
+    } else if (this.running) {
+      this.running = false;
+      this.emitStopped(socket);
+    }
     switch (cmd) {
       case 0x85: // info
         return buildResponse(cmd, reqId);
@@ -161,7 +309,8 @@ export class ViceMockServer {
         if (type >= 8 && type <= 11) {
           this.driveResets.push(type);
         } else {
-          this.resetState();
+          this.resetState(true);
+          if (this.bootMs > 0) this.startBoot();
         }
         return buildResponse(cmd, reqId);
       }
@@ -292,10 +441,22 @@ export class ViceMockServer {
         const payload = this.encodeRegisterValues();
         return buildResponse(0x31, reqId, payload);
       }
-      case 0x71: // step instructions
+      case 0x71: // step instructions: each step advances the PC by 3 bytes
+      case 0x73: { // step return: advances the PC by 0x10
+        const advance = cmd === 0x71 ? 3 * (body.readUInt16LE(1) || 1) : 0x10;
+        const execute = () => {
+          this.registerValues.set(0, (this.pc() + advance) & 0xffff);
+          if (socket.destroyed) return;
+          this.emitResumed(socket);
+          this.emitStopped(socket);
+        };
+        if (this.stepEventDelayMs === undefined) {
+          execute();
+          return buildResponse(cmd, reqId);
+        }
+        setTimeout(execute, this.stepEventDelayMs); // VICE acknowledges first and runs the code afterwards
         return buildResponse(cmd, reqId);
-      case 0x73: // step return
-        return buildResponse(cmd, reqId);
+      }
       case 0x83: { // registers metadata
         const payload = this.encodeRegisterMetadata();
         return buildResponse(cmd, reqId, payload);
@@ -491,14 +652,30 @@ export class ViceMockServer {
     }
   }
 
-  private resetState(): void {
+  /** A machine reset keeps the monitor's checkpoints, as VICE does. */
+  private resetState(keepCheckpoints = false): void {
     this.memory.fill(0);
+    this.initBasic();
+    this.helloReady = false;
+    this.heartbeat = null;
+    if (!keepCheckpoints) {
+      this.checkpoints.clear();
+      this.nextCheckpointId = 1;
+    }
+    this.registerValues.clear();
+    for (const meta of this.registerMetadata) {
+      this.registerValues.set(meta.id, 0);
+    }
+    this.joyportOutput = [0, 0];
+  }
+
+  /** The screen shows READY. and the BASIC pointers are initialised, as when the KERNAL has booted. */
+  private initBasic(): void {
     // Fill screen with spaces and READY.
     this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + SCREEN_SIZE);
     const ready = asciiToScreenCodes("READY.");
     ready.copy(Buffer.from(this.memory.buffer, SCREEN_BASE, ready.length));
-    // Initialise BASIC zero-page pointers so waitForBasicReady() succeeds
-    // immediately instead of spinning for 20 s on all-zero memory.
+    // BASIC zero-page pointers, so waitForBasicReady() succeeds on an all-zero machine.
     //   $002B-$002C  TXTTAB  = $0801  (start of BASIC text)
     //   $002D-$002E  VARTAB  = $0803  (start of variables)
     //   $002F-$0030  ARYTAB  = $0803  (start of arrays)
@@ -507,15 +684,14 @@ export class ViceMockServer {
     this.memory[0x2D] = 0x03; this.memory[0x2E] = 0x08;
     this.memory[0x2F] = 0x03; this.memory[0x30] = 0x08;
     this.memory[0x31] = 0x03; this.memory[0x32] = 0x08;
-    this.helloReady = false;
-    this.heartbeat = null;
-    this.checkpoints.clear();
-    this.nextCheckpointId = 1;
-    this.registerValues.clear();
-    for (const meta of this.registerMetadata) {
-      this.registerValues.set(meta.id, 0);
-    }
-    this.joyportOutput = [0, 0];
+  }
+
+  /** A reset with a boot time: blank screen and zero pointers until the CPU has run bootMs. */
+  private startBoot(): void {
+    this.memory.fill(0x20, SCREEN_BASE, SCREEN_BASE + SCREEN_SIZE);
+    this.memory.fill(0, 0x2B, 0x33);
+    this.bootRemainingMs = this.bootMs;
+    this.bootTick = Date.now();
   }
 
   // Resources survive a machine reset in VICE. Only resources that exist in

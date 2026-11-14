@@ -65,6 +65,13 @@ function createViceFacade(monitor) {
     async withMonitor(fn) {
       return fn(monitor);
     },
+    // The session-aware entry points of ViceBackend; the stub has no session, so they run on the monitor directly.
+    async checkpointOperation(fn) {
+      return fn(monitor);
+    },
+    async debugStopOperation(fn) {
+      return fn(monitor);
+    },
   };
 }
 

@@ -91,6 +91,13 @@ interface SendOptions {
 /** How long a TCP connect to the monitor may take before it is abandoned. */
 export const VICE_CONNECT_TIMEOUT_MS = 5_000;
 
+/** Per-request timeout. C64BRIDGE_VICE_REQUEST_TIMEOUT_MS overrides it, for tests of the timeout path. */
+function viceRequestTimeoutMs(cmd: number): number {
+  const override = Number(process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS);
+  if (Number.isFinite(override) && override > 0) return override;
+  return cmd === 0x84 ? 30_000 : 10_000;
+}
+
 export interface ViceConnectOptions {
   /** Connect timeout in milliseconds (default 5000). */
   readonly connectTimeoutMs?: number;
@@ -105,9 +112,37 @@ export class ViceClient {
   private pending: Map<number, PendingRequest> = new Map();
   private closing = false;
   private onUnsolicitedHandler?: (type: number, frame: Buffer) => void;
+  private onCloseHandler?: (error?: Error) => void;
+  private cpuRunningState = false;
+  private checkpointCreatesBlocked = false;
+  /** Set while a command that executes code is outstanding: what happened after it was sent. */
+  private executionWatch: { resumed: boolean; stopped: boolean; wake?: () => void } | null = null;
+
+  /**
+   * Makes every later checkpoint create fail locally without reaching VICE. Shutdown uses this
+   * before it lists the checkpoints, so none can be created after the listing; creates already
+   * sent are processed by VICE before the listing, because commands on one connection are in order.
+   */
+  blockCheckpointCreates(): void {
+    this.checkpointCreatesBlocked = true;
+  }
 
   setUnsolicitedHandler(handler: (type: number, frame: Buffer) => void): void {
     this.onUnsolicitedHandler = handler;
+  }
+
+  /** Called once when VICE or the network closes the connection; not called for close(). */
+  setCloseHandler(handler: (error?: Error) => void): void {
+    this.onCloseHandler = handler;
+  }
+
+  /**
+   * Whether the CPU is believed to be running because of this connection: true after an
+   * exit (0xAA) or a 0x63 resumed event, false after any other command (VICE enters the
+   * monitor on every command) or a 0x62 stopped event.
+   */
+  get cpuRunning(): boolean {
+    return this.cpuRunningState;
   }
 
   async connect(port: number, host = "127.0.0.1", options: ViceConnectOptions = {}): Promise<void> {
@@ -137,17 +172,30 @@ export class ViceClient {
       this.socket.once("connect", onConnect);
       this.socket.once("error", onError);
     });
+    this.cpuRunningState = true; // VICE enters the monitor on the first command, not on connect
     this.socket.on("data", (chunk: ViceDataChunk) => this.onData(chunk));
     this.socket.on("error", (err) => {
       this.rejectAllPending(err);
     });
     this.socket.on("close", (hadError) => {
-      if (this.pending.size === 0 || this.closing) {
+      if (this.closing) {
+        return;
+      }
+      const handler = this.onCloseHandler;
+      if (handler) {
+        try { handler(hadError ? new Error("VICE monitor connection closed due to error") : undefined); } catch {}
+      }
+      if (this.pending.size === 0) {
         return;
       }
       const reason = hadError ? new Error("VICE monitor connection closed due to error") : new Error("VICE monitor connection closed");
       this.rejectAllPending(reason);
     });
+  }
+
+  /** True while the connection is usable: connected, not closed locally and not closed by VICE. */
+  get isOpen(): boolean {
+    return !!this.socket && !this.closing && !this.socket.destroyed && this.socket.readyState === "open";
   }
 
   close(): void {
@@ -193,6 +241,16 @@ export class ViceClient {
       const err = frame[7];
       const reqId = frame.readUInt32LE(8);
       if (reqId === 0xffffffff) {
+        if (responseType === 0x62) this.cpuRunningState = false;
+        else if (responseType === 0x63) this.cpuRunningState = true;
+        const watch = this.executionWatch;
+        if (watch) {
+          // The stop that ends the execution comes after the resume that starts it. A stop before the
+          // resume is only the monitor being entered for this command.
+          if (responseType === 0x63) watch.resumed = true;
+          else if (responseType === 0x62 && watch.resumed) watch.stopped = true;
+          watch.wake?.();
+        }
         this.onUnsolicitedHandler?.(responseType, frame);
         continue;
       }
@@ -239,6 +297,9 @@ export class ViceClient {
     if (this.nextReqId === 0xffffffff) { // Reserved for unsolicited events (see onData above); skip it on wraparound.
       this.nextReqId = 0;
     }
+    if (cmd === 0x12 && this.checkpointCreatesBlocked) {
+      return Promise.reject(new Error("VICE monitor session is shutting down; no checkpoint can be created"));
+    }
     const reqId = this.nextReqId++ >>> 0;
     const payload = body ?? Buffer.alloc(0);
     const header = Buffer.alloc(11);
@@ -257,7 +318,7 @@ export class ViceClient {
         reject,
         onFrame: options?.onFrame,
       };
-      const timeoutMs = options?.timeoutMs ?? (cmd === 0x84 ? 30_000 : 10_000);
+      const timeoutMs = options?.timeoutMs ?? viceRequestTimeoutMs(cmd);
       pending.timer = setTimeout(() => {
         if (!this.pending.delete(reqId)) return;
         reject(new Error(`VICE monitor request 0x${cmd.toString(16)} timed out after ${timeoutMs}ms`));
@@ -266,6 +327,7 @@ export class ViceClient {
       this.pending.set(reqId, pending);
     });
 
+    this.cpuRunningState = cmd === 0xaa;
     this.socket.write(packet);
     return promise;
   }
@@ -336,6 +398,21 @@ export class ViceClient {
       const chunk = bytes.subarray(offset, offset + 255);
       await this.send(0x72, Buffer.concat([Buffer.from([chunk.length]), chunk]));
     }
+  }
+
+  /**
+   * Feed raw PETSCII bytes to VICE's keyboard buffer, which hands them to the KERNAL buffer as
+   * it empties. VICE reads the command's text as a C string, so a 0x00 byte cannot be sent and is
+   * dropped (the KERNAL ignores it anyway). Longer input goes out as consecutive commands, in order.
+   * Returns the number of bytes fed.
+   */
+  async keyboardFeedBytes(bytes: Uint8Array | readonly number[]): Promise<number> {
+    const data = Buffer.from(Uint8Array.from(bytes).filter((b) => b !== 0));
+    for (let offset = 0; offset < data.length; offset += 255) {
+      const chunk = data.subarray(offset, offset + 255);
+      await this.send(0x72, Buffer.concat([Buffer.from([chunk.length]), chunk]));
+    }
+    return data.length;
   }
 
   /** Set the VICE joyport's active-low control byte (BM command 0xA2). */
@@ -454,15 +531,42 @@ export class ViceClient {
     return this.parseRegisterValues(frame);
   }
 
-  async stepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
+  /**
+   * Sends a command that executes code and, with `waitForStopMs`, waits for the stopped event
+   * that ends the execution. VICE acknowledges these commands before the execution happens, so the
+   * acknowledgement alone says nothing about where the CPU is. Only a stopped event that follows a
+   * resumed event received after the command was sent counts; the state before the command does not.
+   * Returns false when no such stop arrived in time (the caller decides what that means).
+   */
+  private async executeAndWait(cmd: number, body: Buffer | undefined, waitForStopMs: number | undefined): Promise<boolean> {
+    if (waitForStopMs === undefined) {
+      await this.send(cmd, body);
+      return true;
+    }
+    const watch: { resumed: boolean; stopped: boolean; wake?: () => void } = { resumed: false, stopped: false };
+    this.executionWatch = watch;
+    try {
+      await this.send(cmd, body);
+      if (watch.stopped) return true;
+      return await new Promise<boolean>((resolve) => {
+        const finish = (value: boolean) => { clearTimeout(timer); watch.wake = undefined; resolve(value); };
+        const timer = setTimeout(() => finish(false), waitForStopMs);
+        watch.wake = () => { if (watch.stopped) finish(true); else if (!this.isOpen) finish(false); };
+      });
+    } finally {
+      if (this.executionWatch === watch) this.executionWatch = null;
+    }
+  }
+
+  async stepInstructions(count = 1, options?: { readonly stepOver?: boolean; readonly waitForStopMs?: number }): Promise<boolean> {
     const body = Buffer.alloc(3);
     body[0] = options?.stepOver ? 1 : 0;
     body.writeUInt16LE(Math.max(1, Math.min(count, 0xffff)), 1);
-    await this.send(0x71, body);
+    return this.executeAndWait(0x71, body, options?.waitForStopMs);
   }
 
-  async stepReturn(): Promise<void> {
-    await this.send(0x73);
+  async stepReturn(options?: { readonly waitForStopMs?: number }): Promise<boolean> {
+    return this.executeAndWait(0x73, undefined, options?.waitForStopMs);
   }
 
   async displayGet(options?: { readonly alternateCanvas?: boolean; readonly format?: number }): Promise<ViceDisplaySnapshot> {
@@ -512,6 +616,11 @@ export class ViceClient {
     }
 
     await this.send(0x52, body);
+  }
+
+  /** Decodes a 0x11 checkpoint info frame, including unsolicited ones sent when a checkpoint is hit. */
+  decodeCheckpoint(frame: Buffer): ViceCheckpoint {
+    return this.parseCheckpoint(frame);
   }
 
   private parseCheckpoint(frame: Buffer): ViceCheckpoint {

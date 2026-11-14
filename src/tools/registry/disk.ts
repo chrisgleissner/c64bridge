@@ -121,7 +121,7 @@ const diskMountArgsSchema = objectSchema<DiskMountArgs>({
 });
 
 const createImageArgsSchema = objectSchema<CreateImageArgs>({
-  description: "Create a blank disk image (D64/D71/D81/DNP).",
+  description: "Create a blank disk image (D64/D71/D81/DNP). An existing file at the path is not overwritten; the call fails.",
   properties: {
     format: stringSchema({
       description: "Disk image format to create.",
@@ -287,7 +287,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "create_image",
       createImageArgsSchema.jsonSchema as JsonSchema,
-      { description: "Create a blank disk image of the specified format." },
+      { description: "Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;

@@ -113,28 +113,23 @@ test("c64_config list is available on vice", async () => {
   assert.equal(data.categories[0]?.name, "VICE");
 });
 
-test("c64_system pause is rejected on vice", async () => {
+test("c64_system pause and resume run on vice", async () => {
+  const calls = [];
   const ctx = {
     client: {
-      async pause() {
-        throw new Error("should not execute on unsupported platform");
-      },
+      async pause() { calls.push("pause"); return { success: true }; },
+      async resume() { calls.push("resume"); return { success: true }; },
     },
     rag: {},
-    logger: {
-      debug() {},
-      info() {},
-      warn() {},
-      error() {},
-    },
+    logger: createLogger(),
     platform: { id: "vice", features: [], limitedFeatures: [] },
     setPlatform,
   };
-
-  await assert.rejects(
-    () => toolRegistry.invoke("c64_system", { op: "pause" }, ctx),
-    /`c64_system` op `pause` requires backend c64u or u2 \(active: vice\)/,
-  );
+  const paused = await toolRegistry.invoke("c64_system", { op: "pause" }, ctx);
+  assert.equal(paused.isError, undefined, JSON.stringify(paused.content));
+  const resumed = await toolRegistry.invoke("c64_system", { op: "resume" }, ctx);
+  assert.equal(resumed.isError, undefined, JSON.stringify(resumed.content));
+  assert.deepEqual(calls, ["pause", "resume"]);
 });
 
 test("c64_program c64u-only grouped operations reject on vice", async () => {
@@ -2135,7 +2130,9 @@ test("c64_debug wait_for_state reports matched and timed out outcomes", async ()
   setPlatform("vice");
   try {
     let reads = 0;
+    const noSession = async () => ({ session: false, stopped: false });
     const matchedClient = {
+      viceWaitForStop: noSession,
       async viceRegistersAvailable(memspace) {
         assert.equal(memspace, 0);
         return [{ id: 0, name: "PC", bits: 16, size: 2 }];
@@ -2147,6 +2144,7 @@ test("c64_debug wait_for_state reports matched and timed out outcomes", async ()
       },
     };
     const timedOutClient = {
+      viceWaitForStop: noSession,
       async viceRegistersAvailable() {
         return [{ id: 0, name: "PC", bits: 16, size: 2 }];
       },

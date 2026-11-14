@@ -1,4 +1,3 @@
-import { Jimp } from "jimp";
 
 export type VicBitmapMode = "hires" | "multicolor";
 
@@ -88,6 +87,7 @@ export const VIC_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
 ];
 
 export async function importImageAsVicBitmap(options: BitmapImportOptions): Promise<PreparedVicBitmap> {
+  const { Jimp } = await import("jimp");
   const image = await Jimp.read(options.imagePath);
   const sourceWidth = image.bitmap.width;
   const sourceHeight = image.bitmap.height;
@@ -230,6 +230,7 @@ async function renderImageToLogicalCanvas(
   const renderWidth = Math.max(1, Math.round(image.bitmap.width * scale));
   const renderHeight = Math.max(1, Math.round(image.bitmap.height * scale));
   const resized = image.clone().resize({ w: renderWidth, h: renderHeight });
+  const { Jimp } = await import("jimp");
   const canvas = new Jimp({ width: options.width, height: options.height, color: background });
   const offsetX = Math.floor((options.width - renderWidth) / 2);
   const offsetY = Math.floor((options.height - renderHeight) / 2);

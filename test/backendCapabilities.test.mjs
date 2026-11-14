@@ -36,7 +36,7 @@ async function withDirectory(fn) {
 const restrictions = {
   c64_program: { run_crt: ["c64u", "u2"] },
   c64_sound: { capture_samples: ["c64u"], play_sid_file: ["c64u", "u2"], play_mod_file: ["c64u", "u2"] },
-  c64_system: { pause: ["c64u", "u2"], resume: ["c64u", "u2"], menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"], poweroff: ["c64u", "vice"] },
+  c64_system: { menu: ["c64u", "u2"], read_menu_screen: ["c64u", "u2"], poweroff: ["c64u", "vice"] },
   c64_graphics: { capture_frame: ["c64u", "vice"] },
   c64_drive: { load_rom: ["c64u", "u2"] },
   c64_disk: { file_info: ["c64u", "u2"], create_image: ["c64u", "u2"], find_and_run: ["c64u", "u2"], find_paths: ["c64u", "u2"] },
@@ -59,6 +59,19 @@ for (const [name, operations] of Object.entries(restrictions)) {
     }
   }
 }
+
+test("c64_system pause and resume are supported on every platform, including vice", async () => {
+  const descriptor = toolRegistry.list().find((tool) => tool.name === "c64_system");
+  for (const op of ["pause", "resume"]) {
+    const restricted = descriptor.metadata.operationPlatforms?.[op];
+    assert.ok(restricted === undefined || [...restricted].includes("vice"), `${op} must not exclude vice`);
+    const calls = [];
+    const client = { async pause() { calls.push("pause"); return { success: true }; }, async resume() { calls.push("resume"); return { success: true }; } };
+    const result = await toolRegistry.invoke("c64_system", { op }, context("vice", client));
+    assert.equal(result.isError, undefined, JSON.stringify(result));
+    assert.ok(calls.includes(op), `${op} reached the backend on vice`);
+  }
+});
 
 for (const platform of platforms) {
   test(`artifact bundles on ${platform} preserve screen/memory and select a supported debug capture default`, async () => withDirectory(async (dir) => {
@@ -347,6 +360,7 @@ test("flash save failure after restore is reported honestly", async () => withDi
   const file = path.join(dir, "snapshot.json");
   await fs.writeFile(file, JSON.stringify({ categories: { Audio: { Volume: 80 } } }));
   const result = await toolRegistry.invoke("c64_config", { op: "restore", path: file, applyToFlash: true }, context("c64u", {
+    async configsList() { return { categories: ["Audio"] }; }, async configGet() { return { Volume: 10 }; },
     async configBatchUpdate() { return { success: true }; }, async configSaveToFlash() { return { success: false, details: { reason: "flash failed" } }; },
   }));
   assert.equal(result.isError, true);

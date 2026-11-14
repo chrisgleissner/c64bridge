@@ -55,23 +55,11 @@ export function registerMcpServerResourcesTests(withSharedMcpClient) {
         assert.ok(metadata, "resource metadata should be present");
         assert.equal(metadata.domain, expected.domain);
         assert.equal(metadata.priority, expected.priority);
-        assert.ok(
-          typeof metadata.summary === "string" &&
-            metadata.summary.length > 0,
-          "resource metadata should include a non-empty summary",
-        );
-        assert.ok(
-          Array.isArray(metadata.prompts),
-          "metadata.prompts should be an array",
-        );
-        assert.ok(
-          Array.isArray(metadata.tools),
-          "metadata.tools should be an array",
-        );
-        assert.ok(
-          Array.isArray(metadata.relatedResources),
-          "metadata.relatedResources should be an array",
-        );
+        if (!process.env.C64BRIDGE_VERBOSE_SCHEMA) {
+          for (const key of ["summary", "prompts", "tools", "relatedResources", "bundle", "tags"]) {
+            assert.ok(!(key in metadata), `${expected.uri} should not publish _meta.${key} unless C64BRIDGE_VERBOSE_SCHEMA=1`);
+          }
+        }
       }
 
       const readUris = new Set(expectedResources.map((resource) => resource.uri));

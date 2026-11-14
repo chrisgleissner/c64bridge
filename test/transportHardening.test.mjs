@@ -219,6 +219,7 @@ test("R-06 a request that fails before it is sent releases the queue", async (t)
 
 import { metaModule } from "../src/tools/meta/index.js";
 import { machineControlModule } from "../src/tools/machineControl.js";
+import { toolRegistry } from "../src/tools/registry/index.js";
 
 const quietLogger = () => ({ debug() {}, info() {}, warn(...args) { quietLogger.warnings.push(args); }, error() {} });
 quietLogger.warnings = [];
@@ -416,4 +417,110 @@ test("R-14 a foreign listener on the monitor port is detected before VICE is spa
 
   const free = await closedLoopbackPort();
   await assertMonitorPortFree("127.0.0.1", free);
+});
+
+// ---- reset while an explicit pause is held (Ultimate) ------------------------
+
+function requestsAfter(mock, first, second) {
+  const order = mock.state.requestOrder;
+  const a = order.indexOf(first);
+  const b = order.indexOf(second, a + 1);
+  return a >= 0 && b > a;
+}
+
+{
+  const platform = "c64u";
+  test(`reset while explicitly paused resumes the machine afterwards on ${platform}`, async (t) => {
+    const mock = await startMockC64Server();
+    t.after(() => mock.close());
+    const client = new C64Client(mock.baseUrl);
+    const ctx = { platform: { id: platform }, client, logger: quietLogger() };
+
+    assert.equal((await machineControlModule.invoke("pause", {}, ctx)).isError, undefined);
+    assert.equal(mock.state.paused, true);
+    mock.state.requestOrder.length = 0;
+    const reset = await machineControlModule.invoke("reset_c64", {}, ctx);
+    assert.equal(reset.isError, undefined, JSON.stringify(reset.content));
+    assert.ok(requestsAfter(mock, "PUT /v1/machine:reset", "PUT /v1/machine:resume"), `order: ${mock.state.requestOrder.join(", ")}`);
+    assert.equal(mock.state.paused, false);
+    // The explicit flag is cleared: the next owned pause is sent to the device.
+    mock.state.requestOrder.length = 0;
+    assert.equal((await writeCall(ctx, "$0400", "AA")).metadata?.success, true);
+    assert.equal(deviceCalls(mock, "pause"), 1);
+  });
+}
+
+test("reset while explicitly paused resumes the machine on a u2 facade", async () => {
+  const calls = [];
+  const facade = {
+    type: "u2",
+    pause: async () => { calls.push("pause"); return { success: true }; },
+    resume: async () => { calls.push("resume"); return { success: true }; },
+    reset: async () => { calls.push("reset"); return { success: true, details: {} }; },
+  };
+  const client = new C64Client("http://127.0.0.1:9", { forceC64uFacade: true });
+  client.facadePromise = Promise.resolve(facade);
+  assert.equal((await client.explicitPause(facade)).success, true);
+  assert.equal((await client.reset()).success, true);
+  assert.deepEqual(calls, ["pause", "reset", "resume"]);
+});
+
+test("reboot while explicitly paused sends no resume", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+
+  assert.equal((await machineControlModule.invoke("pause", {}, ctx)).isError, undefined);
+  mock.state.requestOrder.length = 0;
+  assert.equal((await machineControlModule.invoke("reboot_c64", {}, ctx)).isError, undefined);
+  assert.equal(deviceCalls(mock, "reboot"), 1);
+  assert.equal(deviceCalls(mock, "resume"), 0);
+});
+
+test("reset without a pause sends no resume", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+  assert.equal((await machineControlModule.invoke("reset_c64", {}, ctx)).isError, undefined);
+  assert.equal(deviceCalls(mock, "resume"), 0);
+});
+
+test("a failed resume after a reset is reported and keeps the explicit pause recorded", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
+
+  assert.equal((await machineControlModule.invoke("pause", {}, ctx)).isError, undefined);
+  mock.state.forcedErrors = ["resume refused"];
+  mock.state.forcedErrorsUrlMatch = "machine:resume";
+  const reset = await machineControlModule.invoke("reset_c64", { waitForReady: true, readyTimeoutMs: 1000 }, ctx);
+  assert.equal(reset.metadata?.success, true);
+  assert.match(String(reset.metadata?.warning), /could not be resumed/);
+  assert.match(JSON.stringify(reset.content), /could not be resumed/);
+  assert.equal(mock.state.paused, true);
+  // The flag still matches reality, so a later explicit resume works.
+  mock.state.requestOrder.length = 0;
+  assert.equal((await machineControlModule.invoke("resume", {}, ctx)).isError, undefined);
+  assert.equal(deviceCalls(mock, "resume"), 1);
+  assert.equal(mock.state.paused, false);
+});
+
+// ---- c64_disk create_image on an existing path -----------------------------
+
+test("c64_disk create_image on an existing path reports that the file exists", async (t) => {
+  const mock = await startMockC64Server();
+  t.after(() => mock.close());
+  const client = new C64Client(mock.baseUrl);
+  const ctx = { platform: { id: "c64u", features: [], limitedFeatures: [] }, client, rag: {}, logger: quietLogger() };
+  const args = { op: "create_image", format: "d64", path: "//USB0/exists.d64" };
+  mock.state.existingFiles = ["//USB0/exists.d64"];
+  const result = await toolRegistry.invoke("c64_disk", args, ctx);
+  assert.equal(result.isError, true);
+  const text = JSON.stringify(result.structuredContent ?? result.content);
+  assert.match(text, /already exists at \/\/USB0\/exists\.d64/);
+  assert.match(text, /does not overwrite/);
+  assert.equal(mock.state.createdImages.length, 0);
 });

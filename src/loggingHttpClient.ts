@@ -1,6 +1,6 @@
-import { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
-import { registerSecret, scrubRequestError } from "./redact.js";
+import { isSensitiveConfigItem, REDACTED_PLACEHOLDER, redactConfigValue, registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
 
 type RequestMeta = {
@@ -24,6 +24,73 @@ function redactHeaders(headers: AxiosRequestConfig["headers"] | undefined): Axio
   ])) as AxiosRequestConfig["headers"];
 }
 
+/** Category and item named by a configuration endpoint path, or undefined for any other path. */
+function configRoute(path: string): { category?: string; item?: string } | undefined {
+  const match = /\/configs(?:\/([^/?#]*))?(?:\/([^/?#]*))?(?:[?#]|$)/.exec(path);
+  if (!match) return undefined;
+  const decode = (segment: string | undefined): string | undefined => {
+    if (segment === undefined) return undefined;
+    try { return decodeURIComponent(segment); } catch { return segment; }
+  };
+  return { category: decode(match[1]), item: decode(match[2]) };
+}
+
+/** A payload that came from or goes to a configuration endpoint, with credential item values replaced. */
+function redactConfigPayload(path: string, payload: unknown): unknown {
+  const route = configRoute(path);
+  if (!route || payload === null || payload === undefined) return payload;
+  if (typeof payload === "string") {
+    try {
+      return redactConfigValue(JSON.parse(payload), route.category, route.item);
+    } catch {
+      return payload;
+    }
+  }
+  if (typeof payload === "object") return redactConfigValue(payload, route.category, route.item);
+  return payload;
+}
+
+/** Query parameters of a configuration write: the value of a credential item is replaced. */
+function redactConfigParams(path: string, params: unknown): unknown {
+  const route = configRoute(path);
+  if (!route?.item || !isSensitiveConfigItem(route.category, route.item)) return params;
+  if (params === null || typeof params !== "object") return params;
+  return Object.fromEntries(Object.keys(params).map((key) => [key, REDACTED_PLACEHOLDER]));
+}
+
+/** The path as logged: the query string of a credential item write is dropped. */
+function redactConfigPath(path: string): string {
+  const route = configRoute(path);
+  if (route?.item && isSensitiveConfigItem(route.category, route.item) && path.includes("?")) {
+    return `${path.split("?")[0]}?${REDACTED_PLACEHOLDER}`;
+  }
+  return path;
+}
+
+/** How long requests fail immediately after a transport-level failure before the next one probes the device again. */
+export const DEVICE_DOWN_BACKOFF_MS = 3_000;
+
+/** Raised without sending a request while a device is marked down after a transport failure. */
+export class DeviceUnreachableError extends Error {
+  readonly retryInMs: number;
+  constructor(baseUrl: string | undefined, retryInMs: number) {
+    super(`Device unreachable${baseUrl ? ` at ${baseUrl}` : ""}: the previous request got no response; not sending more requests for ${Math.max(1, Math.ceil(retryInMs / 1000))} s`);
+    this.name = "DeviceUnreachableError";
+    this.retryInMs = retryInMs;
+  }
+}
+
+const TRANSPORT_FAILURE_CODES = new Set([
+  "ECONNABORTED", "ETIMEDOUT", "ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH",
+  "ENOTFOUND", "EAI_AGAIN", "EPIPE", "ERR_NETWORK", "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+/** True for a failure where the device sent no HTTP response (timeout, refused, reset). HTTP error statuses are not transport failures. */
+export function isTransportFailure(error: unknown): boolean {
+  if (!axios.isAxiosError(error) || error.response) return false;
+  return typeof error.code === "string" && TRANSPORT_FAILURE_CODES.has(error.code);
+}
+
 /**
  * First-in first-out gate that lets one operation run at a time. The Ultimate
  * firmware serves REST requests on a single thread, so every request to one
@@ -45,6 +112,25 @@ export class RequestQueue {
   }
 
   private tail: Promise<void> = Promise.resolve();
+  private downUntil = 0;
+  private downBaseUrl: string | undefined;
+
+  /** Mark the device down for the back-off period after a transport-level failure. */
+  markDown(baseUrl?: string, backoffMs = DEVICE_DOWN_BACKOFF_MS): void {
+    this.downUntil = Date.now() + backoffMs;
+    this.downBaseUrl = baseUrl;
+  }
+
+  /** Clear the down state after a response or a successful probe. */
+  markUp(): void {
+    this.downUntil = 0;
+  }
+
+  /** Throws DeviceUnreachableError while the back-off period lasts. */
+  assertUp(): void {
+    const remaining = this.downUntil - Date.now();
+    if (remaining > 0) throw new DeviceUnreachableError(this.downBaseUrl, remaining);
+  }
 
   /** Resolves when all earlier holders have released; call the returned function exactly once. */
   async acquire(): Promise<() => void> {
@@ -72,12 +158,18 @@ export class RequestQueue {
   }
 }
 
+function isPauseControlRequest(requestConfig: AxiosRequestConfig): boolean {
+  const url = typeof requestConfig.url === "string" ? requestConfig.url : "";
+  return /machine:(pause|resume)(\?|$)/.test(url);
+}
+
 export function createLoggingHttpClient<SecurityDataType = unknown>(
   config?: ApiConfig<SecurityDataType>,
   logger: PrefixedLogger = loggerFor("c64u"),
   queue?: RequestQueue,
 ): HttpClient<SecurityDataType> {
-  const http = new HttpClient<SecurityDataType>(config);
+  // Device requests go straight to the LAN address; HTTP_PROXY must not apply.
+  const http = new HttpClient<SecurityDataType>({ proxy: false, ...config } as ApiConfig<SecurityDataType>);
   registerSecret(readPasswordHeader(config?.headers));
 
   http.instance.interceptors.request.use((request) => {
@@ -107,8 +199,27 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
     // serialised).
     const instance = http.instance;
     const sendRequest = instance.request.bind(instance);
+    //
+    // After a transport failure the device is marked down for a short back-off
+    // period. Requests that reach the front of the queue in that period fail at
+    // once instead of each waiting for its own timeout. A response of any HTTP
+    // status shows the device is up.
+    const baseUrl = typeof config?.baseURL === "string" ? config.baseURL : undefined;
     instance.request = ((requestConfig: AxiosRequestConfig) =>
-      queue.run(() => sendRequest(requestConfig))) as typeof instance.request;
+      queue.run(async () => {
+        // Pause and resume bypass the down state. A resume is the recovery action for a machine an
+        // owned pause froze, and a pause that is refused would leave its paired resume unmatched.
+        if (!isPauseControlRequest(requestConfig)) queue.assertUp();
+        try {
+          const response = await sendRequest(requestConfig);
+          queue.markUp();
+          return response;
+        } catch (error) {
+          if (isTransportFailure(error)) queue.markDown(baseUrl);
+          else if (axios.isAxiosError(error) && error.response) queue.markUp();
+          throw error;
+        }
+      })) as typeof instance.request;
   }
 
   http.instance.interceptors.response.use(
@@ -137,7 +248,7 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
   const meta = extractMeta(response.config);
   const latency = meta ? Date.now() - meta.startedAt : 0;
   const method = meta?.method ?? (response.config.method ?? "get").toUpperCase();
-  const path = meta?.path ?? resolvePath(response.config);
+  const path = redactConfigPath(meta?.path ?? resolvePath(response.config));
   const bytes = payloadByteLength(response.data);
 
   logger.info(`${method} ${path} status=${response.status} bytes=${bytes} latencyMs=${latency}`);
@@ -145,13 +256,13 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
   if (logger.isDebugEnabled()) {
     logger.debug(`request ${method} ${path}`, {
       headers: meta?.headers,
-      query: meta?.params,
-      body: formatPayloadForDebug(meta?.body),
+      query: redactConfigParams(path, meta?.params),
+      body: formatPayloadForDebug(redactConfigPayload(path, meta?.body)),
     });
     logger.debug(`response ${method} ${path}`, {
       status: response.status,
       headers: redactHeaders(response.headers),
-      body: formatPayloadForDebug(response.data),
+      body: formatPayloadForDebug(redactConfigPayload(path, response.data)),
     });
   }
 }
@@ -166,7 +277,7 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
   const meta = extractMeta(config);
   const latency = meta ? Date.now() - meta.startedAt : 0;
   const method = meta?.method ?? (config.method ?? "get").toUpperCase();
-  const path = meta?.path ?? resolvePath(config);
+  const path = redactConfigPath(meta?.path ?? resolvePath(config));
   const response = error.response;
   const status = response?.status ?? "ERR";
   const bytes = response ? payloadByteLength(response.data) : 0;
@@ -177,13 +288,13 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
   if (logger.isDebugEnabled()) {
     logger.debug(`request ${method} ${path}`, {
       headers: meta?.headers,
-      query: meta?.params,
-      body: formatPayloadForDebug(meta?.body),
+      query: redactConfigParams(path, meta?.params),
+      body: formatPayloadForDebug(redactConfigPayload(path, meta?.body)),
     });
     logger.debug(`error ${method} ${path}`, {
       status,
       headers: redactHeaders(response?.headers),
-      body: response ? formatPayloadForDebug(response.data) : null,
+      body: response ? formatPayloadForDebug(redactConfigPayload(path, response.data)) : null,
       message,
     });
   }

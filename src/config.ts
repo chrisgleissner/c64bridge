@@ -92,12 +92,12 @@ export function loadConfig(): C64BridgeConfig {
   const legacyUltimateEndpoint = !c64u && !u2 && LEGACY_ENDPOINT_KEYS.some((key) => hasLegacyValue(rawConfig?.[key]));
   const ultimate = {
     c64u: resolveUltimateEndpoint("c64u", c64u, c64u || !u2 ? rawConfig : undefined),
-    u2: resolveUltimateEndpoint("u2", u2 ?? c64u, u2 ? undefined : rawConfig),
+    u2: resolveUltimateEndpoint("u2", u2 ?? c64u, u2 ? undefined : rawConfig, Boolean(u2)),
   };
   // The selected profile reported by loadConfig keeps the documented fallback
   // between sections and to the legacy fields.
   const selected = useU2
-    ? resolveUltimateEndpoint("u2", u2 ?? c64u, rawConfig)
+    ? resolveUltimateEndpoint("u2", u2 ?? c64u, rawConfig, Boolean(u2))
     : resolveUltimateEndpoint("c64u", c64u ?? u2, rawConfig);
   const vice = rawConfig?.vice as {
     prewarm?: boolean | string | number;
@@ -141,16 +141,22 @@ function ultimateSection(value: unknown): UltimateSectionConfig | undefined {
  * loadConfig() and by every C64U/U2 backend construction:
  * env > section host/hostname/port > legacy top-level c64_host/c64_ip/c64_port
  * > section baseUrl > legacy top-level baseUrl > defaults. Passwords: env >
- * section > legacy top-level networkPassword.
+ * section > legacy top-level networkPassword. For the u2 profile the env
+ * variables are U2_*, with C64U_* as fallback only when `hasU2Section` is false.
  */
 export function resolveUltimateEndpoint(
   profile: "c64u" | "u2",
   section?: UltimateSectionConfig,
   legacy?: Record<string, unknown>,
+  hasU2Section = false,
 ): ResolvedUltimateEndpoint {
-  const envHost = profile === "u2" ? process.env.U2_HOST ?? process.env.C64U_HOST : process.env.C64U_HOST;
-  const envPort = profile === "u2" ? process.env.U2_PORT ?? process.env.C64U_PORT : process.env.C64U_PORT;
-  const envPassword = profile === "u2" ? process.env.U2_PASSWORD ?? process.env.C64U_PASSWORD : process.env.C64U_PASSWORD;
+  // The U2 profile falls back to the C64U_* variables only when the config has
+  // no u2 section (C64_MODE=u2 with just C64U_* set). With a u2 section the
+  // C64U_* variables belong to the C64U and must not retarget the U2.
+  const u2UsesC64uEnv = profile === "u2" && !hasU2Section;
+  const envHost = profile === "u2" ? process.env.U2_HOST ?? (u2UsesC64uEnv ? process.env.C64U_HOST : undefined) : process.env.C64U_HOST;
+  const envPort = profile === "u2" ? process.env.U2_PORT ?? (u2UsesC64uEnv ? process.env.C64U_PORT : undefined) : process.env.C64U_PORT;
+  const envPassword = profile === "u2" ? process.env.U2_PASSWORD ?? (u2UsesC64uEnv ? process.env.C64U_PASSWORD : undefined) : process.env.C64U_PASSWORD;
 
   const envHostName = profile === "u2" && process.env.U2_HOST !== undefined ? "U2_HOST" : "C64U_HOST";
   const envPortName = profile === "u2" && process.env.U2_PORT !== undefined ? "U2_PORT" : "C64U_PORT";

@@ -658,14 +658,21 @@ test("R-05 log.txt is capped, only changed tasks are rewritten and no temporary 
     assert.equal(started.metadata?.success, true);
     assert.equal(started.structuredContent.data.task.id, "0002_big");
     await waitForTaskCompletion({ invoke: (name, args, c) => tool(name).execute(args, c) }, "big", ctx);
-    // The task is marked completed before its final log line and task.json are written,
-    // so wait until those writes have finished (no .tmp file and the final log line present).
+    // The task is marked completed before its final log line and task.json are written.
+    // The last file written is task.json (after the log line and tasks.json), so its
+    // completed status on disk means every write, including the rename, has finished.
     const tmpFiles = async () => (await fs.readdir(`${dir}/tasks/background/0002_big`)).concat(await fs.readdir(dir)).filter((name) => name.endsWith(".tmp"));
-    for (let waited = 0; waited < 2000; waited += 20) {
-      const done = (await tmpFiles()).length === 0
-        && (await fs.readFile(`${dir}/tasks/background/0002_big/log.txt`, "utf8")).includes("completed iterations=1");
-      if (done) break;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+    const taskJsonCompleted = async () => {
+      try {
+        return JSON.parse(await fs.readFile(`${dir}/tasks/background/0002_big/task.json`, "utf8")).status === "completed";
+      } catch {
+        return false; // not written yet
+      }
+    };
+    const deadline = Date.now() + 10_000;
+    while (!(await taskJsonCompleted())) {
+      assert.ok(Date.now() < deadline, "task.json never reached the completed state");
+      await new Promise((resolve) => setImmediate(resolve));
     }
 
     const log = await fs.readFile(`${dir}/tasks/background/0002_big/log.txt`, "utf8");
@@ -705,6 +712,53 @@ test("stop_all_background_tasks counts only the tasks that were running", async 
     assert.equal(stopped.structuredContent.data.totalTasks, 2);
     const again = await tool("stop_all_background_tasks").execute({}, ctx);
     assert.equal(again.structuredContent.data.count, 0);
+  } finally {
+    restore();
+  }
+});
+
+test("concurrent starts of the same name create one task, and distinct names get distinct ids", async () => {
+  const { tool, restore } = await freshBackground("concurrent-start", "background-concurrent-start");
+  try {
+    const ctx = {
+      client: {
+        async pinFacade() { await new Promise((resolve) => setTimeout(resolve, 20)); return undefined; },
+        async readScreen() { return "READY."; },
+      },
+      logger: createLogger(),
+    };
+    const start = (name) => tool("start_background_task").execute({ name, operation: "read_screen", intervalMs: 60_000 }, ctx);
+    const same = await Promise.all([start("dup"), start("dup"), start("dup")]);
+    assert.equal(same.filter((res) => res.metadata?.success === true).length, 1);
+    assert.equal(same.filter((res) => res.isError === true).length, 2);
+    const distinct = await Promise.all([start("a"), start("b"), start("c")]);
+    const ids = distinct.map((res) => res.structuredContent.data.task.id);
+    assert.equal(new Set(ids).size, 3, ids.join(","));
+    const list = await tool("list_background_tasks").execute({}, ctx);
+    assert.equal(list.structuredContent.data.tasks.filter((entry) => entry.name === "dup").length, 1);
+    await tool("stop_all_background_tasks").execute({}, ctx);
+  } finally {
+    restore();
+  }
+});
+
+test("a failed facade pin releases the reserved task name", async () => {
+  const { tool, restore } = await freshBackground("pin-fail", "background-pin-fail");
+  try {
+    let fail = true;
+    const ctx = {
+      client: {
+        async pinFacade() { if (fail) throw new Error("no backend"); return undefined; },
+        async readScreen() { return "READY."; },
+      },
+      logger: createLogger(),
+    };
+    const first = await tool("start_background_task").execute({ name: "pin", operation: "read_screen", intervalMs: 60_000 }, ctx);
+    assert.equal(first.isError, true);
+    fail = false;
+    const second = await tool("start_background_task").execute({ name: "pin", operation: "read_screen", intervalMs: 60_000 }, ctx);
+    assert.equal(second.metadata?.success, true);
+    await tool("stop_all_background_tasks").execute({}, ctx);
   } finally {
     restore();
   }

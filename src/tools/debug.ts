@@ -255,7 +255,7 @@ const getMonitorStateArgsSchema = objectSchema({
 });
 
 const waitForStateArgsSchema = objectSchema({
-  description: "Poll CPU registers until PC equals expectedPC or timeout elapses.",
+  description: "Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled.",
   properties: {
     op: literalSchema("wait_for_state"),
     expectedPC: optionalSchema(stringSchema({ description: "Target PC address to wait for (e.g. $0810).", minLength: 1 })),
@@ -544,15 +544,26 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const deadline = Date.now() + timeoutMs;
       let values: import("../vice/viceClient.js").ViceRegisterValue[] = [];
       let currentPC: number | undefined;
-      while (Date.now() < deadline) {
+      let settled = false;
+      while (!settled) {
+        // Without an expected PC and with a debug session, the tracked CPU state decides: wait for
+        // the stop event (a checkpoint hit or a step) instead of polling. With an expected PC the PC
+        // is read every pollMs whatever the session says, because a session that exists only to hold
+        // a disabled stopping checkpoint says nothing about where the PC is. The wait is cut short by
+        // a stop event, so a hit is still seen at once. Without a session nothing can stop the CPU,
+        // so the PC is polled.
+        const remaining = Math.max(0, deadline - Date.now());
+        const wait = await ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
         values = await ctx.client.viceRegistersGet(0);
         currentPC = pcId !== undefined ? values.find((v) => v.id === pcId)?.value : undefined;
-        if (targetPC === undefined || currentPC === targetPC) {
-          break;
+        settled = targetPC === undefined ? (!wait.session || wait.stopped) : currentPC === targetPC;
+        if (!settled) {
+          if (Date.now() >= deadline) break;
+          // The wait above already took up to pollMs when a session was running the CPU.
+          if (targetPC === undefined || !wait.session || wait.stopped) await new Promise<void>((res) => setTimeout(res, pollMs));
         }
-        await new Promise<void>((res) => setTimeout(res, pollMs));
       }
-      const matched = targetPC === undefined || currentPC === targetPC;
+      const matched = settled;
       const regs = values.map((v) => {
         const meta = metadataById.get(v.id);
         return { id: v.id, name: meta?.name, bits: meta?.bits, size: v.size, value: v.value };
@@ -586,7 +597,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       continueExecutionArgsSchema.parse(args);
       await ctx.client.viceExitMonitor();
-      ctx.logger.info("Exited Binary Monitor — CPU resumed");
+      ctx.logger.info("Continued execution — CPU resumed");
       return textResult("Execution resumed.", { success: true });
     } catch (error) {
       return handleToolError(error);

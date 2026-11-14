@@ -8,34 +8,7 @@
       "_meta": {
         "domain": "guide",
         "priority": "critical",
-        "summary": "Step-by-step rules for safe automation, verification, and rollback on the C64.",
-        "prompts": [
-          "basic-program",
-          "assembly-program",
-          "memory-debug",
-          "cross-platform-demo",
-          "preset-music-demo"
-        ],
-        "tools": [
-          "upload_run_basic",
-          "upload_run_asm",
-          "cross_platform_greeting",
-          "music_play_preset",
-          "read_screen",
-          "read"
-        ],
-        "tags": [
-          "workflow",
-          "safety"
-        ],
-        "bundle": {
-          "id": "guide",
-          "title": "Guides & Orientation",
-          "summary": "Mandatory workflow and safety guidance before issuing any C64 commands.",
-          "order": 0
-        },
-        "order": 0,
-        "relatedResources": []
+        "order": 0
       }
     },
     {
@@ -46,37 +19,128 @@
       "_meta": {
         "domain": "guide",
         "priority": "critical",
-        "summary": "Condensed routing guide for one-call demos, backend switching, and when to prefer orchestration over manual tool composition.",
-        "prompts": [
-          "basic-program",
-          "graphics-demo",
-          "cross-platform-demo",
-          "sid-music",
-          "preset-music-demo"
-        ],
-        "tools": [
-          "c64_program",
-          "c64_sound",
-          "c64_select_backend",
-          "c64_memory",
-          "c64_graphics"
-        ],
-        "tags": [
-          "workflow",
-          "fast-path",
-          "routing"
-        ],
-        "bundle": {
-          "id": "guide",
-          "title": "Guides & Orientation",
-          "summary": "Mandatory workflow and safety guidance before issuing any C64 commands.",
-          "order": 0
-        },
-        "order": 1,
-        "relatedResources": [
-          "c64://guide/bootstrap",
-          "c64://platform/status"
-        ]
+        "order": 1
+      }
+    },
+    {
+      "name": "Game Development Index (read first)",
+      "uri": "c64://gamedev/index",
+      "description": "CRITICAL: Read first when asked to write, port or extend a C64 game; chooses modern C64U/Ultimate (default) or stock C64 and lists which resources to read by game type.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "gamedev",
+        "priority": "critical",
+        "order": 0
+      }
+    },
+    {
+      "name": "Game Architecture",
+      "uri": "c64://gamedev/architecture",
+      "description": "Read before choosing addresses, VIC bank, loader or IRQ layout for a C64 game (stock C64 and modern Ultimate): frame loop, state machine, cycle budgets and memory-map templates.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "gamedev",
+        "priority": "critical",
+        "order": 1
+      }
+    },
+    {
+      "name": "Game Techniques",
+      "uri": "c64://gamedev/techniques",
+      "description": "Read when implementing raster IRQs, sprite multiplexing, scrolling, collision, joystick input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling or Ultimate start-up checks (turbo probe) in a C64 game (stock C64 and modern Ultimate).",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "gamedev",
+        "priority": "critical",
+        "order": 2
+      }
+    },
+    {
+      "name": "Game Toolchain",
+      "uri": "c64://gamedev/toolchain",
+      "description": "Read when setting up a C64 game project, choosing an assembler or compiler, building PRG/D64/CRT files, or testing on VICE and hardware through c64bridge (stock C64 and modern Ultimate).",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "gamedev",
+        "priority": "reference",
+        "order": 3
+      }
+    },
+    {
+      "name": "Game References",
+      "uri": "c64://gamedev/references",
+      "description": "Read to find real games and projects to learn from, with the technique each is known for and where to read it: modern Ultimate (UCI, REU, Upic, turbo) projects and classic stock C64 games.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "gamedev",
+        "priority": "supplemental",
+        "order": 4
+      }
+    },
+    {
+      "name": "Ultimate Hardware Features",
+      "uri": "c64://ultimate/hardware",
+      "description": "Read for modern C64U/Ultimate 64 features (CPU turbo via D031, multiple SIDs, video, config, detection); not applicable to a stock C64.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "critical",
+        "order": 0
+      }
+    },
+    {
+      "name": "Ultimate Command Interface (UCI)",
+      "uri": "c64://ultimate/uci",
+      "description": "Read when a modern C64U/Ultimate game must load files from the Ultimate, save data, use the network, change the palette or detect the device via the UCI registers at DF1B; not on a stock C64.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "reference",
+        "order": 1
+      }
+    },
+    {
+      "name": "Ultimate REU",
+      "uri": "c64://ultimate/reu",
+      "description": "Read when a modern C64U/Ultimate game streams or stores data in the REU (registers DF00, DMA, preload, sizes); not on a stock C64 unless a real REU is fitted.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "reference",
+        "order": 2
+      }
+    },
+    {
+      "name": "Ultimate Upic Graphics",
+      "uri": "c64://ultimate/upic",
+      "description": "Read when a request mentions Upic or a 384x256 16-colour attribute-free full-screen game on a modern C64U/Ultimate at turbo speed; not for a stock C64.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "supplemental",
+        "order": 3
+      }
+    },
+    {
+      "name": "Ultimate Multi-SID Control",
+      "uri": "c64://ultimate/multisid",
+      "description": "Read when a modern C64U/Ultimate game uses more than one SID, sets SID addresses, range splits, pan or the mixer at run time, or must work with empty sockets, one or two real SIDs or SID replacements; not on a stock C64.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "reference",
+        "order": 4
+      }
+    },
+    {
+      "name": "Ultimate Turbo Benchmark",
+      "uri": "c64://ultimate/bench",
+      "description": "Read when you need to measure CPU cycles per frame, badline or sprite cost, REU DMA speed or the reset 1 MHz window on a modern C64U/Ultimate, or to rerun the published measurements.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "ultimate",
+        "priority": "supplemental",
+        "order": 5
       }
     },
     {
@@ -87,43 +151,7 @@
       "_meta": {
         "domain": "vice",
         "priority": "critical",
-        "summary": "Transport framing, single-client constraints, command semantics, and monitor side effects that shape all VICE-backed operations.",
-        "prompts": [
-          "hello-world",
-          "basic-program",
-          "cross-platform-demo",
-          "preset-music-demo",
-          "assembly-program",
-          "sid-music",
-          "graphics-demo",
-          "memory-debug",
-          "drive-manager"
-        ],
-        "tools": [
-          "c64_program",
-          "c64_memory",
-          "c64_debug",
-          "c64_vice",
-          "c64_system"
-        ],
-        "tags": [
-          "vice",
-          "binary-monitor",
-          "emulator",
-          "debugger"
-        ],
-        "bundle": {
-          "id": "vice",
-          "title": "VICE Emulator",
-          "summary": "Critical Binary Monitor protocol guidance for any workflow that targets the VICE backend.",
-          "order": 1
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://guide/bootstrap",
-          "c64://guide/fast-paths",
-          "c64://platform/status"
-        ]
+        "order": 0
       }
     },
     {
@@ -134,29 +162,7 @@
       "_meta": {
         "domain": "languages",
         "priority": "critical",
-        "summary": "Token definitions, syntax rules, and device I/O guidance for BASIC v2.",
-        "prompts": [
-          "basic-program"
-        ],
-        "tools": [
-          "upload_run_basic",
-          "read_screen"
-        ],
-        "tags": [
-          "basic",
-          "language"
-        ],
-        "bundle": {
-          "id": "languages",
-          "title": "Programming Languages",
-          "summary": "Language references required before generating BASIC or 6502 assembly programs.",
-          "order": 2
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://guide/bootstrap",
-          "c64://basic/pitfalls"
-        ]
+        "order": 0
       }
     },
     {
@@ -167,28 +173,7 @@
       "_meta": {
         "domain": "languages",
         "priority": "reference",
-        "summary": "Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps.",
-        "prompts": [
-          "basic-program"
-        ],
-        "tools": [
-          "upload_run_basic"
-        ],
-        "tags": [
-          "basic",
-          "pitfalls",
-          "quickref"
-        ],
-        "bundle": {
-          "id": "languages",
-          "title": "Programming Languages",
-          "summary": "Language references required before generating BASIC or 6502 assembly programs.",
-          "order": 2
-        },
-        "order": 1,
-        "relatedResources": [
-          "c64://basic/spec"
-        ]
+        "order": 1
       }
     },
     {
@@ -199,28 +184,7 @@
       "_meta": {
         "domain": "languages",
         "priority": "critical",
-        "summary": "Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU.",
-        "prompts": [
-          "assembly-program"
-        ],
-        "tools": [
-          "upload_run_asm",
-          "read"
-        ],
-        "tags": [
-          "assembly",
-          "language"
-        ],
-        "bundle": {
-          "id": "languages",
-          "title": "Programming Languages",
-          "summary": "Language references required before generating BASIC or 6502 assembly programs.",
-          "order": 2
-        },
-        "order": 2,
-        "relatedResources": [
-          "c64://guide/bootstrap"
-        ]
+        "order": 2
       }
     },
     {
@@ -231,28 +195,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "critical",
-        "summary": "Register map, waveform behaviour, and ADSR envelopes for expressive SID playback.",
-        "prompts": [
-          "sid-music"
-        ],
-        "tools": [
-          "c64_sound"
-        ],
-        "tags": [
-          "sid",
-          "audio"
-        ],
-        "bundle": {
-          "id": "audio",
-          "title": "SID & Audio",
-          "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 3
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://sound/sidwave/spec",
-          "c64://sound/sid/file-format"
-        ]
+        "order": 0
       }
     },
     {
@@ -263,28 +206,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "summary": "Defines the SIDWAVE interchange format used by the SID composer workflow.",
-        "prompts": [
-          "sid-music"
-        ],
-        "tools": [
-          "c64_sound"
-        ],
-        "tags": [
-          "sid",
-          "format"
-        ],
-        "bundle": {
-          "id": "audio",
-          "title": "SID & Audio",
-          "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 3
-        },
-        "order": 1,
-        "relatedResources": [
-          "c64://sound/sid/spec",
-          "c64://sound/sid/file-format"
-        ]
+        "order": 1
       }
     },
     {
@@ -295,28 +217,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "summary": "Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music.",
-        "prompts": [
-          "sid-music"
-        ],
-        "tools": [
-          "c64_sound"
-        ],
-        "tags": [
-          "sid",
-          "format"
-        ],
-        "bundle": {
-          "id": "audio",
-          "title": "SID & Audio",
-          "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 3
-        },
-        "order": 2,
-        "relatedResources": [
-          "c64://sound/sid/spec",
-          "c64://sound/sidwave/spec"
-        ]
+        "order": 2
       }
     },
     {
@@ -327,29 +228,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "summary": "Captures proven waveforms, ADSR presets, phrasing, and verification workflow for pleasant SID music.",
-        "prompts": [
-          "sid-music"
-        ],
-        "tools": [
-          "c64_sound"
-        ],
-        "tags": [
-          "sid",
-          "best-practices",
-          "audio"
-        ],
-        "bundle": {
-          "id": "audio",
-          "title": "SID & Audio",
-          "summary": "All references needed to compose, play, and verify SID music.",
-          "order": 3
-        },
-        "order": 3,
-        "relatedResources": [
-          "c64://sound/sid/spec",
-          "c64://sound/sidwave/spec"
-        ]
+        "order": 3
       }
     },
     {
@@ -360,30 +239,7 @@
       "_meta": {
         "domain": "graphics",
         "priority": "critical",
-        "summary": "Covers raster timing, sprite control, colour RAM, and bitmap modes on the VIC-II.",
-        "prompts": [
-          "graphics-demo"
-        ],
-        "tools": [
-          "c64_graphics",
-          "c64_memory"
-        ],
-        "tags": [
-          "vic",
-          "graphics"
-        ],
-        "bundle": {
-          "id": "graphics",
-          "title": "Graphics & VIC-II",
-          "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 4
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://assembly/6510-spec",
-          "c64://graphics/character-set",
-          "c64://graphics/petscii/style-guide"
-        ]
+        "order": 0
       }
     },
     {
@@ -394,29 +250,7 @@
       "_meta": {
         "domain": "graphics",
         "priority": "reference",
-        "summary": "Character code table mapping PETSCII codes to screen codes, glyphs, and keyboard input.",
-        "prompts": [
-          "graphics-demo"
-        ],
-        "tools": [
-          "c64_graphics"
-        ],
-        "tags": [
-          "petscii",
-          "charset",
-          "graphics"
-        ],
-        "bundle": {
-          "id": "graphics",
-          "title": "Graphics & VIC-II",
-          "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 4
-        },
-        "order": 1,
-        "relatedResources": [
-          "c64://graphics/vic/spec",
-          "c64://graphics/petscii/style-guide"
-        ]
+        "order": 1
       }
     },
     {
@@ -427,31 +261,7 @@
       "_meta": {
         "domain": "graphics",
         "priority": "reference",
-        "summary": "Documents colour palette, readability presets, dithering patterns, and best practices for creating artistic and readable PETSCII displays.",
-        "prompts": [
-          "graphics-demo"
-        ],
-        "tools": [
-          "c64_graphics"
-        ],
-        "tags": [
-          "petscii",
-          "style",
-          "colours",
-          "graphics"
-        ],
-        "bundle": {
-          "id": "graphics",
-          "title": "Graphics & VIC-II",
-          "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 4
-        },
-        "order": 2,
-        "relatedResources": [
-          "c64://graphics/vic/spec",
-          "c64://graphics/character-set",
-          "c64://graphics/sprite-charset/best-practices"
-        ]
+        "order": 2
       }
     },
     {
@@ -462,34 +272,7 @@
       "_meta": {
         "domain": "graphics",
         "priority": "reference",
-        "summary": "Documents sprite and charset workflows, memory layout, VIC-II configuration, common pitfalls, and proven techniques for hardware-accelerated graphics.",
-        "prompts": [
-          "graphics-demo"
-        ],
-        "tools": [
-          "c64_graphics",
-          "c64_memory",
-          "c64_program"
-        ],
-        "tags": [
-          "sprites",
-          "charset",
-          "graphics",
-          "workflows"
-        ],
-        "bundle": {
-          "id": "graphics",
-          "title": "Graphics & VIC-II",
-          "summary": "Key material for PETSCII art, sprites, and raster control on the VIC-II.",
-          "order": 4
-        },
-        "order": 3,
-        "relatedResources": [
-          "c64://graphics/vic/spec",
-          "c64://graphics/character-set",
-          "c64://graphics/petscii/style-guide",
-          "c64://memory/map"
-        ]
+        "order": 3
       }
     },
     {
@@ -500,35 +283,7 @@
       "_meta": {
         "domain": "memory",
         "priority": "critical",
-        "summary": "Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions.",
-        "prompts": [
-          "memory-debug",
-          "assembly-program"
-        ],
-        "tools": [
-          "read",
-          "write",
-          "verify_and_write_memory"
-        ],
-        "tags": [
-          "memory",
-          "hardware"
-        ],
-        "bundle": {
-          "id": "memory",
-          "title": "Memory & I/O Reference",
-          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 5
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://memory/zero-page-and-workspace",
-          "c64://basic/rom-routines",
-          "c64://kernal/rom-routines",
-          "c64://io/spec",
-          "c64://io/cia/spec",
-          "c64://assembly/6510-spec"
-        ]
+        "order": 0
       }
     },
     {
@@ -539,33 +294,7 @@
       "_meta": {
         "domain": "memory",
         "priority": "reference",
-        "summary": "Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses.",
-        "prompts": [
-          "memory-debug",
-          "assembly-program"
-        ],
-        "tools": [
-          "read",
-          "write",
-          "verify_and_write_memory"
-        ],
-        "tags": [
-          "memory",
-          "zero-page"
-        ],
-        "bundle": {
-          "id": "memory",
-          "title": "Memory & I/O Reference",
-          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 5
-        },
-        "order": 1,
-        "relatedResources": [
-          "c64://memory/map",
-          "c64://basic/rom-routines",
-          "c64://kernal/rom-routines",
-          "c64://assembly/6510-spec"
-        ]
+        "order": 1
       }
     },
     {
@@ -576,35 +305,7 @@
       "_meta": {
         "domain": "memory",
         "priority": "reference",
-        "summary": "Maps BASIC ROM landmarks, reusable interpreter routines, numeric helpers, string helpers, and C64-specific BASIC continuation entries.",
-        "prompts": [
-          "memory-debug",
-          "assembly-program",
-          "basic-program"
-        ],
-        "tools": [
-          "read",
-          "verify_and_write_memory"
-        ],
-        "tags": [
-          "memory",
-          "basic",
-          "rom"
-        ],
-        "bundle": {
-          "id": "memory",
-          "title": "Memory & I/O Reference",
-          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 5
-        },
-        "order": 2,
-        "relatedResources": [
-          "c64://memory/map",
-          "c64://memory/zero-page-and-workspace",
-          "c64://kernal/rom-routines",
-          "c64://basic/spec",
-          "c64://assembly/6510-spec"
-        ]
+        "order": 2
       }
     },
     {
@@ -615,33 +316,7 @@
       "_meta": {
         "domain": "memory",
         "priority": "reference",
-        "summary": "Maps KERNAL ROM vectors, jump table entries, internal routines, serial/tape/screen services, and reset handlers.",
-        "prompts": [
-          "memory-debug",
-          "assembly-program"
-        ],
-        "tools": [
-          "read",
-          "verify_and_write_memory"
-        ],
-        "tags": [
-          "memory",
-          "kernal"
-        ],
-        "bundle": {
-          "id": "memory",
-          "title": "Memory & I/O Reference",
-          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 5
-        },
-        "order": 3,
-        "relatedResources": [
-          "c64://memory/map",
-          "c64://memory/zero-page-and-workspace",
-          "c64://basic/rom-routines",
-          "c64://io/spec",
-          "c64://assembly/6510-spec"
-        ]
+        "order": 3
       }
     },
     {
@@ -652,35 +327,7 @@
       "_meta": {
         "domain": "memory",
         "priority": "critical",
-        "summary": "Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes.",
-        "prompts": [
-          "memory-debug",
-          "assembly-program"
-        ],
-        "tools": [
-          "read",
-          "write",
-          "verify_and_write_memory",
-          "debugreg_read",
-          "debugreg_write"
-        ],
-        "tags": [
-          "io",
-          "hardware"
-        ],
-        "bundle": {
-          "id": "memory",
-          "title": "Memory & I/O Reference",
-          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 5
-        },
-        "order": 4,
-        "relatedResources": [
-          "c64://memory/map",
-          "c64://memory/zero-page-and-workspace",
-          "c64://io/cia/spec",
-          "c64://assembly/6510-spec"
-        ]
+        "order": 4
       }
     },
     {
@@ -691,33 +338,7 @@
       "_meta": {
         "domain": "memory",
         "priority": "reference",
-        "summary": "Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout.",
-        "prompts": [
-          "memory-debug",
-          "assembly-program"
-        ],
-        "tools": [
-          "read",
-          "write",
-          "verify_and_write_memory",
-          "debugreg_read"
-        ],
-        "tags": [
-          "io",
-          "hardware"
-        ],
-        "bundle": {
-          "id": "memory",
-          "title": "Memory & I/O Reference",
-          "summary": "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
-          "order": 5
-        },
-        "order": 5,
-        "relatedResources": [
-          "c64://io/spec",
-          "c64://memory/map",
-          "c64://memory/zero-page-and-workspace"
-        ]
+        "order": 5
       }
     },
     {
@@ -728,30 +349,7 @@
       "_meta": {
         "domain": "printer",
         "priority": "critical",
-        "summary": "Covers device setup, control codes, and Ultimate 64 integration for printers.",
-        "prompts": [
-          "printer-job"
-        ],
-        "tools": [
-          "printer_guide",
-          "printer_commodore_text",
-          "printer_epson_text"
-        ],
-        "tags": [
-          "printer",
-          "spec"
-        ],
-        "bundle": {
-          "id": "printer",
-          "title": "Printers & Hardcopy",
-          "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 6
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://printer/commodore/text",
-          "c64://printer/epson/text"
-        ]
+        "order": 0
       }
     },
     {
@@ -762,28 +360,7 @@
       "_meta": {
         "domain": "printer",
         "priority": "reference",
-        "summary": "Character sets, control codes, and formatting for Commodore MPS text output.",
-        "prompts": [
-          "printer-job"
-        ],
-        "tools": [
-          "printer_commodore_text"
-        ],
-        "tags": [
-          "printer",
-          "commodore"
-        ],
-        "bundle": {
-          "id": "printer",
-          "title": "Printers & Hardcopy",
-          "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 6
-        },
-        "order": 1,
-        "relatedResources": [
-          "c64://printer/spec",
-          "c64://printer/commodore/bitmap"
-        ]
+        "order": 1
       }
     },
     {
@@ -794,29 +371,7 @@
       "_meta": {
         "domain": "printer",
         "priority": "reference",
-        "summary": "Details bitmap modes, graphics commands, and data layout for MPS bitmap printing.",
-        "prompts": [
-          "printer-job"
-        ],
-        "tools": [
-          "printer_commodore_bitmap"
-        ],
-        "tags": [
-          "printer",
-          "commodore",
-          "graphics"
-        ],
-        "bundle": {
-          "id": "printer",
-          "title": "Printers & Hardcopy",
-          "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 6
-        },
-        "order": 2,
-        "relatedResources": [
-          "c64://printer/commodore/text",
-          "c64://printer/spec"
-        ]
+        "order": 2
       }
     },
     {
@@ -827,28 +382,7 @@
       "_meta": {
         "domain": "printer",
         "priority": "reference",
-        "summary": "Lists ESC/P control codes and formatting advice for Epson FX text output.",
-        "prompts": [
-          "printer-job"
-        ],
-        "tools": [
-          "printer_epson_text"
-        ],
-        "tags": [
-          "printer",
-          "epson"
-        ],
-        "bundle": {
-          "id": "printer",
-          "title": "Printers & Hardcopy",
-          "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 6
-        },
-        "order": 3,
-        "relatedResources": [
-          "c64://printer/epson/bitmap",
-          "c64://printer/spec"
-        ]
+        "order": 3
       }
     },
     {
@@ -859,29 +393,7 @@
       "_meta": {
         "domain": "printer",
         "priority": "reference",
-        "summary": "Explains bit-image modes, density options, and data packing for Epson bitmap jobs.",
-        "prompts": [
-          "printer-job"
-        ],
-        "tools": [
-          "printer_epson_bitmap"
-        ],
-        "tags": [
-          "printer",
-          "epson",
-          "graphics"
-        ],
-        "bundle": {
-          "id": "printer",
-          "title": "Printers & Hardcopy",
-          "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 6
-        },
-        "order": 4,
-        "relatedResources": [
-          "c64://printer/epson/text",
-          "c64://printer/spec"
-        ]
+        "order": 4
       }
     },
     {
@@ -892,29 +404,7 @@
       "_meta": {
         "domain": "printer",
         "priority": "supplemental",
-        "summary": "Reusable prompt templates that drive complex printer jobs through the MCP server.",
-        "prompts": [
-          "printer-job"
-        ],
-        "tools": [
-          "printer_prompts"
-        ],
-        "tags": [
-          "printer",
-          "prompts"
-        ],
-        "bundle": {
-          "id": "printer",
-          "title": "Printers & Hardcopy",
-          "summary": "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
-          "order": 6
-        },
-        "order": 5,
-        "relatedResources": [
-          "c64://printer/spec",
-          "c64://printer/commodore/text",
-          "c64://printer/epson/text"
-        ]
+        "order": 5
       }
     },
     {
@@ -925,63 +415,7 @@
       "_meta": {
         "domain": "guide",
         "priority": "critical",
-        "summary": "Explains how to approach each knowledge bundle and when to consult it.",
-        "prompts": [
-          "basic-program",
-          "assembly-program",
-          "sid-music",
-          "graphics-demo",
-          "printer-job",
-          "memory-debug",
-          "cross-platform-demo",
-          "preset-music-demo"
-        ],
-        "tools": [
-          "upload_run_basic",
-          "upload_run_asm",
-          "music_generate",
-          "render_petscii_text",
-          "printer_guide",
-          "read"
-        ],
-        "tags": [
-          "overview"
-        ],
-        "bundle": {
-          "id": "guide",
-          "title": "Knowledge Overview",
-          "summary": "Read this first to understand how the MCP server organizes Commodore 64 expertise.",
-          "order": -1
-        },
-        "order": 0,
-        "relatedResources": [
-          "c64://guide/bootstrap",
-          "c64://guide/fast-paths",
-          "c64://vice/binary-monitor-spec",
-          "c64://basic/spec",
-          "c64://basic/pitfalls",
-          "c64://assembly/6510-spec",
-          "c64://sound/sid/spec",
-          "c64://sound/sidwave/spec",
-          "c64://sound/sid/file-format",
-          "c64://sound/sid/best-practices",
-          "c64://graphics/vic/spec",
-          "c64://graphics/character-set",
-          "c64://graphics/petscii/style-guide",
-          "c64://graphics/sprite-charset/best-practices",
-          "c64://memory/map",
-          "c64://memory/zero-page-and-workspace",
-          "c64://basic/rom-routines",
-          "c64://kernal/rom-routines",
-          "c64://io/spec",
-          "c64://io/cia/spec",
-          "c64://printer/spec",
-          "c64://printer/commodore/text",
-          "c64://printer/commodore/bitmap",
-          "c64://printer/epson/text",
-          "c64://printer/epson/bitmap",
-          "c64://printer/prompt-guide"
-        ]
+        "order": 0
       }
     },
     {
@@ -991,15 +425,7 @@
       "mimeType": "text/markdown",
       "_meta": {
         "domain": "platform",
-        "priority": "critical",
-        "summary": "Current platform (c64u or vice), feature flags, and tool support overview.",
-        "prompts": [],
-        "tools": [],
-        "tags": [
-          "platform",
-          "compatibility"
-        ],
-        "relatedResources": []
+        "priority": "critical"
       }
     }
   ]

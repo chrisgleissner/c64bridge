@@ -36,40 +36,59 @@ const ragRetrieveArgsSchema = objectSchema<RagRetrieveArgs>({
   additionalProperties: false,
 });
 
-function createRagTool(language: RagLanguage, options: { description: string; summary: string; tags: readonly string[] }) {
-  const primaryResourceUris = language === "basic"
+type RagScope = "basic" | "asm" | "docs";
+
+function createRagTool(scope: RagScope, options: { description: string; summary: string; tags: readonly string[] }) {
+  // "docs" searches every index (curated specs, game development and Ultimate docs, repo docs) without a language filter.
+  const language: RagLanguage | undefined = scope === "docs" ? undefined : scope;
+  const primaryResourceUris = scope === "basic"
     ? ["c64://basic/spec", "c64://guide/bootstrap"]
-    : ["c64://assembly/6510-spec", "c64://guide/bootstrap"];
+    : scope === "asm"
+      ? ["c64://assembly/6510-spec", "c64://guide/bootstrap"]
+      : ["c64://gamedev/index", "c64://guide/index"];
 
   return {
-    name: language === "basic" ? "rag_retrieve_basic" : "rag_retrieve_asm",
+    name: scope === "basic" ? "rag_retrieve_basic" : scope === "asm" ? "rag_retrieve_asm" : "rag_retrieve_docs",
     description:
-      language === "basic"
+      scope === "basic"
         ? "Retrieve BASIC references from local knowledge. See c64://basic/spec before coding."
-        : "Retrieve 6502/6510 assembly references from local knowledge. See c64://assembly/6510-spec.",
+        : scope === "asm"
+          ? "Retrieve 6502/6510 assembly references from local knowledge. See c64://assembly/6510-spec."
+          : "Search all curated C64 docs (hardware, game development, Ultimate devices such as REU, UCI, turbo and Upic, VIC-II, SID, memory) for a short targeted passage. Start at c64://gamedev/index for game requests.",
     summary: options.summary,
     inputSchema: ragRetrieveArgsSchema.jsonSchema,
     relatedResources:
-      language === "basic"
+      scope === "basic"
         ? ["c64://basic/spec"]
-        : ["c64://assembly/6510-spec"],
+        : scope === "asm"
+          ? ["c64://assembly/6510-spec"]
+          : ["c64://gamedev/index"],
     relatedPrompts:
-      language === "basic"
+      scope === "basic"
         ? ["basic-program"]
-        : ["assembly-program"],
+        : scope === "asm"
+          ? ["assembly-program"]
+          : ["game-development"],
     tags: options.tags,
     prerequisites: [],
     examples: [
       {
-        name: language === "basic" ? "BASIC PRINT" : "Raster IRQ",
-        description: language === "basic" ? "Find PRINT and device usage" : "Find stable raster IRQ snippet",
+        name: scope === "basic" ? "BASIC PRINT" : scope === "asm" ? "Raster IRQ" : "REU streaming",
+        description: scope === "basic" ? "Find PRINT and device usage" : scope === "asm" ? "Find stable raster IRQ snippet" : "Find REU streaming guidance for Ultimate devices",
         arguments:
-          language === "basic"
+          scope === "basic"
             ? { q: "PRINT to device 4 form feed", k: 3 }
-            : { q: "stable raster irq acknowledge d019", k: 3 },
+            : scope === "asm"
+              ? { q: "stable raster irq acknowledge d019", k: 3 }
+              : { q: "REU streaming", k: 3 },
       },
     ],
-    workflowHints: language === "basic"
+    workflowHints: scope === "docs"
+      ? [
+        "Use for a targeted lookup in the curated docs (hardware, Ultimate features, game techniques) instead of reading a whole resource.",
+        "Read the linked c64:// resource when a hit is relevant but incomplete.",
+      ]
+      : scope === "basic"
       ? [
         "Use when the user needs BASIC examples or syntax reminders before coding.",
         "Summarise key references so the user knows where to look next.",
@@ -137,7 +156,7 @@ function createRagTool(language: RagLanguage, options: { description: string; su
                 name: entry.name,
                 summary: entry.metadata.summary,
               })),
-              refs: refs.map(serializeReference),
+              refs: refs.map((ref) => serializeReference(ref, snippetBudget(refs.length))),
             },
           },
         };
@@ -179,11 +198,26 @@ function summariseSnippet(snippet: string, limit = 240): string {
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
 }
 
-function serializeReference(ref: RagReference): Record<string, unknown> {
+const MAX_SNIPPET_CHARS = 1200;
+const MIN_SNIPPET_CHARS = 300;
+const TOTAL_SNIPPET_CHARS = 6000;
+
+/** Per-hit snippet limit: at most MAX_SNIPPET_CHARS, shrinking so that all hits together stay near TOTAL_SNIPPET_CHARS. */
+export function snippetBudget(hitCount: number): number {
+  if (hitCount <= 0) return MAX_SNIPPET_CHARS;
+  return Math.max(MIN_SNIPPET_CHARS, Math.min(MAX_SNIPPET_CHARS, Math.floor(TOTAL_SNIPPET_CHARS / hitCount)));
+}
+
+export function serializeReference(ref: RagReference, snippetLimit = MAX_SNIPPET_CHARS): Record<string, unknown> {
+  const truncated = ref.snippet.length > snippetLimit;
   const payload: Record<string, unknown> = {
-    snippet: ref.snippet,
+    snippet: truncated ? `${ref.snippet.slice(0, snippetLimit - 1).trimEnd()}…` : ref.snippet,
     score: ref.score,
   };
+  if (truncated) {
+    payload.truncated = true;
+    payload.snippetChars = ref.snippet.length;
+  }
   if (ref.origin) payload.origin = ref.origin;
   if (ref.uri) payload.uri = ref.uri;
   if (ref.sourcePath) payload.sourcePath = ref.sourcePath;
@@ -214,6 +248,11 @@ export const ragModule = defineToolModule({
       description: "Retrieve BASIC snippets, guidance, and discussion relevant to the provided query.",
       summary: "Returns BASIC-focused references from the local knowledge base.",
       tags: ["basic"],
+    }),
+    createRagTool("docs", {
+      description: "Search all curated C64 documentation, including game development and Ultimate device features, for passages relevant to the query.",
+      summary: "Returns references from the curated specs and docs (all indexes) without a BASIC/assembly filter.",
+      tags: ["docs", "hardware", "gamedev"],
     }),
     createRagTool("asm", {
       description: "Retrieve 6502/6510 assembly routines and references relevant to the provided query.",

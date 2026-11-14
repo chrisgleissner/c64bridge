@@ -296,6 +296,8 @@ function relinkBasicProgram(memory) {
 export async function startMockC64Server(options = {}) {
   const state = createInitialState();
   const streamRuntime = createStreamRuntime();
+  state.configWrites = [];
+  state.forbiddenConfigCategories = Array.isArray(options.forbiddenConfigCategories) ? [...options.forbiddenConfigCategories] : [];
   state.networkPassword = typeof options.networkPassword === "string" && options.networkPassword.trim()
     ? options.networkPassword
     : null;
@@ -790,6 +792,15 @@ export async function startMockC64Server(options = {}) {
 
     if (method === "POST" && url === "/v1/configs") {
       const payload = await readJson(req);
+      state.configWrites.push(payload);
+      // Like firmware 3.15a, refuse the whole request with 403 when it touches a read-only category.
+      const refused = payload && typeof payload === "object"
+        ? Object.keys(payload).find((category) => state.forbiddenConfigCategories.includes(category))
+        : undefined;
+      if (refused !== undefined) {
+        sendJson(res, { errors: [`Forbidden: ${refused}`] }, 403);
+        return;
+      }
       if (payload && typeof payload === "object") {
         for (const [category, items] of Object.entries(payload)) {
           if (!state.configs[category]) {
@@ -1043,6 +1054,13 @@ export async function startMockC64Server(options = {}) {
           if (action === "info" && method === "GET") {
             state.lastFileInfo = decodedPath;
             respond({ path: decodedPath, size: 4096, type: "file" });
+            return;
+          }
+
+          // The firmware never overwrites: creating an image at an existing path is HTTP 500 with FILE EXISTS.
+          if (action.startsWith("create_") && method === "PUT"
+            && (state.createdImages.some((image) => image.path === decodedPath) || (state.existingFiles ?? []).includes(decodedPath))) {
+            sendJson(res, { errors: ["FILE EXISTS"] }, 500);
             return;
           }
 

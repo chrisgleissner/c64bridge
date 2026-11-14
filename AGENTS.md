@@ -43,7 +43,7 @@ Tool arguments that become host file paths (memory dumps, config snapshots, spri
 | --- | --- |
 | `C64BRIDGE_ALLOWED_DIRS` | Extra directories for host file paths in tool arguments, separated by the path delimiter; `*` disables the check. |
 | `C64BRIDGE_ACCESS` | `full` (default), `no-destructive` or `read-only`. Limits which operations may be called; read on every call. |
-| `C64BRIDGE_HTTP_TOKEN` | Bearer token required (`Authorization: Bearer <token>`) by the optional HTTP transport (`--http`), which also accepts only loopback Host and Origin headers. |
+| `C64BRIDGE_HTTP_TOKEN` | Bearer token required (`Authorization: Bearer <token>`) by the optional HTTP transport (`--http`), which also accepts only loopback Host and Origin headers. Without a token, any local process that can reach 127.0.0.1 on the port can call every tool. |
 | `C64BRIDGE_DIAGNOSTICS_KEEP` | Number of diagnostics files kept at startup (default 200; files older than 30 days are always removed). |
 | `C64BRIDGE_VERBOSE_SCHEMA` | Set to `1` to include the full per-operation schemas in `tools/list` (omitted by default to keep it small). |
 
@@ -107,7 +107,7 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 - Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`). `upload_run_basic` repairs a missing closing quote or parenthesis and reruns once; pass `autoFix: false` for programs with side effects.
 - Fast demo workflow: `c64_program` (`cross_platform_greeting`) for one-call greetings on VICE and/or C64U with screenshot capture and verification
 - Screen & memory: `c64_memory` (`read`, `write`, `read_screen`, `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory`). `read` accepts `format: "hex"` (default) or `"dump"` (addresses plus a PETSCII column); `list_basic` lists the BASIC program in memory as text.
-- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks). `reset`, `reboot` and `power_cycle` accept `waitForReady` and `readyTimeoutMs` to wait for the BASIC READY. prompt. `pause` and `resume` are not available on VICE.
+- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks). `reset`, `reboot` and `power_cycle` accept `waitForReady` and `readyTimeoutMs` to wait for the BASIC READY. prompt. `pause` and `resume` also work on VICE: `pause` holds the binary monitor connection open, which stops the CPU, until `resume`. `reset`, `reboot`, `power_cycle` and `poweroff` end the pause.
 - Input: `c64_input` (`write_text`, `key`, `keyboard`, `joystick`, `release_all`, `state`)
 - Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`, `load_flash`, `save_flash`, `reset_defaults`). The flash operations take an optional `category`.
 - Drives & files: `c64_disk` (including `find_paths`, which returns `results` and `truncated`; limit with `maxResults`), `c64_drive`
@@ -140,6 +140,7 @@ Keyboard menu navigation is reserved for device features with no REST equivalent
 | Graphics workflow | `.github/skills/graphics-demo/SKILL.md` |
 | Memory inspection or patching | `.github/skills/memory-debug/SKILL.md` |
 | Disk and drive management | `.github/skills/drive-manager/SKILL.md` |
+| Game development (modern Ultimate by default, or stock C64) | `.github/skills/game-development/SKILL.md` |
 | Existing software launch | `.github/skills/software-launch/SKILL.md` |
 | Printer workflow | `.github/skills/printer-job/SKILL.md` |
 | Streaming workflow | `.github/skills/stream-control/SKILL.md` |
@@ -149,6 +150,7 @@ Keyboard menu navigation is reserved for device features with no REST equivalent
 
 Use ListResources to discover built-in knowledge, then read specific URIs to enrich context before coding:
 
+- `c64://gamedev/index` — start here for any C64 game request (modern Ultimate by default, or stock C64); it lists which of `c64://gamedev/{architecture,techniques,toolchain}` and `c64://ultimate/{hardware,uci,reu,upic}` to read
 - `c64://basic/spec` — BASIC v2 tokens, syntax, device I/O
 - `c64://basic/rom-routines` — BASIC ROM routines, parser/evaluator helpers, numeric/string machinery
 - `c64://assembly/6510-spec` — 6510 opcodes, addressing, zero-page strategy

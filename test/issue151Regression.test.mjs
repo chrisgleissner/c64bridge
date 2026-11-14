@@ -56,8 +56,8 @@ c64Test("issue #151: public MCP silence verification distinguishes offset-only i
     mockServer.state.audioSignal = signal({ amplitude: 0 });
     const idle = await call(client, "c64_sound", { op: "silence_all", verify: true });
     assert.equal(idle.isError, undefined, JSON.stringify(idle));
-    assert.equal(idle.metadata.verification.silent, true);
-    assert.equal(idle.metadata.verification.analysis.analysis.source, "ultimate-stream");
+    assert.equal(idle.structuredContent.data.verification.silent, true);
+    assert.equal(idle.structuredContent.data.verification.analysis.analysis.source, "ultimate-stream");
 
     mockServer.state.audioSignal = signal({ rightGain: -1 });
     const residual = await call(client, "c64_sound", { op: "silence_all", verify: true });
@@ -109,7 +109,7 @@ c64Test("public Ultimate capture and pitch analysis use the clock rate of every 
       mockServer.state.audioSignal = signal({ sampleRate, frequency: 523.25 });
       const capture = await call(client, "c64_sound", { op: "capture_samples", count: 256 });
       assert.equal(capture.isError, undefined);
-      assert.equal(capture.metadata.sampleRateHz, sampleRate);
+      assert.equal(capture.structuredContent.data.sampleRateHz, sampleRate);
       const recorded = await call(client, "c64_sound", { op: "record_analyze", durationSeconds: 0.5 });
       assert.equal(recorded.isError, undefined, JSON.stringify(recorded));
       const analysis = JSON.parse(recorded.content[0].text).analysis;

@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { resolveHostPath } from "../hostPaths.js";
+import { readHostFile, resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
 import { basicToPrg } from "./translation/basicTokenizer.js";
 import {
@@ -382,6 +382,16 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     const runBasic = async (source: string) => ctx.client.uploadAndRunBasic(source);
 
+    // The screen before the run lets verification tell a program that cleared the screen from one that never ran.
+    let screenBeforeRun: string | undefined;
+    if (shouldVerify) {
+      try {
+        screenBeforeRun = await ctx.client.readScreen();
+      } catch (beforeError) {
+        ctx.logger.warn("Unable to read screen before BASIC execution", toRecord(beforeError));
+      }
+    }
+
     let result = await runBasic(activeProgram);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
@@ -504,7 +514,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     if (shouldVerify) {
       try {
-        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger);
+        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, undefined, screenBeforeRun);
         if (outcome.status === "error") {
           ctx.logger.warn("BASIC verification detected error", {
             ...(outcome.message ? { message: outcome.message } : {}),
@@ -601,9 +611,6 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const asmResult = assemblyToPrgDetailed(parsed.program);
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
-    if (ctx.platform.id === "vice") {
-      setViceSymbols(asmResult.symbols.entries());
-    }
 
     const result = await ctx.client.uploadAndRunAsm(parsed.program);
     if (!result.success) {
@@ -612,6 +619,11 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
           details: extractFailureDetails(result.details),
         }),
       );
+    }
+    // Replace the registered symbols only once the program has started, so a
+    // failed run keeps the previous table.
+    if (ctx.platform.id === "vice") {
+      setViceSymbols(asmResult.symbols.entries());
     }
 
     // Read back the program bytes (load evidence), then poll for signs of execution.
@@ -746,22 +758,20 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     const parsed = prgFileArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Running PRG file", { path: parsed.path });
 
+    // Validate and parse the symbols file before touching the registered
+    // symbols, and replace them only after the PRG has started. A bad path or a
+    // failed run then leaves the previous symbol table as it was.
     let symbolsLoaded = 0;
-    if (ctx.platform.id === "vice") {
-      clearViceSymbols();
-      if (parsed.symbolsFile) {
-        const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
-        try {
-          const content = await fs.promises.readFile(symbolsPath, "utf8");
-          const syms = parseViceSymbolFile(content);
-          setViceSymbols(syms.entries());
-          symbolsLoaded = syms.size;
-          ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
-        } catch (fileError) {
-          throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
-            details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
-          });
-        }
+    let newSymbols: Map<string, number> | undefined;
+    if (ctx.platform.id === "vice" && parsed.symbolsFile) {
+      const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
+      try {
+        const content = (await readHostFile(symbolsPath)).toString("utf8");
+        newSymbols = parseViceSymbolFile(content);
+      } catch (fileError) {
+        throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
+          details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
+        });
       }
     }
 
@@ -770,6 +780,15 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       throw new ToolExecutionError("C64 backend reported failure while running PRG", {
         details: extractFailureDetails(result.details),
       });
+    }
+
+    if (ctx.platform.id === "vice") {
+      clearViceSymbols();
+      if (newSymbols) {
+        setViceSymbols(newSymbols.entries());
+        symbolsLoaded = newSymbols.size;
+        ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
+      }
     }
 
     const data = {

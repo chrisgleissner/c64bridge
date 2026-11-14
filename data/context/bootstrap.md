@@ -17,6 +17,7 @@ Do not assume the current backend is correct without checking
 
 ## Fast Paths
 
+- Game development: read `c64://gamedev/index` first (modern Ultimate by default, or stock C64); route to `.github/skills/game-development/SKILL.md`.
 - Grouped MCP tools are never called bare. For tools such as `c64_program`, `c64_memory`, `c64_graphics`, `c64_sound`, and `c64_system`, call the tool with flat arguments that include `op`.
 - Wrong: `c64_program {}` or `{ "c64_program": { "op": "cross_platform_greeting" } }`. Correct: call tool `c64_program` with `{ "op": "cross_platform_greeting" }`.
 - For simple visible confirmation on `vice`, `c64u`, or both, prefer `c64_program` with `op: "cross_platform_greeting"`.

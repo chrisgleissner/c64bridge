@@ -16,7 +16,7 @@ Use this skill for pause/resume, reset, reboot, power, menu actions, background 
 ## Execution
 
 1. Use `c64_system` with `op: "pause"`, `op: "resume"`, `op: "reset"`, `op: "reboot"`, `op: "poweroff"`, `op: "power_cycle"`, or `op: "menu"` as needed. `power_cycle` verifies C64U/U64 Tool Menu screens between injected keys; it uses REST reboot on U2-family cartridges and a fresh VICE start on VICE.
-   `reset`, `reboot` and `power_cycle` accept `waitForReady: true` (with `readyTimeoutMs`, default 15000) to wait for the BASIC READY. prompt; a timeout is reported as `ready=false`, not as an error. `pause` and `resume` are not available on VICE.
+   `reset`, `reboot` and `power_cycle` accept `waitForReady: true` (with `readyTimeoutMs`, default 15000) to wait for the BASIC READY. prompt; a timeout is reported as `ready=false`, not as an error. `pause` and `resume` also work on VICE: `pause` holds the binary monitor connection open, which stops the CPU, until `resume`. `reset`, `reboot`, `power_cycle` and `poweroff` end the pause.
 2. Use `c64_system` task operations for background task lifecycle management.
 3. Use `c64_config` REST operations for all C64U/U64/U2 configuration reads, writes, snapshots, diffs, and status checks. `load_flash`, `save_flash` and `reset_defaults` take an optional `category` to limit the operation to one configuration category. Do not navigate configuration menus through injected keyboard input.
 4. Use `c64_input` `key` only for single PETSCII/KERNAL-queue keys and `keyboard` only for physical C64 key chords on Ultimate REST input. Firmware-menu navigation is an exception only when REST has no equivalent, such as the machine code monitor, visual SID editor, or Tool Menu.

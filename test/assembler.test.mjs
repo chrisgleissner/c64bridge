@@ -543,3 +543,58 @@ test(".text and .ascii map ASCII letters to PETSCII upper case", () => {
   ]);
   assert.match(assemblyError('*=$C000\n.text "café€"'), /:2: .*no PETSCII mapping/);
 });
+
+test(".org, *= and the loadAddress option reject values outside $0000-$FFFF", () => {
+  assert.match(assemblyError("*=$10000\n nop"), /:1: .*outside \$0000-\$FFFF/);
+  assert.match(assemblyError(".org -1\n nop"), /:1: .*outside \$0000-\$FFFF/);
+  assert.match(assemblyError("* = $12345\n nop"), /:1: .*outside/);
+  assert.throws(() => assemblyToPrg(" nop", { loadAddress: 0x10000 }), /outside \$0000-\$FFFF/);
+  assert.deepEqual([...assemblyToPrg("*=$FFFF\n .byte 1")], [0xff, 0xff, 1]);
+});
+
+test("overlapping .org blocks are an error naming both ranges", () => {
+  const message = assemblyError("*=$c000\n nop\n nop\n*=$c000\n lda #1");
+  assert.match(message, /:5: Overlapping output/);
+  assert.match(message, /\$C000 \(line 5\)/i);
+  assert.match(message, /\$C000-\$C001 \(line 2\)/i);
+  // Blocks that only touch, or reuse an address without writing, are fine.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n nop\n*=$c001\n nop")], [0x00, 0xc0, 0xea, 0xea]);
+  assert.doesNotThrow(() => assemblyToPrg("*=$c000\n nop\n*=$c000\nlabel:\n*=$c002\n nop"));
+});
+
+test("string directives count characters the same way in both passes for non-BMP text", () => {
+  // Pass 0 used UTF-16 length and pass 1 iterated by code point, which moved the entry address.
+  const emoji = "a\u{1F600}";
+  assert.throws(() => assemblyToPrg(`.word "${emoji}"\n lda #1\n rts`), /does not fit in one word/);
+  assert.throws(() => assemblyToPrg(`.byte "${emoji}"\n lda #1\n rts`), /does not fit in one byte|outside/);
+  const ok = assemblyToPrgDetailed('.word "ab"\nstart: lda #1\n rts');
+  assert.equal(ok.symbols.get("start"), prgEntryAddress(ok.prg));
+});
+
+test("shift counts and bitwise operands outside 32 bits are errors", () => {
+  assert.match(assemblyError(" lda #1<<32"), /Shift count 32/);
+  assert.match(assemblyError(" lda #1<<40"), /Shift count 40/);
+  assert.match(assemblyError(" lda #1>>-1"), /Shift count -1/);
+  assert.match(assemblyError(" lda #$100000000 & $ff"), /outside the 32-bit range/);
+  assert.match(assemblyError(" lda #1<<31"), /outside|too large|range/i); // 2147483648 does not fit a byte
+  assert.match(assemblyError(".word 1<<31"), /2147483648/);
+  assert.deepEqual([...assemblyToPrg("*=$c000\n lda #1<<7\n lda #$ff & $0f\n lda #256>>8")], [0x00, 0xc0, 0xa9, 0x80, 0xa9, 0x0f, 0xa9, 0x01]);
+});
+
+test("32-bit shift and bitwise expressions keep their 1.1.0 results", () => {
+  // 1.1.0 used JavaScript signed 32-bit operators: $80000000 >> 31 is -1, low byte $FF.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n.byte ($80000000 >> 31) & $ff")], [0x00, 0xc0, 0xff]);
+  // -1 & $ffffffff is -1 in 32-bit arithmetic, low byte $FF.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n.byte <(-1 & $ffffffff)")], [0x00, 0xc0, 0xff]);
+});
+
+test("data-only source at the default address gets no BASIC stub", () => {
+  assert.deepEqual([...assemblyToPrg('.text "Hi"')], [0x01, 0x08, 0x48, 0x49]);
+  assert.deepEqual([...assemblyToPrg(".byte 1,2,3")], [0x01, 0x08, 1, 2, 3]);
+  // Data followed by code at the default address keeps the stub, which jumps to the first instruction.
+  const mixed = assemblyToPrgDetailed(".byte 1\nstart: lda #1\n rts");
+  assert.equal(mixed.prg.subarray(2, 6).toString("hex"), "0c080a00");
+  assert.equal(mixed.entryAddress, mixed.symbols.get("start"));
+  // Data at the default address followed by code at an explicit origin has no entry point at $0801.
+  assert.deepEqual([...assemblyToPrg(".byte 1\n*=$c000\n nop")].slice(0, 3), [0x01, 0x08, 1]);
+});

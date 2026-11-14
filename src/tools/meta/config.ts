@@ -6,8 +6,9 @@ import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValida
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
-import { resolveHostPath } from "../../hostPaths.js";
-import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
+import { readHostFile, resolveHostPath } from "../../hostPaths.js";
+import { assertSafeConfigKeys, captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
+import { REDACTED_PLACEHOLDER } from "../../redact.js";
 import { normalizeErrorDetails } from "./util.js";
 
 const configSnapshotAndRestoreArgsSchema = objectSchema({
@@ -24,12 +25,90 @@ const configSnapshotAndRestoreArgsSchema = objectSchema({
 
 // JSON.parse errors can quote the start of the file, so only the path is reported.
 async function readSnapshotFile(path: string): Promise<any> {
-  const text = await fs.readFile(path, "utf8");
+  const text = (await readHostFile(path)).toString("utf8");
   try {
     return JSON.parse(text);
   } catch {
     throw new ToolValidationError(`Snapshot file is not valid JSON: ${path}`, { path: "$.path" });
   }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * The firmware answers a category read as { "<category>": { "<item>": value } } and an item read as
+ * { "<category>": { "<item>": value | { current, values, default } } }. The write endpoint expects the
+ * flat form { "<category>": { "<item>": value } }, so the wrapper is removed on both sides.
+ */
+function flattenCategory(category: string, value: unknown): Record<string, unknown> {
+  let items: Record<string, unknown> = isPlainObject(value) ? value : {};
+  // Firmware responses carry an "errors" array next to the category.
+  if (isPlainObject(items[category]) && Object.keys(items).every((key) => key === category || key === "errors")) {
+    items = items[category] as Record<string, unknown>;
+  }
+  const flat: Record<string, unknown> = Object.create(null);
+  for (const [item, entry] of Object.entries(items)) {
+    let inner: unknown = entry;
+    if (isPlainObject(inner) && isPlainObject(inner[category]) && Object.keys(inner).every((key) => key === category || key === "errors")) {
+      inner = (inner[category] as Record<string, unknown>)[item];
+    }
+    if (isPlainObject(inner) && "current" in inner && !("_error" in inner)) inner = inner.current;
+    flat[item] = inner;
+  }
+  return flat;
+}
+
+function valuesEqual(wanted: unknown, actual: unknown): boolean {
+  if (wanted !== null && typeof wanted === "object") return JSON.stringify(wanted) === JSON.stringify(actual);
+  if (actual !== null && typeof actual === "object") return false;
+  return String(wanted) === String(actual);
+}
+
+/** Items of the snapshot payload ({ category: { item: value } }) whose value differs from the device. */
+function changedConfigItems(
+  payload: Record<string, object>,
+  current: Record<string, unknown>,
+  original: Record<string, unknown>,
+): Record<string, Record<string, unknown>> {
+  const changes: Record<string, Record<string, unknown>> = Object.create(null);
+  for (const [category, items] of Object.entries(payload)) {
+    const wanted = flattenCategory(category, items);
+    const live = flattenCategory(category, current[category]);
+    const originalItems = flattenCategory(category, original[category]);
+    for (const [item, value] of Object.entries(wanted)) {
+      // A redacted credential was removed from the payload; it is never compared or written.
+      if (JSON.stringify(originalItems[item]) !== JSON.stringify(value)) continue;
+      if (value === undefined || value === REDACTED_PLACEHOLDER) continue;
+      if (!Object.prototype.hasOwnProperty.call(live, item) || !valuesEqual(value, live[item])) {
+        (changes[category] ??= Object.create(null) as Record<string, unknown>)[item] = value;
+      }
+    }
+  }
+  // Plain objects for callers and the device client; names were validated before any lookup.
+  return Object.fromEntries(Object.entries(changes).map(([category, items]) => [category, { ...items }]));
+}
+
+function countItems(changes: Record<string, Record<string, unknown>>): number {
+  return Object.values(changes).reduce((sum, items) => sum + Object.keys(items).length, 0);
+}
+
+function describeWriteFailure(details: unknown): { status?: number; message: string } {
+  const d = (details && typeof details === "object" ? details : {}) as Record<string, any>;
+  const status = typeof d.status === "number" ? d.status : undefined;
+  if (status === 403) {
+    return { status, message: "the device refused the write with 403 Forbidden: the network password is missing or wrong" };
+  }
+  const failedItems = Array.isArray(d.results)
+    ? d.results.filter((r: any) => r && r.success === false).map((r: any) => `${r.item}: ${r.error ?? "failed"}`)
+    : [];
+  const message = failedItems.length > 0
+    ? failedItems.join("; ")
+    : typeof d.message === "string" ? d.message
+    : Array.isArray(d.errors) && d.errors.length > 0 ? d.errors.map(String).join("; ")
+    : "write failed";
+  return status === undefined ? { message } : { status, message };
 }
 
 export const tools: ToolDefinition[] = [
@@ -50,7 +129,8 @@ export const tools: ToolDefinition[] = [
         const path = resolveHostPath(String(parsed.path), { purpose: action === "snapshot" ? "write" : "read" });
 
         if (action === "snapshot") {
-          await fs.mkdir(dirname(path), { recursive: true });
+          // A newly created directory is private to the user; an existing directory keeps its mode.
+          await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
           const [version, info, snapshotData] = await Promise.all([
             (ctx.client as any).version(),
             (ctx.client as any).info(),
@@ -63,7 +143,9 @@ export const tools: ToolDefinition[] = [
             inventory: snapshotData.inventory,
             categories: snapshotData.categories,
           };
-          await fs.writeFile(path, JSON.stringify(snapshot, null, 2), "utf8");
+          // The mode applies only when the file is created, so an existing file is tightened as well.
+          await fs.writeFile(path, JSON.stringify(snapshot, null, 2), { encoding: "utf8", mode: 0o600 });
+          await fs.chmod(path, 0o600);
           return jsonResult({
             path,
             categoryCount: Object.keys(snapshotData.categories).length,
@@ -76,29 +158,63 @@ export const tools: ToolDefinition[] = [
           if (!snapshot || typeof snapshot !== "object") {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
+          assertSafeConfigKeys(snapshot.categories);
           let payload: Record<string, object>;
           try {
             payload = stripRedactedSecrets(validateSnapshotCategories(snapshot.categories) as Record<string, object>);
           } catch {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
-          const result = await (ctx.client as any).configBatchUpdate(payload);
-          if (!result.success) {
-            throw new ToolExecutionError("Batch update failed", { details: normalizeErrorDetails(result.details) });
+          const client = ctx.client as any;
+          const current = (await captureConfigSnapshot(client, { includeSecretValues: true, categories: Object.keys(payload) })).categories;
+          const changes = changedConfigItems(payload, current, validateSnapshotCategories(snapshot.categories));
+          const changedItems = countItems(changes);
+          const categories = Object.keys(changes);
+          if (categories.length === 0) {
+            // Device RAM already matches the snapshot, but flash can still hold older settings.
+            if (parsed.applyToFlash) {
+              const saved = await client.configSaveToFlash();
+              if (!saved.success) {
+                throw new ToolExecutionError("Configuration already matched the snapshot, but saving to flash failed", { details: normalizeErrorDetails(saved.details) });
+              }
+              return jsonResult({ restored: true, changedItems: 0, categories: 0, savedToFlash: true }, { success: true });
+            }
+            return jsonResult({ restored: true, changedItems: 0, categories: 0 }, { success: true });
+          }
+          const failedCategories: Array<{ category: string; status?: number; message: string }> = [];
+          let restoredCategories: string[] = categories;
+          const batch = await client.configBatchUpdate(changes);
+          if (!batch.success) {
+            restoredCategories = [];
+            for (const category of categories) {
+              const single = await client.configBatchUpdate({ [category]: changes[category] });
+              if (single.success) {
+                restoredCategories.push(category);
+              } else {
+                failedCategories.push({ category, ...describeWriteFailure(single.details) });
+              }
+            }
+          }
+          if (failedCategories.length > 0) {
+            throw new ToolExecutionError(
+              `Configuration restore failed for ${failedCategories.length} of ${categories.length} categories`,
+              { details: { restoredCategories, failedCategories, changedItems } },
+            );
           }
           if (parsed.applyToFlash) {
-            const saved = await (ctx.client as any).configSaveToFlash();
+            const saved = await client.configSaveToFlash();
             if (!saved.success) {
               throw new ToolExecutionError("Configuration restored, but saving to flash failed", { details: normalizeErrorDetails(saved.details) });
             }
           }
-          return jsonResult({ restored: true, categories: Object.keys(payload).length }, { success: true });
+          return jsonResult({ restored: true, changedItems, categories: categories.length, restoredCategories, ...(parsed.applyToFlash ? { savedToFlash: true } : {}) }, { success: true });
         }
 
         const snapshot = await readSnapshotFile(path);
+        assertSafeConfigKeys(snapshot.categories ?? {});
         const snapCats = validateSnapshotCategories(snapshot.categories ?? {});
         const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true })).categories;
-        const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = {};
+        const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = Object.create(null);
         for (const [cat, snapVal] of Object.entries(snapCats)) {
           const curVal = current[cat];
           if (JSON.stringify(snapVal) !== JSON.stringify(curVal)) {

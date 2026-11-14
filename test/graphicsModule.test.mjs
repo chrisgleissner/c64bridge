@@ -563,3 +563,25 @@ test("c64_batch passes capture_frame image blocks through after the JSON summary
   assert.equal(images[0].mimeType, "image/png");
   assert.equal(result.structuredContent.data.results[0].images, 2);
 });
+
+test("capture_frame png warns about palette indexes above 15 and incomplete frames", async () => {
+  const frames = [
+    indexedFrame(4, 2, (x) => (x === 0 ? 0x12 : 1)),
+    { ...indexedFrame(4, 2, () => 1), complete: false },
+  ];
+  const { ctx } = frameCtx(() => frames);
+  const result = await toolRegistry.invoke("c64_graphics", { op: "capture_frame", count: 2, format: "png" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.equal(result.metadata.outOfPalettePixels, 2);
+  assert.equal(result.metadata.incompleteFrames, 1);
+  assert.equal(result.structuredContent.data.warnings.length, 2);
+  assert.match(result.content[0].text, /above 15/);
+  assert.match(result.content[0].text, /incomplete/);
+  assert.equal(result.content.filter((block) => block.type === "image").length, 2);
+
+  const clean = frameCtx(() => [indexedFrame(4, 2, () => 3)]);
+  const ok = await toolRegistry.invoke("c64_graphics", { op: "capture_frame", format: "png" }, clean.ctx);
+  assert.equal(ok.metadata.outOfPalettePixels, 0);
+  assert.equal(ok.metadata.incompleteFrames, 0);
+  assert.equal(ok.structuredContent.data.warnings, undefined);
+});

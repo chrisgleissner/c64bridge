@@ -7,7 +7,6 @@ import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } f
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
 import os from "node:os";
-import { addMilliseconds } from "date-fns";
 import type { C64Facade } from "../../device.js";
 import { screenCodesToAscii } from "../../petscii.js";
 import { loggerFor } from "../../logger.js";
@@ -310,6 +309,8 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = []): Promise<voi
       await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
       // Only the changed tasks get their per-task files rewritten.
       for (const t of changedTasks) {
+        // A stopped task that was restarted under its name shares the folder with its successor; its stale object must not overwrite the successor's task.json.
+        if (TASKS.get(t.name) !== t) continue;
         await writeTaskJson(t);
         await ensureResultAndLog(t);
       }
@@ -354,7 +355,7 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
 function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]): void {
   if (task.status !== "running") return;
   const delay = Math.max(0, task.intervalMs);
-  task.nextRunAt = addMilliseconds(new Date(), delay);
+  task.nextRunAt = new Date(Date.now() + delay);
   task._timer = setTimeout(async () => {
     if (task.status !== "running") return;
     try {
@@ -460,6 +461,10 @@ const stopBackgroundTaskArgsSchema = objectSchema({
 const listBackgroundTasksArgsSchema = noArgsSchema;
 const stopAllBackgroundTasksArgsSchema = noArgsSchema;
 
+function supersededStartResult(task: BackgroundTask) {
+  return jsonResult({ started: false, superseded: true, name: task.name }, { success: true });
+}
+
 export const tools: ToolDefinition[] = [
   {
     name: "start_background_task",
@@ -495,10 +500,6 @@ export const tools: ToolDefinition[] = [
         const newCounter = String(currentMax + 1).padStart(4, "0");
         const newId = `${newCounter}_${parsed.name}`;
 
-        // Pin the facade now: a later c64_select_backend must not retarget a running task.
-        const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
-        const backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
-
         const task: BackgroundTask = {
           id: existing && existing.status !== "running" ? existing.id : newId,
           name: parsed.name,
@@ -515,18 +516,44 @@ export const tools: ToolDefinition[] = [
           lastError: null,
           nextRunAt: null,
           folder: getBackgroundTaskFolderRelative(existing && existing.status !== "running" ? existing.id : newId),
-          backendId,
+          backendId: null,
           _timer: null,
-          _facade: pinnedFacade,
+          _facade: undefined,
         };
 
+        // Reserve the name and id before the first await below. Everything above is synchronous,
+        // so a concurrent start sees this task as running and cannot reuse its name or id.
         TASKS.set(task.name, task);
-        // Ensure per-task structure and seed files
-        await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
-        await writeTaskJson(task);
-        await ensureResultAndLog(task);
-        await appendTaskLog(task, "started");
-        scheduleNextRun(task, ctx);
+        // While this start awaits, the task may be stopped and its name reused by another start.
+        // Only the task that is still the running registry entry may write its files or start its timer.
+        const superseded = (): boolean => TASKS.get(task.name) !== task || task.status !== "running";
+        try {
+          // Pin the facade now: a later c64_select_backend must not retarget a running task.
+          const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
+          if (superseded()) return supersededStartResult(task);
+          task._facade = pinnedFacade;
+          task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
+          if (superseded()) return supersededStartResult(task);
+          // Ensure per-task structure and seed files
+          await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
+          if (superseded()) return supersededStartResult(task);
+          await writeTaskJson(task);
+          if (superseded()) return supersededStartResult(task);
+          await ensureResultAndLog(task);
+          if (superseded()) return supersededStartResult(task);
+          await appendTaskLog(task, "started");
+          if (superseded()) return supersededStartResult(task);
+          scheduleNextRun(task, ctx);
+        } catch (startError) {
+          // Undo the reservation so the failed start neither blocks its name nor holds a running slot.
+          if (task._timer) clearTimeout(task._timer);
+          task._timer = null;
+          if (TASKS.get(task.name) === task) {
+            if (existing) TASKS.set(existing.name, existing);
+            else TASKS.delete(task.name);
+          }
+          throw startError;
+        }
         await persistTasks([task]);
         return jsonResult({ started: true, task: { id: task.id, name: task.name, operation: task.operation, backendId: task.backendId ?? null, intervalMs: task.intervalMs, maxIterations: task.maxIterations ?? null, folder: task.folder } }, { success: true });
       } catch (error) {

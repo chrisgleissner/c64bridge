@@ -23,7 +23,7 @@ This document is the source of truth for VICE support in the public MCP surface.
 | --- | --- |
 | `c64_program` | `load_prg`, `run_prg`, `upload_run_basic`, `upload_run_asm`, `batch_run`, `bundle_run`, `cross_platform_greeting` |
 | `c64_memory` | `read`, `write`, `read_screen`, `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory` |
-| `c64_system` | `reset`, `reboot`, `poweroff`, `power_cycle`, `start_task`, `stop_task`, `stop_all_tasks`, `list_tasks`, `performance_report` |
+| `c64_system` | `pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `start_task`, `stop_task`, `stop_all_tasks`, `list_tasks`, `performance_report` |
 | `c64_graphics` | `capture_frame`, `render_petscii_art`, `render_bitmap`, `render_sprite`, `render_petscii_text`, `get_display_state` |
 | `c64_rag` | `basic`, `asm` |
 | `c64_disk` | `list_drives`, `mount` |
@@ -45,7 +45,7 @@ This document is the source of truth for VICE support in the public MCP surface.
 | `c64_drive` | `load_rom` |
 | `c64_sound` | `capture_samples`, `play_sid_file`, `play_mod_file` |
 | `c64_config` | `load_flash`, `save_flash`, `reset_defaults`, `read_debugreg`, `write_debugreg`, `shuffle` |
-| `c64_system` | `pause`, `resume`, `menu`, `read_menu_screen` |
+| `c64_system` | `menu`, `read_menu_screen` |
 | `c64_input` | `keyboard`, `release_all`, `state` |
 | `c64_extract` | `fs_stats` |
 | `c64_stream` | all operations |

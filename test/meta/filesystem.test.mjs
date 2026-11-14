@@ -793,3 +793,60 @@ test("find_paths sends the wildcard pattern to the mock /v1/files route", async 
     await mock.close();
   }
 });
+
+test("find_paths and find_and_run reject glob metacharacters in nameContains and extensions", async () => {
+  const patterns = [];
+  const ctx = {
+    client: { async filesInfo(pattern) { patterns.push(pattern); return []; } },
+    logger: createLogger(),
+  };
+  for (const tool of ["find_paths_by_name", "find_and_run_program_by_name"]) {
+    for (const bad of ["a*b", "a?b", "a[b", "a]b", "a/b", "a\\b"]) {
+      const res = await metaModule.invoke(tool, { nameContains: bad }, ctx);
+      assert.equal(res.isError, true, `${tool} nameContains ${bad}`);
+      assert.match(JSON.stringify(res), /nameContains/);
+      const ext = await metaModule.invoke(tool, { nameContains: "demo", extensions: [bad] }, ctx);
+      assert.equal(ext.isError, true, `${tool} extension ${bad}`);
+      assert.match(JSON.stringify(ext), /extensions/);
+    }
+  }
+  assert.deepEqual(patterns, []);
+});
+
+test("find_paths and find_and_run match nameContains against the file name only", async () => {
+  const paths = ["/demo-games/alpha.prg", "/demo-games/demo2.prg", "/other/disk.d64#demo3.prg"];
+  const ctx = {
+    client: { async filesInfo() { return paths; } },
+    logger: createLogger(),
+  };
+  const found = await metaModule.invoke("find_paths_by_name", { nameContains: "demo" }, ctx);
+  assert.deepEqual(found.structuredContent.data.results, ["/demo-games/demo2.prg", "/other/disk.d64#demo3.prg"]);
+
+  const ran = [];
+  const runCtx = {
+    client: {
+      async filesInfo() { return ["/demo-games/alpha.prg", "/demo-games/beta.prg"]; },
+      async runPrgFile(p) { ran.push(p); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("find_and_run_program_by_name", { nameContains: "demo" }, runCtx);
+  assert.equal(res.isError, true);
+  assert.deepEqual(ran, []);
+});
+
+test("find_paths and find_and_run send the device glob with the original nameContains case", async () => {
+  for (const tool of ["find_paths_by_name", "find_and_run_program_by_name"]) {
+    const patterns = [];
+    const ctx = {
+      client: {
+        async filesInfo(pattern) { patterns.push(pattern); return ["/x/my game.prg"]; },
+        async runPrgFile() { return { success: true }; },
+      },
+      logger: createLogger(),
+    };
+    await metaModule.invoke(tool, { nameContains: "Game", caseInsensitive: true, extensions: ["prg"] }, ctx).catch(() => {});
+    assert.ok(patterns.length > 0, tool);
+    assert.ok(patterns.every((p) => p.includes("*Game*")), `${tool}: ${patterns.join(",")}`);
+  }
+});

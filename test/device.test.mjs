@@ -336,13 +336,34 @@ viceIntegrationSuite("device: ViceBackend basic operations", { timeout: VICE_SUI
     assert.deepEqual(Array.from(data), Array.from(READY_PATTERN));
   });
 
-  await t.test("pause/resume report unsupported", async () => {
+  await t.test("pause holds the CPU stopped across operations until resume", async () => {
     const pause = await facade.pause();
+    assert.equal(pause.success, true, JSON.stringify(pause));
+    if (server) assert.equal(server.running, false);
+    const connectionsWhilePaused = server?.connectionsOpened;
+    // The jiffy clock at $A0-$A2 does not advance while the CPU is stopped.
+    const first = await facade.readMemory(0xa0, 3);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const second = await facade.readMemory(0xa0, 3);
+    assert.deepEqual(Array.from(second), Array.from(first));
+    if (server) {
+      assert.equal(server.running, false, "operations reuse the held connection and keep the CPU stopped");
+      assert.equal(server.connectionsOpened, connectionsWhilePaused, "no new monitor connection while paused");
+    }
+    assert.equal((await facade.pause()).details?.alreadyPaused, true);
+
     const resume = await facade.resume();
-    assert.equal(pause.success, false);
-    assert.equal(resume.success, false);
-    assert.equal(pause.details?.code, "UNSUPPORTED");
-    assert.equal(resume.details?.code, "UNSUPPORTED");
+    assert.equal(resume.success, true);
+    assert.equal(resume.details?.resumed, true);
+    if (server) assert.equal(server.running, true);
+    assert.equal((await facade.resume()).details?.resumed, false);
+  });
+
+  await t.test("a reset ends a held pause", async () => {
+    assert.equal((await facade.pause()).success, true);
+    await facade.reset();
+    if (server) assert.equal(server.running, true);
+    assert.equal((await facade.resume()).details?.resumed, false);
   });
 
   await t.test("loadPrgFile throws unsupported", async () => {
@@ -1133,6 +1154,14 @@ test("device: ViceBackend unit branches", async () => {
       },
       async memGet(start, end) {
         calls.push(["memGet", start, end]);
+        if (start === 0x002B && end === 0x07E7) {
+          // One read of the BASIC pointers, the boot marker byte ($03FF, cleared by the reset) and the screen.
+          const state = Buffer.alloc(end - start + 1, 0x20);
+          readyPointers.copy(state, 0);
+          state[0x03FF - 0x2B] = 0;
+          Buffer.from(READY_PATTERN).copy(state, 0x0400 - 0x2B);
+          return state;
+        }
         if (start === 0x002B) {
           return readyPointers;
         }
@@ -1807,13 +1836,6 @@ test("device: ViceBackend reports unsupported operations and emulator metadata",
       },
     });
 
-    const pause = await backend.pause();
-    const resume = await backend.resume();
-    assert.equal(pause.success, false);
-    assert.equal(resume.success, false);
-    assert.match(String(pause.details?.message ?? ""), /not implemented/i);
-    assert.match(String(resume.details?.message ?? ""), /unavailable/i);
-
     await assert.rejects(() => backend.menuButton(), /not supported/);
     await assert.rejects(() => backend.debugregRead(), /not supported/);
     await assert.rejects(() => backend.debugregWrite("AA"), /not supported/);
@@ -1837,4 +1859,29 @@ test("device: ViceBackend reports unsupported operations and emulator metadata",
     assert.ok(Array.isArray(configs.categories));
     assert.equal(configs.categories[0].name, "VICE");
   });
+});
+
+test("ViceBackend PRG file readers enforce the size limit on the opened file, not on an earlier stat", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-prg-limit-"));
+  const file = path.join(dir, "big.prg");
+  const fd = fs.openSync(file, "w");
+  fs.ftruncateSync(fd, 17 * 1024 * 1024); // sparse; above the 16 MiB read limit
+  fs.closeSync(fd);
+  const realStatSync = fs.statSync;
+  const backend = new ViceBackend({ host: "127.0.0.1", port: 6502 });
+  const sent = [];
+  backend.withClient = async (fn) => fn({ async memSet(address) { sent.push(address); }, async memGet() { return Buffer.alloc(4); }, async keyboardFeed() {}, async reset() {} });
+  try {
+    // Simulate a file that was small when it was checked and grew before it was read.
+    fs.statSync = (target, ...rest) => {
+      const stat = realStatSync(target, ...rest);
+      return String(target) === fs.realpathSync(file) ? Object.assign(Object.create(Object.getPrototypeOf(stat)), stat, { size: 4 }) : stat;
+    };
+    await assert.rejects(() => backend.loadPrgFile(file), /too large/);
+    await assert.rejects(() => backend.runPrgFile(file), /too large/);
+    assert.deepEqual(sent, [], "nothing may be sent to VICE for an oversized file");
+  } finally {
+    fs.statSync = realStatSync;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -577,10 +577,10 @@ test("upload_run_basic verify true annotates metadata", async () => {
         },
         async readScreen() {
           screenReads += 1;
-          // First read is the immediate post-run screen check in
-          // executeUploadRunBasic; the poll loop's first read then observes
-          // the firmware's own RUN echo, matching real backend behavior.
-          return screenReads === 1 ? "READY.\n" : "RUN\n";
+          // Reads 1 and 2 are the screen before the run and the immediate
+          // post-run check in executeUploadRunBasic; the poll loop's first
+          // read then observes the firmware's own RUN echo.
+          return screenReads <= 2 ? "READY.\n" : "RUN\n";
         },
       },
       logger: createLogger(),
@@ -626,8 +626,8 @@ test("upload_run_basic verify reports BASIC runtime error details", async () => 
         },
         async readScreen() {
           screenReads += 1;
-          if (screenReads === 1) {
-            return "RUN\n";
+          if (screenReads <= 2) {
+            return "READY.\n"; // before the run, then the immediate post-run check
           }
           return "?TYPE MISMATCH ERROR IN 30\nREADY.\n";
         },
@@ -1193,4 +1193,62 @@ test("upload_run_basic words an unverified run as started, not executed successf
   assert.equal(result.isError, undefined);
   assert.match(result.content[0].text, /uploaded and started/);
   assert.ok(!/executed successfully/.test(result.content[0].text));
+});
+
+test("run_prg keeps the previous VICE symbols when the symbols file is rejected or the run fails", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-symbols-keep-"));
+  const symbolsPath = path.join(tempDir, "new.vs");
+  fs.writeFileSync(symbolsPath, "add_label 0x0900 .newlabel\n", "utf8");
+  const makeCtx = (runResult) => ({
+    client: { async runPrgFile() { return runResult; } },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  });
+  try {
+    // Missing symbols file: the old table survives.
+    setViceSymbols([["old", 0x0810]]);
+    let result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: path.join(tempDir, "missing.vs") }, makeCtx({ success: true }));
+    assert.equal(result.isError, true);
+    assert.equal(getViceSymbol(0x0810), "old");
+
+    // Failed run: the new labels are not registered and the old ones stay.
+    result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: symbolsPath }, makeCtx({ success: false, details: { error: "no" } }));
+    assert.equal(result.isError, true);
+    assert.equal(getViceSymbol(0x0900), undefined);
+    assert.equal(getViceSymbol(0x0810), "old");
+
+    // Successful run replaces them.
+    result = await programRunnersModule.invoke("run_prg", { path: "//USB0/run.prg", symbolsFile: symbolsPath }, makeCtx({ success: true }));
+    assert.equal(result.isError, undefined);
+    assert.equal(getViceSymbol(0x0900), "newlabel");
+    assert.equal(getViceSymbol(0x0810), undefined);
+  } finally {
+    clearViceSymbols();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("upload_run_asm keeps the previous VICE symbols when the run fails", async () => {
+  const makeCtx = (result) => ({
+    client: { async uploadAndRunAsm() { return result; } },
+    logger: createLogger(),
+    platform: createPlatformStatus("vice"),
+    setPlatform: () => createPlatformStatus("vice"),
+  });
+  const program = ".org $0801\nnewlabel: rts";
+  try {
+    setViceSymbols([["old", 0x0810]]);
+    let result = await programRunnersModule.invoke("upload_run_asm", { program }, makeCtx({ success: false, details: { error: "no" } }));
+    assert.equal(result.isError, true);
+    assert.equal(getViceSymbol(0x0810), "old");
+    assert.equal(getViceSymbol(0x0801), undefined, "labels of a program that did not run must not be registered");
+
+    result = await programRunnersModule.invoke("upload_run_asm", { program }, makeCtx({ success: true }));
+    assert.equal(result.isError, undefined);
+    assert.equal(getViceSymbol(0x0801), "newlabel");
+    assert.equal(getViceSymbol(0x0810), undefined);
+  } finally {
+    clearViceSymbols();
+  }
 });

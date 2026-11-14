@@ -166,37 +166,65 @@ function returnedToBasicAfterSys(screen: string): boolean {
   return sysLine >= 0 && lines.slice(sysLine + 1).some((line) => line === "READY.");
 }
 
+function normaliseScreen(screen: string): string {
+  return screen.split("\n").map((line) => line.trimEnd()).join("\n").trim();
+}
+
+/** True when the last non-blank screen line is the READY. prompt, i.e. BASIC is waiting for input. */
+function endsAtReadyPrompt(screen: string): boolean {
+  const lines = screen.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+  return lines.length > 0 && lines[lines.length - 1]!.toUpperCase() === "READY.";
+}
+
 /**
- * Poll for BASIC program outcome by detecting errors on screen.
- * First waits for RUN or ERROR to appear, then continues polling for errors.
+ * Reads the high byte of CURLIN ($3A), which is $FF while BASIC is in direct
+ * mode and holds the current line number's high byte while a program runs.
+ * Returns undefined when memory cannot be read, so the caller can fall back to
+ * screen evidence.
+ */
+async function inDirectMode(client: C64Client): Promise<boolean | undefined> {
+  try {
+    const bytes = await client.readMemoryRaw(0x3a, 1);
+    return bytes[0] === undefined ? undefined : bytes[0] === 0xff;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Poll for the outcome of a BASIC run.
+ *
+ * Evidence that the program ran: the screen shows RUN or an error, differs
+ * from the screen captured before the run (a program that clears the screen
+ * removes the RUN echo), or is blank. A BASIC error returns immediately. Once
+ * there is evidence, the screen ends at the READY. prompt and BASIC is back in
+ * direct mode (CURLIN high byte $FF; without memory access, the same READY.
+ * screen on two consecutive polls), the program has finished without an error
+ * and the poll returns at once. A program that is
+ * still running (no prompt) is watched for errors for the full window.
  */
 async function pollBasicOutcome(
   client: C64Client,
   logger: ToolLogger,
   config: PollConfig,
+  baselineScreen?: string,
 ): Promise<BasicPollResult> {
   const startTime = Date.now();
   let pollCount = 0;
   let runDetected = false;
-  
+  let previousReadyScreen: string | undefined;
+  const baseline = baselineScreen === undefined ? undefined : normaliseScreen(baselineScreen);
+
   logger.debug("Starting BASIC outcome polling", { maxMs: config.maxMs, intervalMs: config.intervalMs });
-  
+
   while (Date.now() - startTime < config.maxMs) {
     pollCount++;
-    
+
     try {
       const screen = await client.readScreen();
       const upperScreen = screen.toUpperCase();
-      
-      // Check if RUN or ERROR appeared (indicating execution started or failed)
-      if (!runDetected && (upperScreen.includes("RUN") || upperScreen.includes("ERROR"))) {
-        runDetected = true;
-        logger.debug("Program execution detected", { pollCount, elapsed: Date.now() - startTime });
-      }
-      
-      // Check for errors
+
       const errorInfo = extractBasicError(screen);
-      
       if (errorInfo) {
         logger.debug("BASIC error detected", { errorInfo, pollCount, elapsed: Date.now() - startTime });
         return {
@@ -206,14 +234,36 @@ async function pollBasicOutcome(
           line: errorInfo.line,
         };
       }
-      
+
+      if (!runDetected) {
+        const changed = baseline !== undefined && normaliseScreen(screen) !== baseline;
+        if (upperScreen.includes("RUN") || upperScreen.includes("ERROR") || changed || normaliseScreen(screen) === "") {
+          runDetected = true;
+          logger.debug("Program execution detected", { pollCount, elapsed: Date.now() - startTime });
+        }
+      }
+
+      if (runDetected && endsAtReadyPrompt(screen)) {
+        // A program can print READY. itself and keep running, so the prompt alone is not proof that it finished.
+        const direct = await inDirectMode(client);
+        const settled = direct === undefined
+          ? previousReadyScreen !== undefined && previousReadyScreen === normaliseScreen(screen)
+          : direct;
+        if (settled) {
+          logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime, direct });
+          return { status: "ok", type: "BASIC" };
+        }
+        previousReadyScreen = normaliseScreen(screen);
+      } else {
+        previousReadyScreen = undefined;
+      }
     } catch (error) {
       logger.debug("Failed to read screen during BASIC polling", { error, pollCount });
     }
     await delay(config.intervalMs);
   }
-  if (!runDetected) { // Neither "RUN" nor an error ever appeared for the whole window. On working backends the firmware's own LOAD/RUN echo shows this text, so its total absence means execution never started despite the reported success (HARD01-011/036).
-    logger.debug("BASIC polling completed without ever observing RUN or an error", { pollCount, elapsed: Date.now() - startTime });
+  if (!runDetected) { // No sign of execution for the whole window: the firmware reported success, but nothing changed on screen (HARD01-011/036).
+    logger.debug("BASIC polling completed without observing execution or an error", { pollCount, elapsed: Date.now() - startTime });
     return {
       status: "error",
       type: "BASIC",
@@ -404,6 +454,7 @@ export async function pollForProgramOutcome(
   logger: ToolLogger,
   config?: Partial<PollConfig>,
   program?: ExpectedProgramBytes,
+  baselineScreen?: string,
 ): Promise<PollResult> {
   const defaults = loadPollConfig();
   const pollConfig: PollConfig = {
@@ -421,7 +472,7 @@ export async function pollForProgramOutcome(
   
   // Poll for program outcome based on type
   if (type === "BASIC") {
-    return pollBasicOutcome(client, logger, pollConfig);
+    return pollBasicOutcome(client, logger, pollConfig, baselineScreen);
   }
   
   return pollAsmOutcome(client, logger, pollConfig, program);

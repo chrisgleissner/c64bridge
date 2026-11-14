@@ -192,6 +192,10 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
+          if (typeof details.warning === "string") {
+            // The CPU may still be stopped, so a READY. wait would only time out.
+            return textResult(`C64 reset command issued. Warning: ${details.warning}`, { success: true, details, warning: details.warning });
+          }
           return await withReadyResult(ctx, parsed, before, "C64 reset command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
@@ -241,7 +245,7 @@ export const machineControlModule = defineToolModule({
     },
     {
       name: "pause",
-      description: "Pause the machine on Ultimate hardware. See memory safety checklist in c64://guide/bootstrap.",
+      description: "Pause the machine until resume. On VICE the pause holds the monitor connection open, and a reset, reboot, power cycle or power-off ends it. See memory safety checklist in c64://guide/bootstrap.",
       summary: "Suspends CPU execution on Ultimate hardware until resumed.",
       inputSchema: pauseArgsSchema.jsonSchema,
       tags: ["pause"],
@@ -252,7 +256,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Pause when the user needs a stable memory snapshot; remind them to resume to continue execution.",
       ],
-      supportedPlatforms: ["c64u", "u2"],
+      supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
           pauseArgsSchema.parse(args ?? {});
@@ -282,7 +286,7 @@ export const machineControlModule = defineToolModule({
     },
     {
       name: "resume",
-      description: "Resume the machine after an Ultimate hardware pause.",
+      description: "Resume the machine after a pause.",
       summary: "Releases the Ultimate hardware pause so the CPU can continue.",
       inputSchema: resumeArgsSchema.jsonSchema,
       tags: ["resume"],
@@ -293,7 +297,7 @@ export const machineControlModule = defineToolModule({
       workflowHints: [
         "Call after a pause or diagnostic halt and confirm the machine is running again.",
       ],
-      supportedPlatforms: ["c64u", "u2"],
+      supportedPlatforms: ["c64u", "u2", "vice"],
       async execute(args, ctx) {
         try {
           resumeArgsSchema.parse(args ?? {});

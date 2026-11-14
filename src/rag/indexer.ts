@@ -16,6 +16,10 @@ const BASIC_DIR = path.join(ASSET_ROOT, "data/basic/examples");
 const ASM_DIR = path.join(ASSET_ROOT, "data/assembly/examples");
 const EXTERNAL_DIR = path.join(ASSET_ROOT, "external");
 const DOC_ROOT = path.join(ASSET_ROOT, "doc");
+// Curated reference specs (memory map, VIC-II, SID, game development, Ultimate devices ...).
+// Example sources and the context files are indexed through their own paths.
+const DATA_ROOT = path.join(ASSET_ROOT, "data");
+const DATA_DOC_EXCLUDE_DIRS = new Set(["context", "basic/examples", "assembly/examples"]);
 // Plans and reviews are internal engineering notes, not C64 reference material.
 const DOC_EXCLUDE_DIRS = new Set(["plans", "reviews"]);
 const CONTEXT_DIR = path.join(ASSET_ROOT, "data/context");
@@ -41,6 +45,14 @@ function shouldExcludeDocFile(file: string): boolean {
   }
   const [firstSegment] = relativeToDoc.split(path.sep);
   return firstSegment !== undefined && DOC_EXCLUDE_DIRS.has(firstSegment);
+}
+
+function isCuratedDataDoc(file: string): boolean {
+  const relative = toPosixRelative(DATA_ROOT, path.resolve(file));
+  if (relative.startsWith("..") || path.isAbsolute(relative) || !relative.includes("/")) {
+    return false;
+  }
+  return ![...DATA_DOC_EXCLUDE_DIRS].some((dir) => relative === dir || relative.startsWith(`${dir}/`));
 }
 
 function resolveEmbeddingsDir(override?: string): string {
@@ -571,6 +583,14 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
         }
       }
     } catch {}
+    try {
+      const dataMdFiles = await collectFiles(DATA_ROOT, [".md"]);
+      for (const f of dataMdFiles) {
+        if (isCuratedDataDoc(f)) {
+          docCandidates.push(f);
+        }
+      }
+    } catch {}
     for (const f of ENV_DOC_FILES) {
       if (!shouldExcludeDocFile(f)) {
         docCandidates.push(f);
@@ -647,7 +667,10 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
     const ext = path.extname(absoluteFile).toLowerCase();
     const isMarkdown = ext === ".md";
     const isContext = contextSet.has(absoluteFile);
-    const isDocFile = isMarkdown && absoluteFile.startsWith(path.resolve(DOC_ROOT) + path.sep);
+    const isDocFile =
+      isMarkdown &&
+      (absoluteFile.startsWith(path.resolve(DOC_ROOT) + path.sep) ||
+        (absoluteFile.startsWith(path.resolve(DATA_ROOT) + path.sep) && isCuratedDataDoc(absoluteFile)));
     const isExternalFile = externalRoots.some((root) => absoluteFile === root || absoluteFile.startsWith(root + path.sep));
     const isPlainText = ext === ".txt" || ext === ".text";
 
@@ -755,8 +778,115 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
 
 // --- Helpers ---
 
-function chunkMarkdownSections(text: string, filePath: string): Array<{ text: string; origin: string }> {
-  // Split on H2/H3 headers; keep headers with content; bound chunk size to ~1500-2500 chars
+const MARKDOWN_SECTION_LIMIT = 2500;
+const MARKDOWN_CHUNK_TARGET = 1800;
+
+interface MarkdownBlock {
+  readonly lines: string[];
+  readonly fenced: boolean;
+}
+
+const FENCE_RE = /^\s*(```|~~~)/;
+const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
+const TABLE_RULE_RE = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
+
+/** Splits text into blocks separated by blank lines. Blank lines inside a code fence do not end a block. */
+function splitMarkdownBlocks(content: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  let current: string[] = [];
+  let fenced = false;
+  let inFence = false;
+  const flush = () => {
+    if (current.length > 0) blocks.push({ lines: current, fenced });
+    current = [];
+    fenced = false;
+  };
+  for (const line of content.split("\n")) {
+    if (FENCE_RE.test(line)) {
+      if (!inFence) fenced = true;
+      inFence = !inFence;
+      current.push(line);
+      continue;
+    }
+    if (!inFence && line.trim() === "") {
+      flush();
+      continue;
+    }
+    current.push(line);
+  }
+  flush();
+  return blocks;
+}
+
+/** Splits one oversized block on line boundaries. Table headers and code fences are repeated so every piece stays well formed. */
+function splitOversizedBlock(block: MarkdownBlock, max: number): string[] {
+  const lines = block.lines.flatMap((line) => {
+    if (line.length <= max) return [line];
+    const parts: string[] = [];
+    for (let i = 0; i < line.length; i += max) parts.push(line.slice(i, i + max));
+    return parts;
+  });
+  let prefix: string[] = [];
+  let body = lines;
+  let suffix: string[] = [];
+  if (block.fenced && lines.length >= 2 && FENCE_RE.test(lines[0]!)) {
+    const open = lines[0]!;
+    const closed = FENCE_RE.test(lines[lines.length - 1]!) && lines.length > 1;
+    prefix = [open];
+    body = lines.slice(1, closed ? -1 : undefined);
+    suffix = [closed ? lines[lines.length - 1]! : open.match(FENCE_RE)![1]!];
+  } else if (lines.length >= 3 && TABLE_ROW_RE.test(lines[0]!) && TABLE_RULE_RE.test(lines[1]!)) {
+    prefix = lines.slice(0, 2);
+    body = lines.slice(2);
+  }
+  const overhead = prefix.join("\n").length + suffix.join("\n").length + 2;
+  const budget = Math.max(200, max - overhead);
+  const pieces: string[] = [];
+  let group: string[] = [];
+  let size = 0;
+  const flush = () => {
+    if (group.length === 0) return;
+    pieces.push([...prefix, ...group, ...suffix].join("\n"));
+    group = [];
+    size = 0;
+  };
+  for (const line of body) {
+    if (size + line.length + 1 > budget) flush();
+    group.push(line);
+    size += line.length + 1;
+  }
+  flush();
+  return pieces;
+}
+
+function splitOversizedSection(content: string, max: number): string[] {
+  const pieces: string[] = [];
+  let buf = "";
+  for (const block of splitMarkdownBlocks(content)) {
+    const text = block.lines.join("\n");
+    if (text.length > max) {
+      if (buf) pieces.push(buf);
+      buf = "";
+      pieces.push(...splitOversizedBlock(block, max));
+    } else if (buf && buf.length + 2 + text.length > max) {
+      pieces.push(buf);
+      buf = text;
+    } else {
+      buf = buf ? `${buf}\n\n${text}` : text;
+    }
+  }
+  if (buf) pieces.push(buf);
+  return pieces;
+}
+
+function isHeadingOnly(text: string): boolean {
+  return text.split("\n").every((line) => line.trim() === "" || /^#{1,6}\s/.test(line));
+}
+
+export function chunkMarkdownSections(text: string, filePath: string): Array<{ text: string; origin: string }> {
+  // Split on H1-H3 headers and keep each header with its content. Sections above
+  // MARKDOWN_SECTION_LIMIT are packed into pieces of at most MARKDOWN_CHUNK_TARGET
+  // characters; blocks that are still too long are split on line boundaries.
   const lines = text.split(/\r?\n/);
   const headerRe = /^(#{1,3})\s+(.*)$/; // matches '#', '##', or '###'
   const chunks: Array<{ title: string; lines: string[] }> = [];
@@ -779,26 +909,13 @@ function chunkMarkdownSections(text: string, filePath: string): Array<{ text: st
   for (const c of chunks) {
     const origin = `${toPosixRelative(process.cwd(), filePath)}#${c.title}`;
     const content = c.lines.join("\n").trim();
-    if (content.length === 0) continue;
-    // If too large, further split by paragraphs
-    if (content.length > 2500) {
-      const paragraphs = content.split(/\n\n+/);
-      let buf: string[] = [];
-      let acc = 0;
-      for (const p of paragraphs) {
-        const toAdd = (buf.length ? "\n\n" : "") + p;
-        if (acc + toAdd.length > 1800) {
-          results.push({ text: buf.join("\n\n"), origin });
-          buf = [p];
-          acc = p.length;
-        } else {
-          buf.push(p);
-          acc += toAdd.length;
-        }
-      }
-      if (buf.length) results.push({ text: buf.join("\n\n"), origin });
-    } else {
-      results.push({ text: content, origin });
+    if (content.length === 0 || isHeadingOnly(content)) continue;
+    const pieces = content.length > MARKDOWN_SECTION_LIMIT
+      ? splitOversizedSection(content, MARKDOWN_CHUNK_TARGET)
+      : [content];
+    for (const piece of pieces) {
+      if (piece.trim().length === 0 || isHeadingOnly(piece)) continue;
+      results.push({ text: piece, origin });
     }
   }
   return results;

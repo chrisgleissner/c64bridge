@@ -21,6 +21,7 @@ import { loadConfig } from "./config.js";
 import { C64Client } from "./c64Client.js";
 import {
   listKnowledgeResources,
+  publishedResourceMeta,
   readKnowledgeResource,
 } from "./rag/knowledgeIndex.js";
 import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
@@ -28,15 +29,17 @@ import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
-import { delegateViceSignalHandling, stopManagedViceProcessesSync } from "./device.js";
+import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
 import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
-import { publishedInputSchema, type ToolRunResult } from "./tools/types.js";
+import { publishedInputSchema, publishedToolMeta } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
+import { RequestQueue } from "./loggingHttpClient.js";
 import axios, { type AxiosResponse } from "axios";
 import { redactValue, registerSecret } from "./redact.js";
+import { toCallToolResult } from "./mcp/callToolResult.js";
 import { loggerFor, payloadByteLength, formatPayloadForDebug, formatErrorMessage } from "./logger.js";
 import { getDiagnosticsSessionInfo, installProcessDiagnostics, withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
 
@@ -70,7 +73,11 @@ export function parseCliOptions(argv: string[]): CliOptions {
     return { mode: "stdio" };
   }
   const portCandidate = argv[httpIndex + 1];
-  return { mode: "http", port: parsePort(portCandidate) };
+  const port = parsePort(portCandidate);
+  if (port === undefined && portCandidate !== undefined && !portCandidate.startsWith("--")) {
+    throw new Error(`Invalid --http port '${portCandidate}': expected an integer from 1 to 65535`);
+  }
+  return { mode: "http", port };
 }
 
 /**
@@ -129,6 +136,7 @@ function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
         const cleanup = Promise.allSettled([
           stopAllBackgroundTasks(),
           client.releaseVideoCapture(),
+          endViceSessions(), // deletes stopping checkpoints and exits the monitor before the sockets close
         ]);
         await Promise.race([
           cleanup,
@@ -159,7 +167,7 @@ function parsePort(raw?: string): number | undefined {
   if (!raw || raw.startsWith("--")) {
     return undefined;
   }
-  const parsed = Number(raw);
+  const parsed = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
   if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65_535) {
     return parsed;
   }
@@ -251,7 +259,7 @@ async function main() {
         name: resource.name,
         description: resource.description,
         mimeType: resource.mimeType,
-        _meta: resource.metadata,
+        _meta: publishedResourceMeta(resource.metadata),
       }));
 
       const platformResource = createPlatformResourceDescriptor();
@@ -354,7 +362,7 @@ async function main() {
           description: tool.description,
           inputSchema: publishedInputSchema(tool.inputSchema),
           ...(tool.annotations ? { annotations: tool.annotations } : {}),
-          _meta: tool.metadata,
+          _meta: publishedToolMeta(tool.metadata),
         })),
       };
       const latency = Date.now() - startedAt;
@@ -650,7 +658,7 @@ function createPlatformResourceDescriptor() {
     name: "Active Platform Status",
     description: "Reports the active MCP platform and tool compatibility snapshot.",
     mimeType: "text/markdown",
-    _meta: {
+    _meta: publishedResourceMeta({
       domain: "platform",
       priority: "critical",
       summary: "Current platform (c64u or vice), feature flags, and tool support overview.",
@@ -658,7 +666,7 @@ function createPlatformResourceDescriptor() {
       tools: [],
       tags: ["platform", "compatibility"],
       relatedResources: [],
-    },
+    }),
   };
 }
 
@@ -740,7 +748,7 @@ export function connectivityProbeUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/v1/info`;
 }
 
-async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
+export async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
   const backendType = await client.getBackendType();
   if (backendType === "vice") {
     writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, reason: "vice_backend" });
@@ -771,14 +779,30 @@ async function logConnectivity(client: C64Client, baseUrl: string, networkPasswo
   try {
     // Send the network password like every other request, or a protected device answers 403.
     registerSecret(networkPassword);
-    const probeResponse = await axios.get(infoUrl, {
+    // Share the per-device queue so the probe never overlaps a tool request.
+    const probeResponse = await RequestQueue.forDevice(baseUrl).run(() => axios.get(infoUrl, {
       timeout: 2000,
+      // Any HTTP answer shows the device is reachable; a 401/403 is reported as an authentication problem below.
+      validateStatus: () => true,
+      // Device requests go straight to the LAN address, not through HTTP_PROXY.
+      proxy: false,
       ...(networkPassword ? { headers: { "X-Password": networkPassword } } : {}),
-    });
+    }));
     response = probeResponse;
     const latency = Date.now() - startedAt;
     const bytes = payloadByteLength(probeResponse.data);
-    c64Logger.info(`GET ${infoUrl} status=${probeResponse.status} bytes=${bytes} latencyMs=${latency}`);
+    const logProbe = probeResponse.status >= 200 && probeResponse.status < 300 ? c64Logger.info : c64Logger.warn;
+    logProbe.call(c64Logger, `GET ${infoUrl} status=${probeResponse.status} bytes=${bytes} latencyMs=${latency}`);
+    if (probeResponse.status === 401 || probeResponse.status === 403) {
+      writeDiagnosticEvent("connectivity_probe_auth_failed", { baseUrl, status: probeResponse.status, latencyMs: latency });
+      console.error(`Device at ${baseUrl} is reachable but rejected the request (HTTP ${probeResponse.status}): authentication failed. Check the network password (X-Password) in the configuration.`);
+      return;
+    }
+    if (probeResponse.status < 200 || probeResponse.status >= 300) {
+      writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, latencyMs: latency, status: probeResponse.status });
+      console.error(`Skipping direct REST connectivity probe (device at ${baseUrl} answered HTTP ${probeResponse.status})`);
+      return;
+    }
   } catch (error) {
     const latency = Date.now() - startedAt;
     if (axios.isAxiosError(error)) {
@@ -819,32 +843,6 @@ async function logConnectivity(client: C64Client, baseUrl: string, networkPasswo
   }
 }
 
-export function toCallToolResult(result: ToolRunResult): {
-  content: ToolRunResult["content"];
-  structuredContent?: ToolRunResult["structuredContent"];
-  metadata?: ToolRunResult["metadata"];
-  isError?: boolean;
-} {
-  const base: {
-    content: ToolRunResult["content"];
-    structuredContent?: ToolRunResult["structuredContent"];
-    metadata?: ToolRunResult["metadata"];
-    isError?: boolean;
-  } = { content: redactValue(result.content) as ToolRunResult["content"] };
-
-  if (result.structuredContent !== undefined) {
-    base.structuredContent = redactValue(result.structuredContent) as ToolRunResult["structuredContent"];
-  }
-  if (result.metadata !== undefined) {
-    base.metadata = redactValue(result.metadata) as ToolRunResult["metadata"];
-  }
-  if (result.isError !== undefined) {
-    base.isError = result.isError;
-  }
-
-  return base;
-}
-
 function toPromptMessage(segment: PromptSegment): {
   role: "assistant" | "user";
   content: { type: "text"; text: string };
@@ -877,3 +875,5 @@ if (process.env.C64BRIDGE_SKIP_AUTO_START !== "1") {
     process.exit(1);
   });
 }
+
+export { toCallToolResult };
