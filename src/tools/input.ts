@@ -334,6 +334,22 @@ function feedNote(fields: ReturnType<typeof feedFields>): string {
   return "";
 }
 
+// A tap owns its press until the matching release. Keep other native joystick
+// changes (including release_all) behind it on the same physical backend.
+const nativeJoystickTails = new WeakMap<object, Promise<void>>();
+
+async function withNativeJoystickLock<T>(backend: object, operation: () => Promise<T>): Promise<T> {
+  const previous = nativeJoystickTails.get(backend) ?? Promise.resolve();
+  const run = previous.then(operation);
+  const tail = run.then(() => undefined, () => undefined);
+  nativeJoystickTails.set(backend, tail);
+  try {
+    return await run;
+  } finally {
+    if (nativeJoystickTails.get(backend) === tail) nativeJoystickTails.delete(backend);
+  }
+}
+
 function textToPetsciiBytes(text: string): Uint8Array {
   const bytes: number[] = [];
   for (let i = 0; i < text.length; i++) {
@@ -405,30 +421,45 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const port = parsed.port as 1 | 2;
       const durationMs = parsed.durationMs ?? 80;
       const pressedByte = joystickByte(parsed.controls);
-      const platform = await ctx.client.getActiveBackendType();
+      const facade = await ctx.client.pinFacade?.();
+      const platform = facade?.type ?? await ctx.client.getActiveBackendType();
 
       if (platform === "c64u") {
-        if (parsed.controls.length === 0 && parsed.action === "release") {
-          const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
-          return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, action: "release_all", state });
-        }
-        const joystickEvent = (transition: "press" | "release") => ({
-          events: [{ kind: "joystick" as const, port, inputs: [...parsed.controls], transition }],
-        });
-        let state;
-        if (parsed.action === "tap") {
-          // The firmware holds a tap for a fixed two frames, so hold the press for durationMs here.
-          await ctx.client.sendInputEvents(joystickEvent("press"));
-          try {
-            await new Promise<void>((res) => setTimeout(res, durationMs));
-          } finally {
-            state = await ctx.client.sendInputEvents(joystickEvent("release"));
+        const backend = facade ?? ctx.client;
+        return await withNativeJoystickLock(backend, async () => {
+          if (parsed.controls.length === 0 && parsed.action === "release") {
+            const state = await backend.sendInputEvents({ events: [{ kind: "release_all" }] });
+            return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, action: "release_all", state });
           }
-        } else {
-          state = await ctx.client.sendInputEvents(joystickEvent(parsed.action as "press" | "release"));
-        }
-        return textResult(`Joystick port ${port} ${parsed.action}: ${parsed.controls.join(", ")}.`, {
-          success: true, port, action: parsed.action, controls: parsed.controls, state,
+          const joystickEvent = (transition: "press" | "release") => ({
+            events: [{ kind: "joystick" as const, port, inputs: [...parsed.controls], transition }],
+          });
+          let state;
+          if (parsed.action === "tap") {
+            // The firmware holds a tap for a fixed two frames, so hold the press for durationMs here.
+            let failed = false;
+            try {
+              // A failed response can follow an applied press, so cleanup also
+              // covers the initial request.
+              await backend.sendInputEvents(joystickEvent("press"));
+              await new Promise<void>((res) => setTimeout(res, durationMs));
+            } catch (error) {
+              failed = true;
+              throw error;
+            } finally {
+              try {
+                state = await backend.sendInputEvents(joystickEvent("release"));
+              } catch (error) {
+                if (!failed) throw error;
+                ctx.logger.warn("Unable to release joystick after a failed tap", { port });
+              }
+            }
+          } else {
+            state = await backend.sendInputEvents(joystickEvent(parsed.action as "press" | "release"));
+          }
+          return textResult(`Joystick port ${port} ${parsed.action}: ${parsed.controls.join(", ")}.`, {
+            success: true, port, action: parsed.action, controls: parsed.controls, state,
+          });
         });
       }
 
@@ -486,7 +517,8 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
   release_all: async (args, ctx) => {
     try {
       releaseAllArgsSchema.parse(args);
-      const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
+      const backend = await ctx.client.pinFacade?.() ?? ctx.client;
+      const state = await withNativeJoystickLock(backend, () => backend.sendInputEvents({ events: [{ kind: "release_all" }] }));
       return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, state });
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
