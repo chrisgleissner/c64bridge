@@ -581,6 +581,13 @@ test("shift counts and bitwise operands outside 32 bits are errors", () => {
   assert.deepEqual([...assemblyToPrg("*=$c000\n lda #1<<7\n lda #$ff & $0f\n lda #256>>8")], [0x00, 0xc0, 0xa9, 0x80, 0xa9, 0x0f, 0xa9, 0x01]);
 });
 
+test("32-bit shift and bitwise expressions keep their 1.1.0 results", () => {
+  // 1.1.0 used JavaScript signed 32-bit operators: $80000000 >> 31 is -1, low byte $FF.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n.byte ($80000000 >> 31) & $ff")], [0x00, 0xc0, 0xff]);
+  // -1 & $ffffffff is -1 in 32-bit arithmetic, low byte $FF.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n.byte <(-1 & $ffffffff)")], [0x00, 0xc0, 0xff]);
+});
+
 test("data-only source at the default address gets no BASIC stub", () => {
   assert.deepEqual([...assemblyToPrg('.text "Hi"')], [0x01, 0x08, 0x48, 0x49]);
   assert.deepEqual([...assemblyToPrg(".byte 1,2,3")], [0x01, 0x08, 1, 2, 3]);
