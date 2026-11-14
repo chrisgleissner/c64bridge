@@ -1641,7 +1641,10 @@ export class ViceBackend implements C64Facade {
       // Autoload power-cycles the machine after this call returns; wait until
       // its LOAD has finished so callers do not write into a machine that is
       // about to be reset.
-      return waitForAutoloadFinished(client, 30_000);
+      // A checkpoint hit during the autoload ends the wait: the CPU stays stopped there.
+      const s = this.session;
+      const stopsBefore = s?.stopEvents ?? 0;
+      return waitForAutoloadFinished(client, 30_000, s ? () => s.stopEvents !== stopsBefore : undefined);
     });
     this.attachedImages.set(n, imagePath);
     return {
@@ -1650,7 +1653,10 @@ export class ViceBackend implements C64Facade {
         drive,
         image: imagePath,
         loadedFirstProgram: outcome.loaded,
-        note: outcome.loaded
+        ...(outcome.stopped ? { stopped: true, ...(outcome.pc !== undefined ? { pc: `$${outcome.pc.toString(16).toUpperCase().padStart(4, "0")}` } : {}) } : {}),
+        note: outcome.stopped
+          ? "A checkpoint stopped the CPU while VICE was loading the disk; the CPU stays stopped there and the autoload may be unfinished."
+          : outcome.loaded
           ? "VICE attaches images through autoload, which resets the machine (clearing RAM) and LOADs the first program without running it."
           : "VICE attaches images through autoload, which resets the machine (clearing RAM); the disk has no program to load.",
       },
@@ -1829,12 +1835,29 @@ const AUTOLOAD_MARKER = Buffer.from([0xc6, 0x4b, 0x1d, 0x9e]);
  * covers screen RAM, BASIC initialised (TXTTAB $0801) with its end-of-program
  * pointer (VARTAB) moved off the reset value $0803 and an empty keyboard buffer.
  */
-async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<{ loaded: boolean }> {
+async function waitForAutoloadFinished(
+  client: ViceClient,
+  timeoutMs: number,
+  stopped?: () => boolean,
+): Promise<{ loaded: boolean; stopped?: boolean; pc?: number }> {
   const deadline = Date.now() + timeoutMs;
   let loadedEnd: number | null = null;
+  // A checkpoint hit leaves the CPU stopped: end the wait without resuming it, and report where it stopped.
+  const stoppedOutcome = async (): Promise<{ loaded: boolean; stopped: true; pc?: number }> => {
+    try {
+      const [metadata, values] = await Promise.all([client.registersAvailable(0), client.registersGet(0)]);
+      const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+      const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
+      return pc === undefined ? { loaded: false, stopped: true } : { loaded: false, stopped: true, pc };
+    } catch {
+      return { loaded: false, stopped: true };
+    }
+  };
   while (Date.now() < deadline) {
+    if (stopped?.()) return await stoppedOutcome();
     await client.exitMonitor();
     await delay(250);
+    if (stopped?.()) return await stoppedOutcome();
     const marker = await client.memGet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER_ADDRESS + AUTOLOAD_MARKER.length - 1);
     if (Buffer.from(marker).equals(AUTOLOAD_MARKER)) continue; // not reset yet
     const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));

@@ -61,6 +61,12 @@ export interface ViceMockServerOptions {
    * milliseconds. Without it the events are sent before the acknowledgement.
    */
   stepEventDelayMs?: number;
+  /**
+   * Emulates the time VICE's autostart takes to power-cycle and LOAD: the old RAM (and the
+   * caller's autoload marker) stays in place and the LOAD text appears only after this many
+   * milliseconds. Default 0: the result is there when the command is acknowledged.
+   */
+  autoloadDelayMs?: number;
 }
 
 const UNSOLICITED = 0xffffffff;
@@ -92,6 +98,8 @@ export class ViceMockServer {
   private nextCheckpointId = 1;
   private readonly registerMetadata = buildDefaultRegisterMetadata();
   private registerValues = new Map<number, number>();
+  private readonly autoloadDelayMs: number;
+  private autoloadTimer: NodeJS.Timeout | null = null;
   private resources = new Map<string, number | string>();
   /** Output lines of VICE's I/O simulation joyport device per port (0 = port 1). */
   private joyportOutput = [0, 0];
@@ -178,6 +186,7 @@ export class ViceMockServer {
   constructor(options?: ViceMockServerOptions) {
     this.wedgeOnUnsafeClose = options?.wedgeOnUnsafeClose === true;
     this.stepEventDelayMs = options?.stepEventDelayMs;
+    this.autoloadDelayMs = Math.max(0, options?.autoloadDelayMs ?? 0);
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
     this.bootMs = Math.max(0, options?.bootMs ?? 0);
@@ -210,6 +219,8 @@ export class ViceMockServer {
   async stop(): Promise<void> {
     if (!this.server) return;
     this.stopping = true;
+    if (this.autoloadTimer) clearTimeout(this.autoloadTimer);
+    this.autoloadTimer = null;
     for (const socket of this.sockets) {
       socket.destroy();
     }
@@ -321,7 +332,13 @@ export class ViceMockServer {
           fileIndex: body.readUInt16LE(1),
           filename: body.subarray(4, 4 + nameLength).toString("utf8"),
         });
-        this.renderAutoload(body[0] === 1);
+        if (this.autoloadDelayMs > 0) {
+          const run = body[0] === 1;
+          this.autoloadTimer = setTimeout(() => { this.autoloadTimer = null; this.renderAutoload(run); }, this.autoloadDelayMs);
+          this.autoloadTimer.unref();
+        } else {
+          this.renderAutoload(body[0] === 1);
+        }
         return buildResponse(cmd, reqId);
       }
       case 0x11: { // checkpoint get

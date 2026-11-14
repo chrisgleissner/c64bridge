@@ -400,6 +400,27 @@ test("HARD03-018 step and step_return do not report success when the CPU did not
   }, { stepEventDelayMs: 2_600 });
 });
 
+test("HARD03-020 mounting a disk stops waiting at a checkpoint hit during the autoload and leaves the CPU stopped", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-mount-stop-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const image = path.join(dir, "disk.d64");
+  fs.writeFileSync(image, Buffer.alloc(174848));
+  await withBackend(async (backend, server) => {
+    const id = await armBreakpointAt(backend, 0xc000);
+    const mounting = backend.driveMount("drive8", image);
+    await waitUntil(() => server.autostarts.length === 1, "the autostart was sent");
+    await delay(100);
+    await hitWhenRunning(server, id);
+    const result = await mounting;
+    assert.equal(server.running, false, "the CPU is still stopped at the checkpoint");
+    assert.equal(result.details.stopped, true);
+    assert.equal(result.details.pc, "$C000");
+    assert.equal(backend.sessionInfo().debugStop, true);
+    await delay(900);
+    assert.equal(server.running, false, "nothing resumed the CPU afterwards");
+  }, { autoloadDelayMs: 800 });
+});
+
 test("a tool call's pause that was queued behind a keyboard feed does not resume past a checkpoint hit during the feed", async () => {
   await withClient(async (client, server) => {
     const created = await client.viceCheckpointCreate({ start: 0xc000 });
