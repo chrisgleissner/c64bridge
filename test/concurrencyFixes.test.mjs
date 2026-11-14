@@ -209,3 +209,34 @@ test("an owned pause acquired while the post-reset resume is pending still sends
   assert.equal((await client.releasePause(facade)).success, true);
   assert.equal(seen[seen.length - 1], "/v1/machine:resume");
 });
+
+test("a background task start that is stopped and replaced while pinning does not overwrite the new task's files", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-bgsuper-"));
+  const previous = process.env.C64_TASK_STATE_FILE;
+  process.env.C64_TASK_STATE_FILE = path.join(dir, "tasks.json");
+  try {
+    let releasePin;
+    const pinGate = new Promise((resolve) => { releasePin = resolve; });
+    let pins = 0;
+    const slowCtx = { client: { pinFacade: async () => { pins += 1; if (pins === 1) await pinGate; return { type: "vice" }; }, readMemory: async () => ({ success: true, data: "$00" }) }, logger: quietLogger };
+    const start = backgroundTool("start_background_task");
+    const startA = start.execute({ name: "bg-super", operation: "read", intervalMs: 100 }, slowCtx);
+    await new Promise((resolve) => setTimeout(resolve, 20)); // A is now suspended in pinFacade
+    await backgroundTool("stop_background_task").execute({ name: "bg-super" }, slowCtx);
+    const startB = await start.execute({ name: "bg-super", operation: "read", intervalMs: 5000 }, slowCtx);
+    assert.ok(!startB.isError, JSON.stringify(startB.content));
+    releasePin();
+    await startA;
+    const registry = JSON.parse(fs.readFileSync(path.join(dir, "tasks.json"), "utf8"));
+    const entry = (registry.tasks ?? registry).find?.((t) => t.name === "bg-super") ?? registry.tasks?.["bg-super"] ?? registry["bg-super"];
+    const id = entry.id;
+    const taskJson = JSON.parse(fs.readFileSync(path.join(dir, "tasks", "background", id, "task.json"), "utf8"));
+    assert.equal(taskJson.intervalMs, 5000, `task.json was overwritten by the superseded start A: ${JSON.stringify(taskJson)}`);
+    assert.equal(taskJson.status, "running");
+    assert.equal(entry.status, "running");
+  } finally {
+    await stopAllBackgroundTasks();
+    if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
+    else process.env.C64_TASK_STATE_FILE = previous;
+  }
+});

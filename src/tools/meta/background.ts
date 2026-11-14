@@ -461,6 +461,10 @@ const stopBackgroundTaskArgsSchema = objectSchema({
 const listBackgroundTasksArgsSchema = noArgsSchema;
 const stopAllBackgroundTasksArgsSchema = noArgsSchema;
 
+function supersededStartResult(task: BackgroundTask) {
+  return jsonResult({ started: false, superseded: true, name: task.name }, { success: true });
+}
+
 export const tools: ToolDefinition[] = [
   {
     name: "start_background_task",
@@ -520,16 +524,25 @@ export const tools: ToolDefinition[] = [
         // Reserve the name and id before the first await below. Everything above is synchronous,
         // so a concurrent start sees this task as running and cannot reuse its name or id.
         TASKS.set(task.name, task);
+        // While this start awaits, the task may be stopped and its name reused by another start.
+        // Only the task that is still the running registry entry may write its files or start its timer.
+        const superseded = (): boolean => TASKS.get(task.name) !== task || task.status !== "running";
         try {
           // Pin the facade now: a later c64_select_backend must not retarget a running task.
           const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
+          if (superseded()) return supersededStartResult(task);
           task._facade = pinnedFacade;
           task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
+          if (superseded()) return supersededStartResult(task);
           // Ensure per-task structure and seed files
           await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
+          if (superseded()) return supersededStartResult(task);
           await writeTaskJson(task);
+          if (superseded()) return supersededStartResult(task);
           await ensureResultAndLog(task);
+          if (superseded()) return supersededStartResult(task);
           await appendTaskLog(task, "started");
+          if (superseded()) return supersededStartResult(task);
           scheduleNextRun(task, ctx);
         } catch (startError) {
           // Undo the reservation so the failed start neither blocks its name nor holds a running slot.
