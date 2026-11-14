@@ -160,6 +160,7 @@ const musicPlayPresetArgsSchema = objectSchema({
 type AnalyzeAudioParams = {
   durationSeconds: number;
   expectedSidwave?: string | Record<string, unknown>;
+  signal?: AbortSignal;
 };
 
 type AnalyzeAudioFn = (options: AnalyzeAudioParams) => Promise<Awaited<ReturnType<typeof recordAndAnalyzeAudio>>>;
@@ -197,11 +198,12 @@ async function silenceSid(context: ToolExecutionContext) {
 
 function resolveAnalyzer(context: ToolExecutionContext): AnalyzeAudioFn {
   const { client } = context;
+  const withSignal = (args: AnalyzeAudioParams): AnalyzeAudioParams => context.signal ? { ...args, signal: context.signal } : args;
   if (client && typeof (client as any).recordAndAnalyzeAudio === "function") {
-    return (args) => (client as any).recordAndAnalyzeAudio(args);
+    return (args) => (client as any).recordAndAnalyzeAudio(withSignal(args));
   }
 
-  return recordAndAnalyzeAudio;
+  return (args) => recordAndAnalyzeAudio(withSignal(args));
 }
 
 function normalizeSidwaveInput(input?: string | Record<string, unknown>): string | Record<string, unknown> | undefined {
@@ -597,8 +599,14 @@ export const tools: ToolDefinition[] = [
         }
 
         if ((analysisMetrics.max ?? analysisMetrics.average ?? 0) <= silenceRmsThreshold) {
+          let cleanupError: string | undefined;
+          try {
+            await silenceSid(context);
+          } catch (error) {
+            cleanupError = error instanceof Error ? error.message : String(error);
+          }
           throw new ToolExecutionError("No audio was detected after playback started", {
-            details: { audible: false, averageRms: analysisMetrics.average, maxRms: analysisMetrics.max, threshold: silenceRmsThreshold },
+            details: { audible: false, averageRms: analysisMetrics.average, maxRms: analysisMetrics.max, threshold: silenceRmsThreshold, ...(cleanupError ? { cleanupError } : {}) },
           });
         }
 

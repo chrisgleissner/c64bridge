@@ -46,11 +46,49 @@ test("analyze gives no positive verdict for an empty capture", async () => {
   assert.ok(!/sounds accurate/.test(text), text);
 });
 
-test("pipeline is not a success when the capture is silent", async () => {
-  const result = await toolRegistry.invoke("c64_sound", { op: "pipeline", sidwave: SCORE, verifySilenceBefore: false, verifySilenceAfter: false, waitBeforeCaptureMs: 0 }, context("c64u", playbackClient("c64u", silentAnalysis)));
-  assert.equal(result.isError, true, JSON.stringify(result));
-  assert.equal(JSON.stringify(result).includes('"audible":false'), true, JSON.stringify(result));
+for (const verifySilenceAfter of [false, true]) {
+  test(`pipeline silences playback before rejecting a silent capture (verifySilenceAfter=${verifySilenceAfter})`, async () => {
+    let playing = false;
+    let silenceCalls = 0;
+    const client = playbackClient("c64u", silentAnalysis);
+    client.runPrg = async () => { playing = true; return { success: true }; };
+    client.sidSilenceAll = async () => { silenceCalls++; playing = false; return { success: true }; };
+    const result = await toolRegistry.invoke("c64_sound", { op: "pipeline", sidwave: SCORE, verifySilenceBefore: false, verifySilenceAfter, waitBeforeCaptureMs: 0 }, context("c64u", client));
+    assert.equal(result.isError, true, JSON.stringify(result));
+    assert.equal(JSON.stringify(result).includes('"audible":false'), true, JSON.stringify(result));
+    assert.equal(silenceCalls, 1);
+    assert.equal(playing, false);
+  });
+}
+
+test("pipeline preserves the no-audio error when playback cleanup fails", async () => {
+  const client = playbackClient("c64u", silentAnalysis);
+  client.sidSilenceAll = async () => ({ success: false, details: { error: "offline" } });
+  const result = await toolRegistry.invoke("c64_sound", { op: "pipeline", sidwave: SCORE, verifySilenceBefore: false, waitBeforeCaptureMs: 0 }, context("c64u", client));
+  assert.equal(result.isError, true);
+  assert.match(result.structuredContent.data.message, /No audio was detected/);
+  assert.equal(result.metadata.error.details.audible, false);
+  assert.match(result.metadata.error.details.cleanupError, /Unable to silence SID/);
 });
+
+for (const op of ["pipeline", "play_preset"]) {
+  test(`${op} forwards the request cancellation signal to audio capture`, async () => {
+    const controller = new AbortController();
+    let captures = 0;
+    const client = playbackClient("c64u", async (options) => {
+      captures++;
+      assert.equal(options.signal, controller.signal);
+      return { analysis: { voices: [], global_metrics: { average_rms: 0.06, max_rms: 0.08 } } };
+    });
+    const ctx = { ...context("c64u", client), signal: controller.signal };
+    const args = op === "pipeline"
+      ? { op, sidwave: SCORE, verifySilenceBefore: false, verifySilenceAfter: false, waitBeforeCaptureMs: 0 }
+      : { op, waitBeforeCaptureMs: 0 };
+    const result = await toolRegistry.invoke("c64_sound", args, ctx);
+    assert.equal(result.isError, undefined, JSON.stringify(result));
+    assert.equal(captures, 1);
+  });
+}
 
 test("play_preset with verify reports audible false and an error for a silent capture", async () => {
   const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", waitBeforeCaptureMs: 0 }, context("c64u", playbackClient("c64u", silentAnalysis)));
