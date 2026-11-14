@@ -312,6 +312,7 @@ function isNoMatch(error: unknown): boolean {
 /**
  * GET /v1/files/<pattern>:info answers with the first file the pattern matches:
  * {files: {path, filename, size, extension}, errors: []}, or 404 when nothing matches.
+ * `path` echoes the requested pattern; `filename` is the resolved file name.
  * Returns undefined for no match; any other answer shape is an error, not an empty search.
  */
 async function firstFirmwareMatch(client: any, pattern: string): Promise<{ path: string; record: Record<string, unknown> } | undefined> {
@@ -329,7 +330,7 @@ async function firstFirmwareMatch(client: any, pattern: string): Promise<{ path:
   const record = files as Record<string, unknown>;
   const filename = record.filename as string;
   const dir = pattern.slice(0, pattern.lastIndexOf("/"));
-  const path = typeof record.path === "string" && record.path.startsWith("/") ? record.path : `${dir}/${filename}`;
+  const path = `${dir}/${filename}`;
   return { path, record };
 }
 

@@ -18,7 +18,7 @@ function firmwareInfo(files, sizes = {}) {
     const hit = files.find((file) => file.slice(0, file.lastIndexOf("/")) === dir && leaf.test(file.slice(file.lastIndexOf("/") + 1)));
     if (!hit) throw Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } });
     const filename = hit.slice(hit.lastIndexOf("/") + 1);
-    return { files: { path: hit, filename, size: sizes[hit] ?? 1024, extension: filename.split(".").pop().toLowerCase() }, errors: [] };
+    return { files: { path: pattern, filename, size: sizes[hit] ?? 1024, extension: filename.split(".").pop().toLowerCase() }, errors: [] };
   };
 }
 
@@ -60,6 +60,24 @@ test("find_paths_by_name limits by maxResults and honors case sensitive flag", a
   const lower = { client: { filesInfo: firmwareInfo(["/b/demo.prg"]) }, logger: createLogger() };
   const res = await metaModule.invoke("find_paths_by_name", { root: "/b", nameContains: "DEMO", caseInsensitive: false }, lower);
   assert.deepEqual(res.structuredContent?.data?.results, []);
+});
+
+test("file discovery resolves the matched filename instead of the firmware's echoed pattern", async () => {
+  const ran = [];
+  const ctx = {
+    client: {
+      filesInfo: firmwareInfo(["/games/demo.prg"]),
+      async runPrgFile(file) { ran.push(file); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const found = await metaModule.invoke("find_paths_by_name", { root: "/games", nameContains: "demo", extensions: ["prg"] }, ctx);
+  assert.deepEqual(found.structuredContent.data.results, ["/games/demo.prg"]);
+  const stats = await metaModule.invoke("filesystem_stats_by_extension", { root: "/games", extensions: ["prg"] }, ctx);
+  assert.deepEqual(stats.structuredContent.data.extensions[0].samples, ["/games/demo.prg"]);
+  const rejected = await metaModule.invoke("find_and_run_program_by_name", { root: "/games", nameContains: "DEMO", caseInsensitive: false, extensions: ["prg"] }, ctx);
+  assert.equal(rejected.isError, true);
+  assert.deepEqual(ran, []);
 });
 
 test("find_and_run_program_by_name runs first matching PRG and records state", async () => {
@@ -736,6 +754,9 @@ test("find_paths sends the wildcard pattern to the mock /v1/files route", async 
     const res = await toolRegistry.invoke("c64_disk", { op: "find_paths", root: "/games", nameContains: "demo", extensions: ["prg"] }, ctx);
     assert.equal(mock.state.lastFileInfo, "/games/*demo*.prg");
     assert.deepEqual(res.structuredContent.data.results, ["/games/demo.prg"]);
+    const info = await client.filesInfo("/games/*demo*.prg");
+    assert.equal(info.files.path, "/games/*demo*.prg");
+    assert.equal(info.files.filename, "demo.prg");
   } finally {
     await mock.close();
   }

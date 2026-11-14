@@ -1073,7 +1073,7 @@ export async function startMockC64Server(options = {}) {
               return;
             }
             const filename = hit.slice(hit.lastIndexOf("/") + 1);
-            respond({ files: { path: hit, filename, size: 4096, extension: filename.split(".").pop().toLowerCase() }, errors: [] });
+            respond({ files: { path: decodedPath, filename, size: 4096, extension: filename.split(".").pop().toLowerCase() }, errors: [] });
             return;
           }
 
