@@ -201,9 +201,13 @@ test("defaultHostOutputDir falls back to ~/.c64bridge when the working directory
   const { base, root } = makeFixture();
   const originalCwd = process.cwd();
   try {
-    withEnv({ HOME: root, TMPDIR: path.join(base, "tmp"), C64BRIDGE_ALLOWED_DIRS: undefined }, () => {
+    withEnv({ HOME: root, TMPDIR: path.join(base, "tmp"), C64BRIDGE_ALLOWED_DIRS: undefined, C64BRIDGE_STATE_DIR: undefined }, () => {
       process.chdir(root);
       assert.equal(defaultHostOutputDir("artifacts", "run_1"), path.join(root, ".c64bridge", "artifacts", "run_1"));
+    });
+    withEnv({ HOME: root, TMPDIR: path.join(base, "tmp"), C64BRIDGE_ALLOWED_DIRS: undefined, C64BRIDGE_STATE_DIR: path.join(base, "state") }, () => {
+      process.chdir(root);
+      assert.equal(defaultHostOutputDir("artifacts", "run_1"), path.join(base, "state", "artifacts", "run_1"));
     });
     process.chdir(base);
     withEnv({ C64BRIDGE_ALLOWED_DIRS: undefined }, () => {

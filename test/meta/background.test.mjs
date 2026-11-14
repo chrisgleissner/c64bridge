@@ -7,8 +7,11 @@ import { createLogger, tmpPath, waitForTaskCompletion } from "./helpers.mjs";
 
 test("background tasks load persisted task state and expose default home dir", async () => {
   const previous = process.env.C64_TASK_STATE_FILE;
+  const previousStateDir = process.env.C64BRIDGE_STATE_DIR;
   delete process.env.C64_TASK_STATE_FILE;
+  delete process.env.C64BRIDGE_STATE_DIR;
   assert.ok(getTasksHomeDir().endsWith(".c64bridge"));
+  if (previousStateDir !== undefined) process.env.C64BRIDGE_STATE_DIR = previousStateDir;
 
   const { file, dir } = tmpPath("background0", "tasks.json");
   await fs.mkdir(dir, { recursive: true });

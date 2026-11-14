@@ -54,6 +54,12 @@ function homeDirectory(): string {
   return process.env.HOME || os.homedir();
 }
 
+/** Parent of task state, default run directories and diagnostics: C64BRIDGE_STATE_DIR, else ~/.c64bridge. Read at call time. */
+export function stateRootDir(): string {
+  const configured = process.env.C64BRIDGE_STATE_DIR?.trim();
+  return configured ? path.resolve(configured) : path.join(homeDirectory(), ".c64bridge");
+}
+
 /**
  * Expand exactly "~" and a leading "~/" (or "~" followed by the platform separator)
  * to the home directory. JSON tool arguments never pass through a shell, so clients
@@ -75,6 +81,7 @@ export function allowedHostRoots(): string[] {
   const home = safeRealpath(homeDirectory());
   if (cwd !== home && cwd !== path.parse(cwd).root) roots.push(cwd);
   roots.push(safeRealpath(path.join(homeDirectory(), ".c64bridge")));
+  roots.push(safeRealpath(stateRootDir()));
   roots.push(safeRealpath(os.tmpdir()));
   const extra = process.env[ALLOWED_DIRS_ENV];
   if (extra) {
@@ -96,13 +103,13 @@ export function resolveHostChildPath(dir: string, ...names: string[]): string {
   return resolveHostPath(path.join(dir, ...names), { purpose: "write" });
 }
 
-/** Default output directory under the working directory, or under ~/.c64bridge when the working directory is not an allowed root. */
+/** Default output directory under the working directory, or under the state root (~/.c64bridge by default) when the working directory is not an allowed root. */
 export function defaultHostOutputDir(...names: string[]): string {
   try {
     return resolveHostPath(path.join(process.cwd(), ...names), { purpose: "write" });
   } catch (error) {
     if (!(error instanceof ToolValidationError)) throw error;
-    return resolveHostPath(path.join(homeDirectory(), ".c64bridge", ...names), { purpose: "write" });
+    return resolveHostPath(path.join(stateRootDir(), ...names), { purpose: "write" });
   }
 }
 
