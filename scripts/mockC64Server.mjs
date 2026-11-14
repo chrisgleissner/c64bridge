@@ -83,6 +83,20 @@ function sendJson(res, payload = {}, statusCode = 200) {
   res.end(JSON.stringify(body));
 }
 
+// Files the mock firmware holds for GET /v1/files/<pattern>:info. Like the firmware, the route answers with
+// one file: the first file in the pattern's directory whose name matches its `*` wildcards.
+const MOCK_FIRMWARE_FILES = ["/games/demo.prg", "/games/other.crt", "/music/demo.sid"];
+
+function firmwareFileMatch(pattern) {
+  const slash = pattern.lastIndexOf("/");
+  const dir = pattern.slice(0, slash);
+  const leafPattern = new RegExp(`^${pattern.slice(slash + 1).split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`, "i");
+  return MOCK_FIRMWARE_FILES.find((file) => {
+    const fileSlash = file.lastIndexOf("/");
+    return file.slice(0, fileSlash) === dir && leafPattern.test(file.slice(fileSlash + 1));
+  });
+}
+
 function createInitialState() {
   return {
     networkPassword: null,
@@ -1053,7 +1067,13 @@ export async function startMockC64Server(options = {}) {
 
           if (action === "info" && method === "GET") {
             state.lastFileInfo = decodedPath;
-            respond({ path: decodedPath, size: 4096, type: "file" });
+            const hit = firmwareFileMatch(decodedPath);
+            if (!hit) {
+              sendJson(res, { errors: ["NOT FOUND"] }, 404);
+              return;
+            }
+            const filename = hit.slice(hit.lastIndexOf("/") + 1);
+            respond({ files: { path: hit, filename, size: 4096, extension: filename.split(".").pop().toLowerCase() }, errors: [] });
             return;
           }
 

@@ -13,7 +13,7 @@ const CASE_INSENSITIVE_COLLATOR = new Intl.Collator(undefined, { sensitivity: "b
 const CASE_SENSITIVE_COLLATOR = new Intl.Collator(undefined, { sensitivity: "variant" });
 
 const findPathsByNameArgsSchema = objectSchema({
-  description: "Find device paths with names containing a substring. Uses firmware wildcard file info.",
+  description: "Find device paths in one directory whose names contain a substring; the firmware returns one match per extension.",
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to search (host)" }), "/"),
     nameContains: stringSchema({ description: "Substring to match", minLength: 1 }),
@@ -41,7 +41,7 @@ const findAndRunProgramArgsSchema = objectSchema({
 });
 
 const filesystemStatsArgsSchema = objectSchema({
-  description: "Compute per-extension stats by walking the filesystem (and container contents) beneath a root path.",
+  description: "Per-extension stats for one directory (no recursion); the firmware returns one match per extension pattern.",
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to scan", minLength: 1 }), "/"),
     extensions: optionalSchema(arraySchema(stringSchema({ description: "Limit to these extensions (without dot)", minLength: 1 }))),
@@ -86,30 +86,6 @@ interface FindRunStateEntry {
 interface FindRunState {
   recentSearches: FindRunStateEntry[];
   lastRunPath?: string;
-}
-
-function extractPaths(value: unknown): string[] {
-  const acc: string[] = [];
-  const stack: unknown[] = [value];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === null || current === undefined) continue;
-    if (typeof current === "string") {
-      acc.push(current);
-      continue;
-    }
-    if (Array.isArray(current)) {
-      for (const item of current) stack.push(item);
-      continue;
-    }
-    if (typeof current === "object") {
-      const maybeObj = current as Record<string, unknown>;
-      if (typeof maybeObj.path === "string") acc.push(maybeObj.path);
-      if (Array.isArray(maybeObj.paths)) stack.push(maybeObj.paths);
-      if (Array.isArray(maybeObj.entries)) stack.push(maybeObj.entries);
-    }
-  }
-  return acc;
 }
 
 function extractExtension(candidate: string): string {
@@ -236,51 +212,6 @@ function isDirectoryRecord(record: Record<string, unknown>, path: string): boole
   return false;
 }
 
-function extractEntriesFromInfo(input: unknown): FileInfoEntry[] {
-  const map = new Map<string, FileInfoEntry>();
-  const stack: unknown[] = [input];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === null || current === undefined) continue;
-    if (typeof current === "string") {
-      if (!map.has(current)) {
-        map.set(current, { path: current, size: null, isContainer: false });
-      }
-      continue;
-    }
-    if (Array.isArray(current)) {
-      for (const item of current) stack.push(item);
-      continue;
-    }
-    if (typeof current === "object") {
-      const obj = current as Record<string, unknown>;
-      const collections = [obj.entries, obj.children, obj.files, obj.contents, obj.items];
-      for (const collection of collections) {
-        if (Array.isArray(collection)) {
-          for (const item of collection) stack.push(item);
-        }
-      }
-      const pathValue = typeof obj.path === "string"
-        ? obj.path
-        : typeof obj.fullPath === "string"
-          ? obj.fullPath
-          : undefined;
-      if (!pathValue) continue;
-      if (isDirectoryRecord(obj, pathValue)) continue;
-      const size = parseSize(obj.size ?? obj.length ?? obj.bytes ?? obj.byteLength);
-      const isContainer = detectContainerFlag(obj, pathValue);
-      const existing = map.get(pathValue);
-      if (!existing) {
-        map.set(pathValue, { path: pathValue, size: size ?? null, isContainer });
-      } else {
-        if (existing.size === null && size !== null) existing.size = size;
-        existing.isContainer = existing.isContainer || isContainer;
-      }
-    }
-  }
-  return Array.from(map.values());
-}
-
 function createStatsAccumulator(): StatsAccumulator {
   return { count: 0, withSize: 0, totalBytes: 0, minBytes: null, maxBytes: null };
 }
@@ -367,10 +298,39 @@ function baseName(candidate: string): string {
   return candidate.split(/[\\/#]/).pop() ?? candidate;
 }
 
+/** One directory only: the firmware does not recurse with `**`, it returns the first match of the pattern. */
 function buildSearchPattern(root: string, extension?: string, nameContains?: string): string {
   const trimmed = root.replace(/\/+$/, "");
   const name = nameContains ? `*${nameContains}*` : "*";
-  return extension ? `${trimmed}/**/${name}.${extension}` : `${trimmed}/**/${name}`;
+  return extension ? `${trimmed}/${name}.${extension}` : `${trimmed}/${name}`;
+}
+
+function isNoMatch(error: unknown): boolean {
+  return (error as { response?: { status?: unknown } } | null)?.response?.status === 404;
+}
+
+/**
+ * GET /v1/files/<pattern>:info answers with the first file the pattern matches:
+ * {files: {path, filename, size, extension}, errors: []}, or 404 when nothing matches.
+ * Returns undefined for no match; any other answer shape is an error, not an empty search.
+ */
+async function firstFirmwareMatch(client: any, pattern: string): Promise<{ path: string; record: Record<string, unknown> } | undefined> {
+  let info: unknown;
+  try {
+    info = await client.filesInfo(pattern);
+  } catch (error) {
+    if (isNoMatch(error)) return undefined;
+    throw error;
+  }
+  const files = (info as { files?: unknown } | null | undefined)?.files;
+  if (!files || typeof files !== "object" || Array.isArray(files) || typeof (files as { filename?: unknown }).filename !== "string") {
+    throw new ToolExecutionError("Unexpected file info response from the device", { details: { pattern } });
+  }
+  const record = files as Record<string, unknown>;
+  const filename = record.filename as string;
+  const dir = pattern.slice(0, pattern.lastIndexOf("/"));
+  const path = typeof record.path === "string" && record.path.startsWith("/") ? record.path : `${dir}/${filename}`;
+  return { path, record };
 }
 
 export const tools: ToolDefinition[] = [
@@ -397,26 +357,13 @@ export const tools: ToolDefinition[] = [
         const seen = new Set<string>();
         const results: string[] = [];
         for (const pattern of patterns) {
-          const info = await (ctx.client as any).filesInfo(pattern);
-          if (Array.isArray(info)) {
-            for (const p of info) {
-              if (typeof p !== "string") continue;
-              const name = parsed.caseInsensitive ? baseName(p).toLowerCase() : baseName(p);
-              if (name.includes(needle) && !seen.has(p)) {
-                seen.add(p);
-                results.push(p);
-                if (results.length >= (limit + 1)) break;
-              }
-            }
-          } else if (info && typeof info === "object" && Array.isArray((info as any).paths)) {
-            for (const p of (info as any).paths) {
-              if (typeof p !== "string") continue;
-              const name = parsed.caseInsensitive ? baseName(p).toLowerCase() : baseName(p);
-              if (name.includes(needle) && !seen.has(p)) {
-                seen.add(p);
-                results.push(p);
-                if (results.length >= (limit + 1)) break;
-              }
+          const match = await firstFirmwareMatch(ctx.client, pattern);
+          if (match) {
+            const p = match.path;
+            const name = parsed.caseInsensitive ? baseName(p).toLowerCase() : baseName(p);
+            if (name.includes(needle) && !seen.has(p)) {
+              seen.add(p);
+              results.push(p);
             }
           }
           if (results.length >= (limit + 1)) break;
@@ -453,18 +400,23 @@ export const tools: ToolDefinition[] = [
 
         for (const pattern of uniquePatterns) {
           try {
-            const info = await (ctx.client as any).filesInfo(pattern);
-            const extracted = extractEntriesFromInfo(info);
-            for (const entry of extracted) {
-              const existing = collected.get(entry.path);
-              if (!existing) {
-                collected.set(entry.path, { ...entry });
-              } else {
-                if (existing.size === null && entry.size !== null) existing.size = entry.size;
-                existing.isContainer = existing.isContainer || entry.isContainer;
-              }
+            // One firmware match per pattern: the entry is the first file of this extension in the directory.
+            const match = await firstFirmwareMatch(ctx.client, pattern);
+            if (!match) continue;
+            const entry: FileInfoEntry = {
+              path: match.path,
+              size: parseSize(match.record.size) ?? null,
+              isContainer: detectContainerFlag(match.record, match.path),
+            };
+            const existing = collected.get(entry.path);
+            if (!existing) {
+              collected.set(entry.path, { ...entry });
+            } else {
+              if (existing.size === null && entry.size !== null) existing.size = entry.size;
+              existing.isContainer = existing.isContainer || entry.isContainer;
             }
           } catch (err) {
+            if (err instanceof ToolError) throw err;
             ctx.logger.warn?.("filesInfo pattern failed", { pattern, error: err instanceof Error ? err.message : String(err) });
           }
         }
@@ -588,9 +540,8 @@ export const tools: ToolDefinition[] = [
           for (const ext of extensions) {
             const pattern = buildSearchPattern(root, ext, parsed.nameContains as string);
             try {
-              const info = await (ctx.client as any).filesInfo(pattern);
-              const paths = extractPaths(info);
-              for (const raw of paths) {
+              const match = await firstFirmwareMatch(ctx.client, pattern);
+              for (const raw of match ? [match.path] : []) {
                 if (typeof raw !== "string" || raw.length === 0) continue;
                 const normalised = normalisePath(baseName(raw), caseInsensitive);
                 if (!normalised.includes(needle)) continue;
@@ -601,6 +552,7 @@ export const tools: ToolDefinition[] = [
                 candidates.push(raw);
               }
             } catch (err) {
+              if (err instanceof ToolError) throw err;
               ctx.logger.warn?.("filesInfo pattern failed", { pattern, error: err instanceof Error ? err.message : String(err) });
             }
           }

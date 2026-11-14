@@ -246,10 +246,25 @@ function isRunnableProgramPath(path: string): boolean {
   return ext === "prg" || ext === "crt";
 }
 
+/**
+ * Paths from a filesInfo answer: a list of paths, {paths: [...]}, or the firmware shape
+ * {files: {filename, ...}} (one match, in the directory of the pattern). Anything else is an error.
+ */
+function parseDiscoveredPaths(info: unknown, searchDir: string, pattern: string): string[] {
+  if (Array.isArray(info)) return info.filter((p): p is string => typeof p === "string");
+  const record = info && typeof info === "object" ? (info as Record<string, unknown>) : undefined;
+  if (record && Array.isArray(record.paths)) return record.paths.filter((p): p is string => typeof p === "string");
+  const files = record?.files;
+  if (files && typeof files === "object" && !Array.isArray(files) && typeof (files as { filename?: unknown }).filename === "string") {
+    return [`${searchDir}/${(files as { filename: string }).filename}`];
+  }
+  throw new ToolExecutionError("Unexpected response from the file lookup; expected a list of paths or {files:{filename}}", { details: { pattern } });
+}
+
 const programShuffleArgsSchema = objectSchema({
   description: "Discover PRG/CRT files under root path, run each for a duration, capture screen, then reset.",
   properties: {
-    root: optionalSchema(stringSchema({ description: "Root path to search for programs", minLength: 1 }), "/"),
+    root: optionalSchema(stringSchema({ description: "Directory to search for programs (not recursive; the firmware lookup returns one match per extension)", minLength: 1 }), "/"),
     extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 })), ["prg", "crt"] as any),
     durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds", integer: true, minimum: 1, maximum: 600000, default: 5000 }), 5000),
     captureScreen: optionalSchema(booleanSchema({ description: "Capture screen after each run", default: true }), true),
@@ -626,7 +641,7 @@ export const tools: ToolDefinition[] = [
   },
   {
     name: "program_shuffle",
-    description: "Discover and run PRG/CRT programs under a root path, capturing screens and resetting between runs.",
+    description: "Run the PRG/CRT programs found in a root directory (one match per extension, no recursion), capturing screens and resetting between runs.",
     summary: "Automated program testing workflow with screen captures and run logs.",
     inputSchema: programShuffleArgsSchema.jsonSchema,
     tags: ["orchestration", "programs", "testing"],
@@ -646,20 +661,22 @@ export const tools: ToolDefinition[] = [
         const captureScreen = parsed.captureScreen !== false;
   const resetDelayMs = parsed.resetDelayMs ?? 100;
         
-        // Discover programs
+        // Discover programs. The firmware resolves the pattern for one directory and answers with a single match
+        // ({files:{filename}}) or 404, so each extension finds at most one program in the root directory.
         const programs: string[] = [];
+        const searchDir = root.replace(/\/+$/, "");
         for (const ext of extensions) {
-          const pattern = `${root}/**/*.${ext}`;
+          const pattern = `${searchDir}/*.${ext}`;
+          let info: unknown;
           try {
-            const info = await (ctx.client as any).filesInfo(pattern);
-            const paths = Array.isArray(info) ? info : (Array.isArray((info as any)?.paths) ? (info as any).paths : []);
-            for (const p of paths) {
-              if (typeof p === "string" && isRunnableProgramPath(p) && programs.length < maxPrograms) {
-                programs.push(p);
-              }
-            }
+            info = await (ctx.client as any).filesInfo(pattern);
           } catch (e) {
-            // Ignore discovery errors for individual patterns
+            continue; // A miss (404) or a failed lookup for one pattern does not stop the others.
+          }
+          for (const p of parseDiscoveredPaths(info, searchDir, pattern)) {
+            if (isRunnableProgramPath(p) && programs.length < maxPrograms && !programs.includes(p)) {
+              programs.push(p);
+            }
           }
         }
 

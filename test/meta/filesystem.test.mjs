@@ -8,40 +8,58 @@ import { startMockC64Server } from "../../scripts/mockC64Server.mjs";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { createLogger, tmpPath } from "./helpers.mjs";
 
+// Answers GET /v1/files/<pattern>:info like the firmware: the first file in the pattern's directory whose
+// name matches the pattern's `*` wildcards, as {files: {...}}, and a 404 when nothing matches.
+function firmwareInfo(files, sizes = {}) {
+  return async (pattern) => {
+    const slash = pattern.lastIndexOf("/");
+    const dir = pattern.slice(0, slash);
+    const leaf = new RegExp(`^${pattern.slice(slash + 1).split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`, "i");
+    const hit = files.find((file) => file.slice(0, file.lastIndexOf("/")) === dir && leaf.test(file.slice(file.lastIndexOf("/") + 1)));
+    if (!hit) throw Object.assign(new Error("Request failed with status code 404"), { response: { status: 404 } });
+    const filename = hit.slice(hit.lastIndexOf("/") + 1);
+    return { files: { path: hit, filename, size: sizes[hit] ?? 1024, extension: filename.split(".").pop().toLowerCase() }, errors: [] };
+  };
+}
+
 test("find_paths_by_name filters by substring and extension", async () => {
   const ctx = {
     client: {
-      async filesInfo() { return ["/games/demo.prg", "/games/other.crt", "/music/demo.sid"]; },
+      filesInfo: firmwareInfo(["/games/demo.prg", "/games/other.crt", "/music/demo.sid"]),
     },
     logger: createLogger(),
   };
-  const res = await metaModule.invoke("find_paths_by_name", { root: "/", nameContains: "demo", extensions: ["prg", "sid"] }, ctx);
+  const res = await metaModule.invoke("find_paths_by_name", { root: "/games", nameContains: "demo", extensions: ["prg", "sid"] }, ctx);
   assert.equal(res.metadata?.success, true);
-  const results = res.structuredContent?.data?.results ?? [];
-  assert.deepEqual(results.sort(), ["/games/demo.prg", "/music/demo.sid"].sort());
+  assert.deepEqual(res.structuredContent?.data?.results, ["/games/demo.prg"]);
 });
 
-test("find_paths_by_name supports object payload shape from firmware", async () => {
+test("find_paths_by_name reports the single firmware match and rejects an array answer", async () => {
   const ctx = {
-    client: {
-      async filesInfo() { return { paths: ["/USB0/Demo1.PRG", "/USB0/Readme.TXT"] }; },
-    },
+    client: { filesInfo: firmwareInfo(["/USB0/Demo1.PRG", "/USB0/Readme.TXT"]) },
     logger: createLogger(),
   };
   const res = await metaModule.invoke("find_paths_by_name", { root: "/USB0", nameContains: "demo", caseInsensitive: true }, ctx);
   assert.equal(res.metadata?.success, true);
-  const results = res.structuredContent?.data?.results ?? [];
-  assert.ok(results.includes("/USB0/Demo1.PRG"));
+  assert.deepEqual(res.structuredContent?.data?.results, ["/USB0/Demo1.PRG"]);
+
+  const unknown = {
+    client: { async filesInfo() { return ["/USB0/Demo1.PRG"]; } },
+    logger: createLogger(),
+  };
+  const bad = await metaModule.invoke("find_paths_by_name", { root: "/USB0", nameContains: "demo" }, unknown);
+  assert.equal(bad.isError, true);
+  assert.equal(bad.metadata?.error?.kind, "execution");
 });
 
 test("find_paths_by_name limits by maxResults and honors case sensitive flag", async () => {
-  const paths = ["/a/demo.prg", "/b/DEMO.prg", "/c/demo.sid", "/d/other.txt"];
-  const ctx = { client: { async filesInfo() { return paths; } }, logger: createLogger() };
-  const res1 = await metaModule.invoke("find_paths_by_name", { root: "/", nameContains: "demo", maxResults: 2 }, ctx);
-  assert.equal((res1.metadata?.count ?? 0) <= 2, true);
-  const res2 = await metaModule.invoke("find_paths_by_name", { root: "/", nameContains: "DEMO", caseInsensitive: false }, ctx);
-  const results2 = res2.structuredContent?.data?.results ?? [];
-  assert.deepEqual(results2, ["/b/DEMO.prg"]);
+  const ctx = { client: { filesInfo: firmwareInfo(["/b/DEMO.prg"]) }, logger: createLogger() };
+  const exact = await metaModule.invoke("find_paths_by_name", { root: "/b", nameContains: "DEMO", caseInsensitive: false }, ctx);
+  assert.deepEqual(exact.structuredContent?.data?.results, ["/b/DEMO.prg"]);
+
+  const lower = { client: { filesInfo: firmwareInfo(["/b/demo.prg"]) }, logger: createLogger() };
+  const res = await metaModule.invoke("find_paths_by_name", { root: "/b", nameContains: "DEMO", caseInsensitive: false }, lower);
+  assert.deepEqual(res.structuredContent?.data?.results, []);
 });
 
 test("find_and_run_program_by_name runs first matching PRG and records state", async () => {
@@ -53,12 +71,7 @@ test("find_and_run_program_by_name runs first matching PRG and records state", a
     let runPath = null;
     const ctx = {
       client: {
-        async filesInfo(pattern) {
-          if (pattern.toLowerCase().includes(".prg")) {
-            return ["/games/Alpha.PRG", "/games/Beta.PRG"];
-          }
-          return [];
-        },
+        filesInfo: firmwareInfo(["/games/Alpha.PRG", "/games/Beta.PRG"]),
         async runPrgFile(p) { runPath = p; return { success: true }; },
       },
       logger: createLogger(),
@@ -88,15 +101,7 @@ test("find_and_run_program_by_name honors alphabetical sort and CRT extension", 
     let prgCalls = 0;
     const ctx = {
       client: {
-        async filesInfo(pattern) {
-          if (pattern.toLowerCase().includes(".crt")) {
-            return ["/games/ZZZ.CRT", "/games/Alpha.CRT", "/games/omega.crt"];
-          }
-          if (pattern.toLowerCase().includes(".prg")) {
-            return ["/games/Zeta.PRG"];
-          }
-          return [];
-        },
+        filesInfo: firmwareInfo(["/games/ZZZ.CRT", "/games/Alpha.CRT", "/games/omega.crt"]),
         async runCrtFile(p) { crtPath = p; return { success: true }; },
         async runPrgFile() { prgCalls += 1; return { success: true }; },
       },
@@ -121,7 +126,7 @@ test("find_and_run_program_by_name honors alphabetical sort and CRT extension", 
 
 test("find_and_run_program_by_name reports error when no program matches", async () => {
   const ctx = {
-    client: { async filesInfo() { return []; } },
+    client: { filesInfo: firmwareInfo([]) },
     logger: createLogger(),
   };
   const res = await metaModule.invoke("find_and_run_program_by_name", { root: "/games", nameContains: "missing" }, ctx);
@@ -132,57 +137,39 @@ test("find_and_run_program_by_name reports error when no program matches", async
 test("filesystem_stats_by_extension aggregates counts and bytes", async () => {
   const ctx = {
     client: {
-      async filesInfo(pattern) {
-        assert.equal(pattern, "/games/**/*");
-        return [
-          { path: "/games/Alpha.PRG", size: 4096 },
-          { path: "/games/Beta.sid", size: 2048 },
-          {
-            path: "/games/Collection.d64",
-            size: 174848,
-            entries: [
-              { path: "/games/Collection.d64#DRAGON.PRG", size: 8192 },
-              { path: "/games/Collection.d64#README.TXT", size: 512 },
-            ],
-          },
-        ];
-      },
+      filesInfo: firmwareInfo(
+        ["/games/Alpha.PRG", "/games/Beta.sid", "/games/Collection.d64"],
+        { "/games/Alpha.PRG": 4096, "/games/Beta.sid": 2048, "/games/Collection.d64": 174848 },
+      ),
     },
     logger: createLogger(),
   };
 
-  const res = await metaModule.invoke("filesystem_stats_by_extension", { root: "/games" }, ctx);
+  const res = await metaModule.invoke("filesystem_stats_by_extension", { root: "/games", extensions: ["prg", "sid", "d64"] }, ctx);
   assert.equal(res.metadata?.success, true);
   const data = res.structuredContent?.data ?? {};
-  assert.equal(data.totals.files, 5);
-  assert.equal(data.insideContainerEntries, 2);
+  assert.equal(data.totals.files, 3);
+  assert.equal(data.totals.totalBytes, 4096 + 2048 + 174848);
 
   const prgStats = (data.extensions ?? []).find((entry) => entry.extension === "prg");
   assert.ok(prgStats, "expected prg stats");
-  assert.equal(prgStats.count, 2);
-  assert.equal(prgStats.totalBytes, 4096 + 8192);
+  assert.equal(prgStats.count, 1);
+  assert.equal(prgStats.totalBytes, 4096);
 
   const d64Stats = (data.extensions ?? []).find((entry) => entry.extension === "d64");
   assert.ok(d64Stats, "expected d64 stats");
   assert.equal(d64Stats.count, 1);
   assert.equal(d64Stats.totalBytes, 174848);
-
-  const containerStats = (data.containers ?? []).find((entry) => entry.container === "/games/Collection.d64");
-  assert.ok(containerStats, "expected container stats");
-  assert.equal(containerStats.totalBytes, 8192 + 512);
 });
 
 test("filesystem_stats_by_extension filters extensions and skips containers when requested", async () => {
   const patterns = [];
+  const info = firmwareInfo(["/games/ALPHA.PRG", "/games/collection.d64"], { "/games/ALPHA.PRG": 4096, "/games/collection.d64": 174848 });
   const ctx = {
     client: {
       async filesInfo(pattern) {
         patterns.push(pattern);
-        return [
-          { path: "/games/ALPHA.PRG", size: 4096 },
-          { path: "/games/collection.d64", size: 174848, entries: [{ path: "/games/collection.d64#BETA.PRG", size: 2048 }] },
-          { path: "/games/readme.txt", size: 128 },
-        ];
+        return info(pattern);
       },
     },
     logger: createLogger(),
@@ -196,25 +183,24 @@ test("filesystem_stats_by_extension filters extensions and skips containers when
 
   assert.equal(res.metadata?.success, true);
   const data = res.structuredContent?.data ?? {};
-  assert.equal(data.totals.files, 2);
-  assert.equal(data.insideContainerEntries, 1);
+  assert.equal(data.totals.files, 1);
 
   const prgStats = (data.extensions ?? []).find((entry) => entry.extension === "prg");
   assert.ok(prgStats, "expected prg stats");
-  assert.equal(prgStats.count, 2);
-  assert.equal(prgStats.totalBytes, 4096 + 2048);
+  assert.equal(prgStats.count, 1);
+  assert.equal(prgStats.totalBytes, 4096);
 
   const hasD64 = (data.extensions ?? []).some((entry) => entry.extension === "d64");
-  assert.equal(hasD64, false, "containers should be skipped when includeContainers is false");
+  assert.equal(hasD64, false, "d64 is not requested by the extension filter");
 
-  assert.deepEqual([...new Set(patterns)], ["/games/**/*.prg"]);
+  assert.deepEqual([...new Set(patterns)], ["/games/*.prg"]);
 });
 
 test("filesystem_stats_by_extension handles entries without size", async () => {
   const ctx = {
     client: {
       async filesInfo() {
-        return ["/games/UNKNOWN"];
+        return { files: { path: "/games/UNKNOWN", filename: "UNKNOWN", extension: "" }, errors: [] };
       },
     },
     logger: createLogger(),
@@ -230,32 +216,16 @@ test("filesystem_stats_by_extension handles entries without size", async () => {
   assert.equal(noneStats.unknownSizes, 1);
 });
 
-test("filesystem_stats_by_extension parses nested collections, deduplicates entries, and warns on failed patterns", async () => {
+test("filesystem_stats_by_extension warns on a failed pattern and keeps the other matches", async () => {
   const warnings = [];
+  const info = firmwareInfo(["/Demo.PRG"], { "/Demo.PRG": 1024 });
   const ctx = {
     client: {
       async filesInfo(pattern) {
-        if (pattern === "/**/*.txt") {
+        if (pattern === "/*.txt") {
           throw new Error("txt lookup failed");
         }
-        return {
-          entries: [
-            { path: "/games/demo.prg", size: "1024" },
-            { fullPath: "/games/demo.prg", bytes: "1024" },
-            { path: "/games/second.prg", length: "512" },
-            { fullPath: "/games/folder/", type: "directory" },
-            {
-              path: "/games/archive.d64",
-              format: "D64",
-              size: "174848",
-              contents: [
-                { fullPath: "/games/archive.d64#INNER.PRG", byteLength: "2048" },
-                { path: "/games/archive.d64#docs/readme.txt", bytes: "256" },
-                { path: "/games/archive.d64#skip/", kind: "folder" },
-              ],
-            },
-          ],
-        };
+        return info(pattern);
       },
     },
     logger: {
@@ -277,26 +247,13 @@ test("filesystem_stats_by_extension parses nested collections, deduplicates entr
   assert.equal(warnings[0].message, "filesInfo pattern failed");
 
   const data = res.structuredContent?.data ?? {};
-  assert.equal(data.totals.files, 4);
-  assert.equal(data.insideContainerEntries, 2);
+  assert.equal(data.totals.files, 1);
 
   const prgStats = (data.extensions ?? []).find((entry) => entry.extension === "prg");
   assert.ok(prgStats, "expected prg stats");
-  assert.equal(prgStats.count, 3);
-  assert.equal(prgStats.totalBytes, 1024 + 512 + 2048);
+  assert.equal(prgStats.count, 1);
+  assert.equal(prgStats.totalBytes, 1024);
   assert.equal(prgStats.samples.length, 1);
-
-  const txtStats = (data.extensions ?? []).find((entry) => entry.extension === "txt");
-  assert.ok(txtStats, "expected txt stats");
-  assert.equal(txtStats.totalBytes, 256);
-
-  const folderStats = (data.folders ?? []).find((entry) => entry.folder === "/games");
-  assert.ok(folderStats, "expected /games folder stats");
-  assert.equal(folderStats.count, 4);
-
-  const containerStats = (data.containers ?? []).find((entry) => entry.container === "/games/archive.d64");
-  assert.ok(containerStats, "expected container stats");
-  assert.equal(containerStats.totalBytes, 2048 + 256);
 });
 
 test("find_and_run_program_by_name rewrites malformed state and tolerates one failing extension scan", async () => {
@@ -317,13 +274,7 @@ test("find_and_run_program_by_name rewrites malformed state and tolerates one fa
           if (pattern.endsWith(".crt")) {
             throw new Error("crt scan failed");
           }
-          return {
-            paths: ["/games/ignore.prg"],
-            entries: [
-              { path: "/games/Demo.PRG" },
-              { paths: ["/games/demo.prg", "/games/Demo.PRG"] },
-            ],
-          };
+          return firmwareInfo(["/games/Demo.PRG"])(pattern);
         },
         async runPrgFile(programPath) {
           runs.push(programPath);
@@ -642,11 +593,7 @@ test("drive_mount_and_verify respects powerOnIfNeeded=false", async () => {
 
 test("find_and_run_program_by_name rejects unsupported extensions after discovery", async () => {
   const ctx = {
-    client: {
-      async filesInfo() {
-        return ["/games/demo.tap"];
-      },
-    },
+    client: { filesInfo: firmwareInfo(["/games/demo.tap"]) },
     logger: createLogger(),
   };
 
@@ -664,9 +611,7 @@ test("find_and_run_program_by_name rejects unsupported extensions after discover
 test("find_and_run_program_by_name surfaces firmware failures", async () => {
   const ctx = {
     client: {
-      async filesInfo() {
-        return ["/games/demo.prg"];
-      },
+      filesInfo: firmwareInfo(["/games/demo.prg"]),
       async runPrgFile() {
         return { success: false, details: { code: "DENIED" } };
       },
@@ -747,35 +692,36 @@ test("drive_mount_and_verify fails when post-mount verification lookup breaks", 
 test("c64_disk find_paths searches without running and builds a root pattern without a doubled slash", async () => {
   const patterns = [];
   let ran = 0;
+  const info = firmwareInfo(["/games/demo.prg"]);
   const ctx = {
     client: {
-      async filesInfo(pattern) { patterns.push(pattern); return ["/games/demo.prg"]; },
+      async filesInfo(pattern) { patterns.push(pattern); return info(pattern); },
       async runPrgFile() { ran++; return { success: true }; },
       async runCrtFile() { ran++; return { success: true }; },
     },
     logger: createLogger(),
     platform: { id: "c64u", features: [], limitedFeatures: [] },
   };
-  const res = await toolRegistry.invoke("c64_disk", { op: "find_paths", nameContains: "demo", extensions: ["prg"] }, ctx);
+  const res = await toolRegistry.invoke("c64_disk", { op: "find_paths", root: "/games/", nameContains: "demo", extensions: ["prg"] }, ctx);
   assert.equal(res.metadata?.success, true);
   assert.deepEqual(res.structuredContent.data.results, ["/games/demo.prg"]);
   assert.equal(res.structuredContent.data.truncated, false);
-  assert.deepEqual(patterns, ["/**/*demo*.prg"]);
+  assert.deepEqual(patterns, ["/games/*demo*.prg"]);
   assert.equal(ran, 0);
 
   patterns.length = 0;
-  await metaModule.invoke("find_and_run_program_by_name", { root: "/", nameContains: "demo" }, ctx).catch(() => {});
-  assert.ok(patterns.length > 0 && patterns.every((p) => p.startsWith("/**/")), `unexpected patterns ${patterns.join(",")}`);
+  await metaModule.invoke("find_and_run_program_by_name", { root: "/games", nameContains: "demo" }, ctx).catch(() => {});
+  assert.ok(patterns.length > 0 && patterns.every((p) => p.startsWith("/games/*demo*.")), `unexpected patterns ${patterns.join(",")}`);
 });
 
 test("find_paths caps results at maxResults and reports truncated", async () => {
-  const paths = Array.from({ length: 5 }, (_, i) => `/a/demo${i}.prg`);
-  const ctx = { client: { async filesInfo() { return paths; } }, logger: createLogger() };
-  const capped = await metaModule.invoke("find_paths_by_name", { nameContains: "demo", maxResults: 3 }, ctx);
-  assert.equal(capped.structuredContent.data.results.length, 3);
+  // One firmware match per extension pattern: three extensions give three candidates.
+  const ctx = { client: { filesInfo: firmwareInfo(["/a/demo.prg", "/a/demo.sid", "/a/demo.crt"]) }, logger: createLogger() };
+  const capped = await metaModule.invoke("find_paths_by_name", { root: "/a", nameContains: "demo", extensions: ["prg", "sid", "crt"], maxResults: 2 }, ctx);
+  assert.equal(capped.structuredContent.data.results.length, 2);
   assert.equal(capped.structuredContent.data.truncated, true);
-  const exact = await metaModule.invoke("find_paths_by_name", { nameContains: "demo", maxResults: 5 }, ctx);
-  assert.equal(exact.structuredContent.data.results.length, 5);
+  const exact = await metaModule.invoke("find_paths_by_name", { root: "/a", nameContains: "demo", extensions: ["prg", "sid", "crt"], maxResults: 3 }, ctx);
+  assert.equal(exact.structuredContent.data.results.length, 3);
   assert.equal(exact.structuredContent.data.truncated, false);
   const tooMany = await metaModule.invoke("find_paths_by_name", { nameContains: "demo", maxResults: 1001 }, ctx);
   assert.equal(tooMany.isError, true);
@@ -787,8 +733,9 @@ test("find_paths sends the wildcard pattern to the mock /v1/files route", async 
   try {
     const client = new C64Client(mock.baseUrl);
     const ctx = { client, logger: createLogger(), platform: { id: "c64u", features: [], limitedFeatures: [] } };
-    await toolRegistry.invoke("c64_disk", { op: "find_paths", nameContains: "demo", extensions: ["prg"] }, ctx);
-    assert.equal(mock.state.lastFileInfo, "/**/*demo*.prg");
+    const res = await toolRegistry.invoke("c64_disk", { op: "find_paths", root: "/games", nameContains: "demo", extensions: ["prg"] }, ctx);
+    assert.equal(mock.state.lastFileInfo, "/games/*demo*.prg");
+    assert.deepEqual(res.structuredContent.data.results, ["/games/demo.prg"]);
   } finally {
     await mock.close();
   }
@@ -814,23 +761,23 @@ test("find_paths and find_and_run reject glob metacharacters in nameContains and
 });
 
 test("find_paths and find_and_run match nameContains against the file name only", async () => {
-  const paths = ["/demo-games/alpha.prg", "/demo-games/demo2.prg", "/other/disk.d64#demo3.prg"];
+  // The directory name contains "demo", the file name of alpha.prg does not: it must not match.
   const ctx = {
-    client: { async filesInfo() { return paths; } },
+    client: { filesInfo: firmwareInfo(["/demo-games/alpha.prg", "/demo-games/demo2.prg"]) },
     logger: createLogger(),
   };
-  const found = await metaModule.invoke("find_paths_by_name", { nameContains: "demo" }, ctx);
-  assert.deepEqual(found.structuredContent.data.results, ["/demo-games/demo2.prg", "/other/disk.d64#demo3.prg"]);
+  const found = await metaModule.invoke("find_paths_by_name", { root: "/demo-games", nameContains: "demo" }, ctx);
+  assert.deepEqual(found.structuredContent.data.results, ["/demo-games/demo2.prg"]);
 
   const ran = [];
   const runCtx = {
     client: {
-      async filesInfo() { return ["/demo-games/alpha.prg", "/demo-games/beta.prg"]; },
+      filesInfo: firmwareInfo(["/demo-games/alpha.prg"]),
       async runPrgFile(p) { ran.push(p); return { success: true }; },
     },
     logger: createLogger(),
   };
-  const res = await metaModule.invoke("find_and_run_program_by_name", { nameContains: "demo" }, runCtx);
+  const res = await metaModule.invoke("find_and_run_program_by_name", { root: "/demo-games", nameContains: "demo" }, runCtx);
   assert.equal(res.isError, true);
   assert.deepEqual(ran, []);
 });
@@ -838,16 +785,37 @@ test("find_paths and find_and_run match nameContains against the file name only"
 test("find_paths and find_and_run send the device glob with the original nameContains case", async () => {
   for (const tool of ["find_paths_by_name", "find_and_run_program_by_name"]) {
     const patterns = [];
+    const info = firmwareInfo(["/x/my game.prg"]);
     const ctx = {
       client: {
-        async filesInfo(pattern) { patterns.push(pattern); return ["/x/my game.prg"]; },
+        async filesInfo(pattern) { patterns.push(pattern); return info(pattern); },
         async runPrgFile() { return { success: true }; },
       },
       logger: createLogger(),
     };
-    await metaModule.invoke(tool, { nameContains: "Game", caseInsensitive: true, extensions: ["prg"] }, ctx).catch(() => {});
+    await metaModule.invoke(tool, { root: "/x", nameContains: "Game", caseInsensitive: true, extensions: ["prg"] }, ctx).catch(() => {});
     assert.ok(patterns.length > 0, tool);
     assert.ok(patterns.every((p) => p.includes("*Game*")), `${tool}: ${patterns.join(",")}`);
+  }
+});
+
+test("filesystem_stats_by_extension on c64u scans one directory with one firmware match per extension", async () => {
+  const mock = await startMockC64Server();
+  try {
+    const client = new C64Client(mock.baseUrl);
+    const ctx = { client, logger: createLogger(), platform: { id: "c64u", features: [], limitedFeatures: [] } };
+    const res = await toolRegistry.invoke("c64_extract", { op: "fs_stats", root: "/games", extensions: ["prg", "crt"] }, ctx);
+    assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
+    assert.equal(mock.state.lastFileInfo, "/games/*.crt");
+    assert.equal(res.structuredContent.data.totals.files, 2);
+    assert.deepEqual(res.structuredContent.data.patterns, ["/games/*.prg", "/games/*.crt"]);
+
+    // A pattern with no match (404 from the firmware) adds nothing and is not an error.
+    const none = await toolRegistry.invoke("c64_extract", { op: "fs_stats", root: "/music", extensions: ["crt"] }, ctx);
+    assert.equal(none.metadata?.success, true, JSON.stringify(none.content));
+    assert.equal(none.structuredContent.data.totals.files, 0);
+  } finally {
+    await mock.close();
   }
 });
 

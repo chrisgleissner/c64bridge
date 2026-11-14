@@ -945,3 +945,39 @@ test("HARD03-023 program_shuffle rejects unsupported extensions and skips discov
   assert.equal(ok.structuredContent?.data?.programs, 1);
   assert.deepEqual(calls.filter((c) => c.startsWith("prg ")), ["prg /games/a.prg"]);
 });
+
+test("HARD03-017 program_shuffle reads the firmware files shape and sends patterns without **", async () => {
+  const patterns = [];
+  const runs = [];
+  const ctx = {
+    client: {
+      async filesInfo(pattern) {
+        patterns.push(pattern);
+        if (pattern.endsWith(".prg")) return { files: { path: "/Usb0/GIANA.PRG", filename: "GIANA.PRG", size: 100, extension: "PRG" }, errors: [] };
+        throw new Error("404 not found");
+      },
+      async runPrgFile(p) { runs.push(p); return { success: true }; },
+      async readScreen() { return "S"; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("program_shuffle", { root: "/Usb0", durationMs: 5, resetDelayMs: 0 }, ctx);
+  assert.equal(res.metadata?.success, true);
+  assert.deepEqual(runs, ["/Usb0/GIANA.PRG"]);
+  assert.ok(patterns.every((p) => !p.includes("**")), patterns.join(","));
+});
+
+test("HARD03-017 program_shuffle reports an unknown filesInfo response shape as an error", async () => {
+  const ctx = {
+    client: {
+      async filesInfo() { return { unexpected: true }; },
+      async runPrgFile() { return { success: true }; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("program_shuffle", { root: "/Usb0", extensions: ["prg"], durationMs: 5, resetDelayMs: 0 }, ctx);
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /unexpected|unknown/i);
+});
