@@ -228,7 +228,7 @@ test("start_task takes the effect of its task operation", async () => {
   await withAccess("read-only", async () => {
     assert.equal(await isBlocked("c64_system", { op: "start_task", name: "t", operation: "write", arguments: { address: "$0400", bytes: "01" } }), true);
     assert.equal(await isBlocked("c64_system", { op: "start_task", name: "t", operation: "menu_button" }), true);
-    assert.equal(await isBlocked("c64_system", { op: "stop_task", name: "t" }), true);
+    assert.equal(await isBlocked("c64_system", { op: "stop_task", name: "t" }), false);
     assert.equal(await isBlocked("c64_system", { op: "list_tasks" }), false);
   });
 });
@@ -270,4 +270,40 @@ test("operation lines in descriptions carry the effect unless it is read", () =>
   assert.match(description("c64_system"), /\n- list_tasks: /);
   assert.match(description("c64_disk"), /\n- unmount \[c64u, u2\] \[write\]: /);
   assert.match(description("c64_disk"), /\n- create_image \[c64u, u2\] \[destructive\]: /);
+});
+
+test("stop_task and stop_all_tasks are read operations (HARD03-005)", async () => {
+  await withAccess("read-only", async () => {
+    assert.equal(await isBlocked("c64_system", { op: "stop_task", name: "x" }), false);
+    assert.equal(await isBlocked("c64_system", { op: "stop_all_tasks" }), false);
+  });
+});
+
+test("configuration writes to network categories are destructive (HARD03-005)", async () => {
+  const sets = (category) => ({ op: "set", category, item: "Use DHCP", value: "Disabled" });
+  const batch = (category) => ({ op: "batch_update", updates: { [category]: { "Static IP": "1.2.3.4" } } });
+  await withAccess("no-destructive", async () => {
+    for (const category of ["Network settings", "WiFi settings", "Wi-Fi", "ETHERNET", "Modem Settings", "Net*", "*", "?"]) {
+      assert.equal(await isBlocked("c64_config", sets(category)), true, `set ${category}`);
+      assert.equal(await isBlocked("c64_config", batch(category)), true, `batch_update ${category}`);
+    }
+    assert.equal(await isBlocked("c64_config", sets("Audio Mixer")), false);
+    assert.equal(await isBlocked("c64_config", batch("Audio Mixer")), false);
+    assert.equal(await isBlocked("c64_config", { op: "batch_update", updates: { "Audio Mixer": { A: 1 }, "Network settings": { B: 2 } } }), true);
+  });
+  await withAccess("full", async () => {
+    assert.equal(await isBlocked("c64_config", sets("Network settings")), false);
+  });
+  await withAccess("read-only", async () => {
+    assert.equal(await isBlocked("c64_config", sets("Audio Mixer")), true);
+  });
+});
+
+test("c64_debug nuclear_reset is destructive: blocked in no-destructive mode, step is not", async () => {
+  const effectOf = (op) => toolRegistry.list().find((entry) => entry.name === "c64_debug").metadata.operationEffects[op];
+  assert.equal(effectOf("nuclear_reset"), "destructive");
+  await withAccess("no-destructive", async () => {
+    assert.equal(await isBlocked("c64_debug", { op: "nuclear_reset" }), true);
+    assert.equal(await isBlocked("c64_debug", { op: "step" }), false);
+  });
 });

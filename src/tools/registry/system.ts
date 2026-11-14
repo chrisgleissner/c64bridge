@@ -164,7 +164,7 @@ export const systemModuleGroup = defineToolModule({
       operationEffects: {
         pause: "write", resume: "write", reset: "write", reboot: "destructive", poweroff: "destructive",
         power_cycle: "destructive", menu: "write", read_menu_screen: "read", start_task: "write",
-        stop_task: "write", stop_all_tasks: "write", list_tasks: "read", performance_report: "read",
+        stop_task: "read", stop_all_tasks: "read", list_tasks: "read", performance_report: "read",
       },
       effectOf: (op, args) => (op === "start_task" ? taskOperationEffect((args as { operation?: unknown }).operation) : undefined),
       tags: ["system", "control", "grouped"],

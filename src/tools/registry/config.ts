@@ -5,6 +5,7 @@ import {
   OPERATION_DISCRIMINATOR,
   type JsonSchema,
 } from "../types.js";
+import { configWriteEffect } from "../access.js";
 import { developerModule } from "../developer.js";
 import { metaModule } from "../meta/index.js";
 import {
@@ -274,7 +275,7 @@ export const configModuleGroup = defineToolModule({
         write_debugreg: "destructive", info: "read", version: "read", snapshot: "write",
         restore: "write", diff: "read", shuffle: "write",
       },
-      effectOf: (op, args) => (op === "restore" && (args as { applyToFlash?: unknown }).applyToFlash === true ? "destructive" : undefined),
+      effectOf: (op, args) => (op === "restore" && (args as { applyToFlash?: unknown }).applyToFlash === true ? "destructive" : configWriteEffect(op, args)),
       tags: ["config", "diagnostics", "grouped"],
       operationPlatforms: {
         load_flash: ["c64u", "u2"],
