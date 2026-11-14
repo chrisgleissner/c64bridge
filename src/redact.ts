@@ -249,7 +249,7 @@ function redactLeaves(value: unknown): unknown {
 
 /**
  * Returns a copy of the arguments of a tool call that is safe to log and record in diagnostics: the
- * values of every configuration write (`value` of `set`, the leaves of `updates` of `batch_update`)
+ * values of every configuration write (`value` of `set`, category leaves of `batch_update`)
  * are replaced, also inside `c64_batch` commands. Category and item names stay visible. The firmware
  * matches item names with wildcards, so the name cannot tell whether an item holds a credential.
  */
@@ -262,8 +262,12 @@ export function redactToolArguments(toolName: string, args: unknown): unknown {
   if (isSet && "value" in record) {
     return { ...record, value: redactLeaves(record.value) };
   }
-  if (isBatchUpdate && "updates" in record) {
-    return { ...record, updates: redactLeaves(record.updates) };
+  if (isBatchUpdate) {
+    // Keep both supported shapes (including mixed calls and a category literally named
+    // "updates"), but mask every category's values rather than only the wrapper's values.
+    return Object.fromEntries(Object.entries(record).map(([key, value]) => [
+      key, key === "op" ? value : redactLeaves(value),
+    ]));
   }
   if (toolName === "c64_batch" && Array.isArray(record.commands)) {
     return {

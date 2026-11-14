@@ -28,7 +28,35 @@ test("HARD03-006 redactToolArguments replaces configuration write values and kee
   assert.deepEqual(redactToolArguments("c64_config", { op: "get", category: "A", item: "B" }), { op: "get", category: "A", item: "B" });
 });
 
-test("HARD03-006 the diagnostics record of a c64_config set call does not contain the value", async (t) => {
+test("configuration argument redaction covers legacy, mixed and literal updates categories", () => {
+  const payloads = [
+    [
+      { "Network settings": { "Network Password": "legacy-secret" } },
+      { "Network settings": { "Network Password": "***" } },
+    ],
+    [
+      { updates: { Audio: { Volume: 80 } }, "Network settings": { "Network Password": "mixed-secret" } },
+      { updates: { Audio: { Volume: "***" } }, "Network settings": { "Network Password": "***" } },
+    ],
+    [
+      { updates: { "Network settings": { "Network Password": "wrapped-secret" } }, Audio: { Volume: 80 } },
+      { updates: { "Network settings": { "Network Password": "***" } }, Audio: { Volume: "***" } },
+    ],
+    [
+      { updates: { "Network Password": "literal-updates-secret" } },
+      { updates: { "Network Password": "***" } },
+    ],
+  ];
+  for (const [payload, expected] of payloads) {
+    assert.deepEqual(redactToolArguments("c64_config", { op: "batch_update", ...payload }), { op: "batch_update", ...expected });
+    assert.deepEqual(redactToolArguments("config_batch_update", payload), expected);
+    assert.deepEqual(redactToolArguments("c64_batch", {
+      commands: [{ tool: "c64_config", args: { op: "batch_update", ...payload } }],
+    }), { commands: [{ tool: "c64_config", args: { op: "batch_update", ...expected } }] });
+  }
+});
+
+test("HARD03-006 diagnostics omit values from set, legacy and mixed batch configuration calls", async (t) => {
   const mock = await startMockC64Server();
   t.after(async () => { await mock.close(); });
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-redact-"));
@@ -59,10 +87,22 @@ test("HARD03-006 the diagnostics record of a c64_config set call does not contai
     name: "c64_config",
     arguments: { op: "set", category: "Network settings", item: "Network P?ssword", value: secretValue },
   });
+  const batchSecrets = ["zz-legacy-password-83c", "zz-mixed-password-14d", "zz-nested-password-28e"];
+  await client.callTool({ name: "c64_config", arguments: {
+    op: "batch_update", "Network settings": { "Network Password": batchSecrets[0] },
+  } });
+  await client.callTool({ name: "c64_config", arguments: {
+    op: "batch_update", updates: { "Audio Mixer": { Volume: 80 } },
+    "Network settings": { "Network Password": batchSecrets[1] },
+  } });
+  await client.callTool({ name: "c64_batch", arguments: { commands: [{ tool: "c64_config", args: {
+    op: "batch_update", "Network settings": { "Network Password": batchSecrets[2] },
+  } }] } });
   const files = fs.readdirSync(diagnosticsDir).filter((file) => file.endsWith(".ndjson"));
   assert.ok(files.length > 0, "a diagnostics file exists");
   const text = files.map((file) => fs.readFileSync(path.join(diagnosticsDir, file), "utf8")).join("\n");
   assert.ok(text.includes("mcp_call_tool_start"), "the call was recorded");
   assert.ok(text.includes("Network P?ssword"), "the item name is recorded");
   assert.equal(text.includes(secretValue), false);
+  for (const secret of batchSecrets) assert.equal(text.includes(secret), false);
 });
