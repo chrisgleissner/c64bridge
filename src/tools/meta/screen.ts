@@ -30,11 +30,10 @@ export const MAX_REPEAT_BUDGET = 3;
 
 /** True when a class like [^!] or [\s\S] (given with its brackets) can match a line break. */
 function classCrossesLines(classText: string): boolean {
-  const body = classText.slice(1, -1);
-  const namesLineBreak = /\\[nrs]|\\x0[adAD]/.test(body);
-  // A negated class matches a line break unless it excludes one; a positive class only when it names one.
-  if (body.startsWith("^")) return !namesLineBreak;
-  return namesLineBreak || /\\[DW]/.test(body);
+  // A single class or escape cannot backtrack; let the engine interpret
+  // encoded characters and ranges rather than enumerating their spellings.
+  try { return new RegExp("^(?:" + classText + ")$").test("\n"); }
+  catch { return true; } // Invalid patterns are reported by compileScreenPattern.
 }
 
 /** True when regex evaluation can be interrupted by the runtime's vm timeout. */
@@ -43,7 +42,7 @@ export function runtimeEnforcesPatternTimeout(): boolean {
 }
 
 /** Splits a group body at its top-level "|" characters, skipping escapes, classes and nested groups. */
-function splitAlternatives(body: string): string[] {
+function splitAlternatives(body: string, includeNested = false): string[] {
   const parts: string[] = [];
   let depth = 0;
   let inClass = false;
@@ -55,7 +54,7 @@ function splitAlternatives(body: string): string[] {
     if (char === "[") inClass = true;
     else if (char === "(") depth += 1;
     else if (char === ")") depth -= 1;
-    else if (char === "|" && depth === 0) { parts.push(body.slice(start, index)); start = index + 1; }
+    else if (char === "|" && (depth === 0 || includeNested)) { parts.push(body.slice(start, index)); start = index + 1; }
   }
   parts.push(body.slice(start));
   return parts;
@@ -109,9 +108,10 @@ export function assertSafeScreenPattern(pattern: string): void {
       if (!inClass && (/[1-9]/.test(next) || (next === "k" && pattern[index + 2] === "<"))) {
         throw new ToolValidationError("Backreferences are not supported in screen patterns", { path });
       }
-      atomCrossesLines = /[nrsDW]/.test(next);
+      const escape = /^\\(?:u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|c[A-Za-z]|[\s\S])/.exec(pattern.slice(index))?.[0] ?? pattern.slice(index, index + 2);
+      atomCrossesLines = !inClass && classCrossesLines(escape);
       if (atomCrossesLines && groupCrosses.length > 0) groupCrosses[groupCrosses.length - 1] = true;
-      index += 1;
+      index += escape.length - 1;
       previousWasGroupWithQuantifier = false;
       continue;
     }
@@ -138,13 +138,15 @@ export function assertSafeScreenPattern(pattern: string): void {
     }
     if (char === ")") {
       previousWasGroupWithQuantifier = groups.pop() ?? false;
+      if (previousWasGroupWithQuantifier && groups.length > 0) groups[groups.length - 1] = true;
       atomCrossesLines = groupCrosses.pop() ?? false;
       if (atomCrossesLines && groupCrosses.length > 0) groupCrosses[groupCrosses.length - 1] = true;
       const groupStart = groupStarts.pop();
       const rest = pattern.slice(index + 1);
-      if (groupStart !== undefined && (/^[*+]/.test(rest) || /^\{\d+(,\d*)?\}/.test(rest))) {
+      if (groupStart !== undefined && (/^[*+?]/.test(rest) || /^\{\d+(,\d*)?\}/.test(rest))) {
         const alternatives = splitAlternatives(pattern.slice(groupStart + 1, index).replace(/^\?:/, ""));
-        if (alternatives.length > 1 && !alternativesAreDisjointLiterals(alternatives)) {
+        if ((alternatives.length > 1 && !alternativesAreDisjointLiterals(alternatives))
+          || (alternatives.length === 1 && splitAlternatives(alternatives[0]!, true).length > 1)) {
           throw new ToolValidationError(
             "A repeated group with alternatives that can match the same text (for example (a|a)+ or (.|.)+) is not supported in screen patterns",
             { path },
@@ -165,14 +167,12 @@ export function assertSafeScreenPattern(pattern: string): void {
           );
         }
         if (groups.length > 0) groups[groups.length - 1] = true;
-        if (char !== "?") {
-          repeatCost += atomCrossesLines ? 2 : 1;
-          if (repeatCost > MAX_REPEAT_BUDGET) {
-            throw new ToolValidationError(
-              `Screen patterns may contain at most ${MAX_REPEAT_BUDGET} repeat units on this runtime (each *, +, {n,m} counts one, and two when it repeats a negated class, [\\s\\S], \\s, \\D or \\W, which can cross line breaks)`,
-              { path },
-            );
-          }
+        repeatCost += atomCrossesLines ? 2 : 1;
+        if (repeatCost > MAX_REPEAT_BUDGET) {
+          throw new ToolValidationError(
+            `Screen patterns may contain at most ${MAX_REPEAT_BUDGET} repeat units on this runtime (each *, +, ?, {n,m} counts one, and two when its atom can cross line breaks)`,
+            { path },
+          );
         }
         if (char === "*" || char === "+" || (char === "{" && /^\{\d+,\}/.test(pattern.slice(index)))) {
           unboundedRepeats += 1;

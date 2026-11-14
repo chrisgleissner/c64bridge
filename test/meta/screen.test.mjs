@@ -441,6 +441,28 @@ test("HARD03-008 backtracking-heavy patterns are rejected or finish within 1 s o
   }
 });
 
+test("screen pattern budget rejects optional and nested backtracking on runtimes without interruption", async () => {
+  const { assertSafeScreenPattern } = await import("../../src/tools/meta/screen.js");
+  const originalBun = globalThis.Bun;
+  if (originalBun === undefined) globalThis.Bun = {};
+  try {
+    for (const pattern of [
+      "a?".repeat(27) + "b",
+      "((a+))+b",
+      "((a|aa))+b",
+      "[\\x00-\\uFFFF]*[\\x00-\\uFFFF]*Z",
+      "\\u000a*\\u000a*Z",
+    ]) {
+      assert.throws(() => assertSafeScreenPattern(pattern), /repeat|quantifier|alternatives/i, pattern);
+    }
+    for (const pattern of ["a??b??c??", "(?:READY|ERROR)?", "([|])+", "R[A-Z]+Y\\.", ".*READY.*"]) {
+      assert.doesNotThrow(() => assertSafeScreenPattern(pattern), pattern);
+    }
+  } finally {
+    if (originalBun === undefined) delete globalThis.Bun;
+  }
+});
+
 test("HARD03-008 simple patterns still work under the stricter budget", async () => {
   const ctx = { client: { async readScreen() { return "READY.\n"; } }, logger: createLogger() };
   for (const pattern of ["READY.", ".*READY.*", "R[A-Z]+Y\\.", "\\d{2,4}|READY\\.?"]) {
