@@ -7,6 +7,7 @@ import { normalizeErrorDetails } from "./util.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
+import { rangeOverlapsIo } from "../../ioRange.js";
 import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
@@ -356,10 +357,9 @@ export const tools: ToolDefinition[] = [
         const minEntropy = parsed.minEntropy ?? 0.3;
         const charsetSize = 2048; // 256 chars * 8 bytes each
 
-        // Common charset locations on C64
+        // Common charset locations on C64. $D000-$DFFF is not listed: a read there returns the I/O view
+        // (and clears CIA interrupt flags on hardware), never the character ROM.
         const commonLocations = [
-          0xD000, // Character ROM (uppercase/graphics)
-          0xD800, // Character ROM (lowercase/uppercase) - accessed via banking
           0x3000, // Common RAM location for custom charsets
           0x2000, // Another common RAM location
         ];
@@ -370,6 +370,7 @@ export const tools: ToolDefinition[] = [
         } else if (parsed.scanRange === "full") {
           // Scan entire 64KB in 2KB increments
           for (let addr = 0; addr <= 0x10000 - charsetSize; addr += 0x800) {
+            if (rangeOverlapsIo(addr, charsetSize)) continue;
             scanLocations.push(addr);
           }
         } else {

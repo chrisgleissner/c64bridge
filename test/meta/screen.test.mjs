@@ -270,7 +270,7 @@ test("rip_charset_from_ram scans common locations", async () => {
   assert.equal(result.metadata?.success, true);
   assert.equal(pauseCalls, 1);
   assert.equal(resumeCalls, 1);
-  assert.ok(readCalls >= 4); // Should scan multiple common locations
+  assert.equal(readCalls, 2); // $3000 and $2000; $D000-$DFFF is never read
 
   const payload = result.structuredContent?.data;
   assert.equal(payload?.found, true);
