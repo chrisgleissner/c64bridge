@@ -171,6 +171,14 @@ export const tools: ToolDefinition[] = [
           const changedItems = countItems(changes);
           const categories = Object.keys(changes);
           if (categories.length === 0) {
+            // Device RAM already matches the snapshot, but flash can still hold older settings.
+            if (parsed.applyToFlash) {
+              const saved = await client.configSaveToFlash();
+              if (!saved.success) {
+                throw new ToolExecutionError("Configuration already matched the snapshot, but saving to flash failed", { details: normalizeErrorDetails(saved.details) });
+              }
+              return jsonResult({ restored: true, changedItems: 0, categories: 0, savedToFlash: true }, { success: true });
+            }
             return jsonResult({ restored: true, changedItems: 0, categories: 0 }, { success: true });
           }
           const failedCategories: Array<{ category: string; status?: number; message: string }> = [];
@@ -199,7 +207,7 @@ export const tools: ToolDefinition[] = [
               throw new ToolExecutionError("Configuration restored, but saving to flash failed", { details: normalizeErrorDetails(saved.details) });
             }
           }
-          return jsonResult({ restored: true, changedItems, categories: categories.length, restoredCategories }, { success: true });
+          return jsonResult({ restored: true, changedItems, categories: categories.length, restoredCategories, ...(parsed.applyToFlash ? { savedToFlash: true } : {}) }, { success: true });
         }
 
         const snapshot = await readSnapshotFile(path);

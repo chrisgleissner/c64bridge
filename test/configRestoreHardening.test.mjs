@@ -127,3 +127,22 @@ test("restore of a snapshot reads only the categories the snapshot contains", as
   assert.deepEqual(state.batches, [{ Audio: { Volume: "7" } }]);
   assert.ok(state.reads.every((read) => read.startsWith("Audio")), `unexpected reads: ${state.reads.join(", ")}`);
 });
+
+test("restore with applyToFlash saves to flash even when RAM already matches the snapshot", async () => {
+  const state = newState({ Audio: { Volume: "10" } });
+  const ctx = { platform: { id: "c64u" }, client: makeClient(state), logger: createLogger() };
+  const file = await writeSnapshot("restore-matching.json", JSON.stringify({
+    categories: { Audio: { Volume: { Audio: { Volume: "10" } } } },
+  }));
+
+  const withFlash = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file, applyToFlash: true }, ctx);
+  assert.equal(withFlash.metadata?.success, true);
+  assert.equal(state.batches.length, 0, "nothing to write to RAM");
+  assert.equal(state.saves, 1, "flash must be saved");
+  assert.equal(withFlash.structuredContent?.data?.savedToFlash, true);
+
+  const withoutFlash = await metaModule.invoke("config_snapshot_and_restore", { action: "restore", path: file }, ctx);
+  assert.equal(withoutFlash.metadata?.success, true);
+  assert.equal(state.saves, 1, "no flash save unless requested");
+  assert.equal(withoutFlash.structuredContent?.data?.savedToFlash, undefined);
+});
