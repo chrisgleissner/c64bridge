@@ -1297,7 +1297,12 @@ export class C64Client {
         // A debugger stop already holds the CPU; the tool call must neither add a pause nor end that stop on release.
         state.skippedDevicePause = facade instanceof ViceBackend && facade.isCpuStopped();
         if (!state.skippedDevicePause) {
-          const pending = facade.pause().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+          const request = facade instanceof ViceBackend ? facade.pauseOwned() : facade.pause();
+          const pending = request.catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) })).then((result) => {
+            // A debugger stop arrived while the pause waited its turn: it is that stop that holds the CPU, so release must not resume.
+            if (result.success && (result.details as { debugStop?: boolean } | undefined)?.debugStop === true) state.skippedDevicePause = true;
+            return result;
+          });
           state.devicePause = pending;
         }
       }

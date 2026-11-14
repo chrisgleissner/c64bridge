@@ -375,3 +375,21 @@ test("step and step_return wait for the stop that follows the command when VICE 
     assert.equal(server.running, true);
   }, { stepEventDelayMs: 60 });
 });
+
+test("a tool call's pause that was queued behind a keyboard feed does not resume past a checkpoint hit during the feed", async () => {
+  await withClient(async (client, server) => {
+    const created = await client.viceCheckpointCreate({ start: 0xc000 });
+    const feeding = client.injectKeyboardQueue(new TextEncoder().encode("SYS49152\r")).then(() => null, (error) => error);
+    await waitUntil(() => server.keyboardFeeds.length === 1, "the keys were fed and the feed holds the monitor queue");
+    const acquiring = client.acquirePause(); // queued behind the feed
+    await hitWhenRunning(server, created.id);
+    await feeding;
+    assert.equal((await acquiring).success, true);
+    assert.equal(server.running, false, "the CPU is stopped at the checkpoint");
+    await client.readMemoryRaw(0x0400, 4);
+    await client.releasePause();
+    assert.equal(server.running, false, "releasing the tool call's pause did not resume past the breakpoint");
+    await client.viceExitMonitor();
+    assert.equal(server.running, true);
+  });
+});

@@ -1340,10 +1340,25 @@ export class ViceBackend implements C64Facade {
    * A reset, reboot, power cycle or power-off ends the pause.
    */
   async pause(): Promise<RunResult> {
+    return this.pauseSession(false);
+  }
+
+  /**
+   * The pause a tool call takes for its own reads. When a debugger stop holds the CPU at the
+   * time the pause is acquired (including one that arrived while the call waited in the monitor
+   * queue), nothing is paused and `details.debugStop` is true: the caller must not resume on
+   * release, because that would run the CPU past the breakpoint.
+   */
+  async pauseOwned(): Promise<RunResult> {
+    return this.pauseSession(true);
+  }
+
+  private async pauseSession(owned: boolean): Promise<RunResult> {
     return this.exclusive(async () => {
       let s = this.liveSession();
       const warning = this.takeLostNotice();
       if (s?.explicitPause) return ViceBackend.withWarning({ success: true, details: { alreadyPaused: true } }, warning);
+      if (owned && s?.debugStop) return ViceBackend.withWarning({ success: true, details: { alreadyPaused: true, debugStop: true } }, warning);
       if (!s) s = await this.openSession();
       const session = s;
       session.busy = true;
