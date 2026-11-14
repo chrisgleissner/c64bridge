@@ -672,10 +672,6 @@ export class C64Client {
       const pointerValue = (spriteAddress & 0x3FFF) >> 6;
       const bitMask = 1 << index;
 
-      const screenRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(SPACE_SCREEN_CODE);
-      screenRam[0x03F8 + index] = pointerValue & 0xFF;
-      const colorRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(DEFAULT_TEXT_FOREGROUND);
-
       const facade = await this.facadePromise;
       const currentDd00 = await this.readByteOrDefault(facade, 0xDD00, 0);
       const currentBorder = await this.readByteOrDefault(facade, 0xD020, DEFAULT_BORDER_COLOR);
@@ -693,8 +689,7 @@ export class C64Client {
       const d01c = (currentD01C & ~bitMask) | (multicolour ? bitMask : 0);
 
       await facade.writeMemory(spriteAddress, spriteSlot);
-      await facade.writeMemory(TEXT_SCREEN_ADDRESS, screenRam);
-      await facade.writeMemory(TEXT_COLOR_RAM_ADDRESS, colorRam);
+      await facade.writeMemory(pointerAddress, Uint8Array.of(pointerValue & 0xFF));
       await facade.writeMemory(0xDD00, Uint8Array.of(textRegisters.dd00));
       await facade.writeMemory(0xD011, Uint8Array.of(textRegisters.d011));
       await facade.writeMemory(0xD016, Uint8Array.of(textRegisters.d016));
