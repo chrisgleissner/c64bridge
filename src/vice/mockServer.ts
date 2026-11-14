@@ -468,7 +468,7 @@ export class ViceMockServer {
       case 0x51: { // resource get
         const nameLen = body[0] ?? 0;
         const name = body.subarray(1, 1 + nameLen).toString("utf8");
-        const value = this.resources.get(name);
+        const value = this.resources.get(this.resourceKey(name));
         if (value === undefined) {
           return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01); // VICE: OBJECT_MISSING for an unknown resource.
         }
@@ -489,7 +489,7 @@ export class ViceMockServer {
       case 0x52: { // resource set
         const isNumber = body[0] === 1;
         const nameLen = body[1] ?? 0;
-        const name = body.subarray(2, 2 + nameLen).toString("utf8");
+        const name = this.resourceKey(body.subarray(2, 2 + nameLen).toString("utf8"));
         if (!this.resources.has(name)) {
           // VICE: an unknown integer resource fails resources_set (CMD_FAILURE); an unknown string one is OBJECT_MISSING.
           return buildResponse(cmd, reqId, Buffer.alloc(0), isNumber ? 0x8f : 0x01);
@@ -692,6 +692,15 @@ export class ViceMockServer {
     this.memory.fill(0, 0x2B, 0x33);
     this.bootRemainingMs = this.bootMs;
     this.bootTick = Date.now();
+  }
+
+  /** VICE matches resource names case-insensitively; returns the canonical spelling when the resource exists. */
+  private resourceKey(name: string): string {
+    const lower = name.toLowerCase();
+    for (const key of this.resources.keys()) {
+      if (key.toLowerCase() === lower) return key;
+    }
+    return name;
   }
 
   // Resources survive a machine reset in VICE. Only resources that exist in

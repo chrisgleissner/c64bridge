@@ -243,3 +243,48 @@ test("S-04 c64_config on VICE applies the c64_vice resource policy on get, set a
   }
   assert.ok(!touched.some((entry) => entry[1] !== "WarpMode"), JSON.stringify(touched));
 });
+
+test("HARD03-001 host-file VICE resources are refused in every spelling on both tool paths", async () => {
+  const { resourceNameProblem } = await import("../src/vice/resourcePolicy.js");
+  const { ViceBackend } = await import("../src/device.js");
+  const canonical = [
+    "SoundRecordDeviceArg", "SoundRecordDeviceName", "SoundDeviceArg", "SoundDeviceName",
+    "VICIIPaletteFile", "JoyMapFile", "C64_256Kfilename", "C64_256KImageName",
+    "SidFilterFile", "FSDevice8Dir", "C64SoundRecordFile",
+  ];
+  const spellings = (name) => [name, name.toUpperCase(), name.toLowerCase(), name.replace(/[a-z]/g, (c, i) => (i % 2 ? c.toUpperCase() : c))];
+  const backend = Object.create(ViceBackend.prototype);
+  const touched = [];
+  backend.withClient = async (fn) => fn({
+    async resourceGet(item) { touched.push(item); return { type: "int", value: 1 }; },
+    async resourceSet(item) { touched.push(item); },
+  });
+  for (const base of canonical) {
+    for (const name of spellings(base)) {
+      assert.ok(resourceNameProblem(name), `policy must refuse ${name}`);
+      const viaTool = await viceModuleGroup.invoke("c64_vice", { op: "resource_set", name, value: "x" }, createCtx());
+      assert.equal(viaTool.isError, true, `c64_vice must refuse ${name}`);
+      await assert.rejects(() => backend.configSet("VICE", name, "x"), /not allowed/, `c64_config set ${name}`);
+      await assert.rejects(() => backend.configGet("VICE", name), /not allowed/, `c64_config get ${name}`);
+    }
+  }
+  assert.deepEqual(touched, []);
+  for (const ok of ["WarpMode", "SidEngine", "WARPMODE", "SoundVolume", "MachineVideoStandard"]) {
+    assert.equal(resourceNameProblem(ok), undefined, ok);
+  }
+});
+
+test("HARD03-001 the VICE monitor mock matches resource names case-insensitively", async (t) => {
+  const { ViceClient } = await import("../src/vice/viceClient.js");
+  const { startViceMockServer } = await import("../src/vice/mockServer.js");
+  const server = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+  t.after(async () => { await server.stop(); });
+  const client = new ViceClient();
+  t.after(() => client.close());
+  await client.connect(server.port);
+
+  assert.deepEqual(await client.resourceGet("SIDENGINE"), await client.resourceGet("SidEngine"));
+  await client.resourceSet("sidengine", 3);
+  assert.equal((await client.resourceGet("SidEngine")).value, 3);
+  await assert.rejects(() => client.resourceGet("NoSuchResource"));
+});
