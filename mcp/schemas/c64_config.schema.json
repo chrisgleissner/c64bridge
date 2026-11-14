@@ -111,8 +111,9 @@
         "integer",
         "null"
       ],
-      "description": "Duration to run each program in milliseconds",
+      "description": "Duration to run each program in milliseconds (1-600000)",
       "minimum": 1,
+      "maximum": 600000,
       "default": 5000
     },
     "captureScreen": {

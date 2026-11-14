@@ -134,8 +134,9 @@
               "integer",
               "null"
             ],
-            "description": "Duration to run each program before assertions",
+            "description": "Duration to run each program before assertions in milliseconds (1-600000)",
             "minimum": 1,
+            "maximum": 600000,
             "default": 2000
           },
           "outputPath": {
@@ -1071,7 +1072,7 @@
         "required": [
           "op"
         ],
-        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause [write]: Pause the machine until resumed. Required inputs: none.\n- resume [write]: Resume CPU execution after a pause. Required inputs: none.\n- reset [write]: Issue a soft reset without cutting power. Required inputs: none. Optional inputs: waitForReady, readyTimeoutMs.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Required inputs: none. Optional inputs: waitForReady, readyTimeoutMs.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. Required inputs: none.\n- power_cycle [destructive]: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. Required inputs: none. Optional inputs: waitForReady, readyTimeoutMs.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). Required inputs: none.\n- start_task [write]: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task [write]: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks [write]: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
+        "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause [write]: Pause the machine until resumed. Required inputs: none.\n- resume [write]: Resume CPU execution after a pause. Required inputs: none.\n- reset [write]: Issue a soft reset without cutting power. Required inputs: none. Optional inputs: waitForReady, readyTimeoutMs.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Required inputs: none. Optional inputs: waitForReady, readyTimeoutMs.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. Required inputs: none.\n- power_cycle [destructive]: Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST. Required inputs: none. Optional inputs: waitForReady, readyTimeoutMs.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button for navigation. Required inputs: none.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+). Required inputs: none.\n- start_task [write]: Start a named background task that runs on an interval. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a specific background task and clear its timer. Required inputs: name.\n- stop_all_tasks: Stop every running background task and persist state. Required inputs: none.\n- list_tasks: List known background tasks with status metadata. Required inputs: none.\n- performance_report: Summarize diagnostics spans and tool latencies from the current or latest MCP session. Required inputs: none. Optional inputs: scope, includeTimeline, maxEntries.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1112,8 +1113,8 @@
           "menu": "write",
           "read_menu_screen": "read",
           "start_task": "write",
-          "stop_task": "write",
-          "stop_all_tasks": "write",
+          "stop_task": "read",
+          "stop_all_tasks": "read",
           "list_tasks": "read",
           "performance_report": "read"
         }
@@ -2132,8 +2133,9 @@
               "integer",
               "null"
             ],
-            "description": "Duration to run each program in milliseconds",
+            "description": "Duration to run each program in milliseconds (1-600000)",
             "minimum": 1,
+            "maximum": 600000,
             "default": 5000
           },
           "captureScreen": {
@@ -2397,8 +2399,9 @@
               "integer",
               "null"
             ],
-            "description": "Retries per chunk on failure",
+            "description": "Retries per chunk on failure (0-10)",
             "minimum": 0,
+            "maximum": 10,
             "default": 1
           },
           "root": {
@@ -2770,12 +2773,12 @@
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none. Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none. Optional inputs: memspace, registers.\n- set_registers [write]: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step [write]: Single-step CPU execution. Required inputs: none. Optional inputs: count, mode.\n- step_return [write]: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none. Optional inputs: memspace.\n- wait_for_state: Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled. Required inputs: none. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [write]: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints). Required inputs: none.\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Required inputs: none. Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Required inputs: none. Optional inputs: memspace, registers.\n- set_registers [write]: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step [write]: Single-step CPU execution. Required inputs: none. Optional inputs: count, mode.\n- step_return [write]: Continue execution until the current routine returns. Required inputs: none.\n- get_monitor_state: Read CPU registers and return the current monitor state. Required inputs: none. Optional inputs: memspace.\n- wait_for_state: Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled. Required inputs: none. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [destructive]: Kill and restart the VICE process (managed instances only). Required inputs: none.\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). Required inputs: none.",
         "additionalProperties": false
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -2799,7 +2802,7 @@
           "step_return": "write",
           "get_monitor_state": "read",
           "wait_for_state": "read",
-          "nuclear_reset": "write",
+          "nuclear_reset": "destructive",
           "continue_execution": "write"
         }
       }
