@@ -177,13 +177,30 @@ function endsAtReadyPrompt(screen: string): boolean {
 }
 
 /**
+ * Reads the high byte of CURLIN ($3A), which is $FF while BASIC is in direct
+ * mode and holds the current line number's high byte while a program runs.
+ * Returns undefined when memory cannot be read, so the caller can fall back to
+ * screen evidence.
+ */
+async function inDirectMode(client: C64Client): Promise<boolean | undefined> {
+  try {
+    const bytes = await client.readMemoryRaw(0x3a, 1);
+    return bytes[0] === undefined ? undefined : bytes[0] === 0xff;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Poll for the outcome of a BASIC run.
  *
  * Evidence that the program ran: the screen shows RUN or an error, differs
  * from the screen captured before the run (a program that clears the screen
  * removes the RUN echo), or is blank. A BASIC error returns immediately. Once
- * there is evidence and the screen ends at the READY. prompt, the program has
- * finished without an error and the poll returns at once. A program that is
+ * there is evidence, the screen ends at the READY. prompt and BASIC is back in
+ * direct mode (CURLIN high byte $FF; without memory access, the same READY.
+ * screen on two consecutive polls), the program has finished without an error
+ * and the poll returns at once. A program that is
  * still running (no prompt) is watched for errors for the full window.
  */
 async function pollBasicOutcome(
@@ -195,6 +212,7 @@ async function pollBasicOutcome(
   const startTime = Date.now();
   let pollCount = 0;
   let runDetected = false;
+  let previousReadyScreen: string | undefined;
   const baseline = baselineScreen === undefined ? undefined : normaliseScreen(baselineScreen);
 
   logger.debug("Starting BASIC outcome polling", { maxMs: config.maxMs, intervalMs: config.intervalMs });
@@ -226,8 +244,18 @@ async function pollBasicOutcome(
       }
 
       if (runDetected && endsAtReadyPrompt(screen)) {
-        logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime });
-        return { status: "ok", type: "BASIC" };
+        // A program can print READY. itself and keep running, so the prompt alone is not proof that it finished.
+        const direct = await inDirectMode(client);
+        const settled = direct === undefined
+          ? previousReadyScreen !== undefined && previousReadyScreen === normaliseScreen(screen)
+          : direct;
+        if (settled) {
+          logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime, direct });
+          return { status: "ok", type: "BASIC" };
+        }
+        previousReadyScreen = normaliseScreen(screen);
+      } else {
+        previousReadyScreen = undefined;
       }
     } catch (error) {
       logger.debug("Failed to read screen during BASIC polling", { error, pollCount });
