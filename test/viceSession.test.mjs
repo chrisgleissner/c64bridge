@@ -393,3 +393,22 @@ test("a tool call's pause that was queued behind a keyboard feed does not resume
     assert.equal(server.running, true);
   });
 });
+
+test("reset after a pause is sent on the held connection before the CPU is let go", async () => {
+  await withClient(async (client, server) => {
+    await client.viceCheckpointCreate({ start: 0xc013 });
+    await client.explicitPause();
+    const from = server.commands.length;
+    const held = server.commands[from - 1][1];
+    await client.reset();
+    const sent = server.commands.slice(from);
+    const firstReset = sent.findIndex(([cmd]) => cmd === 0xcc);
+    const firstExit = sent.findIndex(([cmd]) => cmd === 0xaa);
+    assert.ok(firstReset >= 0, "a reset was sent");
+    assert.equal(sent[firstReset][1], held, "the first reset went out on the connection that held the pause");
+    assert.ok(firstReset < firstExit, "the reset was sent before the CPU was let go (exit)");
+    const firstDelete = sent.findIndex(([cmd]) => cmd === 0x13);
+    assert.ok(firstDelete >= 0 && firstDelete < firstReset, "the stopping checkpoint was deleted before the reset");
+    assert.equal(server.unsafeCloses, 0);
+  }, { wedgeOnUnsafeClose: true });
+});

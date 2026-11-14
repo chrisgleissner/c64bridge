@@ -1310,7 +1310,7 @@ export class ViceBackend implements C64Facade {
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
     let stoppedAt: number | undefined;
-    const warning = await this.endSessionBeforeRestart();
+    const warning = await this.endSessionBeforeRestart((client) => client.reset());
     await this.withClient(async (client) => {
       readiness = await this.resetToBasicPrompt(client, resetReadinessTimeoutMs);
       if (readiness.stopped) {
@@ -1424,9 +1424,12 @@ export class ViceBackend implements C64Facade {
   /**
    * Ends the session before an operation that restarts or stops the machine. The stopping
    * checkpoints are deleted first, so closing the connection cannot wedge VICE's monitor.
-   * Returns the notice of a session that had been lost, if any.
+   * `whileStopped` runs on the held connection after the checkpoints are deleted and before the
+   * CPU is let go, and only when the session holds the CPU stopped. A reset sent there takes effect
+   * before the CPU runs again, so no instruction of the old program runs between the end of the
+   * pause and the reset. Returns the notice of a session that had been lost, if any.
    */
-  private async endSessionBeforeRestart(): Promise<string | null> {
+  private async endSessionBeforeRestart(whileStopped?: (client: ViceClient) => Promise<void>): Promise<string | null> {
     return await this.exclusive(async () => {
       const s = this.liveSession();
       const warning = this.takeLostNotice();
@@ -1438,6 +1441,9 @@ export class ViceBackend implements C64Facade {
           try { await s.client.checkpointDelete(id); } catch { /* already gone */ }
         }
         s.stopping.clear();
+        if (whileStopped && s.cpu === "stopped") {
+          try { await whileStopped(s.client); } catch { /* the reset is repeated on the next connection */ }
+        }
         try { if (!s.client.cpuRunning) await s.client.exitMonitor(); } catch { /* closing resumes the CPU as well */ }
       } finally {
         s.busy = false;
