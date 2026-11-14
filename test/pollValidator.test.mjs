@@ -754,3 +754,30 @@ test("BASIC verification without memory access returns once READY. is stable on 
   assert.equal(result.status, "ok");
   assert.equal(reads, 2);
 });
+
+const STALE_SCREEN = "RUN\nHELLO\n\nREADY.\n";
+
+function createStaleClient(memory) {
+  return {
+    async readScreen() { return STALE_SCREEN; },
+    async readMemoryRaw(address, length) { return memory ? memory(address, length) : new Uint8Array(length); },
+  };
+}
+
+test("HARD03-021 BASIC poll does not count RUN text that was already on the baseline screen", async () => {
+  const outcome = await pollForProgramOutcome("BASIC", createStaleClient(), createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, undefined, STALE_SCREEN);
+  assert.equal(outcome.status, "error");
+  assert.match(outcome.message ?? "", /No execution activity/);
+});
+
+test("HARD03-021 BASIC poll reports a program that is not in memory at $0801", async () => {
+  const bytes = Uint8Array.from([0x0b, 0x08, 0x0a, 0x00, 0x99, 0x22, 0x48, 0x49, 0x22, 0x00, 0x00, 0x00]);
+  const client = {
+    async readScreen() { return "RUN\nHI\n\nREADY.\n"; },
+    async readMemoryRaw(address, length) { return new Uint8Array(length); },
+    async readMemory() { return { success: true, data: "$00" }; },
+  };
+  const outcome = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0x0801, bytes }, "READY.\n");
+  assert.equal(outcome.status, "error");
+  assert.match(outcome.message ?? "", /not loaded/);
+});

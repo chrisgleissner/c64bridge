@@ -208,7 +208,19 @@ async function pollBasicOutcome(
   logger: ToolLogger,
   config: PollConfig,
   baselineScreen?: string,
+  program?: ExpectedProgramBytes,
 ): Promise<BasicPollResult> {
+  if (program) {
+    // The tokenised program stays at $0801 after a run; a backend that answered success without loading it leaves other bytes there.
+    const check = await checkProgramLoaded(client, logger, program);
+    if (check.load) {
+      return {
+        status: "error",
+        type: "BASIC",
+        message: `Program was not loaded: memory at $${program.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the uploaded BASIC program (expected ${check.load.expected}, found ${check.load.found}).`,
+      };
+    }
+  }
   const startTime = Date.now();
   let pollCount = 0;
   let runDetected = false;
@@ -237,7 +249,9 @@ async function pollBasicOutcome(
 
       if (!runDetected) {
         const changed = baseline !== undefined && normaliseScreen(screen) !== baseline;
-        if (upperScreen.includes("RUN") || upperScreen.includes("ERROR") || changed || normaliseScreen(screen) === "") {
+        // With a baseline, text that was already on that screen (RUN left by an earlier run) is no evidence of this run; only a change is.
+        const textEvidence = baseline === undefined && (upperScreen.includes("RUN") || upperScreen.includes("ERROR"));
+        if (textEvidence || changed || (baseline === undefined && normaliseScreen(screen) === "")) {
           runDetected = true;
           logger.debug("Program execution detected", { pollCount, elapsed: Date.now() - startTime });
         }
@@ -472,7 +486,7 @@ export async function pollForProgramOutcome(
   
   // Poll for program outcome based on type
   if (type === "BASIC") {
-    return pollBasicOutcome(client, logger, pollConfig, baselineScreen);
+    return pollBasicOutcome(client, logger, pollConfig, baselineScreen, program);
   }
   
   return pollAsmOutcome(client, logger, pollConfig, program);

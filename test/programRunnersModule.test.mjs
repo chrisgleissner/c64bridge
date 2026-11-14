@@ -1252,3 +1252,18 @@ test("upload_run_asm keeps the previous VICE symbols when the run fails", async 
     clearViceSymbols();
   }
 });
+test("HARD03-021 upload_run_basic verify:true reports not verified when the program is not in memory", async () => {
+  const ctx = {
+    platform: { id: "c64u" },
+    client: {
+      async uploadAndRunBasic() { return { success: true }; },
+      async readScreen() { return "RUN\nHI\n\nREADY.\n"; },
+      async readMemoryRaw(address, length) { return new Uint8Array(length); },
+    },
+    logger: createLogger(),
+  };
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HI"\n20 END', verify: true }, ctx);
+  assert.equal(result.isError, true);
+  assert.notEqual(result.metadata?.verified, true);
+  assert.match(JSON.stringify(result.metadata?.error ?? {}), /not loaded/);
+});

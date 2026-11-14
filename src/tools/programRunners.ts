@@ -514,7 +514,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     if (shouldVerify) {
       try {
-        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, undefined, screenBeforeRun);
+        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, { address: prg.readUInt16LE(0), bytes: prg.subarray(2) }, screenBeforeRun);
         if (outcome.status === "error") {
           ctx.logger.warn("BASIC verification detected error", {
             ...(outcome.message ? { message: outcome.message } : {}),
