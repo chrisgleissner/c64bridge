@@ -58,3 +58,12 @@ test("play_preset with verify reports audible false and an error for a silent ca
   const entry = result.structuredContent.data.results[0];
   assert.equal(entry.verification.audible, false);
 });
+
+test("play_preset keeps the playback entry when the analyzer throws on VICE", async () => {
+  const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", waitBeforeCaptureMs: 0 }, context("vice", playbackClient("vice", async () => { throw new Error("Audio backend not available"); })));
+  assert.equal(result.isError, undefined, JSON.stringify(result));
+  const entry = result.structuredContent.data.results[0];
+  assert.equal(entry.success, true);
+  assert.equal(entry.backend, "vice");
+  assert.match(entry.verification.error, /Audio backend not available/);
+});

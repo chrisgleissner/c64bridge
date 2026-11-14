@@ -386,23 +386,28 @@ export const tools: ToolDefinition[] = [
               if (waitBeforeCaptureMs > 0) {
                 await sleep(waitBeforeCaptureMs);
               }
-              const analysis = await analyzer({
-                durationSeconds: analysisDurationSeconds,
-                expectedSidwave: preset.sidwave,
-              });
-              const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
-              const audible = (metrics.max ?? metrics.average ?? 0) > DEFAULT_RMS_THRESHOLD;
-              verification = {
-                mode: "audio-analysis",
-                durationSeconds: analysis.analysis?.durationSeconds ?? analysisDurationSeconds,
-                averageRms: metrics.average,
-                maxRms: metrics.max,
-                audible,
-                voices: analysis.analysis?.voices ?? [],
-                analysis,
-              };
-              if (!audible) {
-                backendResult.error = "no_audio_detected";
+              try {
+                const analysis = await analyzer({
+                  durationSeconds: analysisDurationSeconds,
+                  expectedSidwave: preset.sidwave,
+                });
+                const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
+                const audible = (metrics.max ?? metrics.average ?? 0) > DEFAULT_RMS_THRESHOLD;
+                verification = {
+                  mode: "audio-analysis",
+                  durationSeconds: analysis.analysis?.durationSeconds ?? analysisDurationSeconds,
+                  averageRms: metrics.average,
+                  maxRms: metrics.max,
+                  audible,
+                  voices: analysis.analysis?.voices ?? [],
+                  analysis,
+                };
+                if (!audible) {
+                  backendResult.error = "no_audio_detected";
+                }
+              } catch (error) {
+                // Playback already started; a failed capture must not turn it into an error.
+                verification = { error: error instanceof Error ? error.message : String(error) };
               }
             }
 
