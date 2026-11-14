@@ -861,13 +861,10 @@ function parseOperand(stream: TokenStream): Operand {
     if (next && next.kind === "punct" && next.value === ",") {
       stream.consumePunct(",");
       const register = stream.consumeSymbol("Expected X or Y after comma").toUpperCase();
-      if (register === "X") {
-        return { kind: "indirect", expr, register: "X" };
-      }
       if (register === "Y") {
         return { kind: "indirect", expr, register: "Y" };
       }
-      throw new Error("Only X or Y are allowed after indirect operand");
+      throw new Error(`Only ,Y is allowed after a closing parenthesis: use (zp),Y or (zp,X) (got ,${register})`);
     }
     return { kind: "indirect", expr };
   }

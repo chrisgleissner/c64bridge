@@ -598,3 +598,13 @@ test("data-only source at the default address gets no BASIC stub", () => {
   // Data at the default address followed by code at an explicit origin has no entry point at $0801.
   assert.deepEqual([...assemblyToPrg(".byte 1\n*=$c000\n nop")].slice(0, 3), [0x01, 0x08, 1]);
 });
+
+test("HARD03-034 assembler rejects the invalid (zp),x operand and names the two valid indirect modes", () => {
+  const message = assemblyError("*=$C000\n nop\n lda ($10),x");
+  assert.match(message, /:3: /);
+  assert.match(message, /\(zp\),Y/);
+  assert.match(message, /\(zp,X\)/);
+  assert.match(assemblyError("*=$C000\n lda ($10),X"), /:2: .*\(zp\),Y/u);
+  // The two valid forms still assemble.
+  assert.deepEqual([...assemblyToPrg("*=$C000\n lda ($10),y\n lda ($10,x)").subarray(2)], [0xb1, 0x10, 0xa1, 0x10]);
+});
