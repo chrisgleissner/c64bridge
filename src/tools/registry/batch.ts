@@ -111,9 +111,11 @@ export const batchModuleGroup = defineToolModule({
 
           // Lazy import to avoid circular dependency at module-init time.
           const { toolRegistry } = await import("./index.js");
+          const { MAX_CAPTURE_PAYLOAD_BYTES, MAX_PNG_FRAMES } = await import("./graphics.js");
 
           const results: BatchResult[] = [];
           const imageBlocks: ToolResponseContent[] = [];
+          let resultBytes = 0;
           let succeeded = 0;
           let failed = 0;
           const batchStart = Date.now();
@@ -160,6 +162,20 @@ export const batchModuleGroup = defineToolModule({
               const resultPayload = toolResult.structuredContent?.data ?? text;
               // Image blocks (capture_frame format "png") have no text form, so they are passed through after the summary.
               const images = toolResult.content.filter((c) => c.type === "image");
+              // The per-call caps of capture_frame also hold for the batch as a whole.
+              const payloadBytes = isError ? 0 : Buffer.byteLength(JSON.stringify(resultPayload) ?? "");
+              const overBytes = resultBytes + payloadBytes > MAX_CAPTURE_PAYLOAD_BYTES;
+              const overImages = imageBlocks.length + images.length > MAX_PNG_FRAMES;
+              if (!isError && (overBytes || overImages)) {
+                const error = overBytes
+                  ? `Batch results would be ${resultBytes + payloadBytes} bytes, above the ${MAX_CAPTURE_PAYLOAD_BYTES} byte limit; split the batch, lower count or use format png`
+                  : `Batch results would hold ${imageBlocks.length + images.length} images, above the limit of ${MAX_PNG_FRAMES}; count must be at most ${MAX_PNG_FRAMES} frames per batch when format is png`;
+                results.push({ index: i, tool: toolName, description: label, success: false, error, elapsedMs });
+                failed++;
+                if (stopOnError) break;
+                continue;
+              }
+              resultBytes += payloadBytes;
               imageBlocks.push(...images);
               if (isError) {
                 results.push({ index: i, tool: toolName, description: label, success: false, error: text, elapsedMs });
