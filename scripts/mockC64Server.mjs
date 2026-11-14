@@ -85,7 +85,7 @@ function sendJson(res, payload = {}, statusCode = 200) {
 
 // Files the mock firmware holds for GET /v1/files/<pattern>:info. Like the firmware, the route answers with
 // one file: the first file in the pattern's directory whose name matches its `*` wildcards.
-const MOCK_FIRMWARE_FILES = ["/games/demo.prg", "/games/other.crt", "/music/demo.sid"];
+const MOCK_FIRMWARE_FILES = ["/games/demo.prg", "/games/other.crt", "/music/demo.sid", "/tmp/demo.d64"];
 
 function firmwareFileMatch(pattern) {
   const slash = pattern.lastIndexOf("/");
