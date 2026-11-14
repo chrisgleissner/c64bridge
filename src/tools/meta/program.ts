@@ -2,7 +2,7 @@
 import { cancelledResult, type ToolDefinition, type ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { measureSidSilence } from "../audio.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
@@ -238,6 +238,12 @@ async function waitForGreetingScreen(
   }
 
   return { matched: false, screen: lastScreen };
+}
+
+/** True for a path that program_shuffle and batch_run_with_assertions can start (.prg or .crt). */
+function isRunnableProgramPath(path: string): boolean {
+  const ext = path.toLowerCase().split(".").pop();
+  return ext === "prg" || ext === "crt";
 }
 
 const programShuffleArgsSchema = objectSchema({
@@ -630,6 +636,11 @@ export const tools: ToolDefinition[] = [
         const parsed = programShuffleArgsSchema.parse(args ?? {});
         const root = parsed.root ?? "/";
         const extensions = (parsed.extensions ?? ["prg", "crt"]) as string[];
+        for (const ext of extensions) {
+          if (!isRunnableProgramPath(`x.${ext}`)) {
+            throw new ToolValidationError(`Unsupported extension "${ext}": program_shuffle runs .prg and .crt files only`, { path: "$.extensions" });
+          }
+        }
         const durationMs = parsed.durationMs ?? 5000;
         const maxPrograms = parsed.maxPrograms ?? 10;
         const captureScreen = parsed.captureScreen !== false;
@@ -643,7 +654,7 @@ export const tools: ToolDefinition[] = [
             const info = await (ctx.client as any).filesInfo(pattern);
             const paths = Array.isArray(info) ? info : (Array.isArray((info as any)?.paths) ? (info as any).paths : []);
             for (const p of paths) {
-              if (typeof p === "string" && programs.length < maxPrograms) {
+              if (typeof p === "string" && isRunnableProgramPath(p) && programs.length < maxPrograms) {
                 programs.push(p);
               }
             }
@@ -757,6 +768,11 @@ export const tools: ToolDefinition[] = [
         if (platform === "vice" && programs.some((program) => program.path.toLowerCase().endsWith(".crt"))) {
           throw new ToolUnsupportedPlatformError("run_crt", platform, ["c64u", "u2"]);
         }
+        programs.forEach((program, index) => {
+          if (!isRunnableProgramPath(program.path)) {
+            throw new ToolValidationError(`Unsupported program type for "${program.path}": batch_run_with_assertions runs .prg and .crt files only`, { path: `$.programs[${index}].path` });
+          }
+        });
         const continueOnError = parsed.continueOnError ?? false;
         const durationMs = parsed.durationMs ?? 2000;
   const resetDelayMs = parsed.resetDelayMs ?? 100;

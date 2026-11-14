@@ -898,3 +898,50 @@ for (const backend of ["vice", "u2"]) {
     assert.equal(recorded, false);
   });
 }
+
+test("HARD03-023 batch_run_with_assertions rejects unsupported extensions before running anything", async () => {
+  const calls = [];
+  const ctx = {
+    platform: { id: "c64u" },
+    client: {
+      async runPrgFile() { calls.push("prg"); return { success: true }; },
+      async runCrtFile() { calls.push("crt"); return { success: true }; },
+      async readScreen() { calls.push("screen"); return "READY."; },
+      async reset() { calls.push("reset"); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("batch_run_with_assertions", {
+    programs: [
+      { path: "/USB0/ok.prg" },
+      { path: "/USB0/elite.d64", assertions: [{ type: "screen_contains", pattern: "READY." }] },
+      { path: "/USB0/demo" },
+    ],
+    durationMs: 5, resetDelayMs: 0,
+  }, ctx);
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "validation");
+  assert.match(res.content[0].text, /elite\.d64/);
+  assert.deepEqual(calls, []);
+});
+
+test("HARD03-023 program_shuffle rejects unsupported extensions and skips discovered paths of other types", async () => {
+  const calls = [];
+  const ctx = {
+    client: {
+      async filesInfo(pattern) { calls.push(`info ${pattern}`); return ["/games/a.prg", "/games/b.d64", "/games/c"]; },
+      async runPrgFile(p) { calls.push(`prg ${p}`); return { success: true }; },
+      async readScreen() { return "S"; },
+      async reset() { calls.push("reset"); return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const bad = await metaModule.invoke("program_shuffle", { root: "/games", extensions: ["d64"], durationMs: 5, resetDelayMs: 0 }, ctx);
+  assert.equal(bad.isError, true);
+  assert.equal(bad.metadata?.error?.kind, "validation");
+  assert.deepEqual(calls, []);
+  const ok = await metaModule.invoke("program_shuffle", { root: "/games", extensions: ["prg"], durationMs: 5, resetDelayMs: 0 }, ctx);
+  assert.equal(ok.metadata?.success, true);
+  assert.equal(ok.structuredContent?.data?.programs, 1);
+  assert.deepEqual(calls.filter((c) => c.startsWith("prg ")), ["prg /games/a.prg"]);
+});
