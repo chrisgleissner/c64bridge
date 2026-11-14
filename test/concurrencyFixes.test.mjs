@@ -171,3 +171,41 @@ test("a stopped task's in-flight iteration does not overwrite a restarted task's
     else process.env.C64_TASK_STATE_FILE = previous;
   }
 });
+
+test("an owned pause acquired while the post-reset resume is pending still sends machine:pause", async (t) => {
+  const seen = [];
+  let resumeResponse;
+  const resumeSeen = new Promise((resolve) => { resumeResponse = { resolve }; });
+  let releaseResume;
+  const server = http.createServer((req, res) => {
+    const route = (req.url ?? "").split("?")[0];
+    seen.push(route);
+    res.setHeader("content-type", "application/json");
+    if (route === "/v1/machine:resume" && !releaseResume) {
+      // Hold the first resume (the one that follows the reset) until the test releases it.
+      releaseResume = () => res.end(JSON.stringify({ errors: [] }));
+      resumeResponse.resolve();
+      return;
+    }
+    res.end(JSON.stringify({ errors: [] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const client = new C64Client(`http://127.0.0.1:${server.address().port}`);
+  const facade = await client.pinFacade();
+
+  assert.equal((await client.explicitPause(facade)).success, true);
+  const reset = client.reset();
+  await resumeSeen;
+  const acquiring = client.acquirePause(facade);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  releaseResume();
+  assert.equal((await reset).success, true);
+  assert.equal((await acquiring).success, true);
+
+  const pauses = seen.filter((route) => route === "/v1/machine:pause").length;
+  assert.equal(pauses, 2, `explicit pause plus the owned pause expected; requests: ${seen.join(", ")}`);
+  assert.equal(seen.lastIndexOf("/v1/machine:pause") > seen.indexOf("/v1/machine:resume"), true, "owned pause must follow the resume");
+  assert.equal((await client.releasePause(facade)).success, true);
+  assert.equal(seen[seen.length - 1], "/v1/machine:resume");
+});

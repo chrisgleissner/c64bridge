@@ -981,7 +981,12 @@ export class C64Client {
       state.explicit = false;
       return { success: res.success, details: res.details };
     }
-    const resumed = await facade.resume().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+    // Pause acquisition and explicit pause wait on resetResume, so no pause can be skipped
+    // against the explicit flag while this resume is pending and then lose it when the flag clears.
+    const pendingResume = facade.resume().catch((error): RunBasicResult => ({ success: false, details: this.normaliseError(error) }));
+    state.resetResume = pendingResume;
+    let resumed: RunBasicResult;
+    try { resumed = await pendingResume; } finally { if (state.resetResume === pendingResume) state.resetResume = undefined; }
     if (resumed.success) {
       state.explicit = false;
       return { success: res.success, details: res.details };
@@ -1257,12 +1262,12 @@ export class C64Client {
    * explicit `c64_system pause` is in effect. An explicit pause is cleared
    * only by an explicit resume.
    */
-  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean }>();
+  private readonly pauseStates = new WeakMap<C64Facade, { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean; resetResume?: Promise<unknown> }>();
 
   private pauseStateFor(facade: C64Facade) {
     let state = this.pauseStates.get(facade);
     if (!state) {
-      const created: { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean } = { depth: 0, explicit: false };
+      const created: { depth: number; explicit: boolean; devicePause?: Promise<RunBasicResult>; skippedDevicePause?: boolean; resetResume?: Promise<unknown> } = { depth: 0, explicit: false };
       state = created;
       this.pauseStates.set(facade, state);
       // The VICE session can end the pause by itself (c64_debug continue_execution, a lost
@@ -1285,6 +1290,8 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       const state = this.pauseStateFor(facade);
+      // A reset's post-reset resume decides the explicit flag; wait for it so the pause below is sent when needed.
+      while (state.resetResume) await state.resetResume;
       state.depth += 1;
       if (state.depth === 1 && !state.explicit) {
         // A debugger stop already holds the CPU; the tool call must neither add a pause nor end that stop on release.
@@ -1327,6 +1334,7 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       const state = this.pauseStateFor(facade);
+      while (state.resetResume) await state.resetResume;
       if (state.depth > 0 && !state.explicit && state.devicePause) {
         // Wait for the tool call's own pause: it may still fail, and then nothing holds the CPU.
         const devicePause = state.devicePause;
