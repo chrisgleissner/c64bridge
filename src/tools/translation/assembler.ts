@@ -1103,9 +1103,18 @@ class Assembler {
     }
     // Addresses that are neither emitted nor reserved are zero-filled. Refuse a run of them that
     // touches $D000-$DFFF: the loader would write zeros to the VIC, SID, CIA and colour RAM.
+    // Count reservation boundaries once so adjacent or overlapping reservations do not require
+    // searching the entire reservation list for every byte in the image.
+    const reservationBoundaries = new Int32Array(0x10001);
+    for (const [resStart, resEnd] of this.reserved) {
+      reservationBoundaries[resStart]! += 1;
+      reservationBoundaries[resEnd + 1]! -= 1;
+    }
+    let reservedDepth = 0;
     let gapStart: number | undefined;
-    for (let addr = start; addr <= end + 1; addr++) {
-      const gap = addr <= end && !this.written[addr] && !this.reserved.some(([s, e]) => addr >= s && addr <= e);
+    for (let addr = 0; addr <= end + 1; addr++) {
+      reservedDepth += reservationBoundaries[addr]!;
+      const gap = addr >= start && addr <= end && !this.written[addr] && reservedDepth === 0;
       if (gap && gapStart === undefined) gapStart = addr;
       if (!gap && gapStart !== undefined) {
         if (rangeOverlapsIo(gapStart, addr - gapStart)) {
