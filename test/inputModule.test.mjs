@@ -310,3 +310,25 @@ test("c64_input.key rejects C128-only key names", async () => {
     assert.equal(result.isError, true, key);
   }
 });
+
+test("HARD03-032 c64_input.joystick tap on c64u holds press for durationMs and then releases", async () => {
+  const { ctx, inputBatches } = createInputContext({ platformId: "c64u" });
+  const sent = [];
+  const base = ctx.client.sendInputEvents.bind(ctx.client);
+  ctx.client.sendInputEvents = async (batch) => {
+    sent.push({ at: Date.now(), batch });
+    return base(batch);
+  };
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 2, controls: ["fire2"], action: "tap", durationMs: 150,
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(
+    sent.map((entry) => entry.batch.events[0].transition),
+    ["press", "release"],
+  );
+  assert.deepEqual(inputBatches[0], { events: [{ kind: "joystick", port: 2, inputs: ["fire2"], transition: "press" }] });
+  assert.deepEqual(inputBatches[1], { events: [{ kind: "joystick", port: 2, inputs: ["fire2"], transition: "release" }] });
+  assert.ok(sent[1].at - sent[0].at >= 140, `held for ${sent[1].at - sent[0].at} ms`);
+});

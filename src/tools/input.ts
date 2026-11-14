@@ -385,9 +385,21 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
           const state = await ctx.client.sendInputEvents({ events: [{ kind: "release_all" }] });
           return textResult("Released all REST-injected keyboard and joystick inputs.", { success: true, action: "release_all", state });
         }
-        const state = await ctx.client.sendInputEvents({
-          events: [{ kind: "joystick", port, inputs: [...parsed.controls], transition: parsed.action as "press" | "release" | "tap" }],
+        const joystickEvent = (transition: "press" | "release") => ({
+          events: [{ kind: "joystick" as const, port, inputs: [...parsed.controls], transition }],
         });
+        let state;
+        if (parsed.action === "tap") {
+          // The firmware holds a tap for a fixed two frames, so hold the press for durationMs here.
+          await ctx.client.sendInputEvents(joystickEvent("press"));
+          try {
+            await new Promise<void>((res) => setTimeout(res, durationMs));
+          } finally {
+            state = await ctx.client.sendInputEvents(joystickEvent("release"));
+          }
+        } else {
+          state = await ctx.client.sendInputEvents(joystickEvent(parsed.action as "press" | "release"));
+        }
         return textResult(`Joystick port ${port} ${parsed.action}: ${parsed.controls.join(", ")}.`, {
           success: true, port, action: parsed.action, controls: parsed.controls, state,
         });
