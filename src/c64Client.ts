@@ -2683,12 +2683,29 @@ export class C64Client {
       return this.withViceMonitor((client) => client.registersSet(writes, payload));
     }
 
-    async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
+    async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<{ stopped: boolean; pc?: number }> {
+      let stopped = true;
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { stopped = await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
+      return await this.viceStepOutcome(stopped);
     }
 
-    async viceStepReturn(): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepReturn({ waitForStopMs: 2_000 }); });
+    async viceStepReturn(): Promise<{ stopped: boolean; pc?: number }> {
+      let stopped = true;
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { stopped = await client.stepReturn({ waitForStopMs: 2_000 }); });
+      return await this.viceStepOutcome(stopped);
+    }
+
+    /** After a step: when the CPU did not stop in time, the session has stopped it; report the PC it was stopped at. */
+    private async viceStepOutcome(stopped: boolean): Promise<{ stopped: boolean; pc?: number }> {
+      if (stopped) return { stopped };
+      try {
+        const [metadata, values] = await Promise.all([this.viceRegistersAvailable(0), this.viceRegistersGet(0)]);
+        const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+        const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
+        return pc === undefined ? { stopped } : { stopped, pc };
+      } catch {
+        return { stopped };
+      }
     }
 
     async viceResourceGet(name: string): Promise<ViceResourceValue> {

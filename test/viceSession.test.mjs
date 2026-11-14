@@ -376,6 +376,30 @@ test("step and step_return wait for the stop that follows the command when VICE 
   }, { stepEventDelayMs: 60 });
 });
 
+test("HARD03-018 step and step_return do not report success when the CPU did not stop within the wait", async () => {
+  await withClient(async (client, server) => {
+    const logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const previous = getPlatformStatus().id;
+    setPlatform("vice");
+    try {
+      const ctx = { client, rag: {}, logger, platform: getPlatformStatus(), setPlatform };
+      for (const args of [{ op: "step" }, { op: "step_return" }]) {
+        const result = await toolRegistry.invoke("c64_debug", args, ctx);
+        const text = result.content.map((c) => c.text ?? "").join("\n");
+        assert.ok(!/^Stepped|^Continued execution until/.test(text), text);
+        assert.equal(result.structuredContent.data.stopped, false);
+        assert.equal(result.structuredContent.data.success, false);
+        assert.match(text, /did not finish/);
+        assert.match(String(result.structuredContent.data.pc ?? text), /\$[0-9A-Fa-f]{4}/);
+        assert.equal(server.running, false, "the tool stopped the CPU");
+        await client.viceExitMonitor();
+      }
+    } finally {
+      setPlatform(previous);
+    }
+  }, { stepEventDelayMs: 2_600 });
+});
+
 test("a tool call's pause that was queued behind a keyboard feed does not resume past a checkpoint hit during the feed", async () => {
   await withClient(async (client, server) => {
     const created = await client.viceCheckpointCreate({ start: 0xc000 });

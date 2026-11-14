@@ -305,6 +305,15 @@ const debugOperationSchemas = [
 
 const checkpointLabels = new Map<number, string>();
 
+/** The step did not finish within the wait: the tool stopped the CPU itself, so the result is not a success. */
+function stepNotFinishedResult(what: string, pc: number | undefined, extra: Record<string, unknown>) {
+  const where = pc !== undefined ? ` at PC=${formatAddress(pc)}` : "";
+  return textResult(
+    `${what} did not finish within the wait; the tool stopped the CPU${where}.`,
+    { success: false, stopped: false, ...(pc !== undefined ? { pc: formatAddress(pc) } : {}), ...extra },
+  );
+}
+
 const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
   list_checkpoints: async (_args, ctx) => {
     try {
@@ -490,7 +499,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const parsed = stepArgsSchema.parse(args);
       const count = parsed.count ?? 1;
       const stepOver = parsed.mode === "over";
-      await ctx.client.viceStepInstructions(count, { stepOver });
+      const outcome = await ctx.client.viceStepInstructions(count, { stepOver });
+      if (outcome && outcome.stopped === false) return stepNotFinishedResult("Step", outcome.pc, { count, mode: stepOver ? "over" : "into" });
       ctx.logger.info("Stepped instructions", { count, stepOver });
       return textResult(
         `Stepped ${count} instruction${count === 1 ? "" : "s"}${stepOver ? " (over)" : ""}.`,
@@ -503,7 +513,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
   step_return: async (args, ctx) => {
     try {
       stepReturnArgsSchema.parse(args);
-      await ctx.client.viceStepReturn();
+      const outcome = await ctx.client.viceStepReturn();
+      if (outcome && outcome.stopped === false) return stepNotFinishedResult("Step until return", outcome.pc, {});
       ctx.logger.info("Stepped until return");
       return textResult("Continued execution until current routine return.", { success: true });
     } catch (error) {
