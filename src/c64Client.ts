@@ -3060,6 +3060,8 @@ function chunkByExpressionLength(input: string, expression: (text: string) => st
  */
 function printerTextExpression(input: string, target: "commodore" | "epson", secondaryAddress?: number): string {
   const needsChr = (char: string): number | undefined => {
+    // Literal < and : and { would be expanded to control codes (<RETURN>, :cr:, {home}) by the tokenizer.
+    if (char === "<" || char === ":" || char === "{") return char.charCodeAt(0);
     if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
     if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
     return undefined;

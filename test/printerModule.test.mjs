@@ -163,3 +163,31 @@ for (const [tool, method, args] of [
     assert.match(result.content[0].text, /^C64 backend reported failure while .*: printer offline$/);
   });
 }
+
+test("HARD03-037 print_text generates literal <, : and { through CHR$ so no control-code name is expanded", async () => {
+  const { buildPrinterBasicProgram } = await import("../src/c64Client.js");
+  const program = buildPrinterBasicProgram({ text: "PRESS <RETURN> TO GO :cr: {home}", target: "commodore" });
+  assert.ok(!program.includes("{$0D}"), program);
+  assert.ok(!/"[^"]*[<{:][^"]*"/u.test(program), program);
+  assert.ok(program.includes("CHR$(60)"), program);
+  assert.ok(program.includes("CHR$(123)"), program);
+});
+
+test("HARD03-037 print_text reports a device error found on the screen after the run", async () => {
+  const ctx = {
+    client: {
+      async printTextOnPrinterAndRun() {
+        return { success: true, details: {} };
+      },
+      async readScreen() {
+        return "?DEVICE NOT PRESENT ERROR\nREADY.";
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const result = await printerModule.invoke("print_text", { text: "HELLO" }, ctx);
+  assert.equal(result.isError, true, JSON.stringify(result.content));
+  assert.equal(result.metadata.error.kind, "execution");
+  assert.match(String(result.content[0].text), /DEVICE NOT PRESENT/);
+});
