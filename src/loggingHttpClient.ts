@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
-import { registerSecret, scrubRequestError } from "./redact.js";
+import { isSensitiveConfigItem, REDACTED_PLACEHOLDER, redactConfigValue, registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
 
 type RequestMeta = {
@@ -22,6 +22,49 @@ function redactHeaders(headers: AxiosRequestConfig["headers"] | undefined): Axio
     key,
     sensitive.test(key) ? "***" : value,
   ])) as AxiosRequestConfig["headers"];
+}
+
+/** Category and item named by a configuration endpoint path, or undefined for any other path. */
+function configRoute(path: string): { category?: string; item?: string } | undefined {
+  const match = /\/configs(?:\/([^/?#]*))?(?:\/([^/?#]*))?(?:[?#]|$)/.exec(path);
+  if (!match) return undefined;
+  const decode = (segment: string | undefined): string | undefined => {
+    if (segment === undefined) return undefined;
+    try { return decodeURIComponent(segment); } catch { return segment; }
+  };
+  return { category: decode(match[1]), item: decode(match[2]) };
+}
+
+/** A payload that came from or goes to a configuration endpoint, with credential item values replaced. */
+function redactConfigPayload(path: string, payload: unknown): unknown {
+  const route = configRoute(path);
+  if (!route || payload === null || payload === undefined) return payload;
+  if (typeof payload === "string") {
+    try {
+      return redactConfigValue(JSON.parse(payload), route.category, route.item);
+    } catch {
+      return payload;
+    }
+  }
+  if (typeof payload === "object") return redactConfigValue(payload, route.category, route.item);
+  return payload;
+}
+
+/** Query parameters of a configuration write: the value of a credential item is replaced. */
+function redactConfigParams(path: string, params: unknown): unknown {
+  const route = configRoute(path);
+  if (!route?.item || !isSensitiveConfigItem(route.category, route.item)) return params;
+  if (params === null || typeof params !== "object") return params;
+  return Object.fromEntries(Object.keys(params).map((key) => [key, REDACTED_PLACEHOLDER]));
+}
+
+/** The path as logged: the query string of a credential item write is dropped. */
+function redactConfigPath(path: string): string {
+  const route = configRoute(path);
+  if (route?.item && isSensitiveConfigItem(route.category, route.item) && path.includes("?")) {
+    return `${path.split("?")[0]}?${REDACTED_PLACEHOLDER}`;
+  }
+  return path;
 }
 
 /** How long requests fail immediately after a transport-level failure before the next one probes the device again. */
@@ -205,7 +248,7 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
   const meta = extractMeta(response.config);
   const latency = meta ? Date.now() - meta.startedAt : 0;
   const method = meta?.method ?? (response.config.method ?? "get").toUpperCase();
-  const path = meta?.path ?? resolvePath(response.config);
+  const path = redactConfigPath(meta?.path ?? resolvePath(response.config));
   const bytes = payloadByteLength(response.data);
 
   logger.info(`${method} ${path} status=${response.status} bytes=${bytes} latencyMs=${latency}`);
@@ -213,13 +256,13 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
   if (logger.isDebugEnabled()) {
     logger.debug(`request ${method} ${path}`, {
       headers: meta?.headers,
-      query: meta?.params,
-      body: formatPayloadForDebug(meta?.body),
+      query: redactConfigParams(path, meta?.params),
+      body: formatPayloadForDebug(redactConfigPayload(path, meta?.body)),
     });
     logger.debug(`response ${method} ${path}`, {
       status: response.status,
       headers: redactHeaders(response.headers),
-      body: formatPayloadForDebug(response.data),
+      body: formatPayloadForDebug(redactConfigPayload(path, response.data)),
     });
   }
 }
@@ -234,7 +277,7 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
   const meta = extractMeta(config);
   const latency = meta ? Date.now() - meta.startedAt : 0;
   const method = meta?.method ?? (config.method ?? "get").toUpperCase();
-  const path = meta?.path ?? resolvePath(config);
+  const path = redactConfigPath(meta?.path ?? resolvePath(config));
   const response = error.response;
   const status = response?.status ?? "ERR";
   const bytes = response ? payloadByteLength(response.data) : 0;
@@ -245,13 +288,13 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
   if (logger.isDebugEnabled()) {
     logger.debug(`request ${method} ${path}`, {
       headers: meta?.headers,
-      query: meta?.params,
-      body: formatPayloadForDebug(meta?.body),
+      query: redactConfigParams(path, meta?.params),
+      body: formatPayloadForDebug(redactConfigPayload(path, meta?.body)),
     });
     logger.debug(`error ${method} ${path}`, {
       status,
       headers: redactHeaders(response?.headers),
-      body: response ? formatPayloadForDebug(response.data) : null,
+      body: response ? formatPayloadForDebug(redactConfigPayload(path, response.data)) : null,
       message,
     });
   }

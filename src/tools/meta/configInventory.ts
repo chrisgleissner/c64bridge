@@ -89,14 +89,18 @@ export function normalizeConfigInventory(details: unknown): readonly ConfigInven
 export interface CaptureConfigSnapshotOptions {
   /** Keep credential values (network password, Wi-Fi keys, ...) in plain text. Default: replace them with `***`. */
   readonly includeSecretValues?: boolean;
+  /** Read only these categories. Default: every category the device lists. */
+  readonly categories?: readonly string[];
 }
 
 export async function captureConfigSnapshot(
   client: ConfigReadableClient,
   options: CaptureConfigSnapshotOptions = {},
 ): Promise<ConfigSnapshotData> {
+  const wanted = options.categories ? new Set(options.categories) : undefined;
   const inventory = normalizeConfigInventory(await client.configsList()).filter((entry) =>
-    !isUnsafeConfigKey(entry.category)
+    (!wanted || wanted.has(entry.category))
+    && !isUnsafeConfigKey(entry.category)
     && !(entry.item !== undefined && isUnsafeConfigKey(entry.item)));
   const categories: Record<string, unknown> = {};
 

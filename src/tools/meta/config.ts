@@ -166,7 +166,7 @@ export const tools: ToolDefinition[] = [
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
           const client = ctx.client as any;
-          const current = (await captureConfigSnapshot(client, { includeSecretValues: true })).categories;
+          const current = (await captureConfigSnapshot(client, { includeSecretValues: true, categories: Object.keys(payload) })).categories;
           const changes = changedConfigItems(payload, current, validateSnapshotCategories(snapshot.categories));
           const changedItems = countItems(changes);
           const categories = Object.keys(changes);
