@@ -307,3 +307,28 @@ test("c64_debug nuclear_reset is destructive: blocked in no-destructive mode, st
     assert.equal(await isBlocked("c64_debug", { op: "step" }), false);
   });
 });
+
+test("network writes in legacy and mixed batch_update calls are blocked before dispatch", async () => {
+  const calls = [];
+  const ctx = createContext(calls);
+  const payloads = [
+    { "Network settings": { "Use DHCP": "Disabled" } },
+    { updates: { "Audio Mixer": { Volume: 80 } }, "Network settings": { "Use DHCP": "Disabled" } },
+    { updates: { "Network settings": { "Use DHCP": "Disabled" } }, "Audio Mixer": { Volume: 80 } },
+    { "Net*": { "Use DHCP": "Disabled" } },
+  ];
+  await withAccess("no-destructive", async () => {
+    for (const payload of payloads) {
+      await assert.rejects(
+        () => toolRegistry.invoke("c64_config", { op: "batch_update", ...payload }, ctx),
+        /effect "destructive"/,
+      );
+    }
+    const { configModuleGroup } = await import("../src/tools/registry/config.js");
+    // A literal legacy category named updates holds item values, not nested categories.
+    assert.equal(configModuleGroup.effectOf("c64_config", {
+      op: "batch_update", updates: { "Network setting label": "local display name" },
+    }), "write");
+  });
+  assert.deepEqual(calls, [], "blocked writes never reach the backend");
+});

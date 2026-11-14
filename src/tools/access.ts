@@ -99,8 +99,14 @@ export function configWriteEffect(op: string | undefined, args: unknown): ToolEf
   if (op === "set") {
     return isNetworkCategory(record.category) ? "destructive" : undefined;
   }
-  const updates = record.updates;
-  if (typeof updates === "object" && updates !== null && Object.keys(updates).some(isNetworkCategory)) {
+  // The parser accepts wrapped, legacy and mixed category maps. A literal category named
+  // "updates" contains primitive item values and must not be mistaken for the wrapper.
+  const wrapped = record.updates;
+  const hasWrapper = typeof wrapped === "object" && wrapped !== null && !Array.isArray(wrapped)
+    && Object.values(wrapped).every((items) => typeof items === "object" && items !== null && !Array.isArray(items));
+  const categories = Object.keys(record).filter((name) => name !== "op" && !(hasWrapper && name === "updates"));
+  if (categories.some(isNetworkCategory)
+    || (hasWrapper && Object.keys(wrapped).some(isNetworkCategory))) {
     return "destructive";
   }
   return undefined;
