@@ -8,6 +8,7 @@ import {
 } from "./schema.js";
 import { jsonResult, textResult } from "./responses.js";
 import { redactConfigValue } from "../redact.js";
+import { isUnsafeConfigKey } from "./meta/configInventory.js";
 import {
   ToolError,
   ToolExecutionError,
@@ -130,6 +131,11 @@ function parseCategoryMap(
   into: Record<string, Record<string, PrimitiveValue>>,
 ): void {
   for (const [category, items] of Object.entries(input)) {
+    if (isUnsafeConfigKey(category)) {
+      throw new ToolValidationError(`Configuration category name "${category}" is not allowed`, {
+        path: `${resolvedPath}.${category}`,
+      });
+    }
     if (typeof items !== "object" || items === null || Array.isArray(items)) {
       throw new ToolValidationError("Each category must map to an object of item values", {
         path: `${resolvedPath}.${category}`,
@@ -137,6 +143,11 @@ function parseCategoryMap(
     }
     const parsedItems: Record<string, PrimitiveValue> = into[category] ?? {};
     for (const [item, rawValue] of Object.entries(items as Record<string, unknown>)) {
+      if (isUnsafeConfigKey(item)) {
+        throw new ToolValidationError(`Configuration item name "${item}" is not allowed`, {
+          path: `${resolvedPath}.${category}.${item}`,
+        });
+      }
       parsedItems[item] = primitiveValueSchema.parse(rawValue, `${resolvedPath}.${category}.${item}`);
     }
     into[category] = parsedItems;

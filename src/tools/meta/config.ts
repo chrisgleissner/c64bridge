@@ -7,7 +7,7 @@ import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
 import { readHostFile, resolveHostPath } from "../../hostPaths.js";
-import { captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
+import { assertSafeConfigKeys, captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
 import { REDACTED_PLACEHOLDER } from "../../redact.js";
 import { normalizeErrorDetails } from "./util.js";
 
@@ -48,7 +48,7 @@ function flattenCategory(category: string, value: unknown): Record<string, unkno
   if (isPlainObject(items[category]) && Object.keys(items).every((key) => key === category || key === "errors")) {
     items = items[category] as Record<string, unknown>;
   }
-  const flat: Record<string, unknown> = {};
+  const flat: Record<string, unknown> = Object.create(null);
   for (const [item, entry] of Object.entries(items)) {
     let inner: unknown = entry;
     if (isPlainObject(inner) && isPlainObject(inner[category]) && Object.keys(inner).every((key) => key === category || key === "errors")) {
@@ -72,7 +72,7 @@ function changedConfigItems(
   current: Record<string, unknown>,
   original: Record<string, unknown>,
 ): Record<string, Record<string, unknown>> {
-  const changes: Record<string, Record<string, unknown>> = {};
+  const changes: Record<string, Record<string, unknown>> = Object.create(null);
   for (const [category, items] of Object.entries(payload)) {
     const wanted = flattenCategory(category, items);
     const live = flattenCategory(category, current[category]);
@@ -82,11 +82,12 @@ function changedConfigItems(
       if (JSON.stringify(originalItems[item]) !== JSON.stringify(value)) continue;
       if (value === undefined || value === REDACTED_PLACEHOLDER) continue;
       if (!Object.prototype.hasOwnProperty.call(live, item) || !valuesEqual(value, live[item])) {
-        (changes[category] ??= {})[item] = value;
+        (changes[category] ??= Object.create(null) as Record<string, unknown>)[item] = value;
       }
     }
   }
-  return changes;
+  // Plain objects for callers and the device client; names were validated before any lookup.
+  return Object.fromEntries(Object.entries(changes).map(([category, items]) => [category, { ...items }]));
 }
 
 function countItems(changes: Record<string, Record<string, unknown>>): number {
@@ -157,6 +158,7 @@ export const tools: ToolDefinition[] = [
           if (!snapshot || typeof snapshot !== "object") {
             throw new ToolValidationError("Invalid snapshot file", { path: "$.path" });
           }
+          assertSafeConfigKeys(snapshot.categories);
           let payload: Record<string, object>;
           try {
             payload = stripRedactedSecrets(validateSnapshotCategories(snapshot.categories) as Record<string, object>);
@@ -201,9 +203,10 @@ export const tools: ToolDefinition[] = [
         }
 
         const snapshot = await readSnapshotFile(path);
+        assertSafeConfigKeys(snapshot.categories ?? {});
         const snapCats = validateSnapshotCategories(snapshot.categories ?? {});
         const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true })).categories;
-        const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = {};
+        const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = Object.create(null);
         for (const [cat, snapVal] of Object.entries(snapCats)) {
           const curVal = current[cat];
           if (JSON.stringify(snapVal) !== JSON.stringify(curVal)) {

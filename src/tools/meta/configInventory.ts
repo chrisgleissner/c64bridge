@@ -1,3 +1,4 @@
+import { ToolValidationError } from "../errors.js";
 import { isSensitiveConfigItem, redactConfigValue, REDACTED_PLACEHOLDER } from "../../redact.js";
 
 export interface ConfigInventoryEntry {
@@ -94,7 +95,9 @@ export async function captureConfigSnapshot(
   client: ConfigReadableClient,
   options: CaptureConfigSnapshotOptions = {},
 ): Promise<ConfigSnapshotData> {
-  const inventory = normalizeConfigInventory(await client.configsList());
+  const inventory = normalizeConfigInventory(await client.configsList()).filter((entry) =>
+    !isUnsafeConfigKey(entry.category)
+    && !(entry.item !== undefined && isUnsafeConfigKey(entry.item)));
   const categories: Record<string, unknown> = {};
 
   for (const entry of inventory) {
@@ -132,6 +135,30 @@ export function stripRedactedSecrets(categories: Record<string, object>): Record
   return Object.fromEntries(
     Object.entries(categories).map(([category, items]) => [category, strip(category, items) as object]),
   );
+}
+
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+export function isUnsafeConfigKey(key: string): boolean {
+  return UNSAFE_KEYS.has(key);
+}
+
+/**
+ * Rejects category or item names that would resolve to Object.prototype members
+ * when used as keys of a plain object. Checked at every depth of the payload.
+ */
+export function assertSafeConfigKeys(value: unknown, path = "$.categories"): void {
+  if (value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertSafeConfigKeys(entry, `${path}[${index}]`));
+    return;
+  }
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (isUnsafeConfigKey(key)) {
+      throw new ToolValidationError(`Configuration category or item name "${key}" is not allowed`, { path: `${path}.${key}` });
+    }
+    assertSafeConfigKeys(entry, `${path}.${key}`);
+  }
 }
 
 export function validateSnapshotCategories(value: unknown): Record<string, unknown> {
