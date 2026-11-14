@@ -2125,6 +2125,31 @@ test("c64_debug get_monitor_state formats the current PC from register values", 
   }
 });
 
+test("HARD03-030 wait_for_state without expectedPC does not report a match when no debug session exists", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const client = {
+      async viceWaitForStop() { return { session: false, stopped: false }; },
+      async viceRegistersAvailable() { return [{ id: 0, name: "PC", bits: 16, size: 2 }]; },
+      async viceRegistersGet() { return [{ id: 0, size: 2, value: 0x2000 }]; },
+    };
+    const logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const result = await toolRegistry.invoke(
+      "c64_debug",
+      { op: "wait_for_state", timeoutMs: 2000, pollMs: 10 },
+      { client, rag: {}, logger, platform: getPlatformStatus(), setPlatform },
+    );
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent?.data?.matched, false);
+    assert.equal(result.structuredContent?.data?.timedOut, false);
+    assert.match(String(result.structuredContent?.data?.reason), /no debug session/);
+    assert.equal(result.structuredContent?.data?.pc, "$2000");
+  } finally {
+    setPlatform(restore);
+  }
+});
+
 test("c64_debug wait_for_state reports matched and timed out outcomes", async () => {
   const restore = getPlatformStatus().id;
   setPlatform("vice");

@@ -557,6 +557,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       let values: import("../vice/viceClient.js").ViceRegisterValue[] = [];
       let currentPC: number | undefined;
       let settled = false;
+      let noSession = false;
       while (!settled) {
         // Without an expected PC and with a debug session, the tracked CPU state decides: wait for
         // the stop event (a checkpoint hit or a step) instead of polling. With an expected PC the PC
@@ -568,7 +569,10 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         const wait = await ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
         values = await ctx.client.viceRegistersGet(0);
         currentPC = pcId !== undefined ? values.find((v) => v.id === pcId)?.value : undefined;
-        settled = targetPC === undefined ? (!wait.session || wait.stopped) : currentPC === targetPC;
+        // Without a session and without an expected PC nothing can stop the CPU: that is not a match.
+        noSession = targetPC === undefined && !wait.session;
+        settled = targetPC === undefined ? (wait.session && wait.stopped) : currentPC === targetPC;
+        if (noSession) break;
         if (!settled) {
           if (Date.now() >= deadline) break;
           // The wait above already took up to pollMs when a session was running the CPU.
@@ -584,7 +588,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       return jsonResult(
         {
           matched,
-          timedOut: !matched,
+          timedOut: !matched && !noSession,
+          ...(noSession ? { reason: "no debug session; nothing can stop the CPU" } : {}),
           pc: currentPC !== undefined ? formatAddress(currentPC) : undefined,
           registers: regs,
         },
