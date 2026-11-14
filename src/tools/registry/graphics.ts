@@ -385,7 +385,7 @@ export const graphicsModuleGroup = defineToolModule({
         {
           name: "Display sprite",
           description: "Show sprite data at coordinates",
-          arguments: { op: "render_sprite", sprite: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+          arguments: { op: "render_sprite", sprite: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
         },
         {
           name: "Import bitmap image",

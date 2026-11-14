@@ -1,6 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { toolRegistry } from "../src/tools/registry/index.js";
+import { graphicsModule } from "../src/tools/graphics.js";
 
 // Variants of a grouped tool schema: oneOf/anyOf entries, or the schema itself.
 function variantsOf(schema) {
@@ -41,5 +42,56 @@ test("every published example names only parameters its operation accepts and su
     }
   }
   assert.ok(checked > 10, `expected to check many examples, checked ${checked}`);
+  assert.deepEqual(problems, []);
+});
+
+test("every published example passes the runtime argument parser of its operation", async () => {
+  const noop = () => {};
+  const logger = { debug: noop, info: noop, warn: noop, error: noop };
+  const harmless = async () => ({ success: true, details: {} });
+  const client = new Proxy({}, { get: (_target, prop) => (prop === "then" ? undefined : harmless) });
+  const problems = [];
+  for (const descriptor of toolRegistry.list()) {
+    for (const example of descriptor.metadata?.examples ?? []) {
+      const args = example.arguments ?? {};
+      if (typeof args.op !== "string") continue;
+      const ctx = {
+        client,
+        rag: {},
+        logger,
+        platform: { id: "c64u", features: [], limitedFeatures: [] },
+        setPlatform: noop,
+      };
+      let result;
+      try {
+        result = await toolRegistry.invoke(descriptor.name, args, ctx);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/validation|must|invalid/i.test(message)) problems.push(`${descriptor.name} ${example.name}: ${message}`);
+        continue;
+      }
+      const error = result?.metadata?.error ?? result?.structuredContent?.data?.error;
+      if (result?.isError && error?.kind === "validation") {
+        problems.push(`${descriptor.name} ${example.name}: ${result.content?.[0]?.text}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, []);
+});
+
+test("every example of the legacy graphics module passes its runtime parser", async () => {
+  const noop = () => {};
+  const harmless = async () => ({ success: true, details: {} });
+  const client = new Proxy({}, { get: (_target, prop) => (prop === "then" ? undefined : harmless) });
+  const ctx = { client, rag: {}, logger: { debug: noop, info: noop, warn: noop, error: noop }, platform: { id: "c64u", features: [], limitedFeatures: [] }, setPlatform: noop };
+  const problems = [];
+  for (const tool of graphicsModule.describeTools()) {
+    for (const example of tool.metadata?.examples ?? []) {
+      const result = await graphicsModule.invoke(tool.name, example.arguments ?? {}, ctx);
+      if (result?.isError && result.metadata?.error?.kind === "validation") {
+        problems.push(`${tool.name} ${example.name}: ${result.content?.[0]?.text}`);
+      }
+    }
+  }
   assert.deepEqual(problems, []);
 });
