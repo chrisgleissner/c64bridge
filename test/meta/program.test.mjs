@@ -319,6 +319,39 @@ test("program_shuffle handles program run errors gracefully", async () => {
   assert.equal(data.errors, 1);
 });
 
+for (const extension of ["prg", "crt"]) {
+  test(`program_shuffle records an unsuccessful ${extension.toUpperCase()} launch before capturing`, async () => {
+    const { dir } = tmpPath(`shuffle-failed-${extension}`, "unused");
+    const captures = [];
+    let resets = 0;
+    let activePath;
+    const launch = async (file) => {
+      activePath = file;
+      return { success: !file.includes("broken"), details: { error: "launch refused" } };
+    };
+    const ctx = {
+      client: {
+        async filesInfo() { return [`/games/broken.${extension}`, `/games/working.${extension}`]; },
+        runPrgFile: launch,
+        runCrtFile: launch,
+        async readScreen() { captures.push(activePath); return "READY."; },
+        async reset() { resets++; return { success: true }; },
+      },
+      logger: createLogger(),
+    };
+    const result = await metaModule.invoke("program_shuffle", {
+      root: "/games", extensions: [extension], outputPath: dir, durationMs: 1, resetDelayMs: 0,
+    }, ctx);
+    assert.equal(result.structuredContent.data.errors, 1);
+    assert.deepEqual(captures, [`/games/working.${extension}`]);
+    assert.equal(resets, 2);
+    const log = JSON.parse(await fs.readFile(result.structuredContent.data.logPath, "utf8"));
+    assert.match(log.programs[0].error, /playback failed/);
+    assert.equal(log.programs[0].screen, undefined);
+    assert.equal(log.programs[1].error, undefined);
+  });
+}
+
 test("program_shuffle with CRT files", async () => {
   const ctx = {
     client: {
@@ -953,7 +986,7 @@ test("HARD03-017 program_shuffle reads the firmware files shape and sends patter
     client: {
       async filesInfo(pattern) {
         patterns.push(pattern);
-        if (pattern.endsWith(".prg")) return { files: { path: "/Usb0/GIANA.PRG", filename: "GIANA.PRG", size: 100, extension: "PRG" }, errors: [] };
+        if (pattern.endsWith(".prg")) return { files: { path: pattern, filename: "GIANA.PRG", size: 100, extension: "PRG" }, errors: [] };
         throw new Error("404 not found");
       },
       async runPrgFile(p) { runs.push(p); return { success: true }; },

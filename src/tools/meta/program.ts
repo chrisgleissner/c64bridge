@@ -706,9 +706,11 @@ export const tools: ToolDefinition[] = [
           try {
             const ext = programPath.toLowerCase().split(".").pop();
             if (ext === "prg") {
-              await (ctx.client as any).runPrgFile(programPath);
+              const run = await (ctx.client as any).runPrgFile(programPath);
+              if (!run.success) throw new ToolExecutionError("PRG playback failed", { details: run.details });
             } else if (ext === "crt") {
-              await (ctx.client as any).runCrtFile(programPath);
+              const run = await (ctx.client as any).runCrtFile(programPath);
+              if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
             }
 
             await sleepUnlessAborted(durationMs, ctx.signal);
