@@ -134,7 +134,7 @@
               "integer",
               "null"
             ],
-            "description": "Duration to run each program before assertions in milliseconds (1-600000)",
+            "description": "Duration to run each program before assertions",
             "minimum": 1,
             "maximum": 600000,
             "default": 2000
@@ -2133,7 +2133,7 @@
               "integer",
               "null"
             ],
-            "description": "Duration to run each program in milliseconds (1-600000)",
+            "description": "Duration to run each program in milliseconds",
             "minimum": 1,
             "maximum": 600000,
             "default": 5000
@@ -2399,7 +2399,7 @@
               "integer",
               "null"
             ],
-            "description": "Retries per chunk on failure (0-10)",
+            "description": "Retries per chunk on failure",
             "minimum": 0,
             "maximum": 10,
             "default": 1

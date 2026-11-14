@@ -111,7 +111,7 @@
         "integer",
         "null"
       ],
-      "description": "Duration to run each program in milliseconds (1-600000)",
+      "description": "Duration to run each program in milliseconds",
       "minimum": 1,
       "maximum": 600000,
       "default": 5000

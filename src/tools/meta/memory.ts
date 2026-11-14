@@ -76,7 +76,7 @@ const memoryDumpToFileArgsSchema = objectSchema({
     format: optionalSchema(stringSchema({ description: "Output format: hex|binary", enum: ["hex", "binary"], default: "hex" as any }), "hex" as any),
     chunkSize: optionalSchema(numberSchema({ description: "Chunk size for reads", integer: true, minimum: 1, maximum: 4096, default: 512 }), 512),
     pauseDuringRead: optionalSchema(booleanSchema({ description: "Pause/resume around dump", default: true }), true),
-    retries: optionalSchema(numberSchema({ description: "Retries per chunk on failure (0-10)", integer: true, minimum: 0, maximum: 10, default: 1 }), 1),
+    retries: optionalSchema(numberSchema({ description: "Retries per chunk on failure", integer: true, minimum: 0, maximum: 10, default: 1 }), 1),
   },
   required: ["address", "length", "outputPath"],
   additionalProperties: false,
