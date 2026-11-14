@@ -349,6 +349,27 @@ async function waitUntil(predicate, timeoutMs = 10_000) {
   return false;
 }
 
+// The pid file only proves that the child started. The launcher registers its signal forwarders
+// in the statements after spawn(), and until then Node's own default SIGTERM handler terminates the
+// launcher without touching the child. SIGHUP is the last forwarder registered and Node does not catch it
+// by default, so a caught SIGHUP means all forwarders are in place. /proc is only available on Linux;
+// elsewhere a short fixed delay is used.
+async function waitForSignalForwarders(pid) {
+  const statusPath = `/proc/${pid}/status`;
+  if (!fs.existsSync(statusPath)) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return true;
+  }
+  return await waitUntil(() => {
+    try {
+      const line = fs.readFileSync(statusPath, "utf8").split("\n").find((entry) => entry.startsWith("SigCgt:"));
+      return line !== undefined && (BigInt(`0x${line.split(/\s+/)[1]}`) & 1n) === 1n;
+    } catch {
+      return false;
+    }
+  });
+}
+
 test("start script forwards SIGTERM to the Bun child and the child exits", async (t) => {
   const fixture = createFixture();
   t.after(() => {
@@ -383,6 +404,7 @@ test("start script forwards SIGTERM to the Bun child and the child exits", async
   t.after(() => {
     if (pidAlive(childPid)) process.kill(childPid, "SIGKILL");
   });
+  assert.ok(await waitForSignalForwarders(launcher.pid), "launcher never registered its signal forwarders");
   launcher.kill("SIGTERM");
   await exited;
   assert.ok(await waitUntil(() => !pidAlive(childPid)), "child process survived SIGTERM to the launcher");
