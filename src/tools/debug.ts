@@ -17,10 +17,12 @@ import {
 import { jsonResult, textResult } from "./responses.js";
 import {
   ToolError,
+  ToolExecutionError,
   ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+import { parseNumericLiteral, assertNotBareHex } from "../numericArg.js";
 
 interface DebugOperationMap extends OperationMap {
   readonly list_checkpoints: Record<string, never>;
@@ -304,6 +306,15 @@ const debugOperationSchemas = [
 
 const checkpointLabels = new Map<number, string>();
 
+/** The step did not finish within the wait: the tool stopped the CPU itself, so the result is not a success. */
+function stepNotFinishedResult(what: string, pc: number | undefined, extra: Record<string, unknown>) {
+  const where = pc !== undefined ? ` at PC=${formatAddress(pc)}` : "";
+  return textResult(
+    `${what} did not finish within the wait; the tool stopped the CPU${where}.`,
+    { success: false, stopped: false, ...(pc !== undefined ? { pc: formatAddress(pc) } : {}), ...extra },
+  );
+}
+
 const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
   list_checkpoints: async (_args, ctx) => {
     try {
@@ -489,7 +500,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const parsed = stepArgsSchema.parse(args);
       const count = parsed.count ?? 1;
       const stepOver = parsed.mode === "over";
-      await ctx.client.viceStepInstructions(count, { stepOver });
+      const outcome = await ctx.client.viceStepInstructions(count, { stepOver });
+      if (outcome && outcome.stopped === false) return stepNotFinishedResult("Step", outcome.pc, { count, mode: stepOver ? "over" : "into" });
       ctx.logger.info("Stepped instructions", { count, stepOver });
       return textResult(
         `Stepped ${count} instruction${count === 1 ? "" : "s"}${stepOver ? " (over)" : ""}.`,
@@ -502,7 +514,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
   step_return: async (args, ctx) => {
     try {
       stepReturnArgsSchema.parse(args);
-      await ctx.client.viceStepReturn();
+      const outcome = await ctx.client.viceStepReturn();
+      if (outcome && outcome.stopped === false) return stepNotFinishedResult("Step until return", outcome.pc, {});
       ctx.logger.info("Stepped until return");
       return textResult("Continued execution until current routine return.", { success: true });
     } catch (error) {
@@ -541,10 +554,22 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const metadata = await ctx.client.viceRegistersAvailable(0);
       const metadataById = new Map(metadata.map((m) => [m.id, m]));
       const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+      const signal = (ctx as { signal?: AbortSignal }).signal;
+      const cancelled = () => {
+        const message = "wait_for_state was cancelled by the client before the wait finished.";
+        return {
+          content: [{ type: "text" as const, text: message }],
+          structuredContent: { type: "json" as const, data: { cancelled: true, message } },
+          metadata: { success: false, cancelled: true },
+          isError: true as const,
+        };
+      };
+      if (signal?.aborted) return cancelled();
       const deadline = Date.now() + timeoutMs;
       let values: import("../vice/viceClient.js").ViceRegisterValue[] = [];
       let currentPC: number | undefined;
       let settled = false;
+      let noSession = false;
       while (!settled) {
         // Without an expected PC and with a debug session, the tracked CPU state decides: wait for
         // the stop event (a checkpoint hit or a step) instead of polling. With an expected PC the PC
@@ -552,11 +577,28 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         // a disabled stopping checkpoint says nothing about where the PC is. The wait is cut short by
         // a stop event, so a hit is still seen at once. Without a session nothing can stop the CPU,
         // so the PC is polled.
+        if (signal?.aborted) return cancelled();
         const remaining = Math.max(0, deadline - Date.now());
-        const wait = await ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
+        const waiting = ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
+        let onAbort: (() => void) | undefined;
+        const aborted = signal
+          ? new Promise<"aborted">((resolve) => { onAbort = () => resolve("aborted"); signal.addEventListener("abort", onAbort, { once: true }); })
+          : undefined;
+        let wait: Awaited<typeof waiting>;
+        try {
+          const raced = aborted ? await Promise.race([waiting, aborted]) : await waiting;
+          if (raced === "aborted") { waiting.catch(() => {}); return cancelled(); }
+          wait = raced;
+        } finally {
+          if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+        }
+        if (signal?.aborted) return cancelled();
         values = await ctx.client.viceRegistersGet(0);
         currentPC = pcId !== undefined ? values.find((v) => v.id === pcId)?.value : undefined;
-        settled = targetPC === undefined ? (!wait.session || wait.stopped) : currentPC === targetPC;
+        // Without a session and without an expected PC nothing can stop the CPU: that is not a match.
+        noSession = targetPC === undefined && !wait.session;
+        settled = targetPC === undefined ? (wait.session && wait.stopped) : currentPC === targetPC;
+        if (noSession) break;
         if (!settled) {
           if (Date.now() >= deadline) break;
           // The wait above already took up to pollMs when a session was running the CPU.
@@ -572,7 +614,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       return jsonResult(
         {
           matched,
-          timedOut: !matched,
+          timedOut: !matched && !noSession,
+          ...(noSession ? { reason: "no debug session; nothing can stop the CPU" } : {}),
           pc: currentPC !== undefined ? formatAddress(currentPC) : undefined,
           registers: regs,
         },
@@ -586,7 +629,15 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       nuclearResetArgsSchema.parse(args);
       ctx.logger.info("Performing nuclear reset of VICE process");
-      await ctx.client.viceNuclearReset();
+      const result = await ctx.client.viceNuclearReset();
+      if (result && result.success === false) {
+        const details = result.details as { code?: unknown; message?: unknown } | undefined;
+        const message = typeof details?.message === "string" ? details.message : "VICE did not restart.";
+        throw new ToolExecutionError(`VICE nuclear reset failed: ${message}`, {
+          ...(typeof details?.code === "string" ? { code: details.code } : {}),
+          details: { result },
+        });
+      }
       checkpointLabels.clear();
       return textResult("VICE process stopped and restarted.", { success: true });
     } catch (error) {
@@ -634,7 +685,7 @@ export const debugModuleGroup = defineToolModule({
         list_checkpoints: "read", get_checkpoint: "read", create_checkpoint: "write", delete_checkpoint: "write",
         toggle_checkpoint: "write", set_condition: "write", list_registers: "read", get_registers: "read",
         set_registers: "write", step: "write", step_return: "write", get_monitor_state: "read",
-        wait_for_state: "read", nuclear_reset: "write", continue_execution: "write",
+        wait_for_state: "read", nuclear_reset: "destructive", continue_execution: "write",
       },
       tags: ["debug", "breakpoint", "registers", "grouped"],
       examples: [
@@ -717,15 +768,10 @@ function formatAddress(value: number): string {
 }
 
 function parseAddress(value: string, label: string): number {
-  const trimmed = value.trim();
-  // Anchored patterns: Number.parseInt alone would read "$08G0" as $0008.
-  let parsed = Number.NaN;
-  if (/^\$[0-9a-f]+$/i.test(trimmed)) {
-    parsed = Number.parseInt(trimmed.slice(1), 16);
-  } else if (/^0x[0-9a-f]+$/i.test(trimmed)) {
-    parsed = Number.parseInt(trimmed.slice(2), 16);
-  } else if (/^[0-9]+$/.test(trimmed)) {
-    parsed = Number.parseInt(trimmed, 10);
+  const parsed = parseNumericLiteral(value, `$.${label}`);
+  if (parsed === undefined) {
+    assertNotBareHex(value, `$.${label}`);
+    throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });
   }
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
     throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });

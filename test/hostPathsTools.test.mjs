@@ -219,3 +219,18 @@ test("memory_dump_to_file does not follow a symbolic link planted at the manifes
     fs.rmSync(outside.dir, { recursive: true, force: true });
   }
 });
+
+test("save_memory to ./.c64bridge.json is rejected and writes nothing (HARD03-003)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h3-cfg-"));
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const ctx = { client: { async readMemoryRaw() { return Uint8Array.of(1, 2, 3); } }, logger: createLogger() };
+    const res = await toolRegistry.invoke("c64_memory", { op: "save_memory", startAddress: "$2000", endAddress: "$2002", filePath: "./.c64bridge.json", asPrg: false }, ctx);
+    assert.equal(res.isError, true, JSON.stringify(res.content));
+    assert.equal(fs.existsSync(path.join(dir, ".c64bridge.json")), false);
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

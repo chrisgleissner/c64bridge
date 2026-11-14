@@ -1,8 +1,8 @@
 import { Buffer } from "node:buffer";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { redactValue } from "./redact.js";
+import { stateRootDir } from "./hostPaths.js";
 
 export interface DiagnosticsSessionInfo {
   readonly component: string;
@@ -457,7 +457,7 @@ function resolveDiagnosticsDirectory(): string {
   if (configured) {
     return path.resolve(configured);
   }
-  return path.join(os.homedir(), ".c64bridge", "diagnostics");
+  return path.join(stateRootDir(), "diagnostics");
 }
 
 function installGlobalHandlers(): void {

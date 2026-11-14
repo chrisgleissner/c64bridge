@@ -245,6 +245,16 @@ test("c64_graphics.get_display_state works on vice with same shape", async () =>
   assert.ok(typeof data.charOrBitmapAddress === "string");
 });
 
+test("c64_graphics.get_display_state reports the bitmap address from D018 bit 3", async () => {
+  const ctx = makeCtx({
+    platformId: "c64u",
+    clientOverrides: buildVicState({ d011: 0x3B, d018: 0x1D }),
+  });
+  const result = await toolRegistry.invoke("c64_graphics", { op: "get_display_state" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.data.charOrBitmapAddress, "$2000");
+});
+
 // ---------------------------------------------------------------------------
 // c64_batch failure reporting and bounds
 // ---------------------------------------------------------------------------
@@ -295,4 +305,46 @@ test("c64_batch limits the number of commands to 64", async () => {
   assert.equal(tooMany.metadata?.error?.kind, "validation");
   assert.match(tooMany.content[0].text, /too many items/);
   assert.match(tooMany.content[0].text, /maxItems: 64/);
+});
+
+// ---------------------------------------------------------------------------
+// HARD03-011 running result caps
+// ---------------------------------------------------------------------------
+
+function captureBatchCtx(makePixels) {
+  return makeCtx({
+    clientOverrides: {
+      async captureFrames(options) {
+        const frames = Array.from({ length: options.count ?? 1 }, () => {
+          const pixels = makePixels();
+          return { frameNumber: null, width: pixels.length, height: 1, bitsPerPixel: 8, pixels, complete: true };
+        });
+        return { backend: "c64u", frames };
+      },
+    },
+  });
+}
+
+test("HARD03-011 c64_batch fails the command that pushes the total result size over 2 MiB", async () => {
+  const ctx = captureBatchCtx(() => new Uint8Array(1_100_000));
+  const command = { tool: "c64_graphics", args: { op: "capture_frame", count: 1, includePixels: true } };
+  const result = await toolRegistry.invoke("c64_batch", { commands: [command, command, command] }, ctx);
+  const results = result.structuredContent.data.results;
+  assert.equal(results[0].success, true);
+  assert.equal(results[1].success, false);
+  assert.match(results[1].error, /2097152 byte limit/);
+  assert.equal(results.length, 2, "stopOnError stops at the failing command");
+  assert.equal(result.isError, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(result.structuredContent.data)) < 3 * 1024 * 1024);
+});
+
+test("HARD03-011 c64_batch fails the command that pushes the image count over 4", async () => {
+  const ctx = captureBatchCtx(() => new Uint8Array(8));
+  const command = { tool: "c64_graphics", args: { op: "capture_frame", count: 4, format: "png" } };
+  const result = await toolRegistry.invoke("c64_batch", { commands: [command, command] }, ctx);
+  const results = result.structuredContent.data.results;
+  assert.equal(results[0].success, true);
+  assert.equal(results[1].success, false);
+  assert.match(results[1].error, /at most 4/);
+  assert.equal(result.content.filter((entry) => entry.type === "image").length, 4);
 });

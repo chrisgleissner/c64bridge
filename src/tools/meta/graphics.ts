@@ -7,6 +7,8 @@ import { normalizeErrorDetails } from "./util.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
+import { rangeOverlapsIo } from "../../ioRange.js";
+import { parseNumericLiteral, assertNotBareHex, assertAddressRange } from "../../numericArg.js";
 import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
@@ -18,19 +20,12 @@ function parseAddressNumeric(value: string): number {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
   }
-  const trimmed = value.trim();
-  // Anchored patterns: Number.parseInt alone would read "$08G0" as $0008.
-  let parsed = Number.NaN;
-  if (/^\$[0-9a-f]+$/i.test(trimmed)) parsed = Number.parseInt(trimmed.slice(1), 16);
-  else if (/^0x[0-9a-f]+$/i.test(trimmed)) parsed = Number.parseInt(trimmed.slice(2), 16);
-  else if (/^%[01]+$/.test(trimmed)) parsed = Number.parseInt(trimmed.slice(1), 2);
-  else if (/^[0-9]+$/.test(trimmed)) parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+  const parsed = parseNumericLiteral(value, "$.address");
+  if (parsed === undefined) {
+    assertNotBareHex(value, "$.address");
     throw new ToolValidationError("Invalid address value", { path: "$.address", details: { value } });
   }
-  if (parsed < 0 || parsed > 0xFFFF) {
-    throw new ToolValidationError("Address must be between $0000 and $FFFF", { path: "$.address", details: { value } });
-  }
+  assertAddressRange(parsed, undefined, "$.address");
   return parsed;
 }
 
@@ -356,10 +351,9 @@ export const tools: ToolDefinition[] = [
         const minEntropy = parsed.minEntropy ?? 0.3;
         const charsetSize = 2048; // 256 chars * 8 bytes each
 
-        // Common charset locations on C64
+        // Common charset locations on C64. $D000-$DFFF is not listed: a read there returns the I/O view
+        // (and clears CIA interrupt flags on hardware), never the character ROM.
         const commonLocations = [
-          0xD000, // Character ROM (uppercase/graphics)
-          0xD800, // Character ROM (lowercase/uppercase) - accessed via banking
           0x3000, // Common RAM location for custom charsets
           0x2000, // Another common RAM location
         ];
@@ -370,6 +364,7 @@ export const tools: ToolDefinition[] = [
         } else if (parsed.scanRange === "full") {
           // Scan entire 64KB in 2KB increments
           for (let addr = 0; addr <= 0x10000 - charsetSize; addr += 0x800) {
+            if (rangeOverlapsIo(addr, charsetSize)) continue;
             scanLocations.push(addr);
           }
         } else {

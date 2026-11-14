@@ -310,3 +310,78 @@ test("c64_input.key rejects C128-only key names", async () => {
     assert.equal(result.isError, true, key);
   }
 });
+
+test("HARD03-032 c64_input.joystick tap on c64u holds press for durationMs and then releases", async () => {
+  const { ctx, inputBatches } = createInputContext({ platformId: "c64u" });
+  const sent = [];
+  const base = ctx.client.sendInputEvents.bind(ctx.client);
+  ctx.client.sendInputEvents = async (batch) => {
+    sent.push({ at: Date.now(), batch });
+    return base(batch);
+  };
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 2, controls: ["fire2"], action: "tap", durationMs: 150,
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(
+    sent.map((entry) => entry.batch.events[0].transition),
+    ["press", "release"],
+  );
+  assert.deepEqual(inputBatches[0], { events: [{ kind: "joystick", port: 2, inputs: ["fire2"], transition: "press" }] });
+  assert.deepEqual(inputBatches[1], { events: [{ kind: "joystick", port: 2, inputs: ["fire2"], transition: "release" }] });
+  assert.ok(sent[1].at - sent[0].at >= 140, `held for ${sent[1].at - sent[0].at} ms`);
+});
+
+test("HARD03-029 c64_input.write_text reports a feed stopped at a checkpoint as not typed", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  ctx.client.injectKeyboardQueue = async () => ({ delivered: 3, status: "stopped", pending: 5, stoppedAt: 0x0810 });
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "HELLO WORLD" }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.data?.success, false);
+  assert.equal(result.structuredContent?.data?.status, "stopped");
+  assert.equal(result.structuredContent?.data?.pending, 5);
+  assert.equal(result.structuredContent?.data?.stoppedAt, 0x0810);
+  const text = String(result.content?.[0]?.text ?? "");
+  assert.match(text, /stopped/);
+  assert.match(text, /\$0810/);
+  assert.equal(/Sent 11 character/.test(text), false, text);
+});
+
+test("HARD03-029 c64_input.write_text reports a queued feed as held, not typed", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  ctx.client.injectKeyboardQueue = async () => ({ delivered: 0, status: "queued", pending: 11 });
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "HELLO WORLD" }, ctx);
+
+  assert.equal(result.structuredContent?.data?.status, "queued");
+  assert.equal(result.structuredContent?.data?.pending, 11);
+  assert.equal(result.structuredContent?.data?.stoppedAt, null);
+  assert.match(String(result.content?.[0]?.text ?? ""), /queued|held/);
+});
+
+test("HARD03-029 c64_input.key stops at a checkpoint and does not press the remaining keys", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  const calls = [];
+  ctx.client.injectKeyboardQueue = async (bytes) => {
+    calls.push(Array.from(bytes));
+    return { delivered: 1, status: "stopped", pending: 0, stoppedAt: 0x0900 };
+  };
+  const result = await toolRegistry.invoke("c64_input", { op: "key", key: "a", count: 3 }, ctx);
+
+  assert.equal(calls.length, 1);
+  assert.equal(result.structuredContent?.data?.success, false);
+  assert.equal(result.structuredContent?.data?.status, "stopped");
+  assert.equal(result.structuredContent?.data?.stoppedAt, 0x0900);
+  assert.equal(/^Pressed/.test(String(result.content?.[0]?.text ?? "")), false);
+});
+
+test("HARD03-029 c64_input.key reports success when every feed drained", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  ctx.client.injectKeyboardQueue = async () => ({ delivered: 1, status: "drained", pending: 0 });
+  const result = await toolRegistry.invoke("c64_input", { op: "key", key: "a", count: 2 }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.data?.success, true);
+  assert.equal(result.structuredContent?.data?.status, "drained");
+});

@@ -91,6 +91,7 @@ const soundOperations: GroupedOperationConfig[] = [
             sampleRateHz: capture.sampleRateHz,
             samplePairs: capture.samplePairs,
             byteLength: samplesBuffer.length,
+            ...(capture.warnings && capture.warnings.length > 0 ? { warnings: [...capture.warnings] } : {}),
             samples: {
               encoding: parsed.encoding,
               data: parsed.encoding === "hex"

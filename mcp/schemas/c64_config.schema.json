@@ -87,7 +87,7 @@
         "string",
         "null"
       ],
-      "description": "Root path to search for programs",
+      "description": "Directory to search for programs (not recursive; the firmware lookup returns one match per extension)",
       "minLength": 1,
       "default": "/"
     },
@@ -113,6 +113,7 @@
       ],
       "description": "Duration to run each program in milliseconds",
       "minimum": 1,
+      "maximum": 600000,
       "default": 5000
     },
     "captureScreen": {

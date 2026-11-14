@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ToolValidationError } from "./tools/errors.js";
 
 export type HostPathPurpose = "read" | "write";
@@ -17,6 +18,7 @@ export interface ResolveHostPathOptions {
 export const DEFAULT_MAX_READ_BYTES = 16 * 1024 * 1024;
 export const DISK_IMAGE_MAX_READ_BYTES = 64 * 1024 * 1024;
 export const ALLOWED_DIRS_ENV = "C64BRIDGE_ALLOWED_DIRS";
+export const ALLOW_HIDDEN_PATHS_ENV = "C64BRIDGE_ALLOW_HIDDEN_PATHS";
 
 /** True when candidate equals root or lies inside it. Both must be absolute. */
 export function isWithin(root: string, candidate: string): boolean {
@@ -54,6 +56,12 @@ function homeDirectory(): string {
   return process.env.HOME || os.homedir();
 }
 
+/** Parent of task state, default run directories and diagnostics: C64BRIDGE_STATE_DIR, else ~/.c64bridge. Read at call time. */
+export function stateRootDir(): string {
+  const configured = process.env.C64BRIDGE_STATE_DIR?.trim();
+  return configured ? path.resolve(configured) : path.join(homeDirectory(), ".c64bridge");
+}
+
 /**
  * Expand exactly "~" and a leading "~/" (or "~" followed by the platform separator)
  * to the home directory. JSON tool arguments never pass through a shell, so clients
@@ -75,6 +83,7 @@ export function allowedHostRoots(): string[] {
   const home = safeRealpath(homeDirectory());
   if (cwd !== home && cwd !== path.parse(cwd).root) roots.push(cwd);
   roots.push(safeRealpath(path.join(homeDirectory(), ".c64bridge")));
+  roots.push(safeRealpath(stateRootDir()));
   roots.push(safeRealpath(os.tmpdir()));
   const extra = process.env[ALLOWED_DIRS_ENV];
   if (extra) {
@@ -96,14 +105,31 @@ export function resolveHostChildPath(dir: string, ...names: string[]): string {
   return resolveHostPath(path.join(dir, ...names), { purpose: "write" });
 }
 
-/** Default output directory under the working directory, or under ~/.c64bridge when the working directory is not an allowed root. */
+/** Default output directory under the working directory, or under the state root (~/.c64bridge by default) when the working directory is not an allowed root. */
 export function defaultHostOutputDir(...names: string[]): string {
   try {
     return resolveHostPath(path.join(process.cwd(), ...names), { purpose: "write" });
   } catch (error) {
     if (!(error instanceof ToolValidationError)) throw error;
-    return resolveHostPath(path.join(homeDirectory(), ".c64bridge", ...names), { purpose: "write" });
+    return resolveHostPath(path.join(stateRootDir(), ...names), { purpose: "write" });
   }
+}
+
+/** Real paths of the files the server reads its configuration from, and of the background task state file. */
+function protectedHostFiles(): string[] {
+  const files: string[] = [];
+  const configured = process.env.C64BRIDGE_CONFIG;
+  if (configured) files.push(configured);
+  files.push(path.join(process.cwd(), ".c64bridge.json"));
+  files.push(path.join(homeDirectory(), ".c64bridge.json"));
+  files.push(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".c64bridge.json"));
+  const taskState = process.env.C64_TASK_STATE_FILE;
+  files.push(taskState ? path.resolve(taskState) : path.join(stateRootDir(), "tasks.json"));
+  return files.map(safeRealpath);
+}
+
+function hiddenPathsAllowed(): boolean {
+  return process.env[ALLOW_HIDDEN_PATHS_ENV]?.trim() === "1";
 }
 
 function confinementDisabled(): boolean {
@@ -129,6 +155,24 @@ export function resolveHostPath(input: string, options: ResolveHostPathOptions):
         `Host path is outside the allowed directories: ${resolved}. Allowed roots: ${roots.join(", ")}. `
           + `Add directories with the ${ALLOWED_DIRS_ENV} environment variable (entries separated by "${path.delimiter}"; "*" disables confinement).`,
         { path: resolved, details: { allowedRoots: roots, env: ALLOWED_DIRS_ENV } },
+      );
+    }
+  }
+  if (protectedHostFiles().includes(real)) {
+    throw new ToolValidationError(
+      `Host path is a server configuration or state file and cannot be used by tools: ${resolved}.`,
+      { path: resolved },
+    );
+  }
+  if (!disabled && !hiddenPathsAllowed()) {
+    const roots = options.roots ? options.roots.map(safeRealpath) : allowedHostRoots();
+    const visible = roots.some((root) => isWithin(root, real)
+      && !path.relative(root, real).split(path.sep).some((part) => part.startsWith(".") && part !== "." && part !== ".."));
+    if (!visible) {
+      throw new ToolValidationError(
+        `Host path has a hidden component (name starting with ".") below an allowed directory: ${resolved}. `
+          + `Set ${ALLOW_HIDDEN_PATHS_ENV}=1 to allow hidden paths.`,
+        { path: resolved, details: { env: ALLOW_HIDDEN_PATHS_ENV } },
       );
     }
   }

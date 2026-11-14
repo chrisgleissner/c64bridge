@@ -50,6 +50,7 @@ import type {
   ViceRegisterWrite,
   ViceResourceValue,
 } from "./vice/viceClient.js";
+import { userStreamTarget, withStreamLock } from "./streamTargets.js";
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
@@ -117,6 +118,8 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+  /** Non-fatal notes, for example that a stream started with c64_stream was restarted. */
+  readonly warnings?: readonly string[];
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -672,10 +675,6 @@ export class C64Client {
       const pointerValue = (spriteAddress & 0x3FFF) >> 6;
       const bitMask = 1 << index;
 
-      const screenRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(SPACE_SCREEN_CODE);
-      screenRam[0x03F8 + index] = pointerValue & 0xFF;
-      const colorRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(DEFAULT_TEXT_FOREGROUND);
-
       const facade = await this.facadePromise;
       const currentDd00 = await this.readByteOrDefault(facade, 0xDD00, 0);
       const currentBorder = await this.readByteOrDefault(facade, 0xD020, DEFAULT_BORDER_COLOR);
@@ -693,8 +692,7 @@ export class C64Client {
       const d01c = (currentD01C & ~bitMask) | (multicolour ? bitMask : 0);
 
       await facade.writeMemory(spriteAddress, spriteSlot);
-      await facade.writeMemory(TEXT_SCREEN_ADDRESS, screenRam);
-      await facade.writeMemory(TEXT_COLOR_RAM_ADDRESS, colorRam);
+      await facade.writeMemory(pointerAddress, Uint8Array.of(pointerValue & 0xFF));
       await facade.writeMemory(0xDD00, Uint8Array.of(textRegisters.dd00));
       await facade.writeMemory(0xD011, Uint8Array.of(textRegisters.d011));
       await facade.writeMemory(0xD016, Uint8Array.of(textRegisters.d016));
@@ -831,9 +829,30 @@ export class C64Client {
       }
       const sysCommand = Buffer.from(`SYS${entryAddress}\r`, "ascii");
       const injectResult = await this.injectKeyboardQueue(sysCommand, { pinnedFacade: facade });
+      const keyboard = injectResult.status === undefined
+        ? undefined
+        : {
+            status: injectResult.status,
+            ...(injectResult.pending === undefined ? {} : { pending: injectResult.pending }),
+            ...(injectResult.stoppedAt === undefined ? {} : { stoppedAt: injectResult.stoppedAt }),
+          };
+      if (injectResult.status === "stopped") {
+        // A checkpoint hit while SYS was typed: the program is loaded but was not started.
+        return {
+          success: false,
+          details: {
+            message: `The program was loaded, but typing SYS${entryAddress} was stopped by a checkpoint${injectResult.stoppedAt === undefined ? "" : ` at $${injectResult.stoppedAt.toString(16).toUpperCase().padStart(4, "0")}`}; it was not started.`,
+            started: false,
+            load: loadResult.details,
+            entryAddress,
+            delivered: injectResult.delivered,
+            keyboard,
+          },
+        };
+      }
       return {
         success: true,
-        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered },
+        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered, ...(keyboard ? { keyboard } : {}) },
       };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1751,6 +1770,32 @@ export class C64Client {
       return { backend: "c64u", frames };
     }
 
+    return withStreamLock("video", async () => {
+      let result: FrameCaptureResult | undefined;
+      try {
+        result = await this.captureC64uVideoFramesOnce(facade, count);
+      } finally {
+        const notes = await this.restoreUserStream(facade, "video");
+        if (result && notes.length > 0) result = { ...result, warnings: [...(result.warnings ?? []), ...notes] };
+      }
+      return result;
+    });
+  }
+
+  /** Restarts a stream the user started with c64_stream start after a capture replaced and stopped it. */
+  private async restoreUserStream(facade: C64Facade, stream: "video" | "audio"): Promise<string[]> {
+    const target = userStreamTarget(stream);
+    if (!target) return [];
+    try {
+      await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, stream, target), `restart ${stream} stream`);
+      return [`The ${stream} stream started with c64_stream was restarted toward ${target} after the capture.`];
+    } catch (error) {
+      writeDiagnosticEvent("user_stream_restart_failed", { stream, error: this.normaliseError(error) });
+      return [`The ${stream} stream started with c64_stream could not be restarted toward ${target}: ${error instanceof Error ? error.message : String(error)}`];
+    }
+  }
+
+  private async captureC64uVideoFramesOnce(facade: C64Facade, count: number): Promise<FrameCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
@@ -1986,6 +2031,7 @@ export class C64Client {
     } finally {
       session.socket.close();
       this.rejectC64uVideoCaptureWaiters(session, stopError ?? new Error("Video capture session closed"));
+      await this.restoreUserStream(session.facade, "video");
     }
 
     if (stopError) {
@@ -2034,6 +2080,23 @@ export class C64Client {
   }
 
   private async captureC64uAudioSamples(
+    facade: C64Facade,
+    samplePairs: number,
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
+  ): Promise<SampleCaptureResult> {
+    return withStreamLock("audio", async () => {
+      let result: SampleCaptureResult | undefined;
+      try {
+        result = await this.captureC64uAudioSamplesOnce(facade, samplePairs, options);
+      } finally {
+        const notes = await this.restoreUserStream(facade, "audio");
+        if (result && notes.length > 0) result = { ...result, warnings: notes };
+      }
+      return result;
+    });
+  }
+
+  private async captureC64uAudioSamplesOnce(
     facade: C64Facade,
     samplePairs: number,
     options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
@@ -2505,7 +2568,7 @@ export class C64Client {
       readonly drainTimeoutMs?: number;
       readonly pinnedFacade?: C64Facade;
     },
-  ): Promise<{ delivered: number }> {
+  ): Promise<{ delivered: number; status?: "drained" | "queued" | "stopped"; pending?: number; stoppedAt?: number }> {
     const data = Buffer.isBuffer(bytes)
       ? bytes
       : Buffer.from(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes));
@@ -2522,7 +2585,12 @@ export class C64Client {
       if (fed.status === "timeout") {
         throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
       }
-      return { delivered: fed.delivered };
+      return {
+        delivered: fed.delivered,
+        status: fed.status,
+        pending: fed.pending,
+        ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
+      };
     }
     const KEYD = 0x0277; // KERNAL keyboard buffer base
     const NDX = 0x00C6;  // pending byte count
@@ -2626,9 +2694,9 @@ export class C64Client {
       return this.withViceMonitor((client) => client.memGet(address, end));
     }
 
-    async viceNuclearReset(): Promise<void> {
+    async viceNuclearReset(): Promise<{ success: boolean; details?: unknown }> {
       const backend = await this.requireViceBackend();
-      await backend.nuclearReset();
+      return await backend.nuclearReset();
     }
 
     async viceCheckpointList(): Promise<ViceCheckpoint[]> {
@@ -2683,12 +2751,29 @@ export class C64Client {
       return this.withViceMonitor((client) => client.registersSet(writes, payload));
     }
 
-    async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
+    async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<{ stopped: boolean; pc?: number }> {
+      let stopped = true;
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { stopped = await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
+      return await this.viceStepOutcome(stopped);
     }
 
-    async viceStepReturn(): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepReturn({ waitForStopMs: 2_000 }); });
+    async viceStepReturn(): Promise<{ stopped: boolean; pc?: number }> {
+      let stopped = true;
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { stopped = await client.stepReturn({ waitForStopMs: 2_000 }); });
+      return await this.viceStepOutcome(stopped);
+    }
+
+    /** After a step: when the CPU did not stop in time, the session has stopped it; report the PC it was stopped at. */
+    private async viceStepOutcome(stopped: boolean): Promise<{ stopped: boolean; pc?: number }> {
+      if (stopped) return { stopped };
+      try {
+        const [metadata, values] = await Promise.all([this.viceRegistersAvailable(0), this.viceRegistersGet(0)]);
+        const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+        const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
+        return pc === undefined ? { stopped } : { stopped, pc };
+      } catch {
+        return { stopped };
+      }
     }
 
     async viceResourceGet(name: string): Promise<ViceResourceValue> {
@@ -3043,6 +3128,8 @@ function chunkByExpressionLength(input: string, expression: (text: string) => st
  */
 function printerTextExpression(input: string, target: "commodore" | "epson", secondaryAddress?: number): string {
   const needsChr = (char: string): number | undefined => {
+    // Literal < and : and { would be expanded to control codes (<RETURN>, :cr:, {home}) by the tokenizer.
+    if (char === "<" || char === ":" || char === "{") return char.charCodeAt(0);
     if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
     if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
     return undefined;

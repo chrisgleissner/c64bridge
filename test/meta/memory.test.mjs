@@ -145,3 +145,24 @@ test("memory_dump_to_file fails when the firmware returns fewer bytes than reque
   const res = await metaModule.invoke("memory_dump_to_file", { address: "$C000", length: 8, outputPath: file, retries: 0 }, ctx);
   assert.equal(res.isError, true);
 });
+
+test("HARD03-036 verify_and_write_memory applies mask to the post-write comparison", async () => {
+  const makeCtx = (readBack) => {
+    let written = false;
+    return {
+      platform: { id: "c64u" },
+      client: {
+        async pause() { return { success: true }; },
+        async resume() { return { success: true }; },
+        async readMemory() { return { success: true, data: written ? readBack : "$00" }; },
+        async writeMemory() { written = true; return { success: true }; },
+      },
+      logger: createLogger(),
+    };
+  };
+  const args = { address: "$D020", bytes: "$01", mask: "$0F" };
+  const ok = await metaModule.invoke("verify_and_write_memory", args, makeCtx("$F1"));
+  assert.equal(ok.metadata?.success, true);
+  const bad = await metaModule.invoke("verify_and_write_memory", args, makeCtx("$F2"));
+  assert.equal(bad.isError, true);
+});

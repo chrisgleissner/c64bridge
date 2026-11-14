@@ -270,7 +270,7 @@ test("rip_charset_from_ram scans common locations", async () => {
   assert.equal(result.metadata?.success, true);
   assert.equal(pauseCalls, 1);
   assert.equal(resumeCalls, 1);
-  assert.ok(readCalls >= 4); // Should scan multiple common locations
+  assert.equal(readCalls, 2); // $3000 and $2000; $D000-$DFFF is never read
 
   const payload = result.structuredContent?.data;
   assert.equal(payload?.found, true);
@@ -425,4 +425,26 @@ test("wait_for_screen_text matches on a read made just before the deadline", asy
   const ctx = { client: { async readScreen() { calls += 1; return calls >= 2 ? "READY." : "x"; } }, logger: createLogger() };
   const res = await metaModule.invoke("wait_for_screen_text", { pattern: "READY.", timeoutMs: 300, intervalMs: 5000 }, ctx);
   assert.equal(res.metadata?.success, true);
+});
+
+test("HARD03-008 backtracking-heavy patterns are rejected or finish within 1 s on a full screen", async () => {
+  const screen = Array.from({ length: 25 }, () => "a".repeat(39) + "x").join("\n");
+  const patterns = ["[^!]*[^!]*[^!]*!", "[\\s\\S]*[\\s\\S]*[\\s\\S]*Z", "[^!]{0,999}".repeat(6) + "!"];
+  const ctx = { client: { async readScreen() { return screen; } }, logger: createLogger() };
+  for (const pattern of patterns) {
+    const started = Date.now();
+    const res = await metaModule.invoke("wait_for_screen_text", { pattern, isRegex: true, timeoutMs: 200, intervalMs: 20 }, ctx);
+    assert.ok(Date.now() - started < 1000, `${pattern} took ${Date.now() - started} ms`);
+    if (typeof globalThis.Bun !== "undefined") {
+      assert.equal(res.metadata?.error?.kind, "validation", pattern);
+    }
+  }
+});
+
+test("HARD03-008 simple patterns still work under the stricter budget", async () => {
+  const ctx = { client: { async readScreen() { return "READY.\n"; } }, logger: createLogger() };
+  for (const pattern of ["READY.", ".*READY.*", "R[A-Z]+Y\\.", "\\d{2,4}|READY\\.?"]) {
+    const res = await metaModule.invoke("wait_for_screen_text", { pattern, isRegex: true, timeoutMs: 100, intervalMs: 20 }, ctx);
+    assert.equal(res.metadata?.success, true, pattern);
+  }
 });

@@ -1,14 +1,14 @@
 // Program testing and orchestration meta tools
-import type { ToolDefinition, ToolExecutionContext } from "../types.js";
+import { cancelledResult, type ToolDefinition, type ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { measureSidSilence } from "../audio.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
-import { sleep, formatTimestampSpec } from "./util.js";
+import { sleep, sleepUnlessAborted, formatTimestampSpec } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 import type { CapturedFrame } from "../../streamCapture.js";
 import { withDiagnosticSpan } from "../../diagnostics.js";
@@ -240,12 +240,33 @@ async function waitForGreetingScreen(
   return { matched: false, screen: lastScreen };
 }
 
+/** True for a path that program_shuffle and batch_run_with_assertions can start (.prg or .crt). */
+function isRunnableProgramPath(path: string): boolean {
+  const ext = path.toLowerCase().split(".").pop();
+  return ext === "prg" || ext === "crt";
+}
+
+/**
+ * Paths from a filesInfo answer: a list of paths, {paths: [...]}, or the firmware shape
+ * {files: {filename, ...}} (one match, in the directory of the pattern). Anything else is an error.
+ */
+function parseDiscoveredPaths(info: unknown, searchDir: string, pattern: string): string[] {
+  if (Array.isArray(info)) return info.filter((p): p is string => typeof p === "string");
+  const record = info && typeof info === "object" ? (info as Record<string, unknown>) : undefined;
+  if (record && Array.isArray(record.paths)) return record.paths.filter((p): p is string => typeof p === "string");
+  const files = record?.files;
+  if (files && typeof files === "object" && !Array.isArray(files) && typeof (files as { filename?: unknown }).filename === "string") {
+    return [`${searchDir}/${(files as { filename: string }).filename}`];
+  }
+  throw new ToolExecutionError("Unexpected response from the file lookup; expected a list of paths or {files:{filename}}", { details: { pattern } });
+}
+
 const programShuffleArgsSchema = objectSchema({
   description: "Discover PRG/CRT files under root path, run each for a duration, capture screen, then reset.",
   properties: {
-    root: optionalSchema(stringSchema({ description: "Root path to search for programs", minLength: 1 }), "/"),
+    root: optionalSchema(stringSchema({ description: "Directory to search for programs (not recursive; the firmware lookup returns one match per extension)", minLength: 1 }), "/"),
     extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 })), ["prg", "crt"] as any),
-    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds", integer: true, minimum: 1, default: 5000 }), 5000),
+    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds", integer: true, minimum: 1, maximum: 600000, default: 5000 }), 5000),
     captureScreen: optionalSchema(booleanSchema({ description: "Capture screen after each run", default: true }), true),
     maxPrograms: optionalSchema(numberSchema({ description: "Maximum number of programs to run", integer: true, minimum: 1, default: 10 }), 10),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for run logs and captures", minLength: 1 })),
@@ -278,7 +299,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
       additionalProperties: false,
     })),
     continueOnError: optionalSchema(booleanSchema({ description: "Continue running programs after assertion failure", default: false }), false),
-    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions", integer: true, minimum: 1, default: 2000 }), 2000),
+    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions", integer: true, minimum: 1, maximum: 600000, default: 2000 }), 2000),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for test results", minLength: 1 })),
     resetDelayMs: optionalSchema(numberSchema({ description: "Delay after reset operations to allow the platform to settle.", integer: true, minimum: 0, maximum: 1000, default: 100 }), 100),
   },
@@ -620,7 +641,7 @@ export const tools: ToolDefinition[] = [
   },
   {
     name: "program_shuffle",
-    description: "Discover and run PRG/CRT programs under a root path, capturing screens and resetting between runs.",
+    description: "Run the PRG/CRT programs found in a root directory (one match per extension, no recursion), capturing screens and resetting between runs.",
     summary: "Automated program testing workflow with screen captures and run logs.",
     inputSchema: programShuffleArgsSchema.jsonSchema,
     tags: ["orchestration", "programs", "testing"],
@@ -630,25 +651,32 @@ export const tools: ToolDefinition[] = [
         const parsed = programShuffleArgsSchema.parse(args ?? {});
         const root = parsed.root ?? "/";
         const extensions = (parsed.extensions ?? ["prg", "crt"]) as string[];
+        for (const ext of extensions) {
+          if (!isRunnableProgramPath(`x.${ext}`)) {
+            throw new ToolValidationError(`Unsupported extension "${ext}": program_shuffle runs .prg and .crt files only`, { path: "$.extensions" });
+          }
+        }
         const durationMs = parsed.durationMs ?? 5000;
         const maxPrograms = parsed.maxPrograms ?? 10;
         const captureScreen = parsed.captureScreen !== false;
   const resetDelayMs = parsed.resetDelayMs ?? 100;
         
-        // Discover programs
+        // Discover programs. The firmware resolves the pattern for one directory and answers with a single match
+        // ({files:{filename}}) or 404, so each extension finds at most one program in the root directory.
         const programs: string[] = [];
+        const searchDir = root.replace(/\/+$/, "");
         for (const ext of extensions) {
-          const pattern = `${root}/**/*.${ext}`;
+          const pattern = `${searchDir}/*.${ext}`;
+          let info: unknown;
           try {
-            const info = await (ctx.client as any).filesInfo(pattern);
-            const paths = Array.isArray(info) ? info : (Array.isArray((info as any)?.paths) ? (info as any).paths : []);
-            for (const p of paths) {
-              if (typeof p === "string" && programs.length < maxPrograms) {
-                programs.push(p);
-              }
-            }
+            info = await (ctx.client as any).filesInfo(pattern);
           } catch (e) {
-            // Ignore discovery errors for individual patterns
+            continue; // A miss (404) or a failed lookup for one pattern does not stop the others.
+          }
+          for (const p of parseDiscoveredPaths(info, searchDir, pattern)) {
+            if (isRunnableProgramPath(p) && programs.length < maxPrograms && !programs.includes(p)) {
+              programs.push(p);
+            }
           }
         }
 
@@ -665,7 +693,12 @@ export const tools: ToolDefinition[] = [
         const results: Array<{ path: string; started: string; ended: string; durationMs: number; screen?: string; error?: string }> = [];
 
         // Run each program
+        let cancelled = false;
         for (const programPath of programs.slice(0, maxPrograms)) {
+          if (ctx.signal?.aborted) {
+            cancelled = true;
+            break;
+          }
           const started = new Date();
           let screen: string | undefined;
           let error: string | undefined;
@@ -678,9 +711,11 @@ export const tools: ToolDefinition[] = [
               await (ctx.client as any).runCrtFile(programPath);
             }
 
-            await sleep(durationMs);
+            await sleepUnlessAborted(durationMs, ctx.signal);
 
-            if (captureScreen) {
+            if (ctx.signal?.aborted) {
+              cancelled = true;
+            } else if (captureScreen) {
               screen = await (ctx.client as any).readScreen();
             }
           } catch (e) {
@@ -711,6 +746,11 @@ export const tools: ToolDefinition[] = [
         // Write log
         const logPath = resolveHostChildPath(outputPath, "shuffle.json");
         await fs.writeFile(logPath, JSON.stringify({ programs: results, summary: { total: results.length, errors: results.filter(r => r.error).length } }, null, 2), "utf8");
+
+        if (cancelled) {
+          const message = `program_shuffle was cancelled by the client after ${results.length} programs; the machine was reset`;
+          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, programs: results.length, logPath } } };
+        }
 
         return jsonResult({ outputPath, programs: results.length, errors: results.filter(r => r.error).length, logPath }, { success: true });
       } catch (error) {
@@ -745,6 +785,11 @@ export const tools: ToolDefinition[] = [
         if (platform === "vice" && programs.some((program) => program.path.toLowerCase().endsWith(".crt"))) {
           throw new ToolUnsupportedPlatformError("run_crt", platform, ["c64u", "u2"]);
         }
+        programs.forEach((program, index) => {
+          if (!isRunnableProgramPath(program.path)) {
+            throw new ToolValidationError(`Unsupported program type for "${program.path}": batch_run_with_assertions runs .prg and .crt files only`, { path: `$.programs[${index}].path` });
+          }
+        });
         const continueOnError = parsed.continueOnError ?? false;
         const durationMs = parsed.durationMs ?? 2000;
   const resetDelayMs = parsed.resetDelayMs ?? 100;
@@ -756,11 +801,17 @@ export const tools: ToolDefinition[] = [
 
         const results: Array<{ path: string; status: "pass" | "fail" | "error"; assertions: Array<{ type: string; status: "pass" | "fail"; message?: string }>; error?: string }> = [];
 
+        let cancelled = false;
         for (const program of programs) {
+          if (ctx.signal?.aborted) {
+            cancelled = true;
+            break;
+          }
           const started = new Date();
           const assertionResults: Array<{ type: string; status: "pass" | "fail"; message?: string }> = [];
           let status: "pass" | "fail" | "error" = "pass";
           let error: string | undefined;
+          let verified = false;
 
           try {
             // Run program
@@ -773,11 +824,14 @@ export const tools: ToolDefinition[] = [
               if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
             }
 
-            await sleep(durationMs);
+            await sleepUnlessAborted(durationMs, ctx.signal);
 
             // Check assertions
             const assertions = program.assertions ?? [];
             for (const assertion of assertions) {
+              if (ctx.signal?.aborted) {
+                throw new Error("Cancelled by the client before all assertions were checked");
+              }
               if (assertion.type === "screen_contains") {
                 const screen = await (ctx.client as any).readScreen();
                 const pattern = assertion.pattern ?? "";
@@ -827,6 +881,7 @@ export const tools: ToolDefinition[] = [
                 if (!isSilent) status = "fail";
               }
             }
+            verified = !ctx.signal?.aborted;
           } catch (e) {
             status = "error";
             error = e instanceof Error ? e.message : String(e);
@@ -849,6 +904,16 @@ export const tools: ToolDefinition[] = [
             error,
           });
 
+          if (ctx.signal?.aborted) {
+            cancelled = true;
+            // An aborted program that had no assertions left to check was not verified.
+            if (status === "pass" && !verified) {
+              results[results.length - 1]!.status = "error";
+              results[results.length - 1]!.error = "Cancelled by the client before the run duration elapsed";
+            }
+            break;
+          }
+
           if (status !== "pass" && !continueOnError) {
             break;
           }
@@ -863,6 +928,11 @@ export const tools: ToolDefinition[] = [
           errors: results.filter(r => r.status === "error").length,
         };
         await fs.writeFile(reportPath, JSON.stringify({ summary, results }, null, 2), "utf8");
+
+        if (cancelled) {
+          const message = `batch_run was cancelled by the client after ${results.length} of ${programs.length} programs; the machine was reset`;
+          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, summary, reportPath } } };
+        }
 
         return jsonResult({ outputPath, summary, reportPath }, { success: summary.failed === 0 && summary.errors === 0 });
       } catch (error) {

@@ -38,7 +38,7 @@ import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js"
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import { RequestQueue } from "./loggingHttpClient.js";
 import axios, { type AxiosResponse } from "axios";
-import { redactValue, registerSecret } from "./redact.js";
+import { redactToolArguments, redactValue, registerSecret } from "./redact.js";
 import { toCallToolResult } from "./mcp/callToolResult.js";
 import { loggerFor, payloadByteLength, formatPayloadForDebug, formatErrorMessage } from "./logger.js";
 import { getDiagnosticsSessionInfo, installProcessDiagnostics, withDiagnosticSpan, writeDiagnosticEvent } from "./diagnostics.js";
@@ -449,18 +449,19 @@ async function main() {
     }
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name } = request.params;
     const args = request.params.arguments ?? {};
     const startedAt = Date.now();
+    const loggedArguments = formatPayloadForDebug(redactToolArguments(name, args));
     writeDiagnosticEvent("mcp_call_tool_start", {
       name,
-      arguments: formatPayloadForDebug(args),
+      arguments: loggedArguments,
     });
     if (toolLogger.isDebugEnabled()) {
       toolLogger.debug("tool request", {
         name,
-        arguments: formatPayloadForDebug(args),
+        arguments: loggedArguments,
       });
     }
 
@@ -471,6 +472,7 @@ async function main() {
         logger: toolLogger,
         platform: getPlatformStatus(),
         setPlatform,
+        signal: extra?.signal,
       });
 
       const response = toCallToolResult(result);

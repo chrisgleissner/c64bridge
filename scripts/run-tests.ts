@@ -5,6 +5,7 @@ import os from "node:os";
 import process from "node:process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { prepareTestStateDir } from "./test-state-dir.mjs";
 
 const DEFAULT_TARGET = "mock";
 const DEFAULT_PLATFORM = "c64u";
@@ -429,6 +430,17 @@ async function runExternalCommand(command: string, args: string[], env: Record<s
 }
 
 async function main(): Promise<number> {
+  const stateDir = prepareTestStateDir(process.env);
+  let code = 1;
+  try {
+    code = await runMatrix();
+  } finally {
+    code = stateDir.finish(code);
+  }
+  return code;
+}
+
+async function runMatrix(): Promise<number> {
   const { target, platform, explicitBaseUrl, runCoverage, passthrough } = parseRunTestsArgs(process.argv.slice(2));
 
   if (!fs.existsSync(defaultEmbeddingsDir)) {

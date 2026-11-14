@@ -7,6 +7,7 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
+import { rangeOverlapsIo } from "../../ioRange.js";
 import { OPCODE_INVENTORY } from "./opcodeInventory.js";
 import type { OpcodeAddressingMode } from "./opcodeInventory.js";
 
@@ -861,13 +862,10 @@ function parseOperand(stream: TokenStream): Operand {
     if (next && next.kind === "punct" && next.value === ",") {
       stream.consumePunct(",");
       const register = stream.consumeSymbol("Expected X or Y after comma").toUpperCase();
-      if (register === "X") {
-        return { kind: "indirect", expr, register: "X" };
-      }
       if (register === "Y") {
         return { kind: "indirect", expr, register: "Y" };
       }
-      throw new Error("Only X or Y are allowed after indirect operand");
+      throw new Error(`Only ,Y is allowed after a closing parenthesis: use (zp),Y or (zp,X) (got ,${register})`);
     }
     return { kind: "indirect", expr };
   }
@@ -1005,7 +1003,7 @@ class Assembler {
   private readonly written = new Uint8Array(0x10000);
   /** Index into blocks (plus one) of the contiguous run that wrote each address in the current pass. */
   private readonly owner = new Uint32Array(0x10000);
-  private blocks: Array<{ start: number; end: number; line: number }> = [];
+  private blocks: Array<{ start: number; end: number; line: number; file: string }> = [];
   private pc = 0;
   private lowestWritten = MAX_ADDRESS;
   private highestWritten = 0;
@@ -1101,6 +1099,23 @@ class Assembler {
         // Adjoining or overlapping blocks extend the image.
         if (resStart <= end + 1 && resEnd > end) { end = resEnd; changed = true; }
         if (resEnd >= start - 1 && resStart < start) { start = resStart; changed = true; }
+      }
+    }
+    // Addresses that are neither emitted nor reserved are zero-filled. Refuse a run of them that
+    // touches $D000-$DFFF: the loader would write zeros to the VIC, SID, CIA and colour RAM.
+    let gapStart: number | undefined;
+    for (let addr = start; addr <= end + 1; addr++) {
+      const gap = addr <= end && !this.written[addr] && !this.reserved.some(([s, e]) => addr >= s && addr <= e);
+      if (gap && gapStart === undefined) gapStart = addr;
+      if (!gap && gapStart !== undefined) {
+        if (rangeOverlapsIo(gapStart, addr - gapStart)) {
+          const after = this.blocks.filter((b) => b.start > gapStart!).sort((a, b) => a.start - b.start)[0] ?? this.blocks[0]!;
+          throw new AssemblyError(
+            `The zero-filled gap ${formatHex(gapStart)}-${formatHex(addr - 1)} between output blocks overlaps $D000-$DFFF (I/O registers); assemble the blocks separately instead`,
+            { file: after.file, line: after.line, text: "" },
+          );
+        }
+        gapStart = undefined;
       }
     }
     const body = this.memory.subarray(start, end + 1);
@@ -1489,7 +1504,7 @@ class Assembler {
     const masked = value & 0xff;
     let block = this.blocks[this.blocks.length - 1];
     if (!block || block.end + 1 !== this.pc) {
-      block = { start: this.pc, end: this.pc, line: location.line };
+      block = { start: this.pc, end: this.pc, line: location.line, file: location.file };
       this.blocks.push(block);
     }
     if (this.written[this.pc]) {

@@ -492,8 +492,9 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
         const before = preInfo.bytes[i] ?? 0x00;
         const after = postInfo.bytes[i] ?? 0x00;
         const expected = writeInfo.bytes[i] ?? 0x00;
+        const postMask = maskBytes ? maskBytes[i] ?? 0xFF : 0xFF;
 
-        if (after !== expected) {
+        if ((after & postMask) !== (expected & postMask)) {
           diffs.push({
             offset: i,
             before: formatByte(before),

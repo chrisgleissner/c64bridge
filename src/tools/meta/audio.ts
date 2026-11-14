@@ -386,19 +386,29 @@ export const tools: ToolDefinition[] = [
               if (waitBeforeCaptureMs > 0) {
                 await sleep(waitBeforeCaptureMs);
               }
-              const analysis = await analyzer({
-                durationSeconds: analysisDurationSeconds,
-                expectedSidwave: preset.sidwave,
-              });
-              const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
-              verification = {
-                mode: "audio-analysis",
-                durationSeconds: analysis.analysis?.durationSeconds ?? analysisDurationSeconds,
-                averageRms: metrics.average,
-                maxRms: metrics.max,
-                voices: analysis.analysis?.voices ?? [],
-                analysis,
-              };
+              try {
+                const analysis = await analyzer({
+                  durationSeconds: analysisDurationSeconds,
+                  expectedSidwave: preset.sidwave,
+                });
+                const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
+                const audible = (metrics.max ?? metrics.average ?? 0) > DEFAULT_RMS_THRESHOLD;
+                verification = {
+                  mode: "audio-analysis",
+                  durationSeconds: analysis.analysis?.durationSeconds ?? analysisDurationSeconds,
+                  averageRms: metrics.average,
+                  maxRms: metrics.max,
+                  audible,
+                  voices: analysis.analysis?.voices ?? [],
+                  analysis,
+                };
+                if (!audible) {
+                  backendResult.error = "no_audio_detected";
+                }
+              } catch (error) {
+                // Playback already started; a failed capture must not turn it into an error.
+                verification = { error: error instanceof Error ? error.message : String(error) };
+              }
             }
 
             // Stop this backend's playback only before moving on to the next one;
@@ -408,7 +418,7 @@ export const tools: ToolDefinition[] = [
             }
 
             backendResult.verification = verification;
-            backendResult.success = true;
+            backendResult.success = backendResult.error === undefined;
             results.push(backendResult);
           }
         } finally {
@@ -583,6 +593,12 @@ export const tools: ToolDefinition[] = [
         if (analysisMetrics.average === null && analysisMetrics.max === null) {
           throw new ToolExecutionError("Audio analysis did not include RMS metrics", {
             details: { globalMetrics: analysis?.analysis?.global_metrics ?? {} },
+          });
+        }
+
+        if ((analysisMetrics.max ?? analysisMetrics.average ?? 0) <= silenceRmsThreshold) {
+          throw new ToolExecutionError("No audio was detected after playback started", {
+            details: { audible: false, averageRms: analysisMetrics.average, maxRms: analysisMetrics.max, threshold: silenceRmsThreshold },
           });
         }
 

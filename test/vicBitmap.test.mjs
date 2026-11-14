@@ -118,7 +118,7 @@ test("resolveVicBitmapMemoryLayout accepts common layouts outside the character 
   assert.equal(resolveVicBitmapMemoryLayout(0x6000, 0x5C00).d018, 0x78);
   assert.equal(resolveVicBitmapMemoryLayout(0x4000, 0x6000).d018, 0x80);
   assert.equal(resolveVicBitmapMemoryLayout(0xE000, 0xC000).d018, 0x08);
-  assert.equal(resolveVicBitmapMemoryLayout(0xC000, 0xE000).bank, 3);
+  assert.equal(resolveVicBitmapMemoryLayout(0xE000, 0xCC00).bank, 3);
 });
 
 test("importImageAsVicBitmap reads image files and preserves source dimensions", async () => {
@@ -146,4 +146,20 @@ test("importImageAsVicBitmap reads image files and preserves source dimensions",
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+test("resolveVicBitmapMemoryLayout rejects bitmap or screen RAM over $D000-$DFFF (HARD03-004)", () => {
+  assert.throws(() => resolveVicBitmapMemoryLayout(0xC000, 0xE000), /\$D000/);
+  assert.throws(() => resolveVicBitmapMemoryLayout(0xE000, 0xD000), /\$D000/);
+  assert.throws(() => resolveVicBitmapMemoryLayout(0xE000, 0xDC00), /\$D000/);
+  assert.equal(resolveVicBitmapMemoryLayout(0xE000, 0xCC00).bank, 3);
+});
+
+test("rangeOverlapsIo detects overlap with $D000-$DFFF", async () => {
+  const { rangeOverlapsIo } = await import("../src/ioRange.js");
+  assert.equal(rangeOverlapsIo(0xCFFF, 1), false);
+  assert.equal(rangeOverlapsIo(0xCFFF, 2), true);
+  assert.equal(rangeOverlapsIo(0xDFFF, 1), true);
+  assert.equal(rangeOverlapsIo(0xE000, 0x100), false);
+  assert.equal(rangeOverlapsIo(0xC000, 8000), true);
+  assert.equal(rangeOverlapsIo(0xD000, 0), false);
 });

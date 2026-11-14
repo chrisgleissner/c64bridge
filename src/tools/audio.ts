@@ -488,8 +488,13 @@ function generateAudioFeedback(analysisResult: unknown, userRequest: string): st
     }
 
     if (/(sound.*right|sound.*good|sound.*correct)/.test(userRequest.toLowerCase())) {
-      const deviation = Math.abs((globalMetrics.average_pitch_deviation as number) ?? 0);
-      if (deviation < 20) {
+      const rawDeviation = globalMetrics.average_pitch_deviation;
+      const notesDetected = voices.some((voice: any) =>
+        Array.isArray(voice?.detected_notes) && voice.detected_notes.some((n: any) => n?.note && n?.frequency));
+      const deviation = typeof rawDeviation === "number" && Number.isFinite(rawDeviation) ? Math.abs(rawDeviation) : 0;
+      if (typeof rawDeviation !== "number" || !Number.isFinite(rawDeviation) || !notesDetected) {
+        feedback += "\n\nNo audio was detected, so there is no verdict on the music. Check that the SID is playing and the audio source is connected.";
+      } else if (deviation < 20) {
         feedback += "\n\n✓ The music sounds accurate with good pitch stability.";
       } else if (deviation < 50) {
         feedback += "\n\n⚠ The music has some pitch variation but is generally recognizable.";

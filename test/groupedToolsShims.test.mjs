@@ -2125,6 +2125,72 @@ test("c64_debug get_monitor_state formats the current PC from register values", 
   }
 });
 
+test("HARD03-030 wait_for_state without expectedPC does not report a match when no debug session exists", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const client = {
+      async viceWaitForStop() { return { session: false, stopped: false }; },
+      async viceRegistersAvailable() { return [{ id: 0, name: "PC", bits: 16, size: 2 }]; },
+      async viceRegistersGet() { return [{ id: 0, size: 2, value: 0x2000 }]; },
+    };
+    const logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const result = await toolRegistry.invoke(
+      "c64_debug",
+      { op: "wait_for_state", timeoutMs: 2000, pollMs: 10 },
+      { client, rag: {}, logger, platform: getPlatformStatus(), setPlatform },
+    );
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent?.data?.matched, false);
+    assert.equal(result.structuredContent?.data?.timedOut, false);
+    assert.match(String(result.structuredContent?.data?.reason), /no debug session/);
+    assert.equal(result.structuredContent?.data?.pc, "$2000");
+  } finally {
+    setPlatform(restore);
+  }
+});
+
+test("HARD03-012 wait_for_state returns promptly with cancelled:true when its signal is aborted", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    let reads = 0;
+    const client = {
+      viceWaitForStop: (ms) => new Promise((resolve) => setTimeout(() => resolve({ session: true, stopped: false }), ms)),
+      async viceRegistersAvailable() { return [{ id: 0, name: "PC", bits: 16, size: 2 }]; },
+      async viceRegistersGet() { reads += 1; return [{ id: 0, size: 2, value: 0x2000 }]; },
+    };
+    const logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const run = (signal) => toolRegistry.invoke(
+      "c64_debug",
+      { op: "wait_for_state", timeoutMs: 30_000, pollMs: 10 },
+      { client, rag: {}, logger, platform: getPlatformStatus(), setPlatform, signal },
+    );
+    const pre = new AbortController();
+    pre.abort();
+    let started = Date.now();
+    const already = await run(pre.signal);
+    assert.ok(Date.now() - started < 1_000);
+    assert.equal(already.isError, true);
+    assert.equal(already.structuredContent.data.cancelled, true);
+    assert.equal(already.metadata.cancelled, true);
+    assert.equal(already.metadata.success, false);
+    assert.match(already.content[0].text, /^wait_for_state was cancelled/);
+
+    const during = new AbortController();
+    started = Date.now();
+    const pending = run(during.signal);
+    setTimeout(() => during.abort(), 50);
+    const result = await pending;
+    assert.ok(Date.now() - started < 2_000, `returned after ${Date.now() - started} ms`);
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.data.cancelled, true);
+    assert.equal(result.metadata.cancelled, true);
+  } finally {
+    setPlatform(restore);
+  }
+});
+
 test("c64_debug wait_for_state reports matched and timed out outcomes", async () => {
   const restore = getPlatformStatus().id;
   setPlatform("vice");
@@ -2243,6 +2309,38 @@ test("c64_debug continue_execution and nuclear_reset delegate to VICE control pa
     assert.equal(exitMonitorCalls, 1);
     assert.equal(nuclearResetCalls, 1);
     assert.equal(afterReset.structuredContent?.data?.checkpoints[0]?.label, undefined);
+  } finally {
+    setPlatform(restore);
+  }
+});
+
+test("HARD03-019 c64_debug nuclear_reset returns an error and keeps labels when the restart did not happen", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const checkpoint = {
+      id: 93, hit: false, start: 0x0900, end: 0x0900, stopOnHit: true, enabled: true, temporary: false,
+      operations: { execute: true, load: false, store: false }, hitCount: 0, ignoreCount: 0, hasCondition: false, memspace: 0,
+    };
+    const stubClient = {
+      async viceCheckpointCreate() { return checkpoint; },
+      async viceCheckpointList() { return [checkpoint]; },
+      async viceNuclearReset() {
+        return { success: false, details: { code: "UNSUPPORTED", message: "VICE nuclear reset requires a managed process" } };
+      },
+    };
+    const ctx = {
+      client: stubClient, rag: {},
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      platform: getPlatformStatus(), setPlatform,
+    };
+    await toolRegistry.invoke("c64_debug", { op: "create_checkpoint", address: "$0900", label: "keep_me" }, ctx);
+    const reset = await toolRegistry.invoke("c64_debug", { op: "nuclear_reset" }, ctx);
+    assert.equal(reset.isError, true);
+    assert.equal(reset.metadata?.error?.kind, "execution");
+    assert.match(JSON.stringify(reset), /UNSUPPORTED|managed process/);
+    const after = await toolRegistry.invoke("c64_debug", { op: "list_checkpoints" }, ctx);
+    assert.equal(after.structuredContent?.data?.checkpoints[0]?.label, "keep_me");
   } finally {
     setPlatform(restore);
   }

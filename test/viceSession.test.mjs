@@ -376,6 +376,89 @@ test("step and step_return wait for the stop that follows the command when VICE 
   }, { stepEventDelayMs: 60 });
 });
 
+test("HARD03-018 step and step_return do not report success when the CPU did not stop within the wait", async () => {
+  await withClient(async (client, server) => {
+    const logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const previous = getPlatformStatus().id;
+    setPlatform("vice");
+    try {
+      const ctx = { client, rag: {}, logger, platform: getPlatformStatus(), setPlatform };
+      for (const args of [{ op: "step" }, { op: "step_return" }]) {
+        const result = await toolRegistry.invoke("c64_debug", args, ctx);
+        const text = result.content.map((c) => c.text ?? "").join("\n");
+        assert.ok(!/^Stepped|^Continued execution until/.test(text), text);
+        assert.equal(result.structuredContent.data.stopped, false);
+        assert.equal(result.structuredContent.data.success, false);
+        assert.match(text, /did not finish/);
+        assert.match(String(result.structuredContent.data.pc ?? text), /\$[0-9A-Fa-f]{4}/);
+        assert.equal(server.running, false, "the tool stopped the CPU");
+        await client.viceExitMonitor();
+      }
+    } finally {
+      setPlatform(previous);
+    }
+  }, { stepEventDelayMs: 2_600 });
+});
+
+test("HARD03-020 mounting a disk stops waiting at a checkpoint hit during the autoload and leaves the CPU stopped", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-mount-stop-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const image = path.join(dir, "disk.d64");
+  fs.writeFileSync(image, Buffer.alloc(174848));
+  await withBackend(async (backend, server) => {
+    const id = await armBreakpointAt(backend, 0xc000);
+    const mounting = backend.driveMount("drive8", image);
+    await waitUntil(() => server.autostarts.length === 1, "the autostart was sent");
+    await delay(100);
+    await hitWhenRunning(server, id);
+    const result = await mounting;
+    assert.equal(server.running, false, "the CPU is still stopped at the checkpoint");
+    assert.equal(result.details.stopped, true);
+    assert.equal(result.details.pc, "$C000");
+    assert.equal(backend.sessionInfo().debugStop, true);
+    await delay(900);
+    assert.equal(server.running, false, "nothing resumed the CPU afterwards");
+  }, { autoloadDelayMs: 800 });
+});
+
+test("HARD03-029 injectKeyboardQueue surfaces a checkpoint hit during the feed and a feed queued behind a pause", async () => {
+  await withClient(async (client, server) => {
+    const created = await client.viceCheckpointCreate({ start: 0xc000 });
+    const feeding = client.injectKeyboardQueue(new TextEncoder().encode("SYS49152\r"));
+    await waitUntil(() => server.keyboardFeeds.length === 1, "the keys were fed");
+    await hitWhenRunning(server, created.id);
+    const stopped = await feeding;
+    assert.equal(stopped.status, "stopped");
+    assert.equal(typeof stopped.stoppedAt, "number");
+    assert.equal(typeof stopped.pending, "number");
+    assert.equal(stopped.delivered, 9);
+    assert.equal(server.running, false);
+
+    // The CPU is stopped, so a further feed only queues; the result says so.
+    const queued = await client.injectKeyboardQueue(new TextEncoder().encode("A"));
+    assert.equal(queued.status, "queued");
+    assert.equal(queued.pending, 1);
+
+    // VICE drops a whole feed silently when more than 16384 bytes are pending: refuse it instead.
+    await assert.rejects(() => client.injectKeyboardQueue(new Uint8Array(16_384).fill(0x41)), /16384|16 384/);
+  });
+});
+
+test("HARD03-029 the queued-key counter restarts when the CPU is resumed", async () => {
+  await withBackend(async (backend) => {
+    const keys = new Uint8Array(10_000).fill(0x41);
+    await backend.pause();
+    assert.equal((await backend.feedKeyboard(keys)).status, "queued");
+    await backend.resume();
+    await backend.pause();
+    const second = await backend.feedKeyboard(keys);
+    assert.equal(second.status, "queued");
+    assert.equal(second.pending, 10_000);
+    // Without a resume the total still counts.
+    await assert.rejects(() => backend.feedKeyboard(keys), /16384/);
+  });
+});
+
 test("a tool call's pause that was queued behind a keyboard feed does not resume past a checkpoint hit during the feed", async () => {
   await withClient(async (client, server) => {
     const created = await client.viceCheckpointCreate({ start: 0xc000 });

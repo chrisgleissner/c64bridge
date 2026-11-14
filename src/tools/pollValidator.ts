@@ -58,6 +58,8 @@ export interface ExpectedProgramBytes {
 }
 
 const LOAD_CHECK_BYTES = 16;
+/** RAM ranges that a CPU-view read returns as written: not zero page ports, BASIC ROM, I/O or KERNAL ROM. */
+const CPU_VISIBLE_RAM: ReadonlyArray<readonly [number, number]> = [[0x0002, 0x9fff], [0xc000, 0xcfff]];
 
 export type PollResult = BasicPollResult | AsmPollResult;
 
@@ -208,7 +210,19 @@ async function pollBasicOutcome(
   logger: ToolLogger,
   config: PollConfig,
   baselineScreen?: string,
+  program?: ExpectedProgramBytes,
 ): Promise<BasicPollResult> {
+  if (program) {
+    // The tokenised program stays at $0801 after a run; a backend that answered success without loading it leaves other bytes there.
+    const check = await checkProgramLoaded(client, logger, program);
+    if (check.load) {
+      return {
+        status: "error",
+        type: "BASIC",
+        message: `Program was not loaded: memory at $${check.load.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the uploaded BASIC program (expected ${check.load.expected}, found ${check.load.found}).`,
+      };
+    }
+  }
   const startTime = Date.now();
   let pollCount = 0;
   let runDetected = false;
@@ -237,7 +251,9 @@ async function pollBasicOutcome(
 
       if (!runDetected) {
         const changed = baseline !== undefined && normaliseScreen(screen) !== baseline;
-        if (upperScreen.includes("RUN") || upperScreen.includes("ERROR") || changed || normaliseScreen(screen) === "") {
+        // With a baseline, text that was already on that screen (RUN left by an earlier run) is no evidence of this run; only a change is.
+        const textEvidence = baseline === undefined && (upperScreen.includes("RUN") || upperScreen.includes("ERROR"));
+        if (textEvidence || changed || (baseline === undefined && normaliseScreen(screen) === "")) {
           runDetected = true;
           logger.debug("Program execution detected", { pollCount, elapsed: Date.now() - startTime });
         }
@@ -298,20 +314,33 @@ async function checkProgramLoaded(
   logger: ToolLogger,
   program: ExpectedProgramBytes,
 ): Promise<Pick<AsmPollResult, "loadCheck" | "load">> {
-  const length = Math.min(LOAD_CHECK_BYTES, program.bytes.length, 0x10000 - program.address);
+  // Compare a window in RAM the CPU sees ($0002-$9FFF, $C000-$CFFF). Under BASIC/KERNAL ROM and I/O a CPU-view read returns ROM or registers, not the loaded bytes.
+  const programEnd = Math.min(program.address + program.bytes.length, 0x10000);
+  let windowStart = -1;
+  let length = 0;
+  for (const [lo, hi] of CPU_VISIBLE_RAM) {
+    const from = Math.max(program.address, lo);
+    const to = Math.min(programEnd - 1, hi);
+    if (from <= to) {
+      windowStart = from;
+      length = Math.min(LOAD_CHECK_BYTES, to - from + 1);
+      break;
+    }
+  }
   if (length <= 0) {
     return { loadCheck: "skipped" };
   }
-  const expected = program.bytes.subarray(0, length);
+  const offset = windowStart - program.address;
+  const expected = program.bytes.subarray(offset, offset + length);
   let found: Uint8Array;
   try {
-    found = await client.readMemoryRaw(program.address, length);
+    found = await client.readMemoryRaw(windowStart, length);
   } catch (error) {
     logger.debug("Unable to read back the loaded program", { error });
     return { loadCheck: "unavailable" };
   }
   if (!buffersEqual(found.subarray(0, length), expected)) {
-    return { loadCheck: "matched", load: { address: program.address, expected: toHex(expected), found: toHex(found.subarray(0, length)) } };
+    return { loadCheck: "matched", load: { address: windowStart, expected: toHex(expected), found: toHex(found.subarray(0, length)) } };
   }
   return { loadCheck: "matched" };
 }
@@ -330,7 +359,7 @@ async function pollAsmOutcome(
       return {
         status: "not_loaded",
         type: "ASM",
-        reason: `memory at $${program.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the assembled program`,
+        reason: `memory at $${check.load.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the assembled program`,
         loadCheck: "matched",
         load: check.load,
       };
@@ -472,7 +501,7 @@ export async function pollForProgramOutcome(
   
   // Poll for program outcome based on type
   if (type === "BASIC") {
-    return pollBasicOutcome(client, logger, pollConfig, baselineScreen);
+    return pollBasicOutcome(client, logger, pollConfig, baselineScreen, program);
   }
   
   return pollAsmOutcome(client, logger, pollConfig, program);

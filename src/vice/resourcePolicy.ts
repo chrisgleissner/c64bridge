@@ -18,8 +18,9 @@ export const SAFE_RESOURCE_PREFIXES = [
   "Warp", // WarpMode: a plain on/off switch
 ] as const;
 
+// VICE looks resource names up case-insensitively, so every test below compares lower-cased names.
 /** Resources that name host files or directories, even under a safe prefix (for example SoundRecordDeviceArg). */
-const HOST_FILE_RESOURCE_PATTERN = /(File|Image|Dir|Directory|Path|Arg|Name)\d*$/;
+const HOST_FILE_RESOURCE_PATTERN = /(file|filename|image|dir|directory|path|arg|name|log|command|cmd|dev)\d*$/;
 
 export type ResourceNameProblem =
   | { readonly kind: "pattern"; readonly message: string }
@@ -34,10 +35,10 @@ export function resourceNameProblem(name: string): ResourceNameProblem | undefin
       message: "Resource names must start with an uppercase letter and use letters, numbers, dashes, underscores, or periods.",
     };
   }
-  if (!SAFE_RESOURCE_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+  if (!SAFE_RESOURCE_PREFIXES.some((prefix) => name.toLowerCase().startsWith(prefix.toLowerCase()))) {
     return { kind: "prefix", message: `Resource name must start with one of: ${SAFE_RESOURCE_PREFIXES.join(", ")}` };
   }
-  if (HOST_FILE_RESOURCE_PATTERN.test(name)) {
+  if (HOST_FILE_RESOURCE_PATTERN.test(name.toLowerCase())) {
     return { kind: "host_file", message: `Resource '${name}' refers to a host file or directory and cannot be accessed through this tool.` };
   }
   return undefined;

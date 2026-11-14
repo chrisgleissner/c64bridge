@@ -354,14 +354,35 @@ export const printerModule = defineToolModule({
           });
         }
 
-        return textResult("Printer job completed successfully.", {
-          success: true,
-          target: parsed.target,
-          textLength: parsed.text.length,
-          secondaryAddress: parsed.secondaryAddress ?? null,
-          formFeed: parsed.formFeed,
-          details: toRecord(result.details) ?? null,
-        });
+        // The BASIC program reports a missing printer on the screen, not in the run result: read it once.
+        let deviceCheck: "no_error" | "unavailable" = "unavailable";
+        let screen: string | undefined;
+        try {
+          screen = await ctx.client.readScreen();
+          if (/\?DEVICE NOT PRESENT/.test(screen)) {
+            throw new ToolExecutionError("Printer job failed: the C64 reported ?DEVICE NOT PRESENT", {
+              details: { screen: screen.trimEnd() },
+            });
+          }
+          deviceCheck = "no_error";
+        } catch (error) {
+          if (error instanceof ToolError) throw error;
+        }
+
+        return textResult(
+          deviceCheck === "no_error"
+            ? "Printer job completed; no device error was shown on screen."
+            : "Printer job started; the screen could not be read, so device errors were not checked.",
+          {
+            success: true,
+            target: parsed.target,
+            textLength: parsed.text.length,
+            secondaryAddress: parsed.secondaryAddress ?? null,
+            formFeed: parsed.formFeed,
+            deviceCheck,
+            details: toRecord(result.details) ?? null,
+          },
+        );
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);

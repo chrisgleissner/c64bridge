@@ -130,6 +130,7 @@
       ],
       "description": "Duration to run each program before assertions",
       "minimum": 1,
+      "maximum": 600000,
       "default": 2000
     },
     "outputPath": {

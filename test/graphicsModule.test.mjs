@@ -439,7 +439,7 @@ test("render_bitmap surfaces image import failures as execution errors", async (
 
   const result = await graphicsModule.invoke(
     "render_bitmap",
-    { imagePath: "/missing/sample.png", format: "hires" },
+    { imagePath: path.join(os.tmpdir(), "c64bridge-missing-dir", "sample.png"), format: "hires" },
     ctx,
   );
 
@@ -584,4 +584,53 @@ test("capture_frame png warns about palette indexes above 15 and incomplete fram
   assert.equal(ok.metadata.outOfPalettePixels, 0);
   assert.equal(ok.metadata.incompleteFrames, 0);
   assert.equal(ok.structuredContent.data.warnings, undefined);
+});
+
+// --- HARD03-002: render_bitmap input goes through host path confinement ------
+import http from "node:http";
+
+test("render_bitmap rejects a path outside the roots and never fetches a URL", async () => {
+  let requests = 0;
+  const server = http.createServer((_req, res) => { requests += 1; res.end("x"); });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  let displayed = 0;
+  const ctx = { client: { async displayBitmap() { displayed += 1; return { success: true, details: {} }; } }, logger: createLogger() };
+  const outsideDir = fs.mkdtempSync(path.join("/dev/shm", "c64bridge-h3-img-"));
+  try {
+    const sample = await writeSampleImage();
+    const outside = path.join(outsideDir, "x.png");
+    fs.copyFileSync(sample.filePath, outside);
+    sample.cleanup();
+    for (const imagePath of [outside, `http://127.0.0.1:${port}/internal/secret.png?token=x`]) {
+      const result = await graphicsModule.invoke("render_bitmap", { imagePath, format: "hires" }, ctx);
+      assert.equal(result.isError, true, imagePath);
+      assert.equal(result.metadata.error.kind, "validation", imagePath);
+    }
+    assert.equal(requests, 0, "no HTTP request was issued");
+    assert.equal(displayed, 0);
+  } finally {
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("render_bitmap rejects an image larger than 4096 x 4096 from the PNG header", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h3-big-"));
+  const file = path.join(dir, "big.png");
+  const header = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header, 0);
+  header.writeUInt32BE(13, 8);
+  header.write("IHDR", 12, "ascii");
+  header.writeUInt32BE(5000, 16);
+  header.writeUInt32BE(5000, 20);
+  fs.writeFileSync(file, header);
+  try {
+    const ctx = { client: { async displayBitmap() { throw new Error("must not be called"); } }, logger: createLogger() };
+    const result = await graphicsModule.invoke("render_bitmap", { imagePath: file, format: "hires" }, ctx);
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /4096/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

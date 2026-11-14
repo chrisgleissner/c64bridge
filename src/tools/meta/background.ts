@@ -6,11 +6,11 @@ import { jsonResult } from "../responses.js";
 import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
-import os from "node:os";
 import type { C64Facade } from "../../device.js";
 import { screenCodesToAscii } from "../../petscii.js";
 import { loggerFor } from "../../logger.js";
 import { formatTimestampSpec, parseTimestampSpec } from "./util.js";
+import { stateRootDir } from "../../hostPaths.js";
 
 type TaskStatus = "running" | "completed" | "stopped" | "error";
 interface BackgroundTask {
@@ -141,7 +141,7 @@ function getTasksHomeDir(): string {
   if (overrideFile) {
     return dirname(overrideFile);
   }
-  return resolvePath(joinPath(os.homedir(), ".c64bridge"));
+  return resolvePath(stateRootDir());
 }
 
 function getTaskStateFilePath(): string {

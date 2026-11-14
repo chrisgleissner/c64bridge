@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareTestStateDir } from "./test-state-dir.mjs";
 
 export const DEFAULT_TARGET = "mock";
 
@@ -38,17 +39,19 @@ if (target === "real" && !env.C64_TEST_BASE_URL) {
 }
 
 if (isMainModule(import.meta.url)) {
+  const stateDir = prepareTestStateDir(env);
   const child = spawn(process.execPath, nodeArgs, {
     stdio: "inherit",
     env,
   });
 
   child.on("close", (code, signal) => {
+    const finalCode = stateDir.finish(code ?? 1);
     if (signal) {
       process.kill(process.pid, signal);
       return;
     }
-    process.exit(code ?? 1);
+    process.exit(finalCode);
   });
 }
 

@@ -1,5 +1,5 @@
 // Screen-related meta tools
-import type { ToolDefinition } from "../types.js";
+import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
@@ -20,6 +20,22 @@ const FINAL_READ_GRACE_MS = 250;
 export const PATTERN_EVAL_TIMEOUT_MS = 250;
 /** Unbounded repeats (*, +, {n,}) allowed per pattern; each one adds a power to the worst-case backtracking cost. */
 export const MAX_UNBOUNDED_REPEATS = 3;
+/**
+ * Repeat budget on runtimes without the vm timeout. Every repeat counts (bounded
+ * ones too, {0,999} is as costly as *); a repeat whose atom can cross a line
+ * break (a negated class, [\s\S], \s, \D, \W, \n) counts double, because it
+ * ranges over the whole 25-line screen instead of one 40-character line.
+ */
+export const MAX_REPEAT_BUDGET = 3;
+
+/** True when a class like [^!] or [\s\S] (given with its brackets) can match a line break. */
+function classCrossesLines(classText: string): boolean {
+  const body = classText.slice(1, -1);
+  const namesLineBreak = /\\[nrs]|\\x0[adAD]/.test(body);
+  // A negated class matches a line break unless it excludes one; a positive class only when it names one.
+  if (body.startsWith("^")) return !namesLineBreak;
+  return namesLineBreak || /\\[DW]/.test(body);
+}
 
 /** True when regex evaluation can be interrupted by the runtime's vm timeout. */
 export function runtimeEnforcesPatternTimeout(): boolean {
@@ -77,8 +93,13 @@ export function assertSafeScreenPattern(pattern: string): void {
   // One entry per open group: whether it contains a quantifier.
   const groups: boolean[] = [];
   const groupStarts: number[] = [];
+  const groupCrosses: boolean[] = [];
   let unboundedRepeats = 0;
+  let repeatCost = 0;
   let inClass = false;
+  let classStart = 0;
+  // Whether the atom just before the current position can match a line break.
+  let atomCrossesLines = false;
   let previousWasGroupWithQuantifier = false;
   for (let index = 0; index < pattern.length; index += 1) {
     const char = pattern[index]!;
@@ -88,20 +109,28 @@ export function assertSafeScreenPattern(pattern: string): void {
       if (!inClass && (/[1-9]/.test(next) || (next === "k" && pattern[index + 2] === "<"))) {
         throw new ToolValidationError("Backreferences are not supported in screen patterns", { path });
       }
+      atomCrossesLines = /[nrsDW]/.test(next);
+      if (atomCrossesLines && groupCrosses.length > 0) groupCrosses[groupCrosses.length - 1] = true;
       index += 1;
       previousWasGroupWithQuantifier = false;
       continue;
     }
     if (inClass) {
-      if (char === "]") inClass = false;
+      if (char === "]") {
+        inClass = false;
+        atomCrossesLines = classCrossesLines(pattern.slice(classStart, index + 1));
+        if (atomCrossesLines && groupCrosses.length > 0) groupCrosses[groupCrosses.length - 1] = true;
+      }
       continue;
     }
     if (char === "[") {
       inClass = true;
+      classStart = index;
       previousWasGroupWithQuantifier = false;
       continue;
     }
     if (char === "(") {
+      groupCrosses.push(false);
       groups.push(false);
       groupStarts.push(index);
       previousWasGroupWithQuantifier = false;
@@ -109,6 +138,8 @@ export function assertSafeScreenPattern(pattern: string): void {
     }
     if (char === ")") {
       previousWasGroupWithQuantifier = groups.pop() ?? false;
+      atomCrossesLines = groupCrosses.pop() ?? false;
+      if (atomCrossesLines && groupCrosses.length > 0) groupCrosses[groupCrosses.length - 1] = true;
       const groupStart = groupStarts.pop();
       const rest = pattern.slice(index + 1);
       if (groupStart !== undefined && (/^[*+]/.test(rest) || /^\{\d+(,\d*)?\}/.test(rest))) {
@@ -134,6 +165,15 @@ export function assertSafeScreenPattern(pattern: string): void {
           );
         }
         if (groups.length > 0) groups[groups.length - 1] = true;
+        if (char !== "?") {
+          repeatCost += atomCrossesLines ? 2 : 1;
+          if (repeatCost > MAX_REPEAT_BUDGET) {
+            throw new ToolValidationError(
+              `Screen patterns may contain at most ${MAX_REPEAT_BUDGET} repeat units on this runtime (each *, +, {n,m} counts one, and two when it repeats a negated class, [\\s\\S], \\s, \\D or \\W, which can cross line breaks)`,
+              { path },
+            );
+          }
+        }
         if (char === "*" || char === "+" || (char === "{" && /^\{\d+,\}/.test(pattern.slice(index)))) {
           unboundedRepeats += 1;
           if (unboundedRepeats > MAX_UNBOUNDED_REPEATS) {
@@ -147,6 +187,7 @@ export function assertSafeScreenPattern(pattern: string): void {
       previousWasGroupWithQuantifier = false;
       continue;
     }
+    atomCrossesLines = false;
     previousWasGroupWithQuantifier = false;
   }
 }
@@ -194,11 +235,13 @@ export interface WaitForScreenTextOptions {
   readonly caseInsensitive?: boolean;
   readonly timeoutMs?: number;
   readonly intervalMs?: number;
+  /** Checked before every read; an aborted signal ends the wait with `cancelled: true`. */
+  readonly signal?: AbortSignal;
 }
 
 export type WaitForScreenTextResult =
   | { matched: true; match: { index: number; length: number; text: string }; elapsedMs: number; screen: string; warnings?: string[] }
-  | { matched: false; elapsedMs: number; screen: string | undefined; warnings?: string[] };
+  | { matched: false; elapsedMs: number; screen: string | undefined; warnings?: string[]; cancelled?: true };
 
 /** Reads the screen, giving up after limitMs. Resolves undefined when the read did not finish in time. */
 async function readWithin(client: { readScreen(): Promise<string> }, limitMs: number): Promise<string | undefined> {
@@ -228,6 +271,9 @@ export async function waitForScreenText(
   const start = Date.now();
   let lastScreen: string | undefined;
   for (;;) {
+    if (options.signal?.aborted) {
+      return { matched: false, cancelled: true, elapsedMs: Date.now() - start, screen: lastScreen, ...(warnings ? { warnings } : {}) };
+    }
     // The last read happens at the deadline, after the final sleep. A stalled read must not outlast the deadline: it counts as a miss.
     const screen = await readWithin(client, Math.max(timeoutMs - (Date.now() - start), FINAL_READ_GRACE_MS));
     if (screen === undefined) break;
@@ -273,7 +319,10 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         const parsed = waitForScreenTextArgsSchema.parse(args ?? {});
-        const result = await waitForScreenText(ctx.client as any, parsed);
+        const result = await waitForScreenText(ctx.client as any, { ...parsed, signal: ctx.signal });
+        if (result.matched === false && result.cancelled) {
+          return cancelledResult(`wait_for_screen_text was cancelled after ${result.elapsedMs} ms`);
+        }
         if (result.matched) {
           return jsonResult({
             matched: true,

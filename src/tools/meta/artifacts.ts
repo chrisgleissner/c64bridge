@@ -2,10 +2,12 @@
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolValidationError, ToolUnsupportedPlatformError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolExecutionError, ToolValidationError, ToolUnsupportedPlatformError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath, isAbsolute } from "node:path";
+import { resolveAddressSymbol } from "../../knowledge.js";
+import { parseNumericLiteral, assertNotBareHex, assertAddressRange } from "../../numericArg.js";
 import { isWithin, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 
 const bundleRunArtifactsArgsSchema = objectSchema({
@@ -59,6 +61,19 @@ export const tools: ToolDefinition[] = [
         }
         const memoryRanges = (parsed.memoryRanges ?? []) as Array<{ address: string; length: number }>;
 
+        // Validate every range before anything is created, with the shared address parser.
+        const resolvedRanges = memoryRanges.map((range, i) => {
+          const rangePath = `$.memoryRanges[${i}]`;
+          const literal = parseNumericLiteral(range.address, `${rangePath}.address`);
+          const address = literal ?? resolveAddressSymbol(range.address);
+          if (address === undefined) {
+            assertNotBareHex(range.address, `${rangePath}.address`);
+            throw new ToolValidationError(`Invalid address "${range.address}"`, { path: `${rangePath}.address` });
+          }
+          assertAddressRange(address, range.length, `${rangePath}.length`);
+          return { address, length: range.length };
+        });
+
         await fs.mkdir(outputPath, { recursive: true });
         const runPath = containedPath(outputPath, runId);
         await fs.mkdir(runPath, { recursive: true });
@@ -77,11 +92,19 @@ export const tools: ToolDefinition[] = [
         if (memoryRanges.length > 0) {
           const memoryPath = containedPath(runPath, "memory");
           await fs.mkdir(memoryPath, { recursive: true });
-          for (let i = 0; i < memoryRanges.length; i++) {
-            const range = memoryRanges[i]!;
-            const result = await (ctx.client as any).readMemory(range.address, String(range.length));
+          // Read every range first, so a failed read leaves no range file behind.
+          const reads: string[] = [];
+          for (let i = 0; i < resolvedRanges.length; i++) {
+            const range = resolvedRanges[i]!;
+            const result = await (ctx.client as any).readMemory(`$${range.address.toString(16).toUpperCase().padStart(4, "0")}`, String(range.length));
+            if (!result || result.success === false || typeof result.data !== "string") {
+              throw new ToolExecutionError(`Memory read failed for range ${i} ($${range.address.toString(16).toUpperCase().padStart(4, "0")}, ${range.length} bytes): ${result?.error ?? "no data returned"}`, { details: { range: i } });
+            }
+            reads.push(result.data);
+          }
+          for (let i = 0; i < reads.length; i++) {
             const rangePath = containedPath(memoryPath, `range_${i}.hex`);
-            await fs.writeFile(rangePath, result.data ?? "", "utf8");
+            await fs.writeFile(rangePath, reads[i]!, "utf8");
             artifacts[`memory_range_${i}`] = rangePath;
           }
         }

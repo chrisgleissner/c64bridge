@@ -125,3 +125,42 @@ test("HARD01-029 bundle_run_artifacts rejects an absolute-path and sibling-prefi
   const siblingExists = await fs.access(siblingDir).then(() => true, () => false);
   assert.equal(siblingExists, false);
 });
+
+test("HARD03-022 bundle_run_artifacts fails and writes no range file when a memory read fails", async () => {
+  const { dir } = tmpPath(`artifacts-${Date.now()}-a`, "x");
+  const ctx = {
+    platform: { id: "c64u" },
+    client: {
+      async readScreen() { return "S"; },
+      async readMemory() { return { success: false, error: "device busy" }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("bundle_run_artifacts", {
+    runId: "fail_001", outputPath: dir, captureScreen: false, captureDebugReg: false,
+    memoryRanges: [{ address: "$0400", length: 16 }],
+  }, ctx);
+  assert.equal(res.isError, true);
+  assert.equal(res.metadata?.error?.kind, "execution");
+  const files = await fs.readdir(path.join(dir, "fail_001", "memory")).catch(() => []);
+  assert.deepEqual(files, []);
+});
+
+test("HARD03-022 bundle_run_artifacts validates addresses and lengths before creating anything", async () => {
+  for (const memoryRange of [{ address: "C000", length: 4 }, { address: "0400", length: 4 }, { address: "$FFF0", length: 64 }, { address: "$0400", length: 70000 }]) {
+    const { dir } = tmpPath(`artifacts-${Date.now()}-${Math.random().toString(36).slice(2)}`, "x");
+    let reads = 0;
+    const ctx = {
+      platform: { id: "c64u" },
+      client: { async readMemory() { reads += 1; return { success: true, data: "$00" }; } },
+      logger: createLogger(),
+    };
+    const res = await metaModule.invoke("bundle_run_artifacts", {
+      runId: "bad_001", outputPath: dir, captureScreen: false, captureDebugReg: false, memoryRanges: [memoryRange],
+    }, ctx);
+    assert.equal(res.isError, true, JSON.stringify(memoryRange));
+    assert.equal(res.metadata?.error?.kind, "validation", JSON.stringify(memoryRange));
+    assert.equal(reads, 0);
+    assert.equal(await fs.stat(path.join(dir, "bad_001")).catch(() => null), null);
+  }
+});
