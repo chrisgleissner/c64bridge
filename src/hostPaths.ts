@@ -54,6 +54,20 @@ function homeDirectory(): string {
   return process.env.HOME || os.homedir();
 }
 
+/**
+ * Expand exactly "~" and a leading "~/" (or "~" followed by the platform separator)
+ * to the home directory. JSON tool arguments never pass through a shell, so clients
+ * that follow the documented ~/.c64bridge root send the literal tilde. "~user" forms
+ * are not expanded.
+ */
+function expandHome(input: string): string {
+  if (input === "~") return homeDirectory();
+  if (input.startsWith("~/") || input.startsWith(`~${path.sep}`)) {
+    return path.join(homeDirectory(), input.slice(2));
+  }
+  return input;
+}
+
 /** Allowed roots (real paths). Reads cwd, environment and home directory at call time. */
 export function allowedHostRoots(): string[] {
   const roots: string[] = [];
@@ -105,7 +119,7 @@ export function resolveHostPath(input: string, options: ResolveHostPathOptions):
   if (typeof input !== "string" || input.length === 0 || input.includes("\0")) {
     throw new ToolValidationError("Host path must be a non-empty string without NUL bytes.");
   }
-  const resolved = path.resolve(input);
+  const resolved = path.resolve(expandHome(input));
   const disabled = !options.roots && confinementDisabled();
   const real = disabled ? resolved : realpathOfDeepest(resolved);
   if (!disabled) {

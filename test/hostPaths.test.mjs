@@ -241,3 +241,31 @@ test("host reads accept only regular files and read through the opened handle", 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("resolveHostPath expands a leading ~ to the home directory", () => {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-home-")));
+  const cwd = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-cwd-")));
+  const savedCwd = process.cwd();
+  try {
+    fs.mkdirSync(path.join(home, ".c64bridge"));
+    fs.writeFileSync(path.join(home, ".c64bridge", "x.json"), "{}");
+    process.chdir(cwd);
+    withEnv({ HOME: home, C64BRIDGE_ALLOWED_DIRS: undefined }, () => {
+      const write = resolveHostPath("~/.c64bridge/x.json", { purpose: "write" });
+      assert.equal(write, path.join(home, ".c64bridge", "x.json"));
+      assert.ok(isWithin(home, write));
+      const read = resolveHostPath("~/.c64bridge/x.json", { purpose: "read" });
+      assert.equal(read, path.join(home, ".c64bridge", "x.json"));
+      assert.ok(!fs.existsSync(path.join(cwd, "~")));
+      assert.equal(resolveHostPath("~", { purpose: "write", roots: [home] }), home);
+      let error;
+      try { resolveHostPath("~other/x", { purpose: "write", roots: [home] }); } catch (e) { error = e; }
+      assert.ok(error instanceof ToolValidationError);
+      assert.ok(error.message.includes(path.join(cwd, "~other", "x")), error.message);
+    });
+  } finally {
+    process.chdir(savedCwd);
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
