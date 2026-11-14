@@ -553,6 +553,17 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const metadata = await ctx.client.viceRegistersAvailable(0);
       const metadataById = new Map(metadata.map((m) => [m.id, m]));
       const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+      const signal = (ctx as { signal?: AbortSignal }).signal;
+      const cancelled = () => {
+        const message = "wait_for_state was cancelled by the client before the wait finished.";
+        return {
+          content: [{ type: "text" as const, text: message }],
+          structuredContent: { type: "json" as const, data: { cancelled: true, message } },
+          metadata: { success: false, cancelled: true },
+          isError: true as const,
+        };
+      };
+      if (signal?.aborted) return cancelled();
       const deadline = Date.now() + timeoutMs;
       let values: import("../vice/viceClient.js").ViceRegisterValue[] = [];
       let currentPC: number | undefined;
@@ -565,8 +576,22 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         // a disabled stopping checkpoint says nothing about where the PC is. The wait is cut short by
         // a stop event, so a hit is still seen at once. Without a session nothing can stop the CPU,
         // so the PC is polled.
+        if (signal?.aborted) return cancelled();
         const remaining = Math.max(0, deadline - Date.now());
-        const wait = await ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
+        const waiting = ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
+        let onAbort: (() => void) | undefined;
+        const aborted = signal
+          ? new Promise<"aborted">((resolve) => { onAbort = () => resolve("aborted"); signal.addEventListener("abort", onAbort, { once: true }); })
+          : undefined;
+        let wait: Awaited<typeof waiting>;
+        try {
+          const raced = aborted ? await Promise.race([waiting, aborted]) : await waiting;
+          if (raced === "aborted") { waiting.catch(() => {}); return cancelled(); }
+          wait = raced;
+        } finally {
+          if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+        }
+        if (signal?.aborted) return cancelled();
         values = await ctx.client.viceRegistersGet(0);
         currentPC = pcId !== undefined ? values.find((v) => v.id === pcId)?.value : undefined;
         // Without a session and without an expected PC nothing can stop the CPU: that is not a match.

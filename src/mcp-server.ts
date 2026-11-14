@@ -449,7 +449,7 @@ async function main() {
     }
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name } = request.params;
     const args = request.params.arguments ?? {};
     const startedAt = Date.now();
@@ -472,6 +472,7 @@ async function main() {
         logger: toolLogger,
         platform: getPlatformStatus(),
         setPlatform,
+        signal: extra?.signal,
       });
 
       const response = toCallToolResult(result);

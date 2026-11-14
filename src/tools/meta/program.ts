@@ -1,5 +1,5 @@
 // Program testing and orchestration meta tools
-import type { ToolDefinition, ToolExecutionContext } from "../types.js";
+import { cancelledResult, type ToolDefinition, type ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolUnsupportedPlatformError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
@@ -8,7 +8,7 @@ import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
-import { sleep, formatTimestampSpec } from "./util.js";
+import { sleep, sleepUnlessAborted, formatTimestampSpec } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 import type { CapturedFrame } from "../../streamCapture.js";
 import { withDiagnosticSpan } from "../../diagnostics.js";
@@ -245,7 +245,7 @@ const programShuffleArgsSchema = objectSchema({
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to search for programs", minLength: 1 }), "/"),
     extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 })), ["prg", "crt"] as any),
-    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds", integer: true, minimum: 1, default: 5000 }), 5000),
+    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds (1-600000)", integer: true, minimum: 1, maximum: 600000, default: 5000 }), 5000),
     captureScreen: optionalSchema(booleanSchema({ description: "Capture screen after each run", default: true }), true),
     maxPrograms: optionalSchema(numberSchema({ description: "Maximum number of programs to run", integer: true, minimum: 1, default: 10 }), 10),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for run logs and captures", minLength: 1 })),
@@ -278,7 +278,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
       additionalProperties: false,
     })),
     continueOnError: optionalSchema(booleanSchema({ description: "Continue running programs after assertion failure", default: false }), false),
-    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions", integer: true, minimum: 1, default: 2000 }), 2000),
+    durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions in milliseconds (1-600000)", integer: true, minimum: 1, maximum: 600000, default: 2000 }), 2000),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for test results", minLength: 1 })),
     resetDelayMs: optionalSchema(numberSchema({ description: "Delay after reset operations to allow the platform to settle.", integer: true, minimum: 0, maximum: 1000, default: 100 }), 100),
   },
@@ -665,7 +665,12 @@ export const tools: ToolDefinition[] = [
         const results: Array<{ path: string; started: string; ended: string; durationMs: number; screen?: string; error?: string }> = [];
 
         // Run each program
+        let cancelled = false;
         for (const programPath of programs.slice(0, maxPrograms)) {
+          if (ctx.signal?.aborted) {
+            cancelled = true;
+            break;
+          }
           const started = new Date();
           let screen: string | undefined;
           let error: string | undefined;
@@ -678,9 +683,11 @@ export const tools: ToolDefinition[] = [
               await (ctx.client as any).runCrtFile(programPath);
             }
 
-            await sleep(durationMs);
+            await sleepUnlessAborted(durationMs, ctx.signal);
 
-            if (captureScreen) {
+            if (ctx.signal?.aborted) {
+              cancelled = true;
+            } else if (captureScreen) {
               screen = await (ctx.client as any).readScreen();
             }
           } catch (e) {
@@ -711,6 +718,11 @@ export const tools: ToolDefinition[] = [
         // Write log
         const logPath = resolveHostChildPath(outputPath, "shuffle.json");
         await fs.writeFile(logPath, JSON.stringify({ programs: results, summary: { total: results.length, errors: results.filter(r => r.error).length } }, null, 2), "utf8");
+
+        if (cancelled) {
+          const message = `program_shuffle was cancelled by the client after ${results.length} programs; the machine was reset`;
+          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, programs: results.length, logPath } } };
+        }
 
         return jsonResult({ outputPath, programs: results.length, errors: results.filter(r => r.error).length, logPath }, { success: true });
       } catch (error) {
@@ -756,11 +768,17 @@ export const tools: ToolDefinition[] = [
 
         const results: Array<{ path: string; status: "pass" | "fail" | "error"; assertions: Array<{ type: string; status: "pass" | "fail"; message?: string }>; error?: string }> = [];
 
+        let cancelled = false;
         for (const program of programs) {
+          if (ctx.signal?.aborted) {
+            cancelled = true;
+            break;
+          }
           const started = new Date();
           const assertionResults: Array<{ type: string; status: "pass" | "fail"; message?: string }> = [];
           let status: "pass" | "fail" | "error" = "pass";
           let error: string | undefined;
+          let verified = false;
 
           try {
             // Run program
@@ -773,11 +791,14 @@ export const tools: ToolDefinition[] = [
               if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
             }
 
-            await sleep(durationMs);
+            await sleepUnlessAborted(durationMs, ctx.signal);
 
             // Check assertions
             const assertions = program.assertions ?? [];
             for (const assertion of assertions) {
+              if (ctx.signal?.aborted) {
+                throw new Error("Cancelled by the client before all assertions were checked");
+              }
               if (assertion.type === "screen_contains") {
                 const screen = await (ctx.client as any).readScreen();
                 const pattern = assertion.pattern ?? "";
@@ -827,6 +848,7 @@ export const tools: ToolDefinition[] = [
                 if (!isSilent) status = "fail";
               }
             }
+            verified = !ctx.signal?.aborted;
           } catch (e) {
             status = "error";
             error = e instanceof Error ? e.message : String(e);
@@ -849,6 +871,16 @@ export const tools: ToolDefinition[] = [
             error,
           });
 
+          if (ctx.signal?.aborted) {
+            cancelled = true;
+            // An aborted program that had no assertions left to check was not verified.
+            if (status === "pass" && !verified) {
+              results[results.length - 1]!.status = "error";
+              results[results.length - 1]!.error = "Cancelled by the client before the run duration elapsed";
+            }
+            break;
+          }
+
           if (status !== "pass" && !continueOnError) {
             break;
           }
@@ -863,6 +895,11 @@ export const tools: ToolDefinition[] = [
           errors: results.filter(r => r.status === "error").length,
         };
         await fs.writeFile(reportPath, JSON.stringify({ summary, results }, null, 2), "utf8");
+
+        if (cancelled) {
+          const message = `batch_run was cancelled by the client after ${results.length} of ${programs.length} programs; the machine was reset`;
+          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, summary, reportPath } } };
+        }
 
         return jsonResult({ outputPath, summary, reportPath }, { success: summary.failed === 0 && summary.errors === 0 });
       } catch (error) {

@@ -1,5 +1,5 @@
 // Screen-related meta tools
-import type { ToolDefinition } from "../types.js";
+import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
@@ -194,11 +194,13 @@ export interface WaitForScreenTextOptions {
   readonly caseInsensitive?: boolean;
   readonly timeoutMs?: number;
   readonly intervalMs?: number;
+  /** Checked before every read; an aborted signal ends the wait with `cancelled: true`. */
+  readonly signal?: AbortSignal;
 }
 
 export type WaitForScreenTextResult =
   | { matched: true; match: { index: number; length: number; text: string }; elapsedMs: number; screen: string; warnings?: string[] }
-  | { matched: false; elapsedMs: number; screen: string | undefined; warnings?: string[] };
+  | { matched: false; elapsedMs: number; screen: string | undefined; warnings?: string[]; cancelled?: true };
 
 /** Reads the screen, giving up after limitMs. Resolves undefined when the read did not finish in time. */
 async function readWithin(client: { readScreen(): Promise<string> }, limitMs: number): Promise<string | undefined> {
@@ -228,6 +230,9 @@ export async function waitForScreenText(
   const start = Date.now();
   let lastScreen: string | undefined;
   for (;;) {
+    if (options.signal?.aborted) {
+      return { matched: false, cancelled: true, elapsedMs: Date.now() - start, screen: lastScreen, ...(warnings ? { warnings } : {}) };
+    }
     // The last read happens at the deadline, after the final sleep. A stalled read must not outlast the deadline: it counts as a miss.
     const screen = await readWithin(client, Math.max(timeoutMs - (Date.now() - start), FINAL_READ_GRACE_MS));
     if (screen === undefined) break;
@@ -273,7 +278,10 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         const parsed = waitForScreenTextArgsSchema.parse(args ?? {});
-        const result = await waitForScreenText(ctx.client as any, parsed);
+        const result = await waitForScreenText(ctx.client as any, { ...parsed, signal: ctx.signal });
+        if (result.matched === false && result.cancelled) {
+          return cancelledResult(`wait_for_screen_text was cancelled after ${result.elapsedMs} ms`);
+        }
         if (result.matched) {
           return jsonResult({
             matched: true,

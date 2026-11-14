@@ -1,4 +1,4 @@
-import { defineToolModule } from "./types.js";
+import { cancelledResult, defineToolModule } from "./types.js";
 import { booleanSchema, numberSchema, objectSchema, optionalSchema } from "./schema.js";
 import { waitForScreenText, MAX_WAIT_TIMEOUT_MS } from "./meta/screen.js";
 import type { ToolExecutionContext } from "./types.js";
@@ -99,7 +99,7 @@ async function waitForReadyPrompt(
   ctx: ToolExecutionContext,
   timeoutMs: number,
   before: string | undefined,
-): Promise<{ ready: boolean; readyElapsedMs: number; lastError?: string }> {
+): Promise<{ ready: boolean; readyElapsedMs: number; lastError?: string; cancelled?: true }> {
   const start = Date.now();
   await new Promise((resolve) => setTimeout(resolve, Math.min(READY_SETTLE_MS, timeoutMs)));
   let lastError: string | undefined;
@@ -119,7 +119,10 @@ async function waitForReadyPrompt(
     },
   };
   const remaining = Math.max(1, timeoutMs - (Date.now() - start));
-  const outcome = await waitForScreenText(tolerantClient, { pattern: "READY.", timeoutMs: remaining, intervalMs: 250 });
+  const outcome = await waitForScreenText(tolerantClient, { pattern: "READY.", timeoutMs: remaining, intervalMs: 250, signal: ctx.signal });
+  if (!outcome.matched && outcome.cancelled) {
+    return { ready: false, readyElapsedMs: Date.now() - start, cancelled: true };
+  }
   return { ready: outcome.matched, readyElapsedMs: Date.now() - start, ...(outcome.matched || !lastError ? {} : { lastError }) };
 }
 
@@ -133,7 +136,11 @@ async function withReadyResult(
   if (parsed.waitForReady !== true) {
     return textResult(baseMessage, { success: true, details });
   }
-  const { ready, readyElapsedMs, lastError } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000, before);
+  const { ready, readyElapsedMs, lastError, cancelled } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000, before);
+  if (cancelled) {
+    // The command itself was already sent; only the wait for READY. was abandoned.
+    return cancelledResult(`${baseMessage} The wait for the READY. prompt was cancelled by the client after ${readyElapsedMs} ms; the command had already been sent and the machine may still be starting.`);
+  }
   const message = ready
     ? `${baseMessage} READY. prompt reached after ${readyElapsedMs} ms.`
     : `${baseMessage} The READY. prompt was not seen within ${readyElapsedMs} ms; the machine may still be starting.`
@@ -387,6 +394,10 @@ export const machineControlModule = defineToolModule({
         try {
           const parsed = powerCycleArgsSchema.parse(args ?? {});
           ctx.logger.info("Power cycling active backend");
+          // The menu sequence is never interrupted between steps, so cancellation is honoured only before it starts.
+          if (ctx.signal?.aborted) {
+            return cancelledResult("power_cycle was cancelled by the client before it started; no menu input was sent and the machine was not touched.");
+          }
           const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.powerCycle();
           if (!result.success) {

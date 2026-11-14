@@ -70,6 +70,18 @@ export interface ToolExecutionContext {
   readonly logger: ToolLogger;
   readonly platform: PlatformStatus;
   readonly setPlatform: (target: PlatformId) => PlatformStatus;
+  /** Aborted when the MCP client cancels the request. Long waits check it at step boundaries. */
+  readonly signal?: AbortSignal;
+}
+
+/** Error result for a call that the client cancelled. */
+export function cancelledResult(message = "The call was cancelled by the client."): ToolRunResult {
+  return {
+    content: [{ type: "text", text: message }],
+    structuredContent: { type: "json", data: { message, cancelled: true } },
+    metadata: { success: false, cancelled: true },
+    isError: true,
+  };
 }
 
 export interface ToolResponseContentText {

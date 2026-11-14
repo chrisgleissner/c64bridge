@@ -2150,6 +2150,47 @@ test("HARD03-030 wait_for_state without expectedPC does not report a match when 
   }
 });
 
+test("HARD03-012 wait_for_state returns promptly with cancelled:true when its signal is aborted", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    let reads = 0;
+    const client = {
+      viceWaitForStop: (ms) => new Promise((resolve) => setTimeout(() => resolve({ session: true, stopped: false }), ms)),
+      async viceRegistersAvailable() { return [{ id: 0, name: "PC", bits: 16, size: 2 }]; },
+      async viceRegistersGet() { reads += 1; return [{ id: 0, size: 2, value: 0x2000 }]; },
+    };
+    const logger = { debug() {}, info() {}, warn() {}, error() {} };
+    const run = (signal) => toolRegistry.invoke(
+      "c64_debug",
+      { op: "wait_for_state", timeoutMs: 30_000, pollMs: 10 },
+      { client, rag: {}, logger, platform: getPlatformStatus(), setPlatform, signal },
+    );
+    const pre = new AbortController();
+    pre.abort();
+    let started = Date.now();
+    const already = await run(pre.signal);
+    assert.ok(Date.now() - started < 1_000);
+    assert.equal(already.isError, true);
+    assert.equal(already.structuredContent.data.cancelled, true);
+    assert.equal(already.metadata.cancelled, true);
+    assert.equal(already.metadata.success, false);
+    assert.match(already.content[0].text, /^wait_for_state was cancelled/);
+
+    const during = new AbortController();
+    started = Date.now();
+    const pending = run(during.signal);
+    setTimeout(() => during.abort(), 50);
+    const result = await pending;
+    assert.ok(Date.now() - started < 2_000, `returned after ${Date.now() - started} ms`);
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.data.cancelled, true);
+    assert.equal(result.metadata.cancelled, true);
+  } finally {
+    setPlatform(restore);
+  }
+});
+
 test("c64_debug wait_for_state reports matched and timed out outcomes", async () => {
   const restore = getPlatformStatus().id;
   setPlatform("vice");

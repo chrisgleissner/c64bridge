@@ -1,4 +1,5 @@
 import {
+  cancelledResult,
   defineToolModule,
   type ToolExecutionContext,
   type ToolResponseContent,
@@ -120,7 +121,13 @@ export const batchModuleGroup = defineToolModule({
           let failed = 0;
           const batchStart = Date.now();
 
+          let cancelled = false;
           for (let i = 0; i < parsed.commands.length; i++) {
+            // A cancelled call must not start the next command.
+            if (ctx.signal?.aborted) {
+              cancelled = true;
+              break;
+            }
             const cmd = parsed.commands[i]!;
             const toolName = typeof cmd.tool === "string" ? cmd.tool : "";
             const args = (typeof cmd.args === "object" && cmd.args !== null) ? cmd.args : {};
@@ -205,6 +212,11 @@ export const batchModuleGroup = defineToolModule({
             results,
           };
 
+          if (cancelled) {
+            const message = `c64_batch was cancelled by the client after ${results.length} of ${parsed.commands.length} commands`;
+            const base = cancelledResult(message);
+            return { ...base, structuredContent: { type: "json", data: { ...summary, cancelled: true, message } }, metadata: { ...base.metadata, succeeded, failed, total: parsed.commands.length } };
+          }
           ctx.logger.info("Batch complete", { total: parsed.commands.length, succeeded, failed, elapsedMs: totalElapsedMs });
           const summaryResult = jsonResult(summary, { success: failed === 0, succeeded, failed, total: parsed.commands.length });
           const outcome = imageBlocks.length > 0 ? { ...summaryResult, content: [...summaryResult.content, ...imageBlocks] } : summaryResult;
