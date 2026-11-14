@@ -850,3 +850,66 @@ test("find_paths and find_and_run send the device glob with the original nameCon
     assert.ok(patterns.every((p) => p.includes("*Game*")), `${tool}: ${patterns.join(",")}`);
   }
 });
+
+test("drive_mount_and_verify returns an error when the verified image is not the mounted one", async () => {
+  let listCalls = 0;
+  const ctx = {
+    client: {
+      async drivesList() {
+        listCalls += 1;
+        // The mount reports success, but the drive still lists the previous image afterwards.
+        return [{ id: "a", power: "on", image: listCalls === 1 ? null : "/Usb0/old.d64" }];
+      },
+      async driveMount() {
+        return { success: true, details: { mounted: true } };
+      },
+      async driveReset() {
+        return { success: true, details: {} };
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("drive_mount_and_verify", {
+    drive: "a",
+    imagePath: "/Usb0/new.d64",
+    powerOnIfNeeded: true,
+  }, ctx);
+
+  assert.equal(res.isError, true, JSON.stringify(res.content));
+  assert.equal(res.metadata?.error?.kind, "execution");
+  const text = String(res.content?.[0]?.text ?? "");
+  assert.ok(text.includes("/Usb0/new.d64"), text);
+  assert.ok(text.includes("/Usb0/old.d64"), text);
+});
+
+test("drive_mount_and_verify finds the soft IEC drive by its listing name", async () => {
+  let listCalls = 0;
+  const ctx = {
+    client: {
+      async drivesList() {
+        listCalls += 1;
+        // GET /v1/drives lists the soft IEC drive as "IEC Drive"; the drive routes call it softiec.
+        return [{ id: "IEC Drive", power: "on", image: listCalls === 1 ? null : "/Temp/soft.d64" }];
+      },
+      async driveMount(drive) {
+        assert.equal(drive, "softiec");
+        return { success: true, details: {} };
+      },
+      async driveReset() {
+        return { success: true, details: {} };
+      },
+    },
+    logger: createLogger(),
+  };
+
+  const res = await metaModule.invoke("drive_mount_and_verify", {
+    drive: "softiec",
+    imagePath: "/Temp/soft.d64",
+    powerOnIfNeeded: true,
+  }, ctx);
+
+  assert.equal(res.metadata?.success, true, JSON.stringify(res.content));
+  assert.equal(res.structuredContent?.data?.verification?.drive, "IEC Drive");
+  assert.equal(res.structuredContent?.data?.verification?.imageMatches, true);
+});

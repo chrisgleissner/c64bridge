@@ -60,6 +60,8 @@ function findListedDrive(drives: any[], drive: string): any {
   const wanted = drive.trim().toLowerCase();
   const exact = drives.find((d) => String(d?.id ?? "").toLowerCase() === wanted);
   if (exact) return exact;
+  // GET /v1/drives lists the soft IEC drive as "IEC Drive"; the drive routes call it softiec.
+  if (wanted === "softiec") return drives.find((d) => String(d?.id ?? "").toLowerCase() === "iec drive");
   // VICE lists drives as driveN; the Ultimate letters a and b default to buses 8 and 9 there.
   const letterBus = wanted === "a" ? 8 : wanted === "b" ? 9 : undefined;
   const bus = /^(?:drive)?\s*(\d+)$/.exec(wanted);
@@ -842,11 +844,14 @@ export const tools: ToolDefinition[] = [
               };
               
               log.push({ step: "verify", success: imageMatches, details: verificationResult });
-              
+
               if (!imageMatches) {
-                ctx.logger.warn?.("Mount verification: image path mismatch", { 
-                  expected: imagePath, 
-                  actual: targetDrive.image 
+                ctx.logger.warn?.("Mount verification: image path mismatch", {
+                  expected: imagePath,
+                  actual: targetDrive.image
+                });
+                throw new ToolExecutionError(`Mount verification failed: drive ${targetDrive.id} shows ${JSON.stringify(targetDrive.image ?? null)}, expected ${JSON.stringify(imagePath)}`, {
+                  details: { drive, expectedImage: imagePath, actualImage: targetDrive.image ?? null, log },
                 });
               }
             } catch (error) {
