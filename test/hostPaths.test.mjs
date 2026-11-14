@@ -273,3 +273,59 @@ test("resolveHostPath expands a leading ~ to the home directory", () => {
     fs.rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("resolveHostPath rejects configuration files, the task state file and hidden components (HARD03-003)", () => {
+  const { base, root } = makeFixture();
+  const home = path.join(base, "home");
+  fs.mkdirSync(path.join(home, ".c64bridge"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".c64bridge.json"), "{}");
+  fs.mkdirSync(path.join(root, ".git", "hooks"), { recursive: true });
+  fs.mkdirSync(path.join(root, ".claude"));
+  fs.writeFileSync(path.join(root, ".env"), "X=1");
+  fs.writeFileSync(path.join(root, "package.json"), "{}");
+  const cfg = path.join(root, "custom-config.json");
+  fs.writeFileSync(cfg, "{}");
+  const env = {
+    HOME: home,
+    C64BRIDGE_STATE_DIR: undefined,
+    C64BRIDGE_ALLOWED_DIRS: undefined,
+    C64BRIDGE_ALLOW_HIDDEN_PATHS: undefined,
+    C64BRIDGE_CONFIG: cfg,
+    C64_TASK_STATE_FILE: path.join(root, "state", "mytasks.json"),
+  };
+  const cwd = process.cwd();
+  try {
+    process.chdir(root);
+    withEnv(env, () => {
+      const rejected = [
+        path.join(root, ".c64bridge.json"),
+        "./.c64bridge.json",
+        path.join(root, ".git", "hooks", "pre-commit"),
+        path.join(root, ".claude", "settings.json"),
+        path.join(root, ".env"),
+        cfg,
+        path.join(root, "state", "mytasks.json"),
+        path.join(home, ".c64bridge", ".hidden", "x.bin"),
+        "~/.c64bridge/.c64bridge.json",
+      ];
+      for (const input of rejected) {
+        for (const purpose of ["read", "write"]) {
+          assert.throws(() => resolveHostPath(input, { purpose }), (e) => e instanceof ToolValidationError && /C64BRIDGE_ALLOW_HIDDEN_PATHS|configuration/.test(e.message), `${input} ${purpose}`);
+        }
+      }
+      assert.doesNotThrow(() => resolveHostPath(path.join(root, "package.json"), { purpose: "write" }));
+      assert.doesNotThrow(() => resolveHostPath("~/.c64bridge/x.bin", { purpose: "write" }));
+      assert.doesNotThrow(() => resolveHostPath(path.join(root, "out", "x.bin"), { purpose: "write" }));
+      // Opt-out lifts hidden components but never the configuration files.
+      withEnv({ C64BRIDGE_ALLOW_HIDDEN_PATHS: "1" }, () => {
+        assert.doesNotThrow(() => resolveHostPath(path.join(root, ".env"), { purpose: "read" }));
+        assert.doesNotThrow(() => resolveHostPath(path.join(root, ".git", "hooks", "pre-commit"), { purpose: "write" }));
+        assert.throws(() => resolveHostPath(path.join(root, ".c64bridge.json"), { purpose: "write" }), ToolValidationError);
+        assert.throws(() => resolveHostPath(cfg, { purpose: "write" }), ToolValidationError);
+      });
+    });
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});

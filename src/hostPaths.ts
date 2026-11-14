@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ToolValidationError } from "./tools/errors.js";
 
 export type HostPathPurpose = "read" | "write";
@@ -17,6 +18,7 @@ export interface ResolveHostPathOptions {
 export const DEFAULT_MAX_READ_BYTES = 16 * 1024 * 1024;
 export const DISK_IMAGE_MAX_READ_BYTES = 64 * 1024 * 1024;
 export const ALLOWED_DIRS_ENV = "C64BRIDGE_ALLOWED_DIRS";
+export const ALLOW_HIDDEN_PATHS_ENV = "C64BRIDGE_ALLOW_HIDDEN_PATHS";
 
 /** True when candidate equals root or lies inside it. Both must be absolute. */
 export function isWithin(root: string, candidate: string): boolean {
@@ -113,6 +115,23 @@ export function defaultHostOutputDir(...names: string[]): string {
   }
 }
 
+/** Real paths of the files the server reads its configuration from, and of the background task state file. */
+function protectedHostFiles(): string[] {
+  const files: string[] = [];
+  const configured = process.env.C64BRIDGE_CONFIG;
+  if (configured) files.push(configured);
+  files.push(path.join(process.cwd(), ".c64bridge.json"));
+  files.push(path.join(homeDirectory(), ".c64bridge.json"));
+  files.push(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".c64bridge.json"));
+  const taskState = process.env.C64_TASK_STATE_FILE;
+  files.push(taskState ? path.resolve(taskState) : path.join(stateRootDir(), "tasks.json"));
+  return files.map(safeRealpath);
+}
+
+function hiddenPathsAllowed(): boolean {
+  return process.env[ALLOW_HIDDEN_PATHS_ENV]?.trim() === "1";
+}
+
 function confinementDisabled(): boolean {
   const extra = process.env[ALLOWED_DIRS_ENV];
   return !!extra && extra.trim() === "*";
@@ -136,6 +155,24 @@ export function resolveHostPath(input: string, options: ResolveHostPathOptions):
         `Host path is outside the allowed directories: ${resolved}. Allowed roots: ${roots.join(", ")}. `
           + `Add directories with the ${ALLOWED_DIRS_ENV} environment variable (entries separated by "${path.delimiter}"; "*" disables confinement).`,
         { path: resolved, details: { allowedRoots: roots, env: ALLOWED_DIRS_ENV } },
+      );
+    }
+  }
+  if (protectedHostFiles().includes(real)) {
+    throw new ToolValidationError(
+      `Host path is a server configuration or state file and cannot be used by tools: ${resolved}.`,
+      { path: resolved },
+    );
+  }
+  if (!disabled && !hiddenPathsAllowed()) {
+    const roots = options.roots ? options.roots.map(safeRealpath) : allowedHostRoots();
+    const visible = roots.some((root) => isWithin(root, real)
+      && !path.relative(root, real).split(path.sep).some((part) => part.startsWith(".") && part !== "." && part !== ".."));
+    if (!visible) {
+      throw new ToolValidationError(
+        `Host path has a hidden component (name starting with ".") below an allowed directory: ${resolved}. `
+          + `Set ${ALLOW_HIDDEN_PATHS_ENV}=1 to allow hidden paths.`,
+        { path: resolved, details: { env: ALLOW_HIDDEN_PATHS_ENV } },
       );
     }
   }
