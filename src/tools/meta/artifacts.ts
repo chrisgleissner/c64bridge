@@ -10,6 +10,9 @@ import { resolveAddressSymbol } from "../../knowledge.js";
 import { parseNumericLiteral, assertNotBareHex, assertAddressRange } from "../../numericArg.js";
 import { isWithin, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 
+const MAX_BUNDLE_MEMORY_BYTES = 2 * 1024 * 1024;
+const MAX_BUNDLE_MEMORY_RANGES = 256;
+
 const bundleRunArtifactsArgsSchema = objectSchema({
   description: "Gather screen capture, memory snapshot, and debugreg into a structured bundle.",
   properties: {
@@ -20,11 +23,14 @@ const bundleRunArtifactsArgsSchema = objectSchema({
       description: "Memory range to snapshot",
       properties: {
         address: stringSchema({ description: "Start address", minLength: 1 }),
-        length: numberSchema({ description: "Length in bytes", integer: true, minimum: 1 }),
+        length: numberSchema({ description: "Length in bytes", integer: true, minimum: 1, maximum: 65536 }),
       },
       required: ["address", "length"],
       additionalProperties: false,
-    }))),
+    }), {
+      description: "Memory snapshots, at most 256 ranges and 2 MiB of requested memory in total.",
+      maxItems: MAX_BUNDLE_MEMORY_RANGES,
+    })),
     captureDebugReg: optionalSchema(booleanSchema({ description: "Capture Ultimate debug registers (C64U/U64 only). Defaults to true on C64U/U64 and false on U2/VICE." })),
   },
   required: ["runId", "outputPath"],
@@ -62,6 +68,7 @@ export const tools: ToolDefinition[] = [
         const memoryRanges = (parsed.memoryRanges ?? []) as Array<{ address: string; length: number }>;
 
         // Validate every range before anything is created, with the shared address parser.
+        let totalMemoryBytes = 0;
         const resolvedRanges = memoryRanges.map((range, i) => {
           const rangePath = `$.memoryRanges[${i}]`;
           const literal = parseNumericLiteral(range.address, `${rangePath}.address`);
@@ -71,6 +78,10 @@ export const tools: ToolDefinition[] = [
             throw new ToolValidationError(`Invalid address "${range.address}"`, { path: `${rangePath}.address` });
           }
           assertAddressRange(address, range.length, `${rangePath}.length`);
+          totalMemoryBytes += range.length;
+          if (totalMemoryBytes > MAX_BUNDLE_MEMORY_BYTES) {
+            throw new ToolValidationError("Memory snapshots exceed the 2 MiB aggregate limit.", { path: "$.memoryRanges" });
+          }
           return { address, length: range.length };
         });
 
