@@ -245,6 +245,16 @@ test("c64_graphics.get_display_state works on vice with same shape", async () =>
   assert.ok(typeof data.charOrBitmapAddress === "string");
 });
 
+test("c64_graphics.get_display_state reports the bitmap address from D018 bit 3", async () => {
+  const ctx = makeCtx({
+    platformId: "c64u",
+    clientOverrides: buildVicState({ d011: 0x3B, d018: 0x1D }),
+  });
+  const result = await toolRegistry.invoke("c64_graphics", { op: "get_display_state" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.data.charOrBitmapAddress, "$2000");
+});
+
 // ---------------------------------------------------------------------------
 // c64_batch failure reporting and bounds
 // ---------------------------------------------------------------------------
