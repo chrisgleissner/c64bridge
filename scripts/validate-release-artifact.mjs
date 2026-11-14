@@ -42,7 +42,7 @@ try {
   };
   mock.state.streamHostResolveFailures = 1;
   const samples = await call('c64_sound', { op: 'capture_samples', count: 256 });
-  assert.equal(samples.metadata.samplePairs, 256);
+  assert.equal(samples.structuredContent?.data?.samplePairs, 256, JSON.stringify(samples.structuredContent));
   await call('c64_graphics', { op: 'capture_frame' });
   const recorded = await call('c64_sound', { op: 'record_analyze', durationSeconds: 0.5 });
   const analysis = JSON.parse(recorded.content.find((entry) => entry.type === 'text').text).analysis;
