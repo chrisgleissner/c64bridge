@@ -781,3 +781,41 @@ test("HARD03-021 BASIC poll reports a program that is not in memory at $0801", a
   assert.equal(outcome.status, "error");
   assert.match(outcome.message ?? "", /not loaded/);
 });
+
+function createRomClient(ram) {
+  return {
+    async readScreen() { return "SYS 49152\nREADY.\n"; },
+    async readMemoryRaw(address, length) {
+      const out = new Uint8Array(length);
+      for (let i = 0; i < length; i += 1) {
+        const a = address + i;
+        out[i] = a >= 0xa000 && a <= 0xbfff ? 0x94 : (ram.get(a) ?? 0);
+      }
+      return out;
+    },
+  };
+}
+
+test("HARD03-025 load check compares a window the CPU sees when the lowest block lies under ROM", async () => {
+  const bytes = new Uint8Array(0x2010);
+  bytes.fill(0xaa, 0, 0x2000);
+  bytes.set([0xa9, 0x01, 0x8d, 0x20, 0xd0, 0x60], 0x2000);
+  const ram = new Map();
+  bytes.forEach((value, index) => { if (0xa000 + index < 0xa000 || 0xa000 + index >= 0xc000) ram.set(0xa000 + index, value); });
+  const outcome = await pollForProgramOutcome("ASM", createRomClient(ram), createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0xa000, bytes });
+  assert.notEqual(outcome.status, "not_loaded");
+  assert.equal(outcome.loadCheck, "matched");
+});
+
+test("HARD03-025 load check is skipped, not an error, when the whole program lies under ROM", async () => {
+  const bytes = new Uint8Array(32).fill(0x55);
+  const outcome = await pollForProgramOutcome("ASM", createRomClient(new Map()), createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0xa000, bytes });
+  assert.notEqual(outcome.status, "not_loaded");
+  assert.equal(outcome.loadCheck, "skipped");
+});
+
+test("HARD03-025 a visible window that really differs is still not_loaded", async () => {
+  const bytes = new Uint8Array(0x2010).fill(0xaa);
+  const outcome = await pollForProgramOutcome("ASM", createRomClient(new Map()), createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0xa000, bytes });
+  assert.equal(outcome.status, "not_loaded");
+});
