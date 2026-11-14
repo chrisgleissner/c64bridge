@@ -176,3 +176,44 @@ function redactConfigTree(value: unknown, category: string | undefined): unknown
 }
 
 export const REDACTED_PLACEHOLDER = REDACTED;
+
+function redactLeaves(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((entry) => redactLeaves(entry));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, redactLeaves(entry)]));
+  }
+  return value === null || value === undefined ? value : REDACTED;
+}
+
+/**
+ * Returns a copy of the arguments of a tool call that is safe to log and record in diagnostics: the
+ * values of every configuration write (`value` of `set`, the leaves of `updates` of `batch_update`)
+ * are replaced, also inside `c64_batch` commands. Category and item names stay visible. The firmware
+ * matches item names with wildcards, so the name cannot tell whether an item holds a credential.
+ */
+export function redactToolArguments(toolName: string, args: unknown): unknown {
+  if (args === null || typeof args !== "object" || Array.isArray(args)) return args;
+  const record = args as Record<string, unknown>;
+  const op = record.op;
+  const isSet = toolName === "config_set" || (toolName === "c64_config" && op === "set");
+  const isBatchUpdate = toolName === "config_batch_update" || (toolName === "c64_config" && op === "batch_update");
+  if (isSet && "value" in record) {
+    return { ...record, value: redactLeaves(record.value) };
+  }
+  if (isBatchUpdate && "updates" in record) {
+    return { ...record, updates: redactLeaves(record.updates) };
+  }
+  if (toolName === "c64_batch" && Array.isArray(record.commands)) {
+    return {
+      ...record,
+      commands: record.commands.map((command) => {
+        if (command === null || typeof command !== "object") return command;
+        const entry = command as Record<string, unknown>;
+        return typeof entry.tool === "string" && "args" in entry
+          ? { ...entry, args: redactToolArguments(entry.tool, entry.args) }
+          : command;
+      }),
+    };
+  }
+  return args;
+}
