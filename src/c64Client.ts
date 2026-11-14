@@ -50,6 +50,7 @@ import type {
   ViceRegisterWrite,
   ViceResourceValue,
 } from "./vice/viceClient.js";
+import { userStreamTarget, withStreamLock } from "./streamTargets.js";
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
@@ -117,6 +118,8 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+  /** Non-fatal notes, for example that a stream started with c64_stream was restarted. */
+  readonly warnings?: readonly string[];
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -1767,6 +1770,32 @@ export class C64Client {
       return { backend: "c64u", frames };
     }
 
+    return withStreamLock("video", async () => {
+      let result: FrameCaptureResult | undefined;
+      try {
+        result = await this.captureC64uVideoFramesOnce(facade, count);
+      } finally {
+        const notes = await this.restoreUserStream(facade, "video");
+        if (result && notes.length > 0) result = { ...result, warnings: [...(result.warnings ?? []), ...notes] };
+      }
+      return result;
+    });
+  }
+
+  /** Restarts a stream the user started with c64_stream start after a capture replaced and stopped it. */
+  private async restoreUserStream(facade: C64Facade, stream: "video" | "audio"): Promise<string[]> {
+    const target = userStreamTarget(stream);
+    if (!target) return [];
+    try {
+      await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, stream, target), `restart ${stream} stream`);
+      return [`The ${stream} stream started with c64_stream was restarted toward ${target} after the capture.`];
+    } catch (error) {
+      writeDiagnosticEvent("user_stream_restart_failed", { stream, error: this.normaliseError(error) });
+      return [`The ${stream} stream started with c64_stream could not be restarted toward ${target}: ${error instanceof Error ? error.message : String(error)}`];
+    }
+  }
+
+  private async captureC64uVideoFramesOnce(facade: C64Facade, count: number): Promise<FrameCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
@@ -2002,6 +2031,7 @@ export class C64Client {
     } finally {
       session.socket.close();
       this.rejectC64uVideoCaptureWaiters(session, stopError ?? new Error("Video capture session closed"));
+      await this.restoreUserStream(session.facade, "video");
     }
 
     if (stopError) {
@@ -2050,6 +2080,23 @@ export class C64Client {
   }
 
   private async captureC64uAudioSamples(
+    facade: C64Facade,
+    samplePairs: number,
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
+  ): Promise<SampleCaptureResult> {
+    return withStreamLock("audio", async () => {
+      let result: SampleCaptureResult | undefined;
+      try {
+        result = await this.captureC64uAudioSamplesOnce(facade, samplePairs, options);
+      } finally {
+        const notes = await this.restoreUserStream(facade, "audio");
+        if (result && notes.length > 0) result = { ...result, warnings: notes };
+      }
+      return result;
+    });
+  }
+
+  private async captureC64uAudioSamplesOnce(
     facade: C64Facade,
     samplePairs: number,
     options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },

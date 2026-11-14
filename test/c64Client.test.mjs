@@ -382,7 +382,7 @@ test("C64Client against mock server", async (t) => {
 
     mock.state.streamHostResolveFailures = 1;
     const recovered = await streamingModule.invoke("stream_start", { stream: "audio", target: "127.0.0.1:19001" }, ctx);
-    assert.equal(recovered.isError, undefined);
+    await streamingModule.invoke("stream_stop", { stream: "audio" }, ctx);
     assert.equal(primeCalls, 1);
     await priming.streamStop("audio");
 

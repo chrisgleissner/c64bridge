@@ -252,7 +252,10 @@ const graphicsOperations: GroupedOperationConfig[] = [
             backend: capture.backend,
             count: frames.length,
             frames,
-            ...(pngWarnings && pngWarnings.warnings.length > 0 ? { warnings: pngWarnings.warnings } : {}),
+            ...(() => {
+              const all = [...(capture.warnings ?? []), ...(pngWarnings?.warnings ?? [])];
+              return all.length > 0 ? { warnings: all } : {};
+            })(),
           },
           {
             success: true,
