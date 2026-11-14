@@ -1252,6 +1252,7 @@ test("upload_run_asm keeps the previous VICE symbols when the run fails", async 
     clearViceSymbols();
   }
 });
+
 test("HARD03-021 upload_run_basic verify:true reports not verified when the program is not in memory", async () => {
   const ctx = {
     platform: { id: "c64u" },
@@ -1266,6 +1267,7 @@ test("HARD03-021 upload_run_basic verify:true reports not verified when the prog
   assert.equal(result.isError, true);
   assert.notEqual(result.metadata?.verified, true);
   assert.match(JSON.stringify(result.metadata?.error ?? {}), /not loaded/);
+});
 
 test("HARD03-029 upload_run_asm reports a queued SYS command in the text and structured content", async () => {
   const ctx = {
