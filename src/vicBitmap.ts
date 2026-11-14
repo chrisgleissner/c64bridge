@@ -1,3 +1,4 @@
+import { rangeOverlapsIo } from "./ioRange.js";
 import { readHostFile } from "./hostPaths.js";
 import { ToolValidationError } from "./tools/errors.js";
 
@@ -188,6 +189,12 @@ export function resolveVicBitmapMemoryLayout(
   }
   if (rangesOverlap(bitmapAddress, BITMAP_BYTE_LENGTH, screenAddress, SCREEN_RAM_BYTE_LENGTH)) {
     throw new Error("Bitmap RAM and screen RAM must not overlap");
+  }
+  if (rangeOverlapsIo(bitmapAddress, BITMAP_BYTE_LENGTH)) {
+    throw new Error("Bitmap RAM must not overlap the I/O area $D000-$DFFF");
+  }
+  if (rangeOverlapsIo(screenAddress, SCREEN_RAM_BYTE_LENGTH)) {
+    throw new Error("Screen RAM must not overlap the I/O area $D000-$DFFF");
   }
   // In banks 0 and 2 the VIC reads the character ROM, not RAM, at bank offsets $1000-$1FFF.
   if (bank === 0 || bank === 2) {
