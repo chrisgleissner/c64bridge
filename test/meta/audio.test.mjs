@@ -380,7 +380,7 @@ describe("meta/audio", () => {
   });
 
   test("music_compile_play_analyze disables post verification by silencing directly", async () => {
-    ctx.client.recordAndAnalyzeAudio = mock(async () => createAnalysis({ averageRms: 0.01, maxRms: 0.02 }));
+    ctx.client.recordAndAnalyzeAudio = mock(async () => createAnalysis({ averageRms: 0.06, maxRms: 0.09 }));
 
     const result = await metaModule.invoke(
       "music_compile_play_analyze",
