@@ -87,7 +87,7 @@
         "string",
         "null"
       ],
-      "description": "Root path to search for programs",
+      "description": "Directory to search for programs (not recursive; the firmware lookup returns one match per extension)",
       "minLength": 1,
       "default": "/"
     },
