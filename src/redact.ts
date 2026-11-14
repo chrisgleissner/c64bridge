@@ -15,17 +15,29 @@ const REDACTED = "***";
 const SENSITIVE_KEY = /^(x-password|authorization|proxy-authorization|cookie|set-cookie|x-api-key)$/i;
 const MIN_SECRET_LENGTH = 1;
 
+/** Secrets of at least this length are redacted wherever they occur in a successful result; chance matches are negligible. */
+const SUBSTRING_SECRET_LENGTH = 8;
+
 const secrets = new Set<string>();
+let warnedShortSecret = false;
 
 export function registerSecret(value: string | undefined | null): void {
   if (typeof value === "string" && value.length >= MIN_SECRET_LENGTH) {
     secrets.add(value);
+    if (value.length < SUBSTRING_SECRET_LENGTH && !warnedShortSecret) {
+      warnedShortSecret = true;
+      process.stderr.write(
+        `[c64bridge] A configured password or token is shorter than ${SUBSTRING_SECRET_LENGTH} characters. `
+          + "In tool results only whole-word matches of it are hidden, so use a longer one.\n",
+      );
+    }
   }
 }
 
 /** Test hook: forget all registered secrets. */
 export function clearRegisteredSecrets(): void {
   secrets.clear();
+  warnedShortSecret = false;
 }
 
 export function isSensitiveKey(key: string): boolean {
@@ -41,6 +53,56 @@ export function redactText(text: string): string {
     }
   }
   return result;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Redaction for strings of a successful tool result. Secrets of at least 8 characters are replaced
+ * wherever they occur. Shorter ones are replaced only as whole words (not inside a longer run of
+ * letters and digits), so numbers, hex digits and base64 text that merely contain them stay intact.
+ */
+export function redactResultText(text: string): string {
+  let result = text;
+  for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
+    if (!result.includes(secret)) continue;
+    if (secret.length >= SUBSTRING_SECRET_LENGTH) {
+      result = result.split(secret).join(REDACTED);
+      continue;
+    }
+    const before = /[A-Za-z0-9]/.test(secret[0]!) ? "(?<![A-Za-z0-9])" : "";
+    const after = /[A-Za-z0-9]/.test(secret[secret.length - 1]!) ? "(?![A-Za-z0-9])" : "";
+    result = result.replace(new RegExp(`${before}${escapeRegExp(secret)}${after}`, "g"), REDACTED);
+  }
+  return result;
+}
+
+/** Keys that carry hex, base64 or raw byte payloads; their string values are never altered. */
+const PAYLOAD_KEY = /hex|base64|pixel|bytes|dump|checksum|crc|hash/i;
+
+/**
+ * Returns a copy of a successful tool result value in which only string leaves are redacted with
+ * `redactResultText`. Numbers, booleans, structure and payload fields stay as they are, so the
+ * result remains valid and equal to what the tool returned apart from the hidden secret.
+ */
+export function redactResultValue(value: unknown, key?: string): unknown {
+  if (typeof value === "string") {
+    return key !== undefined && PAYLOAD_KEY.test(key) ? value : redactResultText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactResultValue(entry, key));
+  }
+  if (value !== null && typeof value === "object" && isPlainObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([name, entry]) => [
+        isSensitiveKey(name) ? name : redactResultText(name),
+        isSensitiveKey(name) ? REDACTED : redactResultValue(entry, name),
+      ]),
+    );
+  }
+  return value;
 }
 
 function isPlainObject(value: object): boolean {

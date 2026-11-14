@@ -1,4 +1,4 @@
-import { redactValue } from "../redact.js";
+import { redactResultText, redactResultValue, redactValue } from "../redact.js";
 import type { ToolRunResult } from "../tools/types.js";
 
 // ToolRunResult.metadata is not an MCP result field, and textResult already copies
@@ -20,6 +20,30 @@ function metadataNotInStructuredContent(
   return remaining;
 }
 
+/**
+ * Successful results are redacted per string leaf, whole-word for short secrets. The text of a JSON
+ * block is parsed and regenerated from the redacted value, and is kept byte for byte when nothing
+ * changed. Image blocks are never altered. Error results use substring redaction of everything
+ * except image data.
+ */
+function redactContent(content: ToolRunResult["content"], isError: boolean): ToolRunResult["content"] {
+  return content.map((block) => {
+    if (block.type !== "text") return block;
+    if (isError) return { ...block, text: redactValue(block.text) as string };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(block.text);
+    } catch {
+      return { ...block, text: redactResultText(block.text) };
+    }
+    if (parsed === null || typeof parsed !== "object") {
+      return { ...block, text: redactResultText(block.text) };
+    }
+    const redacted = redactResultValue(parsed);
+    return JSON.stringify(redacted) === JSON.stringify(parsed) ? block : { ...block, text: JSON.stringify(redacted) };
+  });
+}
+
 export function toCallToolResult(result: ToolRunResult): {
   content: ToolRunResult["content"];
   structuredContent?: ToolRunResult["structuredContent"];
@@ -31,15 +55,17 @@ export function toCallToolResult(result: ToolRunResult): {
     structuredContent?: ToolRunResult["structuredContent"];
     metadata?: ToolRunResult["metadata"];
     isError?: boolean;
-  } = { content: redactValue(result.content) as ToolRunResult["content"] };
+  } = { content: redactContent(result.content, result.isError === true) };
 
   if (result.structuredContent !== undefined) {
-    base.structuredContent = redactValue(result.structuredContent) as ToolRunResult["structuredContent"];
+    base.structuredContent = (result.isError === true
+      ? redactValue(result.structuredContent)
+      : redactResultValue(result.structuredContent)) as ToolRunResult["structuredContent"];
   }
   if (result.metadata !== undefined) {
     const remaining = metadataNotInStructuredContent(result.metadata, result.structuredContent);
     if (Object.keys(remaining).length > 0) {
-      base.metadata = redactValue(remaining) as ToolRunResult["metadata"];
+      base.metadata = (result.isError === true ? redactValue(remaining) : redactResultValue(remaining)) as ToolRunResult["metadata"];
     }
   }
   if (result.isError !== undefined) {
