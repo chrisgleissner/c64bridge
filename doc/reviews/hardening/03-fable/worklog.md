@@ -51,31 +51,31 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 | 020 | B | done | 087488c4 | viceSession | yes |  |
 | 029 | B | wip | h3/b e2017024+e22f8b51 | viceSession |  | held: input.ts write_text/key (F) and upload_run_asm in c64Client.ts (D) must surface the status |
 | 030 | B | done | 2ae92d72 | groupedToolsShims | yes |  |
-| 024 | D | todo | | | | all three parsers in one commit in wave 2 (debug.ts, meta/memory.ts, meta/graphics.ts) |
+| 024 | D | wip | | | | all three parsers in one commit in wave 2 (debug.ts, meta/memory.ts, meta/graphics.ts) |
 | 005 | C | done | 7b0f0a44 | accessMode | yes |  |
 | 006 | C | done | d49c5eb7 | loggingHttpClient, configWriteRedaction | yes |  |
 | 007 | C | done | b1f1af6b | resultRedaction | yes |  |
 | 011 | C | done | 8e48fcc9 | batchAndDisplayState | yes |  |
 | 012 | C | done | 1b9183b1 + follow-up | cancellation, groupedToolsShims | yes | tools/list tripwire 70,000 -> 71,000 bytes |
-| 008 | D | todo | | | | |
-| 021 | D | todo | | | | |
-| 022 | D | todo | | | | |
-| 023 | D | todo | | | | shuffle part specified by F |
-| 025 | D | todo | | | | |
-| 034 | D | todo | | | | |
-| 035 | D | todo | | | | E3 helper |
-| 036 | D | todo | | | | |
-| 037 | D | todo | | | | |
-| 016 | E | todo | | | | |
-| 028 | E | todo | | | | |
-| 038 | E | todo | | | | |
-| 009 | E | todo | | | | |
-| 026 | E | todo | | | | |
-| 027 | E | todo | | | | |
-| 033 | E | todo | | | | |
-| 017 | F | todo | | | | shuffle edit made by D |
-| 031 | F | todo | | | | |
-| 032 | F | todo | | | | |
+| 008 | D | wip | | | | |
+| 021 | D | wip | | | | |
+| 022 | D | wip | | | | |
+| 023 | D | wip | | | | shuffle part specified by F |
+| 025 | D | wip | | | | |
+| 034 | F | wip | | | | |
+| 035 | F | wip | | | | E3 helper |
+| 036 | D | wip | | | | |
+| 037 | F | wip | | | | |
+| 016 | E | wip | | | | |
+| 028 | E | wip | | | | |
+| 038 | E | wip | | | | |
+| 009 | E | wip | | | | |
+| 026 | E | wip | | | | |
+| 027 | E | wip | | | | |
+| 033 | E | wip | | | | |
+| 017 | F+D | wip | | | | filesystem part F, shuffle part D; combined at integration |
+| 031 | F | wip | | | | |
+| 032 | F | wip | | | | |
 | 014 | G | todo | | | | |
 | 015 | G | todo | | | | |
 | 010 | H | todo | | | | |
@@ -99,3 +99,4 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 - 2026-11-14: capability check; amended team structure; branch created; HARD03-046 landed; draft PR #169.
 - 2026-11-14: wave 1 started (A, B, C in worktrees `../c64bridge-wt/{a,b,c}`, Sonnet). 024 moved to D as one commit.
 - 2026-11-14: wave 1 integrated (A, B, C), both mock suites green, every test fails when reverted. 029 held for wave 2.
+- 2026-11-14: wave 2 started: D (Sonnet), E (Sonnet), F (Haiku). 034, 035, 037 moved from D to F to balance load.
