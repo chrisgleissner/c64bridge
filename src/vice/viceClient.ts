@@ -115,6 +115,8 @@ export class ViceClient {
   private onCloseHandler?: (error?: Error) => void;
   private cpuRunningState = false;
   private checkpointCreatesBlocked = false;
+  /** Set while a command that executes code is outstanding: what happened after it was sent. */
+  private executionWatch: { resumed: boolean; stopped: boolean; wake?: () => void } | null = null;
 
   /**
    * Makes every later checkpoint create fail locally without reaching VICE. Shutdown uses this
@@ -241,6 +243,14 @@ export class ViceClient {
       if (reqId === 0xffffffff) {
         if (responseType === 0x62) this.cpuRunningState = false;
         else if (responseType === 0x63) this.cpuRunningState = true;
+        const watch = this.executionWatch;
+        if (watch) {
+          // The stop that ends the execution comes after the resume that starts it. A stop before the
+          // resume is only the monitor being entered for this command.
+          if (responseType === 0x63) watch.resumed = true;
+          else if (responseType === 0x62 && watch.resumed) watch.stopped = true;
+          watch.wake?.();
+        }
         this.onUnsolicitedHandler?.(responseType, frame);
         continue;
       }
@@ -521,15 +531,42 @@ export class ViceClient {
     return this.parseRegisterValues(frame);
   }
 
-  async stepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
+  /**
+   * Sends a command that executes code and, with `waitForStopMs`, waits for the stopped event
+   * that ends the execution. VICE acknowledges these commands before the execution happens, so the
+   * acknowledgement alone says nothing about where the CPU is. Only a stopped event that follows a
+   * resumed event received after the command was sent counts; the state before the command does not.
+   * Returns false when no such stop arrived in time (the caller decides what that means).
+   */
+  private async executeAndWait(cmd: number, body: Buffer | undefined, waitForStopMs: number | undefined): Promise<boolean> {
+    if (waitForStopMs === undefined) {
+      await this.send(cmd, body);
+      return true;
+    }
+    const watch: { resumed: boolean; stopped: boolean; wake?: () => void } = { resumed: false, stopped: false };
+    this.executionWatch = watch;
+    try {
+      await this.send(cmd, body);
+      if (watch.stopped) return true;
+      return await new Promise<boolean>((resolve) => {
+        const finish = (value: boolean) => { clearTimeout(timer); watch.wake = undefined; resolve(value); };
+        const timer = setTimeout(() => finish(false), waitForStopMs);
+        watch.wake = () => { if (watch.stopped) finish(true); else if (!this.isOpen) finish(false); };
+      });
+    } finally {
+      if (this.executionWatch === watch) this.executionWatch = null;
+    }
+  }
+
+  async stepInstructions(count = 1, options?: { readonly stepOver?: boolean; readonly waitForStopMs?: number }): Promise<boolean> {
     const body = Buffer.alloc(3);
     body[0] = options?.stepOver ? 1 : 0;
     body.writeUInt16LE(Math.max(1, Math.min(count, 0xffff)), 1);
-    await this.send(0x71, body);
+    return this.executeAndWait(0x71, body, options?.waitForStopMs);
   }
 
-  async stepReturn(): Promise<void> {
-    await this.send(0x73);
+  async stepReturn(options?: { readonly waitForStopMs?: number }): Promise<boolean> {
+    return this.executeAndWait(0x73, undefined, options?.waitForStopMs);
   }
 
   async displayGet(options?: { readonly alternateCanvas?: boolean; readonly format?: number }): Promise<ViceDisplaySnapshot> {

@@ -2679,11 +2679,11 @@ export class C64Client {
     }
 
     async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation((client) => client.stepInstructions(count, options));
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
     }
 
     async viceStepReturn(): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation((client) => client.stepReturn(), { waitForStopMs: 2_000 });
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepReturn({ waitForStopMs: 2_000 }); });
     }
 
     async viceResourceGet(name: string): Promise<ViceResourceValue> {

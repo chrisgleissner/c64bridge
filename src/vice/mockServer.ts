@@ -55,6 +55,12 @@ export interface ViceMockServerOptions {
    * as on VICE. Default 0: the READY prompt is there immediately.
    */
   bootMs?: number;
+  /**
+   * Emulates VICE acknowledging step (0x71) and step-return (0x73) before the code runs: the
+   * acknowledgement is sent first, and the resumed and stopped events follow after this many
+   * milliseconds. Without it the events are sent before the acknowledgement.
+   */
+  stepEventDelayMs?: number;
 }
 
 const UNSOLICITED = 0xffffffff;
@@ -103,6 +109,7 @@ export class ViceMockServer {
   /** Test hook: every command received, as `[cmd, connection number]`. */
   readonly commands: Array<[number, number]> = [];
   private readonly wedgeOnUnsafeClose: boolean;
+  private readonly stepEventDelayMs: number | undefined;
   private wedged = false;
   private readonly bootMs: number;
   private bootRemainingMs = 0;
@@ -170,6 +177,7 @@ export class ViceMockServer {
 
   constructor(options?: ViceMockServerOptions) {
     this.wedgeOnUnsafeClose = options?.wedgeOnUnsafeClose === true;
+    this.stepEventDelayMs = options?.stepEventDelayMs;
     this.host = options?.host ?? "127.0.0.1";
     this.requestedPort = options?.port;
     this.bootMs = Math.max(0, options?.bootMs ?? 0);
@@ -433,15 +441,22 @@ export class ViceMockServer {
         const payload = this.encodeRegisterValues();
         return buildResponse(0x31, reqId, payload);
       }
-      case 0x71: { // step instructions: each step advances the PC by 3 bytes
-        const count = body.readUInt16LE(1) || 1;
-        this.registerValues.set(0, (this.pc() + 3 * count) & 0xffff);
-        this.emitResumed(socket);
-        this.emitStopped(socket);
+      case 0x71: // step instructions: each step advances the PC by 3 bytes
+      case 0x73: { // step return: advances the PC by 0x10
+        const advance = cmd === 0x71 ? 3 * (body.readUInt16LE(1) || 1) : 0x10;
+        const execute = () => {
+          this.registerValues.set(0, (this.pc() + advance) & 0xffff);
+          if (socket.destroyed) return;
+          this.emitResumed(socket);
+          this.emitStopped(socket);
+        };
+        if (this.stepEventDelayMs === undefined) {
+          execute();
+          return buildResponse(cmd, reqId);
+        }
+        setTimeout(execute, this.stepEventDelayMs); // VICE acknowledges first and runs the code afterwards
         return buildResponse(cmd, reqId);
       }
-      case 0x73: // step return
-        return buildResponse(cmd, reqId);
       case 0x83: { // registers metadata
         const payload = this.encodeRegisterMetadata();
         return buildResponse(cmd, reqId, payload);

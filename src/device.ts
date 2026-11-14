@@ -1047,16 +1047,12 @@ export class ViceBackend implements C64Facade {
    * Runs `fn` on the session, opening one when there is none, and leaves the CPU stopped
    * (a debugger stop) afterwards. Used by single-stepping.
    */
-  async debugStopOperation<T>(fn: (client: ViceClient) => Promise<T>, options?: { waitForStopMs?: number }): Promise<T> {
+  async debugStopOperation<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {
     return this.exclusive(async () => {
       const existing = this.liveSession();
       this.throwIfSessionLost();
       const s = existing ?? await this.openSession();
-      return await this.operate(s, async (client) => {
-        const result = await fn(client);
-        if (options?.waitForStopMs) await this.waitForClientStopped(s, options.waitForStopMs);
-        return result;
-      }, { leaveStopped: true });
+      return await this.operate(s, fn, { leaveStopped: true });
     });
   }
 
@@ -1071,16 +1067,6 @@ export class ViceBackend implements C64Facade {
       this.throwIfSessionLost();
       const s = existing ?? await this.openSession();
       return await this.operate(s, fn, { recount: true });
-    });
-  }
-
-  private waitForClientStopped(s: ViceSession, timeoutMs: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      if (!s.client.cpuRunning) { resolve(); return; }
-      const finish = () => { clearTimeout(timer); s.waiters.delete(check); resolve(); };
-      const check = () => { if (!s.client.cpuRunning || s.lost !== null) finish(); };
-      const timer = setTimeout(finish, timeoutMs);
-      s.waiters.add(check);
     });
   }
 

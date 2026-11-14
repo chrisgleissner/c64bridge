@@ -358,3 +358,20 @@ test("shutdown with a checkpoint creation queued behind it leaves no stopping ch
     assert.equal(server.unsafeCloses, 0, "the connection was closed only after every stopping checkpoint was deleted");
   }, { wedgeOnUnsafeClose: true });
 });
+
+test("step and step_return wait for the stop that follows the command when VICE acknowledges first", async () => {
+  await withClient(async (client, server) => {
+    // The acknowledgement arrives 60 ms before the resumed and stopped events.
+    const started = Date.now();
+    await client.viceStepReturn();
+    assert.ok(Date.now() - started >= 50, "the call waited for the stopped event that followed the command");
+    assert.equal(await pcOf(client), 0x10, "the PC is the one after the execution, not the one before it");
+    assert.equal(server.running, false, "the CPU is stopped, as the session state says");
+
+    await client.viceStepInstructions(1);
+    assert.equal(await pcOf(client), 0x13, "a step is waited for in the same way");
+    assert.equal(server.running, false);
+    await client.viceExitMonitor();
+    assert.equal(server.running, true);
+  }, { stepEventDelayMs: 60 });
+});
