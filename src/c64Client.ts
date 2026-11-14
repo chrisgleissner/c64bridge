@@ -831,9 +831,30 @@ export class C64Client {
       }
       const sysCommand = Buffer.from(`SYS${entryAddress}\r`, "ascii");
       const injectResult = await this.injectKeyboardQueue(sysCommand, { pinnedFacade: facade });
+      const keyboard = injectResult.status === undefined
+        ? undefined
+        : {
+            status: injectResult.status,
+            ...(injectResult.pending === undefined ? {} : { pending: injectResult.pending }),
+            ...(injectResult.stoppedAt === undefined ? {} : { stoppedAt: injectResult.stoppedAt }),
+          };
+      if (injectResult.status === "stopped") {
+        // A checkpoint hit while SYS was typed: the program is loaded but was not started.
+        return {
+          success: false,
+          details: {
+            message: `The program was loaded, but typing SYS${entryAddress} was stopped by a checkpoint${injectResult.stoppedAt === undefined ? "" : ` at $${injectResult.stoppedAt.toString(16).toUpperCase().padStart(4, "0")}`}; it was not started.`,
+            started: false,
+            load: loadResult.details,
+            entryAddress,
+            delivered: injectResult.delivered,
+            keyboard,
+          },
+        };
+      }
       return {
         success: true,
-        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered },
+        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered, ...(keyboard ? { keyboard } : {}) },
       };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -2505,7 +2526,7 @@ export class C64Client {
       readonly drainTimeoutMs?: number;
       readonly pinnedFacade?: C64Facade;
     },
-  ): Promise<{ delivered: number }> {
+  ): Promise<{ delivered: number; status?: "drained" | "queued" | "stopped"; pending?: number; stoppedAt?: number }> {
     const data = Buffer.isBuffer(bytes)
       ? bytes
       : Buffer.from(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes));
@@ -2522,7 +2543,12 @@ export class C64Client {
       if (fed.status === "timeout") {
         throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
       }
-      return { delivered: fed.delivered };
+      return {
+        delivered: fed.delivered,
+        status: fed.status,
+        pending: fed.pending,
+        ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
+      };
     }
     const KEYD = 0x0277; // KERNAL keyboard buffer base
     const NDX = 0x00C6;  // pending byte count

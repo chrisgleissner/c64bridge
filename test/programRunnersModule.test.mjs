@@ -1266,4 +1266,40 @@ test("HARD03-021 upload_run_basic verify:true reports not verified when the prog
   assert.equal(result.isError, true);
   assert.notEqual(result.metadata?.verified, true);
   assert.match(JSON.stringify(result.metadata?.error ?? {}), /not loaded/);
+
+test("HARD03-029 upload_run_asm reports a queued SYS command in the text and structured content", async () => {
+  const ctx = {
+    platform: { id: "vice" },
+    client: {
+      async uploadAndRunAsm() {
+        return { success: true, details: { entryAddress: 49152, keyboard: { status: "queued", pending: 9 } } };
+      },
+      async readScreen() { return ""; },
+      async readMemoryRaw(address, length) { return new Uint8Array(length).fill(0x60); },
+    },
+    logger: createLogger(),
+  };
+  const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $C000\n  RTS\n" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /queued/i);
+  assert.doesNotMatch(result.content[0].text, /executed successfully/);
+  assert.equal(result.structuredContent.data.keyboard.status, "queued");
+  assert.equal(result.structuredContent.data.keyboard.pending, 9);
+  const verified = await programRunnersModule.invoke("upload_run_asm", { program: "* = $C000\n  RTS\n", verify: true }, ctx);
+  assert.equal(verified.isError, true);
+});
+
+test("HARD03-029 upload_run_asm fails with the stop address when the feed was stopped by a checkpoint", async () => {
+  const ctx = {
+    platform: { id: "vice" },
+    client: {
+      async uploadAndRunAsm() {
+        return { success: false, details: { started: false, keyboard: { status: "stopped", pending: 6, stoppedAt: 49152 } } };
+      },
+    },
+    logger: createLogger(),
+  };
+  const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $C000\n  RTS\n" }, ctx);
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata.error.details.keyboard.status, "stopped");
 });

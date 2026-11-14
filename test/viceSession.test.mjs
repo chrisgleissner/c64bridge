@@ -421,6 +421,44 @@ test("HARD03-020 mounting a disk stops waiting at a checkpoint hit during the au
   }, { autoloadDelayMs: 800 });
 });
 
+test("HARD03-029 injectKeyboardQueue surfaces a checkpoint hit during the feed and a feed queued behind a pause", async () => {
+  await withClient(async (client, server) => {
+    const created = await client.viceCheckpointCreate({ start: 0xc000 });
+    const feeding = client.injectKeyboardQueue(new TextEncoder().encode("SYS49152\r"));
+    await waitUntil(() => server.keyboardFeeds.length === 1, "the keys were fed");
+    await hitWhenRunning(server, created.id);
+    const stopped = await feeding;
+    assert.equal(stopped.status, "stopped");
+    assert.equal(typeof stopped.stoppedAt, "number");
+    assert.equal(typeof stopped.pending, "number");
+    assert.equal(stopped.delivered, 9);
+    assert.equal(server.running, false);
+
+    // The CPU is stopped, so a further feed only queues; the result says so.
+    const queued = await client.injectKeyboardQueue(new TextEncoder().encode("A"));
+    assert.equal(queued.status, "queued");
+    assert.equal(queued.pending, 1);
+
+    // VICE drops a whole feed silently when more than 16384 bytes are pending: refuse it instead.
+    await assert.rejects(() => client.injectKeyboardQueue(new Uint8Array(16_384).fill(0x41)), /16384|16 384/);
+  });
+});
+
+test("HARD03-029 the queued-key counter restarts when the CPU is resumed", async () => {
+  await withBackend(async (backend) => {
+    const keys = new Uint8Array(10_000).fill(0x41);
+    await backend.pause();
+    assert.equal((await backend.feedKeyboard(keys)).status, "queued");
+    await backend.resume();
+    await backend.pause();
+    const second = await backend.feedKeyboard(keys);
+    assert.equal(second.status, "queued");
+    assert.equal(second.pending, 10_000);
+    // Without a resume the total still counts.
+    await assert.rejects(() => backend.feedKeyboard(keys), /16384/);
+  });
+});
+
 test("a tool call's pause that was queued behind a keyboard feed does not resume past a checkpoint hit during the feed", async () => {
   await withClient(async (client, server) => {
     const created = await client.viceCheckpointCreate({ start: 0xc000 });

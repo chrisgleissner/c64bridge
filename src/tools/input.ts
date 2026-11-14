@@ -315,6 +315,25 @@ const inputStateArgsSchema = objectSchema({
 // Handlers
 // ---------------------------------------------------------------------------
 
+type FeedResult = { delivered: number; status?: "drained" | "queued" | "stopped"; pending?: number; stoppedAt?: number };
+
+/** The VICE keyboard-feed outcome as result fields. A feed is typed only when its status is "drained". */
+function feedFields(fed: FeedResult | undefined): { status: "drained" | "queued" | "stopped"; pending: number; stoppedAt: number | null; success: boolean } {
+  const status = fed?.status ?? "drained";
+  return { status, pending: fed?.pending ?? 0, stoppedAt: fed?.stoppedAt ?? null, success: status === "drained" };
+}
+
+function feedNote(fields: ReturnType<typeof feedFields>): string {
+  if (fields.status === "stopped") {
+    const at = fields.stoppedAt === null ? "" : ` at $${fields.stoppedAt.toString(16).toUpperCase().padStart(4, "0")}`;
+    return ` The keyboard feed stopped at a checkpoint${at}; ${fields.pending} byte(s) pending.`;
+  }
+  if (fields.status === "queued") {
+    return ` The feed is held: a pause is active; ${fields.pending} byte(s) pending until it ends.`;
+  }
+  return "";
+}
+
 function textToPetsciiBytes(text: string): Uint8Array {
   const bytes: number[] = [];
   for (let i = 0; i < text.length; i++) {
@@ -329,12 +348,15 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const parsed = writeTextArgsSchema.parse(args);
       const expanded = expandPetsciiTokens(parsed.text);
       const petsciiBytes = textToPetsciiBytes(expanded);
-      await ctx.client.injectKeyboardQueue(petsciiBytes);
+      const fed = feedFields(await ctx.client.injectKeyboardQueue(petsciiBytes));
       if (parsed.delayMs && parsed.delayMs > 0) {
         await new Promise<void>((res) => setTimeout(res, parsed.delayMs));
       }
-      ctx.logger.info("Sent keyboard text", { length: expanded.length });
-      return textResult(`Sent ${expanded.length} character(s) to keyboard buffer.`, { success: true, length: expanded.length });
+      ctx.logger.info("Sent keyboard text", { length: expanded.length, status: fed.status });
+      const text = fed.success
+        ? `Sent ${expanded.length} character(s) to keyboard buffer.`
+        : `Keyboard text not typed: ${expanded.length} character(s) requested.${feedNote(fed)}`;
+      return textResult(text, { ...fed, length: expanded.length });
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
       return unknownErrorResult(error);
@@ -355,17 +377,22 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
           : (() => {
               throw new ToolValidationError(`Unrecognised key: ${parsed.key}. Use a single character or a PETSCII token name.`, { path: "$.key" });
             })();
+      let fed = feedFields({ delivered: 0 });
+      let presses = 0;
       for (let i = 0; i < count; i++) {
-        await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte));
+        fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte)));
+        presses += 1;
+        // Stop at the first feed that did not drain: later presses would queue behind a stopped feed.
+        if (fed.status !== "drained") break;
         if (durationMs > 0) {
           await new Promise<void>((res) => setTimeout(res, durationMs));
         }
       }
-      ctx.logger.info("Pressed key", { key: parsed.key, count, durationMs });
-      return textResult(
-        `Pressed '${parsed.key}' ${count} time${count === 1 ? "" : "s"}.`,
-        { success: true, key: parsed.key, count, durationMs },
-      );
+      ctx.logger.info("Pressed key", { key: parsed.key, count, durationMs, status: fed.status });
+      const text = fed.success
+        ? `Pressed '${parsed.key}' ${count} time${count === 1 ? "" : "s"}.`
+        : `Key '${parsed.key}' not pressed after ${presses} of ${count} time${count === 1 ? "" : "s"}.${feedNote(fed)}`;
+      return textResult(text, { ...fed, key: parsed.key, count, presses, durationMs });
     } catch (error) {
       if (error instanceof ToolValidationError) return toolErrorResult(error);
       return unknownErrorResult(error);
