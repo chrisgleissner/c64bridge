@@ -40,23 +40,23 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 | ID | Group | Status | Commit | Test | Reverted | Notes |
 |---|---|---|---|---|---|---|
 | 046 | 0 | done | see git log | `test/stateRootDir.test.mjs` | yes | `C64BRIDGE_STATE_DIR`; runners use a temp state dir |
-| 003 | A | wip | | | | |
-| 002 | A | wip | | | | |
-| 004 | A | wip | | | | E3 helper |
-| 039 | A | wip | | | | E3 helper |
-| 001 | B | wip | | | | |
-| 013 | B | wip | | | | |
-| 018 | B | wip | | | | |
-| 019 | B | wip | | | | |
-| 020 | B | wip | | | | |
-| 029 | B | wip | | | | |
-| 030 | B | wip | | | | |
+| 003 | A | done | c97fd4e6 | hostPaths, hostPathsTools | yes | E1; opt-out C64BRIDGE_ALLOW_HIDDEN_PATHS |
+| 002 | A | done | 85573dfb | graphicsModule | yes | readHostFile + Jimp.fromBuffer; 4096x4096 cap |
+| 004 | A | done | 6ac546aa | vicBitmap | yes | src/ioRange.ts (E3) |
+| 039 | A | done | 0a1efe9c | charsetScanIo | yes |  |
+| 001 | B | done | a2fa3f4e | viceModule | yes | E2; mock case-insensitive |
+| 013 | B | done | dd8bcafd | viceProcess | yes |  |
+| 018 | B | done | cc9ad0ce | viceSession | yes | stopped:false, success:false |
+| 019 | B | done | dd28471e | groupedToolsShims | yes |  |
+| 020 | B | done | 087488c4 | viceSession | yes |  |
+| 029 | B | wip | h3/b e2017024+e22f8b51 | viceSession |  | held: input.ts write_text/key (F) and upload_run_asm in c64Client.ts (D) must surface the status |
+| 030 | B | done | 2ae92d72 | groupedToolsShims | yes |  |
 | 024 | D | todo | | | | all three parsers in one commit in wave 2 (debug.ts, meta/memory.ts, meta/graphics.ts) |
-| 005 | C | wip | | | | |
-| 006 | C | wip | | | | |
-| 007 | C | wip | | | | |
-| 011 | C | wip | | | | |
-| 012 | C | wip | | | | |
+| 005 | C | done | 7b0f0a44 | accessMode | yes |  |
+| 006 | C | done | d49c5eb7 | loggingHttpClient, configWriteRedaction | yes |  |
+| 007 | C | done | b1f1af6b | resultRedaction | yes |  |
+| 011 | C | done | 8e48fcc9 | batchAndDisplayState | yes |  |
+| 012 | C | done | 1b9183b1 + follow-up | cancellation, groupedToolsShims | yes | tools/list tripwire 70,000 -> 71,000 bytes |
 | 008 | D | todo | | | | |
 | 021 | D | todo | | | | |
 | 022 | D | todo | | | | |
@@ -86,7 +86,16 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 | 044 | H | todo | | | | |
 | 045 | H | todo | | | | |
 
+## For the owner (found outside review.md, not fixed)
+
+- `find_and_run_first_match` `waitMs` (src/tools/meta/filesystem.ts) and `compile_run_verify_cycle` `durationMs`
+  (src/tools/meta/compilation.ts) are unbounded sleeps without cancellation.
+- `wait_for_state with expectedPC polls the PC while a session holds only a disabled stopping checkpoint`
+  (test/viceSession.test.mjs) is timing-sensitive: 1 failure in 3 isolated runs on this 2-CPU machine.
+- `rip_charset_from_ram` with an explicit `address` in $D000-$DFFF is still allowed (039 covers only defaults).
+
 ## Log
 
 - 2026-11-14: capability check; amended team structure; branch created; HARD03-046 landed; draft PR #169.
 - 2026-11-14: wave 1 started (A, B, C in worktrees `../c64bridge-wt/{a,b,c}`, Sonnet). 024 moved to D as one commit.
+- 2026-11-14: wave 1 integrated (A, B, C), both mock suites green, every test fails when reverted. 029 held for wave 2.
