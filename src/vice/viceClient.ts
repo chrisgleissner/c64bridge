@@ -114,6 +114,16 @@ export class ViceClient {
   private onUnsolicitedHandler?: (type: number, frame: Buffer) => void;
   private onCloseHandler?: (error?: Error) => void;
   private cpuRunningState = false;
+  private checkpointCreatesBlocked = false;
+
+  /**
+   * Makes every later checkpoint create fail locally without reaching VICE. Shutdown uses this
+   * before it lists the checkpoints, so none can be created after the listing; creates already
+   * sent are processed by VICE before the listing, because commands on one connection are in order.
+   */
+  blockCheckpointCreates(): void {
+    this.checkpointCreatesBlocked = true;
+  }
 
   setUnsolicitedHandler(handler: (type: number, frame: Buffer) => void): void {
     this.onUnsolicitedHandler = handler;
@@ -276,6 +286,9 @@ export class ViceClient {
     }
     if (this.nextReqId === 0xffffffff) { // Reserved for unsolicited events (see onData above); skip it on wraparound.
       this.nextReqId = 0;
+    }
+    if (cmd === 0x12 && this.checkpointCreatesBlocked) {
+      return Promise.reject(new Error("VICE monitor session is shutting down; no checkpoint can be created"));
     }
     const reqId = this.nextReqId++ >>> 0;
     const payload = body ?? Buffer.alloc(0);

@@ -345,3 +345,16 @@ test("shutdown deletes stopping checkpoints even while a monitor operation is in
     await inflight;
   }, { bootMs: 4_000, wedgeOnUnsafeClose: true });
 });
+
+test("shutdown with a checkpoint creation queued behind it leaves no stopping checkpoint and closes safely", async () => {
+  await withBackend(async (backend, server) => {
+    await armBreakpointAt(backend, 0xc000);
+    assert.equal(server.stoppingCheckpoints, 1);
+    // The creation is queued first, then shutdown starts before its command has gone out.
+    const queued = backend.checkpointOperation((c) => c.checkpointCreate({ start: 0xc100, stopOnHit: true })).then(() => null, (error) => error);
+    await ViceBackend.endAllSessions();
+    await queued;
+    assert.equal(server.stoppingCheckpoints, 0, "no stopping checkpoint survives the shutdown");
+    assert.equal(server.unsafeCloses, 0, "the connection was closed only after every stopping checkpoint was deleted");
+  }, { wedgeOnUnsafeClose: true });
+});

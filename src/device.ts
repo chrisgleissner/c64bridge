@@ -1460,6 +1460,8 @@ export class ViceBackend implements C64Facade {
     const s = this.session;
     if (!s || s.lost !== null || !s.client.isOpen) return;
     const client = s.client;
+    // No checkpoint may be created after the listing below, or the close would leave it set.
+    client.blockCheckpointCreates();
     const cleanup = async (): Promise<void> => {
       const ids = new Set(s.stopping);
       // The operation in flight may have created a checkpoint that was not counted yet.
