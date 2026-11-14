@@ -2626,9 +2626,9 @@ export class C64Client {
       return this.withViceMonitor((client) => client.memGet(address, end));
     }
 
-    async viceNuclearReset(): Promise<void> {
+    async viceNuclearReset(): Promise<{ success: boolean; details?: unknown }> {
       const backend = await this.requireViceBackend();
-      await backend.nuclearReset();
+      return await backend.nuclearReset();
     }
 
     async viceCheckpointList(): Promise<ViceCheckpoint[]> {

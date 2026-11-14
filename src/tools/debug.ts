@@ -17,6 +17,7 @@ import {
 import { jsonResult, textResult } from "./responses.js";
 import {
   ToolError,
+  ToolExecutionError,
   ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
@@ -586,7 +587,15 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       nuclearResetArgsSchema.parse(args);
       ctx.logger.info("Performing nuclear reset of VICE process");
-      await ctx.client.viceNuclearReset();
+      const result = await ctx.client.viceNuclearReset();
+      if (result && result.success === false) {
+        const details = result.details as { code?: unknown; message?: unknown } | undefined;
+        const message = typeof details?.message === "string" ? details.message : "VICE did not restart.";
+        throw new ToolExecutionError(`VICE nuclear reset failed: ${message}`, {
+          ...(typeof details?.code === "string" ? { code: details.code } : {}),
+          details: { result },
+        });
+      }
       checkpointLabels.clear();
       return textResult("VICE process stopped and restarted.", { success: true });
     } catch (error) {

@@ -2248,6 +2248,38 @@ test("c64_debug continue_execution and nuclear_reset delegate to VICE control pa
   }
 });
 
+test("HARD03-019 c64_debug nuclear_reset returns an error and keeps labels when the restart did not happen", async () => {
+  const restore = getPlatformStatus().id;
+  setPlatform("vice");
+  try {
+    const checkpoint = {
+      id: 93, hit: false, start: 0x0900, end: 0x0900, stopOnHit: true, enabled: true, temporary: false,
+      operations: { execute: true, load: false, store: false }, hitCount: 0, ignoreCount: 0, hasCondition: false, memspace: 0,
+    };
+    const stubClient = {
+      async viceCheckpointCreate() { return checkpoint; },
+      async viceCheckpointList() { return [checkpoint]; },
+      async viceNuclearReset() {
+        return { success: false, details: { code: "UNSUPPORTED", message: "VICE nuclear reset requires a managed process" } };
+      },
+    };
+    const ctx = {
+      client: stubClient, rag: {},
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      platform: getPlatformStatus(), setPlatform,
+    };
+    await toolRegistry.invoke("c64_debug", { op: "create_checkpoint", address: "$0900", label: "keep_me" }, ctx);
+    const reset = await toolRegistry.invoke("c64_debug", { op: "nuclear_reset" }, ctx);
+    assert.equal(reset.isError, true);
+    assert.equal(reset.metadata?.error?.kind, "execution");
+    assert.match(JSON.stringify(reset), /UNSUPPORTED|managed process/);
+    const after = await toolRegistry.invoke("c64_debug", { op: "list_checkpoints" }, ctx);
+    assert.equal(after.structuredContent?.data?.checkpoints[0]?.label, "keep_me");
+  } finally {
+    setPlatform(restore);
+  }
+});
+
 test("c64_debug new monitor control operations surface client failures", async () => {
   const restore = getPlatformStatus().id;
   setPlatform("vice");
