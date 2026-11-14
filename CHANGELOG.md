@@ -5,6 +5,40 @@
 
 
 
+
+## 1.2.0 - 2026-11-14
+
+### Features
+
+- support c64_system pause and resume on VICE
+- keep a persistent VICE monitor session so c64_debug steps and breakpoints survive between calls
+- add the VICE soak test (npm run test:vice:soak)
+- add the turbo and REU benchmark (npm run bench:turbo) and c64://ultimate/bench with measured values
+- add game-development resources (c64://gamedev/index, architecture, techniques, toolchain, references)
+- add Ultimate resources (c64://ultimate/hardware, uci, reu, upic, multisid), including C64U LED control
+- add the game-development prompt and skill
+- add the c64_rag docs operation for the curated specs
+- load a VICE PRG in 0.6 s instead of 4.2 s, read the screen and type text on one monitor connection
+- shrink tools/list and resources/list and start faster (lazy jimp, date-fns removed)
+
+### Bug Fixes
+
+- resume the CPU after a reset while an explicit pause is held on Ultimate devices
+- fail fast while an Ultimate does not answer, report a rejected network password at startup, bypass HTTP proxies
+- restore configuration snapshots in the flat form the firmware accepts, sending only changed items
+- reject prototype-polluting configuration names and keep configuration passwords out of debug logs
+- save to flash on restore with applyToFlash when no RAM changes are needed
+- serialise pause acquisition behind the post-reset resume
+- stop VICE operations at a checkpoint hit, delete stopping checkpoints before closing the monitor, wait for the stop after step and step_return, send reset while the CPU is still stopped
+- keep polling the PC in wait_for_state with expectedPC
+- reserve background task names before the first await and abort a start that was replaced while starting
+- range-check assembler addresses and operands and BASIC program size, keeping 1.1.0 results for in-range 32-bit expressions
+- stop BASIC verification only when BASIC is back in direct mode
+- read host files only when they are regular files and expand a leading ~ in host paths
+- validate drive ids and report an existing disk image file as a validation error
+- clamp wait_for_text intervalMs, run screen patterns under a vm timeout on Node, return partial list_basic lines for a missing terminator
+- remove date-fns from bun.lock
+
 ## 1.1.0 - 2026-11-12
 
 ### Features
