@@ -546,15 +546,21 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       let currentPC: number | undefined;
       let settled = false;
       while (!settled) {
-        // With a debug session the tracked CPU state decides: wait for the stop event (a checkpoint
-        // hit or a step) instead of polling. Without one nothing can stop the CPU, so poll the PC.
-        const wait = await ctx.client.viceWaitForStop(Math.max(0, deadline - Date.now()));
+        // Without an expected PC and with a debug session, the tracked CPU state decides: wait for
+        // the stop event (a checkpoint hit or a step) instead of polling. With an expected PC the PC
+        // is read every pollMs whatever the session says, because a session that exists only to hold
+        // a disabled stopping checkpoint says nothing about where the PC is. The wait is cut short by
+        // a stop event, so a hit is still seen at once. Without a session nothing can stop the CPU,
+        // so the PC is polled.
+        const remaining = Math.max(0, deadline - Date.now());
+        const wait = await ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
         values = await ctx.client.viceRegistersGet(0);
         currentPC = pcId !== undefined ? values.find((v) => v.id === pcId)?.value : undefined;
         settled = targetPC === undefined ? (!wait.session || wait.stopped) : currentPC === targetPC;
         if (!settled) {
           if (Date.now() >= deadline) break;
-          await new Promise<void>((res) => setTimeout(res, pollMs));
+          // The wait above already took up to pollMs when a session was running the CPU.
+          if (targetPC === undefined || !wait.session || wait.stopped) await new Promise<void>((res) => setTimeout(res, pollMs));
         }
       }
       const matched = settled;

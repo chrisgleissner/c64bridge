@@ -412,3 +412,24 @@ test("reset after a pause is sent on the held connection before the CPU is let g
     assert.equal(server.unsafeCloses, 0);
   }, { wedgeOnUnsafeClose: true });
 });
+
+test("wait_for_state with expectedPC polls the PC while a session holds only a disabled stopping checkpoint", async () => {
+  await withClient(async (client, server) => {
+    await client.viceCheckpointCreate({ start: 0xc013, enabled: false });
+    assert.equal(server.openConnections, 1, "the disabled stopping checkpoint keeps a session open");
+    const setPc = (value) => client.viceRegistersSet([{ name: "PC", value }]);
+    await setPc(0x1000);
+    // The target PC is present from about 30 ms to about 100 ms; the timeout is 150 ms.
+    const writes = [];
+    const timers = [setTimeout(() => writes.push(setPc(0x2001)), 30), setTimeout(() => writes.push(setPc(0x3000)), 100)];
+    try {
+      const result = await waitForState(client, { expectedPC: "$2001", timeoutMs: 150, pollMs: 10 });
+      assert.equal(result.matched, true, "the PC was seen while it was at the target");
+      assert.equal(result.timedOut, false);
+    } finally {
+      await delay(120); // let the second write run before the server stops
+      timers.forEach(clearTimeout);
+      await Promise.allSettled(writes);
+    }
+  });
+});
