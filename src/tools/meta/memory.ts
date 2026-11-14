@@ -150,7 +150,8 @@ export const tools: ToolDefinition[] = [
             const before = preBytesAgain[i] ?? 0x00;
             const after = postBytes[i] ?? 0x00;
             const exp = writeBytes[i] ?? 0x00;
-            if (after !== exp) {
+            const postMask = maskBytes ? (maskBytes[i] ?? 0xFF) : 0xFF;
+            if ((after & postMask) !== (exp & postMask)) {
               diffs.push({ offset: i, before: `$${before.toString(16).toUpperCase().padStart(2, "0")}`, after: `$${after.toString(16).toUpperCase().padStart(2, "0")}`, expected: `$${exp.toString(16).toUpperCase().padStart(2, "0")}` });
             }
           }

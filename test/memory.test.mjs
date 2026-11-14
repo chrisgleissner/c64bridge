@@ -1376,3 +1376,24 @@ test("read defaults to the unchanged hex output and rejects unknown formats", as
   const bad = await memoryModule.invoke("read", { address: "$0400", length: 4, format: "xxd" }, ctx);
   assert.equal(bad.isError, true);
 });
+
+function maskedWriteCtx(readBack) {
+  let written = false;
+  return {
+    client: createMockClient({
+      async pause() { return { success: true }; },
+      async resume() { return { success: true }; },
+      async readMemory() { return { success: true, data: written ? readBack : "$00" }; },
+      async writeMemory() { written = true; return { success: true }; },
+    }),
+    logger: createLogger(),
+    platform: { id: "c64u", features: [], limitedFeatures: [] },
+  };
+}
+
+test("HARD03-036 write verify applies mask to the post-write comparison", async () => {
+  const ok = await toolRegistry.invoke("c64_memory", { op: "write", address: "$D020", bytes: "01", verify: true, mask: "0F" }, maskedWriteCtx("$F1"));
+  assert.equal(ok.isError, undefined);
+  const bad = await toolRegistry.invoke("c64_memory", { op: "write", address: "$D020", bytes: "01", verify: true, mask: "0F" }, maskedWriteCtx("$F2"));
+  assert.equal(bad.isError, true);
+});
