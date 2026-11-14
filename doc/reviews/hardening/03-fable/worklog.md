@@ -40,23 +40,23 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 | ID | Group | Status | Commit | Test | Reverted | Notes |
 |---|---|---|---|---|---|---|
 | 046 | 0 | done | see git log | `test/stateRootDir.test.mjs` | yes | `C64BRIDGE_STATE_DIR`; runners use a temp state dir |
-| 003 | A | todo | | | | |
-| 002 | A | todo | | | | |
-| 004 | A | todo | | | | E3 helper |
-| 039 | A | todo | | | | E3 helper |
-| 001 | B | todo | | | | |
-| 013 | B | todo | | | | |
-| 018 | B | todo | | | | |
-| 019 | B | todo | | | | |
-| 020 | B | todo | | | | |
-| 029 | B | todo | | | | |
-| 030 | B | todo | | | | |
-| 024 | B/D/A | todo | | | | three parsers: debug.ts (B), meta/memory.ts (D), meta/graphics.ts (A) |
-| 005 | C | todo | | | | |
-| 006 | C | todo | | | | |
-| 007 | C | todo | | | | |
-| 011 | C | todo | | | | |
-| 012 | C | todo | | | | |
+| 003 | A | wip | | | | |
+| 002 | A | wip | | | | |
+| 004 | A | wip | | | | E3 helper |
+| 039 | A | wip | | | | E3 helper |
+| 001 | B | wip | | | | |
+| 013 | B | wip | | | | |
+| 018 | B | wip | | | | |
+| 019 | B | wip | | | | |
+| 020 | B | wip | | | | |
+| 029 | B | wip | | | | |
+| 030 | B | wip | | | | |
+| 024 | D | todo | | | | all three parsers in one commit in wave 2 (debug.ts, meta/memory.ts, meta/graphics.ts) |
+| 005 | C | wip | | | | |
+| 006 | C | wip | | | | |
+| 007 | C | wip | | | | |
+| 011 | C | wip | | | | |
+| 012 | C | wip | | | | |
 | 008 | D | todo | | | | |
 | 021 | D | todo | | | | |
 | 022 | D | todo | | | | |
@@ -88,4 +88,5 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 
 ## Log
 
-- 2026-11-14: capability check; amended team structure; branch created; HARD03-046 landed.
+- 2026-11-14: capability check; amended team structure; branch created; HARD03-046 landed; draft PR #169.
+- 2026-11-14: wave 1 started (A, B, C in worktrees `../c64bridge-wt/{a,b,c}`, Sonnet). 024 moved to D as one commit.
