@@ -8,6 +8,7 @@ import { dirname } from "node:path";
 import { resolveHostPath } from "../../hostPaths.js";
 import { createHash } from "node:crypto";
 import { normalizeErrorDetails } from "./util.js";
+import { parseNumericLiteral, assertNotBareHex, assertAddressRange } from "../../numericArg.js";
 import { stripHexByteSeparators } from "../hex.js";
 import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
@@ -37,16 +38,12 @@ function parseAddressNumeric(value: string): number {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
   }
-  const lower = value.trim().toLowerCase();
-  // Anchored patterns: Number.parseInt alone would read "$20ZZ" as $0020.
-  let parsed = Number.NaN;
-  if (/^\$[0-9a-f]+$/.test(lower)) parsed = Number.parseInt(lower.slice(1), 16);
-  else if (/^0x[0-9a-f]+$/.test(lower)) parsed = Number.parseInt(lower.slice(2), 16);
-  else if (/^%[01]+$/.test(lower)) parsed = Number.parseInt(lower.slice(1), 2);
-  else if (/^[0-9]+$/.test(lower)) parsed = Number.parseInt(lower, 10);
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0 || parsed > 0xFFFF) {
+  const parsed = parseNumericLiteral(value, "$.address");
+  if (parsed === undefined) {
+    assertNotBareHex(value, "$.address");
     throw new ToolValidationError("Invalid address value", { path: "$.address", details: { value } });
   }
+  assertAddressRange(parsed, undefined, "$.address");
   return parsed;
 }
 

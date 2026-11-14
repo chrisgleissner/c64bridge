@@ -8,6 +8,7 @@ import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { rangeOverlapsIo } from "../../ioRange.js";
+import { parseNumericLiteral, assertNotBareHex, assertAddressRange } from "../../numericArg.js";
 import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
 function supportsMachinePause(ctx: { platform?: { id?: string }; client?: { type?: string } }): boolean {
@@ -19,19 +20,12 @@ function parseAddressNumeric(value: string): number {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
   }
-  const trimmed = value.trim();
-  // Anchored patterns: Number.parseInt alone would read "$08G0" as $0008.
-  let parsed = Number.NaN;
-  if (/^\$[0-9a-f]+$/i.test(trimmed)) parsed = Number.parseInt(trimmed.slice(1), 16);
-  else if (/^0x[0-9a-f]+$/i.test(trimmed)) parsed = Number.parseInt(trimmed.slice(2), 16);
-  else if (/^%[01]+$/.test(trimmed)) parsed = Number.parseInt(trimmed.slice(1), 2);
-  else if (/^[0-9]+$/.test(trimmed)) parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+  const parsed = parseNumericLiteral(value, "$.address");
+  if (parsed === undefined) {
+    assertNotBareHex(value, "$.address");
     throw new ToolValidationError("Invalid address value", { path: "$.address", details: { value } });
   }
-  if (parsed < 0 || parsed > 0xFFFF) {
-    throw new ToolValidationError("Address must be between $0000 and $FFFF", { path: "$.address", details: { value } });
-  }
+  assertAddressRange(parsed, undefined, "$.address");
   return parsed;
 }
 

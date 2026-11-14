@@ -22,6 +22,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+import { parseNumericLiteral, assertNotBareHex } from "../numericArg.js";
 
 interface DebugOperationMap extends OperationMap {
   readonly list_checkpoints: Record<string, never>;
@@ -767,15 +768,10 @@ function formatAddress(value: number): string {
 }
 
 function parseAddress(value: string, label: string): number {
-  const trimmed = value.trim();
-  // Anchored patterns: Number.parseInt alone would read "$08G0" as $0008.
-  let parsed = Number.NaN;
-  if (/^\$[0-9a-f]+$/i.test(trimmed)) {
-    parsed = Number.parseInt(trimmed.slice(1), 16);
-  } else if (/^0x[0-9a-f]+$/i.test(trimmed)) {
-    parsed = Number.parseInt(trimmed.slice(2), 16);
-  } else if (/^[0-9]+$/.test(trimmed)) {
-    parsed = Number.parseInt(trimmed, 10);
+  const parsed = parseNumericLiteral(value, `$.${label}`);
+  if (parsed === undefined) {
+    assertNotBareHex(value, `$.${label}`);
+    throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });
   }
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
     throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });
