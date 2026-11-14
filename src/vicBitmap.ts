@@ -1,3 +1,6 @@
+import { readHostFile } from "./hostPaths.js";
+import { ToolValidationError } from "./tools/errors.js";
+
 
 export type VicBitmapMode = "hires" | "multicolor";
 
@@ -86,9 +89,29 @@ export const VIC_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
   [0xB2, 0xB2, 0xB2],
 ];
 
+const MAX_IMPORT_IMAGE_DIMENSION = 4096;
+const PNG_SIGNATURE = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+function assertImageDimensions(width: number, height: number): void {
+  if (width > MAX_IMPORT_IMAGE_DIMENSION || height > MAX_IMPORT_IMAGE_DIMENSION) {
+    throw new ToolValidationError(
+      `Image is ${width} x ${height} pixels; the limit is ${MAX_IMPORT_IMAGE_DIMENSION} x ${MAX_IMPORT_IMAGE_DIMENSION}.`,
+    );
+  }
+}
+
 export async function importImageAsVicBitmap(options: BitmapImportOptions): Promise<PreparedVicBitmap> {
+  // The path is confined and read as a regular file; Jimp.read would fetch http(s) values and read any path.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(options.imagePath)) {
+    throw new ToolValidationError("imagePath must be a local file path; URLs are not fetched.");
+  }
+  const buffer = await readHostFile(options.imagePath);
+  if (buffer.length >= 24 && PNG_SIGNATURE.every((byte, index) => buffer[index] === byte)) {
+    assertImageDimensions(buffer.readUInt32BE(16), buffer.readUInt32BE(20));
+  }
   const { Jimp } = await import("jimp");
-  const image = await Jimp.read(options.imagePath);
+  const image = await Jimp.fromBuffer(buffer);
+  assertImageDimensions(image.bitmap.width, image.bitmap.height);
   const sourceWidth = image.bitmap.width;
   const sourceHeight = image.bitmap.height;
   const logicalWidth = options.mode === "multicolor" ? 160 : 320;
