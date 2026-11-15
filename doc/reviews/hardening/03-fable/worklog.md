@@ -94,10 +94,10 @@ Status as in the task table. Each fix gets its own commit with the I-number in t
 |---|---|---|---|
 | I1 | todo | src/tools/meta/filesystem.ts | `find_and_run_first_match` `waitMs` is an unbounded sleep that ignores cancellation |
 | I2 | todo | src/tools/meta/compilation.ts | `compile_run_verify_cycle` `durationMs` is unbounded and ignores cancellation |
-| I3 | todo | test/viceSession.test.mjs | `wait_for_state with expectedPC polls the PC while a session holds only a disabled stopping checkpoint` is timing-sensitive (1 failure in 3 isolated runs on 2 CPUs) |
+| I3 | done | test/viceSession.test.mjs | Transient-PC regression uses virtual CPU time instead of a host-timer window; a397590e; full-timeout mutation still fails |
 | I4 | todo | src/tools/meta/graphics.ts | `rip_charset_from_ram` with an explicit `address` in $D000-$DFFF still reads the I/O area (039 covers only the defaults) |
-| I5 | todo | src/tools/meta/program.ts | `program_shuffle` ignores the `success` of `runPrgFile`/`runCrtFile` (E8) |
-| I6 | todo | src/c64Client.ts, src/streamTargets.ts | the user-stream registry of 033 is updated only by the `c64_stream` tools, not by `C64Client.streamStart`/`streamStop` |
+| I5 | done | src/tools/meta/program.ts | `program_shuffle` checks unsuccessful `runPrgFile`/`runCrtFile` results before capture (E8); 74837fdd |
+| I6 | done | src/c64Client.ts, src/streamTargets.ts | `C64Client.streamStart`/`streamStop` now update the user-stream registry; 158f0f3a |
 | I7 | todo | src/tools/printer.ts | `print_text` checks the screen once right after the run; a later `?DEVICE NOT PRESENT` is missed |
 | I8 | todo | src/device.ts (ViceBackend.feedKeyboard) | a single VICE keyboard feed above 16384 bytes while the CPU runs is not refused (VICE drops it silently) |
 | I9 | todo | src/tools/debug.ts | after a cancelled `wait_for_state` the underlying `viceWaitForStop` keeps running until its own timeout |
@@ -114,3 +114,32 @@ Status as in the task table. Each fix gets its own commit with the I-number in t
 - 2026-11-14: wave 1 integrated (A, B, C), both mock suites green, every test fails when reverted. 029 held for wave 2.
 - 2026-11-14: wave 2 started: D (Sonnet), E (Sonnet), F (Haiku). 034, 035, 037 moved from D to F to balance load.
 - 2026-11-14: wave 2 integrated and pushed; suites green; every test fails when reverted. Wave 3 started: G (Sonnet), H1 (Haiku: 040, 043-045), H2 (Sonnet: 010, 041, 042, docs). Issues I1-I14 recorded; owner asked to fix all.
+
+## PR #169 review follow-up (2026-11-15)
+
+All 15 inline review findings are covered by fixes and regression cases in these commits:
+
+- `1a699429`: legacy and mixed `batch_update` network writes are subject to the access guard; `accessMode.test.mjs` covers legacy and mixed requests.
+- `34a75021`: legacy and mixed configuration values are redacted; `configWriteRedaction.test.mjs` covers argument redaction and diagnostics.
+- `1c845a82`: adjacent assembler reservations use a linear gap check; `assembler.test.mjs` covers many adjacent reservations.
+- `299ecf40`: joystick taps retain their backend, serialize overlapping controls, and release after a lost press response; `inputModule.test.mjs` covers each case.
+- `5a11c99f`: optional and nested regex repetitions count toward the budget; `meta/screen.test.mjs` covers backtracking on runtimes without interruption.
+- `ce5124cd`: inherited task-state and diagnostics overrides are redirected during tests; `stateRootDir.test.mjs` checks isolation and preservation of operator files.
+- `d735c261`: artifact snapshots enforce aggregate memory and range-count limits before reads or file creation; `meta/artifacts.test.mjs` covers limits and the accepted boundary.
+- `81acf78b`: discovered paths use the matched filename rather than the echoed wildcard; `meta/filesystem.test.mjs` covers firmware wildcard results.
+- `74837fdd`: `program_shuffle` records unsuccessful launches before capturing; `meta/program.test.mjs` covers run errors.
+- `2261a60e`: silent playback is cleaned up and request cancellation reaches audio capture; `audioVerdicts.test.mjs` covers cleanup/error preservation and signal forwarding.
+- `158f0f3a`: stream changes wait for capture cleanup, cancelled queued captures do not start later, and one-shot captures invalidate and recreate reusable video sessions; `streamCaptureRestore.test.mjs` and `cancellation.test.mjs` cover these interleavings.
+
+Generated metadata has been refreshed. Additional test-only commit `a397590e` removes the pre-existing I3 scheduling race without weakening its transient-PC check: restoring the old full-timeout wait in a temporary copy fails the test.
+
+Validation on the integrated fixes:
+
+- Full build and TypeScript checking pass; generated MCP snapshot parity passes.
+- C64U mock batches: 1,770 passed, four skipped, with one pre-existing I3 timing failure. After its deterministic correction, the full isolated VICE session file passes all 23 tests; the old full-timeout mutation fails I3 as expected (22 other tests pass).
+- VICE mock selection: 335 passed, 15 skipped, no failures in the serial run.
+- Bun-only C64U batches (included in the C64U count): 82 passed, zero failures, including microphone abort tests.
+- The real-Xvfb supervision test was explicitly excluded because Xvfb is absent and the environment has no usable package indexes/helper. No hardware or real VICE was contacted.
+- Earlier forced-Bun-environment harness assertions pass when rerun with the intended Node environment; an initial concurrent VICE short-deadline test failure does not recur in the serial run.
+
+This follow-up addresses all 15 inline threads; it does not mark the overall Hardening 3 work complete.
