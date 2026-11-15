@@ -502,17 +502,19 @@ test("wait_for_state with expectedPC polls the PC while a session holds only a d
     assert.equal(server.openConnections, 1, "the disabled stopping checkpoint keeps a session open");
     const setPc = (value) => client.viceRegistersSet([{ name: "PC", value }]);
     await setPc(0x1000);
-    // The target PC is present from about 30 ms to about 100 ms; the timeout is 150 ms.
-    const writes = [];
-    const timers = [setTimeout(() => writes.push(setPc(0x2001)), 30), setTimeout(() => writes.push(setPc(0x3000)), 100)];
-    try {
-      const result = await waitForState(client, { expectedPC: "$2001", timeoutMs: 150, pollMs: 10 });
-      assert.equal(result.matched, true, "the PC was seen while it was at the target");
-      assert.equal(result.timedOut, false);
-    } finally {
-      await delay(120); // let the second write run before the server stops
-      timers.forEach(clearTimeout);
-      await Promise.allSettled(writes);
-    }
+    // Drive CPU progress from requested waits, not host timers: a full-timeout
+    // wait skips the target, while short polls observe it even on a busy host.
+    const actualWaitForStop = client.viceWaitForStop.bind(client);
+    let virtualCpuTimeMs = 0;
+    client.viceWaitForStop = async (timeoutMs) => {
+      virtualCpuTimeMs += timeoutMs;
+      const pc = virtualCpuTimeMs < 30 ? 0x1000 : virtualCpuTimeMs < 100 ? 0x2001 : 0x3000;
+      await setPc(pc);
+      return actualWaitForStop(timeoutMs);
+    };
+
+    const result = await waitForState(client, { expectedPC: "$2001", timeoutMs: 3_000, pollMs: 10 });
+    assert.equal(result.matched, true, "the PC was seen during the virtual target window");
+    assert.equal(result.timedOut, false);
   });
 });
