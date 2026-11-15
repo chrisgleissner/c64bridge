@@ -194,3 +194,65 @@ test("HARD03-012 power_cycle with an already aborted signal sends no menu input"
   assert.equal(result.metadata.cancelled, true);
   assert.deepEqual(calls, []);
 });
+
+import { C64Client } from "../src/c64Client.js";
+import { startMockC64Server } from "../scripts/mockC64Server.mjs";
+import { withSharedMcpClient } from "./helpers/mcpTestHarness.mjs";
+import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
+
+async function waitUntil(predicate) {
+  const deadline = Date.now() + 5000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, "mock operation did not start");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+test("cancelling an active audio recording stops its stream and reports cancellation", async () => {
+  const mock = await startMockC64Server();
+  const client = new C64Client(mock.baseUrl);
+  const controller = new AbortController();
+  try {
+    const ctx = makeCtx({}, controller.signal);
+    ctx.client = client;
+    const recording = toolRegistry.invoke("c64_sound", { op: "record_analyze", durationSeconds: 10 }, ctx);
+    await waitUntil(() => mock.state.streams.audio.active);
+    const abortedAt = Date.now();
+    controller.abort();
+    const result = await recording;
+    assert.equal(result.metadata.cancelled, true);
+    assert.equal(result.isError, true);
+    assert.equal(mock.state.streams.audio.active, false);
+    assert.ok(Date.now() - abortedAt < 1000, "cleanup must not wait for the requested recording duration");
+  } finally {
+    controller.abort();
+    await client.streamStop("audio");
+    await mock.close();
+  }
+});
+
+test("an actual MCP cancellation prevents a queued recording from starting a later stream", async () => {
+  await withSharedMcpClient(async ({ client, mockServer }) => {
+    const call = (args, signal) => client.request({
+      method: "tools/call", params: { name: "c64_sound", arguments: args },
+    }, CallToolResultSchema, { signal });
+    const first = call({ op: "record_analyze", durationSeconds: 1.5 });
+    await waitUntil(() => mockServer.state.streams.audio.active);
+    const controller = new AbortController();
+    const queued = call({ op: "record_analyze", durationSeconds: 0.5 }, controller.signal);
+    // A following request provides a transport barrier: the queued recording's
+    // request has reached the server before its cancellation notification.
+    await client.request({ method: "tools/call", params: {
+      name: "c64_memory", arguments: { op: "read", address: "$0400", length: 1 },
+    } }, CallToolResultSchema);
+    controller.abort();
+    await assert.rejects(() => queued);
+    await first;
+    // A subsequent capture waits behind any mistakenly retained recording and
+    // makes the final start count deterministic without a timing-only assertion.
+    await call({ op: "capture_samples", count: 16 });
+    assert.equal(mockServer.state.streamActionLog.filter((event) => event.action === "start" && event.stream === "audio").length, 2,
+      "only the first recording and the final capture may start a stream");
+    assert.equal(mockServer.state.streams.audio.active, false);
+  });
+});

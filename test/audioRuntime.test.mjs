@@ -19,6 +19,7 @@ function installAudioRuntimeMocks({
   rms = 0.2,
   includeQuit = true,
   startThrows = false,
+  onStart,
 } = {}) {
   const instances = [];
 
@@ -36,6 +37,7 @@ function installAudioRuntimeMocks({
       if (startThrows) {
         throw new Error("synthetic start failure");
       }
+      onStart?.();
 
       const samples = 4096;
       const pcm = Buffer.alloc(samples * 2);
@@ -54,6 +56,7 @@ function installAudioRuntimeMocks({
   if (includeQuit) {
     FakeAudioIO.prototype.quit = function quit() {
       this.quitCalled = true;
+      this.quitCalls = (this.quitCalls ?? 0) + 1;
     };
   }
 
@@ -247,9 +250,31 @@ describe("audio runtime integration", () => {
   });
 
   test("recordAndAnalyzeAudio surfaces input startup failures", async () => {
-    installAudioRuntimeMocks({ startThrows: true });
+    const { instances } = installAudioRuntimeMocks({ startThrows: true });
 
     await expect(recordAndAnalyzeAudio({ durationSeconds: 0.5 })).rejects.toThrow("synthetic start failure");
+    expect(instances[0]?.quitCalls).toBe(1);
+  });
+
+  test("microphone cancellation during startup closes the input exactly once", async () => {
+    const controller = new AbortController();
+    const { instances } = installAudioRuntimeMocks({ onStart: () => controller.abort() });
+
+    await expect(recordAndAnalyzeAudio({ durationSeconds: 10, signal: controller.signal })).rejects.toThrow("cancelled");
+    expect(instances[0]?.quitCalls).toBe(1);
+  });
+
+  test("microphone cancellation stops active recording before its duration elapses", async () => {
+    const controller = new AbortController();
+    let started;
+    const inputStarted = new Promise((resolve) => { started = resolve; });
+    const { instances } = installAudioRuntimeMocks({ onStart: () => started() });
+    const recording = recordAndAnalyzeAudio({ durationSeconds: 10, signal: controller.signal });
+    recording.catch(() => {});
+    await inputStarted;
+    controller.abort();
+    await expect(recording).rejects.toThrow("cancelled");
+    expect(instances[0]?.quitCalls).toBe(1);
   });
 
   test("audioModule analyze_audio and record_and_analyze_audio succeed with the mocked runtime", async () => {

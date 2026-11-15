@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import {
+  cancelledResult,
   createOperationDispatcher,
   defineToolModule,
   discriminatedUnionSchema,
@@ -69,7 +70,7 @@ const soundOperations: GroupedOperationConfig[] = [
           encoding: parsed.encoding,
         });
 
-        const capture = await ctx.client.captureSamples({ count: parsed.count });
+        const capture = await ctx.client.captureSamples({ count: parsed.count, signal: ctx.signal });
         const samplesBuffer = Buffer.from(
           capture.samples.buffer,
           capture.samples.byteOffset,
@@ -108,6 +109,7 @@ const soundOperations: GroupedOperationConfig[] = [
           },
         );
       } catch (error) {
+        if (ctx.signal?.aborted) return cancelledResult("Audio capture was cancelled by the client.");
         if (error instanceof ToolError) {
           return toolErrorResult(error);
         }

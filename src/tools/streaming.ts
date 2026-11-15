@@ -1,5 +1,4 @@
 import { defineToolModule } from "./types.js";
-import { forgetUserStream, rememberUserStream } from "../streamTargets.js";
 import { objectSchema, stringSchema } from "./schema.js";
 import { textResult } from "./responses.js";
 import {
@@ -130,7 +129,6 @@ export const streamingModule = defineToolModule({
             });
           }
 
-          rememberUserStream(parsed.stream as StreamKind, parsed.target);
           return textResult(`Stream ${parsed.stream} started toward ${parsed.target}.`, {
             success: true,
             stream: parsed.stream,
@@ -172,7 +170,6 @@ export const streamingModule = defineToolModule({
             });
           }
 
-          forgetUserStream(parsed.stream as StreamKind);
           return textResult(`Stream ${parsed.stream} stop requested.`, {
             success: true,
             stream: parsed.stream,

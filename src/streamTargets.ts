@@ -18,9 +18,12 @@ export function userStreamTarget(stream: UserStreamKind): string | undefined {
 }
 
 /** Runs captures that use the same device stream one after another. */
-export async function withStreamLock<T>(stream: UserStreamKind, task: () => Promise<T>): Promise<T> {
+export async function withStreamLock<T>(stream: UserStreamKind, task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   const previous = lockTails.get(stream) ?? Promise.resolve();
-  const run = previous.catch(() => undefined).then(task);
+  const run = previous.catch(() => undefined).then(() => {
+    signal?.throwIfAborted();
+    return task();
+  });
   const tail = run.catch(() => undefined);
   lockTails.set(stream, tail);
   try {

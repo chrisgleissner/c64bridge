@@ -7,6 +7,7 @@ type AnyFn = any;
 export interface RecordAndAnalyzeParams {
   durationSeconds: number;
   expectedSidwave?: unknown;
+  signal?: AbortSignal;
 }
 
 export interface DetectedNote {
@@ -47,6 +48,7 @@ export function normalizeAudioDuration(durationSeconds: number): number {
 }
 
 export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
+  params.signal?.throwIfAborted();
   const duration = normalizeAudioDuration(params.durationSeconds);
 
   // Capture PCM from default microphone using naudiodon (PortAudio)
@@ -64,6 +66,7 @@ export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Pro
       "Audio backend not available. Please install 'naudiodon' dependencies (PortAudio). No external CLI tools are required."
     );
   }
+  params.signal?.throwIfAborted();
 
   const input = new portAudio.AudioIO({
     inOptions: {
@@ -81,20 +84,32 @@ export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Pro
   });
 
   await new Promise<void>((resolve, reject) => {
-    try {
-      input.start();
-    } catch (err) {
-      reject(err);
-      return;
-    }
-    setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    const finish = (failure?: { error: unknown }) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      params.signal?.removeEventListener("abort", onAbort);
       try {
-        // Some versions expose quit(); others expose stop(). Try both safely.
         if (typeof input.quit === "function") input.quit();
         else if (typeof input.stop === "function") input.stop();
       } catch {}
-      resolve();
-    }, Math.round(duration * 1000));
+      if (failure) reject(failure.error);
+      else resolve();
+    };
+    const onAbort = () => finish({ error: new DOMException("Audio recording was cancelled by the client", "AbortError") });
+    params.signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      input.start();
+    } catch (err) {
+      finish({ error: err });
+      return;
+    }
+    // start() can synchronously dispatch an abort through a backend callback.
+    // Do not arm a recording timer after that callback already closed the input.
+    if (!settled) timer = setTimeout(() => finish(), Math.round(duration * 1000));
+    if (params.signal?.aborted) onAbort();
   });
 
   const pcm16 = Buffer.concat(chunks);

@@ -1,7 +1,7 @@
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
-import { defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
+import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
   booleanSchema,
   numberSchema,
@@ -400,14 +400,18 @@ function shouldAutoAnalyze(request: string): boolean {
 type AudioAnalyzer = (options: {
   durationSeconds: number;
   expectedSidwave?: string | Record<string, unknown>;
+  signal?: AbortSignal;
 }) => Promise<Awaited<ReturnType<typeof recordAndAnalyzeAudio>>>;
 
 function resolveAnalyzer(ctx: ToolExecutionContext): AudioAnalyzer {
   const candidate = (ctx.client as { recordAndAnalyzeAudio?: unknown } | undefined)?.recordAndAnalyzeAudio;
   if (typeof candidate === "function") {
-    return (options) => (candidate as AudioAnalyzer).call(ctx.client, options);
+    return (options) => {
+      ctx.signal?.throwIfAborted();
+      return (candidate as AudioAnalyzer).call(ctx.client, { ...options, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+    };
   }
-  return (options) => recordAndAnalyzeAudio(options);
+  return (options) => recordAndAnalyzeAudio({ ...options, ...(ctx.signal ? { signal: ctx.signal } : {}) });
 }
 
 /**
@@ -1151,6 +1155,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = recordAndAnalyzeArgsSchema.parse(args ?? {});
+          if (ctx.signal?.aborted) return cancelledResult();
           ctx.logger.info("Recording audio for analysis", { durationSeconds: parsed.durationSeconds });
 
           const analyzer = resolveAnalyzer(ctx);
@@ -1166,6 +1171,7 @@ export const audioModule = defineToolModule({
             globalMetrics: result.analysis?.global_metrics ?? {},
           });
         } catch (error) {
+          if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
           if (error instanceof ToolError) {
             return toolErrorResult(error);
           }
@@ -1196,6 +1202,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = analyzeAudioArgsSchema.parse(args ?? {});
+          if (ctx.signal?.aborted) return cancelledResult();
           if (!shouldAutoAnalyze(parsed.request)) {
             return textResult(
               "No audio verification keywords detected. Use phrases like 'check the music' or 'verify the SID playback'.",
@@ -1223,6 +1230,7 @@ export const audioModule = defineToolModule({
             analysis,
           });
         } catch (error) {
+          if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
           if (error instanceof ToolError) {
             return toolErrorResult(error);
           }

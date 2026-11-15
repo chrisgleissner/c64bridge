@@ -50,7 +50,7 @@ import type {
   ViceRegisterWrite,
   ViceResourceValue,
 } from "./vice/viceClient.js";
-import { userStreamTarget, withStreamLock } from "./streamTargets.js";
+import { forgetUserStream, rememberUserStream, userStreamTarget, withStreamLock } from "./streamTargets.js";
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
@@ -1590,11 +1590,27 @@ export class C64Client {
   }
 
   async streamStart(stream: "video" | "audio" | "debug", ip: string): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await this.startStreamResolvingHost(facade, stream, ip); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try {
+      const facade = await this.facadePromise;
+      return await withStreamLock(stream, async () => {
+        if (stream === "video") await this.stopC64uVideoCaptureSession(false);
+        const result = await this.startStreamResolvingHost(facade, stream, ip);
+        if (result.success) rememberUserStream(stream, ip);
+        return result;
+      });
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async streamStop(stream: "video" | "audio" | "debug"): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.streamStop(stream); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try {
+      const facade = await this.facadePromise;
+      return await withStreamLock(stream, async () => {
+        if (stream === "video") await this.stopC64uVideoCaptureSession(false);
+        const result = await facade.streamStop(stream);
+        if (result.success) forgetUserStream(stream);
+        return result;
+      });
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async prepareVideoCapture(options?: { readonly keepAliveMs?: number }): Promise<void> {
@@ -1603,12 +1619,14 @@ export class C64Client {
     if (facade.type !== "c64u") {
       throw new Error("Reusable video capture is only available on C64 Ultimate");
     }
-    await this.ensureC64uVideoCaptureSession(facade);
-    this.scheduleC64uVideoCaptureStop(keepAliveMs);
+    await withStreamLock("video", async () => {
+      await this.ensureC64uVideoCaptureSession(facade);
+      this.scheduleC64uVideoCaptureStop(keepAliveMs);
+    });
   }
 
   async releaseVideoCapture(): Promise<void> {
-    await this.stopC64uVideoCaptureSession();
+    await withStreamLock("video", () => this.stopC64uVideoCaptureSession());
   }
 
   async captureFrames(options?: { readonly count?: number; readonly reuseSession?: boolean; readonly keepAliveMs?: number }): Promise<FrameCaptureResult> {
@@ -1629,13 +1647,14 @@ export class C64Client {
     });
   }
 
-  async captureSamples(options?: { readonly count?: number }): Promise<SampleCaptureResult> {
+  async captureSamples(options?: { readonly count?: number; readonly signal?: AbortSignal }): Promise<SampleCaptureResult> {
+    options?.signal?.throwIfAborted();
     const requestedPairs = Math.max(1, Math.min(65_536, Math.trunc(options?.count ?? 256)));
     const facade = await this.facadePromise;
     if (facade.type !== "c64u") {
       throw new Error("Audio sample capture is only available on C64 Ultimate");
     }
-    return this.captureC64uAudioSamples(facade, requestedPairs);
+    return this.captureC64uAudioSamples(facade, requestedPairs, { signal: options?.signal });
   }
 
   /**
@@ -1643,6 +1662,7 @@ export class C64Client {
    * device audio stream; other backends have no stream, so the host microphone is used.
    */
   async recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
+    params.signal?.throwIfAborted();
     const durationSeconds = normalizeAudioDuration(params.durationSeconds);
     const facade = await this.facadePromise;
     if (facade.type !== "c64u") {
@@ -1655,6 +1675,7 @@ export class C64Client {
       timeoutMs: Math.ceil(durationSeconds * 1_500) + 2_000,
       sampleRateHz,
       acceptPartial: true,
+      signal: params.signal,
     });
     return analyzeStereoStream(capture.samples, capture.sampleRateHz, params.expectedSidwave);
   }
@@ -1763,14 +1784,26 @@ export class C64Client {
     count: number,
     options: { readonly reuseSession?: boolean; readonly keepAliveMs?: number } = {},
   ): Promise<FrameCaptureResult> {
-    if (options.reuseSession) {
-      const session = await this.ensureC64uVideoCaptureSession(facade);
-      const frames = await this.collectFramesFromC64uVideoCaptureSession(session, count, { fresh: true });
-      this.scheduleC64uVideoCaptureStop(options.keepAliveMs ?? 0);
-      return { backend: "c64u", frames };
-    }
-
     return withStreamLock("video", async () => {
+      if (options.reuseSession) {
+        try {
+          const session = await this.ensureC64uVideoCaptureSession(facade);
+          const frames = await this.collectFramesFromC64uVideoCaptureSession(session, count, { fresh: true });
+          this.scheduleC64uVideoCaptureStop(options.keepAliveMs ?? 0);
+          return { backend: "c64u", frames };
+        } catch (error) {
+          // ensureSession cancelled the keepalive timer. A failed collection
+          // must close that session rather than leaving its stream alive forever.
+          try { await this.stopC64uVideoCaptureSession(); }
+          catch (cleanupError) {
+            writeDiagnosticEvent("video_capture_stop_failed", { error: this.normaliseError(cleanupError) });
+          }
+          throw error;
+        }
+      }
+      // A one-shot stream replaces the reusable socket's target. Invalidate that
+      // session first so the next reusable capture starts a live stream again.
+      await this.stopC64uVideoCaptureSession(false);
       let result: FrameCaptureResult | undefined;
       try {
         result = await this.captureC64uVideoFramesOnce(facade, count);
@@ -2002,16 +2035,19 @@ export class C64Client {
       clearTimeout(session.stopTimer);
       session.stopTimer = null;
     }
-    if (keepAliveMs <= 0) {
-      void this.stopC64uVideoCaptureSession().catch(() => {});
-      return;
-    }
-    session.stopTimer = setTimeout(() => {
-      void this.stopC64uVideoCaptureSession().catch(() => {});
-    }, keepAliveMs);
+    const timer = setTimeout(() => {
+      void withStreamLock("video", async () => {
+        // The timer may have expired while another capture held the lock and
+        // subsequently extended the session. Do not close its renewed stream.
+        if (this.c64uVideoCaptureSession === session && session.stopTimer === timer) {
+          await this.stopC64uVideoCaptureSession();
+        }
+      }).catch(() => {});
+    }, Math.max(0, keepAliveMs));
+    session.stopTimer = timer;
   }
 
-  private async stopC64uVideoCaptureSession(): Promise<void> {
+  private async stopC64uVideoCaptureSession(restoreUser = true): Promise<void> {
     const session = this.c64uVideoCaptureSession;
     if (!session) {
       return;
@@ -2031,7 +2067,7 @@ export class C64Client {
     } finally {
       session.socket.close();
       this.rejectC64uVideoCaptureWaiters(session, stopError ?? new Error("Video capture session closed"));
-      await this.restoreUserStream(session.facade, "video");
+      if (restoreUser) await this.restoreUserStream(session.facade, "video");
     }
 
     if (stopError) {
@@ -2082,7 +2118,7 @@ export class C64Client {
   private async captureC64uAudioSamples(
     facade: C64Facade,
     samplePairs: number,
-    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean; readonly signal?: AbortSignal },
   ): Promise<SampleCaptureResult> {
     return withStreamLock("audio", async () => {
       let result: SampleCaptureResult | undefined;
@@ -2093,14 +2129,15 @@ export class C64Client {
         if (result && notes.length > 0) result = { ...result, warnings: notes };
       }
       return result;
-    });
+    }, options?.signal);
   }
 
   private async captureC64uAudioSamplesOnce(
     facade: C64Facade,
     samplePairs: number,
-    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean; readonly signal?: AbortSignal },
   ): Promise<SampleCaptureResult> {
+    options?.signal?.throwIfAborted();
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
@@ -2134,12 +2171,18 @@ export class C64Client {
       captureError = error;
       notifyCapture();
     };
+    const onAbort = () => {
+      captureError = new DOMException("Audio capture was cancelled by the client", "AbortError");
+      notifyCapture();
+    };
     socket.on("message", onMessage);
     socket.on("error", onError);
+    options?.signal?.addEventListener("abort", onAbort, { once: true });
 
     try {
       await this.bindCaptureSocket(socket, bindAddress);
       socketBound = true;
+      options?.signal?.throwIfAborted();
       const target = this.socketEndpoint(socket, bindAddress);
       streamAttempted = true;
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "audio", target), "start audio stream");
@@ -2193,6 +2236,7 @@ export class C64Client {
     } finally {
       captureSettled = true;
       notifyCapture = () => {};
+      options?.signal?.removeEventListener("abort", onAbort);
       socket.off("message", onMessage);
       if (socketBound) socket.close();
       try {
