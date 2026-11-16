@@ -143,3 +143,14 @@ Validation on the integrated fixes:
 - Earlier forced-Bun-environment harness assertions pass when rerun with the intended Node environment; an initial concurrent VICE short-deadline test failure does not recur in the serial run.
 
 This follow-up addresses all 15 inline threads; it does not mark the overall Hardening 3 work complete.
+
+## CI follow-up (2026-11-16)
+
+The PR workflow run `43768819063` exposed a test portability error in Bun coverage:
+`assert.doesNotMatch` is available in Node's assertion library but not in this
+repository's Bun adapter. Both PR-added occurrences (input cleanup and queued ASM
+reporting) now use the equivalent supported boolean assertion. Each failure was
+reproduced before the correction. Afterwards, Bun coverage passes 27 input tests
+and 46 program-runner tests, and both files pass under Node. The exact previously
+failing `c64u-mock/all-04` coverage shard passes all 185 tests. Full matrix coverage
+is checked by the PR workflow; no assertion or coverage threshold was weakened.

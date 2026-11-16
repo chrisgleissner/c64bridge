@@ -1284,7 +1284,7 @@ test("HARD03-029 upload_run_asm reports a queued SYS command in the text and str
   const result = await programRunnersModule.invoke("upload_run_asm", { program: "* = $C000\n  RTS\n" }, ctx);
   assert.equal(result.isError, undefined);
   assert.match(result.content[0].text, /queued/i);
-  assert.doesNotMatch(result.content[0].text, /executed successfully/);
+  assert.equal(/executed successfully/.test(result.content[0].text), false);
   assert.equal(result.structuredContent.data.keyboard.status, "queued");
   assert.equal(result.structuredContent.data.keyboard.pending, 9);
   const verified = await programRunnersModule.invoke("upload_run_asm", { program: "* = $C000\n  RTS\n", verify: true }, ctx);

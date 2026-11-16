@@ -415,7 +415,7 @@ test("native joystick tap releases after a lost press response and preserves the
     assert.deepEqual(transitions, ["press", "release"]);
     assert.equal(held, releaseFails);
     assert.match(result.content[0].text, /press response lost/);
-    assert.doesNotMatch(result.content[0].text, /cleanup failed/);
+    assert.equal(/cleanup failed/.test(result.content[0].text), false);
   }
 });
 
