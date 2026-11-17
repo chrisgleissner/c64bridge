@@ -12,7 +12,7 @@ Bitmap input is read through the same host-file boundary, accepts files rather t
 
 ## State, tasks and cancellation
 
-`C64BRIDGE_STATE_DIR` selects the state root (default `~/.c64bridge`). Default batch, shuffle and compile-cycle artifacts use unique directories under `runs/`. Startup retains at most 200 generated run directories, removing those older than 30 days; explicit output directories are not pruned.
+`C64BRIDGE_STATE_DIR` selects the state root (default `~/.c64bridge`). Default batch, shuffle and compile-cycle artifacts use unique directories under `runs/`. Startup retains at most 200 generated run directories, removing those older than 30 days; explicit output directories and runs owned by another live server process are protected from pruning.
 
 Task status changes are persisted immediately; repeated iteration snapshots and logs are coalesced to at most once a second. The registry retains at most 200 finished tasks. `c64_system` with `op: "delete_task"` removes a finished task and its artifacts; stop a running task first. Task records and folders identify the owning process/session so separate server processes do not interrupt or overwrite each other's live work.
 
