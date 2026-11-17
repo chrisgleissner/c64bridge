@@ -1236,14 +1236,20 @@ export class ViceBackend implements C64Facade {
    * be consumed, so the bytes stay queued and the CPU stays stopped.
    */
   async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult> {
-    const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, bytes.length * 150));
+    // The monitor halts the CPU while all feed chunks are sent, even for a
+    // running machine. No new bytes can drain until the whole feed completes.
+    const queuedBytes = bytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
+    if (queuedBytes > VICE_KEYBOARD_QUEUE_LIMIT) {
+      throw new Error(`VICE keyboard feed of ${queuedBytes} byte(s) exceeds the ${VICE_KEYBOARD_QUEUE_LIMIT} byte queue limit.`);
+    }
+    const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, queuedBytes * 150));
     return await this.withClient(async (client) => {
       // VICE drops a whole feed silently when more than 16384 bytes are pending (kbdbuf.c); while the CPU is
       // stopped nothing is consumed, so the total queued across feeds is what counts.
       const stoppedSession = this.isCpuStopped() ? this.liveSession() : null;
       if (stoppedSession) {
-        if (stoppedSession.queuedKeyBytes + bytes.length > VICE_KEYBOARD_QUEUE_LIMIT) {
-          throw new Error(`VICE keyboard queue limit: ${stoppedSession.queuedKeyBytes} byte(s) are already queued while the CPU is stopped and ${bytes.length} more would exceed ${VICE_KEYBOARD_QUEUE_LIMIT}. Resume the CPU first.`);
+        if (stoppedSession.queuedKeyBytes + queuedBytes > VICE_KEYBOARD_QUEUE_LIMIT) {
+          throw new Error(`VICE keyboard queue limit: ${stoppedSession.queuedKeyBytes} byte(s) are already queued while the CPU is stopped and ${queuedBytes} more would exceed ${VICE_KEYBOARD_QUEUE_LIMIT}. Resume the CPU first.`);
         }
       }
       const delivered = await client.keyboardFeedBytes(bytes);

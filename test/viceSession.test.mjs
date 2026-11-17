@@ -518,3 +518,18 @@ test("wait_for_state with expectedPC polls the PC while a session holds only a d
     assert.equal(result.timedOut, false);
   });
 });
+
+test("I8 running keyboard feeds enforce VICE's pending limit before sending any bytes", async () => {
+  await withBackend(async (backend, server) => {
+    assert.equal(server.running, true);
+    const before = server.keyboardFeeds.length;
+    await assert.rejects(() => backend.feedKeyboard(new Uint8Array(16_385).fill(0x41), { drainTimeoutMs: 50 }), /16384/);
+    assert.equal(server.keyboardFeeds.length, before, "no prefix of an oversized feed was sent");
+    await backend.pause();
+    const exact = await backend.feedKeyboard(new Uint8Array(16_384).fill(0x41));
+    assert.equal(exact.pending, 16_384);
+    assert.equal((await backend.feedKeyboard(new Uint8Array([0]))).delivered, 0, "NUL bytes never enter VICE's queue");
+    await assert.rejects(() => backend.feedKeyboard(new Uint8Array([0x42])), /16384/);
+    await backend.resume();
+  });
+});
