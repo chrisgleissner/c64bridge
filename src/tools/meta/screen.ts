@@ -95,6 +95,7 @@ export function assertSafeScreenPattern(pattern: string): void {
   const groupCrosses: boolean[] = [];
   let unboundedRepeats = 0;
   let repeatCost = 0;
+  let lastQuantifierEnd = -1;
   let inClass = false;
   let classStart = 0;
   // Whether the atom just before the current position can match a line break.
@@ -158,8 +159,11 @@ export function assertSafeScreenPattern(pattern: string): void {
     if (isQuantifier) {
       // "(?" opens a group modifier, and a "?" after another quantifier makes it lazy; neither is a repeat.
       const opensModifier = char === "?" && pattern[index - 1] === "(";
-      const isLazyMarker = char === "?" && "*+?}".includes(pattern[index - 1] ?? "");
+      const isLazyMarker = char === "?" && lastQuantifierEnd === index - 1;
       if (!opensModifier && !isLazyMarker) {
+        // Recognize an actual quantifier token, not an escaped punctuation atom.
+        const quantifier = char === "{" ? /^\{\d+(,\d*)?\}/.exec(pattern.slice(index))?.[0] : char;
+        lastQuantifierEnd = index + (quantifier?.length ?? 1) - 1;
         if (previousWasGroupWithQuantifier) {
           throw new ToolValidationError(
             "Nested quantifiers (a repeated group that itself contains a repeat) are not supported in screen patterns",

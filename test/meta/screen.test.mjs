@@ -499,3 +499,19 @@ test("screen wait cancellation releases a stalled read promptly", async () => {
     assert.equal(result.cancelled, true);
   } finally { clearTimeout(timer); }
 });
+
+test("screen repeat budget counts optional escaped punctuation as repeats", async () => {
+  const { assertSafeScreenPattern } = await import("../../src/tools/meta/screen.js");
+  const originalBun = globalThis.Bun;
+  if (originalBun === undefined) globalThis.Bun = {};
+  try {
+    for (const atom of ["\\*", "\\+", "\\?", "\\}", "}"]) {
+      assert.throws(() => assertSafeScreenPattern(`${atom}?`.repeat(30) + "X"), /repeat/i, atom);
+    }
+    for (const pattern of ["\\*?\\+?\\??", "a*?b+?c??", "a{1,3}?b{1,3}?c{1,3}?"]) {
+      assert.doesNotThrow(() => assertSafeScreenPattern(pattern), pattern);
+    }
+  } finally {
+    if (originalBun === undefined) delete globalThis.Bun;
+  }
+});
