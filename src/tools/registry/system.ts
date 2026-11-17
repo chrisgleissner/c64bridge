@@ -120,6 +120,12 @@ const systemOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "stop_all_background_tasks", rawArgs, ctx),
   },
   {
+    op: "delete_task",
+    schema: extendSchemaWithOp("delete_task", ensureDescriptor(metaDescriptorIndex, "delete_background_task").inputSchema,
+      { description: "Delete a finished background task and its artifacts; stop running tasks first." }),
+    handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "delete_background_task", rawArgs, ctx),
+  },
+  {
     op: "list_tasks",
     schema: extendSchemaWithOp(
       "list_tasks",
@@ -164,7 +170,7 @@ export const systemModuleGroup = defineToolModule({
       operationEffects: {
         pause: "write", resume: "write", reset: "write", reboot: "destructive", poweroff: "destructive",
         power_cycle: "destructive", menu: "write", read_menu_screen: "read", start_task: "write",
-        stop_task: "read", stop_all_tasks: "read", list_tasks: "read", performance_report: "read",
+        stop_task: "read", stop_all_tasks: "read", delete_task: "write", list_tasks: "read", performance_report: "read",
       },
       effectOf: (op, args) => (op === "start_task" ? taskOperationEffect((args as { operation?: unknown }).operation) : undefined),
       tags: ["system", "control", "grouped"],

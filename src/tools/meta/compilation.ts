@@ -7,7 +7,7 @@ import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
 import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { sleepUnlessAborted } from "./util.js";
-import { getTasksHomeDir } from "./background.js";
+import { createDefaultRunDirectory } from "../../runArtifacts.js";
 
 const compileRunVerifyCycleArgsSchema = objectSchema({
   description: "Compile source (BASIC/ASM/SIDWAVE), run, verify via screen/audio, and archive artifacts.",
@@ -54,7 +54,7 @@ export const tools: ToolDefinition[] = [
 
         const outputPath = parsed.outputPath
           ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
-          : resolvePath(joinPath(getTasksHomeDir(), `cycle_${Date.now()}`));
+          : await createDefaultRunDirectory("cycle");
         await fs.mkdir(outputPath, { recursive: true });
 
         const runId = `cycle_${Date.now()}`;

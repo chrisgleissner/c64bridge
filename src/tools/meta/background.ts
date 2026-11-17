@@ -31,6 +31,7 @@ interface BackgroundTask {
   nextRunAt?: Date | null;
   folder: string; // e.g. tasks/background/0001_read
   backendId?: string | null; // backend the task was pinned to at start
+  _lastPersistedAt?: number;
   _timer?: NodeJS.Timeout | null; // transient, not persisted
   _facade?: C64Facade; // transient: facade pinned at start, so a later backend switch cannot retarget the task
 }
@@ -41,6 +42,7 @@ const logger = loggerFor("background");
 export const MIN_INTERVAL_MS = 100;
 export const MAX_RUNNING_TASKS = 16;
 export const MAX_ITERATIONS_LIMIT = 100_000;
+const MAX_FINISHED_TASKS = 200;
 const MAX_LOG_BYTES = 256 * 1024;
 
 // Operations runOperation implements, including the *_memory aliases.
@@ -220,6 +222,7 @@ async function loadTasks(): Promise<void> {
     }
     TASKS.set(t.name, t);
   }
+  pruneFinishedTasks();
 }
 
 let tempFileCounter = 0;
@@ -251,19 +254,12 @@ async function ensureResultAndLog(task: BackgroundTask): Promise<void> {
   await fs.mkdir(folderAbs, { recursive: true });
   const resultPath = resolvePath(folderAbs, "result.json");
   const logPath = resolvePath(folderAbs, "log.txt");
-  try {
-    await fs.access(resultPath);
-  } catch {
-    const initial = {
-      id: task.id,
-      type: "task",
-      name: task.operation,
-      created: formatTimestampSpec(task.startedAt),
-      status: task.status,
-      iterations: task.iterations,
-    } as Record<string, unknown>;
-    await writeFileAtomic(resultPath, JSON.stringify(initial, null, 2));
-  }
+  await writeFileAtomic(resultPath, JSON.stringify({
+    id: task.id, type: "task", name: task.operation,
+    created: formatTimestampSpec(task.startedAt), updatedAt: formatTimestampSpec(task.updatedAt),
+    status: task.status, iterations: task.iterations, lastResult: task.lastResult ?? null,
+    lastError: task.lastError ?? null,
+  }, null, 2));
   try {
     await fs.access(logPath);
   } catch {
@@ -297,6 +293,12 @@ async function capTaskLog(logPath: string): Promise<void> {
   }
 }
 
+function pruneFinishedTasks(): void {
+  const finished = [...TASKS.values()].filter((task) => task.status !== "running")
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  for (const task of finished.slice(MAX_FINISHED_TASKS)) TASKS.delete(task.name);
+}
+
 // Persistence is serialised so two writers never rename over each other.
 let persistChain: Promise<void> = Promise.resolve();
 
@@ -305,6 +307,7 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = []): Promise<voi
     try {
       const path = getTaskStateFilePath();
       await fs.mkdir(dirname(path), { recursive: true });
+      pruneFinishedTasks();
       const data = Array.from(TASKS.values()).map((t) => toPersistedTask(t));
       await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
       // Only the changed tasks get their per-task files rewritten.
@@ -313,6 +316,7 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = []): Promise<voi
         if (TASKS.get(t.name) !== t) continue;
         await writeTaskJson(t);
         await ensureResultAndLog(t);
+        t._lastPersistedAt = Date.now();
       }
     } catch (error) {
       logger.warn(`Unable to persist background task state: ${error instanceof Error ? error.message : String(error)}`);
@@ -376,8 +380,10 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
         await persistTasks([task]);
         return;
       }
-      await appendTaskLog(task, `iteration=${task.iterations}`);
-      await persistTasks([task]);
+      if (Date.now() - (task._lastPersistedAt ?? 0) >= 1000) {
+        await appendTaskLog(task, `iteration=${task.iterations}`);
+        await persistTasks([task]);
+      }
       scheduleNextRun(task, ctx);
     } catch (err) {
       if (task.status !== "running") return;
@@ -581,6 +587,30 @@ export const tools: ToolDefinition[] = [
         await appendTaskLog(task, "stopped");
         await persistTasks([task]);
         return jsonResult({ stopped: true, name: task.name, status: task.status }, { success: true });
+      } catch (error) {
+        if (error instanceof ToolError) return toolErrorResult(error);
+        return unknownErrorResult(error);
+      }
+    },
+  },
+  {
+    name: "delete_background_task",
+    description: "Delete a finished background task and its artifacts; running tasks must be stopped first.",
+    summary: "Removes a finished task from the registry.",
+    inputSchema: stopBackgroundTaskArgsSchema.jsonSchema,
+    tags: ["background", "scheduler"],
+    async execute(args) {
+      try {
+        await ensureTasksLoaded();
+        const parsed = stopBackgroundTaskArgsSchema.parse(args ?? {});
+        const task = TASKS.get(parsed.name);
+        if (task?.status === "running") throw new ToolValidationError("Stop the running task before deleting it", { path: "$.name" });
+        if (task) {
+          TASKS.delete(task.name);
+          await persistTasks();
+          await fs.rm(getBackgroundTaskFolderAbsolute(task.id), { recursive: true, force: true });
+        }
+        return jsonResult({ deleted: Boolean(task), name: parsed.name }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

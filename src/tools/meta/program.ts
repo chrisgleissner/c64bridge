@@ -9,7 +9,7 @@ import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
 import { sleep, sleepUnlessAborted, formatTimestampSpec } from "./util.js";
-import { getTasksHomeDir } from "./background.js";
+import { createDefaultRunDirectory } from "../../runArtifacts.js";
 import type { CapturedFrame } from "../../streamCapture.js";
 import { withDiagnosticSpan } from "../../diagnostics.js";
 import { stripHexByteSeparators } from "../hex.js";
@@ -687,7 +687,7 @@ export const tools: ToolDefinition[] = [
         // Prepare output directory
         const outputPath = parsed.outputPath 
           ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
-          : resolvePath(joinPath(getTasksHomeDir(), `shuffle_${Date.now()}`));
+          : await createDefaultRunDirectory("shuffle");
         await fs.mkdir(outputPath, { recursive: true });
 
         const results: Array<{ path: string; started: string; ended: string; durationMs: number; screen?: string; error?: string }> = [];
@@ -798,7 +798,7 @@ export const tools: ToolDefinition[] = [
 
         const outputPath = parsed.outputPath
           ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
-          : resolvePath(joinPath(getTasksHomeDir(), `batch_${Date.now()}`));
+          : await createDefaultRunDirectory("batch");
         await fs.mkdir(outputPath, { recursive: true });
 
         const results: Array<{ path: string; status: "pass" | "fail" | "error"; assertions: Array<{ type: string; status: "pass" | "fail"; message?: string }>; error?: string }> = [];
