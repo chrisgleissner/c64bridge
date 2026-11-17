@@ -3,6 +3,8 @@ import assert from "#test/assert";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { buildAllIndexes, loadIndexes } from "../src/rag/indexer.ts";
 import { LocalMiniHashEmbedding } from "../src/rag/embeddings.ts";
 
@@ -23,4 +25,14 @@ test("HARD03-041 index inputs exclude repository maintenance instructions", asyn
   } finally {
     await fs.rm(embeddingsDir, { recursive: true, force: true });
   }
+});
+
+
+test("HARD03-041 npm package excludes repository maintenance instructions", async () => {
+  const { stdout } = await promisify(execFile)("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], {
+    cwd: root, encoding: "utf8", timeout: 25000, maxBuffer: 4 * 1024 * 1024,
+  });
+  const files = JSON.parse(stdout)[0].files.map((file) => file.path);
+  assert.ok(files.some((file) => file.startsWith(".github/prompts/")), "ordinary user prompts remain packaged");
+  assert.deepEqual(files.filter(developerOnly), []);
 });
