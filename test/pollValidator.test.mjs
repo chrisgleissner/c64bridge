@@ -777,7 +777,8 @@ test("HARD03-021 BASIC poll reports a program that is not in memory at $0801", a
     async readMemoryRaw(address, length) { return new Uint8Array(length); },
     async readMemory() { return { success: true, data: "$00" }; },
   };
-  const outcome = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0x0801, bytes }, "READY.\n");
+  // No fresh screen evidence: unchanged output plus missing bytes proves no new run.
+  const outcome = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0x0801, bytes }, "RUN\nHI\n\nREADY.\n");
   assert.equal(outcome.status, "error");
   assert.match(outcome.message ?? "", /not loaded/);
 });
@@ -818,4 +819,19 @@ test("HARD03-025 a visible window that really differs is still not_loaded", asyn
   const bytes = new Uint8Array(0x2010).fill(0xaa);
   const outcome = await pollForProgramOutcome("ASM", createRomClient(new Map()), createLogger(), { maxMs: 100, intervalMs: 20, stabilizeMs: 0 }, { address: 0xa000, bytes });
   assert.equal(outcome.status, "not_loaded");
+});
+
+test("BASIC verification accepts fresh execution after a program modifies its tokenized body", async () => {
+  const { basicToPrg } = await import("../src/tools/translation/basicTokenizer.js");
+  const prg = basicToPrg('10 POKE2054,49:PRINT"DONE"');
+  const expected = prg.subarray(2);
+  const memory = Uint8Array.from(expected);
+  assert.equal(memory[2054 - 2049], 50); // The first digit in the already-evaluated POKE operand.
+  memory[2054 - 2049] = 49;
+  const client = {
+    async readScreen() { return "DONE\nREADY.\n"; },
+    async readMemoryRaw(address, length) { return memory.subarray(address - 2049, address - 2049 + length); },
+  };
+  const outcome = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 100, intervalMs: 10, stabilizeMs: 0 }, { address: 2049, bytes: expected }, "READY.\n");
+  assert.equal(outcome.status, "ok");
 });

@@ -212,15 +212,13 @@ async function pollBasicOutcome(
   baselineScreen?: string,
   program?: ExpectedProgramBytes,
 ): Promise<BasicPollResult> {
+  let loadMismatch: string | undefined;
   if (program) {
-    // The tokenised program stays at $0801 after a run; a backend that answered success without loading it leaves other bytes there.
+    // This read happens after RUN: a BASIC program may already have changed its
+    // own tokenized body. A mismatch needs corroboration from absent execution.
     const check = await checkProgramLoaded(client, logger, program);
     if (check.load) {
-      return {
-        status: "error",
-        type: "BASIC",
-        message: `Program was not loaded: memory at $${check.load.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the uploaded BASIC program (expected ${check.load.expected}, found ${check.load.found}).`,
-      };
+      loadMismatch = `Program was not loaded: memory at $${check.load.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the uploaded BASIC program (expected ${check.load.expected}, found ${check.load.found}).`;
     }
   }
   const startTime = Date.now();
@@ -252,8 +250,8 @@ async function pollBasicOutcome(
       if (!runDetected) {
         const changed = baseline !== undefined && normaliseScreen(screen) !== baseline;
         // With a baseline, text that was already on that screen (RUN left by an earlier run) is no evidence of this run; only a change is.
-        const textEvidence = baseline === undefined && (upperScreen.includes("RUN") || upperScreen.includes("ERROR"));
-        if (textEvidence || changed || (baseline === undefined && normaliseScreen(screen) === "")) {
+        const textEvidence = !loadMismatch && baseline === undefined && (upperScreen.includes("RUN") || upperScreen.includes("ERROR"));
+        if (textEvidence || changed || (!loadMismatch && baseline === undefined && normaliseScreen(screen) === "")) {
           runDetected = true;
           logger.debug("Program execution detected", { pollCount, elapsed: Date.now() - startTime });
         }
@@ -283,7 +281,7 @@ async function pollBasicOutcome(
     return {
       status: "error",
       type: "BASIC",
-      message: "No execution activity detected: the firmware reported success, but the program does not appear to have run.",
+      message: loadMismatch ?? "No execution activity detected: the firmware reported success, but the program does not appear to have run.",
     };
   }
   logger.debug("BASIC polling completed without errors", { pollCount, elapsed: Date.now() - startTime });
