@@ -2,7 +2,7 @@
 // Lightweight CLI launcher for the compiled server
 // Usage: `npx c64bridge` or after local install `c64bridge`
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
@@ -56,6 +56,6 @@ if (!entry) {
 	process.exitCode = 1;
 } else {
 	// import the resolved entry
-	const entryUrl = new URL(`file://${entry}`);
+	const entryUrl = pathToFileURL(entry);
 	await import(entryUrl.href);
 }
