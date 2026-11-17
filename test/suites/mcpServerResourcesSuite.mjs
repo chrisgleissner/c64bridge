@@ -142,6 +142,7 @@ export function registerMcpServerResourcesTests(withSharedMcpClient) {
 
   test("legacy resource URIs are rejected by direct reads", async () => {
     const legacyUris = [
+      "c64://unknown/HARD03-042",
       "c64://index",
       "c64://context/bootstrap",
       "c64://context/fast-paths",
@@ -161,8 +162,8 @@ export function registerMcpServerResourcesTests(withSharedMcpClient) {
             { method: "resources/read", params: { uri } },
             ReadResourceResultSchema,
           ),
-          undefined,
-          `${uri} should be rejected`,
+          (error) => error.code === -32002,
+          `${uri} should return Resource not found (-32002)`,
         );
       }
     });

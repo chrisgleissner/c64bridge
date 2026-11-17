@@ -313,7 +313,7 @@ async function main() {
       } else {
         const result = readKnowledgeResource(request.params.uri, PROJECT_ROOT);
         if (!result) {
-          throw new Error(`Unknown resource: ${request.params.uri}`);
+          throw new McpError(-32002, `Unknown resource: ${request.params.uri}`);
         }
         response = {
           contents: [result],

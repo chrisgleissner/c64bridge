@@ -138,7 +138,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     title: "Guides & Orientation",
     summary: "Mandatory workflow and safety guidance before issuing any C64 commands.",
     prompts: ["basic-program", "assembly-program", "memory-debug", "cross-platform-demo", "preset-music-demo"],
-    tools: ["upload_run_basic", "upload_run_asm", "cross_platform_greeting", "music_play_preset", "read_screen", "read"],
+    tools: ["c64_program upload_run_basic", "c64_program upload_run_asm", "c64_program cross_platform_greeting", "c64_sound play_preset", "c64_memory read_screen", "c64_memory read"],
     resources: [
       {
         uri: RESOURCE_URIS.guide.bootstrap,
@@ -148,7 +148,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "critical",
         summary: "Step-by-step rules for safe automation, verification, and rollback on the C64.",
           prompts: ["basic-program", "assembly-program", "memory-debug", "cross-platform-demo", "preset-music-demo"],
-        tools: ["upload_run_basic", "upload_run_asm", "cross_platform_greeting", "music_play_preset", "read_screen", "read"],
+        tools: ["c64_program upload_run_basic", "c64_program upload_run_asm", "c64_program cross_platform_greeting", "c64_sound play_preset", "c64_memory read_screen", "c64_memory read"],
         tags: ["workflow", "safety"],
       },
       {
@@ -365,7 +365,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     title: "Programming Languages",
     summary: "Language references required before generating BASIC or 6502 assembly programs.",
     prompts: ["basic-program", "assembly-program"],
-    tools: ["upload_run_basic", "upload_run_asm", "read_screen", "read"],
+    tools: ["c64_program upload_run_basic", "c64_program upload_run_asm", "c64_memory read_screen", "c64_memory read"],
     resources: [
       {
         uri: RESOURCE_URIS.basic.spec,
@@ -375,7 +375,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "critical",
         summary: "Token definitions, syntax rules, and device I/O guidance for BASIC v2.",
         prompts: ["basic-program"],
-        tools: ["upload_run_basic", "read_screen"],
+        tools: ["c64_program upload_run_basic", "c64_memory read_screen"],
         relatedResources: [RESOURCE_URIS.guide.bootstrap, RESOURCE_URIS.basic.pitfalls],
         tags: ["basic", "language"],
       },
@@ -387,7 +387,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Quickref covering quotation handling, line length, tokenization, variable names, and other BASIC traps.",
         prompts: ["basic-program"],
-        tools: ["upload_run_basic"],
+        tools: ["c64_program upload_run_basic"],
         relatedResources: [RESOURCE_URIS.basic.spec],
         tags: ["basic", "pitfalls", "quickref"],
       },
@@ -399,7 +399,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "critical",
         summary: "Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU.",
         prompts: ["assembly-program"],
-  tools: ["upload_run_asm", "read"],
+  tools: ["c64_program upload_run_asm", "c64_memory read"],
         relatedResources: [RESOURCE_URIS.gamedev.techniques, RESOURCE_URIS.guide.bootstrap],
         tags: ["assembly", "language"],
       },
@@ -524,7 +524,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     title: "Memory & I/O Reference",
     summary: "Critical tables for RAM layout, zero-page vectors, and peripheral I/O registers.",
     prompts: ["memory-debug", "assembly-program"],
-  tools: ["read", "write", "verify_and_write_memory", "debugreg_read", "debugreg_write"],
+  tools: ["c64_memory read", "c64_memory write", "c64_config read_debugreg", "c64_config write_debugreg"],
     resources: [
       {
         uri: RESOURCE_URIS.memory.map,
@@ -534,7 +534,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "critical",
         summary: "Page-by-page breakdown of the 64 KB address space with hardware, ROM, and RAM regions.",
         prompts: ["memory-debug", "assembly-program"],
-  tools: ["read", "write", "verify_and_write_memory"],
+  tools: ["c64_memory read", "c64_memory write"],
         relatedResources: [RESOURCE_URIS.gamedev.index, 
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
           RESOURCE_URIS.basic.romRoutines,
@@ -553,7 +553,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Documents zero-page variables, BASIC pointers, and KERNAL workspace addresses.",
         prompts: ["memory-debug", "assembly-program"],
-  tools: ["read", "write", "verify_and_write_memory"],
+  tools: ["c64_memory read", "c64_memory write"],
         relatedResources: [
           RESOURCE_URIS.memory.map,
           RESOURCE_URIS.basic.romRoutines,
@@ -570,7 +570,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Maps BASIC ROM landmarks, reusable interpreter routines, numeric helpers, string helpers, and C64-specific BASIC continuation entries.",
         prompts: ["memory-debug", "assembly-program", "basic-program"],
-        tools: ["read", "verify_and_write_memory"],
+        tools: ["c64_memory read", "c64_memory write"],
         relatedResources: [
           RESOURCE_URIS.memory.map,
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
@@ -588,7 +588,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Maps KERNAL ROM vectors, jump table entries, internal routines, serial/tape/screen services, and reset handlers.",
         prompts: ["memory-debug", "assembly-program"],
-  tools: ["read", "verify_and_write_memory"],
+  tools: ["c64_memory read", "c64_memory write"],
         relatedResources: [
           RESOURCE_URIS.memory.map,
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
@@ -606,7 +606,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "critical",
         summary: "Covers VIC-II, SID, CIA, and system control registers with address ranges and usage notes.",
         prompts: ["memory-debug", "assembly-program"],
-  tools: ["read", "write", "verify_and_write_memory", "debugreg_read", "debugreg_write"],
+  tools: ["c64_memory read", "c64_memory write", "c64_config read_debugreg", "c64_config write_debugreg"],
         relatedResources: [RESOURCE_URIS.gamedev.index, 
           RESOURCE_URIS.memory.map,
           RESOURCE_URIS.memory.zeroPageAndWorkspace,
@@ -623,7 +623,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Details CIA 1/2 registers, timers, interrupts, and keyboard matrix layout.",
         prompts: ["memory-debug", "assembly-program"],
-  tools: ["read", "write", "verify_and_write_memory", "debugreg_read"],
+  tools: ["c64_memory read", "c64_memory write", "c64_config read_debugreg"],
         relatedResources: [RESOURCE_URIS.gamedev.index, 
           RESOURCE_URIS.io.spec,
           RESOURCE_URIS.memory.map,
@@ -638,14 +638,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
     title: "Printers & Hardcopy",
     summary: "Guides for Commodore MPS and Epson FX printing workflows, including prompts.",
     prompts: ["printer-job"],
-    tools: [
-      "printer_guide",
-      "printer_commodore_text",
-      "printer_commodore_bitmap",
-      "printer_epson_text",
-      "printer_epson_bitmap",
-      "printer_prompts",
-    ],
+    tools: ["c64_printer", "c64_printer print_text", "c64_printer print_bitmap"],
     resources: [
       {
         uri: RESOURCE_URIS.printer.spec,
@@ -655,7 +648,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "critical",
         summary: "Covers device setup, control codes, and Ultimate 64 integration for printers.",
         prompts: ["printer-job"],
-        tools: ["printer_guide", "printer_commodore_text", "printer_epson_text"],
+        tools: ["c64_printer", "c64_printer print_text"],
         relatedResources: [
           RESOURCE_URIS.printer.commodore.text,
           RESOURCE_URIS.printer.epson.text,
@@ -670,7 +663,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Character sets, control codes, and formatting for Commodore MPS text output.",
         prompts: ["printer-job"],
-        tools: ["printer_commodore_text"],
+        tools: ["c64_printer print_text"],
         relatedResources: [
           RESOURCE_URIS.printer.spec,
           RESOURCE_URIS.printer.commodore.bitmap,
@@ -685,7 +678,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Details bitmap modes, graphics commands, and data layout for MPS bitmap printing.",
         prompts: ["printer-job"],
-        tools: ["printer_commodore_bitmap"],
+        tools: ["c64_printer print_bitmap"],
         relatedResources: [
           RESOURCE_URIS.printer.commodore.text,
           RESOURCE_URIS.printer.spec,
@@ -700,7 +693,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Lists ESC/P control codes and formatting advice for Epson FX text output.",
         prompts: ["printer-job"],
-        tools: ["printer_epson_text"],
+        tools: ["c64_printer print_text"],
         relatedResources: [
           RESOURCE_URIS.printer.epson.bitmap,
           RESOURCE_URIS.printer.spec,
@@ -715,7 +708,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "reference",
         summary: "Explains bit-image modes, density options, and data packing for Epson bitmap jobs.",
         prompts: ["printer-job"],
-        tools: ["printer_epson_bitmap"],
+        tools: ["c64_printer print_bitmap"],
         relatedResources: [
           RESOURCE_URIS.printer.epson.text,
           RESOURCE_URIS.printer.spec,
@@ -730,7 +723,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         priority: "supplemental",
         summary: "Reusable prompt templates that drive complex printer jobs through the MCP server.",
         prompts: ["printer-job"],
-        tools: ["printer_prompts"],
+        tools: ["c64_printer"],
         relatedResources: [
           RESOURCE_URIS.printer.spec,
           RESOURCE_URIS.printer.commodore.text,
@@ -796,14 +789,7 @@ const INDEX_RESOURCE: KnowledgeResourceDefinition = {
     priority: "critical",
     summary: "Explains how to approach each knowledge bundle and when to consult it.",
     prompts: ["basic-program", "assembly-program", "sid-music", "graphics-demo", "printer-job", "memory-debug", "cross-platform-demo", "preset-music-demo"],
-    tools: [
-      "upload_run_basic",
-      "upload_run_asm",
-      "music_generate",
-      "render_petscii_text",
-      "printer_guide",
-  "read",
-    ],
+    tools: ["c64_program upload_run_basic", "c64_program upload_run_asm", "c64_sound generate", "c64_graphics render_petscii_text", "c64_printer", "c64_memory read"],
     tags: ["overview"],
     bundle: {
       id: "guide",

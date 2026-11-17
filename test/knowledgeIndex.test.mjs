@@ -180,3 +180,20 @@ test("readKnowledgeResource generates knowledge index dynamically", () => {
   assert.ok(result.text.includes("c64://"), "should include resource URIs");
   assert.ok(result.text.includes("Prompts:") || result.text.includes("Tools:"), "should include prompts or tools");
 });
+
+test("HARD03-042 every published knowledge tool and operation resolves", async () => {
+  const { toolRegistry } = await import("../src/tools/registry/index.js");
+  const tools = new Map(toolRegistry.list().map((tool) => [tool.name, tool]));
+  for (const resource of listKnowledgeResources()) {
+    for (const reference of resource.metadata.tools) {
+      const [name, op, ...extra] = reference.split(" ");
+      const tool = tools.get(name);
+      assert.ok(tool, `${resource.uri} references missing tool ${reference}`);
+      assert.equal(extra.length, 0);
+      if (op) {
+        const operations = tool.inputSchema.properties?.op?.enum ?? [];
+        assert.ok(operations.includes(op), `${resource.uri} references missing operation ${reference}`);
+      }
+    }
+  }
+});
