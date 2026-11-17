@@ -579,7 +579,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         // so the PC is polled.
         if (signal?.aborted) return cancelled();
         const remaining = Math.max(0, deadline - Date.now());
-        const waiting = ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining));
+        const waiting = ctx.client.viceWaitForStop(targetPC === undefined ? remaining : Math.min(pollMs, remaining), signal);
         let onAbort: (() => void) | undefined;
         const aborted = signal
           ? new Promise<"aborted">((resolve) => { onAbort = () => resolve("aborted"); signal.addEventListener("abort", onAbort, { once: true }); })
@@ -589,6 +589,9 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
           const raced = aborted ? await Promise.race([waiting, aborted]) : await waiting;
           if (raced === "aborted") { waiting.catch(() => {}); return cancelled(); }
           wait = raced;
+        } catch (error) {
+          if (signal?.aborted) return cancelled();
+          throw error;
         } finally {
           if (signal && onAbort) signal.removeEventListener("abort", onAbort);
         }

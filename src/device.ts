@@ -1080,18 +1080,27 @@ export class ViceBackend implements C64Facade {
    * Waits until the tracked CPU state is stopped, for at most `timeoutMs`. With no session
    * nothing can stop the CPU by itself, so it returns at once with `session: false`.
    */
-  async waitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+  async waitForStop(timeoutMs: number, signal?: AbortSignal): Promise<{ session: boolean; stopped: boolean }> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
+      signal?.throwIfAborted();
       const s = this.liveSession();
       if (!s) return { session: false, stopped: false };
       if (s.cpu === "stopped") return { session: true, stopped: true };
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { session: true, stopped: false };
-      await new Promise<void>((resolve) => {
-        const wake = () => { clearTimeout(timer); s.waiters.delete(wake); resolve(); };
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          s.waiters.delete(wake);
+          signal?.removeEventListener("abort", abort);
+        };
+        const wake = () => { cleanup(); resolve(); };
+        const abort = () => { cleanup(); reject(signal?.reason ?? new DOMException("The wait was aborted", "AbortError")); };
         const timer = setTimeout(wake, remaining);
         s.waiters.add(wake);
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
       });
     }
   }

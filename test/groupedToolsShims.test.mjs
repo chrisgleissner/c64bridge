@@ -2155,8 +2155,16 @@ test("HARD03-012 wait_for_state returns promptly with cancelled:true when its si
   setPlatform("vice");
   try {
     let reads = 0;
+    let receivedSignal;
+    let activeWaits = 0;
     const client = {
-      viceWaitForStop: (ms) => new Promise((resolve) => setTimeout(() => resolve({ session: true, stopped: false }), ms)),
+      viceWaitForStop: (ms, signal) => new Promise((resolve, reject) => {
+        receivedSignal = signal;
+        activeWaits += 1;
+        const timer = setTimeout(() => { activeWaits -= 1; resolve({ session: true, stopped: false }); }, ms);
+        timer.unref?.();
+        signal?.addEventListener("abort", () => { clearTimeout(timer); activeWaits -= 1; reject(signal.reason); }, { once: true });
+      }),
       async viceRegistersAvailable() { return [{ id: 0, name: "PC", bits: 16, size: 2 }]; },
       async viceRegistersGet() { reads += 1; return [{ id: 0, size: 2, value: 0x2000 }]; },
     };
@@ -2186,6 +2194,9 @@ test("HARD03-012 wait_for_state returns promptly with cancelled:true when its si
     assert.equal(result.isError, true);
     assert.equal(result.structuredContent.data.cancelled, true);
     assert.equal(result.metadata.cancelled, true);
+    assert.equal(receivedSignal, during.signal, "I9 forwards cancellation to the underlying wait");
+    assert.equal(activeWaits, 0);
+    assert.equal(reads, 0);
   } finally {
     setPlatform(restore);
   }

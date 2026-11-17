@@ -2676,9 +2676,9 @@ export class C64Client {
     }
 
     /** Waits until the VICE session tracks the CPU as stopped (a checkpoint hit or step). */
-    async viceWaitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+    async viceWaitForStop(timeoutMs: number, signal?: AbortSignal): Promise<{ session: boolean; stopped: boolean }> {
       const backend = await this.requireViceBackend();
-      return backend.waitForStop(timeoutMs);
+      return backend.waitForStop(timeoutMs, signal);
     }
 
     async viceKeyboardFeed(text: string): Promise<void> {

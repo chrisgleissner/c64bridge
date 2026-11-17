@@ -533,3 +533,22 @@ test("I8 running keyboard feeds enforce VICE's pending limit before sending any 
     await backend.resume();
   });
 });
+
+test("I9 cancelling a VICE stop wait removes its underlying waiter immediately", async () => {
+  await withBackend(async (backend, server) => {
+    await backend.checkpointOperation((client) => client.checkpointCreate({ start: 0xc000, stopOnHit: true, enabled: false }));
+    assert.equal(server.running, true);
+    const controller = new AbortController();
+    const waiting = backend.waitForStop(60_000, controller.signal);
+    const session = backend.session;
+    assert.equal(session.waiters.size, 1);
+    controller.abort();
+    const result = await Promise.race([
+      waiting.then(() => "resolved", (error) => error.name),
+      delay(100).then(() => "still waiting"),
+    ]);
+    assert.equal(result, "AbortError");
+    assert.equal(session.waiters.size, 0);
+    assert.equal(server.running, true, "cancellation must not stop the CPU");
+  });
+});
