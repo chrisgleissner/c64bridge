@@ -116,10 +116,10 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 - Debugging (VICE): `c64_debug` (checkpoints, registers, stepping, `wait_for_state`), `c64_vice` (resources)
 - Streaming and extraction: `c64_stream` (C64U), `c64_extract` (sprites, charset, memory dump, firmware health)
 - Batching: `c64_batch` runs several tool calls in one request
-- Knowledge & RAG: `c64_rag` (BASIC and ASM lookups)
+- Knowledge & RAG: `c64_rag` (`basic`, `asm`, `docs`; queries at most 500 characters)
 - Backend selection: `c64_select_backend`
 
-Tools and parameters are listed dynamically via ListTools.
+Tools and parameters are listed dynamically via ListTools. The [hardening behavior guide](doc/hardening-behavior.md) describes host path restrictions, bounded arguments, task retention, cancellation and verification semantics.
 
 ### Configuration and menu navigation
 
@@ -165,7 +165,7 @@ Use ListResources to discover built-in knowledge, then read specific URIs to enr
 - `c64://io/cia/spec` — CIA timers, keyboard matrix, serial bus, TOD, IRQ/NMI details
 - `c64://graphics/petscii/style-guide` — readable PETSCII, colour/dither guidance
 
-Pull RAG snippets via `c64_rag` (ops `basic`/`asm`) for targeted examples.
+Pull RAG snippets via `c64_rag` (ops `basic`/`asm`/`docs`) for targeted examples.
 
 ## Operating Rule
 

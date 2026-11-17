@@ -207,6 +207,14 @@
     "SIDPLAYFP_BINARY": {
       "description": "Legacy alias for SIDPLAY_BINARY (sidplayfp executable name)",
       "default": ""
+    },
+    "C64BRIDGE_ALLOW_HIDDEN_PATHS": {
+      "description": "Set to 1 to allow hidden host path components; protected configuration and task-state files remain inaccessible",
+      "default": ""
+    },
+    "C64BRIDGE_STATE_DIR": {
+      "description": "Root directory for task state, run artifacts and diagnostics",
+      "default": "~/.c64bridge"
     }
   },
   "repository": {

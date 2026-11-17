@@ -137,6 +137,17 @@
           "description": "GitHub token for optional RAG discovery against GitHub.",
           "format": "string",
           "isSecret": true
+        },
+        {
+          "name": "C64BRIDGE_ALLOW_HIDDEN_PATHS",
+          "description": "Set to 1 to allow hidden host path components; protected configuration and task-state files remain inaccessible.",
+          "format": "string"
+        },
+        {
+          "name": "C64BRIDGE_STATE_DIR",
+          "description": "Root directory for task state, run artifacts and diagnostics.",
+          "format": "filepath",
+          "default": "~/.c64bridge"
         }
       ]
     }

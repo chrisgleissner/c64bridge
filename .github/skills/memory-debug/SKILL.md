@@ -21,6 +21,8 @@ Use this skill for RAM inspection, screen reads, polling for output, and careful
 3. For polling, use `c64_memory` with `op: "wait_for_text"`.
 4. For writes, use `c64_memory` with `op: "write"` only after confirming the target range and side effects.
 
+Artifact memory snapshots are limited to 256 ranges and 2 MiB aggregate raw data. Explicit address strings such as `0400` are hexadecimal. Host exports follow the [host path restrictions](../../../doc/hardening-behavior.md).
+
 ## Validation
 
 1. Re-read the same memory range after every write.

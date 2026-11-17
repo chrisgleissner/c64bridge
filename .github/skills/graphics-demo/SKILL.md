@@ -19,6 +19,8 @@ Use this skill when the user wants visual output on the C64, whether generated d
 2. When the request needs custom loader logic, delegate code generation to `.github/skills/basic-program/SKILL.md` or `.github/skills/assembly-program/SKILL.md`.
 3. Reference `c64://graphics/vic/spec` and any character-set or PETSCII resources needed for the chosen mode.
 
+Host bitmap inputs must satisfy the [host path restrictions](../../../doc/hardening-behavior.md), use files rather than URLs, and fit within 4096 by 4096 pixels. Graphics and charset memory spans must avoid `$D000-$DFFF` I/O.
+
 ## Validation
 
 1. Use `c64_memory` with `op: "read_screen"` for text-mode validation.
