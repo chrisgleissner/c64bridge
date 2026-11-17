@@ -191,3 +191,31 @@ test("HARD03-037 print_text reports a device error found on the screen after the
   assert.equal(result.metadata.error.kind, "execution");
   assert.match(String(result.content[0].text), /DEVICE NOT PRESENT/);
 });
+
+test("I7 print_text detects a delayed device error instead of treating initial READY as completion", async () => {
+  let reads = 0;
+  const ctx = {
+    client: {
+      async printTextOnPrinterAndRun() { return { success: true }; },
+      async readScreen() { return ++reads === 1 ? "READY." : "?DEVICE NOT PRESENT ERROR\nREADY."; },
+    },
+    logger: createLogger(),
+  };
+  const result = await printerModule.invoke("print_text", { text: "HI" }, ctx);
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /DEVICE NOT PRESENT/);
+  assert.equal(reads, 2);
+});
+
+test("I7 print_text reports launch rather than completion when its observation window expires", async () => {
+  const ctx = {
+    client: {
+      async printTextOnPrinterAndRun() { return { success: true }; },
+      async readScreen() { return "PRINTING"; },
+    },
+    logger: createLogger(),
+  };
+  const result = await printerModule.invoke("print_text", { text: "HI" }, ctx);
+  assert.equal(result.metadata.success, true);
+  assert.equal(/completed/.test(result.content[0].text), false);
+});
