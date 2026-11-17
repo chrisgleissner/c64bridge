@@ -207,7 +207,7 @@ test("background tasks support write/read_screen/menu_button and stop missing ta
   }
 });
 
-test("background tasks persist task errors and reuse ids when restarted", async () => {
+test("background tasks persist task errors and isolate artifacts when restarted", async () => {
   const { file, dir } = tmpPath("background4", "tasks.json");
   await fs.mkdir(dir, { recursive: true });
   const previous = process.env.C64_TASK_STATE_FILE;
@@ -245,7 +245,7 @@ test("background tasks persist task errors and reuse ids when restarted", async 
       maxIterations: 1,
     }, ctx);
     assert.equal(second.metadata?.success, true);
-    assert.equal(second.structuredContent?.data?.task?.id, firstTask?.id);
+    assert.ok(second.structuredContent?.data?.task?.id !== firstTask?.id);
     const secondTask = await waitForTaskCompletion(metaModule, "flaky", ctx);
     assert.ok(secondTask?.status === "completed" || secondTask?.status === "stopped");
   } finally {
@@ -652,22 +652,21 @@ test("R-05 log.txt is capped, only changed tasks are rewritten and no temporary 
     await fs.writeFile(file, JSON.stringify({ tasks: [other] }));
     await fs.mkdir(`${dir}/tasks/background/0001_other`, { recursive: true });
     await fs.writeFile(`${dir}/tasks/background/0001_other/task.json`, "SENTINEL");
-    await fs.mkdir(`${dir}/tasks/background/0002_big`, { recursive: true });
     const line = `[2026-03-26T09:00:00.000Z] ${"x".repeat(100)}\n`;
-    await fs.writeFile(`${dir}/tasks/background/0002_big/log.txt`, line.repeat(5000)); // about 520 KB
 
     const ctx = { client: { async readScreen() { return "READY."; } }, logger: createLogger() };
     const started = await tool("start_background_task").execute({ name: "big", operation: "read_screen", intervalMs: 100, maxIterations: 1 }, ctx);
     assert.equal(started.metadata?.success, true);
-    assert.equal(started.structuredContent.data.task.id, "0002_big");
+    const bigFolder = `${dir}/${started.structuredContent.data.task.folder}`;
+    await fs.writeFile(`${bigFolder}/log.txt`, line.repeat(5000)); // about 520 KB
     await waitForTaskCompletion({ invoke: (name, args, c) => tool(name).execute(args, c) }, "big", ctx);
     // The task is marked completed before its final log line and task.json are written.
     // The last file written is task.json (after the log line and tasks.json), so its
     // completed status on disk means every write, including the rename, has finished.
-    const tmpFiles = async () => (await fs.readdir(`${dir}/tasks/background/0002_big`)).concat(await fs.readdir(dir)).filter((name) => name.endsWith(".tmp"));
+    const tmpFiles = async () => (await fs.readdir(bigFolder)).concat(await fs.readdir(dir)).filter((name) => name.endsWith(".tmp"));
     const taskJsonCompleted = async () => {
       try {
-        return JSON.parse(await fs.readFile(`${dir}/tasks/background/0002_big/task.json`, "utf8")).status === "completed";
+        return JSON.parse(await fs.readFile(`${bigFolder}/task.json`, "utf8")).status === "completed";
       } catch {
         return false; // not written yet
       }
@@ -678,7 +677,7 @@ test("R-05 log.txt is capped, only changed tasks are rewritten and no temporary 
       await new Promise((resolve) => setImmediate(resolve));
     }
 
-    const log = await fs.readFile(`${dir}/tasks/background/0002_big/log.txt`, "utf8");
+    const log = await fs.readFile(`${bigFolder}/log.txt`, "utf8");
     assert.ok(log.length <= 256 * 1024, `log.txt is ${log.length} bytes`);
     assert.ok(log.includes("completed iterations=1"));
     assert.ok(log.startsWith("[2026-03-26T09:00:00.000Z] x"), "log must start at a line boundary");
