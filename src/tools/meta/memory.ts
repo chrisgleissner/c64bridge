@@ -1,5 +1,5 @@
 // Memory-related meta tools
-import type { ToolDefinition } from "../types.js";
+import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
@@ -197,6 +197,7 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         const parsed = memoryDumpToFileArgsSchema.parse(args ?? {});
+        if (ctx.signal?.aborted) return cancelledResult("memory_dump was cancelled before reading; no file was written");
         const startAddr = parseAddressNumeric(parsed.address);
         const length = parsed.length as number;
         if (startAddr + length > 0x10000) {
@@ -224,7 +225,7 @@ export const tools: ToolDefinition[] = [
         try {
           while (offset < length) {
             if (ctx.signal?.aborted) {
-              throw new ToolExecutionError(`memory_dump was cancelled by the client after ${offset} of ${length} bytes; no file was written`, { code: "cancelled" });
+              return cancelledResult(`memory_dump was cancelled by the client after ${offset} of ${length} bytes; no file was written`);
             }
             const remaining = length - offset;
             const take = Math.min(chunk, remaining);
@@ -240,6 +241,7 @@ export const tools: ToolDefinition[] = [
               attempts += 1;
               try {
                 const r = await (ctx.client as any).readMemory(`$${formatAddressHex(addr)}`, String(take), pinned);
+                if (ctx.signal?.aborted) return cancelledResult(`memory_dump was cancelled after ${offset} of ${length} bytes; no file was written`);
                 if (!r.success || typeof r.data !== "string") {
                   throw new ToolExecutionError("Firmware returned failure for chunk", { details: normalizeErrorDetails(r.details) });
                 }
@@ -250,6 +252,7 @@ export const tools: ToolDefinition[] = [
                 Buffer.from(bytes).copy(buf, offset, 0, take);
                 success = true;
               } catch (e) {
+                if (ctx.signal?.aborted) return cancelledResult(`memory_dump was cancelled after ${offset} of ${length} bytes; no file was written`);
                 lastErr = e;
                 if (attempts > (parsed.retries ?? 1)) {
                   throw e;

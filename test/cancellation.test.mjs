@@ -148,6 +148,7 @@ test("HARD03-012 memory_dump stops between chunks once aborted and writes no fil
   try {
     const result = await toolRegistry.invoke("c64_extract", { op: "memory_dump", address: "$0400", length: 2048, chunkSize: 512, pauseDuringRead: false, outputPath: out }, ctx);
     assert.equal(result.isError, true);
+    assert.equal(result.metadata.cancelled, true);
     assert.match(result.content[0].text, /cancelled/);
     assert.equal(reads, 1);
     assert.equal(fs.existsSync(out), false);
@@ -255,4 +256,30 @@ test("an actual MCP cancellation prevents a queued recording from starting a lat
       "only the first recording and the final capture may start a stream");
     assert.equal(mockServer.state.streams.audio.active, false);
   });
+});
+
+test("I10 memory_dump cancels after the final read and releases its owned pause without writing", async () => {
+  const controller = new AbortController();
+  const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-cancel-")), "dump.hex");
+  let reads = 0;
+  let resumes = 0;
+  const ctx = makeCtx({
+    async pause() { return { success: true }; },
+    async resume() { resumes += 1; return { success: true }; },
+    async readMemory(address, length) {
+      reads += 1;
+      controller.abort();
+      return { success: true, data: "00".repeat(Number(length)) };
+    },
+  }, controller.signal);
+  try {
+    const result = await toolRegistry.invoke("c64_extract", { op: "memory_dump", address: "$0400", length: 512, chunkSize: 512, outputPath: out }, ctx);
+    assert.equal(result.metadata?.cancelled, true);
+    assert.equal(result.isError, true);
+    assert.equal(reads, 1);
+    assert.equal(resumes, 1);
+    assert.equal(fs.existsSync(out), false);
+  } finally {
+    fs.rmSync(path.dirname(out), { recursive: true, force: true });
+  }
 });
