@@ -470,3 +470,32 @@ test("HARD03-008 simple patterns still work under the stricter budget", async ()
     assert.equal(res.metadata?.success, true, pattern);
   }
 });
+
+test("screen wait cancellation wins over an in-flight matching read", async () => {
+  const { waitForScreenText } = await import("../../src/tools/meta/screen.js");
+  let deliver;
+  const controller = new AbortController();
+  const pending = waitForScreenText({ readScreen: () => new Promise((resolve) => { deliver = resolve; }) }, {
+    pattern: "READY.", timeoutMs: 1000, signal: controller.signal,
+  });
+  controller.abort();
+  deliver("READY.");
+  const result = await pending;
+  assert.equal(result.matched, false);
+  assert.equal(result.cancelled, true);
+});
+
+test("screen wait cancellation releases a stalled read promptly", async () => {
+  const { waitForScreenText } = await import("../../src/tools/meta/screen.js");
+  const controller = new AbortController();
+  const pending = waitForScreenText({ readScreen: () => new Promise(() => {}) }, {
+    pattern: "READY.", timeoutMs: 1000, signal: controller.signal,
+  });
+  controller.abort();
+  let timer;
+  try {
+    const result = await Promise.race([pending, new Promise((resolve) => { timer = setTimeout(() => resolve({ stalled: true }), 250); })]);
+    assert.equal(result.stalled, undefined);
+    assert.equal(result.cancelled, true);
+  } finally { clearTimeout(timer); }
+});

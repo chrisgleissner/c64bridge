@@ -3,7 +3,7 @@ import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
-import { sleep } from "./util.js";
+import { sleepUnlessAborted } from "./util.js";
 import vm from "node:vm";
 
 function escapeRegex(s: string): string {
@@ -244,15 +244,23 @@ export type WaitForScreenTextResult =
   | { matched: false; elapsedMs: number; screen: string | undefined; warnings?: string[]; cancelled?: true };
 
 /** Reads the screen, giving up after limitMs. Resolves undefined when the read did not finish in time. */
-async function readWithin(client: { readScreen(): Promise<string> }, limitMs: number): Promise<string | undefined> {
+async function readWithin(client: { readScreen(): Promise<string> }, limitMs: number, signal?: AbortSignal): Promise<string | undefined> {
+  if (signal?.aborted) return undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), Math.max(1, limitMs)); });
-  const read = client.readScreen();
-  read.catch(() => undefined); // a read that fails after the deadline must not become an unhandled rejection
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<undefined>((resolve) => {
+    onAbort = () => resolve(undefined);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+  });
   try {
-    return await Promise.race([read, timedOut]);
+    const read = client.readScreen();
+    read.catch(() => undefined); // a read that fails after the deadline must not become an unhandled rejection
+    return await Promise.race([read, timedOut, aborted]);
   } finally {
     if (timer) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -275,7 +283,10 @@ export async function waitForScreenText(
       return { matched: false, cancelled: true, elapsedMs: Date.now() - start, screen: lastScreen, ...(warnings ? { warnings } : {}) };
     }
     // The last read happens at the deadline, after the final sleep. A stalled read must not outlast the deadline: it counts as a miss.
-    const screen = await readWithin(client, Math.max(timeoutMs - (Date.now() - start), FINAL_READ_GRACE_MS));
+    const screen = await readWithin(client, Math.max(timeoutMs - (Date.now() - start), FINAL_READ_GRACE_MS), options.signal);
+    if (options.signal?.aborted) {
+      return { matched: false, cancelled: true, elapsedMs: Date.now() - start, screen: lastScreen, ...(warnings ? { warnings } : {}) };
+    }
     if (screen === undefined) break;
     lastScreen = screen;
     const match = matchScreen(screen);
@@ -290,7 +301,7 @@ export async function waitForScreenText(
     }
     const remaining = timeoutMs - (Date.now() - start);
     if (remaining <= 0) break;
-    await sleep(Math.min(intervalMs, remaining));
+    await sleepUnlessAborted(Math.min(intervalMs, remaining), options.signal);
   }
   return { matched: false, elapsedMs: Date.now() - start, screen: lastScreen, ...(warnings ? { warnings } : {}) };
 }
