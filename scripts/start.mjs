@@ -67,12 +67,10 @@ function resolveBunExecutable() {
 
 async function runWithBun(entryPath) {
   const bunExecutable = resolveBunExecutable();
-  const projectRoot = path.dirname(path.dirname(entryPath));
 
   try {
     await new Promise((resolve, reject) => {
       const child = spawn(bunExecutable, [entryPath], {
-        cwd: projectRoot,
         stdio: 'inherit',
         env: {
           ...process.env,
