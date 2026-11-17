@@ -33,6 +33,7 @@ test("HARD03-041 npm package excludes repository maintenance instructions", asyn
     cwd: root, encoding: "utf8", timeout: 25000, maxBuffer: 4 * 1024 * 1024,
   });
   const files = JSON.parse(stdout)[0].files.map((file) => file.path);
+  assert.ok(files.includes("doc/hardening-behavior.md"), "published guidance includes its linked hardening behavior reference");
   assert.ok(files.some((file) => file.startsWith(".github/prompts/")), "ordinary user prompts remain packaged");
   assert.deepEqual(files.filter(developerOnly), []);
 });

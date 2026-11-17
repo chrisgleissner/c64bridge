@@ -108,6 +108,7 @@
     "doc/c64u/**",
     "doc/u2/**",
     "doc/vice/**",
+    "doc/hardening-behavior.md",
     "doc/img/**",
     "scripts/**",
     "!scripts/compare-rest/**",
