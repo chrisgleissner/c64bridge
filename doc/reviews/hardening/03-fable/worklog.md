@@ -76,15 +76,15 @@ evidence in notes), `blocked` (reason in notes). "Reverted" = the new test fails
 | 017 | F+D | done | 2237a14b + f8dffcd3 | device, meta/filesystem, meta/program | yes | single directory, one match per pattern; fs_stats kept (not marked unsupported) |
 | 031 | F | done | 25663201 | meta/filesystem | yes |  |
 | 032 | F | done | b4f9b170 | inputModule | yes | needs hardware confirmation |
-| 014 | G | wip | | | | |
-| 015 | G | wip | | | | |
-| 010 | H | wip | | | | |
-| 040 | H | wip | | | | |
-| 041 | H | wip | | | | |
-| 042 | H | wip | | | | |
-| 043 | H | wip | | | | |
-| 044 | H | wip | | | | |
-| 045 | H | wip | | | | |
+| 014 | G | done | 7d97e2b3 + 1fd6c57c + 8ad4ecaa | taskRetention, taskOwnership | yes | unique runs; startup 200/30-day retention; 200 finished tasks; delete_task; coalesced/current snapshots |
+| 015 | G | done | 1fd6c57c | taskOwnership, backgroundState | yes | real two-process merge/ownership/crash/deletion; filesystem ticket lock; session folders |
+| 010 | H | done | a02ba544 | ragModule, ragDedup | yes | 500 characters; 32 lexical terms |
+| 040 | H | done | 33c06c45 | scripts/start | yes | foreign cwd/config preserved |
+| 041 | H | done | ebecd860 + 088f1209 | ragDeveloperExclusions | yes | maintenance prompts excluded from index/package; local embeddings rebuilt |
+| 042 | H | done | 71b6d13e + e438033b | knowledgeIndex, mcpServerResourcesSuite | yes | public tool/op references; missing URI -32002; runtime/skill docs |
+| 043 | H | done | 57fe2c64 | scripts/cli | yes | pathToFileURL; # and % install paths |
+| 044 | H | done | 92732b2f | scripts/invoke-bun | yes | TERM/INT/HUP forwarding, reaping and spawn errors |
+| 045 | H | done | 43de6d10 | scripts/validate-release | yes | read-only validation; minimal OIDC publication; immutable checks; pinned publisher |
 
 ## Issues found during the work (owner: fix all; tracked as I-numbers)
 
@@ -92,19 +92,19 @@ Status as in the task table. Each fix gets its own commit with the I-number in t
 
 | ID | Status | Where | Issue |
 |---|---|---|---|
-| I1 | todo | src/tools/meta/filesystem.ts | `find_and_run_first_match` `waitMs` is an unbounded sleep that ignores cancellation |
-| I2 | todo | src/tools/meta/compilation.ts | `compile_run_verify_cycle` `durationMs` is unbounded and ignores cancellation |
+| I1 | done | src/tools/meta/filesystem.ts | bounded abort-aware launch wait; d37f8ad2 |
+| I2 | done | src/tools/meta/compilation.ts | bounded duration; cancellation through verification/archival; fa119570 + 842271f8 |
 | I3 | done | test/viceSession.test.mjs | Transient-PC regression uses virtual CPU time instead of a host-timer window; a397590e; full-timeout mutation still fails |
-| I4 | todo | src/tools/meta/graphics.ts | `rip_charset_from_ram` with an explicit `address` in $D000-$DFFF still reads the I/O area (039 covers only the defaults) |
+| I4 | done | src/tools/meta/graphics.ts | explicit charset spans reject I/O before pause; 2698cfe6 |
 | I5 | done | src/tools/meta/program.ts | `program_shuffle` checks unsuccessful `runPrgFile`/`runCrtFile` results before capture (E8); 74837fdd |
 | I6 | done | src/c64Client.ts, src/streamTargets.ts | `C64Client.streamStart`/`streamStop` now update the user-stream registry; 158f0f3a |
-| I7 | todo | src/tools/printer.ts | `print_text` checks the screen once right after the run; a later `?DEVICE NOT PRESENT` is missed |
-| I8 | todo | src/device.ts (ViceBackend.feedKeyboard) | a single VICE keyboard feed above 16384 bytes while the CPU runs is not refused (VICE drops it silently) |
-| I9 | todo | src/tools/debug.ts | after a cancelled `wait_for_state` the underlying `viceWaitForStop` keeps running until its own timeout |
-| I10 | todo | src/tools/meta/memory.ts | `memory_dump` cancellation throws `ToolExecutionError` (code `cancelled`) instead of the shared `cancelledResult()` |
-| I11 | todo | test/audioRuntime.test.mjs, test/diagnostics.test.mjs | tests interfere when several files run in one Bun process (pass alone) |
+| I7 | done | src/tools/printer.ts | bounded delayed-error observation; truthful printer launch wording; c04aaf76 |
+| I8 | done | src/device.ts (ViceBackend.feedKeyboard) | running and stopped keyboard feeds enforce 16384-byte capacity; 97b52dad |
+| I9 | done | src/tools/debug.ts | underlying VICE waiter/timer cancelled without changing CPU; b5ed0f2b |
+| I10 | done | src/tools/meta/memory.ts | shared cancellation result, no final-chunk write, owned pause cleanup; 6842f29d |
+| I11 | skipped | test/audioRuntime.test.mjs, test/diagnostics.test.mjs | Supported test and coverage runners already isolate module-mocking audioRuntime (run-tests.ts ISOLATED_BUN_TEST_FILES and run-coverage.mjs isolatedTests); runner regressions enforce this. Direct combined Bun rerun: 22 passed, zero failures. No production defect substantiated. |
 | I12 | info | test/suites/mcpServerToolsSuite.mjs | tools/list tripwire moved from 70,000 to 71,000 bytes for the new maxima (commit 835d1db6) |
-| I13 | owner decision | src/tools/meta/filesystem.ts | `fs_stats` and `shuffle` on C64U/U2 are single-directory, one match per pattern (review default); marking them unsupported remains the owner's choice |
+| I13 | done | src/tools/meta/filesystem.ts | Retain the review specification default: single-directory, one match per pattern. Documented in the behavior guide and drive skill; no API removal. |
 | I14 | info | environment | Node 22 cancels 7 tests; the project requires Node 24 (`engines`) |
 
 ## Log
@@ -154,3 +154,13 @@ reproduced before the correction. Afterwards, Bun coverage passes 27 input tests
 and 46 program-runner tests, and both files pass under Node. The exact previously
 failing `c64u-mock/all-04` coverage shard passes all 185 tests. Full matrix coverage
 is checked by the PR workflow; no assertion or coverage threshold was weakened.
+
+## Merge-readiness completion (2026-11-17)
+
+All 46 specification findings have implementations and regression coverage. The remaining nine rows and actionable I-number issues above are now complete. Each new correction was checked against a failing pre-fix implementation or a targeted mutation in an isolated worktree; specialist results were reviewed before integration. The I11 test-isolation concern is dismissed with the runner and direct-run evidence above. I12/I14 are informational, and I13 retains the explicitly specified default.
+
+A fresh independent pass found and posted two additional P2 inline findings: cancellation during a pending screen read (`12a80c17`) and successful self-modifying BASIC being called unloaded (`b6d1ec0a`). The existing regex thread was reopened after an escaped-quantifier bypass; `97d1d9b2` tracks parsed quantifier tokens, preserving legitimate lazy quantifiers. Each regression failed before its fix. BASIC verification retains the unchanged stale-screen rejection; a post-execution byte mismatch alone cannot prove a self-modifying program was never loaded.
+
+Targeted integration checks: 158 tests across the cancellation/device/graphics/filesystem/printer suites passed; 37 state tests passed; 32 combined MCP/retention/ownership tests passed, including the tools/list size budget. Launcher suites passed 18 tests. Release fixtures passed seven tests plus Node execution and actionlint, including corrupt artifact rejection. The official pinned publisher archive checksum was verified and its local manifest validation passed; no tag, authentication or publication was performed. Real Xvfb was obtained from a checksum-verified Debian package in /tmp, and the existing supervision test passed.
+
+Final full build, two consecutive runs of each mock matrix, package checks, exact-head CI and thread/mergeability status are recorded in PR #169 before draft status is removed. No real C64 hardware was contacted. The firmware-specific checks in review.md remain explicitly unverified; they are preserved as validation limits, not represented as mock-proven behavior. The PR must not be merged by this task.

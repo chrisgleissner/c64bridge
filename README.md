@@ -973,6 +973,7 @@ Grouped entry point for power, reset, menu, and background task control.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
+| `delete_task` | Delete a finished background task and its artifacts; stop running tasks first. | `name` | — | ✅ | ✅ | ✅ |
 | `list_tasks` | List known background tasks with status metadata. | — | — | ✅ | ✅ | ✅ |
 | `menu` | Toggle the Ultimate menu button for navigation. | — | — | ✅ | ✅ |  |
 | `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ | ✅ |
