@@ -4,11 +4,11 @@ The MCP schemas are the authority for each operation's accepted arguments and pl
 
 ## Host files and configuration
 
-Tool-supplied host paths must resolve inside the working directory, the C64 Bridge state directory, the system temporary directory, or roots added with `C64BRIDGE_ALLOWED_DIRS` (separated by the platform path delimiter). Symlinks are resolved before confinement checks. Hidden path components are rejected by default; `C64BRIDGE_ALLOW_HIDDEN_PATHS=1` permits them. Configuration files and the task registry remain protected even with that opt-out. `C64BRIDGE_ALLOWED_DIRS=*` disables root confinement, but does not disable these protected-file checks.
+Tool-supplied host paths must resolve inside the working directory, the C64 Bridge state directory, the system temporary directory, or roots added with `C64BRIDGE_ALLOWED_DIRS` (separated by the platform path delimiter). Symlinks are resolved before confinement checks. Hidden path components are rejected by default; `C64BRIDGE_ALLOW_HIDDEN_PATHS=1` permits them. Configuration files and the task registry remain protected even with that opt-out. `C64BRIDGE_ALLOWED_DIRS=*` disables root confinement and hidden-component restrictions, but does not disable direct protected-file checks.
 
 Bitmap input is read through the same host-file boundary, accepts files rather than URLs, and is limited to 4096 by 4096 pixels. Default host reads are limited to 16 MiB (disk images: 64 MiB). Existing files inside permitted roots may be overwritten; applications sharing a writable root must protect it from untrusted local users.
 
-`C64BRIDGE_ACCESS=full|no-destructive|read-only` controls operations, including nested batches. Starting, stopping and deleting tasks change state. Network configuration writes that could disconnect the device require destructive access. Credentials in configuration updates are redacted in logs and diagnostics without replacing arbitrary substrings of program data or other tool results.
+`C64BRIDGE_ACCESS=full|no-destructive|read-only` controls operations, including nested batches. Starting tasks inherits the effect of the scheduled operation; stopping tasks remains available in read-only mode so monitoring can be stopped. Deleting finished tasks requires write access. Network configuration writes that could disconnect the device require destructive access. Credentials in configuration updates are redacted in logs and diagnostics without replacing arbitrary substrings of program data or other tool results.
 
 ## State, tasks and cancellation
 

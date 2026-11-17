@@ -13,7 +13,8 @@
     "q": {
       "type": "string",
       "description": "Natural-language query describing the desired BASIC or assembly guidance.",
-      "minLength": 3
+      "minLength": 3,
+      "maxLength": 500
     },
     "k": {
       "type": [

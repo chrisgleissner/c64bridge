@@ -1463,7 +1463,8 @@
           "q": {
             "type": "string",
             "description": "Natural-language query describing the desired BASIC or assembly guidance.",
-            "minLength": 3
+            "minLength": 3,
+            "maxLength": 500
           },
           "k": {
             "type": [
@@ -1685,6 +1686,7 @@
             ],
             "description": "Delay after firmware run before returning",
             "minimum": 0,
+            "maximum": 600000,
             "default": 0
           },
           "captureCandidates": {

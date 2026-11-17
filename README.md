@@ -575,6 +575,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64_MODE` | c64u | — | Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator) |
 | `C64_TASK_STATE_FILE` | auto | — | Override the path used to persist MCP background-task state |
 | `C64BRIDGE_ACCESS` | full | — | Access mode limiting which operations may be called (full, no-destructive, read-only) |
+| `C64BRIDGE_ALLOW_HIDDEN_PATHS` |  | — | Set to 1 to allow hidden host path components; protected configuration and task-state files remain inaccessible |
 | `C64BRIDGE_ALLOWED_DIRS` |  | — | Additional directories allowed for host file paths in tool arguments, separated by the path delimiter; * disables the check |
 | `C64BRIDGE_CONFIG` | ~/.c64bridge.json | config path | Path to configuration JSON |
 | `C64BRIDGE_DIAGNOSTICS_DIR` | ~/.c64bridge/diagnostics | — | Override the directory where persistent MCP diagnostics files are written |
@@ -584,6 +585,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64BRIDGE_POLL_INTERVAL_MS` | 200 | — | Interval between screen polls during program-output validation in normal runtime mode |
 | `C64BRIDGE_POLL_MAX_MS` | 2000 | — | Maximum time to poll for program-output validation before timing out in normal runtime mode |
 | `C64BRIDGE_POLL_STABILIZE_MS` | 100 | — | Extra settle time after a successful poll match before considering output stable |
+| `C64BRIDGE_STATE_DIR` | ~/.c64bridge | — | Root directory for task state, run artifacts and diagnostics |
 | `C64BRIDGE_VERBOSE_SCHEMA` |  | — | Set to 1 to include full per-operation schemas in tools/list |
 | `LOG_LEVEL` | info | — | Logger verbosity (debug, info, warn, error) |
 
@@ -753,6 +755,8 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
 This MCP server exposes **17 tools**, **38 resources**, and **11 prompts** for controlling your Commodore 64.
+
+See the [hardening behavior guide](doc/hardening-behavior.md) for host path restrictions, argument limits, task retention, cancellation and verification semantics.
 
 ### Tools
 
