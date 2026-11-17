@@ -176,3 +176,25 @@ test("I2 compile cycle bounds duration and cancels without verification reads", 
   assert.equal(preAborted.metadata?.cancelled, true);
   assert.equal(launches, 1);
 });
+
+test("I2 cancellation during verification prevents further reads and successful archival", async () => {
+  const controller = new AbortController();
+  const { dir } = tmpPath("cycle", "cancel-verification");
+  let reads = 0;
+  const ctx = {
+    signal: controller.signal,
+    logger: createLogger(),
+    client: {
+      async uploadAndRunBasic() { return { success: true }; },
+      async readScreen() { reads += 1; controller.abort(); return "HELLO"; },
+    },
+  };
+  const result = await metaModule.invoke("compile_run_verify_cycle", {
+    sourceType: "basic", source: "10 END", durationMs: 1, verifyScreen: "HELLO", outputPath: dir,
+  }, ctx);
+  assert.equal(result.metadata?.cancelled, true);
+  assert.equal(reads, 1);
+  const manifest = JSON.parse(await fs.readFile(`${dir}/manifest.json`, "utf8"));
+  assert.equal(manifest.cancelled, true);
+  assert.equal(manifest.verified, false);
+});

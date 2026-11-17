@@ -62,6 +62,15 @@ export const tools: ToolDefinition[] = [
         let ran = false;
         let verified = false;
         let verificationMessage: string | undefined;
+        const cancelCycle = async () => {
+          await fs.writeFile(resolveHostChildPath(outputPath, "manifest.json"), JSON.stringify({
+            runId, sourceType, compiled, ran, verified: false, cancelled: true,
+            createdAt: new Date().toISOString(),
+          }, null, 2), "utf8");
+          return cancelledResult(ran
+            ? "Program launched; compile/run/verify cycle cancelled."
+            : "Compile/run/verify cycle cancelled before launch completed.");
+        };
 
         try {
           if (ctx.signal?.aborted) return cancelledResult("Compile/run/verify cycle cancelled before launch.");
@@ -82,17 +91,12 @@ export const tools: ToolDefinition[] = [
           }
 
           await sleepUnlessAborted(durationMs, ctx.signal);
-          if (ctx.signal?.aborted) {
-            await fs.writeFile(resolveHostChildPath(outputPath, "manifest.json"), JSON.stringify({
-              runId, sourceType, compiled, ran, verified: false, cancelled: true,
-              createdAt: new Date().toISOString(),
-            }, null, 2), "utf8");
-            return cancelledResult("Program launched; compile/run/verify cycle cancelled before verification.");
-          }
+          if (ctx.signal?.aborted) return await cancelCycle();
 
           // Verify
           if (verifyScreen) {
             const screen = await (ctx.client as any).readScreen();
+            if (ctx.signal?.aborted) return await cancelCycle();
             verified = screen.includes(verifyScreen);
             verificationMessage = verified ? "Screen verification passed" : `Screen does not contain "${verifyScreen}"`;
           }
@@ -102,7 +106,9 @@ export const tools: ToolDefinition[] = [
           await fs.writeFile(sourcePath, source, "utf8");
 
           const screenPath = resolveHostChildPath(outputPath, "screen.txt");
+          if (ctx.signal?.aborted) return await cancelCycle();
           const screen = await (ctx.client as any).readScreen();
+          if (ctx.signal?.aborted) return await cancelCycle();
           await fs.writeFile(screenPath, screen, "utf8");
 
           const manifestPath = resolveHostChildPath(outputPath, "manifest.json");
@@ -121,8 +127,10 @@ export const tools: ToolDefinition[] = [
           };
           await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 
+          if (ctx.signal?.aborted) return await cancelCycle();
           return jsonResult({ runId, outputPath, compiled, ran, verified, verificationMessage }, { success: verified || !verifyScreen });
         } catch (e) {
+          if (ctx.signal?.aborted) return await cancelCycle();
           const error = e instanceof Error ? e.message : String(e);
           const manifestPath = resolveHostChildPath(outputPath, "manifest.json");
           const manifest = {
