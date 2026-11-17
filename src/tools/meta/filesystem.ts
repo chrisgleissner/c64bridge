@@ -1,11 +1,11 @@
 // Filesystem discovery meta tool
-import type { ToolDefinition } from "../types.js";
+import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath, dirname } from "node:path";
-import { formatTimestampSpec } from "./util.js";
+import { formatTimestampSpec, sleepUnlessAborted } from "./util.js";
 import { getTasksHomeDir } from "./background.js";
 
 // Reusable collators to avoid repeated instantiation overhead
@@ -33,7 +33,7 @@ const findAndRunProgramArgsSchema = objectSchema({
     extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 }))),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive name match", default: true }), true),
     sort: optionalSchema(stringSchema({ description: "Sort order for matches", enum: ["discovered", "alphabetical"] }), "discovered"),
-    waitMs: optionalSchema(numberSchema({ description: "Delay after firmware run before returning", integer: true, minimum: 0, default: 0 }), 0),
+    waitMs: optionalSchema(numberSchema({ description: "Delay after firmware run before returning", integer: true, minimum: 0, maximum: 600000, default: 0 }), 0),
     captureCandidates: optionalSchema(numberSchema({ description: "Include up to this many candidates in result", integer: true, minimum: 1, maximum: 100 }), 10),
   },
   required: ["nameContains"],
@@ -529,6 +529,7 @@ export const tools: ToolDefinition[] = [
       async execute(args, ctx) {
         try {
           const parsed = findAndRunProgramArgsSchema.parse(args ?? {});
+          if (ctx.signal?.aborted) return cancelledResult("Program search cancelled before launch.");
           const root = parsed.root ?? "/";
           const caseInsensitive = parsed.caseInsensitive !== false;
           assertGlobSafe("nameContains", parsed.nameContains as string);
@@ -567,6 +568,7 @@ export const tools: ToolDefinition[] = [
             candidates.sort((a, b) => collator.compare(a, b));
           }
 
+          if (ctx.signal?.aborted) return cancelledResult("Program search cancelled before launch.");
           const matchedPath = candidates[0];
           const extension = extractExtension(matchedPath);
           let result: { success: boolean; details?: unknown };
@@ -601,9 +603,10 @@ export const tools: ToolDefinition[] = [
           }
 
           if ((parsed.waitMs ?? 0) > 0) {
-            await new Promise((resolve) => setTimeout(resolve, parsed.waitMs ?? 0));
+            await sleepUnlessAborted(parsed.waitMs ?? 0, ctx.signal);
           }
 
+          if (ctx.signal?.aborted) return cancelledResult("Program launched; post-launch wait cancelled.");
           return jsonResult({
             root,
             pattern: parsed.nameContains,

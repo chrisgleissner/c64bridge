@@ -902,3 +902,27 @@ test("drive_mount_and_verify finds the soft IEC drive by its listing name", asyn
   assert.equal(res.structuredContent?.data?.verification?.drive, "IEC Drive");
   assert.equal(res.structuredContent?.data?.verification?.imageMatches, true);
 });
+
+test("I1 find_and_run bounds its post-launch wait and stops it on cancellation", async () => {
+  const controller = new AbortController();
+  let runs = 0;
+  const ctx = {
+    signal: controller.signal,
+    logger: createLogger(),
+    client: {
+      filesInfo: firmwareInfo(["/games/demo.prg"]),
+      async runPrgFile() { runs += 1; controller.abort(); return { success: true }; },
+    },
+  };
+  const invalid = await metaModule.invoke("find_and_run_program_by_name", { nameContains: "demo", waitMs: 600001 }, ctx);
+  assert.equal(invalid.metadata?.error?.kind, "validation");
+  assert.equal(runs, 0);
+  const result = await metaModule.invoke("find_and_run_program_by_name", { root: "/games", nameContains: "demo", extensions: ["prg"], waitMs: 600000 }, ctx);
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata.cancelled, true);
+  assert.equal(runs, 1);
+  const before = runs;
+  const aborted = await metaModule.invoke("find_and_run_program_by_name", { nameContains: "demo" }, ctx);
+  assert.equal(aborted.metadata.cancelled, true);
+  assert.equal(runs, before);
+});
