@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import "./bootstrap/stdio-logger.js";
+import { pruneRunArtifacts } from "./runArtifacts.js";
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -179,6 +180,8 @@ async function main() {
   console.error("Starting c64bridge MCP server...");
   console.error(`c64bridge diagnostics file: ${diagnostics.filePath}`);
   writeDiagnosticEvent("server_start", { diagnosticsFile: diagnostics.filePath });
+  try { await pruneRunArtifacts(); }
+  catch (error) { console.error(`Unable to prune generated run artifacts: ${formatErrorMessage(error)}`); }
 
   const config = await withDiagnosticSpan("startup", "load_config", {}, () => Promise.resolve(loadConfig()));
   const baseUrl = config.baseUrl ?? `http://${config.c64_host}`;
