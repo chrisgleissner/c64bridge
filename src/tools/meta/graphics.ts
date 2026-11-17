@@ -360,7 +360,12 @@ export const tools: ToolDefinition[] = [
 
         const scanLocations: number[] = [];
         if (parsed.address) {
-          scanLocations.push(parseAddressNumeric(parsed.address));
+          const address = parseAddressNumeric(parsed.address);
+          assertAddressRange(address, charsetSize, "$.address");
+          if (rangeOverlapsIo(address, charsetSize)) {
+            throw new ToolValidationError("Charset read must not overlap $D000-$DFFF I/O registers", { path: "$.address" });
+          }
+          scanLocations.push(address);
         } else if (parsed.scanRange === "full") {
           // Scan entire 64KB in 2KB increments
           for (let addr = 0; addr <= 0x10000 - charsetSize; addr += 0x800) {
