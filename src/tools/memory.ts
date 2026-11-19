@@ -624,7 +624,7 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
     validateRangeWithinAddressSpace(address, length, "$.address");
 
     const bytes = await ctx.client.readMemoryRaw(address, length);
-  const symbols = ctx.platform?.id === "vice" ? getViceSymbols() : undefined;
+  const symbols = getViceSymbols();
     const lines = disassemble(bytes, address, parsed.instructionCount, symbols);
     const text = formatDisassembly(lines);
 

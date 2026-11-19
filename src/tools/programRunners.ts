@@ -20,7 +20,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { pollForProgramOutcome } from "./pollValidator.js";
-import { clearViceSymbols, setViceSymbols, parseViceSymbolFile } from "./translation/symbolRegistry.js";
+import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
   if (details === undefined || details === null) {
@@ -344,7 +344,7 @@ const prgFileArgsSchema = objectSchema({
       minLength: 1,
     }),
     symbolsFile: optionalSchema(stringSchema({
-      description: "Path to a VICE symbol file (.vs) to load alongside the PRG. Symbols are used by the disassemble tool when annotating addresses.",
+      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
       minLength: 1,
     })),
   },
@@ -733,10 +733,41 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
   }
 }
 
+async function readSymbolsFile(file: string): Promise<Map<string, number>> {
+  const symbolsPath = resolveHostPath(file, { purpose: "read" });
+  try {
+    return parseSymbolFile((await readHostFile(symbolsPath)).toString("utf8"));
+  } catch (fileError) {
+    throw new ToolExecutionError(`Failed to read symbols file: ${file}`, {
+      details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
+    });
+  }
+}
+
+// Replaces the registered symbols after a successful start. Without a symbols
+// file the table is only cleared when clearWithoutFile is set (VICE).
+function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExecutionContext, clearWithoutFile: boolean) {
+  if (!newSymbols) {
+    if (clearWithoutFile) clearViceSymbols();
+    return { loaded: 0, note: "", fields: {} as Record<string, unknown> };
+  }
+  clearViceSymbols();
+  setViceSymbols(newSymbols.entries());
+  const loaded = newSymbols.size;
+  ctx.logger.info("Loaded symbols from file", { count: loaded });
+  if (loaded === 0) {
+    const warning = `symbolsFile contained no recognisable labels; accepted formats: ${SYMBOL_FILE_FORMATS}.`;
+    return { loaded, note: ` Warning: ${warning}`, fields: { symbolsLoaded: 0, warnings: [warning] } as Record<string, unknown> };
+  }
+  return { loaded, note: ` Loaded ${loaded} debug symbol(s).`, fields: { symbolsLoaded: loaded } as Record<string, unknown> };
+}
+
 async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = prgFileArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Loading PRG file", { path: parsed.path });
+
+    const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
     const result = await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
@@ -745,18 +776,22 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       });
     }
 
+    const symbolReport = applySymbols(newSymbols, ctx, false);
+
     const data = {
       kind: "load_prg" as const,
       format: "prg" as const,
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      ...symbolReport.fields,
     };
-    const base = textResult(`PRG ${parsed.path} loaded into memory.`, {
+    const base = textResult(`PRG ${parsed.path} loaded into memory.${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
+      ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
@@ -775,19 +810,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     // Validate and parse the symbols file before touching the registered
     // symbols, and replace them only after the PRG has started. A bad path or a
     // failed run then leaves the previous symbol table as it was.
-    let symbolsLoaded = 0;
-    let newSymbols: Map<string, number> | undefined;
-    if (ctx.platform.id === "vice" && parsed.symbolsFile) {
-      const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
-      try {
-        const content = (await readHostFile(symbolsPath)).toString("utf8");
-        newSymbols = parseViceSymbolFile(content);
-      } catch (fileError) {
-        throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
-          details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
-        });
-      }
-    }
+    const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
     const result = await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
@@ -796,14 +819,8 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       });
     }
 
-    if (ctx.platform.id === "vice") {
-      clearViceSymbols();
-      if (newSymbols) {
-        setViceSymbols(newSymbols.entries());
-        symbolsLoaded = newSymbols.size;
-        ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
-      }
-    }
+    const symbolReport = applySymbols(newSymbols, ctx, ctx.platform.id === "vice");
+    const symbolsLoaded = symbolReport.loaded;
 
     const data = {
       kind: "run_prg" as const,
@@ -811,15 +828,14 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
-      ...(symbolsLoaded > 0 ? { symbolsLoaded } : {}),
+      ...symbolReport.fields,
     };
-    const symbolNote = symbolsLoaded > 0 ? ` Loaded ${symbolsLoaded} debug symbol(s).` : "";
-    const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolNote}`, {
+    const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
-      ...(symbolsLoaded > 0 ? { symbolsLoaded } : {}),
+      ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
