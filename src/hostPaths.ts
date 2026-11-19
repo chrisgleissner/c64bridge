@@ -123,9 +123,20 @@ function protectedHostFiles(): string[] {
   files.push(path.join(process.cwd(), ".c64bridge.json"));
   files.push(path.join(homeDirectory(), ".c64bridge.json"));
   files.push(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".c64bridge.json"));
-  const taskState = process.env.C64_TASK_STATE_FILE;
-  files.push(taskState ? path.resolve(taskState) : path.join(stateRootDir(), "tasks.json"));
+  files.push(taskStateFile());
   return files.map(safeRealpath);
+}
+
+/** The background task state file: C64_TASK_STATE_FILE, else tasks.json below the state root. */
+function taskStateFile(): string {
+  const taskState = process.env.C64_TASK_STATE_FILE;
+  return taskState ? path.resolve(taskState) : path.join(stateRootDir(), "tasks.json");
+}
+
+/** Real paths of server-owned directories; no tool may read or write anything inside them. */
+function protectedHostTrees(): string[] {
+  // The task state lock: a planted claim file would block every task operation.
+  return [`${taskStateFile()}.lock`].map(safeRealpath);
 }
 
 function hiddenPathsAllowed(): boolean {
@@ -158,7 +169,7 @@ export function resolveHostPath(input: string, options: ResolveHostPathOptions):
       );
     }
   }
-  if (protectedHostFiles().includes(real)) {
+  if (protectedHostFiles().includes(real) || protectedHostTrees().some((tree) => isWithin(tree, real))) {
     throw new ToolValidationError(
       `Host path is a server configuration or state file and cannot be used by tools: ${resolved}.`,
       { path: resolved },
