@@ -135,8 +135,21 @@ function taskStateFile(): string {
 
 /** Real paths of server-owned directories; no tool may read or write anything inside them. */
 function protectedHostTrees(): string[] {
-  // The task state lock: a planted claim file would block every task operation.
-  return [`${taskStateFile()}.lock`].map(safeRealpath);
+  const stateFile = taskStateFile();
+  const tasksHome = path.dirname(stateFile);
+  const diagnostics = process.env.C64BRIDGE_DIAGNOSTICS_DIR?.trim();
+  const cwd = safeRealpath(process.cwd());
+  return [
+    // The task state lock: a planted claim file would block every task operation.
+    `${stateFile}.lock`,
+    // Background task folders (task.json, result.json, log) and the find/run state.
+    path.join(tasksHome, "tasks"),
+    path.join(tasksHome, "meta"),
+    // Diagnostics session files: the audit trail of tool calls.
+    diagnostics ? path.resolve(diagnostics) : path.join(stateRootDir(), "diagnostics"),
+  ].map(safeRealpath)
+    // An operator who points state at a directory that contains the working directory keeps using it.
+    .filter((tree) => !isWithin(tree, cwd));
 }
 
 function hiddenPathsAllowed(): boolean {

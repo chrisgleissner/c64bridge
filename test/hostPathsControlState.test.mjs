@@ -68,3 +68,33 @@ test("I15 save_memory cannot plant a task lock claim and reads no device memory"
     assert.equal(fs.existsSync(path.join(state, "tasks.json.lock")), false, "nothing was created");
   });
 });
+
+test("I16 resolveHostPath rejects background task folders, the find/run state and diagnostics files", async () => {
+  await withControlStateFixture(async ({ state, base }) => {
+    assertControlStateRejected(path.join(state, "tasks", "background", "0001_read", "result.json"));
+    assertControlStateRejected(path.join(state, "tasks", "background", "0001_read", "task.json"));
+    assertControlStateRejected(path.join(state, "meta", "find_and_run_program_by_name.json"));
+    assertControlStateRejected(path.join(state, "diagnostics", "2026-11-19T10-00-00-000Z-1-runtime.ndjson"));
+    // Explicit locations follow their overrides.
+    process.env.C64_TASK_STATE_FILE = path.join(base, "elsewhere", "tasks.json");
+    process.env.C64BRIDGE_DIAGNOSTICS_DIR = path.join(state, "diag");
+    process.env.C64BRIDGE_ALLOWED_DIRS = base;
+    assertControlStateRejected(path.join(base, "elsewhere", "tasks", "background", "x", "log"));
+    assertControlStateRejected(path.join(base, "elsewhere", "meta", "find_and_run_program_by_name.json"));
+    assertControlStateRejected(path.join(state, "diag", "session.ndjson"));
+    // Generated run directories remain the default output location.
+    assert.doesNotThrow(() => resolveHostPath(path.join(state, "runs", "batch_1", "results.json"), { purpose: "write" }));
+  });
+});
+
+test("I16 save_memory cannot overwrite a background task result", async () => {
+  await withControlStateFixture(async ({ state }) => {
+    const result = path.join(state, "tasks", "background", "0001_read", "result.json");
+    let reads = 0;
+    const ctx = { client: { async readMemoryRaw() { reads += 1; return Uint8Array.of(0x7b, 0x7d); } }, logger: createLogger() };
+    const res = await toolRegistry.invoke("c64_memory", { op: "save_memory", startAddress: "$2000", endAddress: "$2001", filePath: result, asPrg: false }, ctx);
+    assert.equal(res.isError, true, JSON.stringify(res.content));
+    assert.equal(reads, 0);
+    assert.equal(fs.existsSync(path.join(state, "tasks")), false);
+  });
+});
