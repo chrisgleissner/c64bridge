@@ -6,7 +6,7 @@ Licensed under the GNU General Public License v2.0 or later.
 See <https://www.gnu.org/licenses/> for details.
 */
 
-import { petsciiToAscii } from "../../petscii.js";
+import { petsciiControlName } from "../../petscii.js";
 import { basicTokenText } from "./basicTokenizer.js";
 import { ToolExecutionError } from "../errors.js";
 
@@ -22,10 +22,22 @@ function hex16(value: number): string {
   return `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
-function plainChar(byte: number): string {
-  if (byte === 0x20 || byte === 0xa0) return " ";
-  const ch = petsciiToAscii(Uint8Array.of(byte));
-  return ch.length === 1 && ch > " " && ch <= "~" ? ch : `{$${byte.toString(16).toUpperCase().padStart(2, "0")}}`;
+function hexCode(byte: number): string {
+  return `{$${byte.toString(16).toUpperCase().padStart(2, "0")}}`;
+}
+
+/**
+ * Text for a byte that is not a token. Inside a string every byte that the tokeniser would
+ * not read back as the same byte is written as {name} or {$xx}, so listing and tokenising
+ * again reproduces the bytes exactly: only $20-$5F stay literal (the tokeniser folds
+ * ASCII a-z to $41-$5A, so $61-$7A need a code). Outside strings $20-$7E stay literal and
+ * $FF is the pi token.
+ */
+function plainChar(byte: number, inString: boolean): string {
+  if (inString ? byte >= 0x20 && byte <= 0x5f : byte >= 0x20 && byte <= 0x7e) return String.fromCharCode(byte);
+  if (!inString && byte === 0xff) return "\u03c0";
+  const name = petsciiControlName(byte);
+  return name !== undefined ? `{${name}}` : hexCode(byte);
 }
 
 /** Expands tokens outside quotes like LIST; quoted text is never detokenised. */
@@ -38,11 +50,11 @@ export function detokenizeLine(bytes: Uint8Array): string {
       out += '"';
       continue;
     }
-    if (!inString && byte >= 0x80) {
-      out += basicTokenText(byte) ?? plainChar(byte);
+    if (!inString && byte >= 0x80 && byte <= 0xcb) {
+      out += basicTokenText(byte) ?? plainChar(byte, false);
       continue;
     }
-    out += plainChar(byte);
+    out += plainChar(byte, inString);
   }
   return out;
 }

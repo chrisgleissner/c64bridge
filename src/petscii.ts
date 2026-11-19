@@ -6,8 +6,6 @@ Licensed under the GNU General Public License v2.0 or later.
 See <https://www.gnu.org/licenses/> for details.
 */
 
-import { getChargenGlyphs, type ChargenGlyph } from "./chargen.js";
-
 const PETSCII_TO_ASCII: Record<number, string> = {
   0x00: " ",
   0x07: "\u0007",
@@ -16,17 +14,6 @@ const PETSCII_TO_ASCII: Record<number, string> = {
   0x8d: "\n",
   0xa0: " ",
 };
-
-const SCREEN_CODE_TO_ASCII = new Map<number, string>();
-let screenCodeMapInitialised = false;
-
-function isPrintableAscii(char: string | undefined): boolean {
-  if (!char || char.length === 0) {
-    return false;
-  }
-  const code = char.charCodeAt(0);
-  return code === 0x20 || (code >= 0x21 && code <= 0x7e);
-}
 
 function petsciiByteToChar(byte: number): string {
   if (PETSCII_TO_ASCII[byte]) {
@@ -54,31 +41,6 @@ export function petsciiToAscii(bytes: Uint8Array): string {
     .join("");
 }
 
-function deriveGlyphChar(glyph: ChargenGlyph): string {
-  if (glyph.basic && glyph.basic.length === 1 && isPrintableAscii(glyph.basic)) {
-    return glyph.basic;
-  }
-
-  const ascii = petsciiByteToChar(glyph.petsciiCode & 0xff);
-  return isPrintableAscii(ascii) ? ascii : " ";
-}
-
-function ensureScreenCodeMap(): void {
-  if (screenCodeMapInitialised) {
-    return;
-  }
-
-  for (const glyph of getChargenGlyphs()) {
-    const code = glyph.screenCode & 0xff;
-    if (SCREEN_CODE_TO_ASCII.has(code)) {
-      continue;
-    }
-    SCREEN_CODE_TO_ASCII.set(code, deriveGlyphChar(glyph));
-  }
-
-  screenCodeMapInitialised = true;
-}
-
 export interface ScreenAsciiOptions {
   readonly columns?: number;
   readonly rows?: number;
@@ -92,17 +54,33 @@ export interface ScreenAsciiOptions {
   readonly charset?: "upper" | "lower";
 }
 
-/** Letters of the lower-case set; reverse-video codes (+128) show the same letter. */
-function lowerCaseSetChar(code: number): string | undefined {
+/**
+ * Shown for screen codes that are graphics, not text (card suits, lines, blocks, shifted
+ * symbols), so a screen full of block graphics does not read as blank. U+2592 never occurs
+ * as a C64 text character.
+ */
+export const SCREEN_GRAPHIC_PLACEHOLDER = "\u2592";
+
+/**
+ * Text of one screen code. Screen codes $00-$3F are the same in both character sets
+ * (@, A-Z or a-z at 1-26, [ pound ] up-arrow left-arrow at $1B-$1F, then ASCII $20-$3F);
+ * the upper-case/graphics set has only graphics at $40-$7F, the lower-case set has
+ * upper-case letters at $41-$5A and graphics elsewhere in $40-$7F. Reverse video (+$80)
+ * shows the same character. Source: C64 Programmer's Reference Guide appendix B, and
+ * data/graphics/character-set.csv (every row maps PETSCII to the screen code by the
+ * KERNAL rule in petsciiToScreenCode). The pound sign is shown as a backslash, the arrows
+ * as ^ and _ (ASCII approximations, unchanged from earlier versions).
+ */
+function screenCodeChar(code: number, lowerCase: boolean): string {
   const base = code & 0x7f;
-  if (base >= 1 && base <= 26) return String.fromCharCode(0x60 + base);
-  if (base >= 0x41 && base <= 0x5a) return String.fromCharCode(base);
-  return undefined;
+  if (base === 0) return "@";
+  if (base <= 26) return String.fromCharCode((lowerCase ? 0x60 : 0x40) + base);
+  if (base < 0x40) return String.fromCharCode(base < 0x20 ? 0x40 + base : base);
+  if (lowerCase && base >= 0x41 && base <= 0x5a) return String.fromCharCode(base);
+  return SCREEN_GRAPHIC_PLACEHOLDER;
 }
 
 export function screenCodesToAscii(bytes: Uint8Array, options?: ScreenAsciiOptions): string {
-  ensureScreenCodeMap();
-
   const columns = options?.columns && options.columns > 0 ? options.columns : 40;
   const maxRows = options?.rows && options.rows > 0 ? options.rows : undefined;
   const trimSpaces = options?.trimTrailingSpaces !== false;
@@ -121,10 +99,7 @@ export function screenCodesToAscii(bytes: Uint8Array, options?: ScreenAsciiOptio
     let line = "";
     for (let idx = index; idx < end; idx += 1) {
       const code = bytes[idx] ?? 0;
-      const char = lowerCase
-        ? lowerCaseSetChar(code & 0xff) ?? SCREEN_CODE_TO_ASCII.get(code & 0xff) ?? petsciiByteToChar(code & 0xff)
-        : SCREEN_CODE_TO_ASCII.get(code & 0xff) ?? petsciiByteToChar(code & 0xff);
-      line += char;
+      line += screenCodeChar(code & 0xff, lowerCase);
     }
 
     if (trimSpaces) {
@@ -160,76 +135,158 @@ export function asciiToPetscii(char: string): number {
   return code;
 }
 
-/** Named PETSCII and control codes that are commonly used on the C64. */
-const NAMED_CHARS: Record<string, number> = Object.freeze({
-  // Control characters (BASIC CHR$ values)
-  "clear": 147, // CLR/HOME (clears screen)
-  "clr": 147,
-  "home": 19,
-  "bell": 7,
-  "beep": 7,
-  "newline": 13,
-  "return": 13,
-  "cr": 13,
-  "lf": 10,
-  "reverse_on": 18,
-  "rvon": 18,
-  "reverse_off": 146,
-  "rvoff": 146,
-  "cursor_up": 145,
-  "cursor_down": 17,
-  "cursor_right": 29,
-  "cursor_left": 157,
+/**
+ * Names accepted by the older ":name:" and "<name>" forms. Kept unchanged so that
+ * ordinary text with colons or angle brackets is not turned into control codes;
+ * the "{name}" form accepts the full table below.
+ */
+const LEGACY_NAMES: ReadonlySet<string> = new Set([
+  "clear", "clr", "home", "bell", "beep", "newline", "return", "cr", "lf", "reverse_on", "rvon", "reverse_off",
+  "rvoff", "cursor_up", "cursor_down", "cursor_right", "cursor_left", "heart", "up_arrow", "uparrow",
+  "left_arrow", "leftarrow", "pi",
+]);
 
-  // Graphic glyphs (commonly referenced by name)
-  // Note: Exact byte shown on screen depends on mode; these are PETSCII/CHR$ values
-  "heart": 115, // $73 (shifted S); $51 would print the letter Q
-  "up_arrow": 94,
-  "uparrow": 94,
-  "left_arrow": 95,
-  "leftarrow": 95,
-  "pi": 222,
-});
+/**
+ * Shared PETSCII control-code table for "{name}", "{$xx}" and "{nn}" in BASIC string
+ * text. The first name of every row is the canonical one used when listing a program.
+ * Sources: C64 Programmer's Reference Guide, appendix C (PETSCII codes: 5 WHT, 13 RETURN,
+ * 14 lower case, 17 CRSR down, 18 RVS ON, 19 HOME, 20 DEL, 28 RED, 29 CRSR right, 30 GRN,
+ * 31 BLU, 129 ORANGE, 133-140 F1-F8, 141 SHIFT RETURN, 142 upper case, 144 BLK, 145 CRSR up,
+ * 146 RVS OFF, 147 CLR, 148 INST, 149 BROWN, 150 LT RED, 151-152 GREY 1-2, 153 LT GREEN,
+ * 154 LT BLUE, 155 GREY 3, 156 PURPLE, 157 CRSR left, 158 YELLOW, 159 CYAN), cross-checked
+ * against the independent table in src/tools/input.ts and the petcat names (VICE). Codes
+ * 0 is not offered: a NUL ends a tokenised BASIC line. 7 (bell), 10 (lf), 115 (heart),
+ * 94/95 (arrows) and 222 (pi) are the older names of this module (115 = SHIFT+S, 222 = pi).
+ */
+const CONTROL_CODE_ROWS: ReadonlyArray<readonly [number, ReadonlyArray<string>]> = [
+  [3, ["stop"]],
+  [5, ["wht", "white"]],
+  [7, ["bell", "beep"]],
+  [10, ["lf"]],
+  [13, ["return", "cr", "newline"]],
+  [14, ["lowercase", "swlc"]],
+  [17, ["down", "cursor_down", "crsr_down"]],
+  [18, ["rvs_on", "reverse_on", "rvon"]],
+  [19, ["home", "cursor_home"]],
+  [20, ["del", "delete"]],
+  [28, ["red"]],
+  [29, ["right", "cursor_right", "crsr_right"]],
+  [30, ["grn", "green"]],
+  [31, ["blu", "blue"]],
+  [94, ["up_arrow", "uparrow"]],
+  [95, ["left_arrow", "leftarrow"]],
+  [115, ["heart"]],
+  [129, ["org", "orange"]],
+  [131, ["run"]],
+  [133, ["f1"]],
+  [134, ["f3"]],
+  [135, ["f5"]],
+  [136, ["f7"]],
+  [137, ["f2"]],
+  [138, ["f4"]],
+  [139, ["f6"]],
+  [140, ["f8"]],
+  [141, ["shift_return"]],
+  [142, ["uppercase", "swuc"]],
+  [144, ["blk", "black"]],
+  [145, ["up", "cursor_up", "crsr_up"]],
+  [146, ["rvs_off", "reverse_off", "rvoff"]],
+  [147, ["clr", "clear"]],
+  [148, ["inst", "ins", "insert"]],
+  [149, ["brn", "brown"]],
+  [150, ["lred", "light_red"]],
+  [151, ["dgry", "dark_grey", "dark_gray", "gry1"]],
+  [152, ["mgry", "medium_grey", "medium_gray", "gry2"]],
+  [153, ["lgrn", "light_green"]],
+  [154, ["lblu", "light_blue"]],
+  [155, ["lgry", "light_grey", "light_gray", "gry3"]],
+  [156, ["pur", "purple"]],
+  [157, ["left", "cursor_left", "crsr_left"]],
+  [158, ["yel", "yellow"]],
+  [159, ["cyn", "cyan"]],
+  [222, ["pi"]],
+];
+
+const NAMED_CHARS: ReadonlyMap<string, number> = new Map(
+  CONTROL_CODE_ROWS.flatMap(([code, names]) => names.map((name) => [name, code] as const)),
+);
+const CANONICAL_NAMES: ReadonlyMap<number, string> = new Map(
+  CONTROL_CODE_ROWS.map(([code, names]) => [code, names[0]!.replace(/_/g, " ")] as const),
+);
+
+/** Canonical brace name for a PETSCII byte (for listings), or undefined. */
+export function petsciiControlName(byte: number): string | undefined {
+  return CANONICAL_NAMES.get(byte);
+}
 
 export function lookupNamedPetscii(name: string): number | undefined {
-  const key = name.trim().toLowerCase().replace(/\s+/g, "_");
-  // Own keys only, so names like "constructor" don't resolve to Object.prototype members.
-  return Object.prototype.hasOwnProperty.call(NAMED_CHARS, key) ? NAMED_CHARS[key] : undefined;
+  const key = name.trim().toLowerCase().replace(/[-\s]+/g, "_");
+  return NAMED_CHARS.get(key);
+}
+
+export type BraceToken =
+  | { readonly ok: true; readonly value: number; readonly endIndex: number }
+  | { readonly ok: false; readonly token: string; readonly reason: string; readonly endIndex: number };
+
+/**
+ * Parses "{name}", "{$xx}" (hex) or "{nn}" (decimal 0-255) at `startIndex`. Returns null when
+ * the text is not a brace token candidate (no closing brace, or characters a token never
+ * contains), so ordinary text such as "{" or "{a,b}" stays literal.
+ */
+export function parseBraceToken(source: string, startIndex: number): BraceToken | null {
+  if (source[startIndex] !== "{") return null;
+  const close = source.indexOf("}", startIndex + 1);
+  if (close < 0) return null;
+  const inner = source.slice(startIndex + 1, close).trim();
+  if (!/^[A-Za-z0-9_$\s-]+$/.test(inner)) return null;
+  const endIndex = close + 1;
+  const token = source.slice(startIndex, endIndex);
+  const hex = /^\$([0-9a-fA-F]{1,2})$/.exec(inner);
+  if (hex) return { ok: true, value: parseInt(hex[1]!, 16), endIndex };
+  if (/^[0-9]+$/.test(inner)) {
+    const value = Number.parseInt(inner, 10);
+    return value <= 255 && inner.length <= 3
+      ? { ok: true, value, endIndex }
+      : { ok: false, token, reason: "decimal codes are 0-255", endIndex };
+  }
+  const value = lookupNamedPetscii(inner);
+  return value === undefined
+    ? { ok: false, token, reason: "unknown control-code name", endIndex }
+    : { ok: true, value, endIndex };
 }
 
 /**
  * Try to parse a named character token starting at the given index.
- * Supported forms: {name}, :name:, <name>
+ * Supported forms: {name}, :name:, <name>. Only {name} accepts the full control-code
+ * table, "{$xx}" and "{nn}"; the colon and angle forms keep the older short list.
  * Returns the PETSCII code and index of the first character AFTER the token
  * when matched, otherwise null.
  */
 export function parseNamedCharToken(source: string, startIndex: number): { value: number; endIndex: number } | null {
   const open = source[startIndex];
-  if (open !== "{" && open !== ":" && open !== "<") {
+  if (open === "{") {
+    const token = parseBraceToken(source, startIndex);
+    return token?.ok ? { value: token.value, endIndex: token.endIndex } : null;
+  }
+  if (open !== ":" && open !== "<") {
     return null;
   }
 
-  const close = open === "{" ? "}" : open === ":" ? ":" : ">";
+  const close = open === ":" ? ":" : ">";
   const idx = source.indexOf(close, startIndex + 1);
   if (idx < 0) {
     return null;
   }
 
-  // Only sane name characters; anything else is ordinary text that happens to use the delimiters.
-  // Multi-word names such as {cursor up} need braces: ":" and "<" also appear in
-  // ordinary text ("Mode: reverse on: yes"), so they only delimit single words.
+  // Multi-word names need braces: ":" and "<" also appear in ordinary text
+  // ("Mode: reverse on: yes"), so they only delimit single words.
   const name = source.slice(startIndex + 1, idx).trim();
-  const namePattern = open === "{" ? /^[A-Za-z0-9_\s-]+$/ : /^[A-Za-z0-9_-]+$/;
-  if (!namePattern.test(name)) {
+  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
     return null;
   }
-
-  const value = lookupNamedPetscii(name.replace(/[-\s]+/g, "_"));
-  if (value === undefined) {
-    return null;
-  }
-
-  return { value, endIndex: idx + 1 };
+  const key = name.toLowerCase().replace(/-+/g, "_");
+  const value = LEGACY_NAMES.has(key) ? NAMED_CHARS.get(key) : undefined;
+  return value === undefined ? null : { value, endIndex: idx + 1 };
 }
 
 /**
@@ -254,4 +311,22 @@ export function encodeStringWithNames(input: string, options: { foldLowercase?: 
     i += 1;
   }
   return Uint8Array.from(bytes);
+}
+
+/**
+ * PETSCII code to screen code, the rule the KERNAL applies when it prints a character:
+ * $20-$3F unchanged, $40-$5F minus $40, $60-$7F minus $20, $A0-$BF minus $40,
+ * $C0-$FE minus $80, $FF gives $5E. Control codes ($00-$1F, $80-$9F) have no screen code.
+ * Source: C64 Programmer's Reference Guide appendix B/C; verified against all 256 rows
+ * of data/graphics/character-set.csv (src/chargen.ts) in test/petscii.test.mjs.
+ */
+export function petsciiToScreenCode(petscii: number): number | undefined {
+  const p = petscii & 0xff;
+  if (p < 0x20 || (p >= 0x80 && p < 0xa0)) return undefined;
+  if (p < 0x40) return p;
+  if (p < 0x60) return p - 0x40;
+  if (p < 0x80) return p - 0x20;
+  if (p < 0xc0) return p - 0x40;
+  if (p < 0xff) return p - 0x80;
+  return 0x5e;
 }
