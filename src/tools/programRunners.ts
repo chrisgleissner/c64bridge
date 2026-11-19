@@ -19,7 +19,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
-import { pollForProgramOutcome } from "./pollValidator.js";
+import { checkAsmProgramLoaded, pollForProgramOutcome, type AsmPollResult } from "./pollValidator.js";
 import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
@@ -328,7 +328,7 @@ const uploadAsmArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Treat missing evidence of execution as an error. The bytes read back at the load address must always match the assembled program (a mismatch is an error either way). With verify:true, a program that loaded but changed nothing on screen is an error; with verify:false it returns success with execution:\"unconfirmed\" (SID players, border effects and JMP * loops change no screen RAM).",
+      description: "Poll the screen for evidence of execution (up to C64BRIDGE_POLL_MAX_MS, default 2 s); a program that changes nothing on screen and does not return to BASIC is then an error. With verify:false (default) nothing is polled: the load is checked with one read and execution is reported as \"unconfirmed\". The bytes at the load address must match the assembled program either way.",
       default: false,
     }),
   },
@@ -652,44 +652,45 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ? { symbols: symbolList, ...(symbolsTruncated ? { symbolsTruncated: true } : {}) }
       : {};
 
-    // Read back the program bytes (load evidence), then poll for signs of execution.
+    // Read back the program bytes (load evidence). Only verify:true polls for signs of execution.
     let verified = false;
     let execution: "confirmed" | "unconfirmed" | undefined;
     let loadCheck: string | undefined;
     const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
+    const expected = { address: loadAddress, bytes: prg.subarray(2) };
     try {
-      const outcome = await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, {
-        address: loadAddress,
-        bytes: prg.subarray(2),
-      });
-      if (outcome.type === "ASM") {
-        loadCheck = outcome.loadCheck;
-        if (outcome.status === "not_loaded") {
-          ctx.logger.warn("ASM program was not loaded", { reason: outcome.reason });
-          return toolErrorResult(
-            new ToolExecutionError(
-              `Assembly program was not loaded: ${outcome.reason}. The backend reported success, but the bytes read back at the load address differ from the assembled program (a program that overwrites its own first bytes also looks like this).`,
-              { details: { reason: outcome.reason, ...(outcome.load ? { loadAddress: outcome.load.address, expected: outcome.load.expected, found: outcome.load.found } : {}) } },
-            ),
-          );
-        }
-        if (outcome.status === "unconfirmed") {
-          if (shouldVerify) {
-            ctx.logger.warn("ASM execution could not be verified", { reason: outcome.reason });
-            return toolErrorResult(
-              new ToolExecutionError(
-                "Assembly program was loaded, but no screen change was observed, so its execution could not be verified",
-                { details: { reason: outcome.reason, loadCheck: outcome.loadCheck, execution: "unconfirmed" } },
-              ),
-            );
-          }
-          execution = "unconfirmed";
-        } else {
-          execution = "confirmed";
-          if (shouldVerify) {
-            verified = true;
-          }
-        }
+      const outcome: { status: string; reason?: string; loadCheck?: string; load?: { address: number; expected: string; found: string } } = shouldVerify
+        ? await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, expected) as AsmPollResult
+        : await (async () => {
+            const check = await checkAsmProgramLoaded(ctx.client, ctx.logger, expected);
+            return check.load
+              ? { status: "not_loaded", reason: `memory at $${check.load.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the assembled program`, ...check }
+              : { status: "not_observed", ...check };
+          })();
+      loadCheck = outcome.loadCheck;
+      if (outcome.status === "not_loaded") {
+        ctx.logger.warn("ASM program was not loaded", { reason: outcome.reason });
+        return toolErrorResult(
+          new ToolExecutionError(
+            `Assembly program was not loaded: ${outcome.reason}. The backend reported success, but the bytes read back at the load address differ from the assembled program (a program that overwrites its own first bytes also looks like this).`,
+            { details: { reason: outcome.reason, ...(outcome.load ? { loadAddress: outcome.load.address, expected: outcome.load.expected, found: outcome.load.found } : {}) } },
+          ),
+        );
+      }
+      if (outcome.status === "unconfirmed") {
+        ctx.logger.warn("ASM execution could not be verified", { reason: outcome.reason });
+        return toolErrorResult(
+          new ToolExecutionError(
+            "Assembly program was loaded, but no screen change was observed, so its execution could not be verified",
+            { details: { reason: outcome.reason, loadCheck: outcome.loadCheck, execution: "unconfirmed" } },
+          ),
+        );
+      }
+      if (outcome.status === "not_observed") {
+        execution = "unconfirmed";
+      } else {
+        execution = "confirmed";
+        verified = true;
       }
     } catch (pollError) {
       ctx.logger.debug("Polling encountered an error", toRecord(pollError));
@@ -717,8 +718,8 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const message = startQueued
       ? `Assembly program assembled, uploaded and loaded. The SYS command is queued (${keyboardFeed?.pending ?? "?"} character(s) pending) because the CPU is paused; the program starts when the machine resumes.`
       : execution === "unconfirmed"
-      ? "Assembly program assembled, uploaded and loaded. No screen change was observed, so it is not confirmed that the program is running (a SID player, a border effect or a JMP * loop looks like this)."
-      : "Assembly program assembled, uploaded, and executed successfully.";
+      ? "Assembly program assembled, uploaded and loaded, and the SYS command was typed. Execution was not observed (verify:false does not poll); pass verify:true to poll the screen for evidence."
+      : "Assembly program assembled, uploaded, and executed successfully (verified).";
     const base = textResult(message, {
       success: true,
       entryAddress,

@@ -343,6 +343,18 @@ async function checkProgramLoaded(
   return { loadCheck: "matched" };
 }
 
+/**
+ * The load evidence alone, without waiting for signs of execution: used when the caller did not ask
+ * for verification. One memory read.
+ */
+export async function checkAsmProgramLoaded(
+  client: C64Client,
+  logger: ToolLogger,
+  program: ExpectedProgramBytes,
+): Promise<Pick<AsmPollResult, "loadCheck" | "load">> {
+  return checkProgramLoaded(client, logger, program);
+}
+
 async function pollAsmOutcome(
   client: C64Client,
   logger: ToolLogger,
@@ -407,15 +419,21 @@ async function pollAsmOutcome(
   }
   let previousSignature: number | null = null; // Only stable RAM: reading I/O can ack CIA interrupts on Ultimate, and raster/timer values aren't evidence of liveness.
   let alive = false;
+  // With readScreenDetailed one read per poll covers both checks and follows the screen the VIC-II
+  // shows (a program may move it away from $0400). Without it, screen RAM at $0400 is read directly.
+  const detailedClient = client as C64Client & { readScreenDetailed?: () => Promise<{ text: string }> };
+  const detailed = typeof detailedClient.readScreenDetailed === "function";
   
   const pollDeadline = Date.now() + config.maxMs;
   
   while (Date.now() < pollDeadline && !alive) {
     pollCount++;
     
+    let screenText: string | undefined;
     try {
+      screenText = detailed ? (await detailedClient.readScreenDetailed!()).text : await client.readScreen();
       // A routine that works for a while before RTS shows READY. only after the first screen read.
-      if (returnedToBasicAfterSys(await client.readScreen())) {
+      if (returnedToBasicAfterSys(screenText)) {
         logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
         return { status: "ok", type: "ASM", loadCheck };
       }
@@ -424,7 +442,8 @@ async function pollAsmOutcome(
     }
 
     try {
-      const screenRam = await client.readMemoryRaw(0x0400, 0x03e8);
+      if (detailed && screenText === undefined) throw new Error("screen read failed");
+      const screenRam = detailed ? new TextEncoder().encode(screenText) : await client.readMemoryRaw(0x0400, 0x03e8);
       const signature = computeCrc32(screenRam);
       
       // Check for any activity
