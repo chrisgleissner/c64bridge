@@ -82,18 +82,28 @@ export interface C64ClientOptions {
 }
 
 /** Raised when the KERNAL keyboard buffer did not drain before another chunk
- * could safely be queued. Callers must report this as partial delivery. */
+ * could safely be queued. Callers must report this as partial delivery.
+ * `delivered` counts the bytes handed to the keyboard queue, including the
+ * `pending` ones still waiting there; only the bytes after `delivered` need
+ * to be sent again. */
 export class KeyboardQueueDrainTimeoutError extends Error {
   readonly delivered: number;
   readonly requested: number;
   readonly timeoutMs: number;
+  readonly pending: number | undefined;
 
-  constructor(delivered: number, requested: number, timeoutMs: number) {
-    super(`Keyboard queue did not drain after ${timeoutMs}ms; delivered ${delivered} of ${requested} byte(s). Resume the machine and retry the remaining input.`);
+  constructor(delivered: number, requested: number, timeoutMs: number, pending?: number) {
+    const queued = pending === undefined || pending <= 0
+      ? ""
+      : delivered === 0
+        ? ` The keyboard queue still holds ${pending} byte(s) from earlier input, so nothing was queued.`
+        : ` ${pending} of them are still queued and are typed when the machine reads the keyboard; do not send them again.`;
+    super(`Keyboard queue did not drain after ${timeoutMs}ms; delivered ${delivered} of ${requested} byte(s).${queued} Resume the machine, then send only the remaining ${requested - delivered} byte(s).`);
     this.name = "KeyboardQueueDrainTimeoutError";
     this.delivered = delivered;
     this.requested = requested;
     this.timeoutMs = timeoutMs;
+    this.pending = pending;
   }
 }
 
@@ -2707,50 +2717,78 @@ export class C64Client {
     }
     const chunkSize = Math.max(1, Math.min(10, options?.chunkSize ?? 10));
     const pollMs = Math.max(1, options?.drainPollMs ?? 8);
-    const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
 
     const facade = options?.pinnedFacade ?? await this.facadePromise;
-    if (facade.feedKeyboard) {
-      const fed = await facade.feedKeyboard(data, options?.drainTimeoutMs === undefined ? undefined : { drainTimeoutMs: options.drainTimeoutMs });
-      if (fed.status === "timeout") {
-        throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
-      }
-      return {
-        delivered: fed.delivered,
-        status: fed.status,
-        pending: fed.pending,
-        ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
-      };
-    }
-    const KEYD = 0x0277; // KERNAL keyboard buffer base
-    const NDX = 0x00C6;  // pending byte count
-
-    let delivered = 0;
-    for (let offset = 0; offset < data.length; offset += chunkSize) {
-      const slice = data.subarray(offset, Math.min(data.length, offset + chunkSize));
-      // Write the bytes into the queue first so KERNAL never reads a stale
-      // length+old-byte combination.
-      await facade.writeMemory(KEYD, Buffer.from(slice));
-      await facade.writeMemory(NDX, Buffer.from([slice.length]));
-
-      // Drain before another write.  Overwriting a non-empty KERNAL queue loses
-      // user input, so a timeout is an explicit partial-delivery failure.
-      const drainStart = Date.now();
-      let drained = false;
-      while (Date.now() - drainStart < totalTimeoutMs) {
-        const ndx = await facade.readMemory(NDX, 1);
-        if ((ndx[0] ?? 0) === 0) {
-          drained = true;
-          break;
+    // One injection per machine at a time: two calls writing the queue in turn would mix or drop each other's bytes.
+    return this.withKeyboardLock(facade, async () => {
+      if (facade.feedKeyboard) {
+        // VICE counts the bytes it queues (a NUL is dropped) and needs about 150 ms per key at least.
+        const queuedBytes = data.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
+        const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, queuedBytes * 150));
+        const fed = await facade.feedKeyboard(data, { drainTimeoutMs: timeoutMs });
+        if (fed.status === "timeout") {
+          throw new KeyboardQueueDrainTimeoutError(fed.delivered, data.length, timeoutMs, fed.pending);
         }
-        await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+        return {
+          delivered: fed.delivered,
+          status: fed.status,
+          pending: fed.pending,
+          ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
+        };
       }
-      delivered += slice.length;
-      if (!drained) {
-        throw new KeyboardQueueDrainTimeoutError(delivered, data.length, totalTimeoutMs);
+      const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
+      const KEYD = 0x0277; // KERNAL keyboard buffer base
+      const NDX = 0x00C6;  // pending byte count
+
+      /** Waits until NDX is 0 and returns 0, or returns the count still pending at the timeout. */
+      const waitForEmptyQueue = async (): Promise<number> => {
+        const drainStart = Date.now();
+        for (;;) {
+          const ndx = (await facade.readMemory(NDX, 1))[0] ?? 0;
+          if (ndx === 0) return 0;
+          if (Date.now() - drainStart >= totalTimeoutMs) return ndx;
+          await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+        }
+      };
+
+      // Bytes still queued from earlier input (a keypress, a call that timed out) must not be overwritten.
+      let pending = await waitForEmptyQueue();
+      if (pending > 0) {
+        throw new KeyboardQueueDrainTimeoutError(0, data.length, totalTimeoutMs, pending);
       }
+      let delivered = 0;
+      for (let offset = 0; offset < data.length; offset += chunkSize) {
+        const slice = data.subarray(offset, Math.min(data.length, offset + chunkSize));
+        // Write the bytes into the queue first so KERNAL never reads a stale
+        // length+old-byte combination.
+        await facade.writeMemory(KEYD, Buffer.from(slice));
+        await facade.writeMemory(NDX, Buffer.from([slice.length]));
+        delivered += slice.length;
+
+        // Drain before another write. Overwriting a non-empty KERNAL queue loses
+        // user input, so a timeout is an explicit partial-delivery failure.
+        pending = await waitForEmptyQueue();
+        if (pending > 0) {
+          throw new KeyboardQueueDrainTimeoutError(delivered, data.length, totalTimeoutMs, pending);
+        }
+      }
+      return { delivered };
+    });
+  }
+
+  /** Keyboard injections per facade, chained so each starts after the previous one ended. */
+  private readonly keyboardLocks = new WeakMap<C64Facade, Promise<unknown>>();
+
+  private async withKeyboardLock<T>(facade: C64Facade, fn: () => Promise<T>): Promise<T> {
+    const previous = this.keyboardLocks.get(facade) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(fn);
+    const settled = run.catch(() => undefined);
+    this.keyboardLocks.set(facade, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.keyboardLocks.get(facade) === settled) this.keyboardLocks.delete(facade);
     }
-    return { delivered };
   }
 
     /** `continue_execution`: lets the CPU run and ends the explicit pause and any debugger stop. */
