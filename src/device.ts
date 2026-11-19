@@ -161,7 +161,7 @@ export interface C64Facade {
    * memory. `status` is "drained" once consumed, "queued" when the CPU is stopped so the text
    * waits until it runs, and "timeout" when the KERNAL still had `pending` bytes at the deadline.
    */
-  feedKeyboard?(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult>;
+  feedKeyboard?(bytes: Uint8Array, options?: { drainTimeoutMs?: number; signal?: AbortSignal }): Promise<KeyboardFeedResult>;
   writeMemoryBlocks?(blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void>;
   // System control
   reset(): Promise<RunResult>;
@@ -381,6 +381,9 @@ function assertAllowedViceResource(name: string): void {
   const problem = resourceNameProblem(name);
   if (problem) throw new Error(`VICE resource '${name}' is not allowed: ${problem.message}`);
 }
+
+/** The wait for the keyboard buffer to drain ends when $00C6 has not changed for this long. */
+const KEYBOARD_STALL_MS = 2_000;
 
 /** VICE's keyboard buffer queue (kbdbuf.c) holds at most this many bytes. */
 const VICE_KEYBOARD_QUEUE_LIMIT = 16_384;
@@ -1349,7 +1352,7 @@ export class ViceBackend implements C64Facade {
    * refills the buffer on a timer). With the CPU stopped by a pause or debugger stop nothing can
    * be consumed, so the bytes stay queued and the CPU stays stopped.
    */
-  async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult> {
+  async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number; signal?: AbortSignal }): Promise<KeyboardFeedResult> {
     // The monitor halts the CPU while all feed chunks are sent, even for a
     // running machine. No new bytes can drain until the whole feed completes.
     const queuedBytes = bytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
@@ -1384,15 +1387,22 @@ export class ViceBackend implements C64Facade {
       let gap = 30;
       let emptyReads = 0;
       let pending = delivered;
+      let lastPending = -1;
+      let lastChange = Date.now();
       for (;;) {
+        options?.signal?.throwIfAborted();
         await client.exitMonitor();
         await delay(gap);
+        options?.signal?.throwIfAborted();
         // A checkpoint hit stopped the CPU while it ran: never resume it again.
         if (!client.cpuRunning || hit()) return await stoppedResult(pending);
         pending = (await client.memGet(0x00c6, 0x00c6))[0] ?? 0;
         if (hit()) return await stoppedResult(pending);
         emptyReads = pending === 0 ? emptyReads + 1 : 0;
         if (emptyReads >= 2) return { delivered, status: "drained", pending: 0 };
+        if (pending !== lastPending) { lastPending = pending; lastChange = Date.now(); }
+        // A program that does not read the keyboard leaves $00C6 as it is: waiting longer only holds the monitor.
+        if (Date.now() - lastChange >= KEYBOARD_STALL_MS) return { delivered, status: "timeout", pending };
         if (Date.now() - start >= timeoutMs) return { delivered, status: "timeout", pending };
         gap = Math.min(150, Math.ceil(gap * 1.5));
       }

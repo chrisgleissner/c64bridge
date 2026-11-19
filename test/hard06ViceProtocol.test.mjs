@@ -350,3 +350,23 @@ test("a PRG that runs past $FFFF is refused before the machine is reset", async 
     assert.ok(!server.commands.some(([cmd]) => cmd === 0xcc));
   });
 });
+
+test("DEVICE-4 a keyboard feed that nothing consumes stops waiting after the buffer count stalls, and can be aborted", async () => {
+  await withBackend(async (backend, server) => {
+    server.memory[0xc6] = 5; // a program that never reads the keyboard leaves the KERNAL buffer count as it is
+    const started = Date.now();
+    const result = await backend.feedKeyboard(new Uint8Array(512).fill(0x41), { drainTimeoutMs: 60_000 });
+    const ms = Date.now() - started;
+    assert.equal(result.status, "timeout");
+    assert.equal(result.pending, 5);
+    assert.ok(ms >= 1_900 && ms < 4_000, `waited ${ms} ms (limit was 60 s)`);
+
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 200);
+    const abortStarted = Date.now();
+    await assert.rejects(() => backend.feedKeyboard(new Uint8Array([0x41]), { drainTimeoutMs: 60_000, signal: controller.signal }), /abort/i);
+    assert.ok(Date.now() - abortStarted < 1_000);
+    // The monitor is free again for the next operation.
+    assert.equal((await backend.readMemory(0x0400, 2)).length, 2);
+  });
+});
