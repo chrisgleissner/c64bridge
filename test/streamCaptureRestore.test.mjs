@@ -200,3 +200,12 @@ test("I17 a capture whose UDP socket cannot bind leaves no socket open", async (
   await assert.rejects(() => client.captureFrames({ count: 1, reuseSession: true }), /EADDRNOTAVAIL|bind|address/i);
   assert.equal(await settled(), before, "every capture socket was closed");
 });
+
+test("I19 a video capture that never started its stream sends no stream stop", async () => {
+  const events = [];
+  const client = clientWithStubFacade(events);
+  client.resolveCaptureEndpoint = async () => ({ bindAddress: "203.0.113.7", acceptsSource: () => true });
+  await assert.rejects(() => client.captureFrames({ count: 1 }), /EADDRNOTAVAIL|bind|address/i);
+  await assert.rejects(() => client.captureSamples({ count: 16 }), /EADDRNOTAVAIL|bind|address/i);
+  assert.deepEqual(events, [], events.join("|"));
+});

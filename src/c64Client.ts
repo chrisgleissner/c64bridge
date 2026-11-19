@@ -1835,6 +1835,7 @@ export class C64Client {
     const packets: ReturnType<typeof parseVideoPacket>[] = [];
     let stopError: Error | null = null;
     let captureFailed = false;
+    let streamAttempted = false;
     let stopped = false;
     // Stops the stream once. A failure is reported as a warning (success path)
     // or as a diagnostic (failure path); it never replaces the capture outcome.
@@ -1854,6 +1855,7 @@ export class C64Client {
     try {
       await this.bindCaptureSocket(socket, bindAddress);
       const target = this.socketEndpoint(socket, bindAddress);
+      streamAttempted = true;
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "video", target), "start video stream");
 
       const frames = await new Promise<readonly CapturedFrame[]>((resolve, reject) => {
@@ -1892,7 +1894,7 @@ export class C64Client {
       captureFailed = true;
       throw error;
     } finally {
-      if (captureFailed) {
+      if (captureFailed && streamAttempted) {
         // Keep the capture error; the stop failure is only a diagnostic.
         await stopOneShotVideoStream();
       }
