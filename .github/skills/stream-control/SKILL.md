@@ -18,6 +18,7 @@ Use this skill when the user wants a live audio or video stream forwarded to ano
 1. Use `c64_stream` with `op: "start"` to begin a stream.
 2. Use `c64_stream` with `op: "stop"` to terminate a stream.
 3. Confirm the stream target back to the user after each action.
+4. Streams need a wired Ethernet link (U64-class only); starting video stops debug; defaults ports 11000 video, 11001 audio, 11002 debug; a video start with `palette=1` adds palette packets (`c64://ultimate/hardware`, Data streams).
 
 ## Validation
 
