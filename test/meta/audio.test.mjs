@@ -63,6 +63,8 @@ describe("meta/audio", () => {
       "music_compile_play_analyze",
       {
         sidwave: SAMPLE_SIDWAVE,
+        verifySilenceBefore: true,
+        verifySilenceAfter: true,
         waitBeforeCaptureMs: 0,
         analysisDurationSeconds: 1,
         silenceDurationSeconds: 0.5,
@@ -128,6 +130,8 @@ describe("meta/audio", () => {
       "music_compile_play_analyze",
       {
         sidwave: SAMPLE_SIDWAVE,
+        verifySilenceBefore: true,
+        verifySilenceAfter: true,
         waitBeforeCaptureMs: 0,
         postSilenceWaitMs: 0,
         silenceRmsThreshold: 0.02,
@@ -182,6 +186,8 @@ describe("meta/audio", () => {
       "music_compile_play_analyze",
       {
         sidwave: SAMPLE_SIDWAVE,
+        verifySilenceBefore: true,
+        verifySilenceAfter: true,
         output: "sid",
         waitBeforeCaptureMs: 0,
         analysisDurationSeconds: 1,
@@ -205,6 +211,8 @@ describe("meta/audio", () => {
       "music_compile_play_analyze",
       {
         sidwave: SAMPLE_SIDWAVE,
+        verifySilenceBefore: true,
+        verifySilenceAfter: true,
         waitBeforeCaptureMs: 0,
         silenceRmsThreshold: 0.02,
         silenceWaitMs: 0,
@@ -230,6 +238,8 @@ describe("meta/audio", () => {
       "music_compile_play_analyze",
       {
         sidwave: SAMPLE_SIDWAVE,
+        verifySilenceBefore: true,
+        verifySilenceAfter: true,
         waitBeforeCaptureMs: 0,
         analysisDurationSeconds: 1,
         silenceDurationSeconds: 0.5,
@@ -330,6 +340,7 @@ describe("meta/audio", () => {
       "music_play_preset",
       {
         preset: legacyAlias,
+        verify: true,
         platforms: ["vice", "c64u"],
         waitBeforeCaptureMs: 0,
         analysisDurationSeconds: 1,
@@ -372,6 +383,7 @@ describe("meta/audio", () => {
       "music_play_preset",
       {
         preset: "fuer_elise",
+        verify: true,
         platforms: ["c64u"],
         waitBeforeCaptureMs: 0,
         analysisDurationSeconds: 1,

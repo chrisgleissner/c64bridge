@@ -83,7 +83,7 @@ for (const op of ["pipeline", "play_preset"]) {
     const ctx = { ...context("c64u", client), signal: controller.signal };
     const args = op === "pipeline"
       ? { op, sidwave: SCORE, verifySilenceBefore: false, verifySilenceAfter: false, waitBeforeCaptureMs: 0 }
-      : { op, waitBeforeCaptureMs: 0 };
+      : { op, verify: true, waitBeforeCaptureMs: 0 };
     const result = await toolRegistry.invoke("c64_sound", args, ctx);
     assert.equal(result.isError, undefined, JSON.stringify(result));
     assert.equal(captures, 1);
@@ -91,17 +91,42 @@ for (const op of ["pipeline", "play_preset"]) {
 }
 
 test("play_preset with verify reports audible false and an error for a silent capture", async () => {
-  const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", waitBeforeCaptureMs: 0 }, context("c64u", playbackClient("c64u", silentAnalysis)));
+  const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", verify: true, waitBeforeCaptureMs: 0 }, context("c64u", playbackClient("c64u", silentAnalysis)));
   assert.equal(result.isError, true, JSON.stringify(result));
   const entry = result.structuredContent.data.results[0];
   assert.equal(entry.verification.audible, false);
 });
 
 test("play_preset keeps the playback entry when the analyzer throws on VICE", async () => {
-  const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", waitBeforeCaptureMs: 0 }, context("vice", playbackClient("vice", async () => { throw new Error("Audio backend not available"); })));
+  const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", verify: true, waitBeforeCaptureMs: 0 }, context("vice", playbackClient("vice", async () => { throw new Error("Audio backend not available"); })));
   assert.equal(result.isError, undefined, JSON.stringify(result));
   const entry = result.structuredContent.data.results[0];
   assert.equal(entry.success, true);
   assert.equal(entry.backend, "vice");
   assert.match(entry.verification.error, /Audio backend not available/);
+});
+
+test("HARD06 SOUND-4 pipeline without an audio capture backend plays and says the analysis was skipped", async () => {
+  const client = playbackClient("vice", undefined);
+  delete client.recordAndAnalyzeAudio;
+  let played = 0;
+  client.runPrg = async () => { played += 1; return { success: true }; };
+  const result = await toolRegistry.invoke("c64_sound", { op: "pipeline", sidwave: SCORE, waitBeforeCaptureMs: 0 }, context("vice", client));
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.equal(played, 1);
+  const data = result.structuredContent.data;
+  assert.equal(data.analysis, null);
+  assert.match(data.warnings[0], /No audio capture backend/);
+});
+
+test("HARD06 SOUND-15 play_preset and pipeline do not record audio unless asked", async () => {
+  let captures = 0;
+  const client = playbackClient("c64u", async () => { captures += 1; return analyzePcmForTest(new Float32Array(44100).fill(0.2), 44100); });
+  const preset = await toolRegistry.invoke("c64_sound", { op: "play_preset" }, context("c64u", client));
+  assert.equal(preset.isError, undefined, JSON.stringify(preset.content));
+  assert.equal(captures, 0);
+  assert.equal(preset.structuredContent.data.verificationEnabled, false);
+  const pipeline = await toolRegistry.invoke("c64_sound", { op: "pipeline", sidwave: SCORE, waitBeforeCaptureMs: 0 }, context("c64u", client));
+  assert.equal(pipeline.isError, undefined, JSON.stringify(pipeline.content));
+  assert.equal(captures, 1, "only the analysis capture, no silence checks");
 });
