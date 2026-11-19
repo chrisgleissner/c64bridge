@@ -297,9 +297,13 @@ const musicCompileArgsSchema = objectSchema({
       default: "prg",
     }), "prg"),
     dryRun: optionalSchema(booleanSchema({
-      description: "When true, skip playback and only return compilation metadata.",
+      description: "When true, skip playback and only return compilation metadata (combine with outputPath to export the file).",
       default: false,
     }), false),
+    outputPath: optionalSchema(stringSchema({
+      description: "Host file to write the compiled PRG or SID (per output) to, inside the allowed directories. Works with dryRun on every backend.",
+      minLength: 1,
+    })),
   },
   additionalProperties: false,
 });
@@ -1097,6 +1101,13 @@ export const audioModule = defineToolModule({
 
           const document = parseSidwave(source);
           const compiled = compileSidwaveToPrg(document);
+          const sidFile = outputFormat === "sid" ? compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress }) : undefined;
+          let outputFile: string | undefined;
+          if (parsed.outputPath) {
+            outputFile = resolveHostPath(parsed.outputPath, { purpose: "write" });
+            await mkdir(dirname(outputFile), { recursive: true });
+            await writeFile(outputFile, sidFile ? sidFile.sid : compiled.prg);
+          }
 
           let ranOnC64 = false;
           let runDetails: Record<string, unknown> | null = null;
@@ -1104,8 +1115,7 @@ export const audioModule = defineToolModule({
           if (!parsed.dryRun) {
             cancelGeneratedSidPlayback();
             if (outputFormat === "sid") {
-              const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
-              const result = await ctx.client.sidplayAttachment(sid.sid);
+              const result = await ctx.client.sidplayAttachment(sidFile!.sid);
               if (result.success) clearViceSymbols(); // labels belong to one program
               if (!result.success) {
                 throw new ToolExecutionError("C64 backend reported failure while playing compiled SID", {
@@ -1127,7 +1137,9 @@ export const audioModule = defineToolModule({
             }
           }
 
-          const message = `Compiled '${document.song.title}' to ${outputFormat.toUpperCase()}${parsed.dryRun ? " (dry run)" : ""}.`;
+          const durationSeconds = Math.round((compiled.totalFrames / compiled.framesPerSecond) * 10) / 10;
+          const entry = `$${compiled.entryAddress.toString(16).toUpperCase().padStart(4, "0")}`;
+          const message = `Compiled '${document.song.title}' to ${outputFormat.toUpperCase()}${parsed.dryRun ? " (dry run)" : ""}: ${compiled.prg.length} bytes, ${durationSeconds} s per loop (${compiled.totalFrames} frames at ${Math.round(compiled.framesPerSecond * 100) / 100} Hz), PRG entry ${entry} (SYS ${compiled.entryAddress})${outputFile ? `, written to ${outputFile}` : ""}.`;
           const voiceSummaries = document.voices.map((voice) => ({
             id: voice.id,
             name: voice.name,
@@ -1144,6 +1156,11 @@ export const audioModule = defineToolModule({
             dryRun: parsed.dryRun,
             format: outputFormat,
             prgSize: compiled.prg.length,
+            ...(sidFile ? { sidSize: sidFile.sid.length } : {}),
+            ...(outputFile ? { outputPath: outputFile } : {}),
+            totalFrames: compiled.totalFrames,
+            framesPerSecond: compiled.framesPerSecond,
+            durationSeconds,
             entryAddress: compiled.entryAddress,
             basicFreeBytes: compiled.basicFreeBytes,
             warnings: compiled.warnings,

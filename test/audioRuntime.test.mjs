@@ -298,7 +298,7 @@ describe("audio runtime integration", () => {
 
     expect(analyzed.isError).toBeUndefined();
     expect(analyzed.metadata?.analyzed).toBe(true);
-    expect(String(analyzed.content?.[0]?.text ?? "")).toContain("Voice 1:");
+    expect(String(analyzed.content?.[0]?.text ?? "")).toContain("Mix:");
     expect(String(analyzed.content?.[0]?.text ?? "")).toContain("sounds accurate");
   });
 
