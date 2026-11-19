@@ -480,7 +480,7 @@ async function main() {
 
       const response = toCallToolResult(result);
       const latency = Date.now() - startedAt;
-      const bytes = payloadByteLength(response);
+      const bytes = contentByteLength(response.content);
       const status = result.isError ? "error" : "ok";
 
       toolLogger.info(`call tool name=${name} status=${status} bytes=${bytes} latencyMs=${latency}`);
@@ -503,7 +503,7 @@ async function main() {
       const latency = Date.now() - startedAt;
       const fallback = unknownErrorResult(error);
       const response = toCallToolResult(fallback);
-      const bytes = payloadByteLength(response);
+      const bytes = contentByteLength(response.content);
 
       toolLogger.error(`call tool name=${name} status=failed bytes=${bytes} latencyMs=${latency} error=${formatErrorMessage(error)}`);
 
@@ -658,6 +658,11 @@ async function main() {
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
   });
+}
+
+/** Bytes of the content blocks, for the log line; serialising a large result once more only to count it is wasted time. */
+function contentByteLength(content: ReturnType<typeof toCallToolResult>["content"]): number {
+  return content.reduce((sum, block) => sum + Buffer.byteLength(block.type === "text" ? block.text : block.data), 0);
 }
 
 function createPlatformResourceDescriptor() {
