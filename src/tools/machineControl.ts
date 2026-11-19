@@ -104,6 +104,9 @@ async function waitForReadyPrompt(
   const start = Date.now();
   await new Promise((resolve) => setTimeout(resolve, Math.min(READY_SETTLE_MS, timeoutMs)));
   let lastError: string | undefined;
+  // A boot clears the screen, so once any read differs from the screen before the reset, a READY.
+  // that matches the old screen again is the new prompt and needs no grace period.
+  let changedSinceReset = false;
   const tolerantClient = {
     async readScreen(): Promise<string> {
       const remaining = timeoutMs - (Date.now() - start);
@@ -111,7 +114,8 @@ async function waitForReadyPrompt(
         const screen = await withinMs(ctx.client.readScreen(), remaining);
         if (screen === undefined) return "";
         lastError = undefined;
-        if (before !== undefined && screen === before && Date.now() - start < READY_UNCHANGED_GRACE_MS) return "";
+        if (before !== undefined && screen !== before) changedSinceReset = true;
+        if (before !== undefined && !changedSinceReset && screen === before && Date.now() - start < READY_UNCHANGED_GRACE_MS) return "";
         return screen;
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
@@ -136,6 +140,10 @@ async function withReadyResult(
 ) {
   if (parsed.waitForReady !== true) {
     return textResult(baseMessage, { success: true, details });
+  }
+  if (details.promptOk === true) {
+    // The backend itself waited for the READY. prompt (VICE does on reset and reboot).
+    return textResult(`${baseMessage} READY. prompt confirmed by the backend.`, { success: true, details, ready: true, readyElapsedMs: 0 });
   }
   const { ready, readyElapsedMs, lastError, cancelled } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000, before);
   if (cancelled) {

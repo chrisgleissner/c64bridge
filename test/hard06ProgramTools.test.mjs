@@ -123,3 +123,22 @@ test("HARD06 PROGMEM-1 a checkpoint hit inside the program after SYS is a starte
   }
   clearViceSymbols();
 });
+
+test("HARD06 PROGMEM-3 reset waitForReady trusts a backend that already saw READY. and skips the grace after the screen changed", async () => {
+  const { machineControlModule } = await import("../src/tools/machineControl.js");
+  const boot = "    **** COMMODORE 64 BASIC V2 ****\n\nREADY.\n";
+  // VICE: the backend reset reports the prompt it waited for.
+  const vice = { async readScreen() { return boot; }, async reset() { return { success: true, details: { pointersOk: true, promptOk: true } }; } };
+  let started = Date.now();
+  let result = await machineControlModule.invoke("reset_c64", { waitForReady: true }, { client: vice, logger, platform: platform("vice") });
+  assert.equal(result.isError, undefined);
+  assert.equal(result.metadata.ready, true);
+  assert.ok(Date.now() - started < 1000, `VICE reset took ${Date.now() - started} ms`);
+  // Ultimate: the screen is cleared during the boot and then shows the same boot screen again.
+  let reads = 0;
+  const ultimate = { async readScreen() { reads += 1; return reads === 2 ? "" : boot; }, async reset() { return { success: true, details: {} }; } };
+  started = Date.now();
+  result = await machineControlModule.invoke("reset_c64", { waitForReady: true }, { client: ultimate, logger, platform: platform("c64u") });
+  assert.equal(result.metadata.ready, true);
+  assert.ok(Date.now() - started < 2000, `Ultimate reset took ${Date.now() - started} ms`);
+});
