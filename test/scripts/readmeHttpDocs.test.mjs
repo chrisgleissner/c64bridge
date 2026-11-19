@@ -14,3 +14,10 @@ test("PACKAGE-2 README HTTP section documents the real /mcp JSON-RPC endpoint", 
   assert.ok(!/\/tools\/c64_/.test(section), "there are no /tools/<name> routes");
   assert.ok(!section.includes("8000"), "the default port is 3000");
 });
+
+test("PACKAGE-10 developer guide states that Bun is required to build and test", () => {
+  const guide = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../../doc/developer.md"), "utf8");
+  assert.ok(!/Bun\*\* ≥ 1\.3 optional/.test(guide));
+  assert.ok(/Bun[^\n]*required to build and test/.test(guide));
+  assert.ok(!guide.includes("respects package-lock"));
+});
