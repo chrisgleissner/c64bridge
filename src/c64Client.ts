@@ -164,6 +164,17 @@ export function audioSampleRateForSystemMode(mode: string | null): number {
     : C64U_PAL_AUDIO_SAMPLE_RATE;
 }
 
+/** Longest wait for the first audio datagram after the stream started. */
+const AUDIO_FIRST_DATAGRAM_TIMEOUT_MS = 1_500;
+
+/**
+ * Time allowed for an audio capture: three times its duration at the stream's sample rate plus
+ * 1.5 s for the stream to start. (The stream delivers about 48,000 pairs per second.)
+ */
+export function audioCaptureTimeoutMs(samplePairs: number, sampleRateHz: number): number {
+  return Math.ceil((samplePairs / sampleRateHz) * 3_000) + 1_500;
+}
+
 // A partial capture must still hold one analysis window (2048 stereo frames).
 const MIN_PARTIAL_AUDIO_VALUES = 2048 * 2;
 const STREAM_HOST_RESOLVE_ERROR = "Network Host Resolve Error";
@@ -2224,11 +2235,13 @@ export class C64Client {
     let notifyCapture: () => void = () => {};
     let streamAttempted = false;
     let failed = false;
+    let datagramSeen = false;
 
     // The firmware can emit UDP before its REST response reaches us. Listen
     // before starting, and cap collection even while start/config/stop requests are pending.
     const onMessage = (msg: Buffer, rinfo: { address: string }) => {
       if (!acceptsSource(rinfo.address)) return;
+      datagramSeen = true;
       if (captureSettled || captureError || collectedValues >= neededValues) return;
       try {
         const packet = parseAudioPacket(msg);
@@ -2261,8 +2274,17 @@ export class C64Client {
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "audio", target), "start audio stream");
 
       await new Promise<void>((resolve, reject) => {
-        const timeoutMs = options?.timeoutMs ?? Math.max(1_000, Math.ceil(samplePairs / 192) * 500);
+        const sampleRateHz = options?.sampleRateHz ?? C64U_NTSC_AUDIO_SAMPLE_RATE;
+        const timeoutMs = options?.timeoutMs ?? audioCaptureTimeoutMs(samplePairs, sampleRateHz);
+        // The stream sends a datagram every few milliseconds; none at all means UDP from the device does not arrive.
+        const silenceTimer = setTimeout(() => {
+          if (captureSettled || datagramSeen) return;
+          captureSettled = true;
+          clearTimeout(timer);
+          reject(new Error(`No audio datagram arrived within ${AUDIO_FIRST_DATAGRAM_TIMEOUT_MS}ms after the audio stream started. Check that UDP from the device reaches this host (firewall, network route).`));
+        }, Math.min(AUDIO_FIRST_DATAGRAM_TIMEOUT_MS, timeoutMs));
         const timer = setTimeout(() => {
+          clearTimeout(silenceTimer);
           captureSettled = true;
           // UDP drops packets, so a count-based capture can fall short. Analysis accepts what arrived.
           if (options?.acceptPartial && collectedValues >= MIN_PARTIAL_AUDIO_VALUES) {
@@ -2277,6 +2299,7 @@ export class C64Client {
           if (captureError || collectedValues >= neededValues) {
             captureSettled = true;
             clearTimeout(timer);
+            clearTimeout(silenceTimer);
             if (captureError) reject(captureError);
             else resolve();
           }
