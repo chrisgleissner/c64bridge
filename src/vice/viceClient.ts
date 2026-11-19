@@ -76,6 +76,8 @@ export interface ViceDisplaySnapshot {
 
 interface PendingRequest {
   cmd: number;
+  /** The command byte that was sent (the expected response type can differ, for example 0x12 answers 0x11). */
+  sent?: number;
   resolve: (frame: Buffer) => void;
   reject: (err: unknown) => void;
   onFrame?: (type: number, frame: Buffer) => void;
@@ -90,6 +92,34 @@ interface SendOptions {
 
 /** How long a TCP connect to the monitor may take before it is abandoned. */
 export const VICE_CONNECT_TIMEOUT_MS = 5_000;
+
+/** Error codes of the binary monitor (data/vice/vice-binary-monitor-spec.md, "Generic Errors"). */
+const BM_ERROR_TEXT: Readonly<Record<number, string>> = {
+  0x01: "object does not exist",
+  0x02: "invalid memspace",
+  0x80: "incorrect command length",
+  0x81: "invalid parameter value",
+  0x82: "unsupported API version",
+  0x83: "unknown command type",
+  0x8f: "general failure after basic validation",
+};
+
+const BM_COMMAND_NAME: Readonly<Record<number, string>> = {
+  0x01: "memory get", 0x02: "memory set", 0x11: "checkpoint get", 0x12: "checkpoint set", 0x13: "checkpoint delete",
+  0x14: "checkpoint list", 0x15: "checkpoint toggle", 0x22: "condition set", 0x31: "registers get", 0x32: "registers set",
+  0x41: "dump", 0x42: "undump", 0x51: "resource get", 0x52: "resource set", 0x71: "advance instructions", 0x72: "keyboard feed",
+  0x73: "execute until return", 0x81: "ping", 0x82: "banks available", 0x83: "registers available", 0x84: "display get",
+  0x85: "vice info", 0x86: "cpu history", 0x91: "palette get", 0xa2: "joyport set", 0xaa: "exit", 0xb2: "userport set",
+  0xbb: "quit", 0xcc: "reset", 0xdd: "autostart",
+};
+
+/** "BM error 0x81 (invalid parameter value) in memory get 0x01", for the client of the tool that never saw the frame. */
+export function describeMonitorError(code: number, command?: number): string {
+  const text = BM_ERROR_TEXT[code];
+  const name = command === undefined ? undefined : BM_COMMAND_NAME[command];
+  const where = command === undefined ? "" : ` in ${name ? `${name} ` : "command "}0x${command.toString(16).padStart(2, "0")}`;
+  return `BM error 0x${code.toString(16)}${text ? ` (${text})` : ""}${where}`;
+}
 
 /** Per-request timeout. C64BRIDGE_VICE_REQUEST_TIMEOUT_MS overrides it, for tests of the timeout path. */
 function viceRequestTimeoutMs(cmd: number): number {
@@ -320,7 +350,7 @@ export class ViceClient {
 
       if (err !== 0x00) {
         if (pending.timer) clearTimeout(pending.timer);
-        pending.reject(new Error(`BM error 0x${err.toString(16)}`));
+        pending.reject(new Error(describeMonitorError(err, pending.sent)));
         this.pending.delete(reqId);
         continue;
       }
@@ -372,6 +402,7 @@ export class ViceClient {
     const promise = new Promise<Buffer>((resolve, reject) => {
       const pending: PendingRequest = {
         cmd: expectedCmd,
+        sent: cmd,
         resolve,
         reject,
         onFrame: options?.onFrame,

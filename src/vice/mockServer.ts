@@ -231,6 +231,7 @@ export class ViceMockServer {
   }
 
   private handleSocket(socket: net.Socket): void {
+    socket.setNoDelay(true); // Two small writes in a row (event, then response) would otherwise wait for the peer's delayed ACK, about 40 ms.
     this.sockets.add(socket);
     this.connectionsOpened += 1;
     const connection = this.connectionsOpened;
@@ -313,8 +314,8 @@ export class ViceMockServer {
       this.emitStopped(socket);
     }
     switch (cmd) {
-      case 0x85: // info
-        return buildResponse(cmd, reqId);
+      case 0x85: // info: ML | MV (main version 3.10.0.0) | SL | SV (SVN revision 0)
+        return buildResponse(cmd, reqId, Buffer.from([4, 3, 10, 0, 0, 4, 0, 0, 0, 0]));
       case 0xCC: { // reset: types 8-11 reset only that drive's CPU
         const type = body[0] ?? 0;
         if (type >= 8 && type <= 11) {
@@ -345,7 +346,7 @@ export class ViceMockServer {
         const id = body.readUInt32LE(0);
         const checkpoint = this.checkpoints.get(id);
         if (!checkpoint) {
-          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x83);
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01); // OBJECT_MISSING, as the specification says
         }
         return buildResponse(cmd, reqId, this.encodeCheckpoint(checkpoint));
       }
@@ -378,21 +379,23 @@ export class ViceMockServer {
       }
       case 0x13: { // checkpoint delete
         const id = body.readUInt32LE(0);
-        this.checkpoints.delete(id);
+        if (!this.checkpoints.delete(id)) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01);
         return buildResponse(cmd, reqId);
       }
       case 0x14: { // checkpoint list
         for (const checkpoint of this.checkpoints.values()) {
           socket.write(buildResponse(0x11, reqId, this.encodeCheckpoint(checkpoint)));
         }
-        return buildResponse(cmd, reqId);
+        const count = Buffer.alloc(4); // the specification: 0x14 | CC:u32, the total checkpoint count
+        count.writeUInt32LE(this.checkpoints.size, 0);
+        return buildResponse(cmd, reqId, count);
       }
       case 0x15: { // checkpoint toggle
         const id = body.readUInt32LE(0);
         const enabled = body[4] === 1;
         const checkpoint = this.checkpoints.get(id);
         if (!checkpoint) {
-          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x83);
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01); // OBJECT_MISSING, as the specification says
         }
         checkpoint.enabled = enabled;
         return buildResponse(cmd, reqId);
@@ -401,12 +404,14 @@ export class ViceMockServer {
         const id = body.readUInt32LE(0);
         const checkpoint = this.checkpoints.get(id);
         if (!checkpoint) {
-          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x83);
+          return buildResponse(cmd, reqId, Buffer.alloc(0), 0x01); // OBJECT_MISSING, as the specification says
         }
         checkpoint.hasCondition = (body[4] ?? 0) > 0;
         return buildResponse(cmd, reqId);
       }
       case 0x01: { // mem get
+        if (body.length !== 8) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x80);
+        if (body[5]! > 4) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x02);
         const start = body.readUInt16LE(1);
         const end = body.readUInt16LE(3);
         if (start > end) {
@@ -423,8 +428,12 @@ export class ViceMockServer {
         return buildResponse(cmd, reqId, payload);
       }
       case 0x02: { // mem set
+        if (body.length < 8) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x80);
+        if (body[5]! > 4) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x02);
         const start = body.readUInt16LE(1);
         const end = body.readUInt16LE(3);
+        if (start > end) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x81);
+        if (body.length !== 8 + (end - start + 1)) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x80);
         const payload = body.subarray(8);
         for (let i = 0; i < payload.length && start + i <= 0xffff; i += 1) {
           this.memory[start + i] = payload[i];
