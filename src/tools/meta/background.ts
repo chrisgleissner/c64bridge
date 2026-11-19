@@ -62,7 +62,8 @@ const MAX_LOG_BYTES = 256 * 1024;
 
 // Operations runOperation implements, including the *_memory aliases.
 const SUPPORTED_OPERATIONS = ["read", "write", "read_screen", "menu_button", "read_memory", "write_memory"] as const;
-const MAX_STORED_RESULT_CHARS = 4096;
+// The registry file is rewritten on every persist, so a stored result stays small (a screen is 1000 characters).
+const MAX_STORED_RESULT_CHARS = 1024;
 
 function summariseResult(result: unknown): unknown {
   let text: string;

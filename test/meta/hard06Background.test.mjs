@@ -112,3 +112,15 @@ test("HARD06 META-14 a read_screen task reads the screen where $D018 and $DD00 p
     assert.ok(reads.some(([address]) => address === 0x0800));
   });
 });
+
+test("HARD06 META-18 a stored task result is capped at 1024 characters", async () => {
+  await withState("h6bg6", async () => {
+    const client = { readMemory: async () => ({ success: true, data: "$" + "AB".repeat(2000) }) };
+    const ctx = { client, logger: createLogger() };
+    await metaModule.invoke("start_background_task", { name: "big", operation: "read", intervalMs: 100, maxIterations: 1 }, ctx);
+    const done = await waitForTaskCompletion(metaModule, "big", ctx);
+    assert.equal(done.status, "completed");
+    assert.equal(done.lastResult.truncated, true);
+    assert.equal(done.lastResult.preview.length, 1024);
+  });
+});
