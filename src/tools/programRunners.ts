@@ -617,15 +617,22 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
 
+    const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
+    const programEnd = loadAddress + Math.max(0, prg.length - 2); // exclusive
     const result = await ctx.client.uploadAndRunAsm(parsed.program, asmResult);
-    if (!result.success) {
+    const keyboardFeed = toRecord(result.details)?.keyboard as { status?: string; pending?: number; stoppedAt?: number } | undefined;
+    // A checkpoint that stops the CPU inside the loaded program means SYS reached the program: it
+    // started and is held at the checkpoint. A stop anywhere else (BASIC or KERNAL while SYS was
+    // typed) means it did not start.
+    const stoppedAt = keyboardFeed?.status === "stopped" && typeof keyboardFeed.stoppedAt === "number" ? keyboardFeed.stoppedAt : undefined;
+    const stoppedInProgram = stoppedAt !== undefined && stoppedAt >= loadAddress && stoppedAt < programEnd;
+    if (!result.success && !stoppedInProgram) {
       return toolErrorResult(
         new ToolExecutionError("C64 backend reported failure while running assembly program", {
           details: extractFailureDetails(result.details),
         }),
       );
     }
-    const keyboardFeed = toRecord(result.details)?.keyboard as { status?: string; pending?: number } | undefined;
     const startQueued = keyboardFeed?.status === "queued";
     if (startQueued && shouldVerify) {
       return toolErrorResult(
@@ -652,9 +659,13 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     let verified = false;
     let execution: "confirmed" | "unconfirmed" | undefined;
     let loadCheck: string | undefined;
-    const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
     const expected = { address: loadAddress, bytes: prg.subarray(2) };
-    try {
+    if (stoppedInProgram) {
+      // The CPU is held at a checkpoint inside the program: that is evidence of execution, and
+      // polling the screen of a stopped machine would only wait.
+      execution = "confirmed";
+      verified = shouldVerify;
+    } else try {
       const outcome: { status: string; reason?: string; loadCheck?: string; load?: { address: number; expected: string; found: string } } = shouldVerify
         ? await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, expected) as AsmPollResult
         : await (async () => {
@@ -699,6 +710,9 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       }
     }
 
+    const fmt = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+    const stopLabel = stoppedInProgram ? symbolEntries.find(([, address]) => address === stoppedAt)?.[0] : undefined;
+    const stopFields = stoppedInProgram ? { stopped: true, stoppedAt: fmt(stoppedAt!), ...(stopLabel ? { stoppedAtLabel: stopLabel } : {}) } : {};
     const data = {
       kind: "upload_run_asm" as const,
       format: "prg" as const,
@@ -709,9 +723,12 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...stopFields,
       ...symbolFields,
     };
-    const message = startQueued
+    const message = stoppedInProgram
+      ? `Assembly program assembled, uploaded and started; a checkpoint stopped the CPU at ${fmt(stoppedAt!)}${stopLabel ? ` (${stopLabel})` : ""} inside the program. Use c64_debug to inspect, step or continue.`
+      : startQueued
       ? `Assembly program assembled, uploaded and loaded. The SYS command is queued (${keyboardFeed?.pending ?? "?"} character(s) pending) because the CPU is paused; the program starts when the machine resumes.`
       : execution === "unconfirmed"
       ? "Assembly program assembled, uploaded and loaded, and the SYS command was typed. Execution was not observed (verify:false does not poll); pass verify:true to poll the screen for evidence."
@@ -725,6 +742,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...stopFields,
       ...symbolFields,
     });
     return { ...base, structuredContent: { type: "json", data } };

@@ -102,3 +102,24 @@ test("HARD06 PROGMEM-6 upload_run_basic verify auto-fixes an error that appears 
     if (saved === undefined) delete process.env.C64BRIDGE_POLL_INTERVAL_MS; else process.env.C64BRIDGE_POLL_INTERVAL_MS = saved;
   }
 });
+
+test("HARD06 PROGMEM-1 a checkpoint hit inside the program after SYS is a started program with its labels", async () => {
+  const { clearViceSymbols, getSymbolAddress } = await import("../src/tools/translation/symbolRegistry.js");
+  clearViceSymbols();
+  const source = "*=$C000\nstart: lda #1\nloop: sta $d020\n jmp loop\n";
+  const { client } = asmClient(source, {
+    async uploadAndRunAsm() {
+      return { success: false, details: { started: false, entryAddress: 0xc000, keyboard: { status: "stopped", pending: 9, stoppedAt: 0xc000 } } };
+    },
+  });
+  for (const verify of [false, true]) {
+    const result = await programRunnersModule.invoke("upload_run_asm", { program: source, verify }, { client, logger, platform: platform("vice") });
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+    assert.equal(result.structuredContent.data.stopped, true);
+    assert.equal(result.structuredContent.data.stoppedAt, "$C000");
+    assert.equal(result.structuredContent.data.stoppedAtLabel, "start");
+    assert.match(result.content[0].text, /stopped the CPU at \$C000 \(start\)/);
+    assert.equal(getSymbolAddress("loop"), 0xc002);
+  }
+  clearViceSymbols();
+});

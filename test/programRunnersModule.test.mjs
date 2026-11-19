@@ -1176,7 +1176,8 @@ test("HARD03-029 upload_run_asm fails with the stop address when the feed was st
     platform: { id: "vice" },
     client: {
       async uploadAndRunAsm() {
-        return { success: false, details: { started: false, keyboard: { status: "stopped", pending: 6, stoppedAt: 49152 } } };
+        // HARD06 PROGMEM-1: a stop outside the program ($E5CD, KERNAL keyboard wait) means it did not start.
+        return { success: false, details: { started: false, keyboard: { status: "stopped", pending: 6, stoppedAt: 0xe5cd } } };
       },
     },
     logger: createLogger(),
