@@ -1189,10 +1189,29 @@ export class C64Client {
 
   // --- SID/Music helpers ---
 
-  async sidSetVolume(volume: number, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+  /**
+   * Writes $D418. Its low nibble is the volume; bits 4-6 select the low-, band- and high-pass
+   * filter and bit 7 turns voice 3 off. The register is write-only, so the upper bits cannot be
+   * kept: they are `filterMode` (0-15, bit 0 = low-pass ... bit 3 = voice 3 off), or 0, which
+   * switches the filter modes off. The result states the value written.
+   */
+  async sidSetVolume(volume: number, pinnedFacade?: C64Facade, options?: { readonly filterMode?: number }): Promise<RunBasicResult> {
     const clamped = Math.max(0, Math.min(15, Math.floor(volume)));
-    const byte = Buffer.from([clamped]);
-    return this.writeMemory("$D418", this.bytesToHex(byte), pinnedFacade);
+    const filterMode = options?.filterMode === undefined ? undefined : Math.max(0, Math.min(15, Math.floor(options.filterMode)));
+    const value = ((filterMode ?? 0) << 4) | clamped;
+    const result = await this.writeMemory("$D418", this.bytesToHex(Uint8Array.of(value)), pinnedFacade);
+    if (!result.success) return result;
+    const details = (result.details && typeof result.details === "object" ? result.details : {}) as Record<string, unknown>;
+    return {
+      ...result,
+      details: {
+        ...details,
+        value,
+        ...(filterMode === undefined
+          ? { notice: "$D418 is write-only, so its filter mode bits 4-7 were set to 0: a low-, band- or high-pass filter in use is now off and voice 3 is on." }
+          : {}),
+      },
+    };
   }
 
   async sidReset(hard = false): Promise<RunBasicResult> {
