@@ -1961,7 +1961,11 @@ export class C64Client {
         return;
       }
       session.packets.push(packet);
-      this.flushC64uVideoCaptureWaiters(session);
+      try {
+        this.flushC64uVideoCaptureWaiters(session);
+      } catch (error) {
+        this.rejectC64uVideoCaptureWaiters(session, error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
     socket.on("error", (error) => {
