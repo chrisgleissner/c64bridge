@@ -343,6 +343,10 @@ const prgFileArgsSchema = objectSchema({
       description: prgPathDescription,
       minLength: 1,
     }),
+    location: optionalSchema(stringSchema({
+      description: "auto (default): Ultimate device path on c64u/u2, host path on VICE. host: read the file from the host and upload it (Ultimate). device: Ultimate path only.",
+      enum: ["auto", "host", "device"],
+    })),
     symbolsFile: optionalSchema(stringSchema({
       description: "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
       minLength: 1,
@@ -771,14 +775,44 @@ function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExec
   return { loaded, note: ` Loaded ${loaded} debug symbol(s).`, fields: { symbolsLoaded: loaded } as Record<string, unknown> };
 }
 
+const MAX_UPLOAD_PRG_BYTES = 65538;
+
+type PrgSource = { location: "host" | "device"; bytes?: Buffer; loadAddress?: number };
+
+// Decides where the PRG comes from. Host files are read and validated here, so
+// nothing reaches the device when the path or size is unacceptable.
+async function resolvePrgSource(
+  parsed: { path: string; location?: string },
+  ctx: ToolExecutionContext,
+): Promise<PrgSource> {
+  const requested = parsed.location ?? "auto";
+  const isVice = ctx.platform.id === "vice";
+  if (isVice) {
+    if (requested === "device") {
+      throw new ToolValidationError("location \"device\" is not available on VICE; PRG paths are host paths there.", { path: "$.location" });
+    }
+    return { location: "host" };
+  }
+  if (requested !== "host") return { location: "device" };
+  const bytes = await readHostFile(parsed.path, { maxBytes: MAX_UPLOAD_PRG_BYTES + 1 });
+  if (bytes.length < 2 || bytes.length > MAX_UPLOAD_PRG_BYTES) {
+    throw new ToolValidationError(
+      `PRG file must be 2 to ${MAX_UPLOAD_PRG_BYTES} bytes (load address plus at most 64 KiB); ${parsed.path} is ${bytes.length} bytes.`,
+      { path: "$.path" },
+    );
+  }
+  return { location: "host", bytes, loadAddress: bytes.readUInt16LE(0) };
+}
+
 async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = prgFileArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Loading PRG file", { path: parsed.path });
 
+    const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
-    const result = await ctx.client.loadPrgFile(parsed.path);
+    const result = source.bytes ? await ctx.client.loadPrg(source.bytes) : await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while loading PRG", {
         details: extractFailureDetails(result.details),
@@ -793,6 +827,8 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
       ...symbolReport.fields,
     };
     const base = textResult(`PRG ${parsed.path} loaded into memory.${symbolReport.note}`, {
@@ -800,6 +836,8 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
       ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
@@ -819,9 +857,10 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     // Validate and parse the symbols file before touching the registered
     // symbols, and replace them only after the PRG has started. A bad path or a
     // failed run then leaves the previous symbol table as it was.
+    const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
-    const result = await ctx.client.runPrgFile(parsed.path);
+    const result = source.bytes ? await ctx.client.runPrg(source.bytes) : await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running PRG", {
         details: extractFailureDetails(result.details),
@@ -837,6 +876,8 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
       ...symbolReport.fields,
     };
     const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolReport.note}`, {
@@ -844,6 +885,8 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
       ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };

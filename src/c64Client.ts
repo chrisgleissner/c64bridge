@@ -869,6 +869,16 @@ export class C64Client {
     }
   }
 
+  async loadPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      const res = await facade.loadPrg(prg);
+      return { success: res.success, details: res.details };
+    } catch (error) {
+      return { success: false, details: this.normaliseError(error) };
+    }
+  }
+
   /** Upload a SID binary and instruct firmware to play it (attachment mode). */
   async sidplayAttachment(sid: Uint8Array | Buffer, options?: { songnr?: number; songlengths?: Uint8Array | Buffer }): Promise<RunBasicResult> {
     try {
