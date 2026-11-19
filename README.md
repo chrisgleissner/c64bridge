@@ -10,10 +10,10 @@ Your AI Command Bridge for the Commodore 64.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
 
-[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D&quality=insiders)
-[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%2C%22VICE_BINARY%22%3A%22%2Fusr%2Flocal%2Fbin%2Fx64sc%22%2C%22VICE_DIRECTORY%22%3A%22%2Fusr%2Flocal%2Fshare%2Fvice%22%2C%22VICE_VISIBLE%22%3A%22true%22%2C%22VICE_WARP%22%3A%22false%22%7D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSIsIlZJQ0VfQklOQVJZIjoiL3Vzci9sb2NhbC9iaW4veDY0c2MiLCJWSUNFX0RJUkVDVE9SWSI6Ii91c3IvbG9jYWwvc2hhcmUvdmljZSIsIlZJQ0VfVklTSUJMRSI6InRydWUiLCJWSUNFX1dBUlAiOiJmYWxzZSJ9fQ==)
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D%7D&quality=insiders)
+[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
 [![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
 C64 Bridge is an MCP server for controlling and working with a Commodore 64 from an AI client.
@@ -440,6 +440,7 @@ Otherwise, put the following into your own `.vscode/mcp.json`:
 {
   "servers": {
     "c64bridge": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
@@ -474,6 +475,7 @@ You can add `env` entries in `.vscode/mcp.json` to select a config file, overrid
 {
   "servers": {
     "c64bridge": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
@@ -674,6 +676,30 @@ Use `--scope user` to make it available across all your projects, or `--scope pr
 **Claude Code VS Code plugin** — the plugin reads the same `.mcp.json` and the same user-scope `claude mcp add` registrations as the CLI. No extra setup is required beyond installing the plugin and approving the project server prompt. The existing [.vscode/mcp.json](./.vscode/mcp.json) is read by GitHub Copilot, not by Claude Code; the two files coexist without conflict because they target different clients with different config schemas.
 
 **Verify it works** — after registration, run `claude mcp list` (CLI) or open the MCP panel (plugin) and look for `c64bridge`. Then ask Claude Code something like *“use vice: write a small BASIC program that clears the screen and prints HELLO CLAUDE”* — it should call `c64_select_backend` and `c64_program` directly. If tools do not appear, confirm Node 24+ is on `PATH`, that the server was approved at the requested scope, and that the backend is reachable per the [Configuration](#configuration) section.
+
+### Claude Desktop and Cursor
+
+Both clients use the same `mcpServers` shape (checked against the official [MCP quickstart for Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and the [Cursor MCP documentation](https://cursor.com/docs/context/mcp)):
+
+```json
+{
+  "mcpServers": {
+    "c64bridge": {
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": {
+        "C64U_HOST": "192.168.1.99"
+      }
+    }
+  }
+}
+```
+
+- **Claude Desktop**: Settings, Developer, Edit Config opens `claude_desktop_config.json` (macOS `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows `%APPDATA%\Claude\claude_desktop_config.json`). Restart Claude Desktop completely after saving. Claude Desktop starts the server with its own `PATH`; if `npx` is not found or is too old, use the absolute path of a Node 24 `npx` as `command`.
+- **Cursor**: `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for all projects.
+- Replace `192.168.1.99` with the IP address of your Ultimate (the default host name `c64u` only works when it resolves on your network). For VICE use `"C64_MODE": "vice"` instead.
+- The server writes its log to stderr and then waits for the client on stdin. Started by hand in a terminal it appears to hang; that is expected, stop it with Ctrl-C.
+- Setting `C64U_HOST` with `claude mcp add` uses its `--env` option (syntax unverified here; the shared configuration files above work with every client).
 
 ## Example Workflow
 

@@ -64,21 +64,19 @@ If the current agent cannot directly see `c64bridge` MCP tools such as `c64_prog
 For a visible single-backend VICE greeting, prefer a no-probe fast path and avoid screenshot capture or Binary Monitor verification unless the user explicitly requests confirmation artifacts.
 Once the MCP server is connected and tools are available in-session, do not spend extra turns inspecting README sections or tool manifests for routine `c64_select_backend`, `c64_program`, or `c64_memory` operations.
 
-3) VS Code Copilot Chat (MCP)
+3) VS Code (GitHub Copilot Chat, MCP)
 
-Add to Settings (JSON):
+Add to `.vscode/mcp.json` (top-level key `servers`, `type` is required):
 
 ```json
 {
-  "github.copilot.chat.experimental.mcp": {
-    "servers": [
-      { "name": "c64bridge", "command": "node", "args": ["./node_modules/c64bridge/dist/index.js"], "type": "stdio" }
-    ]
+  "servers": {
+    "c64bridge": { "type": "stdio", "command": "npx", "args": ["-y", "c64bridge@latest"] }
   }
 }
 ```
 
-Keep the server running; tools are discovered automatically in the chat session.
+Start the server from the entry shown above it; tools are discovered automatically in the chat session.
 
 4) Shared agent instructions
 
