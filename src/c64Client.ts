@@ -3218,6 +3218,8 @@ function printerTextExpression(input: string, target: "commodore" | "epson", sec
   const needsChr = (char: string): number | undefined => {
     // Literal < and : and { would be expanded to control codes (<RETURN>, :cr:, {home}) by the tokenizer.
     if (char === "<" || char === ":" || char === "{") return char.charCodeAt(0);
+    // A NUL byte in a string literal would end the tokenised BASIC line.
+    if (char === "\u0000") return 0;
     if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
     if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
     return undefined;

@@ -45,3 +45,26 @@ test("long lines are split into short BASIC lines joined with semicolons", () =>
   for (const line of printLines) assert.ok(line.length <= 78, line);
   assert.ok(printLines.slice(0, -1).every((line) => line.endsWith(";")));
 });
+
+// Review correction: a NUL byte inside a string literal ends the tokenised BASIC line, and the
+// interpreter then reads the following text bytes as a link, a line number and statements.
+function lineEnds(prg) {
+  const base = prg.readUInt16LE(0);
+  const ends = [];
+  for (let offset = 2; prg.readUInt16LE(offset) !== 0;) {
+    const next = prg.readUInt16LE(offset) - base + 2;
+    ends.push({ firstZero: prg.indexOf(0, offset + 4), expected: next - 1 });
+    offset = next;
+  }
+  return ends;
+}
+
+test("a NUL character cannot end a BASIC line early and expose raw token bytes", () => {
+  for (const text of ["\u0000ab\u009e64738", "X\u0000\u0000Y"]) {
+    const prg = basicToPrg(buildPetsciiScreenBasic({ text }));
+    for (const { firstZero, expected } of lineEnds(prg)) {
+      assert.equal(firstZero, expected, `line ends at its terminator for ${JSON.stringify(text)}`);
+    }
+  }
+  assert.ok(buildPetsciiScreenBasic({ text: "\u0000" }).includes("CHR$(0)"));
+});
