@@ -660,10 +660,11 @@ function parseAddressArg(raw: string, fieldPath: string): number {
   const trimmed = raw.trim();
   let addr = parseNumericLiteral(trimmed, fieldPath);
   if (addr === undefined) {
-    // Loaded program symbols first, then the documented system symbols.
+    // Bare hex stays an error, so a label cannot shadow a numeric form. Then
+    // loaded program symbols, then the documented system symbols.
+    assertNotBareHex(trimmed, fieldPath);
     const resolved = getSymbolAddress(trimmed) ?? resolveAddressSymbol(trimmed);
     if (resolved === undefined) {
-      assertNotBareHex(trimmed, fieldPath);
       throw new ToolValidationError(`Unknown address or symbol: ${trimmed}; no such symbol is loaded`, { path: fieldPath });
     }
     addr = resolved;

@@ -774,10 +774,10 @@ function formatAddress(value: number): string {
 function parseAddress(value: string, label: string): number {
   const parsed = parseNumericLiteral(value, `$.${label}`);
   if (parsed === undefined) {
+    assertNotBareHex(value, `$.${label}`);
     const symbol = getSymbolAddress(value.trim());
     if (symbol !== undefined) return symbol;
-    assertNotBareHex(value, `$.${label}`);
-    throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });
+    throw new ToolValidationError(`Invalid ${label}: not a number and no such symbol is loaded`, { path: `$.${label}` });
   }
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
     throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });

@@ -94,3 +94,20 @@ test("HARD04-003 c64_debug create_checkpoint accepts a registered label", async 
   assert.equal(unknown.isError, true);
   assert.equal(calls.length, 1);
 });
+
+test("HARD04-003 a label spelled like bare hex does not shadow the ambiguous-hex rejection", async () => {
+  setViceSymbols([["beef", 0xc000]]);
+  const reads = [];
+  const res = await toolRegistry.invoke("c64_memory", { op: "read", address: "beef", length: 1 }, c64uCtx(reads));
+  assert.equal(res.isError, true);
+  assert.match(res.content.map((c) => c.text ?? "").join("\n"), /hexadecimal needs a prefix/);
+  assert.equal(reads.length, 0);
+  const calls = [];
+  const ctx = {
+    client: { async viceCheckpointCreate(args) { calls.push(args); return {}; } },
+    rag: {}, logger, platform: platform("vice"), setPlatform: () => platform("vice"),
+  };
+  const dbg = await debugModuleGroup.invoke("c64_debug", { op: "create_checkpoint", address: "beef" }, ctx);
+  assert.equal(dbg.isError, true);
+  assert.equal(calls.length, 0);
+});
