@@ -655,6 +655,8 @@ export class ViceBackend implements C64Facade {
     ViceBackend.supervisors.clear();
   }
   private readonly debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
+  /** An explicitly configured VICE binary that does not exist; thrown when a launch is needed (never a silent other emulator). */
+  private binaryProblem: Error | null = null;
   private startupPromise: Promise<void> | null = null;
   private monitorQueue: Promise<void> = Promise.resolve();
   private lastProcessStart = 0;
@@ -675,12 +677,20 @@ export class ViceBackend implements C64Facade {
     const configBinary = config.exe !== undefined
       ? configuredString(config.exe) ?? (typeof config.exe === "string" ? config.exe : String(config.exe))
       : undefined;
-    const resolvedLaunch = resolveViceLaunch({
+    const launchOptions = {
       envBinary,
       configBinary,
       envDirectory: configuredString(process.env.VICE_DIRECTORY),
       configDirectory: configuredString(config.directory),
-    });
+    };
+    let resolvedLaunch: { binary: string; directory?: string };
+    try {
+      resolvedLaunch = resolveViceLaunch(launchOptions);
+    } catch (error) {
+      // An emulator that is already running needs no binary, so the problem is raised only when a launch is needed.
+      this.binaryProblem = error instanceof Error ? error : new Error(String(error));
+      resolvedLaunch = resolveViceLaunch({ ...launchOptions, envBinary: undefined, configBinary: undefined });
+    }
     this.exe = resolvedLaunch.binary;
 
     const envHost = normaliseViceHost(process.env.VICE_HOST);
@@ -796,6 +806,7 @@ export class ViceBackend implements C64Facade {
         extraArgs: this.extraArgs,
       });
     }
+    if (this.binaryProblem) throw this.binaryProblem;
     const handle = await startViceProcess(buildManagedViceProcessOptions({
       binary: this.exe,
       directory: this.directory,
@@ -1984,6 +1995,8 @@ function resolveViceBinary(
     if (resolvedExplicit) {
       return resolvedExplicit;
     }
+    const source = options.envBinary !== undefined ? "VICE_BINARY" : "the vice.exe configuration";
+    throw new Error(`The VICE binary '${explicit}' from ${source} was not found. Fix the path or remove it to use x64sc from PATH.`);
   }
 
   for (const candidate of ["/usr/local/bin/x64sc", "/usr/local/bin/x64"]) {

@@ -77,3 +77,16 @@ test("VICE-16 a step wait ends at once when the connection drops", async () => {
     assert.ok(Date.now() - started < 1_500, `waited ${Date.now() - started} ms`);
   }, { stepEventDelayMs: 5_000 });
 });
+
+test("VICE-13 a missing explicit VICE binary is an error when a launch is needed, not a silent other emulator", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const saved = { VICE_BINARY: process.env.VICE_BINARY, VICE_TEST_TARGET: process.env.VICE_TEST_TARGET };
+  process.env.VICE_BINARY = "/nonexistent/dir/x64sc";
+  delete process.env.VICE_TEST_TARGET;
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: 1 });
+    await assert.rejects(() => backend.readMemory(0x400, 1), /VICE binary '\/nonexistent\/dir\/x64sc' from VICE_BINARY was not found/);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});

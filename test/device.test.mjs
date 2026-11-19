@@ -1588,8 +1588,8 @@ test("device: VICE binary resolution falls back to PATH on other systems", () =>
   assert.equal(resolved, "C:/VICE/x64sc.exe");
 });
 
-test("device: VICE binary resolution falls back when an explicit path is missing", () => {
-  const resolved = __resolveViceBinaryForTests(
+test("device: VICE binary resolution refuses a missing explicit path instead of using another emulator (VICE-13)", () => {
+  assert.throws(() => __resolveViceBinaryForTests(
     { envBinary: "/usr/local/bin/x64sc" },
     (binary) => {
       if (binary === "/usr/local/bin/x64sc") {
@@ -1600,9 +1600,7 @@ test("device: VICE binary resolution falls back when an explicit path is missing
       }
       return null;
     },
-  );
-
-  assert.equal(resolved, "/usr/bin/x64sc");
+  ), /VICE_BINARY.*was not found/);
 });
 
 test("device: VICE launch resolution keeps an explicit binary while falling back to a detected resource directory", () => {
