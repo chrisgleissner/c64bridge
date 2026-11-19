@@ -92,16 +92,6 @@ const MUSIC_PRESETS: Record<MusicPresetName, MusicPresetDefinition> = {
   },
 };
 
-const silenceAndVerifyArgsSchema = objectSchema({
-  description: "Arguments for the silence_and_verify meta tool",
-  properties: {
-    durationSeconds: optionalSchema(numberSchema({ description: "Recording length in seconds for the silence probe.", minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
-    rmsThreshold: optionalSchema(numberSchema({ description: "Maximum allowed RMS to consider the capture silent.", minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
-    waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Delay in milliseconds after silencing before recording starts.", minimum: 0, maximum: 5000 }), DEFAULT_SILENCE_WAIT_MS),
-  },
-  additionalProperties: false,
-});
-
 const musicCompilePlayAnalyzeArgsSchema = objectSchema({
   description: "Compile a SIDWAVE score, play it, then record and analyze the audio output.",
   properties: {
@@ -259,7 +249,7 @@ async function performSilenceCheck(
   const { logger } = context;
   const label = options.label ?? "silence";
 
-  logger?.debug?.("silence_and_verify: running silence check", {
+  logger?.debug?.("silence check: running silence check", {
     stage: label,
     durationSeconds: options.durationSeconds,
     rmsThreshold: options.rmsThreshold,
@@ -285,7 +275,7 @@ async function performSilenceCheck(
   const maxRms = metrics.max ?? metrics.average ?? 0;
   const silent = maxRms <= options.rmsThreshold;
 
-  logger?.debug?.("silence_and_verify: silence check metrics", {
+  logger?.debug?.("silence check: silence check metrics", {
     stage: label,
     averageRms,
     maxRms,
@@ -466,48 +456,6 @@ export const tools: ToolDefinition[] = [
         if (error instanceof ToolExecutionError) {
           return toolErrorResult(error);
         }
-        return unknownErrorResult(error);
-      }
-    },
-  },
-  {
-    name: "silence_and_verify",
-    description:
-      "Silence all SID voices, capture a short sample, and ensure the output is below an RMS threshold.",
-    inputSchema: silenceAndVerifyArgsSchema.jsonSchema,
-    async execute(args, context) {
-      try {
-        const parsed = silenceAndVerifyArgsSchema.parse(args ?? {});
-        const durationSeconds = parsed.durationSeconds ?? DEFAULT_SILENCE_DURATION_SECONDS;
-        const rmsThreshold = parsed.rmsThreshold ?? DEFAULT_RMS_THRESHOLD;
-        const waitBeforeCaptureMs = parsed.waitBeforeCaptureMs ?? DEFAULT_SILENCE_WAIT_MS;
-
-        const analyzer = resolveAnalyzer(context);
-        const check = await performSilenceCheck(context, analyzer, {
-          durationSeconds,
-          rmsThreshold,
-          waitBeforeCaptureMs,
-          label: "primary",
-        });
-
-        return jsonResult(
-          {
-            silent: check.silent,
-            durationSeconds: check.durationSeconds,
-            waitBeforeCaptureMs,
-            threshold: rmsThreshold,
-            metrics: check.metrics,
-          },
-          {
-            success: check.silent,
-            silent: check.silent,
-          },
-        );
-      } catch (error) {
-        if (error instanceof ToolExecutionError) {
-          return toolErrorResult(error);
-        }
-
         return unknownErrorResult(error);
       }
     },
