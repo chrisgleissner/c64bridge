@@ -289,6 +289,9 @@ interface C64uVideoCaptureSession {
  */
 export const VIDEO_SESSION_MAX_PACKETS = 4096;
 
+/** Shortest interval between two diagnostic records about ignored video datagrams. */
+const IGNORED_VIDEO_REPORT_INTERVAL_MS = 10_000;
+
 export interface BitmapDisplayResult {
   readonly mode: "hires" | "multicolor";
   readonly bank: number;
@@ -2444,14 +2447,27 @@ export class C64Client {
     throw new Error(`Failed to ${action}: ${JSON.stringify(result.details ?? null)}`);
   }
 
+  /** Ignored video datagrams not yet reported, and when the last report was written. */
+  private ignoredVideoPackets = 0;
+  private ignoredVideoReportAt = 0;
+
   private parseVideoPacketOrNull(payload: Buffer): ReturnType<typeof parseVideoPacket> | null {
     try {
       return parseVideoPacket(payload);
     } catch (error) {
-      writeDiagnosticEvent("capture_video_packet_ignored", {
-        message: error instanceof Error ? error.message : String(error),
-        bytes: payload.length,
-      });
+      // A hostile stream can send thousands of bad datagrams per second: report at most one record
+      // per interval, carrying the number ignored since the previous record and the latest reason.
+      this.ignoredVideoPackets += 1;
+      const now = Date.now();
+      if (now - this.ignoredVideoReportAt >= IGNORED_VIDEO_REPORT_INTERVAL_MS) {
+        writeDiagnosticEvent("capture_video_packet_ignored", {
+          message: error instanceof Error ? error.message : String(error),
+          bytes: payload.length,
+          ignoredPackets: this.ignoredVideoPackets,
+        });
+        this.ignoredVideoPackets = 0;
+        this.ignoredVideoReportAt = now;
+      }
       return null;
     }
   }
