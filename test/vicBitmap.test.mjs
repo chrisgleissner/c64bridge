@@ -163,3 +163,62 @@ test("rangeOverlapsIo detects overlap with $D000-$DFFF", async () => {
   assert.equal(rangeOverlapsIo(0xC000, 8000), true);
   assert.equal(rangeOverlapsIo(0xD000, 0), false);
 });
+
+async function writeTempImage(name, build) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vicbitmap-g1-"));
+  const file = path.join(dir, name);
+  await build(file);
+  return { dir, file };
+}
+
+test("MEDIA-1: render with a light background colour (red channel >= 0x80) does not throw", async () => {
+  const { dir, file } = await writeTempImage("sq.png", (f) => new Jimp({ width: 40, height: 20, color: 0x00ff00ff }).write(f));
+  try {
+    for (const backgroundColor of [1, 2, 4, 7, 8, 10, 13, 15]) {
+      const prepared = await importImageAsVicBitmap({ imagePath: file, mode: "hires", backgroundColor });
+      assert.equal(prepared.backgroundColor, backgroundColor);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("MEDIA-2: multicolor preserveAspect keeps a square image square on screen", async () => {
+  const { dir, file } = await writeTempImage("sq2.png", (f) => new Jimp({ width: 200, height: 200, color: 0x00ff00ff }).write(f));
+  try {
+    const prepared = await importImageAsVicBitmap({ imagePath: file, mode: "multicolor", backgroundColor: 0 });
+    let minX = 40, maxX = -1, minY = 25, maxY = -1;
+    for (let cell = 0; cell < 1000; cell += 1) {
+      if (prepared.screenRam[cell] === 0) continue;
+      const x = cell % 40, y = Math.floor(cell / 40);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+    }
+    const widthCells = maxX - minX + 1, heightCells = maxY - minY + 1;
+    assert.ok(Math.abs(widthCells - heightCells) <= 1, `square should cover similar cells, got ${widthCells}x${heightCells}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("MEDIA-3: oversized GIF, BMP and JPEG headers are rejected before decoding", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vicbitmap-g1-"));
+  try {
+    const gif = Buffer.alloc(32);
+    gif.write("GIF89a", 0, "latin1");
+    gif.writeUInt16LE(40000, 6);
+    gif.writeUInt16LE(40000, 8);
+    const bmp = Buffer.alloc(64);
+    bmp.write("BM", 0, "latin1");
+    bmp.writeUInt32LE(40, 14);
+    bmp.writeInt32LE(40000, 18);
+    bmp.writeInt32LE(-40000, 22);
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x9c, 0x40, 0x9c, 0x40, 0x01, 0x01, 0x11, 0x00]);
+    for (const [name, data] of [["a.gif", gif], ["a.bmp", bmp], ["a.jpg", jpg]]) {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, data);
+      await assert.rejects(importImageAsVicBitmap({ imagePath: file, mode: "hires" }), /limit is 4096/, name);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
