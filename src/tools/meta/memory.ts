@@ -54,7 +54,7 @@ const memoryDumpToFileArgsSchema = objectSchema({
     length: numberSchema({ description: "Number of bytes to dump", integer: true, minimum: 1, maximum: 65536 }),
     outputPath: stringSchema({ description: "Destination file path", minLength: 1 }),
     format: optionalSchema(stringSchema({ description: "Output format: hex|binary", enum: ["hex", "binary"], default: "hex" as any }), "hex" as any),
-    chunkSize: optionalSchema(numberSchema({ description: "Chunk size for reads", integer: true, minimum: 1, maximum: 4096, default: 512 }), 512),
+    chunkSize: optionalSchema(numberSchema({ description: "Bytes per read request (default: the whole range in one read)", integer: true, minimum: 1, maximum: 65536 })),
     pauseDuringRead: optionalSchema(booleanSchema({ description: "Pause/resume around dump", default: true }), true),
     retries: optionalSchema(numberSchema({ description: "Retries per chunk on failure", integer: true, minimum: 0, maximum: 10, default: 1 }), 1),
   },
@@ -81,7 +81,7 @@ export const tools: ToolDefinition[] = [
             { path: "$.length" },
           );
         }
-        const chunk = Math.min(Math.max(1, parsed.chunkSize ?? 512), 4096);
+        const chunk = Math.min(Math.max(1, parsed.chunkSize ?? length), 65536);
         const pause = parsed.pauseDuringRead !== false;
         const outputPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
         const outDir = dirname(outputPath);

@@ -52,6 +52,16 @@ function bytesToHex(bytes: Uint8Array): string {
   return `$${Buffer.from(bytes).toString("hex").toUpperCase()}`;
 }
 
+async function readByte(ctx: { client: unknown }, address: number, pinned: unknown): Promise<number | undefined> {
+  try {
+    const read = await (ctx.client as any).readMemory(`$${formatAddressHex(address)}`, "1", pinned);
+    if (!read?.success || typeof read.data !== "string") return undefined;
+    return hexToBytes(read.data)[0];
+  } catch {
+    return undefined;
+  }
+}
+
 function countBits(byte: number): number {
   let b = byte & 0xFF;
   b = b - ((b >> 1) & 0x55);
@@ -68,7 +78,10 @@ interface SpriteAnalysis {
   nonZeroRows: number;
   totalSetBits: number;
   boundingBox: { minX: number; maxX: number; minY: number; maxY: number; width: number; height: number } | null;
-  rowActivations: Array<{ row: number; setBits: number; firstBit: number | null; lastBit: number | null }>;
+  rowActivations?: Array<{ row: number; setBits: number; firstBit: number | null; lastBit: number | null }>;
+  /** VIC bank (0-3) of the block and the sprite data pointer value that selects it within that bank. */
+  vicBank?: number;
+  pointer?: string;
 }
 
 function analyzeSprite(bytes: Uint8Array, startAddress: number): SpriteAnalysis | null {
@@ -129,11 +142,12 @@ const extractSpritesArgsSchema = objectSchema({
   properties: {
     address: stringSchema({ description: "Start address ($HHHH or decimal)", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to scan", integer: true, minimum: 63, maximum: 65536 }),
-    stride: optionalSchema(numberSchema({ description: "Stride between sprite candidates in bytes", integer: true, minimum: 1, default: 64 }), 64),
+    stride: optionalSchema(numberSchema({ description: "Stride between sprite candidates in bytes (at least 63; sprite blocks are 64 bytes apart)", integer: true, minimum: 63, default: 64 }), 64),
     maxSprites: optionalSchema(numberSchema({ description: "Maximum sprites to return", integer: true, minimum: 1, maximum: 256, default: 16 }), 16),
     minNonZeroRows: optionalSchema(numberSchema({ description: "Minimum non-empty rows required", integer: true, minimum: 1, maximum: 21, default: 4 }), 4),
     minSetBits: optionalSchema(numberSchema({ description: "Minimum number of set bits required", integer: true, minimum: 1, maximum: 504, default: 12 }), 12),
-    includeBase64: optionalSchema(booleanSchema({ description: "Include base64 data in response", default: true }), true),
+    includeBase64: optionalSchema(booleanSchema({ description: "Also include each sprite as base64 (bytesHex already carries the data)", default: false }), false),
+    includeRows: optionalSchema(booleanSchema({ description: "Include the per-row bit activation of each sprite", default: false }), false),
     outputDir: optionalSchema(stringSchema({ description: "Directory to write .spr files", minLength: 1 })),
     pauseDuringRead: optionalSchema(booleanSchema({ description: "Pause the machine during memory read", default: true }), true),
   },
@@ -198,9 +212,9 @@ function analyzeCharset(bytes: Uint8Array, startAddress: number): CharsetAnalysi
 }
 
 const ripCharsetArgsSchema = objectSchema({
-  description: "Locate and extract character set data from RAM.",
+  description: "Locate and extract character set data from RAM; without an address it checks the charset in use ($D018/$DD00) and the common RAM locations.",
   properties: {
-    address: optionalSchema(stringSchema({ description: "Start address to scan ($HHHH or decimal). If not provided, scans common locations.", minLength: 1 })),
+    address: optionalSchema(stringSchema({ description: "Start address to scan ($HHHH or decimal). If not provided, checks the active charset and common locations ($0800, $2000, $2800, $3000, $3800).", minLength: 1 })),
     scanRange: optionalSchema(stringSchema({ description: "Range to scan if address not provided: 'common' or 'full'", enum: ["common", "full"] }), "common"),
     outputPath: optionalSchema(stringSchema({ description: "File path to write charset binary", minLength: 1 })),
     pauseDuringRead: optionalSchema(booleanSchema({ description: "Pause the machine during memory read", default: true }), true),
@@ -234,7 +248,8 @@ export const tools: ToolDefinition[] = [
         const maxSprites = parsed.maxSprites ?? 16;
         const minNonZeroRows = parsed.minNonZeroRows ?? 4;
         const minSetBits = parsed.minSetBits ?? 12;
-        const includeBase64 = parsed.includeBase64 !== false;
+        const includeBase64 = parsed.includeBase64 === true;
+        const includeRows = parsed.includeRows === true;
         const pauseDuringRead = parsed.pauseDuringRead !== false;
 
         if (startAddress + length - 1 > 0xFFFF) {
@@ -276,6 +291,11 @@ export const tools: ToolDefinition[] = [
               analysis.base64 = Buffer.from(window).toString("base64");
             }
             analysis.offset = offset;
+            const spriteAddress = (startAddress + offset) & 0xFFFF;
+            // Sprite data pointer: the block number inside the 16 KB VIC bank (address within the bank / 64).
+            analysis.vicBank = spriteAddress >> 14;
+            analysis.pointer = `$${(((spriteAddress & 0x3FFF) >> 6) & 0xFF).toString(16).toUpperCase().padStart(2, "0")}`;
+            if (!includeRows) delete (analysis as Partial<SpriteAnalysis>).rowActivations;
             sprites.push(analysis);
           }
 
@@ -300,6 +320,10 @@ export const tools: ToolDefinition[] = [
               warnings = [resumeWarning(result.details)];
               ctx.logger.warn("C64 resume reported failure after sprite scan", { details: result.details });
             }
+          }
+          if (startAddress % 64 !== 0) {
+            // Sprite data starts on a 64-byte block boundary (pointer x 64), so a scan from another address sees shifted windows.
+            warnings = [...(warnings ?? []), `address $${formatAddressHex(startAddress)} is not a multiple of 64; real sprite blocks start at multiples of 64 ($${formatAddressHex(startAddress - (startAddress % 64))}, +64, ...), so these windows are probably shifted`];
           }
           return jsonResult({
             scanned: {
@@ -351,12 +375,10 @@ export const tools: ToolDefinition[] = [
         const minEntropy = parsed.minEntropy ?? 0.3;
         const charsetSize = 2048; // 256 chars * 8 bytes each
 
-        // Common charset locations on C64. $D000-$DFFF is not listed: a read there returns the I/O view
-        // (and clears CIA interrupt flags on hardware), never the character ROM.
-        const commonLocations = [
-          0x3000, // Common RAM location for custom charsets
-          0x2000, // Another common RAM location
-        ];
+        // Common charset locations in VIC bank 0 ($D018 bits 1-3 select a 2 KB block: $0800, $2000, $2800, $3000, $3800).
+        // $D000-$DFFF is not listed: a read there returns the I/O view (and clears CIA interrupt flags
+        // on hardware), never the character ROM.
+        const commonLocations = [0x3800, 0x3000, 0x2800, 0x2000, 0x0800];
 
         const scanLocations: number[] = [];
         if (parsed.address) {
@@ -367,7 +389,7 @@ export const tools: ToolDefinition[] = [
           }
           scanLocations.push(address);
         } else if (parsed.scanRange === "full") {
-          // Scan entire 64KB in 2KB increments
+          // Every 2 KB block outside the I/O area; read below in two large blocks, not one request per block.
           for (let addr = 0; addr <= 0x10000 - charsetSize; addr += 0x800) {
             if (rangeOverlapsIo(addr, charsetSize)) continue;
             scanLocations.push(addr);
@@ -388,24 +410,63 @@ export const tools: ToolDefinition[] = [
         try {
           const candidates: Array<CharsetAnalysis & { bytes?: Uint8Array }> = [];
 
-          for (const startAddress of scanLocations) {
-            if (startAddress + charsetSize - 1 > 0xFFFF) continue;
-
-            const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(charsetSize), pinned);
-            if (!read.success || typeof read.data !== "string") {
-              continue; // Skip this location if read fails
+          // The charset the VIC-II uses now: $D018 bits 1-3 (x $800) inside the bank chosen by $DD00 bits 0-1 (inverted, x $4000).
+          // Both are plain register reads (no side effects). Skipped when the reads fail or both read $00.
+          let active: { address: number; inRom: boolean } | undefined;
+          if (!parsed.address) {
+            const d018 = await readByte(ctx, 0xd018, pinned);
+            const dd00 = await readByte(ctx, 0xdd00, pinned);
+            if (d018 !== undefined && dd00 !== undefined && !(d018 === 0 && dd00 === 0)) {
+              const bank = 3 - (dd00 & 0x03);
+              const offset = ((d018 >> 1) & 0x07) * 0x0800;
+              // Banks 0 and 2 show the character ROM at offsets $1000-$1FFF instead of RAM; the CPU cannot read that image.
+              const inRom = (bank === 0 || bank === 2) && offset >= 0x1000 && offset < 0x2000;
+              active = { address: bank * 0x4000 + offset, inRom };
+              if (!inRom && !rangeOverlapsIo(active.address, charsetSize) && !scanLocations.includes(active.address)) {
+                scanLocations.unshift(active.address);
+              }
             }
+          }
 
-            const bytes = hexToBytes(read.data);
-            if (bytes.length < charsetSize) continue;
-
+          const analyse = (startAddress: number, bytes: Uint8Array): void => {
             const analysis = analyzeCharset(bytes, startAddress);
-
             // Apply heuristics to determine if this looks like a charset
             if (analysis.nonEmptyChars >= minNonEmptyChars && analysis.entropy >= minEntropy) {
               candidates.push({ ...analysis, bytes });
             }
+          };
+
+          if (parsed.scanRange === "full" && !parsed.address) {
+            const blocks: Array<[number, number]> = [[0x0000, 0xd000], [0xe000, 0x10000]];
+            for (const [from, to] of blocks) {
+              const read = await (ctx.client as any).readMemory(`$${formatAddressHex(from)}`, String(to - from), pinned);
+              if (!read.success || typeof read.data !== "string") continue;
+              const all = hexToBytes(read.data);
+              if (all.length < to - from) continue;
+              for (const startAddress of scanLocations) {
+                if (startAddress >= from && startAddress + charsetSize <= to) analyse(startAddress, all.subarray(startAddress - from, startAddress - from + charsetSize));
+              }
+            }
+          } else {
+            for (const startAddress of scanLocations) {
+              if (startAddress + charsetSize - 1 > 0xFFFF) continue;
+
+              const read = await (ctx.client as any).readMemory(`$${formatAddressHex(startAddress)}`, String(charsetSize), pinned);
+              if (!read.success || typeof read.data !== "string") {
+                continue; // Skip this location if read fails
+              }
+
+              const bytes = hexToBytes(read.data);
+              if (bytes.length < charsetSize) continue;
+              analyse(startAddress, bytes);
+            }
           }
+
+          const activeInfo = (): Record<string, unknown> => active === undefined ? {} : {
+            activeCharset: active.inRom
+              ? { address: `$${formatAddressHex(active.address)}`, inRom: true, note: "The VIC-II shows the character ROM image here; the CPU cannot read it as RAM." }
+              : { address: `$${formatAddressHex(active.address)}`, inRom: false },
+          };
 
           // Resume as soon as the reads are done, so a failure can be reported in the result.
           let warnings: string[] | undefined;
@@ -422,13 +483,17 @@ export const tools: ToolDefinition[] = [
             return jsonResult({
               found: false,
               scanned: scanLocations.length,
+              ...activeInfo(),
               message: "No valid charsets found matching criteria",
               ...(warnings ? { warnings } : {}),
             }, { success: true });
           }
 
-          // Sort by non-empty chars descending, then by entropy descending
+          // The charset in use comes first; the others follow by non-empty chars, then by entropy (both descending).
           candidates.sort((a, b) => {
+            const activeA = active !== undefined && a.address === `$${formatAddressHex(active.address)}` ? 1 : 0;
+            const activeB = active !== undefined && b.address === `$${formatAddressHex(active.address)}` ? 1 : 0;
+            if (activeA !== activeB) return activeB - activeA;
             const diffNonEmpty = b.nonEmptyChars - a.nonEmptyChars;
             if (diffNonEmpty !== 0) return diffNonEmpty;
             return b.entropy - a.entropy;
@@ -450,6 +515,8 @@ export const tools: ToolDefinition[] = [
             found: true,
             charset: analysisWithoutBytes,
             candidates: candidates.length,
+            candidateAddresses: candidates.map((entry) => entry.address),
+            ...activeInfo(),
             outputFile,
             paused: canPause,
             ...(warnings ? { warnings } : {}),
