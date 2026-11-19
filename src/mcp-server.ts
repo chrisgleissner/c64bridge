@@ -10,6 +10,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
@@ -252,7 +253,7 @@ async function main() {
   const toolLogger = loggerFor("tool");
   const resourceLogger = loggerFor("resource");
   const promptLogger = loggerFor("prompt");
-  const promptRegistry = createPromptRegistry();
+  // Built on the first prompts request; a session that never lists prompts does not pay for it.
   const getPromptRegistry = createPromptRegistryGetter();
   const implementationInfo = getMcpServerImplementationInfo();
 
@@ -325,12 +326,17 @@ async function main() {
     }
   });
 
+  // No resource templates; answering keeps clients that ask from logging a method-not-found error.
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
+
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    // c64_rag returns links with a #fragment (a section); the resource is the document.
+    const uri = request.params.uri.split("#")[0]!;
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_read_resource_start", { uri: request.params.uri });
     try {
       let response;
-      if (request.params.uri === PLATFORM_RESOURCE_URI) {
+      if (uri === PLATFORM_RESOURCE_URI) {
         response = {
           contents: [
             {
@@ -341,8 +347,8 @@ async function main() {
           ],
         };
       } else {
-        const skill = readSkillResource(request.params.uri);
-        const result = skill ?? readKnowledgeResource(request.params.uri, PROJECT_ROOT);
+        const skill = readSkillResource(uri);
+        const result = skill ?? readKnowledgeResource(uri, PROJECT_ROOT);
         if (!result) {
           throw new McpError(-32002, `Unknown resource: ${request.params.uri}`);
         }
@@ -429,7 +435,7 @@ async function main() {
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_list_prompts_start");
     try {
-      const entries = promptRegistry.list();
+      const entries = getPromptRegistry().list();
       const response = {
         prompts: entries.map((entry) => ({
           name: entry.descriptor.name,
@@ -578,7 +584,7 @@ async function main() {
     }
 
     try {
-      const resolved = promptRegistry.resolve(name, args);
+      const resolved = getPromptRegistry().resolve(name, args);
 
       const response = {
         description: resolved.description,
