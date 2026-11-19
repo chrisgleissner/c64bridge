@@ -114,7 +114,8 @@ test("effects of the dangerous operations", () => {
   assert.equal(effect("c64_memory", "write"), "write");
   assert.equal(effect("c64_memory", "read"), "read");
   assert.equal(effect("c64_config", "set"), "write");
-  assert.equal(effect("c64_select_backend", "select"), "write");
+  // WORKFLOW-16: selecting a backend changes routing only and is allowed in read-only mode.
+  assert.equal(effect("c64_select_backend", "select"), "read");
   assert.equal(effect("c64_rag", "basic"), "read");
 });
 

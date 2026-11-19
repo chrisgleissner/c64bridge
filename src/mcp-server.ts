@@ -126,7 +126,7 @@ export const SERVER_INSTRUCTIONS = [
   "c64bridge controls a Commodore 64: C64 Ultimate / Ultimate 64 and U2-family hardware over REST, or the VICE emulator.",
   "Every grouped tool (c64_program, c64_memory, c64_system, c64_config, ...) needs an `op` argument; never call one with {}.",
   "Read c64://platform/status first: active backend, configured backends, access mode (C64BRIDGE_ACCESS) and which tools and ops each backend supports.",
-  "Switch backends with c64_select_backend {op:\"select\", backend:\"c64u\"|\"u2\"|\"vice\"}; it changes no machine state.",
+  "Switch backends with c64_select_backend {op:\"select\", backend:\"c64u\"|\"u2\"|\"vice\"}; it is allowed in read-only mode.",
   "Step-by-step workflows are skill resources c64://skills/<name> (hello-world, basic-program, assembly-program, game-development, ...); prompts name the one to use.",
   "For any game request read c64://gamedev/index first; it chooses the target and lists what to read.",
   "Knowledge resources: resources/list; targeted snippets: c64_rag {op:\"basic\"|\"asm\"|\"docs\", q}.",
