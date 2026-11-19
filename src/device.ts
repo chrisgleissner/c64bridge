@@ -343,6 +343,8 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
   try {
     await axios.get(`${baseUrl.replace(/\/+$/, "")}/v1/version`, {
       timeout,
+      maxContentLength: 1024 * 1024,
+      signal: AbortSignal.timeout(Math.max(timeout * 5, 10_000)),
       headers: buildC64uHeaders(networkPassword),
       validateStatus: () => true,
       proxy: false,
