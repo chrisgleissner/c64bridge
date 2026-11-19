@@ -34,7 +34,8 @@ function withStructuredJson(
   payload: Record<string, unknown>,
   metadata?: Record<string, unknown>,
 ) {
-  return jsonResult(payload, metadata ? { ...metadata, details: payload, raw: payload } : { details: payload, raw: payload });
+  // The payload is already the text block and structuredContent; repeating it as metadata sent it four times.
+  return jsonResult(payload, metadata);
 }
 
 const noArgsSchema = objectSchema<Record<string, never>>({
@@ -541,10 +542,7 @@ export const developerModule = defineToolModule({
           ctx.logger.info("Fetching firmware version");
 
           const details = await ctx.client.version();
-          return withStructuredJson(toRecord(details) ?? {}, {
-            success: true,
-            details: toRecord(details) ?? {},
-          });
+          return withStructuredJson(toRecord(details) ?? {}, { success: true });
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -573,10 +571,7 @@ export const developerModule = defineToolModule({
           ctx.logger.info("Fetching hardware info");
 
           const details = await ctx.client.info();
-          return withStructuredJson(toRecord(details) ?? {}, {
-            success: true,
-            details: toRecord(details) ?? {},
-          });
+          return withStructuredJson(toRecord(details) ?? {}, { success: true });
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
