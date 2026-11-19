@@ -132,7 +132,7 @@ test("rag_retrieve_basic formats reference metadata and truncated snippets", asy
   const text = result.content[0].text;
 
   assert.match(text, /1\. c64:\/\/basic\/spec#Printing \| link: https:\/\/example.com\/basic#printing \(score=0\.750\)\n   10 PRINT "HI"/);
-  assert.match(text, /2\. doc\/basic\/long\.md \(score=0\.500\)\n   B{200,}\.\.\./);
+  assert.match(text, /2\. doc\/basic\/long\.md \(score=0\.500\)\n   B{320}\n/);  // MEDIA-11: the text block uses the structured budget, no 240-character cut
   assert.match(text, /3\. link: https:\/\/example.com\/basic#border \(score=0\.250\)\n   POKE 53280,0/);
 
   const refs = result.structuredContent?.data?.refs ?? [];
@@ -152,3 +152,26 @@ for (const scope of ["basic", "asm", "docs"]) {
     assert.equal(calls, 0);
   });
 }
+
+test("MEDIA-11 the text block keeps line breaks of code and cuts at the structured budget", async () => {
+  const code = "loop:  lda $d012\n       cmp #$80\n       bne loop\n\n       rts";
+  const huge = `${"x".repeat(1500)}`;
+  const ctx = { client: {}, logger: createLogger(), rag: { async retrieve() { return [{ snippet: code, origin: "c64://gamedev/techniques#1", score: 0.9 }, { snippet: huge, origin: "big", score: 0.5 }]; } } };
+  const result = await ragModule.invoke("rag_retrieve_docs", { q: "raster wait" }, ctx);
+  const text = result.content[0].text;
+  assert.ok(text.includes("\n   loop:  lda $d012\n          cmp #$80\n          bne loop\n\n          rts"), text);
+  const second = text.split("2. big")[1];
+  assert.ok(second.includes("…") && !second.includes("..."), "cut at the budget with an ellipsis");
+  assert.ok(second.trim().length > 900, "budget is 1200 characters, not 240");
+});
+
+test("KNOWLEDGE-4 a query of only spaces is rejected before retrieval", async () => {
+  let calls = 0;
+  const ctx = { client: {}, logger: createLogger(), rag: { async retrieve() { calls++; return []; } } };
+  for (const q of ["     ", "\t \n  "]) {
+    const result = await ragModule.invoke("rag_retrieve_docs", { q }, ctx);
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /at least 3 non-space/);
+  }
+  assert.equal(calls, 0);
+});

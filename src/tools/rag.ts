@@ -6,6 +6,7 @@ import { textResult } from "./responses.js";
 import {
   ToolError,
   ToolExecutionError,
+  ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
@@ -101,6 +102,12 @@ function createRagTool(scope: RagScope, options: { description: string; summary:
     async execute(args: unknown, ctx: ToolExecutionContext) {
       try {
         const parsed = ragRetrieveArgsSchema.parse(args ?? {});
+        if (parsed.q.trim().length < 3) {
+          throw new ToolValidationError("Query must contain at least 3 non-space characters.", {
+            path: "$.q",
+            details: { minLength: 3 },
+          });
+        }
         const limit = parsed.k ?? 3;
 
         ctx.logger.debug("Retrieving RAG references", {
@@ -128,7 +135,7 @@ function createRagTool(scope: RagScope, options: { description: string; summary:
           : ["- No curated resources found."];
 
         const ragLines = ragCount
-          ? refs.map((ref, index) => formatReference(index, ref))
+          ? refs.map((ref, index) => formatReference(index, ref, snippetBudget(refs.length)))
           : ["No supplemental RAG references were found."];
 
         const text = [
@@ -171,7 +178,7 @@ function createRagTool(scope: RagScope, options: { description: string; summary:
   } as const;
 }
 
-function formatReference(index: number, ref: RagReference): string {
+function formatReference(index: number, ref: RagReference, snippetLimit: number): string {
   const locationParts: string[] = [];
   if (ref.origin) {
     locationParts.push(ref.origin);
@@ -186,17 +193,22 @@ function formatReference(index: number, ref: RagReference): string {
   }
   const location = locationParts.length ? locationParts.join(" | ") : "origin: unknown";
   const scoreLabel = Number.isFinite(ref.score) ? ref.score.toFixed(3) : "n/a";
-  const snippet = summariseSnippet(ref.snippet);
+  const snippet = formatSnippet(ref.snippet, snippetLimit);
   const header = `${index + 1}. ${location} (score=${scoreLabel})`;
-  return snippet ? `${header}\n   ${snippet}` : header;
+  return snippet ? `${header}\n${snippet}` : header;
 }
 
-function summariseSnippet(snippet: string, limit = 240): string {
-  const normalized = snippet.replace(/\s+/g, " ").trim();
-  if (!normalized) {
+/**
+ * The snippet as the text block shows it: line breaks kept (code and tables stay readable), each
+ * line indented under the list number, cut at the same per-hit budget as the structured snippet.
+ */
+function formatSnippet(snippet: string, limit: number): string {
+  const trimmed = snippet.replace(/\r\n?/g, "\n").trim();
+  if (!trimmed) {
     return "";
   }
-  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 3)}...`;
+  const body = trimmed.length > limit ? `${trimmed.slice(0, limit - 1).trimEnd()}…` : trimmed;
+  return body.split("\n").map((line) => (line ? `   ${line}` : "")).join("\n");
 }
 
 const MAX_SNIPPET_CHARS = 1200;
