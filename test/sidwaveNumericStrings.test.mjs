@@ -32,3 +32,16 @@ test("SIDWAVE unquoted ~ (YAML null) in a groove is a tie (SOUND-12)", () => {
   const quoted = arrangeSidwave(parseSidwave(yaml.replace("~,", '"~",'))).voices[0].notes;
   assert.deepEqual(notes, quoted);
 });
+
+test("SIDWAVE a dense song is rejected quickly with the size error (SOUND-17)", () => {
+  const started = Date.now();
+  assert.throws(
+    () => arrangeSidwave(parseSidwave({
+      sidwave: "1.0", tempo: 30,
+      voices: [{ id: 1, patterns: { A: { groove: ["C4"], length: 0.05 } } }],
+      timeline: [{ bars: 4096, layers: { v1: "A" } }],
+    })),
+    /more than 20000 notes.*past the \$D000 limit/,
+  );
+  assert.ok(Date.now() - started < 1500);
+});
