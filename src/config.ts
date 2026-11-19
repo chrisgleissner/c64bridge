@@ -64,6 +64,11 @@ export function loadConfig(): C64BridgeConfig {
       rawConfig = JSON.parse(readFileSync(candidatePath, "utf-8"));
       break;
     } catch (error) {
+      if (candidatePath === configPath && (error as NodeJS.ErrnoException).code === "ENOENT") {
+        // A named file that does not exist (for example a typo) must not hand control to the
+        // working-directory or home configuration either, which may name another machine.
+        throw new Error(`C64BRIDGE_CONFIG file '${candidatePath}' does not exist; fix the path or unset C64BRIDGE_CONFIG`);
+      }
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         if (candidatePath === configPath) {
           // An explicitly named file that cannot be used must not silently

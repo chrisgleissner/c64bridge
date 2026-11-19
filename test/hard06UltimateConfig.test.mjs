@@ -6,6 +6,7 @@ import assert from "#test/assert";
 import { loadConfig } from "../src/config.ts";
 
 // DEVICE-1: a credential goes only to the host it was configured for.
+// DEVICE-2: a named configuration file that does not exist is an error, not a fallback.
 
 const ENV = ["C64BRIDGE_CONFIG", "C64_MODE", "C64U_HOST", "C64U_PORT", "C64U_PASSWORD", "U2_HOST", "U2_PORT", "U2_PASSWORD"];
 
@@ -60,4 +61,13 @@ test("a u2 section keeps its own password when U2_HOST overrides its host", (t) 
   const config = loadConfig();
   assert.equal(config.ultimate.u2.baseUrl, "http://u2b.lan");
   assert.equal(config.ultimate.u2.networkPassword, "B");
+});
+
+test("a missing C64BRIDGE_CONFIG file is an error even when the working directory has a config", (t) => {
+  const { dir, file } = setup(t, undefined);
+  writeFileSync(path.join(dir, ".c64bridge.json"), JSON.stringify({ c64u: { host: "other-machine.lan", networkPassword: "pw-other" } }), "utf8");
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+  t.after(() => process.chdir(originalCwd));
+  assert.throws(() => loadConfig(), (error) => error.message.includes("C64BRIDGE_CONFIG") && error.message.includes(file) && error.message.includes("does not exist"));
 });
