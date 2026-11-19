@@ -270,7 +270,8 @@ test("rip_charset_from_ram scans common locations", async () => {
   assert.equal(result.metadata?.success, true);
   assert.equal(pauseCalls, 1);
   assert.equal(resumeCalls, 1);
-  assert.equal(readCalls, 2); // $3000 and $2000; $D000-$DFFF is never read
+  // HARD06 META-13: $D018 and $DD00 (active charset), then $3800 $3000 $2800 $2000 $0800; no block read overlaps $D000-$DFFF
+  assert.equal(readCalls, 7);
 
   const payload = result.structuredContent?.data;
   assert.equal(payload?.found, true);
