@@ -155,7 +155,7 @@ const readMemoryArgsSchema = objectSchema({
       minLength: 1,
     }),
     length: numberSchema({
-      description: "Number of bytes to read starting from the resolved address.",
+      description: "Number of bytes to read starting from the resolved address (default 256, cut at $FFFF when not given).",
       integer: true,
       minimum: 1,
       maximum: 4096,
@@ -344,9 +344,12 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
 
     // Validate before any device call so a bad address is a validation error.
     const readStart = parseAddressArg(parsed.address, "$.address");
-    assertAddressRange(readStart, parsed.length ?? 256, "$.length");
+    // The default length stops at $FFFF; an explicit length must fit.
+    const lengthGiven = typeof rawArgs === "object" && rawArgs !== null && (rawArgs as Record<string, unknown>).length !== undefined;
+    const readLength = lengthGiven ? parsed.length ?? 256 : Math.min(parsed.length ?? 256, 0x10000 - readStart);
+    assertAddressRange(readStart, readLength, "$.length");
 
-    const result = await ctx.client.readMemory(fmtAddr(readStart), String(parsed.length));
+    const result = await ctx.client.readMemory(fmtAddr(readStart), String(readLength));
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while reading memory", {
         details: normaliseFailure(result.details),
@@ -355,7 +358,7 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
 
     const detailRecord = toRecord(result.details) ?? {};
     const resolvedAddress = resolveAddressLabel(detailRecord, fmtAddr(readStart));
-    const resolvedLength = resolveLength(detailRecord) ?? parsed.length;
+    const resolvedLength = resolveLength(detailRecord) ?? readLength;
     const dumpLines = parsed.format === "dump" && typeof result.data === "string"
       ? formatHexDump(readStart, parseFirmwareHex(result.data, "memory read").bytes)
       : undefined;
@@ -588,14 +591,14 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 }
 
 const disassembleArgsSchema = objectSchema({
-  description: "Parameters for disassembling a block of VICE memory into 6502/6510 instructions.",
+  description: "Parameters for disassembling a block of C64 memory into 6502/6510 instructions (all backends; loaded labels annotate the listing).",
   properties: {
     address: stringSchema({
       description: "Start address as $HHHH, decimal, or symbol name.",
       minLength: 1,
     }),
     length: numberSchema({
-      description: "Number of bytes to read and disassemble.",
+      description: "Number of bytes to read and disassemble (default 64, cut at $FFFF when not given).",
       integer: true,
       minimum: 1,
       maximum: 4096,
@@ -618,10 +621,11 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
     const address = parseAddressArg(parsed.address, "$.address");
     // An instruction is at most 3 bytes, so 3 x instructionCount bytes always
     // cover the requested instructions; clamp at the end of the address space.
+    const lengthGiven = typeof rawArgs === "object" && rawArgs !== null && (rawArgs as Record<string, unknown>).length !== undefined;
     const length = parsed.instructionCount !== undefined
       ? Math.min(3 * parsed.instructionCount, 0x10000 - address)
-      : parsed.length ?? 64;
-    ctx.logger.info("Disassembling VICE memory", { address: parsed.address, length });
+      : lengthGiven ? parsed.length ?? 64 : Math.min(parsed.length ?? 64, 0x10000 - address);
+    ctx.logger.info("Disassembling memory", { address: parsed.address, length });
 
     validateRangeWithinAddressSpace(address, length, "$.address");
 
@@ -780,7 +784,7 @@ const fillMemoryArgsSchema = objectSchema({
     pattern: stringSchema({
       description: "Hex bytes to repeat, e.g. 'FF' or 'AA 55'. Space-separated or run together.",
       minLength: 2,
-      pattern: /^[\s0-9A-Fa-f$]+$/,
+      pattern: /^[\s_0-9A-Fa-f$]+$/,
     }),
   },
   required: ["address", "length", "pattern"],
@@ -818,7 +822,7 @@ const searchMemoryArgsSchema = objectSchema({
     pattern: stringSchema({
       description: "Hex bytes to find, e.g. 'A9 00' for LDA #$00.",
       minLength: 2,
-      pattern: /^[\s0-9A-Fa-f$]+$/,
+      pattern: /^[\s_0-9A-Fa-f$]+$/,
     }),
     maxResults: optionalSchema(numberSchema({ description: "Maximum matches to return (default 10).", integer: true, minimum: 1, maximum: 100, default: 10 })),
   },

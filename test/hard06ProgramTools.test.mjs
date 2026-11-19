@@ -335,3 +335,28 @@ test("HARD06 PROGMEM-10 set_registers rejects values wider than the register and
     clearViceSymbols();
   }
 });
+
+test("HARD06 PROGMEM-12 default lengths stop at $FFFF and every hex pattern accepts _ separators", async () => {
+  const { toolRegistry } = await import("../src/tools/registry/index.js");
+  const reads = [];
+  const written = [];
+  const client = {
+    async readMemory(address, length) { reads.push([address, Number(length)]); return { success: true, data: "$" + "EA".repeat(Number(length)), details: { address, length: Number(length) } }; },
+    async readMemoryRaw(address, length) { reads.push([address, length]); return new Uint8Array(length).fill(0xea); },
+    async writeMemoryRaw(address, bytes) { written.push([address, [...bytes]]); },
+  };
+  const ctx = { client, logger, platform: platform("vice"), setPlatform: () => platform("vice"), rag: {} };
+  const read = await toolRegistry.invoke("c64_memory", { op: "read", address: "$FF80" }, ctx);
+  assert.equal(read.isError, undefined, read.content[0].text);
+  assert.deepEqual(reads.at(-1), ["$FF80", 128]);
+  const explicit = await toolRegistry.invoke("c64_memory", { op: "read", address: "$FF80", length: 256 }, ctx);
+  assert.equal(explicit.isError, true);
+  const dis = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$FFF0" }, ctx);
+  assert.equal(dis.isError, undefined, dis.content[0].text);
+  assert.deepEqual(reads.at(-1), [0xfff0, 16]);
+  const fill = await toolRegistry.invoke("c64_memory", { op: "fill_memory", address: "$C000", length: 4, pattern: "AA_55" }, ctx);
+  assert.equal(fill.isError, undefined, fill.content[0].text);
+  assert.deepEqual(written.at(-1), [0xc000, [0xaa, 0x55, 0xaa, 0x55]]);
+  const search = await toolRegistry.invoke("c64_memory", { op: "search_memory", startAddress: "$C000", endAddress: "$C00F", pattern: "EA_EA" }, ctx);
+  assert.equal(search.isError, undefined, search.content[0].text);
+});
