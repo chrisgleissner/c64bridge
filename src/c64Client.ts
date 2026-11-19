@@ -1200,6 +1200,7 @@ export class C64Client {
       const facade = await this.facadePromise;
       // Unhooking a running SIDWAVE player is best-effort: a failed read must not stop the SID being silenced.
       const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade).catch(() => false);
+      this.sidControl.delete(facade);
       if (hard) {
         const span = 0x19;
         await this.writeBlocks(facade, [
@@ -1298,6 +1299,7 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       await facade.writeMemory(base, bytes);
+      this.sidControlFor(facade)[voice - 1] = ctrl;
       return { success: true };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1311,11 +1313,31 @@ export class C64Client {
     const ctrlAddr = 0xd400 + (voice - 1) * 7 + 4;
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
-      await facade.writeMemory(ctrlAddr, Buffer.from([0x00]));
-      return { success: true };
+      // Clearing only the gate bit starts the release phase with the waveform still sounding.
+      // The SID registers are write-only, so the control byte is the one note_on last wrote.
+      const last = this.sidControlFor(facade)[voice - 1];
+      const control = last === undefined ? 0x00 : last & 0xfe;
+      await facade.writeMemory(ctrlAddr, Uint8Array.of(control));
+      if (last === undefined) {
+        return { success: true, details: { control, notice: "No note_on was sent to this voice through this server, so the waveform is unknown; the control register was set to $00, which ends the note without a release." } };
+      }
+      this.sidControlFor(facade)[voice - 1] = control;
+      return { success: true, details: { control } };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
+  }
+
+  /** Control register values ($D404, $D40B, $D412) last written by sidNoteOn/sidNoteOff, per backend. */
+  private readonly sidControl = new WeakMap<C64Facade, Array<number | undefined>>();
+
+  private sidControlFor(facade: C64Facade): Array<number | undefined> {
+    let control = this.sidControl.get(facade);
+    if (!control) {
+      control = [undefined, undefined, undefined];
+      this.sidControl.set(facade, control);
+    }
+    return control;
   }
 
   async sidSilenceAll(): Promise<RunBasicResult> {

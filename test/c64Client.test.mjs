@@ -696,7 +696,8 @@ test("C64Client against mock server", async (t) => {
     const noteOff = await client.sidNoteOff(1);
     assert.equal(noteOff.success, true);
     assert.equal(mock.state.lastWrite.address, 0xd404);
-    assert.equal(mock.state.lastWrite.bytes[0], 0x00);
+    // HARD06 MEDIA-5: only the gate bit is cleared; the pulse waveform (bit 6) stays for the release.
+    assert.equal(mock.state.lastWrite.bytes[0], 0x40);
 
     const silence = await client.sidSilenceAll();
     assert.equal(silence.success, true);
