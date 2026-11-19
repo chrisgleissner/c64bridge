@@ -1,5 +1,8 @@
 import test from "#test/runner";
 import assert from "#test/assert";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { clearViceSymbols, getSymbolAddress, setViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 
@@ -68,5 +71,53 @@ test("load_prg keeps the labels of the running program", async () => {
   await registerLabels(ctx);
   const result = await toolRegistry.invoke("c64_program", { op: "load_prg", path: "/Usb0/data.prg" }, ctx);
   assert.ok(!result.isError, JSON.stringify(result.content));
+  assert.equal(getSymbolAddress("score"), 0xc002);
+});
+
+// Review correction: the meta runners and the VICE restart start programs too.
+function withProgramRunners(ctx) {
+  const programPath = "/Usb0/game.prg";
+  Object.assign(ctx.client, {
+    async filesInfo() { return { files: { path: programPath, filename: "game.prg", size: 100, extension: "prg" }, errors: [] }; },
+    async runPrgFile() { return { success: true }; },
+    async viceNuclearReset() { return { success: true }; },
+  });
+  return programPath;
+}
+
+const outputDirs = [];
+const outputDir = () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hard05-labels-")); outputDirs.push(dir); return dir; };
+test.after(() => { for (const dir of outputDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
+
+const metaCases = [
+  ["find_and_run", "c64_disk", () => ({ op: "find_and_run", root: "/Usb0", nameContains: "game" })],
+  ["shuffle", "c64_config", () => ({ op: "shuffle", root: "/Usb0", durationMs: 1, maxPrograms: 1, resetDelayMs: 0, outputPath: outputDir() })],
+  ["batch_run", "c64_program", (programPath) => ({ op: "batch_run", programs: [{ path: programPath }], durationMs: 1, resetDelayMs: 0, outputPath: outputDir() })],
+  ["nuclear_reset", "c64_debug", () => ({ op: "nuclear_reset" })],
+];
+
+for (const [name, tool, makeArgs] of metaCases) {
+  test(`labels of an earlier program are cleared by ${name}`, async () => {
+    const ctx = makeContext();
+    const programPath = withProgramRunners(ctx);
+    if (tool === "c64_debug") {
+      const vice = { id: "vice", features: [], limitedFeatures: [] };
+      ctx.platform = vice;
+      ctx.setPlatform = () => vice;
+    }
+    await registerLabels(ctx);
+    const result = await toolRegistry.invoke(tool, makeArgs(programPath), ctx);
+    assert.ok(!result.isError, JSON.stringify(result.content));
+    assert.equal(getSymbolAddress("score"), undefined);
+  });
+}
+
+test("a failed find_and_run start keeps the labels", async () => {
+  const ctx = makeContext();
+  withProgramRunners(ctx);
+  ctx.client.runPrgFile = async () => ({ success: false, details: { reason: "refused" } });
+  await registerLabels(ctx);
+  const result = await toolRegistry.invoke("c64_disk", { op: "find_and_run", root: "/Usb0", nameContains: "game" }, ctx);
+  assert.equal(result.isError, true);
   assert.equal(getSymbolAddress("score"), 0xc002);
 });

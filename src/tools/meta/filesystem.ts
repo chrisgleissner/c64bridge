@@ -1,4 +1,5 @@
 // Filesystem discovery meta tool
+import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
@@ -583,6 +584,7 @@ export const tools: ToolDefinition[] = [
           if (!result?.success) {
             throw new ToolExecutionError("Firmware failed to run program", { details: { matchedPath, extension, response: result?.details } });
           }
+          clearViceSymbols(); // labels belong to one program
 
           const limit = Math.min(parsed.captureCandidates ?? 10, candidates.length);
           const topCandidates = candidates.slice(0, limit);

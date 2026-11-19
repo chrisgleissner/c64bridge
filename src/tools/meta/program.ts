@@ -710,9 +710,11 @@ export const tools: ToolDefinition[] = [
             if (ext === "prg") {
               const run = await (ctx.client as any).runPrgFile(programPath);
               if (!run.success) throw new ToolExecutionError("PRG playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             } else if (ext === "crt") {
               const run = await (ctx.client as any).runCrtFile(programPath);
               if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             }
 
             await sleepUnlessAborted(durationMs, ctx.signal);
@@ -823,9 +825,11 @@ export const tools: ToolDefinition[] = [
             if (ext === "prg") {
               const run = await (ctx.client as any).runPrgFile(program.path);
               if (!run.success) throw new ToolExecutionError("PRG playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             } else if (ext === "crt") {
               const run = await (ctx.client as any).runCrtFile(program.path);
               if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             }
 
             await sleepUnlessAborted(durationMs, ctx.signal);
