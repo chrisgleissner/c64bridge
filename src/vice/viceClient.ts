@@ -219,6 +219,7 @@ export class ViceClient {
       if (this.closing) {
         return;
       }
+      this.executionWatch?.wake?.(); // a step that was acknowledged must not wait out its time limit when VICE is gone
       const handler = this.onCloseHandler;
       if (handler) {
         try { handler(hadError ? new Error("VICE monitor connection closed due to error") : undefined); } catch {}
@@ -691,6 +692,9 @@ export class ViceClient {
 
     let body: Buffer;
     if (typeof value === "number") {
+      if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+        throw new Error(`Resource '${trimmed}': ${value} is not a 32-bit integer`);
+      }
       const header = Buffer.from([1, nameBytes.length & 0xff]);
       const intPayload = Buffer.alloc(4);
       intPayload.writeInt32LE(value | 0, 0);

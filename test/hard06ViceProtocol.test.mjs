@@ -57,3 +57,23 @@ test("mock follows the specification: memory set validation, checkpoint list cou
     void server;
   });
 });
+
+test("VICE-11 resource_set rejects a number that does not fit 32 bits instead of truncating it", async () => {
+  await withMock(async (client) => {
+    await assert.rejects(() => client.resourceSet("SoundVolume", 4294967296 + 50), /not a 32-bit integer/);
+    await assert.rejects(() => client.resourceSet("SoundVolume", 1.5), /not a 32-bit integer/);
+    assert.deepEqual(await client.resourceGet("SoundVolume"), { type: "int", value: 100 });
+    await client.resourceSet("SoundVolume", -5);
+    assert.deepEqual(await client.resourceGet("SoundVolume"), { type: "int", value: -5 });
+  });
+});
+
+test("VICE-16 a step wait ends at once when the connection drops", async () => {
+  await withMock(async (client, server) => {
+    const started = Date.now();
+    setTimeout(() => server.dropConnections(), 50);
+    const stopped = await client.stepInstructions(1, { waitForStopMs: 3_000 });
+    assert.equal(stopped, false);
+    assert.ok(Date.now() - started < 1_500, `waited ${Date.now() - started} ms`);
+  }, { stepEventDelayMs: 5_000 });
+});
