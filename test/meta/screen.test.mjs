@@ -515,3 +515,15 @@ test("screen repeat budget counts optional escaped punctuation as repeats", asyn
     if (originalBun === undefined) delete globalThis.Bun;
   }
 });
+
+test("HARD06 META-8 regex anchors match at screen row boundaries", async () => {
+  const { waitForScreenText } = await import("../../src/tools/meta/screen.js");
+  const screen = ["**** BASIC V2 ****", "", "READY.", "RUN", "", "HELLO", "", "READY."].join("\n");
+  const client = { readScreen: async () => screen };
+  for (const pattern of ["^HELLO$", "^RUN$", "^READY\\.$"]) {
+    const result = await waitForScreenText(client, { pattern, isRegex: true, timeoutMs: 100, intervalMs: 20 });
+    assert.equal(result.matched, true, pattern);
+  }
+  const miss = await waitForScreenText(client, { pattern: "^ELLO$", isRegex: true, timeoutMs: 50, intervalMs: 20 });
+  assert.equal(miss.matched, false);
+});
