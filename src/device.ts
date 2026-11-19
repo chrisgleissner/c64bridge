@@ -479,12 +479,21 @@ class C64uBackend implements C64Facade {
     );
     const contentType = (response.headers?.["content-type"] ?? "").toString().toLowerCase();
     const body = response.data as unknown;
+    let bytes: Uint8Array;
     if (contentType.includes("application/json")) {
       const text = Buffer.from(body as ArrayBuffer).toString("utf8");
-      try { const parsed = JSON.parse(text); return extractBytes(parsed?.data ?? parsed); } catch { return extractBytes(text); }
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+      if (parsed !== undefined && typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && !("data" in parsed)) {
+        const errors = (parsed as { errors?: unknown }).errors;
+        throw new Error(`Memory read at $${addrStr} returned a JSON body without data${Array.isArray(errors) && errors.length > 0 ? `: ${errors.map(String).join("; ")}` : ""}`);
+      }
+      bytes = parsed === undefined ? extractBytes(text) : extractBytes((parsed as { data?: unknown } | null)?.data ?? parsed);
+    } else {
+      bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : extractBytes(body);
     }
-    if (body instanceof ArrayBuffer) return new Uint8Array(body);
-    return extractBytes(body);
+    if (bytes.length !== length) throw new Error(`Memory read at $${addrStr} returned ${bytes.length} bytes instead of ${length}`);
+    return bytes;
   }
   async writeMemory(address: number, bytes: Uint8Array): Promise<void> {
     const addrStr = address.toString(16).toUpperCase().padStart(4, "0");

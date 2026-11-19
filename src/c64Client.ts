@@ -2570,7 +2570,11 @@ export class C64Client {
     validateMemoryRange(address, length);
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
-      return await facade.readMemory(address, length);
+      const bytes = await facade.readMemory(address, length);
+      if (bytes.length !== length) {
+        throw new Error(`Memory read at ${this.formatAddress(address)} returned ${bytes.length} bytes instead of ${length}`);
+      }
+      return bytes;
     } catch (facadeError) {
       if (!(facadeError instanceof Error) || (facadeError as any).code !== "UNSUPPORTED") {
         throw facadeError;
@@ -2585,16 +2589,23 @@ export class C64Client {
     );
     const contentType = (response.headers?.["content-type"] ?? "").toString().toLowerCase();
     const body = response.data as unknown;
+    let bytes: Uint8Array;
     if (contentType.includes("application/json")) {
       const text = Buffer.from(body as ArrayBuffer).toString("utf8");
-      try {
-        const parsed = JSON.parse(text);
-        return this.extractBytes(parsed?.data ?? parsed);
-      } catch {
-        return this.extractBytes(text);
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+      if (parsed !== undefined && typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && !("data" in parsed)) {
+        const errors = (parsed as { errors?: unknown }).errors;
+        throw new Error(`Memory read at ${addrStr} returned a JSON body without data${Array.isArray(errors) && errors.length > 0 ? `: ${errors.map(String).join("; ")}` : ""}`);
       }
+      bytes = parsed === undefined ? this.extractBytes(text) : this.extractBytes((parsed as { data?: unknown } | null)?.data ?? parsed);
+    } else {
+      bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : this.extractBytes(body);
     }
-    return body instanceof ArrayBuffer ? new Uint8Array(body) : this.extractBytes(body);
+    if (bytes.length !== length) {
+      throw new Error(`Memory read at ${addrStr} returned ${bytes.length} bytes instead of ${length}`);
+    }
+    return bytes;
   }
 
   /**
