@@ -19,7 +19,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
-import { checkAsmProgramLoaded, pollForProgramOutcome, type AsmPollResult } from "./pollValidator.js";
+import { checkAsmProgramLoaded, pollForProgramOutcome, type AsmPollResult, type BasicPollResult } from "./pollValidator.js";
 import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
@@ -308,11 +308,11 @@ const uploadBasicArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Run post-execution polling to ensure the BASIC program executed without errors.",
+      description: "Poll the screen until the program ends, shows a BASIC error or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) passes; an error is reported with its line. Without verify the program is started and nothing is observed.",
       default: false,
     }),
     autoFix: optionalSchema(booleanSchema({
-      description: "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      description: "With verify:true, when a BASIC error is seen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
       default: true,
     })),
   },
@@ -390,191 +390,196 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       return started;
     };
 
-    // The screen before the run lets verification tell a program that cleared the screen from one that never ran.
-    let screenBeforeRun: string | undefined;
-    if (shouldVerify) {
+    const readScreenSafely = async (what: string): Promise<string | undefined> => {
       try {
-        screenBeforeRun = await ctx.client.readScreen();
-      } catch (beforeError) {
-        ctx.logger.warn("Unable to read screen before BASIC execution", toRecord(beforeError));
+        return await ctx.client.readScreen();
+      } catch (screenError) {
+        ctx.logger.warn(`Unable to read screen ${what}`, toRecord(screenError));
+        return undefined;
       }
+    };
+
+    // Polls the outcome of one run. The screen before the run lets the poll tell a program that
+    // cleared the screen from one that never ran.
+    const pollRun = (programPrg: Buffer, before: string | undefined) =>
+      pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, { address: programPrg.readUInt16LE(0), bytes: programPrg.subarray(2) }, before) as Promise<BasicPollResult>;
+
+    const verifyError = (error: unknown) => {
+      ctx.logger.warn("BASIC verification failed", toRecord(error));
+      return toolErrorResult(new ToolExecutionError("Failed to verify BASIC program execution", { details: toRecord(error) ?? undefined }));
+    };
+
+    if (!shouldVerify) {
+      // RUN was only just typed, so the screen would still show the state before the run: it is not read.
+      const result = await runBasic(activeProgram);
+      if (!result.success) {
+        throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
+          details: extractFailureDetails(result.details),
+        });
+      }
+      const message = "BASIC program uploaded and started (RUN typed). Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).";
+      const fields = { entryAddress, prgSize: prg.length };
+      const base = textResult(message, { success: true, ...fields, details: result.details ?? null });
+      return { ...base, structuredContent: { type: "json", data: { kind: "upload_run_basic" as const, format: "prg" as const, ...fields, resources: ["c64://basic/spec", "c64://guide/bootstrap"] } } };
     }
 
-    let result = await runBasic(activeProgram);
+    const screenBeforeRun = await readScreenSafely("before BASIC execution");
+    const result = await runBasic(activeProgram);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
         details: extractFailureDetails(result.details),
       });
     }
 
-    let screenOutput: string | undefined;
+    let outcome: BasicPollResult;
     try {
-      screenOutput = await ctx.client.readScreen();
-    } catch (screenError) {
-      ctx.logger.warn("Unable to read screen after BASIC execution", toRecord(screenError));
+      outcome = await pollRun(prg, screenBeforeRun);
+    } catch (pollError) {
+      return verifyError(pollError);
     }
 
+    const lineErrorOf = (o: BasicPollResult): BasicRuntimeError[] =>
+      o.status === "error" && o.line !== undefined
+        ? [{ line: o.line, ...(o.message ? { type: o.message } : {}), raw: o.text ?? `?${o.message ?? ""} ERROR IN ${o.line}` }]
+        : [];
+    const verificationFailed = (o: BasicPollResult) => {
+      ctx.logger.warn("BASIC verification detected error", {
+        ...(o.message ? { message: o.message } : {}),
+        ...(o.line !== undefined ? { line: o.line } : {}),
+      });
+      return toolErrorResult(
+        new ToolExecutionError("BASIC program verification failed", {
+          details: {
+            ...(o.message ? { message: o.message } : {}),
+            ...(o.line !== undefined ? { line: o.line } : {}),
+            ...(o.screen ? { screen: o.screen } : {}),
+          },
+        }),
+      );
+    };
+
+    let screenOutput = outcome.screen;
     let autoFixInfo:
       | {
           readonly changes: readonly BasicAutoFixChange[];
           readonly originalErrors: readonly BasicRuntimeError[];
         }
       | undefined;
-    let verified: boolean | undefined;
 
-    if (screenOutput) {
-      const errors = parseBasicRuntimeErrors(screenOutput);
-      if (errors.length > 0) {
-        ctx.logger.warn("Detected BASIC runtime errors", {
-          errors: errors.map((error) => ({ line: error.line, type: error.type })),
-        });
+    if (outcome.status === "error") {
+      const errors = lineErrorOf(outcome);
+      if (errors.length === 0) return verificationFailed(outcome);
+      ctx.logger.warn("Detected BASIC runtime errors", { errors: errors.map((error) => ({ line: error.line, type: error.type })) });
 
-        const normalizedErrors = normalizeRuntimeErrors(errors);
-        const fixAttempt = parsed.autoFix === false ? undefined : attemptAutoFixBasicProgram(activeProgram, errors);
-        if (!fixAttempt) {
-          const data = {
-            kind: "basic_runtime_error" as const,
-            programSource: originalProgram,
-            errors: normalizedErrors,
-            ...(screenOutput ? { screen: screenOutput } : {}),
-            autoFix: {
-              attempted: false,
-              ...(parsed.autoFix === false ? { disabled: true } : {}),
-            },
-          };
-          return structuredExecutionError(
-            parsed.autoFix === false
-              ? "Detected BASIC runtime errors after execution. Auto-fix is disabled (autoFix:false), so the program was not rewritten or run again."
-              : "Detected BASIC runtime errors after execution.",
-            data,
-          );
-        }
-
-        ctx.logger.info("Attempting BASIC auto-fix", {
-          changes: fixAttempt.changes.map((change) => ({
-            line: change.line,
-            notes: change.notes,
-          })),
-        });
-
-        const retryResult = await ctx.client.uploadAndRunBasic(fixAttempt.program);
-        if (retryResult.success) clearViceSymbols();
-        if (!retryResult.success) {
-          const data = {
-            kind: "basic_runtime_error" as const,
-            programSource: originalProgram,
-            errors: normalizedErrors,
-            ...(screenOutput ? { screen: screenOutput } : {}),
-            autoFix: {
-              attempted: true,
-              changes: fixAttempt.changes,
-              programSource: fixAttempt.program,
-              failure: {
-                reason: "firmware_failure",
-                details: extractFailureDetails(retryResult.details),
-              },
-            },
-          };
-          return structuredExecutionError(
-            "Auto-fix failed due to firmware error while re-running BASIC program.",
-            data,
-          );
-        }
-
-        let retryScreen: string | undefined;
-        try {
-          retryScreen = await ctx.client.readScreen();
-        } catch (retryScreenError) {
-          ctx.logger.warn("Unable to read screen after BASIC auto-fix execution", toRecord(retryScreenError));
-        }
-
-        const remainingErrors = retryScreen ? parseBasicRuntimeErrors(retryScreen) : [];
-        if (remainingErrors.length > 0) {
-          const data = {
-            kind: "basic_runtime_error" as const,
-            programSource: originalProgram,
-            errors: normalizedErrors,
-            ...(screenOutput ? { screen: screenOutput } : {}),
-            autoFix: {
-              attempted: true,
-              changes: fixAttempt.changes,
-              programSource: fixAttempt.program,
-              resultingErrors: normalizeRuntimeErrors(remainingErrors),
-              ...(retryScreen ? { screen: retryScreen } : {}),
-            },
-          };
-          return structuredExecutionError(
-            "BASIC program still reports errors after auto-fix attempt.",
-            data,
-          );
-        }
-
-        activeProgram = fixAttempt.program;
-        prg = basicToPrg(activeProgram);
-        entryAddress = prg.readUInt16LE(0);
-        result = retryResult;
-        screenOutput = retryScreen;
-        autoFixInfo = {
-          changes: fixAttempt.changes,
-          originalErrors: errors,
+      const normalizedErrors = normalizeRuntimeErrors(errors);
+      const errorFields = { message: outcome.message, line: outcome.line };
+      const fixAttempt = parsed.autoFix === false ? undefined : attemptAutoFixBasicProgram(activeProgram, errors);
+      if (!fixAttempt) {
+        const data = {
+          kind: "basic_runtime_error" as const,
+          ...errorFields,
+          programSource: originalProgram,
+          errors: normalizedErrors,
+          ...(screenOutput ? { screen: screenOutput } : {}),
+          autoFix: {
+            attempted: false,
+            ...(parsed.autoFix === false ? { disabled: true } : {}),
+          },
         };
-      }
-    }
-
-    if (shouldVerify) {
-      try {
-        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, { address: prg.readUInt16LE(0), bytes: prg.subarray(2) }, screenBeforeRun);
-        if (outcome.status === "error") {
-          ctx.logger.warn("BASIC verification detected error", {
-            ...(outcome.message ? { message: outcome.message } : {}),
-            ...(outcome.line !== undefined ? { line: outcome.line } : {}),
-          });
-          return toolErrorResult(
-            new ToolExecutionError("BASIC program verification failed", {
-              details: {
-                ...(outcome.message ? { message: outcome.message } : {}),
-                ...(outcome.line !== undefined ? { line: outcome.line } : {}),
-              },
-            }),
-          );
-        }
-        verified = true;
-      } catch (verifyError) {
-        ctx.logger.warn("BASIC verification failed", toRecord(verifyError));
-        return toolErrorResult(
-          new ToolExecutionError("Failed to verify BASIC program execution", {
-            details: toRecord(verifyError) ?? undefined,
-          }),
+        const where = `${errors[0]!.raw}`;
+        return structuredExecutionError(
+          parsed.autoFix === false
+            ? `Detected BASIC runtime errors after execution (${where}). Auto-fix is disabled (autoFix:false), so the program was not rewritten or run again.`
+            : `Detected BASIC runtime errors after execution (${where}).`,
+          data,
         );
       }
+
+      ctx.logger.info("Attempting BASIC auto-fix", {
+        changes: fixAttempt.changes.map((change) => ({ line: change.line, notes: change.notes })),
+      });
+
+      const retryBefore = await readScreenSafely("before the BASIC auto-fix run");
+      const retryResult = await runBasic(fixAttempt.program);
+      if (!retryResult.success) {
+        const data = {
+          kind: "basic_runtime_error" as const,
+          ...errorFields,
+          programSource: originalProgram,
+          errors: normalizedErrors,
+          ...(screenOutput ? { screen: screenOutput } : {}),
+          autoFix: {
+            attempted: true,
+            changes: fixAttempt.changes,
+            programSource: fixAttempt.program,
+            failure: {
+              reason: "firmware_failure",
+              details: extractFailureDetails(retryResult.details),
+            },
+          },
+        };
+        return structuredExecutionError("Auto-fix failed due to firmware error while re-running BASIC program.", data);
+      }
+
+      const retryPrg = basicToPrg(fixAttempt.program);
+      let retryOutcome: BasicPollResult;
+      try {
+        retryOutcome = await pollRun(retryPrg, retryBefore);
+      } catch (pollError) {
+        return verifyError(pollError);
+      }
+      const remainingErrors = lineErrorOf(retryOutcome);
+      if (remainingErrors.length > 0) {
+        const data = {
+          kind: "basic_runtime_error" as const,
+          ...errorFields,
+          programSource: originalProgram,
+          errors: normalizedErrors,
+          ...(screenOutput ? { screen: screenOutput } : {}),
+          autoFix: {
+            attempted: true,
+            changes: fixAttempt.changes,
+            programSource: fixAttempt.program,
+            resultingErrors: normalizeRuntimeErrors(remainingErrors),
+            ...(retryOutcome.screen ? { screen: retryOutcome.screen } : {}),
+          },
+        };
+        return structuredExecutionError(`BASIC program still reports errors after auto-fix attempt (${remainingErrors[0]!.raw}).`, data);
+      }
+      if (retryOutcome.status === "error") return verificationFailed(retryOutcome);
+
+      activeProgram = fixAttempt.program;
+      prg = retryPrg;
+      entryAddress = prg.readUInt16LE(0);
+      screenOutput = retryOutcome.screen;
+      autoFixInfo = { changes: fixAttempt.changes, originalErrors: errors };
     }
 
     const changedLines = autoFixInfo
       ? autoFixInfo.changes.map((change) => `line ${change.line}: "${change.before}" -> "${change.after}"`).join("; ")
       : "";
     const message = autoFixInfo
-      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run showed no BASIC error on screen.${verified ? "" : " Execution was not verified."}`
-      : verified
-        ? "BASIC program uploaded and executed successfully (verified)."
-        : "BASIC program uploaded and started. No BASIC error was visible on the screen immediately afterwards; pass verify:true to poll for the outcome.";
+      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run was verified without a BASIC error.`
+      : "BASIC program uploaded and executed successfully (verified).";
 
+    const autoFixFields = autoFixInfo
+      ? {
+          autoFix: {
+            applied: true,
+            changes: autoFixInfo.changes,
+            originalErrors: autoFixInfo.originalErrors,
+            programSource: activeProgram,
+          },
+        }
+      : {};
     const metadata = {
       success: true,
       entryAddress,
       prgSize: prg.length,
       details: result.details ?? null,
       ...(screenOutput ? { screen: screenOutput } : {}),
-      ...(autoFixInfo
-        ? {
-            autoFix: {
-              applied: true,
-              changes: autoFixInfo.changes,
-              originalErrors: autoFixInfo.originalErrors,
-              programSource: activeProgram,
-            },
-          }
-        : {}),
-      ...(verified ? { verified: true } : {}),
+      ...autoFixFields,
+      verified: true,
     };
 
     const data = {
@@ -584,17 +589,8 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       prgSize: prg.length,
       resources: ["c64://basic/spec", "c64://guide/bootstrap"],
       ...(screenOutput ? { screen: screenOutput } : {}),
-      ...(autoFixInfo
-        ? {
-            autoFix: {
-              applied: true,
-              changes: autoFixInfo.changes,
-              originalErrors: autoFixInfo.originalErrors,
-              programSource: activeProgram,
-            },
-          }
-        : {}),
-      ...(verified ? { verified: true } : {}),
+      ...autoFixFields,
+      verified: true,
     };
 
     const base = textResult(message, metadata);

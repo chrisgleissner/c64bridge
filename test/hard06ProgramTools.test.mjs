@@ -63,3 +63,42 @@ test("HARD06 PROGMEM-5 ASM liveness follows the screen the VIC-II shows and read
   assert.equal(outcome.status, "ok");
   assert.ok(!reads.includes(0x0400), "screen RAM at $0400 is not read separately");
 });
+
+test("HARD06 PROGMEM-6 upload_run_basic without verify does not read the screen it cannot interpret yet", async () => {
+  let screenReads = 0;
+  const client = {
+    async uploadAndRunBasic() { return { success: true }; },
+    async readScreen() { screenReads += 1; return "READY.\n"; },
+  };
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: "10 PRINT 1" }, { client, logger, platform: platform("vice") });
+  assert.equal(result.isError, undefined);
+  assert.equal(screenReads, 0);
+  assert.equal(result.structuredContent.data.screen, undefined);
+  assert.match(result.content[0].text, /not observed/);
+});
+
+test("HARD06 PROGMEM-6 upload_run_basic verify auto-fixes an error that appears only after the first reads", async () => {
+  const saved = process.env.C64BRIDGE_POLL_INTERVAL_MS;
+  process.env.C64BRIDGE_POLL_INTERVAL_MS = "1";
+  try {
+    const uploads = [];
+    let readsSinceRun = 0;
+    const client = {
+      async uploadAndRunBasic(program) { uploads.push(program); readsSinceRun = 0; return { success: true }; },
+      async readScreen() {
+        if (uploads.length === 0) return "READY.\n";
+        readsSinceRun += 1;
+        // The error shows up only once the program has run for a while.
+        if (uploads.length === 1) return readsSinceRun < 3 ? "RUN\n" : "RUN\n?SYNTAX  ERROR IN 10\nREADY.\n";
+        return readsSinceRun < 3 ? "RUN\n" : "RUN\nHELLO\nREADY.\n";
+      },
+    };
+    const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HELLO\n20 END', verify: true }, { client, logger, platform: platform("vice") });
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+    assert.equal(uploads.length, 2);
+    assert.equal(result.structuredContent.data.autoFix.applied, true);
+    assert.equal(result.structuredContent.data.verified, true);
+  } finally {
+    if (saved === undefined) delete process.env.C64BRIDGE_POLL_INTERVAL_MS; else process.env.C64BRIDGE_POLL_INTERVAL_MS = saved;
+  }
+});
