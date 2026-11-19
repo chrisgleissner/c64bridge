@@ -1725,12 +1725,16 @@ export class C64Client {
     await withStreamLock("video", () => this.stopC64uVideoCaptureSession());
   }
 
-  async captureFrames(options?: { readonly count?: number; readonly reuseSession?: boolean; readonly keepAliveMs?: number }): Promise<FrameCaptureResult> {
+  /**
+   * Captures video frames. On VICE a frame is cropped to the inner screen area VICE reports
+   * (offset and size from Display Get); `includeBorder: true` returns the whole canvas VICE renders.
+   */
+  async captureFrames(options?: { readonly count?: number; readonly reuseSession?: boolean; readonly keepAliveMs?: number; readonly includeBorder?: boolean }): Promise<FrameCaptureResult> {
     return withDiagnosticSpan("client", "capture_frames", { count: options?.count ?? 1, reuseSession: options?.reuseSession === true }, async () => {
       const requestedCount = Math.max(1, Math.min(32, Math.trunc(options?.count ?? 1)));
       const facade = await this.facadePromise;
       if (facade.type === "vice") {
-        return this.captureViceFrames(requestedCount);
+        return this.captureViceFrames(facade as ViceBackend, requestedCount, options?.includeBorder === true);
       }
 
       if (facade.type !== "c64u") {
@@ -2207,18 +2211,23 @@ export class C64Client {
     }
   }
 
-  private async captureViceFrames(count: number): Promise<FrameCaptureResult> {
-    const viceFacade = await this.requireViceBackend();
-
+  private async captureViceFrames(viceFacade: ViceBackend, count: number, includeBorder: boolean): Promise<FrameCaptureResult> {
     const frames: CapturedFrame[] = [];
+    const warnings = new Set<string>();
     for (let index = 0; index < count; index += 1) {
       const snapshot = await this.captureViceDisplaySnapshot(viceFacade);
-      frames.push(this.normaliseViceDisplaySnapshot(snapshot));
+      const { frame, warning } = this.normaliseViceDisplaySnapshot(snapshot, includeBorder);
+      frames.push(frame);
+      if (warning) warnings.add(warning);
     }
 
-    return { backend: "vice", frames };
+    return { backend: "vice", frames, ...(warnings.size > 0 ? { warnings: [...warnings] } : {}) };
   }
 
+  /**
+   * Reads the VICE display. Only an empty frame (VICE has not rendered one yet) is retried; a
+   * monitor error, a timeout or a lost session is reported at once.
+   */
   private async captureViceDisplaySnapshot(viceFacade: ViceBackend): Promise<{
     readonly debugWidth: number;
     readonly debugHeight: number;
@@ -2229,22 +2238,17 @@ export class C64Client {
     readonly bitsPerPixel: number;
     readonly pixels: Uint8Array | Buffer;
   }> {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= 8; attempt += 1) {
-      try {
-        const snapshot = await viceFacade.withMonitor((client) => client.displayGet({}));
-        if (snapshot.pixels.length > 0) {
-          return snapshot;
-        }
-        lastError = new Error("VICE display capture returned an empty frame");
-      } catch (error) {
-        lastError = error;
+    const attempts = 8;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const snapshot = await viceFacade.withMonitor((client) => client.displayGet({}));
+      if (snapshot.pixels.length > 0) {
+        return snapshot;
       }
-      if (attempt < 8) {
+      if (attempt < attempts) {
         await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, 150 * attempt)));
       }
     }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "VICE display capture failed"));
+    throw new Error(`VICE display capture returned an empty frame ${attempts} times`);
   }
 
   private async captureC64uAudioSamples(
@@ -2573,6 +2577,11 @@ export class C64Client {
     }
   }
 
+  /**
+   * Crops a VICE display snapshot to the inner area VICE reports (XO, YO, IW, IH of Display Get),
+   * so the geometry does not depend on what the screen shows. With `includeBorder`, or when the
+   * snapshot cannot be cropped, the whole canvas is returned; an unusable inner area is reported.
+   */
   private normaliseViceDisplaySnapshot(snapshot: {
     readonly debugWidth: number;
     readonly debugHeight: number;
@@ -2582,116 +2591,55 @@ export class C64Client {
     readonly innerHeight?: number;
     readonly bitsPerPixel: number;
     readonly pixels: Uint8Array | Buffer;
-  }): CapturedFrame {
+  }, includeBorder = false): { frame: CapturedFrame; warning?: string } {
     const bytesPerPixel = snapshot.bitsPerPixel > 0 && snapshot.bitsPerPixel % 8 === 0
       ? snapshot.bitsPerPixel / 8
       : 0;
     const pixels = Uint8Array.from(snapshot.pixels);
+    const whole: CapturedFrame = {
+      frameNumber: null,
+      width: snapshot.debugWidth,
+      height: snapshot.debugHeight,
+      bitsPerPixel: snapshot.bitsPerPixel,
+      pixels,
+      complete: true,
+    };
     const canCrop = bytesPerPixel > 0
       && snapshot.debugWidth > 0
       && snapshot.debugHeight > 0
       && pixels.length >= snapshot.debugWidth * snapshot.debugHeight * bytesPerPixel;
+    if (includeBorder || !canCrop) {
+      return { frame: whole };
+    }
 
-    if (!canCrop) {
+    const left = snapshot.offsetX ?? 0;
+    const top = snapshot.offsetY ?? 0;
+    const width = snapshot.innerWidth ?? 0;
+    const height = snapshot.innerHeight ?? 0;
+    if (width <= 0 || height <= 0 || left + width > snapshot.debugWidth || top + height > snapshot.debugHeight) {
       return {
-        frameNumber: null,
-        width: snapshot.debugWidth,
-        height: snapshot.debugHeight,
-        bitsPerPixel: snapshot.bitsPerPixel,
-        pixels,
-        complete: true,
+        frame: whole,
+        warning: `VICE reported an inner screen area (${width} x ${height} at ${left},${top}) outside its ${snapshot.debugWidth} x ${snapshot.debugHeight} canvas; the whole canvas was returned.`,
       };
     }
-
-    const innerWidth = typeof snapshot.innerWidth === "number" && snapshot.innerWidth > 0
-      ? snapshot.innerWidth
-      : snapshot.debugWidth;
-    const innerHeight = typeof snapshot.innerHeight === "number" && snapshot.innerHeight > 0
-      ? snapshot.innerHeight
-      : snapshot.debugHeight;
-    const rowThreshold = Math.max(1, Math.min(innerWidth, snapshot.debugWidth, 32));
-    const columnThreshold = Math.max(1, Math.min(innerHeight, snapshot.debugHeight, 32));
-
-    const isPixelVisible = (pixelIndex: number): boolean => {
-      const offset = pixelIndex * bytesPerPixel;
-      for (let byteIndex = 0; byteIndex < bytesPerPixel; byteIndex += 1) {
-        if ((pixels[offset + byteIndex] ?? 0) !== 0) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    const rowVisibleCounts = new Array<number>(snapshot.debugHeight).fill(0);
-    for (let row = 0; row < snapshot.debugHeight; row += 1) {
-      let visiblePixels = 0;
-      const rowStart = row * snapshot.debugWidth;
-      for (let column = 0; column < snapshot.debugWidth; column += 1) {
-        if (isPixelVisible(rowStart + column)) {
-          visiblePixels += 1;
-        }
-      }
-      rowVisibleCounts[row] = visiblePixels;
-    }
-
-    const top = rowVisibleCounts.findIndex((count) => count >= rowThreshold);
-    const bottom = rowVisibleCounts.length - 1 - [...rowVisibleCounts].reverse().findIndex((count) => count >= rowThreshold);
-
-    if (top < 0 || bottom < top) {
-      return {
-        frameNumber: null,
-        width: snapshot.debugWidth,
-        height: snapshot.debugHeight,
-        bitsPerPixel: snapshot.bitsPerPixel,
-        pixels,
-        complete: true,
-      };
-    }
-
-    const columnVisibleCounts = new Array<number>(snapshot.debugWidth).fill(0);
-    for (let column = 0; column < snapshot.debugWidth; column += 1) {
-      let visiblePixels = 0;
-      for (let row = top; row <= bottom; row += 1) {
-        if (isPixelVisible((row * snapshot.debugWidth) + column)) {
-          visiblePixels += 1;
-        }
-      }
-      columnVisibleCounts[column] = visiblePixels;
-    }
-
-    const left = columnVisibleCounts.findIndex((count) => count >= columnThreshold);
-    const right = columnVisibleCounts.length - 1 - [...columnVisibleCounts].reverse().findIndex((count) => count >= columnThreshold);
-
-    if (left < 0 || right < left) {
-      return {
-        frameNumber: null,
-        width: snapshot.debugWidth,
-        height: snapshot.debugHeight,
-        bitsPerPixel: snapshot.bitsPerPixel,
-        pixels,
-        complete: true,
-      };
-    }
-
-    const croppedWidth = right - left + 1;
-    const croppedHeight = bottom - top + 1;
 
     const rowStride = snapshot.debugWidth * bytesPerPixel;
-    const croppedRowStride = croppedWidth * bytesPerPixel;
-    const cropped = new Uint8Array(croppedRowStride * croppedHeight);
-    for (let row = 0; row < croppedHeight; row += 1) {
+    const croppedRowStride = width * bytesPerPixel;
+    const cropped = new Uint8Array(croppedRowStride * height);
+    for (let row = 0; row < height; row += 1) {
       const sourceStart = ((top + row) * rowStride) + (left * bytesPerPixel);
-      const sourceEnd = sourceStart + croppedRowStride;
-      cropped.set(pixels.subarray(sourceStart, sourceEnd), row * croppedRowStride);
+      cropped.set(pixels.subarray(sourceStart, sourceStart + croppedRowStride), row * croppedRowStride);
     }
 
     return {
-      frameNumber: null,
-      width: croppedWidth,
-      height: croppedHeight,
-      bitsPerPixel: snapshot.bitsPerPixel,
-      pixels: cropped,
-      complete: true,
+      frame: {
+        frameNumber: null,
+        width,
+        height,
+        bitsPerPixel: snapshot.bitsPerPixel,
+        pixels: cropped,
+        complete: true,
+      },
     };
   }
 
