@@ -807,10 +807,6 @@ export class C64Client {
         options?.screenAddress ?? 0x0400,
       );
       const facade = await this.facadePromise;
-      await facade.writeMemory(layout.bitmapAddress, bitmap.bitmapData);
-      await facade.writeMemory(layout.screenAddress, bitmap.screenRam);
-      await facade.writeMemory(layout.colorRamAddress, bitmap.colorRam);
-
       let currentDd00 = 0;
       try {
         const dd00 = await facade.readMemory(0xDD00, 1);
@@ -826,12 +822,17 @@ export class C64Client {
         currentDd00,
       });
 
-      await facade.writeMemory(0xDD00, Uint8Array.of(registers.dd00));
-      await facade.writeMemory(0xD011, Uint8Array.of(registers.d011));
-      await facade.writeMemory(0xD016, Uint8Array.of(registers.d016));
-      await facade.writeMemory(0xD018, Uint8Array.of(registers.d018));
-      await facade.writeMemory(0xD020, Uint8Array.of(registers.d020));
-      await facade.writeMemory(0xD021, Uint8Array.of(registers.d021));
+      // Data first, then the registers that make the VIC-II show it.
+      await this.writeBlocks(facade, [
+        { address: layout.bitmapAddress, bytes: bitmap.bitmapData },
+        { address: layout.screenAddress, bytes: bitmap.screenRam },
+        { address: layout.colorRamAddress, bytes: bitmap.colorRam },
+        { address: 0xDD00, bytes: Uint8Array.of(registers.dd00) },
+        { address: 0xD011, bytes: Uint8Array.of(registers.d011) },
+        { address: 0xD016, bytes: Uint8Array.of(registers.d016) },
+        { address: 0xD018, bytes: Uint8Array.of(registers.d018) },
+        { address: 0xD020, bytes: Uint8Array.of(registers.d020, registers.d021) },
+      ]);
 
       return {
         success: true,
@@ -1201,16 +1202,19 @@ export class C64Client {
       const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade).catch(() => false);
       if (hard) {
         const span = 0x19;
-        const ff = Buffer.alloc(span, 0xff);
-        const zz = Buffer.alloc(span, 0x00);
-        await facade.writeMemory(0xd400, ff);
-        await facade.writeMemory(0xd400, zz);
+        await this.writeBlocks(facade, [
+          { address: 0xd400, bytes: Buffer.alloc(span, 0xff) },
+          { address: 0xd400, bytes: Buffer.alloc(span, 0x00) },
+        ]);
         return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
       }
-      await facade.writeMemory(0xd404, Buffer.from([0x00]));
-      await facade.writeMemory(0xd40b, Buffer.from([0x00]));
-      await facade.writeMemory(0xd412, Buffer.from([0x00]));
-      await facade.writeMemory(0xd418, Buffer.from([0x00]));
+      // Gate and waveform off on all three voices, then volume 0, in one batch.
+      await this.writeBlocks(facade, [
+        { address: 0xd404, bytes: Uint8Array.of(0x00) },
+        { address: 0xd40b, bytes: Uint8Array.of(0x00) },
+        { address: 0xd412, bytes: Uint8Array.of(0x00) },
+        { address: 0xd418, bytes: Uint8Array.of(0x00) },
+      ]);
       return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
