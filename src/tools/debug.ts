@@ -23,6 +23,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { parseNumericLiteral, assertNotBareHex } from "../numericArg.js";
+import { getSymbolAddress } from "./translation/symbolRegistry.js";
 
 interface DebugOperationMap extends OperationMap {
   readonly list_checkpoints: Record<string, never>;
@@ -773,6 +774,8 @@ function formatAddress(value: number): string {
 function parseAddress(value: string, label: string): number {
   const parsed = parseNumericLiteral(value, `$.${label}`);
   if (parsed === undefined) {
+    const symbol = getSymbolAddress(value.trim());
+    if (symbol !== undefined) return symbol;
     assertNotBareHex(value, `$.${label}`);
     throw new ToolValidationError(`Invalid ${label}`, { path: `$.${label}` });
   }

@@ -19,7 +19,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { disassemble, formatDisassembly } from "./translation/disassembler.js";
-import { getViceSymbols } from "./translation/symbolRegistry.js";
+import { getSymbolAddress, getViceSymbols } from "./translation/symbolRegistry.js";
 import { resolveAddressSymbol } from "../knowledge.js";
 import { stripHexByteSeparators } from "./hex.js";
 import { resolveHostPath } from "../hostPaths.js";
@@ -346,7 +346,7 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const readStart = parseAddressArg(parsed.address, "$.address");
     assertAddressRange(readStart, parsed.length ?? 256, "$.length");
 
-    const result = await ctx.client.readMemory(parsed.address, String(parsed.length));
+    const result = await ctx.client.readMemory(fmtAddr(readStart), String(parsed.length));
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while reading memory", {
         details: normaliseFailure(result.details),
@@ -354,7 +354,7 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     }
 
     const detailRecord = toRecord(result.details) ?? {};
-    const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
+    const resolvedAddress = resolveAddressLabel(detailRecord, fmtAddr(readStart));
     const resolvedLength = resolveLength(detailRecord) ?? parsed.length;
     const dumpLines = parsed.format === "dump" && typeof result.data === "string"
       ? formatHexDump(readStart, parseFirmwareHex(result.data, "memory read").bytes)
@@ -397,10 +397,12 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
     const expectedInfo = parsed.expected ? parseUserHex(parsed.expected, "$.expected") : undefined;
     const maskInfo = parsed.mask ? parseUserHex(parsed.mask, "$.mask") : undefined;
     const shouldVerify = parsed.verify || Boolean(expectedInfo) || Boolean(maskInfo);
-    assertAddressRange(parseAddressArg(parsed.address, "$.address"), writeInfo.bytes.length, "$.bytes");
+    const writeStart = parseAddressArg(parsed.address, "$.address");
+    const writeAddress = fmtAddr(writeStart);
+    assertAddressRange(writeStart, writeInfo.bytes.length, "$.bytes");
 
     if (!shouldVerify) {
-      const result = await ctx.client.writeMemory(parsed.address, writeInfo.canonical);
+      const result = await ctx.client.writeMemory(writeAddress, writeInfo.canonical);
       if (!result.success) {
         throw new ToolExecutionError("C64 backend reported failure while writing memory", {
           details: normaliseFailure(result.details),
@@ -408,7 +410,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       }
 
       const detailRecord = toRecord(result.details) ?? {};
-      const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
+      const resolvedAddress = resolveAddressLabel(detailRecord, writeAddress);
       const resolvedLength = resolveLength(detailRecord);
 
       return textResult(`Wrote ${resolvedLength ?? "the provided"} bytes starting at ${resolvedAddress}.`, {
@@ -438,7 +440,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
       const maskBytes = maskInfo?.bytes;
       const readLength = Math.max(1, Math.max(writeInfo.bytes.length, expectedBytes.length));
 
-      const preRead = await ctx.client.readMemory(parsed.address, String(readLength), pinnedFacade);
+      const preRead = await ctx.client.readMemory(writeAddress, String(readLength), pinnedFacade);
       if (!preRead.success) {
         throw new ToolExecutionError("C64 backend reported failure while reading memory", {
           details: normaliseFailure(preRead.details),
@@ -466,19 +468,19 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 
         if (preMismatches.length > 0 && parsed.abortOnMismatch !== false) {
           throw new ToolExecutionError("Verification failed before write", {
-            details: { mismatches: preMismatches, address: parsed.address },
+            details: { mismatches: preMismatches, address: writeAddress },
           });
         }
       }
 
-      const writeResult = await ctx.client.writeMemory(parsed.address, writeInfo.canonical, pinnedFacade);
+      const writeResult = await ctx.client.writeMemory(writeAddress, writeInfo.canonical, pinnedFacade);
       if (!writeResult.success) {
         throw new ToolExecutionError("C64 backend reported failure while writing memory", {
           details: normaliseFailure(writeResult.details),
         });
       }
 
-      const postRead = await ctx.client.readMemory(parsed.address, String(Math.max(1, writeInfo.bytes.length)), pinnedFacade);
+      const postRead = await ctx.client.readMemory(writeAddress, String(Math.max(1, writeInfo.bytes.length)), pinnedFacade);
       if (!postRead.success) {
         throw new ToolExecutionError("C64 backend reported failure while reading back memory", {
           details: normaliseFailure(postRead.details),
@@ -506,12 +508,12 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 
       if (diffs.length > 0) {
         throw new ToolExecutionError("Post-write verification failed", {
-          details: { address: parsed.address, diffs },
+          details: { address: writeAddress, diffs },
         });
       }
 
       const detailRecord = toRecord(writeResult.details) ?? {};
-      const resolvedAddress = resolveAddressLabel(detailRecord, parsed.address);
+      const resolvedAddress = resolveAddressLabel(detailRecord, writeAddress);
       const resolvedLength = resolveLength(detailRecord);
 
       const verificationMetadata: Record<string, unknown> = {
@@ -658,10 +660,11 @@ function parseAddressArg(raw: string, fieldPath: string): number {
   const trimmed = raw.trim();
   let addr = parseNumericLiteral(trimmed, fieldPath);
   if (addr === undefined) {
-    const resolved = resolveAddressSymbol(trimmed);
+    // Loaded program symbols first, then the documented system symbols.
+    const resolved = getSymbolAddress(trimmed) ?? resolveAddressSymbol(trimmed);
     if (resolved === undefined) {
       assertNotBareHex(trimmed, fieldPath);
-      throw new ToolValidationError(`Unknown address or symbol: ${trimmed}`, { path: fieldPath });
+      throw new ToolValidationError(`Unknown address or symbol: ${trimmed}; no such symbol is loaded`, { path: fieldPath });
     }
     addr = resolved;
   }

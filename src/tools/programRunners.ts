@@ -632,9 +632,16 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     }
     // Replace the registered symbols only once the program has started, so a
     // failed run keeps the previous table.
-    if (ctx.platform.id === "vice") {
-      setViceSymbols(asmResult.symbols.entries());
+    setViceSymbols(asmResult.symbols.entries());
+    const symbolEntries = [...asmResult.symbols.entries()].sort((a, b) => a[1] - b[1]);
+    const symbolsTruncated = symbolEntries.length > 256;
+    const symbolList: Record<string, string> = {};
+    for (const [name, address] of symbolEntries.slice(0, 256)) {
+      symbolList[name] = `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
     }
+    const symbolFields = symbolEntries.length > 0
+      ? { symbols: symbolList, ...(symbolsTruncated ? { symbolsTruncated: true } : {}) }
+      : {};
 
     // Read back the program bytes (load evidence), then poll for signs of execution.
     let verified = false;
@@ -696,6 +703,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...symbolFields,
     };
     const message = startQueued
       ? `Assembly program assembled, uploaded and loaded. The SYS command is queued (${keyboardFeed?.pending ?? "?"} character(s) pending) because the CPU is paused; the program starts when the machine resumes.`
@@ -711,6 +719,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...symbolFields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {

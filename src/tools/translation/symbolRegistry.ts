@@ -5,12 +5,17 @@
  */
 
 const viceAddressToLabel = new Map<number, string>();
+// Every registered name, including several names for one address (the address
+// map keeps only the last one). A repeated name keeps its last address.
+const viceNameToAddress = new Map<string, number>();
 
 export function setViceSymbols(nameToAddress: Iterable<readonly [string, number]>): void {
   viceAddressToLabel.clear();
+  viceNameToAddress.clear();
   for (const [name, address] of nameToAddress) {
     if (address >= 0 && address <= 0xffff) {
       viceAddressToLabel.set(address, name);
+      viceNameToAddress.set(name, address);
     }
   }
 }
@@ -19,8 +24,13 @@ export function getViceSymbol(address: number): string | undefined {
   return viceAddressToLabel.get(address);
 }
 
+export function getSymbolAddress(name: string): number | undefined {
+  return viceNameToAddress.get(name);
+}
+
 export function clearViceSymbols(): void {
   viceAddressToLabel.clear();
+  viceNameToAddress.clear();
 }
 
 export function getViceSymbols(): ReadonlyMap<number, string> {
