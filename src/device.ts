@@ -12,7 +12,7 @@ import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
 import { ViceClient, viceRequestTimeoutMs, type ViceCheckpoint } from "./vice/viceClient.js";
 import { resourceNameProblem } from "./vice/resourcePolicy.js";
-import { resetAndWaitForBasic } from "./vice/readiness.js";
+import { resetAndWaitForBasic, waitForBootedPrompt } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { assertSafeConfigName, assertSafeDevicePath } from "./devicePathSafety.js";
@@ -771,16 +771,15 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  private async waitForUsableMachine(timeoutMs = 20_000): Promise<void> {
+  /** A freshly started emulator boots by itself: wait for its BASIC prompt instead of resetting it (a reset costs a second boot). */
+  private async waitForBootedMachine(timeoutMs = 20_000): Promise<void> {
     const client = new ViceClient();
     try {
       await client.connect(this.port, this.host);
-      const readiness = await this.resetToBasicPrompt(client, timeoutMs);
+      const readiness = await waitForBootedPrompt(client, { timeoutMs });
       try { await client.exitMonitor(); } catch {}
       if (!readiness.pointersOk || !readiness.promptOk) {
-        throw new Error(
-          `VICE machine at ${this.host}:${this.port} did not reach the BASIC prompt within ${timeoutMs}ms`,
-        );
+        throw new Error(`VICE machine at ${this.host}:${this.port} did not reach the BASIC prompt within ${timeoutMs}ms`);
       }
     } finally {
       client.close();
@@ -831,11 +830,10 @@ export class ViceBackend implements C64Facade {
     handle.process.once("exit", () => {
       ViceBackend.supervisors.delete(key);
     });
-    // Allow VICE to fully initialize its display before connecting to the monitor.
-    // Early monitor connection can interfere with the boot sequence.
-    await delay(1000);
+    // startViceProcess has already talked to the monitor, so there is nothing left to protect with a fixed sleep:
+    // observe readiness instead (decision D1).
     await this.waitForResponsiveMonitor(20_000);
-    await this.waitForUsableMachine(20_000);
+    await this.waitForBootedMachine(20_000);
   }
 
   private async ensureProcess(): Promise<void> {

@@ -223,3 +223,45 @@ test("VICE-4 the first operation after the emulator was replaced reports it once
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
+
+test("VICE-7 a cold start waits for the emulator's own boot: no reset, no fixed 1 s sleep", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const root = path.resolve(import.meta.dirname, "..");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-cold-"));
+  const log = path.join(dir, "commands.json");
+  const fakeTs = path.join(dir, "fake-vice.mts");
+  fs.writeFileSync(fakeTs, `
+import fs from "node:fs";
+import { startViceMockServer } from ${JSON.stringify(path.join(root, "src/vice/mockServer.ts"))};
+const port = Number(process.argv[process.argv.indexOf("-binarymonitoraddress") + 1].split(":")[1]);
+const server = await startViceMockServer({ port });
+setInterval(() => fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(server.commands.map((c) => c[0]))), 20);
+`);
+  const fake = path.join(dir, "x64sc");
+  fs.writeFileSync(fake, `#!/bin/sh\ncd ${root} && exec node --import tsx/esm ${fakeTs} "$@"\n`, { mode: 0o755 });
+  const saved = { VICE_TEST_TARGET: process.env.VICE_TEST_TARGET, VICE_BINARY: process.env.VICE_BINARY, VICE_HEADLESS: process.env.VICE_HEADLESS };
+  delete process.env.VICE_TEST_TARGET;
+  process.env.VICE_BINARY = fake;
+  process.env.VICE_HEADLESS = "1";
+  const free = await startViceMockServer();
+  const port = free.port;
+  await free.stop();
+  const backend = new ViceBackend({ host: "127.0.0.1", port });
+  try {
+    const started = Date.now();
+    assert.equal(await backend.ping(), true);
+    const ms = Date.now() - started;
+    await new Promise((r) => setTimeout(r, 100));
+    const commands = JSON.parse(fs.readFileSync(log, "utf8"));
+    assert.ok(!commands.includes(0xcc), `no reset was sent: ${commands}`);
+    assert.ok(commands.includes(0x01), "the screen was read");
+    assert.ok(ms < 4_000, `cold start took ${ms} ms`);
+  } finally {
+    await backend.poweroff().catch(() => {});
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
