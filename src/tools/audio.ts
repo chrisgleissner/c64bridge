@@ -252,6 +252,11 @@ const musicGenerateArgsSchema = objectSchema({
       description: "Optional musical preset to influence timing/expression.",
       enum: ["classic", "expression"],
     }), "classic"),
+    system: optionalSchema(stringSchema({
+      description: "Video system for the note frequencies. Defaults to PAL; use NTSC on an NTSC machine or the notes sound about 65 cents sharp.",
+      enum: ["PAL", "NTSC"],
+      default: "PAL",
+    }), "PAL"),
   },
   additionalProperties: false,
 });
@@ -964,6 +969,7 @@ export const audioModule = defineToolModule({
         try {
           const parsed = musicGenerateArgsSchema.parse(args ?? {});
           const intervals = parseIntervals(parsed.pattern);
+          const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
           const timeline: Array<{ t: number; note: string; durationMs: number }> = [];
           let timestamp = 0;
           const expressiveDurations = [250, 180, 180, 400];
@@ -972,7 +978,7 @@ export const audioModule = defineToolModule({
             const note = transposeNote(parsed.root, iv);
             const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
             // Playback runs in the background, so a note the SID cannot play must be rejected here.
-            assertPlayableFrequency(noteHz(note), note, "PAL", "$.root");
+            assertPlayableFrequency(noteHz(note), note, system, "$.root");
             timeline.push({ t: timestamp, note, durationMs });
             timestamp += durationMs;
           }
@@ -997,6 +1003,10 @@ export const audioModule = defineToolModule({
               await previousPlayback;
               const pinnedFacade = await pinnedFacadePromise;
               await ctx.client.sidSetVolume(8, pinnedFacade);
+              // Steps are scheduled against the start time, so REST latency does not accumulate as tempo drift.
+              const startedAt = Date.now();
+              let stepStart = 0;
+              const sleepUntil = (offsetMs: number) => sleep(Math.max(0, startedAt + offsetMs - Date.now()), controller.signal);
               for (let i = 0; i < parsed.steps; i += 1) {
                 if (controller.signal.aborted) break;
                 const iv = intervals[i % intervals.length]!;
@@ -1005,6 +1015,7 @@ export const audioModule = defineToolModule({
                   voice: 1,
                   note,
                   waveform: (parsed.waveform ?? "tri") as "pulse" | "saw" | "tri" | "noise",
+                  system,
                   pulseWidth: 0x0800,
                   attack: 1,
                   decay: 7,
@@ -1015,10 +1026,11 @@ export const audioModule = defineToolModule({
                 // Hold GATE for most of the note, then clear it for a short gap so the next note retriggers ADSR.
                 const gateGapMs = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
                 // Cancellation ends the sleep at once, so the final gate-off below follows promptly.
-                await sleep(Math.max(0, durationMs - gateGapMs), controller.signal);
+                await sleepUntil(stepStart + durationMs - gateGapMs);
                 if (controller.signal.aborted) break;
                 await ctx.client.sidNoteOff(1, pinnedFacade);
-                await sleep(gateGapMs, controller.signal);
+                await sleepUntil(stepStart + durationMs);
+                stepStart += durationMs;
               }
               await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {
@@ -1029,7 +1041,7 @@ export const audioModule = defineToolModule({
             }
           })();
 
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root}. Playback is running and will be replaced by the next generated sequence.`, {
+          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root} (${system} pitch table). Playback is running and will be replaced by the next generated sequence.`, {
             success: true,
             root: parsed.root,
             intervals,
@@ -1037,6 +1049,7 @@ export const audioModule = defineToolModule({
             tempoMs: parsed.tempoMs,
             waveform: parsed.waveform ?? "tri",
             preset: parsed.preset ?? "classic",
+            system,
             timeline,
           });
         } catch (error) {
