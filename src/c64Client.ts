@@ -3117,13 +3117,24 @@ export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: numb
   const bg = toByte(opts.backgroundColor ?? 0); // default black
   // Clear screen, set colours, print text starting at 1,1
   // Note: CHR$(147) clears the screen.
-  const sanitized = opts.text.replace(/\r\n?|\n/g, "\\n");
-  const program = [
-    `10 POKE 53280,${border}:POKE 53281,${bg}:PRINT CHR$(147)`,
-    `20 PRINT "${sanitized}"`,
-    `30 GETA$:IFA$=""THEN30:END:REM wait for key then end`,
-  ].join("\n");
-  return program;
+  // The text is data: quotes and the characters the tokenizer expands become CHR$ pieces, and each
+  // line break is a real PRINT line end. Long lines are split so a BASIC line stays short.
+  const lines = [`10 POKE 53280,${border}:POKE 53281,${bg}:PRINT CHR$(147)`];
+  let ln = 20;
+  for (const logical of opts.text.split(/\r\n|\r|\n/)) {
+    if (logical.length === 0) {
+      lines.push(`${ln} PRINT`);
+      ln += 10;
+      continue;
+    }
+    const chunks = chunkByExpressionLength(logical, (text) => printerTextExpression(text, "commodore"), PRINTER_EXPRESSION_MAX);
+    chunks.forEach((chunk, index) => {
+      lines.push(`${ln} PRINT ${printerTextExpression(chunk, "commodore")}${index < chunks.length - 1 ? ";" : ""}`);
+      ln += 10;
+    });
+  }
+  lines.push(`${ln} GETA$:IFA$=""THEN${ln}:END:REM wait for key then end`);
+  return lines.join("\n");
 }
 
 export function buildPrinterBasicProgram(opts: {
