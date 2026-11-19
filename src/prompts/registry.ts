@@ -4,6 +4,7 @@ import { RESOURCE_URIS } from "../rag/resourceUris.js";
 import { toolRegistry } from "../tools/registry/index.js";
 import type { ToolDescriptor } from "../tools/types.js";
 import { ToolValidationError } from "../tools/errors.js";
+import { rewriteSkillPaths, SKILL_URI_PREFIX } from "../mcp/skills.js";
 
 export interface PromptDescriptor {
   readonly name: string;
@@ -107,7 +108,7 @@ const ROUTING_CORE_SEGMENT: PromptSegment = {
   role: "assistant",
   content: [
     "Prompts in this repository define intent and routing only.",
-    "Execution logic, validation steps, and safety rules live exclusively in `.github/skills/*/SKILL.md`.",
+    `Execution logic, validation steps, and safety rules live exclusively in the skill resources \`${SKILL_URI_PREFIX}<name>\` (read them with resources/read).`,
     `When the request targets the \`vice\` backend, read \`${RESOURCE_URIS.vice.binaryMonitorSpec}\` before executing the skill so Binary Monitor single-client behaviour, trap/resume semantics, and monitor-side side effects stay in scope.`,
     "Use the referenced skill, extract missing inputs from the user request, execute the skill, and summarize the outcome.",
   ].join("\n"),
@@ -117,10 +118,10 @@ function buildSkillRoutingSegment(skillPath: string, routingNotes: readonly stri
   return {
     id: `routing/${skillPath}`,
     role: "assistant",
-    content: [
-      `Use the skill defined in \`${skillPath}\` as the single source of truth for execution.`,
+    content: rewriteSkillPaths([
+      `Read the skill resource \`${skillPath}\` and use it as the single source of truth for execution.`,
       ...routingNotes,
-    ].join("\n"),
+    ].join("\n")),
   };
 }
 

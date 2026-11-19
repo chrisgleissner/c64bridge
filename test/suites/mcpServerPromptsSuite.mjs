@@ -96,7 +96,7 @@ export function registerMcpServerPromptsTests(withSharedMcpClient) {
       assert.deepEqual(
         toolNames,
         expected.tools.map((tool) => tool.name),
-        "Prompt should surface matching tool descriptors",
+        "Prompt should name the matching tools",
       );
     });
   });
@@ -131,11 +131,11 @@ export function registerMcpServerPromptsTests(withSharedMcpClient) {
       );
 
       assert.ok(
-        result._meta?.tools?.some((tool) => tool.name === "c64_graphics"),
+        result._meta?.tools?.includes("c64_graphics"),
         "Graphics prompt should include c64_graphics grouped tool",
       );
       assert.ok(
-        result._meta?.tools?.some((tool) => tool.name === "c64_memory"),
+        result._meta?.tools?.includes("c64_memory"),
         "Graphics prompt should include c64_memory",
       );
       assert.ok(
@@ -159,7 +159,7 @@ export function registerMcpServerPromptsTests(withSharedMcpClient) {
       assert.ok(resourceUris.includes("c64://printer/epson/text"), "should include Epson text guide");
       assert.ok(resourceUris.includes("c64://printer/epson/bitmap"), "should include Epson bitmap guide");
       assert.ok(
-        result._meta?.tools?.some((tool) => tool.name === "c64_printer"),
+        result._meta?.tools?.includes("c64_printer"),
         "should include c64_printer tool",
       );
     });

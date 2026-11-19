@@ -29,6 +29,7 @@ import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
 import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
+import { listSkillResources, readSkillResource, rewriteSkillPaths } from "./mcp/skills.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
@@ -118,6 +119,22 @@ export function checkHttpRequestAccess(
 }
 
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 2_000;
+
+/** Returned from initialize: the minimum a client needs before its first call (D7). */
+export const SERVER_INSTRUCTIONS = [
+  "c64bridge controls a Commodore 64: C64 Ultimate / Ultimate 64 and U2-family hardware over REST, or the VICE emulator.",
+  "Every grouped tool (c64_program, c64_memory, c64_system, c64_config, ...) needs an `op` argument; never call one with {}.",
+  "Read c64://platform/status first: active backend, configured backends, access mode (C64BRIDGE_ACCESS) and which tools and ops each backend supports.",
+  "Switch backends with c64_select_backend {op:\"select\", backend:\"c64u\"|\"u2\"|\"vice\"}; it changes no machine state.",
+  "Step-by-step workflows are skill resources c64://skills/<name> (hello-world, basic-program, assembly-program, game-development, ...); prompts name the one to use.",
+  "For any game request read c64://gamedev/index first; it chooses the target and lists what to read.",
+  "Knowledge resources: resources/list; targeted snippets: c64_rag {op:\"basic\"|\"asm\"|\"docs\", q}.",
+  "Addresses are $HHHH hex or decimal numbers; bare hex such as 0400 is rejected as ambiguous.",
+  "Host file paths must lie in the working directory, ~/.c64bridge or the temp directory (C64BRIDGE_ALLOWED_DIRS adds roots).",
+  "Ultimate hardware reads run_prg/load_prg paths from its own storage; pass location: \"host\" to upload a PRG built on this machine.",
+  "Labels from upload_run_asm or a symbolsFile can be used as addresses until the next program start, reset or backend switch.",
+  "Long calls report progress when the request carries a progress token; a cancelled call stops at the next step.",
+].join("\n");
 
 /**
  * Installs the single shutdown path. The first trigger stops background
@@ -249,6 +266,7 @@ async function main() {
         tools: {},
         prompts: {},
       },
+      instructions: SERVER_INSTRUCTIONS,
     }
   );
 
@@ -266,9 +284,15 @@ async function main() {
       }));
 
       const platformResource = createPlatformResourceDescriptor();
+      const skillResources = listSkillResources().map((skill) => ({
+        uri: skill.uri,
+        name: skill.name,
+        description: skill.description,
+        mimeType: skill.mimeType,
+      }));
 
       const response = {
-        resources: [...knowledgeResources, platformResource],
+        resources: [...knowledgeResources, ...skillResources, platformResource],
       };
 
       const latency = Date.now() - startedAt;
@@ -314,12 +338,15 @@ async function main() {
           ],
         };
       } else {
-        const result = readKnowledgeResource(request.params.uri, PROJECT_ROOT);
+        const skill = readSkillResource(request.params.uri);
+        const result = skill ?? readKnowledgeResource(request.params.uri, PROJECT_ROOT);
         if (!result) {
           throw new McpError(-32002, `Unknown resource: ${request.params.uri}`);
         }
+        // Knowledge text names skills by repository path; clients read them as c64://skills/<name>.
+        const text = (result as { text?: unknown }).text;
         response = {
-          contents: [result],
+          contents: [typeof text === "string" ? { ...result, text: rewriteSkillPaths(text) } : result],
         };
       }
 
@@ -549,14 +576,14 @@ async function main() {
         messages: resolved.messages.map(toPromptMessage),
         _meta: {
           arguments: resolved.arguments,
+          // Names only: the descriptors are in tools/list, and repeating them cost about 80 KB per prompt.
           resources: resolved.resources.map((resource) => ({
             uri: resource.uri,
             name: resource.name,
             description: resource.description,
             mimeType: resource.mimeType,
-            metadata: resource.metadata,
           })),
-          tools: resolved.tools,
+          tools: resolved.tools.map((tool) => tool.name),
         },
       };
 
