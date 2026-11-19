@@ -36,6 +36,19 @@ Address arguments of `c64_memory` and of `c64_debug` checkpoints and `wait_for_s
 
 The HTTP transport prints a stderr warning at startup when `C64BRIDGE_HTTP_TOKEN` is not set.
 
+## Untrusted device data and routes (Hardening 5)
+
+The device, the emulator and their network path are treated as untrusted input.
+
+- Route names: no tool argument can change the REST route. Configuration category and item names and device file paths reject `.` and `..` segments (also percent-encoded, in any letter case), control characters and backslashes; device paths also reject empty inner segments, and category names reject `/`. Item names may contain `/` (the firmware item `Bus Sharing - I/O1`); it is sent as `%2F` inside one segment. Rejection is a validation error before any request.
+- REST: a response body is limited to 16 MiB, and every request has a total deadline of 120 s in addition to the 10 s idle timeout (a call with a longer timeout keeps it as its deadline). Reachability probes are limited to 1 MiB. A memory read that returns a different number of bytes than requested, or a JSON body without data, is an error.
+- Video stream: packets must have width 1 to 512, lines within 0 to 512, 4 bits per pixel, encoding 0 and the payload their header announces; other datagrams (including palette packets) are ignored. A line counts toward a complete frame only when its pixels arrived. A reusable capture session keeps at most 4096 packets. Ignored datagrams are reported in diagnostics at most once per 10 s, with the count (`ignoredPackets`).
+- VICE monitor: a response frame above 4 MiB ends the monitor session.
+
+Labels belong to one program on one backend. They are cleared after every successful program start except `load_prg` (BASIC, assembly, PRG, CRT, find-and-run, shuffle, batch runs, compile cycle, PETSCII and art rendering, greeting, SID, MOD and compiled music), after reset, reboot, power cycle, power off and VICE restart, and on a backend switch. A failed start keeps them. A label named `__proto__` is returned like any other.
+
+`render_petscii_text` prints its text as data: quotes, NUL, `<`, `:` and `{` are spliced as `CHR$`, each line break starts a new printed line, and long lines are split so every BASIC line stays short. Text that would need more than 63999 as a line number is rejected.
+
 ## Limits and knowledge
 
 Raw graphics/audio output is capped at 2 MiB, PNG captures at four images, including aggregate batch output. Artifact snapshots accept at most 256 memory ranges and 2 MiB of aggregate raw memory before reading the device. SIDWAVE input is limited to 4096 bars. Regex waits on runtimes without interruptible evaluation enforce a conservative repetition budget. Knowledge queries (`c64_rag` operations `basic`, `asm`, `docs`) are limited to 500 characters and lexical ranking to 32 distinct terms.
