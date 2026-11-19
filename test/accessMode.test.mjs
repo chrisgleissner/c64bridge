@@ -252,14 +252,15 @@ test("tool annotations follow the operation effects", () => {
   });
   assert.equal(byName.get("c64_system").annotations.destructiveHint, true);
   assert.equal(byName.get("c64_system").annotations.readOnlyHint, false);
-  assert.equal(byName.get("c64_memory").annotations.destructiveHint, false);
+  // D10 / MCP-11: a write overwrites state, which MCP does not count as additive.
+  assert.equal(byName.get("c64_memory").annotations.destructiveHint, true);
   assert.equal(byName.get("c64_memory").annotations.readOnlyHint, false);
   assert.equal(byName.get("c64_batch").annotations.readOnlyHint, false);
   assert.equal(byName.get("c64_batch").annotations.destructiveHint, true);
   for (const tool of toolRegistry.list()) {
     const effects = tool.metadata.operationEffects ? Object.values(tool.metadata.operationEffects) : [tool.metadata.effect];
     assert.equal(tool.annotations.readOnlyHint, effects.every((effect) => effect === "read"), tool.name);
-    assert.equal(tool.annotations.destructiveHint, effects.includes("destructive"), tool.name);
+    assert.equal(tool.annotations.destructiveHint, effects.some((effect) => effect !== "read"), tool.name);
     assert.equal(tool.annotations.openWorldHint, false, tool.name);
   }
 });
