@@ -147,12 +147,12 @@ function prepareAssemblyArgs(args: Record<string, unknown>): Record<string, unkn
     return {};
   }
   if (typeof hardware !== "string") {
-    throw new Error("assembly-program prompt argument \"hardware\" must be a string");
+    throw new ToolValidationError("assembly-program prompt argument \"hardware\" must be a string");
   }
   const normalized = hardware.trim().toLowerCase();
   const allowed: AssemblyHardware[] = ["sid", "vic", "cia", "multi"];
   if (!allowed.includes(normalized as AssemblyHardware)) {
-    throw new Error(
+    throw new ToolValidationError(
       `assembly-program prompt does not support hardware \"${hardware}\". Expected one of: ${allowed.join(", ")}`,
     );
   }
@@ -165,12 +165,12 @@ function prepareGraphicsArgs(args: Record<string, unknown>): Record<string, unkn
     return {};
   }
   if (typeof mode !== "string") {
-    throw new Error("graphics-demo prompt argument \"mode\" must be a string");
+    throw new ToolValidationError("graphics-demo prompt argument \"mode\" must be a string");
   }
   const normalized = mode.trim().toLowerCase();
   const allowed: GraphicsMode[] = ["text", "multicolour", "bitmap", "sprite"];
   if (!allowed.includes(normalized as GraphicsMode)) {
-    throw new Error(
+    throw new ToolValidationError(
       `graphics-demo prompt does not support mode \"${mode}\". Expected one of: ${allowed.join(", ")}`,
     );
   }
@@ -181,12 +181,12 @@ function prepareGameDevArgs(args: Record<string, unknown>): Record<string, unkno
   const prepared: Record<string, unknown> = {};
   const target = args.target;
   if (target !== undefined && target !== null && typeof target !== "string") {
-    throw new Error("game-development prompt argument \"target\" must be a string");
+    throw new ToolValidationError("game-development prompt argument \"target\" must be a string");
   }
   const normalized = typeof target === "string" && target.trim() ? target.trim().toLowerCase() : "modern";
   const allowed: GameTarget[] = ["modern", "authentic"];
   if (!allowed.includes(normalized as GameTarget)) {
-    throw new Error(
+    throw new ToolValidationError(
       `game-development prompt does not support target \"${String(target)}\". Expected one of: ${allowed.join(", ")}`,
     );
   }
@@ -197,7 +197,7 @@ function prepareGameDevArgs(args: Record<string, unknown>): Record<string, unkno
       continue;
     }
     if (typeof value !== "string") {
-      throw new Error(`game-development prompt argument \"${key}\" must be a string`);
+      throw new ToolValidationError(`game-development prompt argument \"${key}\" must be a string`);
     }
     const trimmed = value.trim();
     if (trimmed) {
@@ -213,12 +213,12 @@ function preparePrinterArgs(args: Record<string, unknown>): Record<string, unkno
     return {};
   }
   if (typeof printerType !== "string") {
-    throw new Error("printer-job prompt argument \"printerType\" must be a string");
+    throw new ToolValidationError("printer-job prompt argument \"printerType\" must be a string");
   }
   const normalized = printerType.trim().toLowerCase();
   const allowed: PrinterType[] = ["commodore", "epson"];
   if (!allowed.includes(normalized as PrinterType)) {
-    throw new Error(
+    throw new ToolValidationError(
       `printer-job prompt does not support printerType \"${printerType}\". Expected one of: ${allowed.join(", ")}`,
     );
   }
