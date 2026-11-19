@@ -3343,6 +3343,30 @@ function printerTextExpression(input: string, target: "commodore" | "epson", sec
   return pieces.join(";");
 }
 
+/** A BASIC V2 string holds at most 255 characters, so bitmap rows are kept in an array of such strings. */
+const BASIC_STRING_MAX = 255;
+
+/**
+ * BASIC lines that READ `count` DATA bytes into A$(0), A$(1), ... with at most 255 bytes each,
+ * and the DATA lines themselves (numbered from `dataLine`).
+ */
+function bitmapRowLoader(count: number, chunks: number, firstLine: number): string[] {
+  return [
+    `${firstLine} DIM A$(${chunks - 1})`,
+    `${firstLine + 10} FOR I=0 TO ${count - 1}:READ A:K=INT(I/${BASIC_STRING_MAX}):A$(K)=A$(K)+CHR$(A):NEXT I`,
+  ];
+}
+
+function bitmapDataLines(values: readonly number[], firstLine: number): string[] {
+  const lines: string[] = [];
+  let ln = firstLine;
+  for (let i = 0; i < values.length; i += 8) {
+    lines.push(`${ln} DATA ${values.slice(i, i + 8).join(",")}`);
+    ln += 10;
+  }
+  return lines;
+}
+
 export function buildCommodoreBitmapBasicProgram(opts: {
   columns: number[];
   repeats?: number;
@@ -3357,28 +3381,24 @@ export function buildCommodoreBitmapBasicProgram(opts: {
     const n = Math.max(0, Math.min(255, Math.floor(v)));
     return ensureMsb ? (n | 0x80) : n;
   });
+  const chunks = Math.max(1, Math.ceil(cols.length / BASIC_STRING_MAX));
   const lines: string[] = [];
   lines.push(`10 OPEN1,4,${saddr}`);
-  lines.push(`20 A$=""`);
-  lines.push(`30 FOR I=1 TO ${cols.length}`);
-  lines.push(`40 READ A:A$=A$+CHR$(A)`);
-  lines.push(`50 NEXT I`);
-  lines.push(`60 FOR J=1 TO ${repeats}`);
+  lines.push(...bitmapRowLoader(cols.length, chunks, 20));
+  lines.push(`40 FOR J=1 TO ${repeats}`);
+  // CHR$(8) selects bit image mode; the row ends with the carriage return of the bare PRINT#1.
   if (typeof opts.useSubRepeat === "number") {
     const r = Math.max(0, Math.min(255, Math.floor(opts.useSubRepeat)));
-    lines.push(`70 PRINT#1,CHR$(8);CHR$(26);CHR$(${r});A$`);
+    lines.push(`50 PRINT#1,CHR$(8);CHR$(26);CHR$(${r});`);
   } else {
-    lines.push(`70 PRINT#1,CHR$(8);A$`);
+    lines.push(`50 PRINT#1,CHR$(8);`);
   }
+  lines.push(`60 FOR K=0 TO ${chunks - 1}:PRINT#1,A$(K);:NEXT K`);
+  lines.push(`70 PRINT#1`);
   lines.push(`80 NEXT J`);
   lines.push(`90 CLOSE1`);
   lines.push(`100 END`);
-  let ln = 110;
-  for (let i = 0; i < cols.length; i += 8) {
-    const group = cols.slice(i, i + 8);
-    lines.push(`${ln} DATA ${group.join(",")}`);
-    ln += 10;
-  }
+  lines.push(...bitmapDataLines(cols, 110));
   return lines.join("\n");
 }
 
@@ -3390,43 +3410,35 @@ export function buildEpsonBitmapBasicProgram(opts: {
   timesPerLine?: number;
 }): string {
   const cols = (opts.columns ?? []).map((v) => Math.max(0, Math.min(255, Math.floor(v))));
-  const len = cols.length;
-  const n = len & 0xff;
-  const m = (len >> 8) & 0xff;
   const mode = (opts.mode ?? "K").toUpperCase() as "K" | "L" | "Y" | "Z" | "*";
   const repeats = Math.max(1, Math.floor(opts.repeats ?? 1));
-  const timesPerLine = Math.max(1, Math.floor(opts.timesPerLine ?? 4));
+  const timesPerLine = Math.max(1, Math.floor(opts.timesPerLine ?? 1));
+  const chunks = Math.max(1, Math.ceil(cols.length / BASIC_STRING_MAX));
 
   function modeCode(mo: string): number | null {
     const map: Record<string, number> = { K: 75, L: 76, Y: 89, Z: 90 };
     return map[mo] ?? null;
   }
 
+  // Each string is sent as its own graphics command: ESC K n1 n2 (or ESC * m n1 n2), where
+  // n1 + 256 * n2 is the number of column bytes that follow; one string holds at most 255.
+  const command = mode === "*"
+    ? `CHR$(27);"*";CHR$(${Math.max(0, Math.min(6, Math.floor(opts.density ?? 0)))})`
+    : `CHR$(27);CHR$(${modeCode(mode)!})`;
+
   const lines: string[] = [];
   lines.push(`10 OPEN1,4`);
-  if (mode === "*") {
-    const density = Math.max(0, Math.min(6, Math.floor(opts.density ?? 0)));
-    lines.push(`20 A$=CHR$(27)+"*"+CHR$(${density})+CHR$(${n})+CHR$(${m})`);
-  } else {
-    const mc = modeCode(mode)!;
-    lines.push(`20 A$=CHR$(27)+CHR$(${mc})+CHR$(${n})+CHR$(${m})`);
-  }
-  lines.push(`30 FOR I=1 TO ${cols.length}`);
-  lines.push(`40 READ A:A$=A$+CHR$(A)`);
-  lines.push(`50 NEXT I`);
-  lines.push(`60 PRINT#1,CHR$(27);CHR$(65);CHR$(8);CHR$(10);CHR$(13)`);
-  lines.push(`70 FOR J=1 TO ${repeats}`);
-  const seg = Array.from({ length: timesPerLine }).map(() => "A$").join(";");
-  lines.push(`80 PRINT#1,${seg};CHR$(10);CHR$(13)`);
-  lines.push(`90 NEXT J`);
-  lines.push(`100 CLOSE1`);
-  lines.push(`110 END`);
-  let ln = 120;
-  for (let i = 0; i < cols.length; i += 8) {
-    const group = cols.slice(i, i + 8);
-    lines.push(`${ln} DATA ${group.join(",")}`);
-    ln += 10;
-  }
+  lines.push(...bitmapRowLoader(cols.length, chunks, 20));
+  lines.push(`40 PRINT#1,CHR$(27);CHR$(65);CHR$(8);CHR$(10);CHR$(13)`);
+  lines.push(`50 FOR J=1 TO ${repeats}`);
+  lines.push(`60 FOR T=1 TO ${timesPerLine}`);
+  lines.push(`70 FOR K=0 TO ${chunks - 1}:PRINT#1,${command};CHR$(LEN(A$(K)));CHR$(0);A$(K);:NEXT K`);
+  lines.push(`80 NEXT T`);
+  lines.push(`90 PRINT#1,CHR$(10);CHR$(13)`);
+  lines.push(`100 NEXT J`);
+  lines.push(`110 CLOSE1`);
+  lines.push(`120 END`);
+  lines.push(...bitmapDataLines(cols, 130));
   return lines.join("\n");
 }
 
