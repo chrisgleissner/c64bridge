@@ -430,3 +430,20 @@ test("Node start launcher preserves a foreign caller directory and its local con
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.stdout.trim().split("\n"), [callerDir, path.join(projectDir, "src", "index.ts"), '{"backend":"caller"}']);
 });
+
+test("PACKAGE-3 start script passes its command line arguments (--http) to the Bun child", async (t) => {
+  const fixture = createFixture();
+  const argsFile = path.join(fixture.dir, "args.json");
+  const stub = path.join(fixture.dir, "bun-stub.mjs");
+  writeFile(stub, `#!/usr/bin/env node\nimport fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));\n`, 0o755);
+  t.after(() => fs.rmSync(fixture.dir, { recursive: true, force: true }));
+
+  const startModule = await importFixtureStart(fixture.dir);
+  const restoreEnv = withTempEnv({ BUN_BIN: stub });
+  try {
+    assert.equal(await startModule.runWithBun("entry.ts", ["--http", "3000"]), true);
+  } finally {
+    restoreEnv();
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(argsFile, "utf8")), ["entry.ts", "--http", "3000"]);
+});
