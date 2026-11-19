@@ -1918,8 +1918,15 @@ export class C64Client {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
-    await this.bindCaptureSocket(socket, bindAddress);
-    const target = this.socketEndpoint(socket, bindAddress);
+    let target: string;
+    try {
+      await this.bindCaptureSocket(socket, bindAddress);
+      target = this.socketEndpoint(socket, bindAddress);
+    } catch (error) {
+      // A socket whose bind failed still holds a handle under Node; close it so it does not leak.
+      closeQuietly(socket);
+      throw error;
+    }
 
     const session: C64uVideoCaptureSession = {
       facade,
@@ -2147,7 +2154,6 @@ export class C64Client {
     let captureError: Error | null = null;
     let captureSettled = false;
     let notifyCapture: () => void = () => {};
-    let socketBound = false;
     let streamAttempted = false;
     let failed = false;
 
@@ -2181,7 +2187,6 @@ export class C64Client {
 
     try {
       await this.bindCaptureSocket(socket, bindAddress);
-      socketBound = true;
       options?.signal?.throwIfAborted();
       const target = this.socketEndpoint(socket, bindAddress);
       streamAttempted = true;
@@ -2238,7 +2243,8 @@ export class C64Client {
       notifyCapture = () => {};
       options?.signal?.removeEventListener("abort", onAbort);
       socket.off("message", onMessage);
-      if (socketBound) socket.close();
+      // Also after a failed bind: the socket still holds a handle under Node.
+      closeQuietly(socket);
       try {
         if (streamAttempted) await this.ensureStreamSuccess(await facade.streamStop("audio"), "stop audio stream");
       } catch (error) {
@@ -3306,4 +3312,9 @@ export function buildCommodoreDllBasicProgram(opts: {
   }
   lines.push(`${ln} CLOSE1`);
   return lines.join("\n");
+}
+
+/** Close a UDP socket that may already be closed. */
+function closeQuietly(socket: Socket): void {
+  try { socket.close(); } catch { /* already closed */ }
 }

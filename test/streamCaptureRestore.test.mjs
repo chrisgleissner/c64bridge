@@ -176,3 +176,27 @@ test("reusable capture cleanup retains the original collection failure", async (
     forgetUserStream("video");
   }
 });
+
+test("I17 a capture whose UDP socket cannot bind leaves no socket open", async () => {
+  const udpHandles = () => (process.getActiveResourcesInfo?.() ?? []).filter((name) => /UDP/i.test(name)).length;
+  // Sockets of earlier tests close asynchronously; start from a settled count.
+  const settled = async () => {
+    let last = udpHandles();
+    for (let stable = 0; stable < 3;) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const now = udpHandles();
+      stable = now === last ? stable + 1 : 0;
+      last = now;
+    }
+    return last;
+  };
+  const before = await settled();
+  const events = [];
+  const client = clientWithStubFacade(events);
+  // 203.0.113.0/24 (TEST-NET-3) is never a local address, so binding to it fails.
+  client.resolveCaptureEndpoint = async () => ({ bindAddress: "203.0.113.7", acceptsSource: () => true });
+  await assert.rejects(() => client.captureSamples({ count: 16 }), /EADDRNOTAVAIL|bind|address/i);
+  await assert.rejects(() => client.captureFrames({ count: 1 }), /EADDRNOTAVAIL|bind|address/i);
+  await assert.rejects(() => client.captureFrames({ count: 1, reuseSession: true }), /EADDRNOTAVAIL|bind|address/i);
+  assert.equal(await settled(), before, "every capture socket was closed");
+});
