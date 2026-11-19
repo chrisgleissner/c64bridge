@@ -79,3 +79,16 @@ test("HARD04-002 a symbols file without labels reports symbolsLoaded 0 and a war
     assert.match(res.structuredContent.data.warnings[0], /64tass/);
   });
 });
+
+test("HARD04-002 run_prg without symbolsFile clears earlier labels on c64u", async () => {
+  await withSymbolsFile("start = $C000\n", async (file) => {
+    const ctx = ctxFor("c64u");
+    await programRunnersModule.invoke("run_prg", { path: "//USB0/a.prg", symbolsFile: file }, ctx);
+    assert.equal(getViceSymbol(0xc000), "start");
+    const run = await programRunnersModule.invoke("run_prg", { path: "//USB0/b.prg" }, ctx);
+    assert.equal(run.isError, undefined);
+    assert.equal(getViceSymbol(0xc000), undefined);
+    const read = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "start", instructionCount: 1 }, ctx);
+    assert.equal(read.isError, true);
+  });
+});

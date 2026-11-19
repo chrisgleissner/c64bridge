@@ -758,7 +758,8 @@ async function readSymbolsFile(file: string): Promise<Map<string, number>> {
 }
 
 // Replaces the registered symbols after a successful start. Without a symbols
-// file the table is only cleared when clearWithoutFile is set (VICE).
+// file the table is cleared only when clearWithoutFile is set: run_prg starts a
+// new program on every backend, while load_prg may add data to a running one.
 function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExecutionContext, clearWithoutFile: boolean) {
   if (!newSymbols) {
     if (clearWithoutFile) clearViceSymbols();
@@ -867,7 +868,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       });
     }
 
-    const symbolReport = applySymbols(newSymbols, ctx, ctx.platform.id === "vice");
+    const symbolReport = applySymbols(newSymbols, ctx, true);
     const symbolsLoaded = symbolReport.loaded;
 
     const data = {
