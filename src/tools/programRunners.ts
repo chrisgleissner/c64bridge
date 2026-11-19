@@ -644,10 +644,10 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     setViceSymbols(asmResult.symbols.entries());
     const symbolEntries = [...asmResult.symbols.entries()].sort((a, b) => a[1] - b[1]);
     const symbolsTruncated = symbolEntries.length > 256;
-    const symbolList: Record<string, string> = {};
-    for (const [name, address] of symbolEntries.slice(0, 256)) {
-      symbolList[name] = `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
-    }
+    // fromEntries defines own properties, so a label named __proto__ is kept like any other.
+    const symbolList: Record<string, string> = Object.fromEntries(
+      symbolEntries.slice(0, 256).map(([name, address]) => [name, `$${address.toString(16).toUpperCase().padStart(4, "0")}`]),
+    );
     const symbolFields = symbolEntries.length > 0
       ? { symbols: symbolList, ...(symbolsTruncated ? { symbolsTruncated: true } : {}) }
       : {};
