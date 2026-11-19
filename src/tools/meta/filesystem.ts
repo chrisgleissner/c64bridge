@@ -4,21 +4,21 @@ import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
-import { promises as fs } from "node:fs";
-import { resolve as resolvePath, join as joinPath, dirname } from "node:path";
-import { formatTimestampSpec, sleepUnlessAborted } from "./util.js";
-import { getTasksHomeDir } from "./background.js";
+import { sleepUnlessAborted } from "./util.js";
 
 // Reusable collators to avoid repeated instantiation overhead
 const CASE_INSENSITIVE_COLLATOR = new Intl.Collator(undefined, { sensitivity: "base" });
 const CASE_SENSITIVE_COLLATOR = new Intl.Collator(undefined, { sensitivity: "variant" });
+
+/** Each extension is one device request, so the list is bounded. */
+export const MAX_EXTENSIONS = 16;
 
 const findPathsByNameArgsSchema = objectSchema({
   description: "Find device paths in one directory whose names contain a substring; the firmware returns one match per extension.",
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to search (host)" }), "/"),
     nameContains: stringSchema({ description: "Substring to match", minLength: 1 }),
-    extensions: optionalSchema(arraySchema(stringSchema({ description: "Extension filter without dot", minLength: 1 }))),
+    extensions: optionalSchema(arraySchema(stringSchema({ description: "Extension filter without dot", minLength: 1 }), { maxItems: MAX_EXTENSIONS })),
     maxResults: optionalSchema(numberSchema({ description: "Maximum results", integer: true, minimum: 1, maximum: 1000, default: 100 }), 100),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive name match", default: true }), true),
   },
@@ -31,7 +31,7 @@ const findAndRunProgramArgsSchema = objectSchema({
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to search", minLength: 1 }), "/"),
     nameContains: stringSchema({ description: "Substring to match", minLength: 1 }),
-    extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 }))),
+    extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 }), { maxItems: MAX_EXTENSIONS })),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive name match", default: true }), true),
     sort: optionalSchema(stringSchema({ description: "Sort order for matches", enum: ["discovered", "alphabetical"] }), "discovered"),
     waitMs: optionalSchema(numberSchema({ description: "Delay after firmware run before returning", integer: true, minimum: 0, maximum: 600000, default: 0 }), 0),
@@ -45,7 +45,7 @@ const filesystemStatsArgsSchema = objectSchema({
   description: "Per-extension stats for one directory (no recursion); the firmware returns one match per extension pattern.",
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to scan", minLength: 1 }), "/"),
-    extensions: optionalSchema(arraySchema(stringSchema({ description: "Limit to these extensions (without dot)", minLength: 1 }))),
+    extensions: optionalSchema(arraySchema(stringSchema({ description: "Limit to these extensions (without dot)", minLength: 1 }), { maxItems: MAX_EXTENSIONS })),
     includeContainers: optionalSchema(booleanSchema({ description: "Include container images (d64/d81/etc.) in extension stats", default: true }), true),
     maxSamplesPerExtension: optionalSchema(numberSchema({ description: "Number of sample paths to keep per extension", integer: true, minimum: 1, maximum: 10, default: 3 }), 3),
   },
@@ -76,19 +76,6 @@ function findListedDrive(drives: any[], drive: string): any {
   return onBus.find((d) => d?.raw?.enabled !== false) ?? onBus[0];
 }
 
-interface FindRunStateEntry {
-  root: string;
-  pattern: string;
-  extensions: string[];
-  matched?: string;
-  timestamp: string;
-}
-
-interface FindRunState {
-  recentSearches: FindRunStateEntry[];
-  lastRunPath?: string;
-}
-
 function extractExtension(candidate: string): string {
   const withoutContainer = candidate.includes("#") ? candidate.slice(candidate.indexOf("#") + 1) : candidate;
   const lastSegment = withoutContainer.split(/[\\/]/).pop() ?? withoutContainer;
@@ -99,52 +86,6 @@ function extractExtension(candidate: string): string {
 
 function normalisePath(path: string, caseInsensitive: boolean): string {
   return caseInsensitive ? path.toLowerCase() : path;
-}
-
-async function loadState(statePath: string): Promise<FindRunState> {
-  try {
-    const text = await fs.readFile(statePath, "utf8");
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed === "object") {
-      const rawRecent = Array.isArray((parsed as any).recentSearches) ? (parsed as any).recentSearches : [];
-      const recent: FindRunStateEntry[] = [];
-      for (const rawEntry of rawRecent) {
-        if (!rawEntry || typeof rawEntry !== "object" || typeof (rawEntry as any).pattern !== "string") continue;
-        const rootValue = typeof (rawEntry as any).root === "string" ? (rawEntry as any).root : "/";
-        const extensionsValue = Array.isArray((rawEntry as any).extensions)
-          ? (rawEntry as any).extensions.map((ext: unknown) => String(ext))
-          : [];
-        const matchedValue = typeof (rawEntry as any).matched === "string" ? (rawEntry as any).matched : undefined;
-        const timestampValue = typeof (rawEntry as any).timestamp === "string" ? (rawEntry as any).timestamp : formatTimestampSpec();
-        recent.push({
-          root: rootValue,
-          pattern: String((rawEntry as any).pattern),
-          extensions: extensionsValue,
-          matched: matchedValue,
-          timestamp: timestampValue,
-        });
-      }
-      return {
-        recentSearches: recent,
-        lastRunPath: typeof (parsed as any).lastRunPath === "string" ? (parsed as any).lastRunPath : undefined,
-      } satisfies FindRunState;
-    }
-  } catch (error: any) {
-    if (error?.code !== "ENOENT") {
-      // Ignore malformed state; caller will write a fresh copy
-    }
-  }
-  return { recentSearches: [] } satisfies FindRunState;
-}
-
-async function persistState(statePath: string, entry: FindRunStateEntry, lastRunPath: string): Promise<void> {
-  const current = await loadState(statePath);
-  const updated: FindRunState = {
-    recentSearches: [entry, ...current.recentSearches].slice(0, 10),
-    lastRunPath,
-  };
-  await fs.mkdir(dirname(statePath), { recursive: true });
-  await fs.writeFile(statePath, JSON.stringify(updated, null, 2), "utf8");
 }
 
 interface FileInfoEntry {
@@ -352,13 +293,14 @@ export const tools: ToolDefinition[] = [
 
         const exts = (parsed.extensions ?? []) as string[];
         const patterns: string[] = exts.length > 0
-          ? exts.map((e) => buildSearchPattern(root, e, parsed.nameContains as string))
+          ? Array.from(new Set(exts.map((e) => buildSearchPattern(root, e.replace(/^\./, "").toLowerCase(), parsed.nameContains as string))))
           : [buildSearchPattern(root, undefined, parsed.nameContains as string)];
         const limit = parsed.maxResults ?? 100;
 
         const seen = new Set<string>();
         const results: string[] = [];
         for (const pattern of patterns) {
+          if (ctx.signal?.aborted) return cancelledResult("find_paths_by_name was cancelled before it finished.");
           const match = await firstFirmwareMatch(ctx.client, pattern);
           if (match) {
             const p = match.path;
@@ -401,6 +343,7 @@ export const tools: ToolDefinition[] = [
         const collected = new Map<string, FileInfoEntry>();
 
         for (const pattern of uniquePatterns) {
+          if (ctx.signal?.aborted) return cancelledResult("filesystem_stats_by_extension was cancelled before it finished.");
           try {
             // One firmware match per pattern: the entry is the first file of this extension in the directory.
             const match = await firstFirmwareMatch(ctx.client, pattern);
@@ -517,7 +460,7 @@ export const tools: ToolDefinition[] = [
     {
       name: "find_and_run_program_by_name",
       description: "Search under a root for the first PRG/CRT whose name contains a substring and run it.",
-      summary: "Finds and executes programs by name, recording recent searches for quick replay.",
+      summary: "Finds and executes programs by name.",
       inputSchema: findAndRunProgramArgsSchema.jsonSchema,
       tags: ["files", "discover", "programs"],
       examples: [
@@ -540,7 +483,8 @@ export const tools: ToolDefinition[] = [
           const seen = new Set<string>();
           const candidates: string[] = [];
 
-          for (const ext of extensions) {
+          for (const ext of Array.from(new Set(extensions.map((e) => e.replace(/^\./, "").toLowerCase())))) {
+            if (ctx.signal?.aborted) return cancelledResult("Program search cancelled before launch.");
             const pattern = buildSearchPattern(root, ext, parsed.nameContains as string);
             try {
               const match = await firstFirmwareMatch(ctx.client, pattern);
@@ -589,21 +533,6 @@ export const tools: ToolDefinition[] = [
           const limit = Math.min(parsed.captureCandidates ?? 10, candidates.length);
           const topCandidates = candidates.slice(0, limit);
 
-          const stateDir = resolvePath(joinPath(getTasksHomeDir(), "meta"));
-          const statePath = resolvePath(joinPath(stateDir, "find_and_run_program_by_name.json"));
-          const entry: FindRunStateEntry = {
-            root,
-            pattern: parsed.nameContains as string,
-            extensions,
-            matched: matchedPath,
-            timestamp: formatTimestampSpec(),
-          };
-          try {
-            await persistState(statePath, entry, matchedPath);
-          } catch (stateError) {
-            ctx.logger.warn?.("Failed to persist find/run state", { error: stateError instanceof Error ? stateError.message : String(stateError) });
-          }
-
           if ((parsed.waitMs ?? 0) > 0) {
             await sleepUnlessAborted(parsed.waitMs ?? 0, ctx.signal);
           }
@@ -615,7 +544,6 @@ export const tools: ToolDefinition[] = [
             matchedPath,
             extension,
             candidates: topCandidates,
-            statePath,
           }, { success: true });
         } catch (error) {
           if (error instanceof ToolError) return toolErrorResult(error);

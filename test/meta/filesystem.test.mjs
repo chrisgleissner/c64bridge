@@ -82,6 +82,7 @@ test("file discovery resolves the matched filename instead of the firmware's ech
 
 test("find_and_run_program_by_name runs first matching PRG and records state", async () => {
   const { file, dir } = tmpPath("findrun", "state.json");
+  await fs.rm(path.join(dir, "meta"), { recursive: true, force: true });
   await fs.mkdir(dir, { recursive: true });
   const previous = process.env.C64_TASK_STATE_FILE;
   process.env.C64_TASK_STATE_FILE = file;
@@ -99,10 +100,9 @@ test("find_and_run_program_by_name runs first matching PRG and records state", a
     assert.equal(res.metadata?.success, true);
     assert.equal(runPath, "/games/Alpha.PRG");
 
-    const stateFile = path.join(dir, "meta", "find_and_run_program_by_name.json");
-    const state = JSON.parse(await fs.readFile(stateFile, "utf8"));
-    assert.equal(state.lastRunPath, "/games/Alpha.PRG");
-    assert.equal(Array.isArray(state.recentSearches), true);
+    // HARD06 META-15: no unread state file is written any more.
+    await assert.rejects(fs.stat(path.join(dir, "meta", "find_and_run_program_by_name.json")));
+    assert.equal(res.structuredContent.data.statePath, undefined);
   } finally {
     if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
     else process.env.C64_TASK_STATE_FILE = previous;
@@ -274,16 +274,13 @@ test("filesystem_stats_by_extension warns on a failed pattern and keeps the othe
   assert.equal(prgStats.samples.length, 1);
 });
 
-test("find_and_run_program_by_name rewrites malformed state and tolerates one failing extension scan", async () => {
+test("find_and_run_program_by_name tolerates one failing extension scan", async () => {
   const { file, dir } = tmpPath("findrun-bad-state", "tasks.json");
   await fs.mkdir(dir, { recursive: true });
   const previous = process.env.C64_TASK_STATE_FILE;
   process.env.C64_TASK_STATE_FILE = file;
 
   try {
-    await fs.mkdir(path.join(dir, "meta"), { recursive: true });
-    await fs.writeFile(path.join(dir, "meta", "find_and_run_program_by_name.json"), "{broken", "utf8");
-
     const warnings = [];
     const runs = [];
     const ctx = {
@@ -319,11 +316,6 @@ test("find_and_run_program_by_name rewrites malformed state and tolerates one fa
     assert.deepEqual(runs, ["/games/Demo.PRG"]);
     assert.equal(warnings.some((entry) => entry.message === "filesInfo pattern failed"), true);
     assert.deepEqual(res.structuredContent?.data?.candidates, ["/games/Demo.PRG"]);
-
-    const statePath = path.join(dir, "meta", "find_and_run_program_by_name.json");
-    const state = JSON.parse(await fs.readFile(statePath, "utf8"));
-    assert.equal(state.lastRunPath, "/games/Demo.PRG");
-    assert.equal(state.recentSearches[0].matched, "/games/Demo.PRG");
   } finally {
     if (previous === undefined) delete process.env.C64_TASK_STATE_FILE;
     else process.env.C64_TASK_STATE_FILE = previous;
@@ -925,4 +917,24 @@ test("I1 find_and_run bounds its post-launch wait and stops it on cancellation",
   const aborted = await metaModule.invoke("find_and_run_program_by_name", { nameContains: "demo" }, ctx);
   assert.equal(aborted.metadata.cancelled, true);
   assert.equal(runs, before);
+});
+
+test("HARD06 META-9 extension lists are bounded and a cancelled search stops issuing requests", async () => {
+  let lookups = 0;
+  const client = { async filesInfo() { lookups += 1; const error = new Error("no match"); error.response = { status: 404 }; throw error; } };
+  const many = Array.from({ length: 17 }, (_, i) => `e${i}`);
+  for (const tool of ["find_paths_by_name", "filesystem_stats_by_extension", "find_and_run_program_by_name"]) {
+    const res = await metaModule.invoke(tool, { nameContains: "x", extensions: many }, { client, logger: createLogger() });
+    assert.equal(res.isError, true, tool);
+    assert.equal(res.metadata?.error?.kind, "validation", tool);
+  }
+  assert.equal(lookups, 0);
+  const controller = new AbortController();
+  const aborting = { async filesInfo() { lookups += 1; controller.abort(); const error = new Error("no match"); error.response = { status: 404 }; throw error; } };
+  const res = await metaModule.invoke("find_paths_by_name", { nameContains: "x", extensions: ["prg", "crt", "d64"] }, { client: aborting, logger: createLogger(), signal: controller.signal });
+  assert.equal(lookups, 1);
+  assert.equal(res.metadata?.cancelled, true);
+  const dup = await metaModule.invoke("find_paths_by_name", { nameContains: "x", extensions: ["prg", "PRG", ".prg"] }, { client, logger: createLogger() });
+  assert.equal(lookups, 2);
+  assert.equal(dup.isError, undefined);
 });

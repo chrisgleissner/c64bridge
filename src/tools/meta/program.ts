@@ -290,7 +290,7 @@ const programShuffleArgsSchema = objectSchema({
   description: "Discover PRG/CRT files under root path, run each for a duration, capture screen, then reset.",
   properties: {
     root: optionalSchema(stringSchema({ description: "Directory to search for programs (not recursive; the firmware lookup returns one match per extension)", minLength: 1 }), "/"),
-    extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 })), ["prg", "crt"] as any),
+    extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 }), { maxItems: 8 }), ["prg", "crt"] as any),
     durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds", integer: true, minimum: 1, maximum: 600000, default: 5000 }), 5000),
     captureScreen: optionalSchema(booleanSchema({ description: "Capture screen after each run", default: true }), true),
     maxPrograms: optionalSchema(numberSchema({ description: "Maximum number of programs to run", integer: true, minimum: 1, default: 10 }), 10),
@@ -322,7 +322,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
       },
       required: ["path"],
       additionalProperties: false,
-    })),
+    }), { description: "Programs to run in order (at most 64).", minItems: 1, maxItems: 64 }),
     continueOnError: optionalSchema(booleanSchema({ description: "Continue running programs after assertion failure", default: false }), false),
     durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions", integer: true, minimum: 1, maximum: 600000, default: 2000 }), 2000),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for test results", minLength: 1 })),
@@ -691,7 +691,8 @@ export const tools: ToolDefinition[] = [
         // ({files:{filename}}) or 404, so each extension finds at most one program in the root directory.
         const programs: string[] = [];
         const searchDir = root.replace(/\/+$/, "");
-        for (const ext of extensions) {
+        for (const ext of new Set(extensions)) {
+          if (ctx.signal?.aborted) return cancelledResult("program_shuffle was cancelled during discovery; nothing was run.");
           const pattern = `${searchDir}/*.${ext}`;
           let info: unknown;
           try {
