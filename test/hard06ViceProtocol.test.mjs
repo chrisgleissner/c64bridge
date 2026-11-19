@@ -197,3 +197,29 @@ test("VICE-3 ping on an emulator that accepts connections but does not answer fa
     for (const [k, v] of Object.entries({ VICE_TEST_TARGET: saved.VICE_TEST_TARGET, C64BRIDGE_VICE_REQUEST_TIMEOUT_MS: saved.T })) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
+
+test("VICE-4 the first operation after the emulator was replaced reports it once, and the next one runs", async () => {
+  const { ViceBackend, ViceSessionLostError } = await import("../src/device.js");
+  const saved = { VICE_TEST_TARGET: process.env.VICE_TEST_TARGET, VICE_BINARY: process.env.VICE_BINARY };
+  delete process.env.VICE_TEST_TARGET;
+  process.env.VICE_BINARY = "/nonexistent/dir/x64sc";
+  const first = await startViceMockServer();
+  const port = first.port;
+  let second;
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port });
+    await backend.readMemory(0x0400, 4);
+    await first.stop();
+    await assert.rejects(() => backend.readMemory(0x0400, 4), /was not found/);
+    second = await startViceMockServer({ port });
+    await assert.rejects(
+      () => backend.readMemory(0x0400, 4),
+      (error) => error instanceof ViceSessionLostError && /VICE was started again: the machine was reset/.test(error.message),
+    );
+    assert.equal((await backend.readMemory(0x0400, 4)).length, 4);
+  } finally {
+    await first.stop();
+    await second?.stop();
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
