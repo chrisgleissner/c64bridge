@@ -190,3 +190,16 @@ test("HARD06 PROGMEM-7/13 step and monitor state report PC, CPU state, hit check
   assert.equal(back.structuredContent.data.pc, "$C010");
   assert.equal(calls.available, 1, "register metadata is read once per client");
 });
+
+test("HARD06 PROGMEM-8 wait_for_state returns at once when the CPU is stopped at another address", async () => {
+  const { debugModuleGroup } = await import("../src/tools/debug.js");
+  const { client } = debugStub();
+  const started = Date.now();
+  const result = await debugModuleGroup.invoke("c64_debug", { op: "wait_for_state", expectedPC: "$D000", timeoutMs: 2000, pollMs: 10 }, { client, logger, platform: platform("vice") });
+  const data = JSON.parse(result.content[0].text);
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+  assert.equal(data.matched, false);
+  assert.equal(data.timedOut, false);
+  assert.equal(data.stoppedElsewhere, true);
+  assert.equal(data.pc, "$C000");
+});

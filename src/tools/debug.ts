@@ -551,6 +551,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       let currentPC: number | undefined;
       let settled = false;
       let noSession = false;
+      let stoppedElsewhere = false;
       while (!settled) {
         // Without an expected PC and with a debug session, the tracked CPU state decides: wait for
         // the stop event (a checkpoint hit or a step) instead of polling. With an expected PC the PC
@@ -583,6 +584,8 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         noSession = targetPC === undefined && !wait.session;
         settled = targetPC === undefined ? (wait.session && wait.stopped) : currentPC === targetPC;
         if (noSession) break;
+        // A CPU held somewhere else (another checkpoint, a step or a pause) cannot reach the expected PC.
+        if (!settled && targetPC !== undefined && wait.session && wait.stopped) { stoppedElsewhere = true; break; }
         if (!settled) {
           if (Date.now() >= deadline) break;
           // The wait above already took up to pollMs when a session was running the CPU.
@@ -597,8 +600,9 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       return jsonResult(
         {
           matched,
-          timedOut: !matched && !noSession,
+          timedOut: !matched && !noSession && !stoppedElsewhere,
           ...(noSession ? { reason: "no debug session; nothing can stop the CPU" } : {}),
+          ...(stoppedElsewhere ? { stoppedElsewhere: true, reason: "the CPU is stopped at another address and cannot reach expectedPC until it is resumed (continue_execution or step)" } : {}),
           cpu,
           pc: currentPC !== undefined ? formatAddress(currentPC) : undefined,
           ...(checkpointIds?.length ? { checkpointIds } : {}),
