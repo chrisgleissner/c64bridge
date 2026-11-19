@@ -240,3 +240,28 @@ test("HARD06 PROGMEM-9 / WORKFLOW-12 c64_memory and c64_debug share one address 
     clearViceSymbols();
   }
 });
+
+test("HARD06 PROGMEM-11 program results state load range and entry in $HHHH, also for a VICE host PRG", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const source = "start: lda #1\n sta $0400\nloop: jmp loop\n";
+  const { client } = asmClient(source);
+  const asm = await programRunnersModule.invoke("upload_run_asm", { program: source }, { client, logger, platform: platform("c64u") });
+  assert.deepEqual(asm.structuredContent.data.addresses, { load: "$0801", end: "$0815", entry: "$080E" });
+  assert.match(asm.content[0].text, /\$0801-\$0815, entry \$080E \(SYS 2062\)/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h6-prg-"));
+  try {
+    const file = path.join(dir, "demo.prg");
+    fs.writeFileSync(file, Buffer.from([0x00, 0xc0, 0xa9, 0x01, 0x60]));
+    const vice = { async loadPrgFile() { return { success: true }; } };
+    const loaded = await programRunnersModule.invoke("load_prg", { path: file }, { client: vice, logger, platform: platform("vice") });
+    assert.equal(loaded.isError, undefined, JSON.stringify(loaded.content));
+    assert.deepEqual(loaded.structuredContent.data.addresses, { load: "$C000", end: "$C002" });
+    assert.match(loaded.content[0].text, /Load range \$C000-\$C002/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  const basic = await programRunnersModule.invoke("upload_run_basic", { program: "10 PRINT 1" }, { client: { async uploadAndRunBasic() { return { success: true }; } }, logger, platform: platform("vice") });
+  assert.match(basic.content[0].text, /\$0801-\$08/);
+});

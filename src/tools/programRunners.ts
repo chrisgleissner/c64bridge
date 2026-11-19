@@ -417,8 +417,9 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
           details: extractFailureDetails(result.details),
         });
       }
-      const message = "BASIC program uploaded and started (RUN typed). Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).";
-      const fields = { entryAddress, prgSize: prg.length };
+      const addresses = prgAddresses(prg);
+      const message = `BASIC program uploaded and started (RUN typed); it occupies ${addresses.load}-${addresses.end}. Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).`;
+      const fields = { entryAddress, addresses, prgSize: prg.length };
       const base = textResult(message, { success: true, ...fields, details: result.details ?? null });
       return { ...base, structuredContent: { type: "json", data: { kind: "upload_run_basic" as const, format: "prg" as const, ...fields, resources: ["c64://basic/spec", "c64://guide/bootstrap"] } } };
     }
@@ -561,6 +562,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
     const message = autoFixInfo
       ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run was verified without a BASIC error.`
       : "BASIC program uploaded and executed successfully (verified).";
+    const addresses = prgAddresses(prg);
 
     const autoFixFields = autoFixInfo
       ? {
@@ -575,6 +577,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
     const metadata = {
       success: true,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       details: result.details ?? null,
       ...(screenOutput ? { screen: screenOutput } : {}),
@@ -586,6 +589,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       kind: "upload_run_basic" as const,
       format: "prg" as const,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       resources: ["c64://basic/spec", "c64://guide/bootstrap"],
       ...(screenOutput ? { screen: screenOutput } : {}),
@@ -593,7 +597,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       verified: true,
     };
 
-    const base = textResult(message, metadata);
+    const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.`, metadata);
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
     if (error instanceof ToolError) {
@@ -712,11 +716,14 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
 
     const fmt = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
     const stopLabel = stoppedInProgram ? symbolEntries.find(([, address]) => address === stoppedAt)?.[0] : undefined;
+    const addresses = prgAddresses(prg, entryAddress);
+    const where = ` Program at ${addresses.load}-${addresses.end}, entry ${addresses.entry} (SYS ${entryAddress}).`;
     const stopFields = stoppedInProgram ? { stopped: true, stoppedAt: fmt(stoppedAt!), ...(stopLabel ? { stoppedAtLabel: stopLabel } : {}) } : {};
     const data = {
       kind: "upload_run_asm" as const,
       format: "prg" as const,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       resources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
       ...(loadCheck ? { loadCheck } : {}),
@@ -733,9 +740,10 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       : execution === "unconfirmed"
       ? "Assembly program assembled, uploaded and loaded, and the SYS command was typed. Execution was not observed (verify:false does not poll); pass verify:true to poll the screen for evidence."
       : "Assembly program assembled, uploaded, and executed successfully (verified).";
-    const base = textResult(message, {
+    const base = textResult(message + where, {
       success: true,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       details: result.details ?? null,
       ...(loadCheck ? { loadCheck } : {}),
@@ -798,7 +806,28 @@ function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExec
 
 const MAX_UPLOAD_PRG_BYTES = 65538;
 
-type PrgSource = { location: "host" | "device"; bytes?: Buffer; loadAddress?: number };
+function hex4(value: number): string {
+  return `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+/** Load range of a PRG image (two-byte load address, then the body): first and last byte. */
+function prgAddresses(prg: Buffer, entry?: number): { load: string; end: string; entry?: string } {
+  const load = prg.readUInt16LE(0);
+  const end = Math.min(0xffff, load + Math.max(1, prg.length - 2) - 1);
+  return { load: hex4(load), end: hex4(end), ...(entry !== undefined ? { entry: hex4(entry) } : {}) };
+}
+
+/** VICE reads host PRG files itself; the header is read here only to report the load range. */
+async function peekHostPrg(file: string): Promise<Buffer | undefined> {
+  try {
+    const bytes = await readHostFile(file, { maxBytes: MAX_UPLOAD_PRG_BYTES + 1 });
+    return bytes.length >= 2 && bytes.length <= MAX_UPLOAD_PRG_BYTES ? bytes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type PrgSource = { location: "host" | "device"; bytes?: Buffer; loadAddress?: number; header?: Buffer };
 
 // Decides where the PRG comes from. Host files are read and validated here, so
 // nothing reaches the device when the path or size is unacceptable.
@@ -812,7 +841,8 @@ async function resolvePrgSource(
     if (requested === "device") {
       throw new ToolValidationError("location \"device\" is not available on VICE; PRG paths are host paths there.", { path: "$.location" });
     }
-    return { location: "host" };
+    const peeked = await peekHostPrg(parsed.path);
+    return { location: "host", ...(peeked ? { header: peeked, loadAddress: peeked.readUInt16LE(0) } : {}) };
   }
   if (requested !== "host") return { location: "device" };
   const bytes = await readHostFile(parsed.path, { maxBytes: MAX_UPLOAD_PRG_BYTES + 1 });
@@ -822,7 +852,7 @@ async function resolvePrgSource(
       { path: "$.path" },
     );
   }
-  return { location: "host", bytes, loadAddress: bytes.readUInt16LE(0) };
+  return { location: "host", bytes, header: bytes, loadAddress: bytes.readUInt16LE(0) };
 }
 
 async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
@@ -841,6 +871,8 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
     }
 
     const symbolReport = applySymbols(newSymbols, ctx, false);
+    const addresses = source.header ? prgAddresses(source.header) : undefined;
+    const rangeNote = addresses ? ` Load range ${addresses.load}-${addresses.end}.` : "";
 
     const data = {
       kind: "load_prg" as const,
@@ -850,15 +882,17 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       resources: ["c64://guide/bootstrap"],
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     };
-    const base = textResult(`PRG ${parsed.path} loaded into memory.${symbolReport.note}`, {
+    const base = textResult(`PRG ${parsed.path} loaded into memory.${rangeNote}${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
@@ -890,6 +924,8 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 
     const symbolReport = applySymbols(newSymbols, ctx, true);
     const symbolsLoaded = symbolReport.loaded;
+    const addresses = source.header ? prgAddresses(source.header) : undefined;
+    const rangeNote = addresses ? ` Load range ${addresses.load}-${addresses.end}.` : "";
 
     const data = {
       kind: "run_prg" as const,
@@ -899,15 +935,17 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       resources: ["c64://guide/bootstrap"],
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     };
-    const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolReport.note}`, {
+    const base = textResult(`PRG ${parsed.path} loaded and executed.${rangeNote}${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };

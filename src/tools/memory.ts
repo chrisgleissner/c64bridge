@@ -411,12 +411,12 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 
       const detailRecord = toRecord(result.details) ?? {};
       const resolvedAddress = resolveAddressLabel(detailRecord, writeAddress);
-      const resolvedLength = resolveLength(detailRecord);
+      const resolvedLength = resolveLength(detailRecord) ?? writeInfo.bytes.length;
 
-      return textResult(`Wrote ${resolvedLength ?? "the provided"} bytes starting at ${resolvedAddress}.`, {
+      return textResult(`Wrote ${resolvedLength} byte${resolvedLength === 1 ? "" : "s"} starting at ${resolvedAddress}.`, {
         success: true,
         address: resolvedAddress,
-        length: resolvedLength ?? null,
+        length: resolvedLength,
         bytes: writeInfo.canonical,
         details: detailRecord,
       });
@@ -514,7 +514,7 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
 
       const detailRecord = toRecord(writeResult.details) ?? {};
       const resolvedAddress = resolveAddressLabel(detailRecord, writeAddress);
-      const resolvedLength = resolveLength(detailRecord);
+      const resolvedLength = resolveLength(detailRecord) ?? writeInfo.bytes.length;
 
       const verificationMetadata: Record<string, unknown> = {
         written: writeInfo.canonical,
@@ -550,10 +550,10 @@ async function executeWriteMemory(rawArgs: unknown, ctx: ToolExecutionContext): 
         }
         paused = false;
       }
-      return textResult(`Wrote ${resolvedLength ?? "the provided"} bytes starting at ${resolvedAddress} (verified).`, {
+      return textResult(`Wrote ${resolvedLength} byte${resolvedLength === 1 ? "" : "s"} starting at ${resolvedAddress} (verified).`, {
         success: true,
         address: resolvedAddress,
-        length: resolvedLength ?? null,
+        length: resolvedLength,
         bytes: writeInfo.canonical,
         details: detailRecord,
         verified: true,
