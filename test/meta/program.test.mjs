@@ -314,9 +314,12 @@ test("program_shuffle handles program run errors gracefully", async () => {
   };
 
   const res = await metaModule.invoke("program_shuffle", { root: "/games", extensions: ["prg"], durationMs: 5, captureScreen: false, resetDelayMs: 0 }, ctx);
-  assert.equal(res.metadata?.success, true);
+  // HARD06 META-7 (D3): a run that failed is an error result, and the reason is in the result.
+  assert.equal(res.metadata?.success, false);
+  assert.equal(res.isError, true);
   const data = res.structuredContent?.data ?? {};
   assert.equal(data.errors, 1);
+  assert.match(data.results[0].error, /run failed/);
 });
 
 for (const extension of ["prg", "crt"]) {
@@ -1013,4 +1016,60 @@ test("HARD03-017 program_shuffle reports an unknown filesInfo response shape as 
   const res = await metaModule.invoke("program_shuffle", { root: "/Usb0", extensions: ["prg"], durationMs: 5, resetDelayMs: 0 }, ctx);
   assert.equal(res.isError, true);
   assert.match(res.content[0].text, /unexpected|unknown/i);
+});
+
+test("HARD06 META-6 screen_contains without a pattern is rejected and matching ignores case", async () => {
+  let runs = 0;
+  const ctx = {
+    client: {
+      async runPrgFile() { runs += 1; return { success: true }; },
+      async readScreen() { return "HELLO WORLD"; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const bad = await metaModule.invoke("batch_run_with_assertions", { programs: [{ path: "/a.prg", assertions: [{ type: "screen_contains" }] }], durationMs: 1, resetDelayMs: 0 }, ctx);
+  assert.equal(bad.isError, true);
+  assert.equal(bad.metadata?.error?.kind, "validation");
+  assert.equal(runs, 0);
+  const good = await metaModule.invoke("batch_run_with_assertions", { programs: [{ path: "/a.prg", assertions: [{ type: "screen_contains", pattern: "Hello World" }] }], durationMs: 1, resetDelayMs: 0 }, ctx);
+  assert.equal(good.metadata?.success, true, JSON.stringify(good.content));
+});
+
+test("HARD06 META-7 batch_run_with_assertions returns the failing assertion and screen in the result", async () => {
+  const ctx = {
+    client: {
+      async runPrgFile() { return { success: true }; },
+      async readScreen() { return "GURU MEDITATION"; },
+      async reset() { return { success: true }; },
+    },
+    logger: createLogger(),
+  };
+  const res = await metaModule.invoke("batch_run_with_assertions", { programs: [{ path: "/a.prg", assertions: [{ type: "screen_contains", pattern: "READY." }] }], durationMs: 1, resetDelayMs: 0 }, ctx);
+  assert.equal(res.isError, true);
+  const entry = res.structuredContent.data.results[0];
+  assert.equal(entry.status, "fail");
+  assert.match(entry.assertions[0].message, /READY\./);
+  assert.equal(entry.screen, "GURU MEDITATION");
+  assert.match(res.content[0].text, /GURU MEDITATION/);
+});
+
+test("HARD06 META-19 greeting verification survives a line wrap inside a word", async () => {
+  // 41 characters wrap after column 40; the screen text then has a newline inside the word.
+  const message = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLM!";
+  const wrapped = `${message.slice(0, 40)}\n${message.slice(40)}`;
+  const ctx = {
+    platform: { id: "vice" },
+    setPlatform() {},
+    logger: createLogger(),
+    client: {
+      getActiveBackendType: async () => "vice",
+      getAvailableBackends: () => ["vice"],
+      switchBackend() {},
+      async uploadAndRunBasic() { return { success: true }; },
+      async readScreen() { return wrapped; },
+    },
+  };
+  const res = await metaModule.invoke("cross_platform_greeting", { platforms: ["vice"], messageTemplate: message, captureScreenshot: false, verify: true, timeoutMs: 100 }, ctx);
+  assert.equal(res.structuredContent.data.results[0].verification.screenContainsExpectedText, true, JSON.stringify(res.structuredContent.data.results[0]));
 });

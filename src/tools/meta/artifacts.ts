@@ -90,6 +90,7 @@ export const tools: ToolDefinition[] = [
         await fs.mkdir(runPath, { recursive: true });
 
         const artifacts: Record<string, string> = {};
+        let screenText: string | undefined;
 
         // Capture screen
         if (captureScreen) {
@@ -97,6 +98,7 @@ export const tools: ToolDefinition[] = [
           const screenPath = containedPath(runPath, "screen.txt");
           await fs.writeFile(screenPath, screen, "utf8");
           artifacts.screen = screenPath;
+          screenText = screen.length > 1000 ? `${screen.slice(0, 1000)}...` : screen;
         }
 
         // Capture memory ranges
@@ -137,7 +139,7 @@ export const tools: ToolDefinition[] = [
         };
         await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 
-        return jsonResult({ runId, runPath, artifacts }, { success: true });
+        return jsonResult({ runId, runPath, artifacts, ...(screenText !== undefined ? { screen: screenText } : {}) }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
