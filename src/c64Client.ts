@@ -336,19 +336,17 @@ export interface BitmapDisplayResult {
 }
 
 export interface SpriteDisplayResult {
+  /** VIC bank in use (0-3, bank n starts at n * $4000); the sprite is placed in it. */
   readonly bank: number;
   readonly spriteAddress: string;
   readonly screenAddress: string;
-  readonly colorRamAddress: string;
   readonly pointerAddress: string;
   readonly pointerValue: number;
+  /** Sprite registers after the write; the VIC bank and screen mode registers are left as they were. */
   readonly registers: {
     readonly dd00: number;
     readonly d011: number;
-    readonly d016: number;
     readonly d018: number;
-    readonly d020: number;
-    readonly d021: number;
     readonly d010: number;
     readonly d015: number;
     readonly d01c: number;
@@ -359,6 +357,7 @@ export interface SpriteDisplayResult {
   readonly color: number;
   readonly multicolour: boolean;
   readonly spriteByteLength: number;
+  readonly warnings?: readonly string[];
 }
 
 const TEXT_SCREEN_COLUMNS = 40;
@@ -614,6 +613,7 @@ export class C64Client {
     y?: number;
     color?: number;
     multicolour?: boolean;
+    dataAddress?: number;
   }): Promise<RunBasicResult> {
     return this.displaySprite(options);
   }
@@ -688,6 +688,13 @@ export class C64Client {
     });
   }
 
+  /**
+   * Shows a sprite in the VIC bank and screen mode the machine currently uses: it writes the
+   * 64-byte sprite block, its pointer and the sprite's own registers, and leaves $DD00, $D011,
+   * $D016, $D018 and the colours alone. `dataAddress` (a multiple of 64 inside the current bank)
+   * chooses where the block goes; by default it goes to bank + $2000, $3000 or $0800 (+ 64 per
+   * sprite index), the first one clear of the screen, character set and bitmap in use.
+   */
   async displaySprite(options: {
     readonly spriteBytes: Uint8Array | Buffer;
     readonly spriteIndex?: number;
@@ -695,6 +702,7 @@ export class C64Client {
     readonly y?: number;
     readonly color?: number;
     readonly multicolour?: boolean;
+    readonly dataAddress?: number;
   }): Promise<RunBasicResult & { details?: SpriteDisplayResult | unknown }> {
     try {
       const index = Math.max(0, Math.min(7, Math.floor(options.spriteIndex ?? 0)));
@@ -710,63 +718,64 @@ export class C64Client {
       const spriteSlot = Buffer.alloc(64, 0x00);
       spriteBytes.copy(spriteSlot, 0, 0, 63);
 
-      const spriteAddress = SPRITE_DATA_BASE_ADDRESS + index * 0x40;
-      const pointerAddress = TEXT_SCREEN_ADDRESS + 0x03F8 + index;
+      const facade = await this.facadePromise;
+      const warnings: string[] = [];
+      // $D010-$D01C in one read; it stops before the collision registers $D01E/$D01F, which clear when read.
+      let vic: Uint8Array | undefined;
+      let dd00: number | undefined;
+      try {
+        dd00 = (await facade.readMemory(0xDD00, 1))[0];
+        vic = await facade.readMemory(0xD010, 13);
+      } catch (error) {
+        warnings.push(`The VIC registers could not be read (${error instanceof Error ? error.message : String(error)}); the default screen at $0400 in bank 0 was assumed.`);
+      }
+      const reg = (address: number): number => vic?.[address - 0xD010] ?? 0;
+      const layout = screenLayoutFromRegisters(vic ? reg(0xD018) : undefined, dd00);
+      const screenAddress = layout.baseAddress;
+      const bankBase = screenAddress & 0xC000;
+      const bank = bankBase >> 14;
+      const d011 = reg(0xD011);
+      const d018 = layout.registers ? reg(0xD018) : 0x14;
+
+      const spriteAddress = options.dataAddress === undefined
+        ? defaultSpriteDataAddress(bankBase, index, { screenAddress, d011, d018 })
+        : checkedSpriteDataAddress(options.dataAddress, bankBase);
+      const pointerAddress = screenAddress + 0x03F8 + index;
+      if (pointerAddress >= 0xD000 && pointerAddress <= 0xDFFF) {
+        throw new Error(`The screen at $${hex4(screenAddress)} lies under the I/O area, so its sprite pointer at $${hex4(pointerAddress)} cannot be written.`);
+      }
       const pointerValue = (spriteAddress & 0x3FFF) >> 6;
       const bitMask = 1 << index;
+      const d010 = (reg(0xD010) & ~bitMask) | (x > 0xFF ? bitMask : 0);
+      const d015 = reg(0xD015) | bitMask;
+      const d01c = (reg(0xD01C) & ~bitMask) | (multicolour ? bitMask : 0);
 
-      const facade = await this.facadePromise;
-      const currentDd00 = await this.readByteOrDefault(facade, 0xDD00, 0);
-      const currentBorder = await this.readByteOrDefault(facade, 0xD020, DEFAULT_BORDER_COLOR);
-      const currentBackground = await this.readByteOrDefault(facade, 0xD021, DEFAULT_BACKGROUND_COLOR);
-      const currentD010 = await this.readByteOrDefault(facade, 0xD010, 0);
-      const currentD015 = await this.readByteOrDefault(facade, 0xD015, 0);
-      const currentD01C = await this.readByteOrDefault(facade, 0xD01C, 0);
-      const textRegisters = buildVicTextRegisters({
-        currentDd00,
-        borderColor: currentBorder,
-        backgroundColor: currentBackground,
-      });
-      const d010 = (currentD010 & ~bitMask) | (x > 0xFF ? bitMask : 0);
-      const d015 = currentD015 | bitMask;
-      const d01c = (currentD01C & ~bitMask) | (multicolour ? bitMask : 0);
-
-      await facade.writeMemory(spriteAddress, spriteSlot);
-      await facade.writeMemory(pointerAddress, Uint8Array.of(pointerValue & 0xFF));
-      await facade.writeMemory(0xDD00, Uint8Array.of(textRegisters.dd00));
-      await facade.writeMemory(0xD011, Uint8Array.of(textRegisters.d011));
-      await facade.writeMemory(0xD016, Uint8Array.of(textRegisters.d016));
-      await facade.writeMemory(0xD018, Uint8Array.of(textRegisters.d018));
-      await facade.writeMemory(0xD020, Uint8Array.of(textRegisters.d020));
-      await facade.writeMemory(0xD021, Uint8Array.of(textRegisters.d021));
-      await facade.writeMemory(0xD000 + index * 2, Uint8Array.of(x & 0xFF));
-      await facade.writeMemory(0xD001 + index * 2, Uint8Array.of(y & 0xFF));
-      await facade.writeMemory(0xD010, Uint8Array.of(d010));
-      await facade.writeMemory(0xD015, Uint8Array.of(d015));
-      await facade.writeMemory(0xD01C, Uint8Array.of(d01c));
-      await facade.writeMemory(0xD027 + index, Uint8Array.of(color));
+      await this.writeBlocks(facade, [
+        { address: spriteAddress, bytes: spriteSlot },
+        { address: pointerAddress, bytes: Uint8Array.of(pointerValue) },
+        { address: 0xD000 + index * 2, bytes: Uint8Array.of(x & 0xFF, y) },
+        { address: 0xD010, bytes: Uint8Array.of(d010) },
+        { address: 0xD015, bytes: Uint8Array.of(d015) },
+        { address: 0xD01C, bytes: Uint8Array.of(d01c) },
+        { address: 0xD027 + index, bytes: Uint8Array.of(color) },
+      ]);
 
       return {
         success: true,
         details: {
-          bank: 0,
+          bank,
           spriteAddress: this.formatAddress(spriteAddress),
-          screenAddress: this.formatAddress(TEXT_SCREEN_ADDRESS),
-          colorRamAddress: this.formatAddress(TEXT_COLOR_RAM_ADDRESS),
+          screenAddress: this.formatAddress(screenAddress),
           pointerAddress: this.formatAddress(pointerAddress),
           pointerValue,
-          registers: {
-            ...textRegisters,
-            d010,
-            d015,
-            d01c,
-          },
+          registers: { dd00: dd00 ?? 0, d011, d018, d010, d015, d01c },
           index,
           x,
           y,
           color,
           multicolour,
           spriteByteLength: spriteBytes.length,
+          ...(warnings.length > 0 ? { warnings } : {}),
         } satisfies SpriteDisplayResult,
       };
     } catch (error) {
@@ -774,6 +783,17 @@ export class C64Client {
         success: false,
         details: this.normaliseError(error),
       };
+    }
+  }
+
+  /** Writes blocks in order: one call when the backend can batch them, else one write per block. */
+  private async writeBlocks(facade: C64Facade, blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void> {
+    if (typeof facade.writeMemoryBlocks === "function") {
+      await facade.writeMemoryBlocks(blocks);
+      return;
+    }
+    for (const block of blocks) {
+      await facade.writeMemory(block.address, block.bytes);
     }
   }
 
@@ -3145,6 +3165,56 @@ function toByte(value: number | undefined, fallback = 0): number {
 
 function normaliseColorNibble(value: number): number {
   return Math.max(0, Math.min(0x0F, Math.floor(value))) & 0x0F;
+}
+
+function hex4(value: number): string {
+  return value.toString(16).toUpperCase().padStart(4, "0");
+}
+
+/** True when the VIC-II sees the character ROM, not RAM, at this address (offsets $1000-$1FFF of banks 0 and 2). */
+function vicSeesCharRom(address: number): boolean {
+  const bank = address >> 14;
+  const offset = address & 0x3FFF;
+  return (bank === 0 || bank === 2) && offset >= 0x1000 && offset < 0x2000;
+}
+
+/** Memory the VIC-II reads for the current screen mode: screen RAM and either the bitmap or a RAM character set. */
+function vicDisplayRanges(bankBase: number, screenAddress: number, d011: number, d018: number): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [[screenAddress, screenAddress + 0x0400]];
+  if ((d011 & 0x20) !== 0) {
+    const bitmap = bankBase + ((d018 & 0x08) !== 0 ? 0x2000 : 0);
+    ranges.push([bitmap, bitmap + 0x2000]);
+  } else {
+    const charset = bankBase + ((d018 >> 1) & 0x07) * 0x0800;
+    if (!vicSeesCharRom(charset)) ranges.push([charset, charset + 0x0800]);
+  }
+  return ranges;
+}
+
+function defaultSpriteDataAddress(bankBase: number, index: number, vic: { screenAddress: number; d011: number; d018: number }): number {
+  const ranges = vicDisplayRanges(bankBase, vic.screenAddress, vic.d011, vic.d018);
+  for (const offset of [0x2000, 0x3000, 0x0800]) {
+    const address = bankBase + offset + index * 0x40;
+    const clear = ranges.every(([start, end]) => address + 0x40 <= start || address >= end);
+    if (clear && !(address >= 0xD000 && address <= 0xDFFF)) return address;
+  }
+  throw new Error(`No free sprite block was found in VIC bank ${bankBase >> 14} next to the screen and graphics in use; pass dataAddress.`);
+}
+
+function checkedSpriteDataAddress(address: number, bankBase: number): number {
+  if (!Number.isInteger(address) || address < 0 || address > 0xFFC0 || address % 0x40 !== 0) {
+    throw new ToolValidationError("dataAddress must be a multiple of 64 between $0000 and $FFC0");
+  }
+  if ((address & 0xC000) !== bankBase) {
+    throw new ToolValidationError(`dataAddress $${hex4(address)} is outside the VIC bank in use ($${hex4(bankBase)}-$${hex4(bankBase + 0x3FFF)}); the VIC-II can only show sprites from its bank`);
+  }
+  if (vicSeesCharRom(address)) {
+    throw new ToolValidationError(`dataAddress $${hex4(address)} is where the VIC-II sees the character ROM; choose an address outside offsets $1000-$1FFF of the bank`);
+  }
+  if (address >= 0xD000 && address <= 0xDFFF) {
+    throw new ToolValidationError(`dataAddress $${hex4(address)} lies under the I/O area, where writes reach the chip registers`);
+  }
+  return address;
 }
 
 function buildVicTextRegisters(options: {
