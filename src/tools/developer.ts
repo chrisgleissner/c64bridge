@@ -7,6 +7,7 @@ import {
   type Schema,
 } from "./schema.js";
 import { jsonResult, textResult } from "./responses.js";
+import { assertSafeConfigName } from "../devicePathSafety.js";
 import { redactConfigValue } from "../redact.js";
 import { isUnsafeConfigKey } from "./meta/configInventory.js";
 import {
@@ -281,6 +282,8 @@ export const developerModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = configGetArgsSchema.parse(args ?? {});
+          assertSafeConfigName(parsed.category, "category");
+          if (parsed.item !== undefined) assertSafeConfigName(parsed.item, "item");
           ctx.logger.info("Reading configuration", {
             category: parsed.category,
             item: parsed.item ?? null,
@@ -320,6 +323,8 @@ export const developerModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = configSetArgsSchema.parse(args ?? {});
+          assertSafeConfigName(parsed.category, "category");
+          assertSafeConfigName(parsed.item, "item");
           ctx.logger.info("Setting configuration", {
             category: parsed.category,
             item: parsed.item,
@@ -418,6 +423,7 @@ export const developerModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const { category } = flashCategoryArgsSchema.parse(args ?? {});
+          if (category !== undefined) assertSafeConfigName(category, "category");
           ctx.logger.info("Loading configuration from flash", { category });
 
           const result = await ctx.client.configLoadFromFlash(category);
@@ -455,6 +461,7 @@ export const developerModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const { category } = flashCategoryArgsSchema.parse(args ?? {});
+          if (category !== undefined) assertSafeConfigName(category, "category");
           ctx.logger.info("Saving configuration to flash", { category });
 
           const result = await ctx.client.configSaveToFlash(category);
@@ -492,6 +499,7 @@ export const developerModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const { category } = flashCategoryArgsSchema.parse(args ?? {});
+          if (category !== undefined) assertSafeConfigName(category, "category");
           ctx.logger.info("Resetting configuration to defaults", { category });
 
           const result = await ctx.client.configResetToDefault(category);

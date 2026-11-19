@@ -15,6 +15,7 @@ import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { resetAndWaitForBasic } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
+import { assertSafeConfigName, assertSafeDevicePath } from "./devicePathSafety.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
 
 let signalDelegate = false;
@@ -604,8 +605,8 @@ class C64uBackend implements C64Facade {
   // The generated client interpolates path parameters unencoded and the firmware
   // splits the path on "/" before decoding, so names such as "Bus Sharing - I/O1"
   // must be percent-encoded here.
-  async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
-  async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
+  async configGet(cat: string, item?: string): Promise<unknown> { assertSafeConfigName(cat, "category"); if (item) assertSafeConfigName(item, "item"); const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
+  async configSet(cat: string, item: string, value: string): Promise<RunResult> { assertSafeConfigName(cat, "category"); assertSafeConfigName(item, "item"); const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
   async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return this.actionResult(res.data); }
   async configLoadFromFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(configActionRoute(":load_from_flash", category)); return this.actionResult(res.data); }
   async configSaveToFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(configActionRoute(":save_to_flash", category)); return this.actionResult(res.data); }
@@ -1844,12 +1845,15 @@ function unsupported(name: string): Error { const err = new Error(`Operation '${
 
 /** Whole-device route suffix, or `/{category}:action` for one category (the generated client prefixes `/v1/configs`). */
 function configActionRoute(action: string, category?: string): string {
-  return category === undefined ? action : `/${encodeURIComponent(category)}${action}`;
+  if (category === undefined) return action;
+  assertSafeConfigName(category, "category");
+  return `/${encodeURIComponent(category)}${action}`;
 }
 
 /** Ultimate file APIs treat slash as a path separator. Encode each name once,
  * preserving leading and nested separators for firmware routing. */
 function encodeDevicePath(value: string): string {
+  assertSafeDevicePath(value);
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }
 

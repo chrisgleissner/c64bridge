@@ -6,6 +6,7 @@ import {
   stringSchema,
 } from "./schema.js";
 import { textResult } from "./responses.js";
+import { assertSafeDevicePath } from "../devicePathSafety.js";
 import {
   ToolError,
   ToolExecutionError,
@@ -586,6 +587,7 @@ export const storageModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = fileInfoArgsSchema.parse(args ?? {});
+          assertSafeDevicePath(parsed.path);
           ctx.logger.info("Fetching file info", { path: parsed.path });
 
           const details = await ctx.client.filesInfo(parsed.path);
@@ -623,6 +625,7 @@ export const storageModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = createD64ArgsSchema.parse(args ?? {});
+          assertSafeDevicePath(parsed.path);
           ctx.logger.info("Creating D64 image", {
             path: parsed.path,
             tracks: parsed.tracks ?? null,
@@ -675,6 +678,7 @@ export const storageModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = createD71ArgsSchema.parse(args ?? {});
+          assertSafeDevicePath(parsed.path);
           ctx.logger.info("Creating D71 image", {
             path: parsed.path,
             diskname: parsed.diskname ?? null,
@@ -722,6 +726,7 @@ export const storageModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = createD81ArgsSchema.parse(args ?? {});
+          assertSafeDevicePath(parsed.path);
           ctx.logger.info("Creating D81 image", {
             path: parsed.path,
             diskname: parsed.diskname ?? null,
@@ -771,6 +776,7 @@ export const storageModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = createDnpArgsSchema.parse(args ?? {});
+          assertSafeDevicePath(parsed.path);
           ctx.logger.info("Creating DNP image", {
             path: parsed.path,
             tracks: parsed.tracks,

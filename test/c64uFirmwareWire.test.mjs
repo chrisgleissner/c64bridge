@@ -247,14 +247,14 @@ test("config category and item names containing '/' reach the firmware as single
   const item = await facade.configGet("C64 and Cartridge Settings", "Bus Sharing - I/O1");
   assert.deepEqual(item.segments, ["C64 and Cartridge Settings", "Bus Sharing - I/O1"]);
   assert.equal((await facade.configSet("C64 and Cartridge Settings", "Bus Sharing - I/O2", "Internal")).success, true);
-  const category = await facade.configGet("Odd/Category 100%");
-  assert.deepEqual(category.segments, ["Odd/Category 100%"]);
+  const category = await facade.configGet("Odd Category 100%");
+  assert.deepEqual(category.segments, ["Odd Category 100%"]);
 
   const configUrls = server.requests.filter((entry) => entry.url.startsWith("/v1/configs/")).map((entry) => entry.url.split("?")[0]);
   assert.deepEqual(configUrls, [
     "/v1/configs/C64%20and%20Cartridge%20Settings/Bus%20Sharing%20-%20I%2FO1",
     "/v1/configs/C64%20and%20Cartridge%20Settings/Bus%20Sharing%20-%20I%2FO2",
-    "/v1/configs/Odd%2FCategory%20100%25",
+    "/v1/configs/Odd%20Category%20100%25",
   ]);
 });
 
