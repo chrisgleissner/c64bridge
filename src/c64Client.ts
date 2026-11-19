@@ -634,7 +634,7 @@ export class C64Client {
           borderColor: options.borderColor ?? DEFAULT_BORDER_COLOR,
           backgroundColor: options.backgroundColor ?? DEFAULT_BACKGROUND_COLOR,
         });
-        const screenRam = buildGreetingScreenRam(options.message);
+        const { screenRam, rows, warnings } = buildGreetingScreenRam(options.message);
         const colorRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(DEFAULT_TEXT_FOREGROUND);
 
         const writes = [
@@ -664,6 +664,8 @@ export class C64Client {
             colorRamAddress: this.formatAddress(TEXT_COLOR_RAM_ADDRESS),
             registers: textRegisters,
             message: options.message,
+            rows,
+            ...(warnings.length > 0 ? { warnings } : {}),
           },
         };
       } catch (error) {
@@ -3144,63 +3146,73 @@ function buildVicTextRegisters(options: {
   };
 }
 
-function asciiCharToScreenCode(char: string): number {
+/**
+ * Screen code of an ASCII character in the upper-case/graphics set, or undefined when the set has
+ * no such glyph. $20-$3F (space, digits, punctuation) are the same codes as ASCII; @ is $00, A-Z
+ * are $01-$1A (lower case shown as upper case), [ is $1B and ] is $1D.
+ */
+function asciiCharToScreenCode(char: string): number | undefined {
   if (char.length !== 1) {
-    return SPACE_SCREEN_CODE;
+    return undefined;
   }
-
-  const upper = char.toUpperCase();
-  if (upper >= "A" && upper <= "Z") {
-    return upper.charCodeAt(0) - 64;
-  }
-
-  if (upper >= "0" && upper <= "9") {
-    return upper.charCodeAt(0);
-  }
-
-  switch (upper) {
-    case " ":
-      return SPACE_SCREEN_CODE;
-    case ".":
-      return 0x2E;
-    case ",":
-      return 0x2C;
-    case "!":
-      return 0x21;
-    case ":":
-      return 0x3A;
-    case ";":
-      return 0x3B;
-    case "-":
-      return 0x2D;
-    case "'":
-      return 0x27;
-    case "/":
-      return 0x2F;
-    case "?":
-      return 0x3F;
-    default:
-      return SPACE_SCREEN_CODE;
-  }
+  const code = char.toUpperCase().charCodeAt(0);
+  if (code >= 0x20 && code <= 0x3F) return code;
+  if (code >= 0x40 && code <= 0x5A) return code - 0x40;
+  if (code === 0x5B) return 0x1B;
+  if (code === 0x5D) return 0x1D;
+  return undefined;
 }
 
-function writeScreenLine(screenRam: Uint8Array, row: number, text: string): void {
-  if (row < 0 || row >= TEXT_SCREEN_ROWS) {
-    return;
-  }
+/** Message rows of the greeting screen: row 1 up to row 21, so READY. still fits two rows below. */
+const GREETING_FIRST_ROW = 1;
+const GREETING_MAX_ROWS = 21;
 
-  const offset = row * TEXT_SCREEN_COLUMNS;
-  const clipped = text.slice(0, TEXT_SCREEN_COLUMNS);
-  for (let index = 0; index < clipped.length; index += 1) {
-    screenRam[offset + index] = asciiCharToScreenCode(clipped[index] ?? " ");
+/** Splits text into 40-column rows, breaking at a space where one is near so no word is cut. */
+function wrapScreenText(text: string): string[] {
+  const rows: string[] = [];
+  for (const line of text.split(/\r\n|\r|\n/)) {
+    let rest = line;
+    while (rest.length > TEXT_SCREEN_COLUMNS) {
+      const cut = rest.lastIndexOf(" ", TEXT_SCREEN_COLUMNS);
+      if (cut <= 0) {
+        rows.push(rest.slice(0, TEXT_SCREEN_COLUMNS));
+        rest = rest.slice(TEXT_SCREEN_COLUMNS);
+      } else {
+        rows.push(rest.slice(0, cut));
+        rest = rest.slice(cut + 1);
+      }
+    }
+    rows.push(rest);
   }
+  return rows;
 }
 
-function buildGreetingScreenRam(message: string): Uint8Array {
+function buildGreetingScreenRam(message: string): { screenRam: Uint8Array; rows: number; warnings: string[] } {
   const screenRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(SPACE_SCREEN_CODE);
-  writeScreenLine(screenRam, 1, message);
-  writeScreenLine(screenRam, 3, "READY.");
-  return screenRam;
+  const warnings: string[] = [];
+  const unsupported = new Set<string>();
+  let rows = wrapScreenText(message);
+  if (rows.length > GREETING_MAX_ROWS) {
+    warnings.push(`The message needs ${rows.length} screen rows; only the first ${GREETING_MAX_ROWS} were written.`);
+    rows = rows.slice(0, GREETING_MAX_ROWS);
+  }
+  rows.forEach((text, index) => {
+    const offset = (GREETING_FIRST_ROW + index) * TEXT_SCREEN_COLUMNS;
+    for (let column = 0; column < text.length; column += 1) {
+      const code = asciiCharToScreenCode(text[column]!);
+      if (code === undefined) unsupported.add(text[column]!);
+      screenRam[offset + column] = code ?? SPACE_SCREEN_CODE;
+    }
+  });
+  if (unsupported.size > 0) {
+    warnings.push(`These characters have no glyph in the C64 upper-case set and were written as spaces: ${[...unsupported].map((char) => JSON.stringify(char)).join(", ")}.`);
+  }
+  const readyRow = GREETING_FIRST_ROW + rows.length + 1;
+  const ready = "READY.";
+  for (let column = 0; column < ready.length; column += 1) {
+    screenRam[readyRow * TEXT_SCREEN_COLUMNS + column] = asciiCharToScreenCode(ready[column]!)!;
+  }
+  return { screenRam, rows: rows.length, warnings };
 }
 
 export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; backgroundColor?: number }): string {
