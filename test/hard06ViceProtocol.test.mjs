@@ -298,3 +298,55 @@ test("VICE-15 the autoload wait reads the machine state with one memory read per
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
+
+async function withBackend(body) {
+  const { ViceBackend } = await import("../src/device.js");
+  const saved = process.env.VICE_TEST_TARGET;
+  process.env.VICE_TEST_TARGET = "mock";
+  const server = await startViceMockServer();
+  try {
+    await body(new ViceBackend({ host: "127.0.0.1", port: server.port }), server);
+  } finally {
+    await server.stop();
+    if (saved === undefined) delete process.env.VICE_TEST_TARGET; else process.env.VICE_TEST_TARGET = saved;
+  }
+}
+
+const word = (bytes, at) => bytes[at] | (bytes[at + 1] << 8);
+
+test("PROGMEM-4 load_prg at $0801 moves VARTAB, ARYTAB and STREND behind the program and says it reset the machine", async () => {
+  await withBackend(async (backend) => {
+    const prg = Buffer.from([0x01, 0x08, 0x0b, 0x08, 0x0a, 0x00, 0x99, 0x22, 0x41, 0x22, 0x00, 0x00, 0x00]); // 10 PRINT"A"
+    const result = await backend.loadPrg(prg);
+    assert.equal(result.success, true);
+    assert.equal(result.details.reset, true);
+    assert.equal(result.details.loadAddress, "$0801");
+    assert.equal(result.details.endAddress, "$080C");
+    const ptrs = await backend.readMemory(0x2b, 8);
+    assert.equal(word(ptrs, 0), 0x0801);
+    assert.equal(word(ptrs, 2), 0x080c, "VARTAB");
+    assert.equal(word(ptrs, 4), 0x080c, "ARYTAB");
+    assert.equal(word(ptrs, 6), 0x080c, "STREND");
+  });
+});
+
+test("VICE-5 a PRG that does not load at $0801 leaves BASIC's pointers alone and is started with SYS", async () => {
+  await withBackend(async (backend, server) => {
+    const before = await backend.readMemory(0x2b, 8);
+    const result = await backend.runPrg(Buffer.from([0x00, 0xc0, 0xa9, 0x01, 0x8d, 0x20, 0xd0, 0x60]));
+    assert.deepEqual([...await backend.readMemory(0x2b, 8)], [...before]);
+    assert.deepEqual(server.keyboardFeeds.map((b) => b.toString("latin1")), ["SYS49152\r"]);
+    assert.equal(result.details.started, "SYS 49152");
+    assert.equal(result.details.loadAddress, "$C000");
+    const loaded = await backend.loadPrg(Buffer.from([0x00, 0xc0, 0x60]));
+    assert.equal(loaded.details.basicPointersSet, false);
+    assert.deepEqual([...await backend.readMemory(0x2b, 8)], [...before]);
+  });
+});
+
+test("a PRG that runs past $FFFF is refused before the machine is reset", async () => {
+  await withBackend(async (backend, server) => {
+    await assert.rejects(() => backend.loadPrg(Buffer.concat([Buffer.from([0xf0, 0xff]), Buffer.alloc(0x20)])), /runs past \$FFFF/);
+    assert.ok(!server.commands.some(([cmd]) => cmd === 0xcc));
+  });
+});

@@ -1159,7 +1159,7 @@ test("device: ViceBackend unit branches", async () => {
           const state = Buffer.alloc(end - start + 1, 0x20);
           readyPointers.copy(state, 0);
           state[0x03FF - 0x2B] = 0;
-          Buffer.from(READY_PATTERN).copy(state, 0x0400 - 0x2B);
+          (autoloadScreen ?? Buffer.from(READY_PATTERN)).copy(state, 0x0400 - 0x2B);
           return state;
         }
         if (start === 0x002B) {

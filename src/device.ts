@@ -630,6 +630,13 @@ class C64uBackend implements C64Facade {
   async modplayFile(pathStr: string): Promise<RunResult> { const res = await (this.api as any).v1.runnersModplayUpdate(":modplay", { file: pathStr }); return this.actionResult(res.data); }
 }
 
+/** Start of BASIC program text on the C64 (TXTTAB after a reset). */
+const BASIC_START = 0x0801;
+
+function formatViceAddress(address: number): string {
+  return `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
 /** Measured on x64sc: the KERNAL boot takes about 0.5 s in warp mode and 2.5 s at normal speed. */
 const BOOT_FIRST_CHECK_WARP_MS = 450;
 const BOOT_FIRST_CHECK_MS = 2200;
@@ -1231,6 +1238,9 @@ export class ViceBackend implements C64Facade {
     if (buffer.length < 2) throw new Error("PRG data too short");
     const loadAddress = buffer.readUInt16LE(0);
     const body = buffer.subarray(2);
+    if (loadAddress + body.length > 0x10000) {
+      throw new Error(`PRG loads at ${formatViceAddress(loadAddress)} and is ${body.length} bytes long, which runs past $FFFF.`);
+    }
     await this.withClient(async (client) => {
       const readiness = await this.resetToBasicPrompt(client, 10_000);
       if (readiness.stopped) {
@@ -1244,30 +1254,64 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  private async injectPrg(buffer: Buffer): Promise<void> {
-    await this.loadPrgAndFinish(buffer, async (client, loadAddress, programEnd) => {
-      const ptrs = Buffer.alloc(8);
-      ptrs.writeUInt16LE(loadAddress, 0);
-      ptrs.writeUInt16LE(programEnd, 2);
-      ptrs.writeUInt16LE(programEnd, 4);
-      ptrs.writeUInt16LE(programEnd, 6);
-      await client.memSet(0x002B, ptrs);
-      await client.keyboardFeed("RUN\r");
+  /**
+   * BASIC's program pointers (C64 memory map, zero page): $2B/$2C TXTTAB start of BASIC text, $2D/$2E VARTAB
+   * start of variables, $2F/$30 ARYTAB start of arrays, $31/$32 STREND end of arrays. After a load the three
+   * upper ones must point behind the program, as the BASIC LOAD command leaves them.
+   */
+  private static basicPointerBytes(programEnd: number): Buffer {
+    const ptrs = Buffer.alloc(6);
+    ptrs.writeUInt16LE(programEnd, 0);
+    ptrs.writeUInt16LE(programEnd, 2);
+    ptrs.writeUInt16LE(programEnd, 4);
+    return ptrs;
+  }
+
+  private async injectPrg(buffer: Buffer): Promise<RunResult> {
+    let started = "RUN";
+    let loadAddress = 0;
+    await this.loadPrgAndFinish(buffer, async (client, address, programEnd) => {
+      loadAddress = address;
+      if (address === BASIC_START) {
+        const txttab = Buffer.alloc(2);
+        txttab.writeUInt16LE(BASIC_START, 0);
+        await client.memSet(0x002b, Buffer.concat([txttab, ViceBackend.basicPointerBytes(programEnd)]));
+        await client.keyboardFeed("RUN\r");
+      } else {
+        // Not a BASIC program: BASIC's pointers stay as they are and the code is entered with SYS.
+        started = `SYS ${address}`;
+        await client.keyboardFeed(`SYS${address}\r`);
+      }
     });
+    return { success: true, details: { loadAddress: formatViceAddress(loadAddress), started, reset: true } };
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
     const buffer = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
-    await this.injectPrg(buffer);
-    return { success: true };
+    return await this.injectPrg(buffer);
   }
 
   /** Load PRG bytes without starting them — the caller decides how to enter
-   * the code (e.g. a subsequent typed `SYS <entry>` for machine code). */
+   * the code (e.g. a subsequent typed `SYS <entry>` for machine code). The machine is reset first. */
   async loadPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
     const buffer = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
-    await this.loadPrgAndFinish(buffer, async () => {});
-    return { success: true };
+    let loadAddress = 0;
+    let programEnd = 0;
+    await this.loadPrgAndFinish(buffer, async (client, address, end) => {
+      loadAddress = address;
+      programEnd = end;
+      // A program at the BASIC start must be listable and runnable: VARTAB, ARYTAB and STREND move behind it.
+      if (address === BASIC_START && end > address) await client.memSet(0x002d, ViceBackend.basicPointerBytes(end));
+    });
+    return {
+      success: true,
+      details: {
+        reset: true,
+        loadAddress: formatViceAddress(loadAddress),
+        endAddress: formatViceAddress(programEnd),
+        basicPointersSet: loadAddress === BASIC_START,
+      },
+    };
   }
 
   async loadPrgFile(prgPath: string): Promise<RunResult> {
@@ -1277,8 +1321,7 @@ export class ViceBackend implements C64Facade {
 
   async runPrgFile(prgPath: string): Promise<RunResult> {
     const data = await readHostFile(prgPath);
-    await this.injectPrg(data);
-    return { success: true };
+    return await this.injectPrg(data);
   }
   async runCrtFile(_path: string): Promise<RunResult> { throw unsupported("runCrtFile"); }
   async sidplayFile(_p: string): Promise<RunResult> { throw unsupported("sidplayFile"); }
