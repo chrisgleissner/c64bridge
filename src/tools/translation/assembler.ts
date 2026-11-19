@@ -8,9 +8,23 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from "node:buffer";
 import { rangeOverlapsIo } from "../../ioRange.js";
+import { parseBraceToken, petsciiToScreenCode } from "../../petscii.js";
 import { OPCODE_INVENTORY } from "./opcodeInventory.js";
 import type { OpcodeAddressingMode } from "./opcodeInventory.js";
 
+/*
+ * Dialect summary (what an LLM can rely on):
+ *  - Labels: "name:" or, in column 0, "name" followed by an instruction, directive or nothing.
+ *    ".local:" labels belong to the last global label. Names are case-sensitive, mnemonics are not.
+ *  - Numbers: $hex, 0xhex, %binary, 0bbinary, decimal; "<x" and ">x" take the low and high byte.
+ *  - Text: character literals ('A', "A" in an expression) and strings under .byte are raw ASCII;
+ *    .text/.ascii/.petscii/!text/!pet fold a-z to the PETSCII letters $41-$5A and accept
+ *    {name}/{$xx} control codes; .scr/.screen/!scr give screen codes. So 'a' is $61 but
+ *    .text "a" is $41; write .text for text the C64 prints.
+ *  - Comments: ";" and "//".
+ *  - Conditionals, macros (\1..\9, named parameters, \@ unique per expansion) and repeats are
+ *    expanded here; see SUPPORTED_DIRECTIVES for every accepted directive spelling.
+ */
 export interface AssembleOptions {
   /**
    * Optional default load address used when no ORG or `* =` directive appears.
@@ -35,11 +49,18 @@ export interface AssembleOptions {
     requestedPath: string,
     fromFile: string,
   ) => string | { contents: string; fileName?: string };
+  /**
+   * Resolver invoked for `.incbin "path"[, offset[, length]]` (also `!binary`). It returns the
+   * file bytes; without it `.incbin` is an error. The tools do not provide one.
+   */
+  resolveIncbin?: (requestedPath: string, fromFile: string) => Uint8Array;
 }
 
 export class AssemblyError extends Error {
   constructor(message: string, readonly location: SourceLocation) {
-    super(`${location.file}:${location.line}: ${message}`);
+    const where = `${location.file}:${location.line}${location.context ? ` (in ${location.context})` : ""}`;
+    const shown = location.text.trim();
+    super(`${where}: ${message}${shown ? `\n    ${shown.length > 160 ? `${shown.slice(0, 157)}...` : shown}` : ""}`);
   }
 }
 
@@ -55,6 +76,8 @@ interface SourceLocation {
   file: string;
   line: number;
   text: string;
+  /** Set for lines produced by a macro or repeat expansion, for example "macro wait". */
+  context?: string;
 }
 
 interface ParsedLine {
@@ -85,7 +108,9 @@ interface AssignmentStatement {
   isLocationCounter: boolean;
 }
 
-type DirectiveName = "org" | "byte" | "word" | "text" | "fill" | "align" | "equ" | "reserve" | "include";
+type DirectiveName =
+  | "org" | "byte" | "word" | "text" | "screen" | "fill" | "align" | "alignmask" | "equ" | "reserve" | "include" | "incbin"
+  | "if" | "else" | "endif";
 
 type DirectiveArg =
   | { kind: "expr"; expr: Expression }
@@ -177,6 +202,8 @@ export function prgEntryAddress(prg: Uint8Array): number {
   return digits.length > 0 && target <= 0xffff ? target : loadAddress;
 }
 const MAX_ADDRESS = 0xffff;
+/** A zero-filled gap or trailing .res at least this long is reported in AssemblyResult.warnings. */
+const LARGE_FILL_WARNING_BYTES = 1024;
 const INT32_MIN = -0x80000000;
 const UINT32_MAX = 0xffffffff;
 
@@ -217,22 +244,51 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   "BYTE": "byte",
   "DB": "byte",
   ".DB": "byte",
+  "!BYTE": "byte",
+  "!BY": "byte",
+  "!8": "byte",
   ".WORD": "word",
   "WORD": "word",
   "DW": "word",
   ".DW": "word",
+  "!WORD": "word",
+  "!WO": "word",
+  "!16": "word",
   ".RES": "reserve",
   "RES": "reserve",
   ".DS": "reserve",
   "DS": "reserve",
   ".EQU": "equ",
   ".FILL": "fill",
+  "!FILL": "fill",
+  "!FI": "fill",
   ".ALIGN": "align",
+  "!ALIGN": "alignmask",
   ".TEXT": "text",
   ".ASCII": "text",
+  "!TEXT": "text",
+  "!TX": "text",
+  ".PETSCII": "text",
+  "!PET": "text",
+  ".SCR": "screen",
+  ".SCREEN": "screen",
+  "!SCR": "screen",
   ".INCLUDE": "include",
   "INCLUDE": "include",
+  "!SOURCE": "include",
+  ".INCBIN": "incbin",
+  "!BINARY": "incbin",
+  "!BIN": "incbin",
+  ".IF": "if",
+  ".ELSE": "else",
+  ".ENDIF": "endif",
 };
+
+/** Shown with "unsupported directive": every spelling the assembler accepts, grouped by meaning. */
+const SUPPORTED_DIRECTIVES =
+  ".org/org/* = ; .byte/.db/!byte/!by/!8 ; .word/.dw/!word/!wo/!16 ; .text/.ascii/.petscii/!text/!tx/!pet ; .scr/.screen/!scr ; " +
+  ".fill/!fill/!fi ; .align ; !align ; .res/.ds ; .equ/name = value ; .include/!source ; .incbin/!binary/!bin ; " +
+  ".if/.else/.endif ; .macro name params/.endmacro/.endm ; .repeat n/.rept/.endrepeat/.endr";
 
 const RELATIVE_ONLY = new Set<string>(["BCC", "BCS", "BEQ", "BMI", "BNE", "BPL", "BVC", "BVS"]);
 
@@ -247,6 +303,11 @@ export interface AssemblyResult {
   readonly entryAddress: number;
   /** Global label name -> resolved address (after both passes). */
   readonly symbols: ReadonlyMap<string, number>;
+  /**
+   * Things that are legal but probably not intended, for the caller to show: a large zero-filled
+   * gap between output blocks, a trailing `.res` that enlarges the PRG, or an empty image.
+   */
+  readonly warnings: readonly string[];
 }
 
 export function assemblyToPrg(source: string, options?: AssembleOptions): Buffer {
@@ -265,8 +326,9 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   const parser = new Parser(resolver);
   const statements = parser.parse(normalized, rootFile);
 
-  const assembler = new Assembler(statements, loadAddress);
+  const assembler = new Assembler(statements, loadAddress, options?.resolveIncbin);
   assembler.runPass(0);
+  assembler.resolveDeferredAssignments();
   assembler.runPass(1);
 
   const prg = assembler.buildPrg();
@@ -275,36 +337,268 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   const entryAddress = stubTarget !== loadAddressOfPrg
     ? stubTarget
     : assembler.getFirstInstructionAddress() ?? loadAddressOfPrg;
-  return { prg, symbols: assembler.getSymbols(), entryAddress };
+  return { prg, symbols: assembler.getSymbols(), entryAddress, warnings: assembler.getWarnings() };
 }
 
 function normalizeSource(input: string): string {
-  return input.replace(/\r\n?/g, "\n");
+  return input.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+}
+
+interface SourceLine {
+  text: string;
+  line: number;
+  context?: string;
+}
+
+interface MacroDefinition {
+  name: string;
+  params: string[];
+  body: SourceLine[];
+  location: SourceLocation;
+}
+
+const MAX_EXPANDED_LINES = 100_000;
+const MAX_NESTING_DEPTH = 16;
+const MAX_REPEAT_COUNT = 65_536;
+
+const BLOCK_CLOSERS: Record<string, { opens: string[]; closes: string[] }> = {
+  macro: { opens: [".MACRO"], closes: [".ENDMACRO", ".ENDM"] },
+  repeat: { opens: [".REPEAT", ".REPT"], closes: [".ENDREPEAT", ".ENDR"] },
+};
+
+/** Upper-cased first directive of a line (after any "label:" prefixes), or undefined. */
+function leadingDirective(text: string): string | undefined {
+  let tokens: Token[];
+  try {
+    tokens = tokenize(text);
+  } catch {
+    return undefined;
+  }
+  let index = 0;
+  while (tokens[index]?.kind === "symbol" && tokens[index + 1]?.kind === "punct" && tokens[index + 1]!.value === ":") {
+    index += 2;
+  }
+  const head = tokens[index];
+  return head?.kind === "symbol" && head.value.startsWith(".") ? head.value.toUpperCase() : undefined;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Splits macro call arguments at top-level commas; a trailing comment is dropped. */
+function splitMacroArguments(text: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let depth = 0;
+  let quote: string | undefined;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+    if (quote) {
+      current += char;
+      if (char === "\\" && index + 1 < text.length) {
+        current += text[index + 1];
+        index += 1;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+    } else if (char === ";" || (char === "/" && text[index + 1] === "/")) {
+      break;
+    } else if (char === "(") {
+      depth += 1;
+      current += char;
+    } else if (char === ")") {
+      depth -= 1;
+      current += char;
+    } else if (char === "," && depth === 0) {
+      args.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim() !== "" || args.length > 0) args.push(current.trim());
+  return args;
+}
+
+/**
+ * Replaces `\1`..`\9` (positional arguments) and `\@` (a number unique to this expansion) in a
+ * macro or repeat body line, and named parameters outside strings and comments.
+ */
+function substituteMacroText(text: string, params: readonly string[], args: readonly string[], unique: number): string {
+  let out = "";
+  let quote: string | undefined;
+  let comment = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+    if (char === "\\" && index + 1 < text.length) {
+      const next = text[index + 1]!;
+      if (next === "@") {
+        out += String(unique);
+        index += 1;
+        continue;
+      }
+      if (next >= "1" && next <= "9") {
+        out += args[Number(next) - 1] ?? "";
+        index += 1;
+        continue;
+      }
+      out += char + next;
+      index += 1;
+      continue;
+    }
+    if (comment) {
+      out += char;
+      continue;
+    }
+    if (quote) {
+      out += char;
+      if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      out += char;
+      continue;
+    }
+    if (char === ";" || (char === "/" && text[index + 1] === "/")) {
+      comment = true;
+      out += char;
+      continue;
+    }
+    if (isSymbolStart(char)) {
+      let end = index + 1;
+      while (end < text.length && isSymbolPart(text[end]!)) end += 1;
+      const word = text.slice(index, end);
+      const position = params.indexOf(word);
+      out += position >= 0 ? args[position] ?? "" : word;
+      index = end - 1;
+      continue;
+    }
+    out += char;
+  }
+  return out;
+}
+
+/** Evaluates an expression that needs no symbols other than the constants seen so far. */
+function evaluateConstantExpression(expr: Expression, constants: ReadonlyMap<string, number>): number | undefined {
+  switch (expr.type) {
+    case "number":
+      return expr.value;
+    case "symbol":
+      return expr.name === "*" ? undefined : constants.get(expr.name);
+    case "unary": {
+      const value = evaluateConstantExpression(expr.operand, constants);
+      if (value === undefined) return undefined;
+      switch (expr.op) {
+        case "+": return value;
+        case "-": return -value;
+        case "!": return value ? 0 : 1;
+        case "~": return ~value;
+        case "<": return value & 0xff;
+        case ">": return (value >> 8) & 0xff;
+        default: return undefined;
+      }
+    }
+    case "binary": {
+      const left = evaluateConstantExpression(expr.left, constants);
+      const right = evaluateConstantExpression(expr.right, constants);
+      if (left === undefined || right === undefined) return undefined;
+      switch (expr.op) {
+        case "+": return left + right;
+        case "-": return left - right;
+        case "*": return left * right;
+        case "/": return right === 0 ? undefined : Math.trunc(left / right);
+        case "%": return right === 0 ? undefined : left % right;
+        case "<<": return right >= 0 && right <= 31 ? left << right : undefined;
+        case ">>": return right >= 0 && right <= 31 ? left >> right : undefined;
+        case "&": return left & right;
+        case "|": return left | right;
+        case "^": return left ^ right;
+        case "==": return left === right ? 1 : 0;
+        case "!=": return left !== right ? 1 : 0;
+        case "<": return left < right ? 1 : 0;
+        case "<=": return left <= right ? 1 : 0;
+        case ">": return left > right ? 1 : 0;
+        case ">=": return left >= right ? 1 : 0;
+        default: return undefined;
+      }
+    }
+    default:
+      return undefined;
+  }
 }
 
 class Parser {
+  private readonly macros = new Map<string, MacroDefinition>();
+  /** Constants defined so far by `name = expr`, for `.repeat` counts. */
+  private readonly constants = new Map<string, number>();
+  private expandedLines = 0;
+  private expansionCounter = 0;
+
   constructor(
     private readonly includeResolver?: (requestedPath: string, fromFile: string) => string | { contents: string; fileName?: string },
   ) {}
 
   parse(source: string, fileName: string): ParsedLine[] {
     const statements: ParsedLine[] = [];
-    this.parseInto(statements, source, fileName, []);
+    this.parseLines(statements, toSourceLines(source), fileName, [], 0);
     return statements;
   }
 
-  private parseInto(
+  private parseSource(statements: ParsedLine[], source: string, fileName: string, includeStack: string[], depth: number): void {
+    this.parseLines(statements, toSourceLines(source), fileName, includeStack, depth);
+  }
+
+  /** The index of the line that closes the block opened at `lines[openIndex]`. */
+  private findBlockEnd(lines: SourceLine[], openIndex: number, kind: "macro" | "repeat", location: SourceLocation): number {
+    const { opens, closes } = BLOCK_CLOSERS[kind]!;
+    let depth = 1;
+    for (let index = openIndex + 1; index < lines.length; index += 1) {
+      const directive = leadingDirective(lines[index]!.text);
+      if (directive && opens.includes(directive)) depth += 1;
+      else if (directive && closes.includes(directive)) {
+        depth -= 1;
+        if (depth === 0) return index;
+      }
+    }
+    throw new AssemblyError(`${kind === "macro" ? ".macro" : ".repeat"} has no matching ${closes[0]!.toLowerCase()}`, location);
+  }
+
+  private countExpansion(count: number, location: SourceLocation): void {
+    this.expandedLines += count;
+    if (this.expandedLines > MAX_EXPANDED_LINES) {
+      throw new AssemblyError(`Macro and repeat expansion exceeds ${MAX_EXPANDED_LINES} lines`, location);
+    }
+  }
+
+  private parseLines(
     statements: ParsedLine[],
-    source: string,
+    lines: SourceLine[],
     fileName: string,
     includeStack: string[],
+    depth: number,
   ): void {
-    const lines = source.split("\n");
+    if (depth > MAX_NESTING_DEPTH) {
+      const first = lines[0];
+      throw new AssemblyError(`Macro, repeat and include nesting is deeper than ${MAX_NESTING_DEPTH}`, {
+        file: fileName,
+        line: first?.line ?? 0,
+        text: first?.text ?? "",
+      });
+    }
     for (let index = 0; index < lines.length; index += 1) {
-      const originalLine = lines[index] ?? "";
-      const location: SourceLocation = { file: fileName, line: index + 1, text: originalLine };
+      const source = lines[index]!;
+      const originalLine = source.text;
+      const location: SourceLocation = { file: fileName, line: source.line, text: originalLine, ...(source.context ? { context: source.context } : {}) };
       let labels: string[] = [];
       let statement: Statement | undefined;
+      let expansion: SourceLine[] | undefined;
       try {
         const tokens = tokenize(originalLine);
         if (tokens.length === 0) {
@@ -319,7 +613,78 @@ class Parser {
           stream.consumePunct(":");
         }
 
-        statement = this.parseStatement(stream, location, includeStack, statements);
+        // A name in column 0 that is neither a mnemonic, a directive, a macro nor an assignment is a
+        // label without a colon, as ACME, 64tass and DASM accept.
+        const head = stream.peek();
+        if (head?.kind === "symbol" && /^[A-Za-z_]/.test(originalLine) && !head.value.startsWith(".")) {
+          const upper = head.value.toUpperCase();
+          const next = stream.peek(1);
+          const isAssignment = (next?.kind === "punct" && next.value === "=") || (next?.kind === "symbol" && next.value.toUpperCase() === ".EQU");
+          if (!isAssignment && !INSTRUCTION_TABLE.has(upper) && !(upper in DIRECTIVE_ALIASES) && !this.macros.has(upper)) {
+            const nextUpper = next?.kind === "symbol" ? next.value.toUpperCase() : undefined;
+            const statementFollows =
+              next === undefined ||
+              (nextUpper !== undefined &&
+                (INSTRUCTION_TABLE.has(nextUpper) || nextUpper in DIRECTIVE_ALIASES || nextUpper.startsWith(".") || this.macros.has(nextUpper))) ||
+              (next.kind === "punct" && next.value === "!" && stream.peek(2) !== undefined);
+            if (!statementFollows) {
+              throw new AssemblyError(
+                `Unknown instruction "${head.value}" (a name in column 0 is a label only when an instruction, directive or macro follows it or nothing does; labels may also end with ':')`,
+                location,
+              );
+            }
+            labels.push(stream.consumeSymbol());
+          }
+        }
+
+        const directive = leadingDirectiveOf(stream);
+        if (directive === ".MACRO") {
+          stream.consume();
+          const end = this.findBlockEnd(lines, index, "macro", location);
+          this.defineMacro(stream, lines.slice(index + 1, end), location);
+          statements.push({ labels, statement: undefined, location });
+          index = end;
+          continue;
+        }
+        if (directive === ".REPEAT" || directive === ".REPT") {
+          stream.consume();
+          const expr = parseExpression(stream, new Set<string>());
+          stream.expectEnd();
+          const count = evaluateConstantExpression(expr, this.constants);
+          if (count === undefined || !Number.isInteger(count) || count < 0 || count > MAX_REPEAT_COUNT) {
+            throw new AssemblyError(
+              `${directive.toLowerCase()} needs a count of 0..${MAX_REPEAT_COUNT} made of numbers and constants defined earlier with "name = value"`,
+              location,
+            );
+          }
+          const end = this.findBlockEnd(lines, index, "repeat", location);
+          const body = lines.slice(index + 1, end);
+          this.countExpansion(count * body.length, location);
+          statements.push({ labels, statement: undefined, location });
+          for (let iteration = 0; iteration < count; iteration += 1) {
+            const unique = ++this.expansionCounter;
+            const expanded = body.map((line) => ({
+              text: substituteMacroText(line.text, [], [], unique),
+              line: source.line,
+              context: source.context ?? "repeat",
+            }));
+            this.parseLines(statements, expanded, fileName, includeStack, depth + 1);
+          }
+          index = end;
+          continue;
+        }
+        if (directive !== undefined && [".ENDMACRO", ".ENDM", ".ENDREPEAT", ".ENDR"].includes(directive)) {
+          throw new AssemblyError(`${directive.toLowerCase()} without a matching ${directive.includes("MACRO") || directive === ".ENDM" ? ".macro" : ".repeat"}`, location);
+        }
+
+        const macroHead = stream.peek();
+        const macroName = macroHead?.kind === "symbol" ? macroHead.value.toUpperCase() : undefined;
+        const macro = macroName !== undefined ? this.macros.get(macroName) : undefined;
+        if (macro) {
+          expansion = this.expandMacro(macro, originalLine, source, location);
+        } else {
+          statement = this.parseStatement(stream, location, includeStack, statements, depth);
+        }
       } catch (error) {
         // Name the source line for syntax errors as well.
         if (error instanceof AssemblyError) {
@@ -328,12 +693,70 @@ class Parser {
         throw new AssemblyError(error instanceof Error ? error.message : String(error), location);
       }
 
+      if (statement?.kind === "assignment" && !statement.isLocationCounter && !statement.target.startsWith(".")) {
+        const value = evaluateConstantExpression(statement.expr, this.constants);
+        if (value !== undefined) this.constants.set(statement.target, value);
+      }
       statements.push({
         labels,
         statement,
         location,
       });
+      if (expansion) {
+        this.parseLines(statements, expansion, fileName, includeStack, depth + 1);
+      }
     }
+  }
+
+  private defineMacro(stream: TokenStream, body: SourceLine[], location: SourceLocation): void {
+    const nameToken = stream.peek();
+    if (nameToken?.kind !== "symbol" || nameToken.value.startsWith(".")) {
+      throw new AssemblyError(".macro needs a name: .macro name param1, param2", location);
+    }
+    stream.consume();
+    const name = nameToken.value;
+    const upper = name.toUpperCase();
+    if (INSTRUCTION_TABLE.has(upper) || upper in DIRECTIVE_ALIASES) {
+      throw new AssemblyError(`Macro name "${name}" is a mnemonic or directive`, location);
+    }
+    if (this.macros.has(upper)) {
+      throw new AssemblyError(`Macro "${name}" is already defined (line ${this.macros.get(upper)!.location.line})`, location);
+    }
+    const params: string[] = [];
+    if (stream.peek()?.kind === "punct" && stream.peek()!.value === "(") stream.consume();
+    while (!stream.isAtEnd()) {
+      const token = stream.peek()!;
+      if (token.kind === "punct" && (token.value === "," || token.value === ")")) {
+        stream.consume();
+        continue;
+      }
+      if (token.kind !== "symbol") {
+        throw new AssemblyError(".macro parameters are names separated by commas", location);
+      }
+      params.push(stream.consumeSymbol());
+    }
+    this.macros.set(upper, { name, params, body, location });
+  }
+
+  private expandMacro(macro: MacroDefinition, text: string, source: SourceLine, location: SourceLocation): SourceLine[] {
+    // Skip label prefixes and the macro name itself; the rest is the argument list.
+    const afterName = new RegExp(`^\\s*(?:[A-Za-z_.][\\w.]*\\s*:\\s*)*${escapeRegExp(macro.name)}(?![\\w.])`, "i").exec(text);
+    const rest = afterName ? text.slice(afterName[0].length) : "";
+    const args = splitMacroArguments(rest);
+    // A macro without named parameters takes its arguments as \\1 .. \\9.
+    if (macro.params.length > 0 && args.length !== macro.params.length) {
+      throw new AssemblyError(
+        `Macro ${macro.name} takes ${macro.params.length} argument${macro.params.length === 1 ? "" : "s"} (${macro.params.join(", ") || "none"}), got ${args.length}`,
+        location,
+      );
+    }
+    this.countExpansion(macro.body.length, location);
+    const unique = ++this.expansionCounter;
+    return macro.body.map((line) => ({
+      text: substituteMacroText(line.text, macro.params, args, unique),
+      line: source.line,
+      context: `macro ${macro.name}`,
+    }));
   }
 
   private parseStatement(
@@ -341,6 +764,7 @@ class Parser {
     location: SourceLocation,
     includeStack: string[],
     statements: ParsedLine[],
+    depth: number,
   ): Statement | undefined {
     const first = stream.peek();
     if (!first) return undefined;
@@ -371,24 +795,36 @@ class Parser {
       };
     }
 
-    if (first.kind !== "symbol") {
-      throw new AssemblyError("Expected an opcode, directive, or assignment", location);
+    let upper: string;
+    if (first.kind === "punct" && first.value === "!" && (stream.peek(1)?.kind === "symbol" || stream.peek(1)?.kind === "number")) {
+      // ACME spelling: !byte, !08, !16 ...
+      stream.consume();
+      const word = stream.consume();
+      upper = `!${word.kind === "number" ? String(word.value) : String(word.value).toUpperCase()}`;
+    } else {
+      if (first.kind !== "symbol") {
+        throw new AssemblyError("Expected an opcode, directive, or assignment", location);
+      }
+
+      // "name .equ expr", the same as "name = expr".
+      const second = stream.peek(1);
+      if (second?.kind === "symbol" && second.value.toUpperCase() === ".EQU") {
+        const target = stream.consumeSymbol();
+        stream.consumeSymbol();
+        const expr = parseExpression(stream, new Set<string>());
+        stream.expectEnd();
+        return { kind: "assignment", target, expr, isLocationCounter: false };
+      }
+
+      upper = stream.consumeSymbol().toUpperCase();
     }
 
-    // "name .equ expr", the same as "name = expr".
-    const second = stream.peek(1);
-    if (second?.kind === "symbol" && second.value.toUpperCase() === ".EQU") {
-      const target = stream.consumeSymbol();
-      stream.consumeSymbol();
-      const expr = parseExpression(stream, new Set<string>());
-      stream.expectEnd();
-      return { kind: "assignment", target, expr, isLocationCounter: false };
+    if ((upper.startsWith(".") || upper.startsWith("!")) && !(upper in DIRECTIVE_ALIASES)) {
+      throw new AssemblyError(`unsupported directive ${upper.toLowerCase()}; supported: ${SUPPORTED_DIRECTIVES}${upper.startsWith(".") ? ' (a local label needs a trailing ":")' : ""}`, location);
     }
-
-    const upper = stream.consumeSymbol().toUpperCase();
 
     if (upper in DIRECTIVE_ALIASES) {
-      const directive = DIRECTIVE_ALIASES[upper];
+      const directive = DIRECTIVE_ALIASES[upper]!;
       switch (directive) {
         case "org": {
           const expr = parseExpression(stream, new Set<string>());
@@ -399,23 +835,37 @@ class Parser {
             args: [{ kind: "expr", expr }],
           };
         }
-        case "include": {
-          const includePath = stream.consumeString("include expects a string literal path");
+        case "include":
+        case "incbin": {
+          const path = stream.consumeString(`${directive} expects a string literal path`);
+          const args: DirectiveArg[] = [{ kind: "string", value: path }];
+          if (directive === "incbin") {
+            while (stream.peek()?.kind === "punct" && stream.peek()!.value === "," && args.length < 3) {
+              stream.consumePunct(",");
+              args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>([","])) });
+            }
+          }
           stream.expectEnd();
+          if (directive === "incbin") {
+            return { kind: "directive", name: "incbin", args };
+          }
 
           if (!this.includeResolver) {
-            throw new AssemblyError("include directive requires a resolveInclude option", location);
+            throw new AssemblyError(
+              "include needs a resolveInclude option; the MCP tools provide none, so paste the included source into the program",
+              location,
+            );
           }
-          if (includeStack.includes(includePath)) {
-            throw new AssemblyError(`Recursive include detected for "${includePath}"`, location);
+          if (includeStack.includes(path)) {
+            throw new AssemblyError(`Recursive include detected for "${path}"`, location);
           }
-          const resolved = this.includeResolver(includePath, location.file);
+          const resolved = this.includeResolver(path, location.file);
           const includeContent =
             typeof resolved === "string" ? resolved : resolved.contents;
           const includeName =
-            typeof resolved === "string" ? includePath : resolved.fileName ?? includePath;
+            typeof resolved === "string" ? path : resolved.fileName ?? path;
 
-          this.parseInto(statements, normalizeSource(includeContent), includeName, [...includeStack, includePath]);
+          this.parseSource(statements, normalizeSource(includeContent), includeName, [...includeStack, path], depth + 1);
           return undefined;
         }
         case "equ": {
@@ -426,6 +876,15 @@ class Parser {
           stream.expectEnd();
           return { kind: "assignment", target, expr, isLocationCounter: false };
         }
+        case "if": {
+          const expr = parseExpression(stream, new Set<string>());
+          stream.expectEnd();
+          return { kind: "directive", name: "if", args: [{ kind: "expr", expr }] };
+        }
+        case "else":
+        case "endif":
+          stream.expectEnd();
+          return { kind: "directive", name: directive, args: [] };
         case "fill":
         case "align": {
           const args: DirectiveArg[] = [{ kind: "expr", expr: parseExpression(stream, new Set<string>([","])) }];
@@ -436,14 +895,34 @@ class Parser {
           stream.expectEnd();
           return { kind: "directive", name: directive, args };
         }
+        case "alignmask": {
+          // ACME: !align ANDVALUE, EQUALVALUE [, FILLVALUE]
+          const args: DirectiveArg[] = [];
+          for (;;) {
+            args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>([","])) });
+            if (stream.peek()?.kind === "punct" && stream.peek()!.value === "," && args.length < 3) {
+              stream.consumePunct(",");
+              continue;
+            }
+            break;
+          }
+          stream.expectEnd();
+          if (args.length < 2) {
+            throw new AssemblyError("!align needs ANDVALUE, EQUALVALUE [, FILLVALUE] (use .align N to align to a multiple of N)", location);
+          }
+          return { kind: "directive", name: "alignmask", args };
+        }
         case "byte":
         case "text":
+        case "screen":
         case "word": {
           const args: DirectiveArg[] = [];
           while (!stream.isAtEnd()) {
             const next = stream.peek();
             if (!next) break;
-            if (next.kind === "string") {
+            // A one-character string followed by an operator starts an expression: 'A'-64.
+            const startsExpression = next.kind === "string" && [...next.value].length === 1 && asBinaryOperator(stream.peek(1)) !== undefined;
+            if (next.kind === "string" && !startsExpression) {
               args.push({ kind: "string", value: stream.consumeString() });
             } else {
               args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>()) });
@@ -462,12 +941,17 @@ class Parser {
           };
         }
         case "reserve": {
-          const expr = parseExpression(stream, new Set<string>());
+          const args: DirectiveArg[] = [{ kind: "expr", expr: parseExpression(stream, new Set<string>([","])) }];
+          // ".res n, value" fills n bytes with value, as in ca65.
+          if (stream.peek()?.kind === "punct" && stream.peek()!.value === ",") {
+            stream.consumePunct(",");
+            args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>()) });
+          }
           stream.expectEnd();
           return {
             kind: "directive",
             name: "reserve",
-            args: [{ kind: "expr", expr }],
+            args,
           };
         }
         default:
@@ -476,7 +960,7 @@ class Parser {
     }
 
     const mnemonic = upper;
-    const operand = parseOperand(stream);
+    const operand = parseOperand(stream, mnemonic);
     stream.expectEnd();
     return {
       kind: "instruction",
@@ -484,6 +968,16 @@ class Parser {
       operand,
     };
   }
+}
+
+function toSourceLines(source: string): SourceLine[] {
+  return source.split("\n").map((text, index) => ({ text, line: index + 1 }));
+}
+
+/** The upper-cased directive at the head of the stream, without consuming it. */
+function leadingDirectiveOf(stream: TokenStream): string | undefined {
+  const head = stream.peek();
+  return head?.kind === "symbol" && head.value.startsWith(".") ? head.value.toUpperCase() : undefined;
 }
 
 function tokenize(line: string): Token[] {
@@ -494,11 +988,11 @@ function tokenize(line: string): Token[] {
   while (index < length) {
     const char = line[index] ?? "";
 
-    if (char === ";" || char === "\u201b") {
+    if (char === ";" || char === "\u201b" || (char === "/" && line[index + 1] === "/")) {
       break;
     }
 
-    if (char === " " || char === "\t") {
+    if (char === " " || char === "\t" || char === "\u00a0") {
       index += 1;
       continue;
     }
@@ -513,8 +1007,16 @@ function tokenize(line: string): Token[] {
         const current = line[index] ?? "";
         if (current === "\\" && index + 1 < length) {
           const escape = line[index + 1] ?? "";
-          const translated = translateEscape(escape);
-          value += translated;
+          if (escape === "x") {
+            const digits = /^[0-9a-fA-F]{2}/.exec(line.slice(index + 2, index + 4));
+            if (!digits) {
+              throw new Error('Escape \\x needs two hex digits, for example "\\x41"');
+            }
+            value += String.fromCharCode(parseInt(digits[0], 16));
+            index += 4;
+            continue;
+          }
+          value += translateEscape(escape);
           index += 2;
           continue;
         }
@@ -530,7 +1032,7 @@ function tokenize(line: string): Token[] {
       }
 
       if (!closed) {
-        throw new Error("Unterminated string literal");
+        throw new Error('Unterminated string literal (a backslash escapes the next character: write \\\\ for one backslash and \\" for a quote)');
       }
 
       tokens.push({ kind: "string", value });
@@ -575,7 +1077,8 @@ function tokenize(line: string): Token[] {
       continue;
     }
 
-    throw new Error(`Unexpected character '${char}'`);
+    const codePoint = line.codePointAt(index) ?? 0;
+    throw new Error(`Unexpected character '${codePoint < 0x20 || codePoint === 0x7f ? "" : String.fromCodePoint(codePoint)}' (U+${codePoint.toString(16).toUpperCase().padStart(4, "0")})`);
   }
 
   return tokens;
@@ -630,6 +1133,14 @@ class TokenStream {
     return this.index >= this.tokens.length;
   }
 
+  mark(): number {
+    return this.index;
+  }
+
+  reset(mark: number): void {
+    this.index = mark;
+  }
+
   expectEnd(): void {
     if (!this.isAtEnd()) {
       throw new Error("Unexpected tokens at end of line");
@@ -651,8 +1162,10 @@ function translateEscape(char: string): string {
       return "\"";
     case "'":
       return "'";
+    case "0":
+      return "\0";
     default:
-      return char;
+      throw new Error(`Unknown escape "\\${char}" in a string; use \\0, \\xNN, \\n, \\r, \\t, \\\\, \\" or \\'`);
   }
 }
 
@@ -815,7 +1328,7 @@ function asBinaryOperator(token: Token | undefined): BinaryOperator | undefined 
   return undefined;
 }
 
-function parseOperand(stream: TokenStream): Operand {
+function parseOperand(stream: TokenStream, mnemonic: string): Operand {
   if (stream.isAtEnd()) {
     return { kind: "none" };
   }
@@ -823,11 +1336,10 @@ function parseOperand(stream: TokenStream): Operand {
   const first = stream.peek();
   if (!first) return { kind: "none" };
 
-  if (first.kind === "symbol" && first.value.toUpperCase() === "A") {
+  // "A" alone is the accumulator for ASL, LSR, ROL and ROR; for every other instruction it is a
+  // symbol, so a label named "a" works in "lda a" and "lda a+1".
+  if (first.kind === "symbol" && first.value.toUpperCase() === "A" && stream.peek(1) === undefined && INSTRUCTION_TABLE.get(mnemonic)?.has(AddressingMode.Accumulator)) {
     stream.consume();
-    if (!stream.isAtEnd()) {
-      throw new Error("Unexpected tokens after accumulator operand");
-    }
     return { kind: "accumulator" };
   }
 
@@ -837,6 +1349,7 @@ function parseOperand(stream: TokenStream): Operand {
     return { kind: "immediate", expr };
   }
 
+  const parenthesisMark = stream.mark();
   if (first.kind === "punct" && first.value === "(") {
     stream.consumePunct("(");
     const expr = parseExpression(stream, new Set<string>([",", ")"]));
@@ -859,15 +1372,19 @@ function parseOperand(stream: TokenStream): Operand {
     }
 
     const next = stream.peek();
-    if (next && next.kind === "punct" && next.value === ",") {
+    if (next && next.kind === "punct" && next.value !== "," && asBinaryOperator(next) !== undefined) {
+      // "(1+2)*3" and "(label)+1" are expressions that start with a parenthesis, not an indirect operand.
+      stream.reset(parenthesisMark);
+    } else if (next && next.kind === "punct" && next.value === ",") {
       stream.consumePunct(",");
       const register = stream.consumeSymbol("Expected X or Y after comma").toUpperCase();
       if (register === "Y") {
         return { kind: "indirect", expr, register: "Y" };
       }
       throw new Error(`Only ,Y is allowed after a closing parenthesis: use (zp),Y or (zp,X) (got ,${register})`);
+    } else {
+      return { kind: "indirect", expr };
     }
-    return { kind: "indirect", expr };
   }
 
   const expr = parseExpression(stream, new Set<string>([","]));
@@ -964,6 +1481,14 @@ class SymbolTable {
     }
   }
 
+  getScope(): string | undefined {
+    return this.currentScope;
+  }
+
+  setScope(scope: string | undefined): void {
+    this.currentScope = scope;
+  }
+
   get(label: string): number | undefined {
     if (label === "*") {
       throw new Error("'*' should be resolved externally");
@@ -1010,9 +1535,69 @@ class Assembler {
   private firstInstructionAddress: number | undefined;
   /** Reserved (.res) ranges from the last pass, as [start, end] inclusive. */
   private reserved: Array<[number, number]> = [];
+  private readonly warnings: string[] = [];
+  private readonly incbinCache = new Map<string, Uint8Array>();
+  /** Open `.if` blocks of the current pass. */
+  private ifStack: Array<{ active: boolean; parentActive: boolean; taken: boolean; seenElse: boolean; location: SourceLocation }> = [];
+  /** Assignments whose value needed a symbol that was not defined yet in the first pass. */
+  private deferred: Array<{ statement: AssignmentStatement; location: SourceLocation; pc: number; scope: string | undefined }> = [];
 
-  constructor(private readonly lines: ParsedLine[], private readonly defaultLoadAddress: number) {
+  constructor(
+    private readonly lines: ParsedLine[],
+    private readonly defaultLoadAddress: number,
+    private readonly resolveIncbin?: (requestedPath: string, fromFile: string) => Uint8Array,
+  ) {
     this.symbolTable.reset();
+  }
+
+  getWarnings(): readonly string[] {
+    return this.warnings;
+  }
+
+  /**
+   * "size = end - start" before the labels it uses: the first pass cannot evaluate it, so it is
+   * resolved here, after every label has an address and before the second pass reads it.
+   */
+  resolveDeferredAssignments(): void {
+    let pending = this.deferred;
+    this.deferred = [];
+    const savedPc = this.pc;
+    const savedScope = this.symbolTable.getScope();
+    try {
+      while (pending.length > 0) {
+        const unresolved: typeof pending = [];
+        for (const item of pending) {
+          this.pc = item.pc;
+          this.symbolTable.setScope(item.scope);
+          let value: number | undefined;
+          try {
+            value = this.evaluate(item.statement.expr, 0, item.location);
+          } catch (error) {
+            if (error instanceof AssemblyError) throw error;
+            throw new AssemblyError(error instanceof Error ? error.message : String(error), item.location);
+          }
+          if (value === undefined) {
+            unresolved.push(item);
+            continue;
+          }
+          try {
+            this.symbolTable.setAssignment(item.statement.target, value, item.location);
+          } catch (error) {
+            throw new AssemblyError(error instanceof Error ? error.message : String(error), item.location);
+          }
+        }
+        if (unresolved.length === pending.length) {
+          const first = unresolved[0]!;
+          this.pc = first.pc;
+          this.symbolTable.setScope(first.scope);
+          throw this.undefinedError(first.statement.expr, first.location, "Assignment depends on an undefined symbol");
+        }
+        pending = unresolved;
+      }
+    } finally {
+      this.pc = savedPc;
+      this.symbolTable.setScope(savedScope);
+    }
   }
 
   runPass(pass: 0 | 1): void {
@@ -1025,6 +1610,7 @@ class Assembler {
       this.firstInstructionAddress = undefined;
     }
     this.reserved = [];
+    this.ifStack = [];
     this.written.fill(0);
     this.owner.fill(0);
     this.blocks = [];
@@ -1049,6 +1635,10 @@ class Assembler {
         const message = error instanceof Error ? error.message : String(error);
         throw new AssemblyError(message, line.location);
       }
+    }
+    const open = this.ifStack[this.ifStack.length - 1];
+    if (open) {
+      throw new AssemblyError(".if has no matching .endif", open.location);
     }
   }
 
@@ -1086,6 +1676,7 @@ class Assembler {
     // The PRG spans the bytes actually emitted, so org blocks that only define
     // labels neither move the load address nor add padding.
     if (this.lowestWritten > this.highestWritten) {
+      this.warnings.push("The source emits no bytes (only labels, equates or .res); the PRG is empty");
       return Buffer.alloc(0);
     }
     let start = this.lowestWritten;
@@ -1093,13 +1684,25 @@ class Assembler {
     // Reserved space that adjoins the emitted bytes (a trailing "counter: .res 1")
     // is part of the image and zero-filled, as in ca65 and DASM; detached blocks
     // such as zero-page variables are not, so they do not stretch the PRG.
-    for (let changed = true; changed;) {
-      changed = false;
-      for (const [resStart, resEnd] of this.reserved) {
-        // Adjoining or overlapping blocks extend the image.
-        if (resStart <= end + 1 && resEnd > end) { end = resEnd; changed = true; }
-        if (resEnd >= start - 1 && resStart < start) { start = resStart; changed = true; }
-      }
+    // Merge the ranges once, then extend the image to the right and to the left in one pass each.
+    const merged: Array<[number, number]> = [];
+    for (const [resStart, resEnd] of [...this.reserved].sort((a, b) => a[0] - b[0])) {
+      const last = merged[merged.length - 1];
+      if (last && resStart <= last[1] + 1) last[1] = Math.max(last[1], resEnd);
+      else merged.push([resStart, resEnd]);
+    }
+    const emittedBytes = end - start + 1;
+    for (const [resStart, resEnd] of merged) {
+      if (resStart <= end + 1 && resEnd > end) end = resEnd;
+    }
+    for (let index = merged.length - 1; index >= 0; index -= 1) {
+      const [resStart, resEnd] = merged[index]!;
+      if (resEnd >= start - 1 && resStart < start) start = resStart;
+    }
+    if (end - start + 1 - emittedBytes >= LARGE_FILL_WARNING_BYTES) {
+      this.warnings.push(
+        `.res space next to the emitted bytes adds ${end - start + 1 - emittedBytes} zero bytes to the PRG (${formatHex(start)}-${formatHex(end)}); put big buffers in a separate .org block or define them with name = address instead`,
+      );
     }
     // Addresses that are neither emitted nor reserved are zero-filled. Refuse a run of them that
     // touches $D000-$DFFF: the loader would write zeros to the VIC, SID, CIA and colour RAM.
@@ -1117,6 +1720,11 @@ class Assembler {
       const gap = addr >= start && addr <= end && !this.written[addr] && reservedDepth === 0;
       if (gap && gapStart === undefined) gapStart = addr;
       if (!gap && gapStart !== undefined) {
+        if (addr - gapStart >= LARGE_FILL_WARNING_BYTES) {
+          this.warnings.push(
+            `${addr - gapStart} zero bytes ${formatHex(gapStart)}-${formatHex(addr - 1)} between output blocks are part of the PRG; assemble the blocks separately or move them closer`,
+          );
+        }
         if (rangeOverlapsIo(gapStart, addr - gapStart)) {
           const after = this.blocks.filter((b) => b.start > gapStart!).sort((a, b) => a.start - b.start)[0] ?? this.blocks[0]!;
           throw new AssemblyError(
@@ -1142,15 +1750,26 @@ class Assembler {
   }
 
   private processLine(line: ParsedLine, pass: 0 | 1): void {
-    for (const label of line.labels) {
-      if (pass === 0) {
-        this.symbolTable.setLabel(label, this.pc, line.location);
-      } else {
-        this.symbolTable.ensureLabel(label, this.pc);
+    const active = this.ifStack.length === 0 || this.ifStack[this.ifStack.length - 1]!.active;
+    if (active) {
+      for (const label of line.labels) {
+        if (pass === 0) {
+          this.symbolTable.setLabel(label, this.pc, line.location);
+        } else {
+          this.symbolTable.ensureLabel(label, this.pc);
+        }
       }
     }
 
     if (!line.statement) {
+      return;
+    }
+
+    if (line.statement.kind === "directive" && (line.statement.name === "if" || line.statement.name === "else" || line.statement.name === "endif")) {
+      this.handleConditional(line.statement, pass, line.location, active);
+      return;
+    }
+    if (!active) {
       return;
     }
 
@@ -1169,9 +1788,47 @@ class Assembler {
     }
   }
 
+  private handleConditional(statement: DirectiveStatement, pass: 0 | 1, location: SourceLocation, active: boolean): void {
+    if (statement.name === "if") {
+      if (!active) {
+        this.ifStack.push({ active: false, parentActive: false, taken: true, seenElse: false, location });
+        return;
+      }
+      const expr = (statement.args[0] as { kind: "expr"; expr: Expression }).expr;
+      const value = this.evaluate(expr, pass, location);
+      if (value === undefined) {
+        throw this.undefinedError(expr, location, ".if needs a value that is known at this point (labels defined later in the file are not)");
+      }
+      const taken = value !== 0;
+      this.ifStack.push({ active: taken, parentActive: true, taken, seenElse: false, location });
+      return;
+    }
+    const top = this.ifStack[this.ifStack.length - 1];
+    if (!top) {
+      throw new AssemblyError(`.${statement.name} without a matching .if`, location);
+    }
+    if (statement.name === "endif") {
+      this.ifStack.pop();
+      return;
+    }
+    if (top.seenElse) {
+      throw new AssemblyError(".else after .else in the same .if", location);
+    }
+    top.seenElse = true;
+    if (top.parentActive) {
+      top.active = !top.taken;
+      top.taken = true;
+    }
+  }
+
   private handleAssignment(statement: AssignmentStatement, pass: 0 | 1, location: SourceLocation): void {
     const value = this.evaluate(statement.expr, pass, location);
     if (value === undefined) {
+      if (pass === 0 && !statement.isLocationCounter) {
+        // Resolved after the first pass, see resolveDeferredAssignments().
+        this.deferred.push({ statement, location, pc: this.pc, scope: this.symbolTable.getScope() });
+        return;
+      }
       throw this.undefinedError(statement.expr, location, "Assignment depends on an undefined symbol");
     }
     if (statement.isLocationCounter) {
@@ -1197,20 +1854,16 @@ class Assembler {
         break;
       }
       case "byte":
-      case "text": {
-        const isText = statement.name === "text";
+      case "text":
+      case "screen": {
         for (const arg of statement.args) {
           if (arg.kind === "string") {
+            // Both passes encode, so the size is the same and a bad character is reported at once.
+            const codes = encodeStringArgument(statement.name, arg.value, location);
             if (pass === 1) {
-              for (const char of arg.value) {
-                const code = isText ? asciiToPetscii(char, location) : char.charCodeAt(0);
-                if (code > 0xff) {
-                  throw new AssemblyError(`byte directive character '${char}' (code ${code}) does not fit in one byte`, location);
-                }
-                this.writeByte(code, location);
-              }
+              for (const code of codes) this.writeByte(code, location);
             } else {
-              this.pc += Array.from(arg.value).length;
+              this.pc += codes.length;
             }
           } else {
             const value = this.evaluate(arg.expr, pass, location);
@@ -1264,16 +1917,54 @@ class Assembler {
         break;
       }
       case "fill": {
-        const count = this.evaluateDefined(statement.args[0]!, pass, location, "fill directive");
-        if (!Number.isInteger(count) || count < 0 || count > 0x10000) {
-          throw new AssemblyError(`fill directive requires a count of 0..65536, got ${count}`, location);
+        this.emitFill(statement.args[0]!, statement.args[1], pass, location, "fill directive");
+        break;
+      }
+      case "alignmask": {
+        // ACME: pad until (pc AND andValue) == equalValue; the default fill is NOP ($EA).
+        const mask = this.evaluateDefined(statement.args[0]!, pass, location, "!align");
+        const wanted = this.evaluateDefined(statement.args[1]!, pass, location, "!align");
+        const value = statement.args[2] ? this.evaluateDefined(statement.args[2], pass, location, "!align") : 0xea;
+        if (!Number.isInteger(mask) || !Number.isInteger(wanted) || mask < 0 || mask > 0xffff || wanted < 0 || wanted > 0xffff) {
+          throw new AssemblyError(`!align needs ANDVALUE and EQUALVALUE in 0..65535, got ${mask}, ${wanted}`, location);
         }
-        const value = statement.args[1] ? this.evaluateDefined(statement.args[1], pass, location, "fill directive") : 0;
+        let padding = 0;
+        while (((this.pc + padding) & mask) !== wanted) {
+          padding += 1;
+          if (padding > 0x10000) {
+            throw new AssemblyError(`!align ${mask}, ${wanted} can never be satisfied`, location);
+          }
+        }
         if (pass === 1) {
-          this.checkByteValue(value, "fill directive", location);
-          for (let index = 0; index < count; index += 1) this.writeByte(value, location);
+          this.checkByteValue(value, "!align", location);
+          for (let index = 0; index < padding; index += 1) this.writeByte(value, location);
         } else {
-          this.pc += count;
+          this.pc += padding;
+        }
+        break;
+      }
+      case "incbin": {
+        const path = (statement.args[0] as { kind: "string"; value: string }).value;
+        if (!this.resolveIncbin) {
+          throw new AssemblyError(".incbin needs a resolveIncbin option; the MCP tools provide none, so write the bytes with .byte", location);
+        }
+        let data = this.incbinCache.get(path);
+        if (!data) {
+          data = this.resolveIncbin(path, location.file);
+          if (!(data instanceof Uint8Array) || data.length > 0x10000) {
+            throw new AssemblyError(`.incbin "${path}" must give at most 65536 bytes`, location);
+          }
+          this.incbinCache.set(path, data);
+        }
+        const offset = statement.args[1] ? this.evaluateDefined(statement.args[1], pass, location, ".incbin offset") : 0;
+        const length = statement.args[2] ? this.evaluateDefined(statement.args[2], pass, location, ".incbin length") : data.length - offset;
+        if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length < 0 || offset + length > data.length) {
+          throw new AssemblyError(`.incbin "${path}": offset ${offset} and length ${length} do not fit the ${data.length} bytes of the file`, location);
+        }
+        if (pass === 1) {
+          for (let index = 0; index < length; index += 1) this.writeByte(data[offset + index]!, location);
+        } else {
+          this.pc += length;
         }
         break;
       }
@@ -1297,8 +1988,13 @@ class Assembler {
         break;
       }
       case "reserve": {
+        if (statement.args.length === 2) {
+          // ".res n, value" emits n copies of value.
+          this.emitFill(statement.args[0]!, statement.args[1], pass, location, "reserve directive");
+          break;
+        }
         if (statement.args.length !== 1 || statement.args[0]?.kind !== "expr") {
-          throw new AssemblyError("reserve directive expects a single expression", location);
+          throw new AssemblyError("reserve directive expects a size and an optional fill value", location);
         }
         const amount = this.evaluate(statement.args[0]?.expr, pass, location);
         if (amount === undefined) {
@@ -1375,6 +2071,20 @@ class Assembler {
     }
   }
 
+  private emitFill(countArg: DirectiveArg, valueArg: DirectiveArg | undefined, pass: 0 | 1, location: SourceLocation, context: string): void {
+    const count = this.evaluateDefined(countArg, pass, location, context);
+    if (!Number.isInteger(count) || count < 0 || count > 0x10000) {
+      throw new AssemblyError(`${context} requires a count of 0..65536, got ${count}`, location);
+    }
+    const value = valueArg ? this.evaluateDefined(valueArg, pass, location, context) : 0;
+    if (pass === 1) {
+      this.checkByteValue(value, context, location);
+      for (let index = 0; index < count; index += 1) this.writeByte(value, location);
+    } else {
+      this.pc += count;
+    }
+  }
+
   private evaluateDefined(arg: DirectiveArg, pass: 0 | 1, location: SourceLocation, context: string): number {
     if (arg.kind !== "expr") {
       throw new AssemblyError(`${context} expects a numeric expression`, location);
@@ -1415,7 +2125,14 @@ class Assembler {
       return new AssemblyError(fallback, location);
     }
     const quoted = names.map((name) => `"${name}"`).join(", ");
-    return new AssemblyError(`Undefined symbol${names.length > 1 ? "s" : ""} ${quoted}`, location);
+    // Symbols are case-sensitive; point at a name that differs only in case.
+    const hints = names.flatMap((name) => {
+      const lower = name.toLowerCase();
+      const match = [...this.symbolTable.allGlobals().keys()].find((candidate) => candidate.toLowerCase() === lower);
+      return match ? [`"${match}"`] : [];
+    });
+    const hint = hints.length > 0 ? ` (symbols are case-sensitive; did you mean ${hints.join(", ")}?)` : "";
+    return new AssemblyError(`Undefined symbol${names.length > 1 ? "s" : ""} ${quoted}${hint}`, location);
   }
 
   private evaluate(expr: Expression, pass: 0 | 1, location: SourceLocation): number | undefined {
@@ -1550,11 +2267,58 @@ class Assembler {
 function asciiToPetscii(char: string, location: SourceLocation): number {
   const code = char.charCodeAt(0);
   if (code > 0x7f) {
-    throw new AssemblyError(`text directive character '${char}' (code ${code}) is not ASCII and has no PETSCII mapping`, location);
+    throw new AssemblyError(`text directive character '${char}' (code ${code}) is not ASCII and has no PETSCII mapping; use .byte $xx for it`, location);
   }
   if (code >= 0x61 && code <= 0x7a) return code - 0x20;
   if (code === 0x0a) return 0x0d;
   return code;
+}
+
+/**
+ * Bytes of a string argument. `.byte` is raw character codes; `.text` (also `.ascii`, `.petscii`,
+ * `!text`, `!pet`) is PETSCII as above, plus {name}, {$xx} and {nn} control codes as in BASIC
+ * strings; `.scr` (`.screen`, `!scr`) is screen codes: the PETSCII of the text converted by the
+ * KERNAL rule (petsciiToScreenCode), so letters of either case are screen codes 1-26.
+ */
+function encodeStringArgument(kind: "byte" | "text" | "screen", value: string, location: SourceLocation): number[] {
+  const codes: number[] = [];
+  if (kind === "byte") {
+    for (const char of value) {
+      const code = char.charCodeAt(0);
+      if (code > 0xff) {
+        throw new AssemblyError(`byte directive character '${char}' (code ${code}) does not fit in one byte`, location);
+      }
+      codes.push(code);
+    }
+    return codes;
+  }
+  let index = 0;
+  while (index < value.length) {
+    if (kind === "text" && value[index] === "{") {
+      const token = parseBraceToken(value, index);
+      if (token) {
+        if (!token.ok) {
+          throw new AssemblyError(`${token.token} is not a known control code (${token.reason}); write \\x7b for a literal brace`, location);
+        }
+        codes.push(token.value);
+        index = token.endIndex;
+        continue;
+      }
+    }
+    const char = String.fromCodePoint(value.codePointAt(index)!);
+    index += char.length;
+    const petscii = asciiToPetscii(char, location);
+    if (kind === "text") {
+      codes.push(petscii);
+      continue;
+    }
+    const screen = petsciiToScreenCode(petscii);
+    if (screen === undefined) {
+      throw new AssemblyError(`screen text character ${JSON.stringify(char)} has no screen code (it is a control code)`, location);
+    }
+    codes.push(screen);
+  }
+  return codes;
 }
 
 interface ResolvedInstruction {
@@ -1662,6 +2426,9 @@ function chooseAddressingMode(
     case "expression": {
       const register = operand.register;
       if (RELATIVE_ONLY.has(mnemonic)) {
+        if (register) {
+          throw new AssemblyError(`Instruction ${mnemonic} is a relative branch and takes no ,${register} index`, location);
+        }
         if (!available.has(AddressingMode.Relative)) {
           throw new AssemblyError(`Instruction ${mnemonic} does not support relative addressing`, location);
         }
