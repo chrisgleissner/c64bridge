@@ -60,6 +60,8 @@ function flattenCategory(category: string, value: unknown): Record<string, unkno
   return flat;
 }
 
+const ERROR_ITEM = "_error";
+
 function valuesEqual(wanted: unknown, actual: unknown): boolean {
   if (wanted !== null && typeof wanted === "object") return JSON.stringify(wanted) === JSON.stringify(actual);
   if (actual !== null && typeof actual === "object") return false;
@@ -78,6 +80,8 @@ function changedConfigItems(
     const live = flattenCategory(category, current[category]);
     const originalItems = flattenCategory(category, original[category]);
     for (const [item, value] of Object.entries(wanted)) {
+      // A failed read was stored as { _error }; it is not a device item and is never written.
+      if (item === ERROR_ITEM) continue;
       // A redacted credential was removed from the payload; it is never compared or written.
       if (JSON.stringify(originalItems[item]) !== JSON.stringify(value)) continue;
       if (value === undefined || value === REDACTED_PLACEHOLDER) continue;
@@ -146,11 +150,19 @@ export const tools: ToolDefinition[] = [
           // The mode applies only when the file is created, so an existing file is tightened as well.
           await fs.writeFile(path, JSON.stringify(snapshot, null, 2), { encoding: "utf8", mode: 0o600 });
           await fs.chmod(path, 0o600);
+          const failed = snapshotData.failed;
           return jsonResult({
             path,
             categoryCount: Object.keys(snapshotData.categories).length,
             itemCount: snapshotData.inventory.length,
-          }, { success: true });
+            ...(failed.length > 0
+              ? {
+                  partial: true,
+                  failedReads: failed,
+                  warning: `${failed.length} configuration read(s) failed and are stored as _error; they are skipped by restore and diff. Run the snapshot again once the device answers.`,
+                }
+              : {}),
+          }, { success: true, ...(failed.length > 0 ? { partial: true } : {}) });
         }
 
         if (action === "restore") {
@@ -213,15 +225,28 @@ export const tools: ToolDefinition[] = [
         const snapshot = await readSnapshotFile(path);
         assertSafeConfigKeys(snapshot.categories ?? {});
         const snapCats = validateSnapshotCategories(snapshot.categories ?? {});
-        const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true })).categories;
+        const current = (await captureConfigSnapshot(ctx.client as any, { includeSecretValues: parsed.includeSecretValues === true, categories: Object.keys(snapCats) })).categories;
+        // Item-level diff: only the items that differ, not both whole categories.
         const diff: Record<string, Record<string, { expected: unknown; actual: unknown }>> = Object.create(null);
+        const unreadable: string[] = [];
         for (const [cat, snapVal] of Object.entries(snapCats)) {
+          const wanted = flattenCategory(cat, snapVal);
+          if (ERROR_ITEM in wanted && Object.keys(wanted).length === 1) { unreadable.push(cat); continue; }
           const curVal = current[cat];
-          if (JSON.stringify(snapVal) !== JSON.stringify(curVal)) {
-            diff[cat] = { _changed: { expected: snapVal, actual: curVal } } as any;
+          if (curVal === undefined) { diff[cat] = { _category: { expected: "present", actual: "missing on the device" } }; continue; }
+          const live = flattenCategory(cat, curVal);
+          if (ERROR_ITEM in live && Object.keys(live).length === 1) { unreadable.push(cat); continue; }
+          const changed: Record<string, { expected: unknown; actual: unknown }> = {};
+          for (const item of new Set([...Object.keys(wanted), ...Object.keys(live)])) {
+            if (item === ERROR_ITEM) continue;
+            const present = Object.prototype.hasOwnProperty.call(live, item);
+            if (!Object.prototype.hasOwnProperty.call(wanted, item) || !present || !valuesEqual(wanted[item], live[item])) {
+              changed[item] = { expected: wanted[item], actual: live[item] };
+            }
           }
+          if (Object.keys(changed).length > 0) diff[cat] = changed;
         }
-        return jsonResult({ diff }, { success: true, changed: Object.keys(diff).length });
+        return jsonResult({ diff: { ...diff }, ...(unreadable.length > 0 ? { unreadableCategories: unreadable } : {}) }, { success: true, changed: Object.keys(diff).length });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

@@ -9,6 +9,8 @@ export interface ConfigInventoryEntry {
 export interface ConfigSnapshotData {
   readonly inventory: readonly ConfigInventoryEntry[];
   readonly categories: Record<string, unknown>;
+  /** Categories (or items) whose read failed; their snapshot entry is `{ _error }` and is never restored. */
+  readonly failed: ReadonlyArray<{ readonly category: string; readonly item?: string; readonly error: string }>;
 }
 
 interface ConfigListResult {
@@ -103,6 +105,7 @@ export async function captureConfigSnapshot(
     && !isUnsafeConfigKey(entry.category)
     && !(entry.item !== undefined && isUnsafeConfigKey(entry.item)));
   const categories: Record<string, unknown> = {};
+  const failed: Array<{ category: string; item?: string; error: string }> = [];
 
   for (const entry of inventory) {
     try {
@@ -112,13 +115,13 @@ export async function captureConfigSnapshot(
         : redactConfigValue(normalized, entry.category, entry.item);
       setSnapshotValue(categories, entry, value);
     } catch (error) {
-      setSnapshotValue(categories, entry, {
-        _error: error instanceof Error ? error.message : String(error),
-      });
+      const message = error instanceof Error ? error.message : String(error);
+      failed.push({ category: entry.category, ...(entry.item ? { item: entry.item } : {}), error: message });
+      setSnapshotValue(categories, entry, { _error: message });
     }
   }
 
-  return { inventory, categories };
+  return { inventory, categories, failed };
 }
 
 /**
