@@ -22,6 +22,9 @@ import {
 } from "./errors.js";
 
 import { getPlatformStatus } from "../platform.js";
+import { resolveHostPath } from "../hostPaths.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 
@@ -32,6 +35,11 @@ const generatedPlaybacks = new Set<AbortController>();
 
 let lastGeneratedPlayback: Promise<void> = Promise.resolve();
 
+/**
+ * Stops a running `music_generate` sequence. Every operation that starts a program, plays a file, resets
+ * the machine or takes over the SID calls this, otherwise the background notes keep writing into the
+ * new program's SID registers.
+ */
 export function cancelGeneratedSidPlayback(): void {
   for (const controller of generatedPlaybacks) controller.abort();
   generatedPlaybacks.clear();
@@ -68,7 +76,7 @@ const sidVolumeArgsSchema = objectSchema({
   description: "Set the SID master volume (0-15).",
   properties: {
     volume: numberSchema({
-      description: "Desired SID master volume. Values outside 0-15 are clamped.",
+      description: "SID master volume 0-15 (other values are rejected). Writes all of $D418, so filter mode bits set by a running program are cleared.",
       minimum: 0,
       maximum: 15,
     }),
@@ -638,6 +646,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidNoteOnArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback(); // A running generated sequence would overwrite this voice.
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice ?? 1))) as 1 | 2 | 3;
           const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
           if (parsed.note) {
@@ -673,7 +682,7 @@ export const audioModule = defineToolModule({
           const detailRecord = toRecord(result.details) ?? {};
           const systemNote = parsed.system
             ? `Using ${parsed.system} timing.`
-            : "Using default PAL timing. For NTSC, pass system: 'NTSC'. Check $02A6 memory location to verify system.";
+            : "Using default PAL timing. For NTSC, pass system: 'NTSC'. Read $02A6 (KERNAL PAL/NTSC flag: 1 = PAL, 0 = NTSC) to check the machine.";
 
           return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}. ${systemNote}`, {
             success: true,
@@ -681,7 +690,7 @@ export const audioModule = defineToolModule({
             note: parsed.note ?? null,
             frequencyHz: parsed.frequencyHz ?? null,
             system: parsed.system ?? "PAL",
-            systemReminder: "$02A6 contains PAL/NTSC flag (1=NTSC, 0=PAL)",
+            systemReminder: "$02A6 holds the KERNAL PAL/NTSC flag: 1 = PAL, 0 = NTSC",
             waveform: parsed.waveform ?? "pulse",
             pulseWidth: parsed.pulseWidth,
             envelope: {
@@ -716,6 +725,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidNoteOffArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback();
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice))) as 1 | 2 | 3;
           ctx.logger.info("Stopping SID voice", { voice });
 
@@ -865,6 +875,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidplayFileArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback();
           ctx.logger.info("Playing SID file", { path: parsed.path, songnr: parsed.songnr ?? null });
 
           const result = await ctx.client.sidplayFile(parsed.path, parsed.songnr);
@@ -907,6 +918,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = modplayFileArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback();
           ctx.logger.info("Playing MOD file", { path: parsed.path });
 
           const result = await ctx.client.modplayFile(parsed.path);
@@ -1085,6 +1097,7 @@ export const audioModule = defineToolModule({
           let runDetails: Record<string, unknown> | null = null;
 
           if (!parsed.dryRun) {
+            cancelGeneratedSidPlayback();
             if (outputFormat === "sid") {
               const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
               const result = await ctx.client.sidplayAttachment(sid.sid);
