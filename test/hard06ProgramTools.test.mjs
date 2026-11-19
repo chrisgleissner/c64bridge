@@ -291,3 +291,25 @@ test("HARD06 WORKFLOW-12 run_prg with a symbols file names a bounded sample of t
     clearViceSymbols();
   }
 });
+
+test("HARD06 WORKFLOW-7 a device 404 for a path that exists on the host suggests location host", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h6-host-"));
+  try {
+    const file = path.join(dir, "demo.prg");
+    fs.writeFileSync(file, Buffer.from([0x01, 0x08, 0x00, 0x00, 0x00]));
+    const notFound = { success: false, details: { message: "Request failed with status code 404" } };
+    const client = { async runPrgFile() { return notFound; }, async loadPrgFile() { return notFound; } };
+    for (const op of ["run_prg", "load_prg"]) {
+      const result = await programRunnersModule.invoke(op, { path: file }, { client, logger, platform: platform("c64u") });
+      assert.equal(result.isError, true);
+      assert.match(result.content[0].text, /location: "host"/, op);
+    }
+    const missing = await programRunnersModule.invoke("run_prg", { path: "//USB0/demo.prg" }, { client, logger, platform: platform("c64u") });
+    assert.ok(!/location: "host"/.test(missing.content[0].text));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

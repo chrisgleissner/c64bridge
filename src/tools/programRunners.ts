@@ -864,6 +864,21 @@ async function resolvePrgSource(
   return { location: "host", bytes, header: bytes, loadAddress: bytes.readUInt16LE(0) };
 }
 
+/**
+ * On Ultimate hardware a path without `location` is a device path. When the device rejects it but
+ * the path names a PRG on this host (inside the allowed roots), say how to upload it instead.
+ */
+function hostLocationHint(parsed: { path: string; location?: string }, source: PrgSource, ctx: ToolExecutionContext): string {
+  if (parsed.location !== undefined || source.location !== "device" || ctx.platform.id === "vice") return "";
+  try {
+    const resolved = resolveHostPath(parsed.path, { purpose: "read" });
+    if (!fs.statSync(resolved).isFile()) return "";
+  } catch {
+    return "";
+  }
+  return ` (${parsed.path} was used as a path on the Ultimate device, but it is a file on this host; pass location: "host" to upload it)`;
+}
+
 async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = prgFileArgsSchema.parse(rawArgs ?? {});
@@ -874,7 +889,7 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
 
     const result = source.bytes ? await ctx.client.loadPrg(source.bytes) : await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 backend reported failure while loading PRG", {
+      throw new ToolExecutionError(`C64 backend reported failure while loading PRG${hostLocationHint(parsed, source, ctx)}`, {
         details: extractFailureDetails(result.details),
       });
     }
@@ -926,7 +941,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 
     const result = source.bytes ? await ctx.client.runPrg(source.bytes) : await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 backend reported failure while running PRG", {
+      throw new ToolExecutionError(`C64 backend reported failure while running PRG${hostLocationHint(parsed, source, ctx)}`, {
         details: extractFailureDetails(result.details),
       });
     }
