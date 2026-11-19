@@ -179,3 +179,21 @@ test("VICE-2 a verified emulator that went away is probed again, which launches 
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
+
+test("VICE-3 ping on an emulator that accepts connections but does not answer fails after one attempt", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const saved = { VICE_TEST_TARGET: process.env.VICE_TEST_TARGET, T: process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS };
+  delete process.env.VICE_TEST_TARGET;
+  process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS = "200";
+  const server = await startViceMockServer();
+  server.hang = true;
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    const started = Date.now();
+    assert.equal(await backend.ping(), false);
+    assert.ok(Date.now() - started < 1_500, `ping took ${Date.now() - started} ms`);
+  } finally {
+    await server.stop();
+    for (const [k, v] of Object.entries({ VICE_TEST_TARGET: saved.VICE_TEST_TARGET, C64BRIDGE_VICE_REQUEST_TIMEOUT_MS: saved.T })) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});

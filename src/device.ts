@@ -10,7 +10,7 @@ import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
-import { ViceClient, type ViceCheckpoint } from "./vice/viceClient.js";
+import { ViceClient, viceRequestTimeoutMs, type ViceCheckpoint } from "./vice/viceClient.js";
 import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { resetAndWaitForBasic } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
@@ -719,7 +719,7 @@ export class ViceBackend implements C64Facade {
     try {
       if (this.debugEnabled) console.error("[vice-backend] probing existing VICE", this.host, this.port);
       await client.connect(this.port, this.host);
-      await client.info();
+      await client.info({ timeoutMs: Math.min(3_000, viceRequestTimeoutMs(0x85)) }); // a probe: an emulator that does not answer in 3 s is not usable
       try { await client.exitMonitor(); } catch {}
       if (this.debugEnabled) console.error("[vice-backend] existing VICE is reachable");
       return true;
@@ -1189,6 +1189,9 @@ export class ViceBackend implements C64Facade {
         if (this.debugEnabled) {
           console.error(`[vice-backend] ping failed (attempt ${attempt}/${attempts})`, error);
         }
+        // A monitor that accepted the connection but did not answer, or whose port something else holds, will not
+        // answer a repeat either: retrying it eight times took about 85 s.
+        if (error instanceof Error && /timed out|already in use/i.test(error.message)) break;
         if (attempt < attempts) {
           await delay(Math.min(1_000, 200 * attempt));
         }

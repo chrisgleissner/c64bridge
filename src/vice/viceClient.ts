@@ -122,7 +122,7 @@ export function describeMonitorError(code: number, command?: number): string {
 }
 
 /** Per-request timeout. C64BRIDGE_VICE_REQUEST_TIMEOUT_MS overrides it, for tests of the timeout path. */
-function viceRequestTimeoutMs(cmd: number): number {
+export function viceRequestTimeoutMs(cmd: number): number {
   const override = Number(process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS);
   if (Number.isFinite(override) && override > 0) return override;
   return cmd === 0x84 ? 30_000 : 10_000;
@@ -422,7 +422,7 @@ export class ViceClient {
     return promise;
   }
 
-  async info(): Promise<void> { await this.send(0x85); }
+  async info(options?: { readonly timeoutMs?: number }): Promise<void> { await this.send(0x85, undefined, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }); }
   async resetSoft(): Promise<void> { await this.send(0xCC, Buffer.from([0x00])); }
   async resetHard(): Promise<void> { await this.send(0xCC, Buffer.from([0x01])); }
   async reset(type: 0 | 1 = 0): Promise<void> { await this.send(0xCC, Buffer.from([type])); }
