@@ -30,6 +30,7 @@ import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
 import { listSkillResources, readSkillResource, rewriteSkillPaths } from "./mcp/skills.js";
+import { createProgressReporter, type ProgressToken } from "./mcp/progress.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
@@ -495,6 +496,11 @@ async function main() {
       });
     }
 
+    const progressToken = (request.params as { _meta?: { progressToken?: ProgressToken } })._meta?.progressToken;
+    const progress = progressToken !== undefined && extra?.sendNotification
+      ? createProgressReporter(progressToken, (notification) => extra.sendNotification(notification))
+      : undefined;
+
     try {
       const result = await toolRegistry.invoke(name, args, {
         client,
@@ -503,7 +509,8 @@ async function main() {
         platform: getPlatformStatus(),
         setPlatform,
         signal: extra?.signal,
-      });
+        ...(progress ? { reportProgress: progress.report } : {}),
+      }).finally(() => progress?.stop());
 
       const response = toCallToolResult(result);
       const latency = Date.now() - startedAt;

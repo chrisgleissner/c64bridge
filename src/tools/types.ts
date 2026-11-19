@@ -72,6 +72,12 @@ export interface ToolExecutionContext {
   readonly setPlatform: (target: PlatformId) => PlatformStatus;
   /** Aborted when the MCP client cancels the request. Long waits check it at step boundaries. */
   readonly signal?: AbortSignal;
+  /**
+   * Reports progress to a client that asked for it (MCP progress token); absent otherwise. Long
+   * loops call it per step: `completed` of `total` steps, with an optional short message. The
+   * server also sends a heartbeat while the call runs.
+   */
+  readonly reportProgress?: (completed: number, total?: number, message?: string) => void;
 }
 
 /** Error result for a call that the client cancelled. */
