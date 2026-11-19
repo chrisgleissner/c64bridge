@@ -265,9 +265,13 @@ interface C64uVideoCaptureSession {
   readonly socket: Socket;
   readonly bindAddress: string;
   readonly target: string;
+  /** The most recent packets, at most VIDEO_SESSION_MAX_PACKETS; older ones are dropped. */
   readonly packets: Array<ReturnType<typeof parseVideoPacket>>;
+  /** Number of packets dropped from the front of `packets`; packet indexes below are absolute. */
+  packetBase: number;
   readonly waiters: Array<{
     count: number;
+    /** Absolute index of the first packet this waiter may use. */
     startIndex: number;
     resolve: (frames: readonly CapturedFrame[]) => void;
     reject: (error: Error) => void;
@@ -277,6 +281,13 @@ interface C64uVideoCaptureSession {
   closed: boolean;
   error: Error | null;
 }
+
+/**
+ * Packets a reusable video capture session keeps. A frame is 68 packets at the firmware geometry
+ * (at most 512 for one-line packets), so this covers several requested frames; older packets can
+ * no longer complete a frame a waiter needs, and the stream must not grow memory while it stays open.
+ */
+export const VIDEO_SESSION_MAX_PACKETS = 4096;
 
 export interface BitmapDisplayResult {
   readonly mode: "hires" | "multicolor";
@@ -1946,6 +1957,7 @@ export class C64Client {
       bindAddress,
       target,
       packets: [],
+      packetBase: 0,
       waiters: [],
       stopTimer: null,
       closed: false,
@@ -1961,6 +1973,11 @@ export class C64Client {
         return;
       }
       session.packets.push(packet);
+      const excess = session.packets.length - VIDEO_SESSION_MAX_PACKETS;
+      if (excess > 0) {
+        session.packets.splice(0, excess);
+        session.packetBase += excess;
+      }
       try {
         this.flushC64uVideoCaptureWaiters(session);
       } catch (error) {
@@ -1994,8 +2011,8 @@ export class C64Client {
     if (session.error) {
       throw session.error;
     }
-    const startIndex = options.fresh ? session.packets.length : 0;
-    const existingFrames = collectCompleteVideoFrames(session.packets.slice(startIndex), count);
+    const startIndex = session.packetBase + (options.fresh ? session.packets.length : 0);
+    const existingFrames = collectCompleteVideoFrames(session.packets.slice(startIndex - session.packetBase), count);
     if (existingFrames.length >= count) {
       return existingFrames;
     }
@@ -2032,7 +2049,7 @@ export class C64Client {
   private flushC64uVideoCaptureWaiters(session: C64uVideoCaptureSession): void {
     for (let index = session.waiters.length - 1; index >= 0; index -= 1) {
       const waiter = session.waiters[index];
-      const frames = collectCompleteVideoFrames(session.packets.slice(waiter.startIndex), waiter.count);
+      const frames = collectCompleteVideoFrames(session.packets.slice(Math.max(0, waiter.startIndex - session.packetBase)), waiter.count);
       if (frames.length >= waiter.count) {
         session.waiters.splice(index, 1);
         waiter.resolve(frames);
