@@ -657,6 +657,8 @@ export class ViceBackend implements C64Facade {
   private readonly debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
   /** An explicitly configured VICE binary that does not exist; thrown when a launch is needed (never a silent other emulator). */
   private binaryProblem: Error | null = null;
+  /** An emulator this server did not start answered a probe; cleared when a connection to it fails. */
+  private externalVerified = false;
   private startupPromise: Promise<void> | null = null;
   private monitorQueue: Promise<void> = Promise.resolve();
   private lastProcessStart = 0;
@@ -793,7 +795,9 @@ export class ViceBackend implements C64Facade {
       try { await existing.stop(); } catch {}
       ViceBackend.supervisors.delete(key);
     }
+    if (this.externalVerified) return;
     if (await this.tryPingExisting()) {
+      this.externalVerified = true; // D1: a probe that succeeded is not repeated before every operation
       return;
     }
     if (this.debugEnabled) {
@@ -973,11 +977,28 @@ export class ViceBackend implements C64Facade {
     }
   }
 
+  /**
+   * Connects a client. When the emulator that an earlier probe found has gone away, the probe is repeated
+   * (which starts a managed emulator when allowed) and the connection is tried once more.
+   */
+  private async connectClient(client: ViceClient): Promise<ViceClient> {
+    try {
+      await client.connect(this.port, this.host);
+      return client;
+    } catch (error) {
+      if (!this.externalVerified || this.mockMode) throw error;
+      this.externalVerified = false;
+      await this.ensureProcess();
+      const retry = new ViceClient();
+      await retry.connect(this.port, this.host);
+      return retry;
+    }
+  }
+
   /** Connects the long-lived session client. The CPU keeps running until the first command. Call only inside `exclusive`. */
   private async openSession(): Promise<ViceSession> {
     if (!this.mockMode) await this.ensureProcess();
-    const client = new ViceClient();
-    await client.connect(this.port, this.host);
+    const client = await this.connectClient(new ViceClient());
     if (this.manageProcess && this.lastProcessStart > 0) {
       const settleDelay = 500 - (Date.now() - this.lastProcessStart);
       if (settleDelay > 0) await delay(settleDelay);
@@ -1130,9 +1151,8 @@ export class ViceBackend implements C64Facade {
 
   private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean; noLaunch?: boolean }): Promise<T> {
     if (!this.mockMode && options?.noLaunch !== true) await this.ensureProcess();
-    const client = new ViceClient();
     if (this.debugEnabled) console.error("[vice-backend] connecting to VICE monitor", { host: this.host, port: this.port });
-    await client.connect(this.port, this.host);
+    const client = await this.connectClient(new ViceClient());
     if (this.manageProcess && this.lastProcessStart > 0) {
       const sinceStart = Date.now() - this.lastProcessStart;
       const settleDelay = 500 - sinceStart;
@@ -1592,6 +1612,7 @@ export class ViceBackend implements C64Facade {
           // Ignore transport errors during quit; the emulator will terminate regardless.
         }
       }, { resumeOnClose: false, noLaunch: true });
+      this.externalVerified = false;
       if (managedHandle) {
         try {
           await managedHandle.stop();

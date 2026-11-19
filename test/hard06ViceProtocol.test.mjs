@@ -141,3 +141,41 @@ test("VICE-1 reset keeps stop-on-hit breakpoints and the session stays open", as
     if (saved === undefined) delete process.env.VICE_TEST_TARGET; else process.env.VICE_TEST_TARGET = saved;
   }
 });
+
+test("VICE-2 an emulator that answered one probe is not probed again before every operation", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const saved = process.env.VICE_TEST_TARGET;
+  delete process.env.VICE_TEST_TARGET;
+  const server = await startViceMockServer();
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    await backend.readMemory(0x0400, 4);
+    const opened = server.connectionsOpened;
+    const commands = server.commands.length;
+    for (let i = 0; i < 3; i += 1) await backend.readMemory(0x0400, 4);
+    assert.equal(server.connectionsOpened - opened, 3, "one connection per call");
+    assert.equal(server.commands.length - commands, 6, "memory get and exit per call, no info probe");
+    assert.ok(!server.commands.slice(commands).some(([cmd]) => cmd === 0x85));
+  } finally {
+    await server.stop();
+    if (saved === undefined) delete process.env.VICE_TEST_TARGET; else process.env.VICE_TEST_TARGET = saved;
+  }
+});
+
+test("VICE-2 a verified emulator that went away is probed again, which launches a managed one", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const saved = { VICE_TEST_TARGET: process.env.VICE_TEST_TARGET, VICE_BINARY: process.env.VICE_BINARY };
+  delete process.env.VICE_TEST_TARGET;
+  process.env.VICE_BINARY = "/nonexistent/dir/x64sc";
+  const server = await startViceMockServer();
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    await backend.readMemory(0x0400, 4);
+    await server.stop();
+    // The probe is repeated after the connection fails; with nothing listening it reaches the launch step.
+    await assert.rejects(() => backend.readMemory(0x0400, 4), /VICE binary '\/nonexistent\/dir\/x64sc' from VICE_BINARY was not found/);
+  } finally {
+    await server.stop();
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
