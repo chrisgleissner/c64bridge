@@ -73,7 +73,7 @@ CharPad (charsets, maps), SpritePad (sprites), GoatTracker or SID-Wizard (music,
 7. Do not interrupt another user's running program or flash on a shared device; power operations need explicit user authorisation.
 
 ## 7. MODERN packaging: `.cfg` and REU image
-A `.cfg` beside the PRG (same base name, started from the file browser) applies settings before the program runs; sections the machine lacks are skipped. Values are the labels shown by `c64_config get`; check them on the target.
+A sidecar `.cfg` (same path, extension `.cfg`; for a PRG also `.usr` if there is no `.cfg`) applies settings before the program starts. Applied by file-browser Run/Load of PRG, CRT, "Run Disk" (not "Mount Disk"), G64 and TAP, and by REST `run_prg` / `load_prg` with `file=` (c64_program `run_prg` with `location: "device"`). NOT applied by REST `run_crt`, the upload (host) variants or raw load. Sections or items the machine lacks are skipped; a rejected value is skipped and the valid lines still apply (no popup). Through UCI LOAD_CONFIG the same file is all-or-nothing (status `89`, nothing applied). Settings are RAM only (lost at power cycle). Values are the labels shown by `c64_config get`, matched case-insensitively; check them on the target.
 ```
 [U64 Specific Settings]
 Turbo Control=U64 Turbo Registers
@@ -82,8 +82,8 @@ CPU Speed=64
 RAM Expansion Unit=Enabled
 REU Size=16 MB
 ```
-- Other machines may use a different label for registers mode (`C64U Turbo Registers`, unverified) or lack `64`: list both Turbo Control lines only if the loader tolerates the unknown one, and always keep the 1 MHz path.
-- REU image: `REU Preload=Enabled` and `REU Preload Image=/Usb0/preload.reu` are read at firmware boot only (`c64://ultimate/reu`); games that must work without a reboot load the same file with UCI LOAD_REU. Build it from level files:
+- The public firmware and official docs know only `U64 Turbo Registers` (`Off`, `Manual`, `U64 Turbo Registers`, `TurboEnable Bit`); `C64U Turbo Registers` is reported by one test script, not in source (unverified). `CPU Speed=64` is invalid on U64 / Elite MK1 (max `48`). A second `Turbo Control` line with the other label works from the file browser (the unknown value is skipped) but makes LOAD_CONFIG reject the whole file; always keep the 1 MHz path.
+- REU image: `REU Preload=Enabled` and `REU Preload Image=/Usb0/preload.reu` are read at firmware boot only (`c64://ultimate/reu`); games that must work without a reboot load the same file with UCI Control `04 08` (loads `REU Preload Image` at `REU Preload Offset`) or DOS `21` (any file). Build it from level files:
 ```python
 import struct, zlib
 blocks = [open(f, "rb").read() for f in ("level1.bin", "level2.bin")]  # each at most 64 KB
