@@ -1025,8 +1025,8 @@ export class C64Client {
       let charset: "upper" | "lower" = "upper";
       let registers: { d018: number; dd00: number } | undefined;
       try {
-        const d018 = (await this.readMemoryRaw(0xd018, 1))[0];
-        const dd00 = (await this.readMemoryRaw(0xdd00, 1))[0];
+        const d018 = (await this.readMemoryRaw(0xd018, 1, facade))[0];
+        const dd00 = (await this.readMemoryRaw(0xdd00, 1, facade))[0];
         const layout = screenLayoutFromRegisters(d018, dd00);
         baseAddress = layout.baseAddress;
         charset = layout.charset;
@@ -1035,7 +1035,8 @@ export class C64Client {
         // Keep the defaults when the VIC registers cannot be read.
       }
       const length = Math.min(0x03e8, 0x10000 - baseAddress);
-      const bytes = await this.readMemoryRaw(baseAddress, length);
+      // All three reads use the facade resolved above, so a backend switch cannot mix two machines.
+      const bytes = await this.readMemoryRaw(baseAddress, length, facade);
       const text = screenCodesToAscii(bytes, { columns: 40, rows: 25, charset });
       return { text, baseAddress, charset, ...(registers ? { registers } : {}) };
     });
