@@ -3,6 +3,7 @@
 **Summary:** Upic is a software technique by Aleksi Eeben, not a hardware mode and not a register. With the VIC display disabled (`$D011` bit 4 = 0) the whole screen is border, and the CPU, running at Ultimate turbo speed, stores a colour to `$D020` once per pixel, cycle-exact against the raster beam. Result: 384x256, 16 colours (from the runtime palette), no colour clash, no hardware sprites, no text. It needs an Ultimate 64 / Elite / Elite II / C64U at top turbo speed, PAL. Game code gets roughly 17-27% of each frame.
 **Read when:** a request mentions Upic, a full-screen 16-colour bitmap without attribute clash on an Ultimate, or a game that scrolls and animates by palette cycling.
 
+Checked against GideonZ/1541ultimate 700c7f2 (2026-11-13); the public source has no U64 / C64 Ultimate FPGA core, so core register behaviour is device-measured or marked unverified.
 Marks: "(unverified)" = inferred or untested. Credit: Upic by Aleksi Eeben (https://csdb.dk/release/?id=263889). Public implementations: https://github.com/xahmol/mandelbrot-upic (Xander Mol, Christian Gleissner; Oscar64, GPL-3.0) and https://github.com/xahmol/ultimate-uci-oscar64 (library with Upic renderer, GPL-3: read for reference, do not paste its code into other-licensed projects). Cross-references: c64://ultimate/hardware (turbo), c64://ultimate/uci (palette commands), c64://ultimate/reu (REU data), c64://graphics/vic/spec.
 
 ## Requirements
@@ -11,7 +12,7 @@ Marks: "(unverified)" = inferred or untested. Credit: Upic by Aleksi Eeben (http
 |---|---|
 | Machine | Ultimate 64, Elite (48 MHz), Elite II, C64U (64 MHz). Not U2 cartridges, not a stock C64, not VICE (logic and buffers can be tested in VICE; the picture cannot). |
 | Video | PAL only (NTSC untested) |
-| Turbo | Turbo Control set to the registers value (`U64 Turbo Registers`, measured on a U64 Elite fw 3.15a and a C64U fw 1.2.1; other firmware may label it `C64U Turbo Registers`, unverified: read the allowed values), CPU Speed at top entry; program then writes `$D031` = `$8F` (index 15, badlines suppressed). Set with `c64_config` or a `.cfg` named like the PRG (same folder, run from the Ultimate file browser). A `.cfg` is described in `c64://gamedev/toolchain`; listing both Turbo Control labels is unverified. |
+| Turbo | Turbo Control set to the registers value (`U64 Turbo Registers`: the only label in the public source and official docs, measured on a U64 Elite fw 3.15a and a C64U fw 1.2.1; one test script reports `C64U Turbo Registers` on some firmware, not in source, unverified: read the allowed values), CPU Speed at top entry; program then writes `$D031` = `$8F` (index 15, badlines suppressed). Set with `c64_config` or a `.cfg` named like the PRG (same folder, run from the Ultimate file browser). A `.cfg` is described in `c64://gamedev/toolchain`; listing both Turbo Control labels works from the file browser (the unknown value is skipped, valid lines still apply) but not through UCI LOAD_CONFIG (all-or-nothing). |
 | UCI | `Command Interface` = Enabled, for palette commands (c64://ultimate/uci) |
 | Firmware | palette commands: 3.15 or later on U64 family (development builds after 3.15); C64U needs a firmware that has them (shipped by 1.2.1 on one measured C64U) |
 
