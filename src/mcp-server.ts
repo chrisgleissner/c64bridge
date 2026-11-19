@@ -653,7 +653,7 @@ async function main() {
     console.error("c64bridge MCP server running on stdio");
   }
 
-  await logConnectivity(client, baseUrl, config.networkPassword);
+  await logConnectivity(client, baseUrl, config.networkPassword, { vicePrewarm: config.vicePrewarm });
   
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
@@ -756,10 +756,21 @@ export function connectivityProbeUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/v1/info`;
 }
 
-export async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
+export async function logConnectivity(
+  client: C64Client,
+  baseUrl: string,
+  networkPassword?: string,
+  options: { vicePrewarm?: boolean } = {},
+): Promise<void> {
   const backendType = await client.getBackendType();
   if (backendType === "vice") {
     writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, reason: "vice_backend" });
+    // A VICE memory read starts a managed emulator. VICE starts lazily on first use unless
+    // prewarm is configured, so without prewarm the startup probe must not touch it.
+    if (options.vicePrewarm !== true) {
+      console.error("Active backend is VICE; it starts on first use (set VICE_PREWARM=1 to start it at startup)");
+      return;
+    }
     console.error("Skipping direct REST connectivity probe because active backend is VICE");
     try {
       const memoryAddress = "$0000";
