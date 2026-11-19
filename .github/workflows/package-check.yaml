@@ -60,6 +60,16 @@ jobs:
         if: ${{ env.PACKAGE_SOURCE == 'local' }}
         run: npm run build
 
+      - name: Verify generated files are committed (local source)
+        if: ${{ env.PACKAGE_SOURCE == 'local' }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          if ! git diff --exit-code -- README.md mcp mcp.json server.json; then
+            echo "::error::Generated files are out of date. Run 'npm run build' and commit the result." >&2
+            exit 1
+          fi
+
       - name: Pack package
         id: pack
         run: |
@@ -122,6 +132,14 @@ jobs:
           PKG_DIR="${{ steps.extract.outputs.pkg_dir }}"
           cd "$PKG_DIR"
           npm install --omit=dev
+
+      - name: Check package budgets (size, forbidden files, initialize time, tools/list size)
+        env:
+          PKG_DIR: ${{ steps.extract.outputs.pkg_dir }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          node scripts/check-package-budget.mjs "$PKG_DIR" "$TARBALL"
 
       - name: Start mock C64 server
         id: mock
