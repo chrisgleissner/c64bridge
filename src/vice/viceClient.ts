@@ -423,6 +423,65 @@ export class ViceClient {
   }
 
   async info(options?: { readonly timeoutMs?: number }): Promise<void> { await this.send(0x85, undefined, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }); }
+  /** VICE version (BM 0x85): the main version bytes as "3.10.0.0" and the SVN revision. */
+  async versionInfo(): Promise<{ readonly version: string; readonly svnRevision: number }> {
+    const frame = await this.send(0x85);
+    const body = frame.subarray(12);
+    const mainLength = body[0] ?? 0;
+    const main = body.subarray(1, 1 + mainLength);
+    const svnLength = body[1 + mainLength] ?? 0;
+    const svn = body.subarray(2 + mainLength, 2 + mainLength + svnLength);
+    return { version: [...main].join("."), svnRevision: svn.length >= 4 ? svn.readUInt32LE(0) : 0 };
+  }
+
+  /** Machine specific bank ids and names (BM 0x82); the ids must not be hard-coded. */
+  async banksAvailable(): Promise<Array<{ readonly id: number; readonly name: string }>> {
+    const frame = await this.send(0x82);
+    const body = frame.subarray(12);
+    if (body.length < 2) return [];
+    const count = body.readUInt16LE(0);
+    const banks: Array<{ id: number; name: string }> = [];
+    let offset = 2;
+    for (let i = 0; i < count && offset < body.length; i += 1) {
+      const itemLength = (body[offset] ?? 0) + 1;
+      if (itemLength < 4 || offset + itemLength > body.length) break;
+      const id = body.readUInt16LE(offset + 1);
+      const nameLength = body[offset + 3] ?? 0;
+      banks.push({ id, name: body.toString("utf8", offset + 4, Math.min(offset + 4 + nameLength, offset + itemLength)) });
+      offset += itemLength;
+    }
+    return banks;
+  }
+
+  /** Reads memory of a given bank id (from banksAvailable), for example the RAM under ROM or I/O. */
+  async memGetBank(start: number, end: number, bankId: number, memspace: ViceMemspace = 0): Promise<Buffer> {
+    const body = Buffer.alloc(8);
+    body[0] = 0; // no side effects
+    body.writeUInt16LE(start & 0xffff, 1);
+    body.writeUInt16LE(end & 0xffff, 3);
+    body[5] = memspace;
+    body.writeUInt16LE(bankId & 0xffff, 6);
+    const frame = await this.send(0x01, body);
+    const declared = frame.readUInt16LE(12);
+    const len = Math.min(frame.length - 14, declared === 0 ? 0x10000 : declared);
+    return frame.subarray(14, 14 + len);
+  }
+
+  /** Saves the emulator state to a snapshot file on the VICE host (BM 0x41). */
+  async dumpSnapshot(filename: string, options?: { readonly saveRoms?: boolean; readonly saveDisks?: boolean }): Promise<void> {
+    const name = Buffer.from(filename, "utf8");
+    if (name.length === 0 || name.length > 255) throw new Error("Snapshot file names must be 1-255 bytes");
+    await this.send(0x41, Buffer.concat([Buffer.from([options?.saveRoms ? 1 : 0, options?.saveDisks ? 1 : 0, name.length]), name]));
+  }
+
+  /** Restores a snapshot file (BM 0x42); returns the program counter after the restore. */
+  async undumpSnapshot(filename: string): Promise<number> {
+    const name = Buffer.from(filename, "utf8");
+    if (name.length === 0 || name.length > 255) throw new Error("Snapshot file names must be 1-255 bytes");
+    const frame = await this.send(0x42, Buffer.concat([Buffer.from([name.length]), name]));
+    return frame.length >= 14 ? frame.readUInt16LE(12) : 0;
+  }
+
   async resetSoft(): Promise<void> { await this.send(0xCC, Buffer.from([0x00])); }
   async resetHard(): Promise<void> { await this.send(0xCC, Buffer.from([0x01])); }
   async reset(type: 0 | 1 = 0): Promise<void> { await this.send(0xCC, Buffer.from([type])); }

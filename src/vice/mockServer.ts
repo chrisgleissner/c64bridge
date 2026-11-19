@@ -95,6 +95,7 @@ export class ViceMockServer {
   readonly keyboardFeeds: Buffer[] = [];
   private heartbeat: { startedAt: number; baseValue: number } | null = null;
   private checkpoints = new Map<number, MockCheckpoint>();
+  private snapshots = new Map<string, { memory: Uint8Array; registers: Map<number, number> }>();
   private nextCheckpointId = 1;
   private readonly registerMetadata = buildDefaultRegisterMetadata();
   private registerValues = new Map<number, number>();
@@ -316,6 +317,35 @@ export class ViceMockServer {
     switch (cmd) {
       case 0x85: // info: ML | MV (main version 3.10.0.0) | SL | SV (SVN revision 0)
         return buildResponse(cmd, reqId, Buffer.from([4, 3, 10, 0, 0, 4, 0, 0, 0, 0]));
+      case 0x82: { // banks available: ids are machine specific (UNSURE which ids real x64sc uses)
+        const entries = [{ id: 0, name: "default" }, { id: 1, name: "ram" }].map(({ id, name }) => {
+          const nameBytes = Buffer.from(name, "utf8");
+          const entry = Buffer.alloc(4 + nameBytes.length);
+          entry[0] = 3 + nameBytes.length;
+          entry.writeUInt16LE(id, 1);
+          entry[3] = nameBytes.length;
+          nameBytes.copy(entry, 4);
+          return entry;
+        });
+        const count = Buffer.alloc(2);
+        count.writeUInt16LE(entries.length, 0);
+        return buildResponse(cmd, reqId, Buffer.concat([count, ...entries]));
+      }
+      case 0x41: { // dump: the mock keeps the snapshot in memory, keyed by file name
+        const nameLength = body[2] ?? 0;
+        this.snapshots.set(body.subarray(3, 3 + nameLength).toString("utf8"), { memory: this.memory.slice(), registers: new Map(this.registerValues) });
+        return buildResponse(cmd, reqId);
+      }
+      case 0x42: { // undump
+        const nameLength = body[0] ?? 0;
+        const snapshot = this.snapshots.get(body.subarray(1, 1 + nameLength).toString("utf8"));
+        if (!snapshot) return buildResponse(cmd, reqId, Buffer.alloc(0), 0x8f);
+        this.memory = snapshot.memory.slice();
+        this.registerValues = new Map(snapshot.registers);
+        const pc = Buffer.alloc(2);
+        pc.writeUInt16LE(this.pc(), 0);
+        return buildResponse(cmd, reqId, pc);
+      }
       case 0xCC: { // reset: types 8-11 reset only that drive's CPU
         const type = body[0] ?? 0;
         if (type >= 8 && type <= 11) {
