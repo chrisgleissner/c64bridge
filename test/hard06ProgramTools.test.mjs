@@ -203,3 +203,40 @@ test("HARD06 PROGMEM-8 wait_for_state returns at once when the CPU is stopped at
   assert.equal(data.stoppedElsewhere, true);
   assert.equal(data.pc, "$C000");
 });
+
+test("HARD06 PROGMEM-9 / WORKFLOW-12 c64_memory and c64_debug share one address parser with documented names, offsets and suggestions", async () => {
+  const { debugModuleGroup } = await import("../src/tools/debug.js");
+  const { memoryModule } = await import("../src/tools/memory.js");
+  const { setViceSymbols, clearViceSymbols } = await import("../src/tools/translation/symbolRegistry.js");
+  const created = [];
+  const reads = [];
+  const ctx = {
+    client: {
+      async viceCheckpointCreate(options) {
+        created.push(options.start);
+        return { id: 1, start: options.start, end: options.end, enabled: true, stopOnHit: true, temporary: false, hitCount: 0, ignoreCount: 0, operations: { execute: true, load: false, store: false }, memspace: 0, hasCondition: false };
+      },
+      async readMemory(address, length) { reads.push(address); return { success: true, data: "$" + "00".repeat(Number(length)), details: { address, length: Number(length) } }; },
+    },
+    logger,
+    platform: platform("vice"),
+  };
+  setViceSymbols([["main_loop", 0xc010], ["sprite_data", 0x2000]]);
+  try {
+    for (const address of ["screen", "CHROUT", "main_loop+3", "sprite_data-$10", "main_loop + 0x10"]) {
+      const result = await debugModuleGroup.invoke("c64_debug", { op: "create_checkpoint", address }, ctx);
+      assert.equal(result.isError, undefined, `${address}: ${result.content[0].text}`);
+    }
+    assert.deepEqual(created, [0x0400, 0xffd2, 0xc013, 0x1ff0, 0xc020]);
+    const read = await memoryModule.invoke("read", { address: "main_loop+1", length: 1 }, ctx);
+    assert.equal(read.isError, undefined);
+    assert.equal(reads[0], "$C011");
+    const typo = await debugModuleGroup.invoke("c64_debug", { op: "create_checkpoint", address: "mainloop" }, ctx);
+    assert.equal(typo.isError, true);
+    assert.match(typo.content[0].text, /closest are: main_loop/);
+    const outside = await memoryModule.invoke("read", { address: "CHROUT+$100", length: 1 }, ctx);
+    assert.equal(outside.isError, true);
+  } finally {
+    clearViceSymbols();
+  }
+});

@@ -656,21 +656,69 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
 // ---------------------------------------------------------------------------
 // Shared address-parsing helper
 // ---------------------------------------------------------------------------
-function parseAddressArg(raw: string, fieldPath: string): number {
+/**
+ * Resolves an address argument: a numeric literal ($C000, 0xC000, 49152), a loaded program label,
+ * a documented system name (screen, CHROUT, ...), or a name followed by +n or -n, where n is a
+ * numeric literal (loop+3, sprite_data+$40). Shared by c64_memory and c64_debug.
+ */
+export function parseAddressArg(raw: string, fieldPath: string): number {
   const trimmed = raw.trim();
   let addr = parseNumericLiteral(trimmed, fieldPath);
   if (addr === undefined) {
+    const expression = /^(.+?)\s*([+-])\s*([^+-]+)$/.exec(trimmed);
+    let name = trimmed;
+    let offset = 0;
+    if (expression && !/^[+-]/.test(trimmed)) {
+      const literal = parseNumericLiteral(expression[3]!.trim(), fieldPath);
+      if (literal === undefined) {
+        throw new ToolValidationError(`Invalid offset in ${trimmed}: write a number such as 3, $10 or 0x10 after the ${expression[2]}`, { path: fieldPath });
+      }
+      name = expression[1]!.trim();
+      offset = expression[2] === "-" ? -literal : literal;
+    }
     // Bare hex stays an error, so a label cannot shadow a numeric form. Then
     // loaded program symbols, then the documented system symbols.
-    assertNotBareHex(trimmed, fieldPath);
-    const resolved = getSymbolAddress(trimmed) ?? resolveAddressSymbol(trimmed);
+    assertNotBareHex(name, fieldPath);
+    const resolved = getSymbolAddress(name) ?? resolveAddressSymbol(name);
     if (resolved === undefined) {
-      throw new ToolValidationError(`Unknown address or symbol: ${trimmed}; no such symbol is loaded`, { path: fieldPath });
+      throw new ToolValidationError(unknownSymbolMessage(name), { path: fieldPath });
     }
-    addr = resolved;
+    addr = resolved + offset;
+    if (addr < 0 || addr > 0xffff) {
+      throw new ToolValidationError(`${trimmed} is ${addr < 0 ? "below $0000" : "above $FFFF"}`, { path: fieldPath });
+    }
   }
   assertAddressRange(addr, undefined, fieldPath);
   return addr;
+}
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = row[j]!;
+      row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return row[b.length]!;
+}
+
+/** Names the closest loaded labels, so a typo can be corrected without listing every label. */
+function unknownSymbolMessage(name: string): string {
+  const loaded = [...new Set(getViceSymbols().values())];
+  if (loaded.length === 0) {
+    return `Unknown address or symbol: ${name}; no such symbol is loaded. No program labels are loaded (upload_run_asm, or run_prg/load_prg with symbolsFile, load them). Documented names such as screen or CHROUT also work.`;
+  }
+  const wanted = name.toLowerCase();
+  const closest = loaded
+    .map((label) => ({ label, distance: label.toLowerCase().includes(wanted) || wanted.includes(label.toLowerCase()) ? 0 : editDistance(wanted, label.toLowerCase()) }))
+    .sort((a, b) => a.distance - b.distance || a.label.localeCompare(b.label))
+    .slice(0, 5)
+    .map((entry) => entry.label);
+  return `Unknown address or symbol: ${name}; no such symbol is loaded. ${loaded.length} label(s) are loaded, the closest are: ${closest.join(", ")}.`;
 }
 
 function fmtAddr(addr: number): string {
