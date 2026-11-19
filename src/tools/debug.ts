@@ -13,6 +13,7 @@ import {
   objectSchema,
   optionalSchema,
   stringSchema,
+  type Schema,
 } from "./schema.js";
 import { jsonResult, textResult } from "./responses.js";
 import {
@@ -108,12 +109,27 @@ const registerSelectorSchema = objectSchema<RegisterSelectorRecord>({
   additionalProperties: false,
 });
 
+// A number, or a string in the address syntax ($C000, 0xC000, 49152, a label, label+n), so the PC
+// can be set to a label. The range is checked against the register's width before the write.
+const registerValueSchema: Schema<number> = {
+  jsonSchema: {
+    type: ["integer", "string"],
+    description: "Value to write: an integer, or a string such as \"$C000\", \"0xC000\", a loaded label or label+n.",
+  },
+  parse(value: unknown, path?: string): number {
+    const at = path ?? "$.value";
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+    if (typeof value === "string") return parseAddressArg(value, at);
+    throw new ToolValidationError("Register value must be a non-negative integer or an address string such as \"$C000\"", { path: at });
+  },
+};
+
 const registerWriteSchema = objectSchema<RegisterWriteRecord>({
   description: "Register write descriptor.",
   properties: {
     name: optionalSchema(stringSchema({ description: "Register name (case-insensitive)." })),
     id: optionalSchema(numberSchema({ description: "Register id.", integer: true, minimum: 0 })),
-    value: numberSchema({ description: "Value to write.", integer: true, minimum: 0 }),
+    value: registerValueSchema,
   },
   required: ["value"],
   additionalProperties: false,
@@ -461,9 +477,18 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const parsed = setRegistersArgsSchema.parse(args);
       const memspace = normaliseMemspace(parsed.memspace);
       const metadata = await registerMetadata(ctx, memspace);
-      const writes = parsed.writes.map((entry) => {
+      const writes = parsed.writes.map((entry, index) => {
         if (!entry.name && entry.id === undefined) {
           throw new ToolValidationError("Each write must specify a name or id.", { path: "$.writes" });
+        }
+        const meta = entry.id !== undefined
+          ? metadata.find((m) => m.id === entry.id)
+          : metadata.find((m) => m.name.toLowerCase() === entry.name!.toLowerCase());
+        if (meta && meta.bits > 0 && meta.bits < 32 && entry.value >= 2 ** meta.bits) {
+          throw new ToolValidationError(
+            `${meta.name} is a ${meta.bits}-bit register; ${entry.value} ($${entry.value.toString(16).toUpperCase()}) is outside 0-${2 ** meta.bits - 1}`,
+            { path: `$.writes[${index}].value` },
+          );
         }
         return entry;
       });

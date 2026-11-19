@@ -313,3 +313,25 @@ test("HARD06 WORKFLOW-7 a device 404 for a path that exists on the host suggests
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("HARD06 PROGMEM-10 set_registers rejects values wider than the register and accepts address strings and labels", async () => {
+  const { debugModuleGroup } = await import("../src/tools/debug.js");
+  const { setViceSymbols, clearViceSymbols } = await import("../src/tools/translation/symbolRegistry.js");
+  const sent = [];
+  const { client } = debugStub({ async viceRegistersSet(writes) { sent.push(...writes); return []; } });
+  const ctx = { client, logger, platform: platform("vice") };
+  const tooWide = await debugModuleGroup.invoke("c64_debug", { op: "set_registers", writes: [{ name: "A", value: 300 }] }, ctx);
+  assert.equal(tooWide.isError, true);
+  assert.match(tooWide.content[0].text, /8-bit register/);
+  const pcTooWide = await debugModuleGroup.invoke("c64_debug", { op: "set_registers", writes: [{ name: "PC", value: 0x1c000 }] }, ctx);
+  assert.equal(pcTooWide.isError, true);
+  assert.equal(sent.length, 0);
+  setViceSymbols([["start", 0xc000]]);
+  try {
+    const ok = await debugModuleGroup.invoke("c64_debug", { op: "set_registers", writes: [{ name: "PC", value: "start+2" }, { name: "A", value: "$FF" }] }, ctx);
+    assert.equal(ok.isError, undefined, ok.content[0].text);
+    assert.deepEqual(sent.map((w) => w.value), [0xc002, 0xff]);
+  } finally {
+    clearViceSymbols();
+  }
+});
