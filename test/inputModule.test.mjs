@@ -204,11 +204,18 @@ test("c64_input.key sends single-byte injections for token names", async () => {
   }, ctx);
   assert.equal(result.isError, undefined);
   const injects = writes.filter((w) => w.kind === "kbd_queue");
-  assert.equal(injects.length, 2, "F1 pressed twice");
-  for (const inject of injects) {
-    assert.equal(inject.bytes.length, 1);
-    assert.equal(inject.bytes[0], 133, "F1 PETSCII = 133");
-  }
+  assert.equal(injects.length, 1, "MEDIA-14: presses without a pause go out as one injection");
+  assert.deepEqual([...injects[0].bytes], [133, 133], "F1 PETSCII = 133, twice");
+  assert.equal(result.metadata?.presses, 2);
+});
+
+test("c64_input.key with durationMs keeps one injection per press", async () => {
+  const { ctx, writes } = createInputContext({ platformId: "c64u" });
+  const result = await toolRegistry.invoke("c64_input", { op: "key", key: "F1", count: 2, durationMs: 1 }, ctx);
+  assert.equal(result.isError, undefined);
+  const injects = writes.filter((w) => w.kind === "kbd_queue");
+  assert.equal(injects.length, 2);
+  for (const inject of injects) assert.deepEqual([...inject.bytes], [133]);
 });
 
 test("c64_input.key accepts single printable characters and reports duration metadata", async () => {
