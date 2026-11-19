@@ -414,7 +414,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       const parsed = listRegistersArgsSchema.parse(args);
       const memspace = normaliseMemspace(parsed.memspace);
-      const metadata = await ctx.client.viceRegistersAvailable(memspace);
+      const metadata = await registerMetadata(ctx, memspace);
       return jsonResult(
         {
           memspace,
@@ -435,27 +435,20 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       const parsed = getRegistersArgsSchema.parse(args);
       const memspace = normaliseMemspace(parsed.memspace);
-      const metadata = await ctx.client.viceRegistersAvailable(memspace);
-      const values = await ctx.client.viceRegistersGet(memspace);
+      const [metadata, values, cpu] = await Promise.all([registerMetadata(ctx, memspace), ctx.client.viceRegistersGet(memspace), cpuState(ctx)]);
       const metadataById = new Map(metadata.map((entry) => [entry.id, entry]));
       let filtered = values;
       if (parsed.registers && parsed.registers.length > 0) {
         const requested = buildRegisterPredicate(parsed.registers, metadataById);
         filtered = values.filter((value) => requested(value.id));
       }
+      const pc = pcOf(formatRegisters(values, metadata));
       return jsonResult(
         {
           memspace,
-          registers: filtered.map((value) => {
-            const meta = metadataById.get(value.id);
-            return {
-              id: value.id,
-              name: meta?.name,
-              bits: meta?.bits,
-              size: value.size,
-              value: value.value,
-            };
-          }),
+          cpu,
+          ...(pc !== undefined ? { pc: formatAddress(pc) } : {}),
+          registers: formatRegisters(filtered, metadata),
         },
         { success: true, count: filtered.length, memspace },
       );
@@ -467,7 +460,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       const parsed = setRegistersArgsSchema.parse(args);
       const memspace = normaliseMemspace(parsed.memspace);
-      const metadata = await ctx.client.viceRegistersAvailable(memspace);
+      const metadata = await registerMetadata(ctx, memspace);
       const writes = parsed.writes.map((entry) => {
         if (!entry.name && entry.id === undefined) {
           throw new ToolValidationError("Each write must specify a name or id.", { path: "$.writes" });
@@ -475,20 +468,10 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         return entry;
       });
       const updated = await ctx.client.viceRegistersSet(writes, { memspace, metadata });
-      const metadataById = new Map(metadata.map((entry) => [entry.id, entry]));
       return jsonResult(
         {
           memspace,
-          registers: updated.map((value) => {
-            const meta = metadataById.get(value.id);
-            return {
-              id: value.id,
-              name: meta?.name,
-              bits: meta?.bits,
-              size: value.size,
-              value: value.value,
-            };
-          }),
+          registers: formatRegisters(updated, metadata),
         },
         { success: true, count: updated.length, memspace },
       );
@@ -504,9 +487,11 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const outcome = await ctx.client.viceStepInstructions(count, { stepOver });
       if (outcome && outcome.stopped === false) return stepNotFinishedResult("Step", outcome.pc, { count, mode: stepOver ? "over" : "into" });
       ctx.logger.info("Stepped instructions", { count, stepOver });
+      const { registers, pc } = await registerSnapshotAfterStep(ctx);
+      const where = pc !== undefined ? ` PC=${formatAddress(pc)}` : "";
       return textResult(
-        `Stepped ${count} instruction${count === 1 ? "" : "s"}${stepOver ? " (over)" : ""}.`,
-        { success: true, count, mode: stepOver ? "over" : "into" },
+        `Stepped ${count} instruction${count === 1 ? "" : "s"}${stepOver ? " (over)" : ""}; CPU stopped at${where || " an unknown PC"}.`,
+        { success: true, count, mode: stepOver ? "over" : "into", cpu: "stopped", ...(pc !== undefined ? { pc: formatAddress(pc) } : {}), ...(registers ? { registers } : {}) },
       );
     } catch (error) {
       return handleToolError(error);
@@ -518,7 +503,11 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const outcome = await ctx.client.viceStepReturn();
       if (outcome && outcome.stopped === false) return stepNotFinishedResult("Step until return", outcome.pc, {});
       ctx.logger.info("Stepped until return");
-      return textResult("Continued execution until current routine return.", { success: true });
+      const { registers, pc } = await registerSnapshotAfterStep(ctx);
+      return textResult(
+        `Continued execution until the current routine returned; CPU stopped at${pc !== undefined ? ` PC=${formatAddress(pc)}` : " an unknown PC"}.`,
+        { success: true, cpu: "stopped", ...(pc !== undefined ? { pc: formatAddress(pc) } : {}), ...(registers ? { registers } : {}) },
+      );
     } catch (error) {
       return handleToolError(error);
     }
@@ -527,19 +516,11 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     try {
       const parsed = getMonitorStateArgsSchema.parse(args);
       const memspace = normaliseMemspace(parsed.memspace);
-      const [metadata, values] = await Promise.all([
-        ctx.client.viceRegistersAvailable(memspace),
-        ctx.client.viceRegistersGet(memspace),
-      ]);
-      const metadataById = new Map(metadata.map((m) => [m.id, m]));
-      const registers = values.map((v) => {
-        const meta = metadataById.get(v.id);
-        return { id: v.id, name: meta?.name, bits: meta?.bits, size: v.size, value: v.value };
-      });
-      const pc = registers.find((r) => r.name?.toUpperCase() === "PC");
-      ctx.logger.info("Read monitor state", { memspace, pc: pc ? formatAddress(pc.value) : "unknown" });
+      const [{ registers, pc }, cpu] = await Promise.all([registerSnapshot(ctx, memspace), cpuState(ctx)]);
+      const checkpointIds = cpu === "stopped" ? await checkpointsAtPc(ctx, pc) : undefined;
+      ctx.logger.info("Read monitor state", { memspace, pc: pc !== undefined ? formatAddress(pc) : "unknown" });
       return jsonResult(
-        { memspace, registers, pc: pc ? formatAddress(pc.value) : undefined },
+        { memspace, cpu, pc: pc !== undefined ? formatAddress(pc) : undefined, ...(checkpointIds?.length ? { checkpointIds } : {}), registers },
         { success: true, memspace, count: registers.length },
       );
     } catch (error) {
@@ -552,8 +533,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const timeoutMs = parsed.timeoutMs ?? 5000;
       const pollMs = parsed.pollMs ?? 100;
       const targetPC = parsed.expectedPC ? parseAddress(parsed.expectedPC, "expectedPC") : undefined;
-      const metadata = await ctx.client.viceRegistersAvailable(0);
-      const metadataById = new Map(metadata.map((m) => [m.id, m]));
+      const metadata = await registerMetadata(ctx, 0);
       const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
       const signal = (ctx as { signal?: AbortSignal }).signal;
       const cancelled = () => {
@@ -610,17 +590,18 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         }
       }
       const matched = settled;
-      const regs = values.map((v) => {
-        const meta = metadataById.get(v.id);
-        return { id: v.id, name: meta?.name, bits: meta?.bits, size: v.size, value: v.value };
-      });
+      const regs = formatRegisters(values, metadata);
+      const cpu = await cpuState(ctx);
+      const checkpointIds = cpu === "stopped" ? await checkpointsAtPc(ctx, currentPC) : undefined;
       ctx.logger.info("wait_for_state settled", { matched, pc: currentPC !== undefined ? formatAddress(currentPC) : "unknown" });
       return jsonResult(
         {
           matched,
           timedOut: !matched && !noSession,
           ...(noSession ? { reason: "no debug session; nothing can stop the CPU" } : {}),
+          cpu,
           pc: currentPC !== undefined ? formatAddress(currentPC) : undefined,
+          ...(checkpointIds?.length ? { checkpointIds } : {}),
           registers: regs,
         },
         { success: true, matched },
@@ -643,6 +624,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         });
       }
       checkpointLabels.clear();
+      registerMetadataCache.delete(ctx.client); // a new emulator process may describe its registers differently
       clearViceSymbols(); // a restarted emulator runs no program
       return textResult("VICE process stopped and restarted.", { success: true });
     } catch (error) {
@@ -660,6 +642,102 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
     }
   },
 };
+
+
+type RegisterMetadata = import("../vice/viceClient.js").ViceRegisterMetadata;
+type RegisterValue = import("../vice/viceClient.js").ViceRegisterValue;
+type DebugCtx = Parameters<(typeof debugOperationHandlers)["get_registers"]>[1];
+
+// Register metadata does not change while the emulator runs, so it is read once per client and
+// memory space (HARD06 PROGMEM-13). nuclear_reset starts a new emulator and drops the cache.
+const registerMetadataCache = new WeakMap<object, Map<number, Promise<RegisterMetadata[]>>>();
+
+function registerMetadata(ctx: DebugCtx, memspace: number): Promise<RegisterMetadata[]> {
+  let perClient = registerMetadataCache.get(ctx.client);
+  if (!perClient) {
+    perClient = new Map();
+    registerMetadataCache.set(ctx.client, perClient);
+  }
+  let pending = perClient.get(memspace);
+  if (!pending) {
+    pending = ctx.client.viceRegistersAvailable(memspace as import("../vice/viceClient.js").ViceMemspace);
+    perClient.set(memspace, pending);
+    const cached = pending;
+    pending.catch(() => { if (perClient!.get(memspace) === cached) perClient!.delete(memspace); });
+  }
+  return pending;
+}
+
+const STATUS_REGISTER_NAMES = new Set(["FL", "SR", "P"]);
+
+/** 6502 status register bits 7..0: N V - B D I Z C (MOS MCS6500 Microcomputer Family Programming Manual, section 3). */
+function statusFlags(value: number): string {
+  return ["N", "V", "-", "B", "D", "I", "Z", "C"]
+    .map((name, index) => (name === "-" ? null : `${name}=${(value >> (7 - index)) & 1}`))
+    .filter((entry): entry is string => entry !== null)
+    .join(" ");
+}
+
+function formatRegisters(values: readonly RegisterValue[], metadata: readonly RegisterMetadata[]) {
+  const metadataById = new Map(metadata.map((entry) => [entry.id, entry]));
+  return values.map((value) => {
+    const meta = metadataById.get(value.id);
+    const bits = meta?.bits ?? value.size * 8;
+    const digits = Math.max(2, Math.ceil(bits / 4));
+    return {
+      id: value.id,
+      name: meta?.name,
+      bits: meta?.bits,
+      size: value.size,
+      value: value.value,
+      hex: `$${value.value.toString(16).toUpperCase().padStart(digits, "0")}`,
+      ...(meta && bits === 8 && STATUS_REGISTER_NAMES.has(meta.name.toUpperCase()) ? { flags: statusFlags(value.value) } : {}),
+    };
+  });
+}
+
+function pcOf(registers: ReadonlyArray<{ name?: string; value: number }>): number | undefined {
+  return registers.find((r) => r.name?.toUpperCase() === "PC")?.value;
+}
+
+/** Whether the CPU is held (checkpoint hit, step or pause) or running. Without a debug session nothing holds it. */
+async function cpuState(ctx: DebugCtx): Promise<"stopped" | "running"> {
+  try {
+    const state = await ctx.client.viceWaitForStop(0);
+    return state.session && state.stopped ? "stopped" : "running";
+  } catch {
+    return "running";
+  }
+}
+
+/** Execute checkpoints whose range contains the PC: the checkpoints the CPU stopped at. */
+async function checkpointsAtPc(ctx: DebugCtx, pc: number | undefined): Promise<number[] | undefined> {
+  if (pc === undefined) return undefined;
+  try {
+    const checkpoints = await ctx.client.viceCheckpointList();
+    return checkpoints
+      .filter((cp) => cp.enabled && cp.operations.execute && cp.start <= pc && pc <= cp.end)
+      .map((cp) => cp.id);
+  } catch {
+    return undefined;
+  }
+}
+
+/** After a step the registers are a convenience: a failed read leaves them out instead of failing the step. */
+async function registerSnapshotAfterStep(ctx: DebugCtx): Promise<{ registers?: ReturnType<typeof formatRegisters>; pc?: number }> {
+  try {
+    return await registerSnapshot(ctx);
+  } catch (error) {
+    ctx.logger.warn("Unable to read registers after the step", { error: error instanceof Error ? error.message : String(error) });
+    return {};
+  }
+}
+
+async function registerSnapshot(ctx: DebugCtx, memspace = 0) {
+  const [metadata, values] = await Promise.all([registerMetadata(ctx, memspace), ctx.client.viceRegistersGet(memspace)]);
+  const registers = formatRegisters(values, metadata);
+  return { registers, pc: pcOf(registers) };
+}
 
 const debugOperationDispatcher = createOperationDispatcher<DebugOperationMap>(
   "c64_debug",

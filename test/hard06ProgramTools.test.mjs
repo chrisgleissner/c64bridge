@@ -142,3 +142,51 @@ test("HARD06 PROGMEM-3 reset waitForReady trusts a backend that already saw READ
   assert.equal(result.metadata.ready, true);
   assert.ok(Date.now() - started < 2000, `Ultimate reset took ${Date.now() - started} ms`);
 });
+
+function debugStub(overrides = {}) {
+  const calls = { available: 0 };
+  let pc = 0xc000;
+  const client = {
+    async viceRegistersAvailable() {
+      calls.available += 1;
+      return [{ id: 0, name: "PC", bits: 16, size: 2 }, { id: 1, name: "A", bits: 8, size: 1 }, { id: 5, name: "FL", bits: 8, size: 1 }];
+    },
+    async viceRegistersGet() { return [{ id: 0, size: 2, value: pc }, { id: 1, size: 1, value: 0x2a }, { id: 5, size: 1, value: 0b10100011 }]; },
+    async viceStepInstructions() { pc += 3; return { stopped: true }; },
+    async viceStepReturn() { pc = 0xc010; return { stopped: true }; },
+    async viceWaitForStop() { return { session: true, stopped: true }; },
+    async viceCheckpointList() {
+      return [
+        { id: 4, start: 0xc003, end: 0xc003, enabled: true, operations: { execute: true, load: false, store: false } },
+        { id: 5, start: 0xc003, end: 0xc003, enabled: true, operations: { execute: false, load: true, store: false } },
+      ];
+    },
+    ...overrides,
+  };
+  return { calls, client };
+}
+
+test("HARD06 PROGMEM-7/13 step and monitor state report PC, CPU state, hit checkpoint and decoded registers; metadata is read once", async () => {
+  const { debugModuleGroup } = await import("../src/tools/debug.js");
+  const { calls, client } = debugStub();
+  const ctx = { client, logger, platform: platform("vice") };
+  const step = await debugModuleGroup.invoke("c64_debug", { op: "step" }, ctx);
+  assert.equal(step.isError, undefined);
+  assert.match(step.content[0].text, /PC=\$C003/);
+  assert.equal(step.structuredContent.data.pc, "$C003");
+  const state = await debugModuleGroup.invoke("c64_debug", { op: "get_monitor_state" }, ctx);
+  const data = JSON.parse(state.content[0].text);
+  assert.equal(data.cpu, "stopped");
+  assert.equal(data.pc, "$C003");
+  assert.deepEqual(data.checkpointIds, [4]);
+  const fl = data.registers.find((r) => r.name === "FL");
+  assert.equal(fl.hex, "$A3");
+  assert.equal(fl.flags, "N=1 V=0 B=0 D=0 I=0 Z=1 C=1");
+  assert.equal(data.registers.find((r) => r.name === "PC").hex, "$C003");
+  const regs = JSON.parse((await debugModuleGroup.invoke("c64_debug", { op: "get_registers" }, ctx)).content[0].text);
+  assert.equal(regs.cpu, "stopped");
+  assert.equal(regs.pc, "$C003");
+  const back = await debugModuleGroup.invoke("c64_debug", { op: "step_return" }, ctx);
+  assert.equal(back.structuredContent.data.pc, "$C010");
+  assert.equal(calls.available, 1, "register metadata is read once per client");
+});
