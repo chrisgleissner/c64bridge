@@ -448,7 +448,7 @@ export const printerModule = defineToolModule({
           });
         }
 
-        return textResult("Commodore bitmap row printed successfully.", {
+        return textResult("Commodore bitmap program started on the C64; printer output was not checked (a missing printer would show ?DEVICE NOT PRESENT on screen).", {
           success: true,
           columnCount: parsed.columns.length,
           repeats: parsed.repeats ?? 1,
@@ -511,7 +511,7 @@ export const printerModule = defineToolModule({
           });
         }
 
-        return textResult("Epson bitmap row printed successfully.", {
+        return textResult("Epson bitmap program started on the C64; printer output was not checked (a missing printer would show ?DEVICE NOT PRESENT on screen).", {
           success: true,
           columnCount: parsed.columns.length,
           mode: parsed.mode,
@@ -574,7 +574,7 @@ export const printerModule = defineToolModule({
           });
         }
 
-        return textResult("Custom printer characters defined successfully.", {
+        return textResult("Printer character-definition program started on the C64; printer output was not checked (a missing printer would show ?DEVICE NOT PRESENT on screen).", {
           success: true,
           firstChar: parsed.firstChar,
           count: parsed.chars.length,
