@@ -4,8 +4,11 @@ import {
   discriminatedUnionSchema,
   OPERATION_DISCRIMINATOR,
   type JsonSchema,
+  type ToolExecutionContext,
 } from "../types.js";
-import { configWriteEffect } from "../access.js";
+import { assertAccess, configWriteEffect, getAccessMode, isEffectAllowed } from "../access.js";
+import { readHostFile } from "../../hostPaths.js";
+import { captureConfigSnapshot } from "../meta/configInventory.js";
 import { developerModule } from "../developer.js";
 import { metaModule } from "../meta/index.js";
 import {
@@ -79,6 +82,36 @@ const configDiffArgsSchema = objectSchema<ConfigDiffArgs>({
   required: ["path"],
   additionalProperties: false,
 });
+
+/**
+ * A restore that changes a network category (or a wildcard category the firmware could match to
+ * one) can cut the bridge off from the device, exactly like `set` on that category, so it needs
+ * the destructive effect. The snapshot file decides this, so the check runs here, before the
+ * restore, and compares the snapshot's network categories with the device. Full access skips it.
+ */
+async function assertRestoreNetworkAccess(path: string, ctx: ToolExecutionContext): Promise<void> {
+  if (isEffectAllowed(getAccessMode(), "destructive")) return;
+  let categories: Record<string, unknown>;
+  try {
+    const snapshot = JSON.parse((await readHostFile(path)).toString("utf8"));
+    categories = snapshot && typeof snapshot.categories === "object" && snapshot.categories !== null && !Array.isArray(snapshot.categories)
+      ? snapshot.categories as Record<string, unknown>
+      : {};
+  } catch {
+    // The restore itself reports a missing or invalid file.
+    return;
+  }
+  const network = Object.keys(categories).filter((name) => configWriteEffect("set", { category: name }) === "destructive");
+  if (network.length === 0) return;
+  let changed = network.filter((name) => /[*?]/.test(name));
+  if (changed.length === 0) {
+    const current = (await captureConfigSnapshot(ctx.client as never, { categories: network })).categories;
+    changed = network.filter((name) => JSON.stringify(categories[name]) !== JSON.stringify(current[name]));
+  }
+  if (changed.length > 0) {
+    assertAccess("c64_config", "restore", "destructive");
+  }
+}
 
 const configOperations: GroupedOperationConfig[] = [
   {
@@ -206,6 +239,7 @@ const configOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
       const parsed = configRestoreArgsSchema.parse(rest);
+      await assertRestoreNetworkAccess(parsed.path, ctx);
       if (parsed.applyToFlash === undefined) {
         return metaModule.invoke("config_snapshot_and_restore", {
           action: "restore",
