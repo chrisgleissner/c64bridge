@@ -179,6 +179,9 @@ function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
   if (mode === "stdio") {
     process.stdin.once("end", () => void shutdown("stdin end", 0));
     process.stdin.once("close", () => void shutdown("stdin close", 0));
+    // The client closed its end of stdout (EPIPE): without a listener the write error is an
+    // uncaught exception that ends the process before cleanup.
+    process.stdout.on("error", () => void shutdown("stdout closed", 0));
   }
 }
 
