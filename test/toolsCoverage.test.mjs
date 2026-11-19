@@ -149,8 +149,8 @@ test("C64Client MCP tool coverage", async (t) => {
     assert.ok(displayWrites.some((entry) => entry.address === 0xD011 && entry.bytes.length === 1));
     assert.ok(displayWrites.some((entry) => entry.address === 0xD016 && entry.bytes.length === 1));
     assert.ok(displayWrites.some((entry) => entry.address === 0xD018 && entry.bytes.length === 1));
-    assert.ok(displayWrites.some((entry) => entry.address === 0xD020 && entry.bytes.length === 1));
-    assert.ok(displayWrites.some((entry) => entry.address === 0xD021 && entry.bytes.length === 1));
+    // HARD06 CLIENT-6: border and background colour go out as one write to $D020-$D021.
+    assert.ok(displayWrites.some((entry) => entry.address === 0xD020 && entry.bytes.length === 2 && entry.bytes[0] === 6));
 
     const viceWrites = [];
     const viceBitmapClient = new C64Client("http://stub.local");
