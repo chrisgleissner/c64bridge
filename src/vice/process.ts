@@ -53,6 +53,20 @@ export function resolveXvfbDisplayForLaunch(display: string): string {
   return display;
 }
 
+/**
+ * The environment handed to VICE and Xvfb: the server's own, without the bridge's settings and
+ * anything that looks like a credential, so the emulator (and whatever it starts) never sees the
+ * HTTP token or an Ultimate network password.
+ */
+export function viceChildEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (/^C64BRIDGE_/i.test(key) || /(PASSWORD|PASSWD|TOKEN|SECRET|API_?KEY)/i.test(key)) continue;
+    result[key] = value;
+  }
+  return result;
+}
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -247,7 +261,7 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     useXvfb = probe.useXvfb;
     display = useXvfb ? resolveXvfbDisplayForLaunch(probe.display) : probe.display;
   }
-  const viceEnv: NodeJS.ProcessEnv = { ...process.env };
+  const viceEnv: NodeJS.ProcessEnv = viceChildEnvironment(process.env);
   let xvfb: ChildProcess | null = null;
   const xvfbOutput = createOutputTailCapture("xvfb");
   const viceOutput = createOutputTailCapture("vice");
@@ -270,7 +284,7 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
     if (debugEnabled) {
       console.error("[vice-process] launching Xvfb", { display });
     }
-    xvfb = spawn("Xvfb", [display, "-screen", "0", "640x480x24"], { stdio: ["ignore", "pipe", "pipe"] });
+    xvfb = spawn("Xvfb", [display, "-screen", "0", "640x480x24"], { stdio: ["ignore", "pipe", "pipe"], env: viceChildEnvironment(process.env) });
     if (debugEnabled) {
       console.error("[vice-process] Xvfb pid", { pid: xvfb.pid });
     }
