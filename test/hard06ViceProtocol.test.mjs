@@ -117,3 +117,27 @@ test("VICE-14 poweroff of an emulator that is not running does not launch one", 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("VICE-1 reset keeps stop-on-hit breakpoints and the session stays open", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const saved = process.env.VICE_TEST_TARGET;
+  process.env.VICE_TEST_TARGET = "mock";
+  const server = await startViceMockServer();
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    const cp = await backend.checkpointOperation((c) => c.checkpointCreate({ start: 0xc000 }));
+    await backend.pause();
+    const result = await backend.reset();
+    assert.equal(result.success, true);
+    assert.equal(server.stoppingCheckpoints, 1, "the breakpoint survived the reset");
+    assert.equal(backend.sessionInfo().open, true);
+    assert.equal(backend.sessionInfo().explicitPause, false);
+    assert.equal(server.unsafeCloses, 0);
+    const list = await backend.withMonitor((c) => c.checkpointList());
+    assert.deepEqual(list.map((c) => c.id), [cp.id]);
+    await backend.checkpointOperation((c) => c.checkpointDelete(cp.id));
+  } finally {
+    await server.stop();
+    if (saved === undefined) delete process.env.VICE_TEST_TARGET; else process.env.VICE_TEST_TARGET = saved;
+  }
+});

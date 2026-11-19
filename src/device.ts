@@ -1366,7 +1366,7 @@ export class ViceBackend implements C64Facade {
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
     let stoppedAt: number | undefined;
-    const warning = await this.endSessionBeforeRestart((client) => client.reset());
+    const warning = await this.endSessionBeforeRestart((client) => client.reset(), { keepCheckpoints: true });
     await this.withClient(async (client) => {
       readiness = await this.resetToBasicPrompt(client, resetReadinessTimeoutMs);
       if (readiness.stopped) {
@@ -1486,13 +1486,34 @@ export class ViceBackend implements C64Facade {
    * before the CPU runs again, so no instruction of the old program runs between the end of the
    * pause and the reset. Returns the notice of a session that had been lost, if any.
    */
-  private async endSessionBeforeRestart(whileStopped?: (client: ViceClient) => Promise<void>): Promise<string | null> {
+  private async endSessionBeforeRestart(
+    whileStopped?: (client: ViceClient) => Promise<void>,
+    options?: { keepCheckpoints?: boolean },
+  ): Promise<string | null> {
     return await this.exclusive(async () => {
       const s = this.liveSession();
       const warning = this.takeLostNotice();
       if (!s) return warning;
       const hadExplicitPause = s.explicitPause;
       s.busy = true;
+      if (options?.keepCheckpoints && s.stopping.size > 0) {
+        // A machine reset keeps the monitor's checkpoints (as VICE does), and the connection must stay open
+        // while one stops the CPU. Only the pause and the debugger stop end.
+        try {
+          if (whileStopped && s.cpu === "stopped") {
+            try { await whileStopped(s.client); } catch { /* the reset is repeated on the next operation */ }
+          }
+          try { if (!s.client.cpuRunning) await s.client.exitMonitor(); } catch { /* the next operation reports a dead connection */ }
+          s.explicitPause = false;
+          s.debugStop = false;
+          s.cpu = "running";
+          s.queuedKeyBytes = 0;
+        } finally {
+          s.busy = false;
+        }
+        if (hadExplicitPause) this.pauseClearedListener?.();
+        return warning;
+      }
       try {
         for (const id of s.stopping) {
           try { await s.client.checkpointDelete(id); } catch { /* already gone */ }
