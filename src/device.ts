@@ -348,6 +348,7 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
       headers: buildC64uHeaders(networkPassword),
       validateStatus: () => true,
       proxy: false,
+      maxRedirects: 0, // a redirect would send X-Password to another host
     });
     return true;
   } catch {

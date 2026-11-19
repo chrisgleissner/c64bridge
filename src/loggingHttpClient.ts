@@ -209,8 +209,9 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
   queue?: RequestQueue,
   limits?: { readonly totalDeadlineMs?: number },
 ): HttpClient<SecurityDataType> {
-  // Device requests go straight to the LAN address; HTTP_PROXY must not apply.
-  const http = new HttpClient<SecurityDataType>({ proxy: false, maxContentLength: REST_MAX_RESPONSE_BYTES, ...config } as ApiConfig<SecurityDataType>);
+  // Device requests go straight to the LAN address; HTTP_PROXY must not apply. The firmware never
+  // redirects, and a redirect would carry X-Password and request bodies to another host: none is followed.
+  const http = new HttpClient<SecurityDataType>({ proxy: false, maxContentLength: REST_MAX_RESPONSE_BYTES, ...config, maxRedirects: 0 } as ApiConfig<SecurityDataType>);
   const totalDeadlineMs = limits?.totalDeadlineMs ?? REST_TOTAL_DEADLINE_MS;
   registerSecret(readPasswordHeader(config?.headers));
 
