@@ -265,3 +265,36 @@ setInterval(() => fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(server
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("VICE-15 the autoload wait reads the machine state with one memory read per poll", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-mount-"));
+  const image = path.join(dir, "disk.d64");
+  fs.writeFileSync(image, Buffer.alloc(174848));
+  const saved = { VICE_TEST_TARGET: process.env.VICE_TEST_TARGET, C64BRIDGE_ALLOWED_DIRS: process.env.C64BRIDGE_ALLOWED_DIRS };
+  process.env.VICE_TEST_TARGET = "mock";
+  process.env.C64BRIDGE_ALLOWED_DIRS = dir;
+  const server = await startViceMockServer({ autoloadDelayMs: 600 });
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    const ranges = [];
+    const original = ViceClient.prototype.memGet;
+    ViceClient.prototype.memGet = function (start, end) { ranges.push(`${start.toString(16)}-${end.toString(16)}`); return original.call(this, start, end); };
+    let result;
+    try {
+      result = await backend.driveMount("8", image);
+    } finally {
+      ViceClient.prototype.memGet = original;
+    }
+    assert.equal(result.success, true);
+    assert.ok(ranges.length >= 2);
+    assert.deepEqual([...new Set(ranges)], ["2b-7e7"], "every poll is one read of $002B-$07E7");
+  } finally {
+    await server.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});

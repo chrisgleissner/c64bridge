@@ -1987,9 +1987,11 @@ async function waitForAutoloadFinished(
     await client.exitMonitor();
     await delay(250);
     if (stopped?.()) return await stoppedOutcome();
-    const marker = await client.memGet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER_ADDRESS + AUTOLOAD_MARKER.length - 1);
-    if (Buffer.from(marker).equals(AUTOLOAD_MARKER)) continue; // not reset yet
-    const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));
+    // One read serves every check below: $002B-$07E7 holds the BASIC pointers, $00C6, the marker at $02A7 and the screen.
+    const state = await client.memGet(0x002b, 0x07e7);
+    const at = (address: number, length: number) => state.subarray(address - 0x002b, address - 0x002b + length);
+    if (Buffer.from(at(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER.length)).equals(AUTOLOAD_MARKER)) continue; // not reset yet
+    const screen = screenCodesToAscii(at(0x0400, 1000));
     const load = screen.lastIndexOf('LOAD"');
     if (load >= 0) {
       const after = screen.slice(load);
@@ -2001,8 +2003,8 @@ async function waitForAutoloadFinished(
     }
     // TXTTAB = $0801 shows BASIC has initialised (right after the power cycle RAM
     // holds VICE's init pattern); VARTAB off $0803 then shows the LOAD has ended.
-    const pointers = await client.memGet(0x002b, 0x002e);
-    const keyboardQueue = await client.memGet(0x00c6, 0x00c6);
+    const pointers = at(0x002b, 4);
+    const keyboardQueue = at(0x00c6, 1);
     const txttab = (pointers[0] ?? 0) | ((pointers[1] ?? 0) << 8);
     const vartab = (pointers[2] ?? 0) | ((pointers[3] ?? 0) << 8);
     // BASIC's cold start sets TXTTAB before VARTAB, so require the same end
