@@ -54,7 +54,7 @@ import { forgetUserStream, rememberUserStream, userStreamTarget, withStreamLock 
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
-  collectCompleteVideoFrames,
+  VideoFrameAssembler,
   parseAudioPacket,
   parseVideoPacket,
   type CapturedFrame,
@@ -265,13 +265,13 @@ interface C64uVideoCaptureSession {
   readonly socket: Socket;
   readonly bindAddress: string;
   readonly target: string;
-  /** The most recent packets, at most VIDEO_SESSION_MAX_PACKETS; older ones are dropped. */
-  readonly packets: Array<ReturnType<typeof parseVideoPacket>>;
-  /** Number of packets dropped from the front of `packets`; packet indexes below are absolute. */
-  packetBase: number;
+  /** Frames being assembled; holds at most VIDEO_SESSION_MAX_PACKETS packets of incomplete frames. */
+  readonly assembler: VideoFrameAssembler;
+  /** The most recent complete frames, at most VIDEO_SESSION_MAX_FRAMES. */
+  readonly frames: Array<{ readonly frame: CapturedFrame; readonly firstPacketIndex: number }>;
   readonly waiters: Array<{
     count: number;
-    /** Absolute index of the first packet this waiter may use. */
+    /** Index of the first packet this waiter may use: a frame qualifies when its first packet is at or after it. */
     startIndex: number;
     resolve: (frames: readonly CapturedFrame[]) => void;
     reject: (error: Error) => void;
@@ -288,6 +288,9 @@ interface C64uVideoCaptureSession {
  * no longer complete a frame a waiter needs, and the stream must not grow memory while it stays open.
  */
 export const VIDEO_SESSION_MAX_PACKETS = 4096;
+
+/** Complete frames a reusable session keeps for waiters (the capture count is at most 32). */
+const VIDEO_SESSION_MAX_FRAMES = 64;
 
 /** Shortest interval between two diagnostic records about ignored video datagrams. */
 const IGNORED_VIDEO_REPORT_INTERVAL_MS = 10_000;
@@ -1856,7 +1859,8 @@ export class C64Client {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
-    const packets: ReturnType<typeof parseVideoPacket>[] = [];
+    const assembler = new VideoFrameAssembler(VIDEO_SESSION_MAX_PACKETS);
+    const completed: CapturedFrame[] = [];
     let stopError: Error | null = null;
     let captureFailed = false;
     let streamAttempted = false;
@@ -1895,11 +1899,14 @@ export class C64Client {
             if (!packet) {
               return;
             }
-            packets.push(packet);
-            const frames = collectCompleteVideoFrames(packets, count);
-            if (frames.length >= count) {
+            const assembled = assembler.add(packet);
+            if (!assembled) {
+              return;
+            }
+            completed.push(assembled.frame);
+            if (completed.length >= count) {
               clearTimeout(timer);
-              resolve(frames);
+              resolve(completed.slice(0, count));
             }
           } catch (error) {
             clearTimeout(timer);
@@ -1959,8 +1966,8 @@ export class C64Client {
       socket,
       bindAddress,
       target,
-      packets: [],
-      packetBase: 0,
+      assembler: new VideoFrameAssembler(VIDEO_SESSION_MAX_PACKETS),
+      frames: [],
       waiters: [],
       stopTimer: null,
       closed: false,
@@ -1975,13 +1982,15 @@ export class C64Client {
       if (!packet) {
         return;
       }
-      session.packets.push(packet);
-      const excess = session.packets.length - VIDEO_SESSION_MAX_PACKETS;
-      if (excess > 0) {
-        session.packets.splice(0, excess);
-        session.packetBase += excess;
-      }
       try {
+        const assembled = session.assembler.add(packet);
+        if (!assembled) {
+          return;
+        }
+        session.frames.push(assembled);
+        if (session.frames.length > VIDEO_SESSION_MAX_FRAMES) {
+          session.frames.splice(0, session.frames.length - VIDEO_SESSION_MAX_FRAMES);
+        }
         this.flushC64uVideoCaptureWaiters(session);
       } catch (error) {
         this.rejectC64uVideoCaptureWaiters(session, error instanceof Error ? error : new Error(String(error)));
@@ -2014,8 +2023,8 @@ export class C64Client {
     if (session.error) {
       throw session.error;
     }
-    const startIndex = session.packetBase + (options.fresh ? session.packets.length : 0);
-    const existingFrames = collectCompleteVideoFrames(session.packets.slice(startIndex - session.packetBase), count);
+    const startIndex = options.fresh ? session.assembler.packetsSeen : 0;
+    const existingFrames = this.sessionFramesFrom(session, startIndex, count);
     if (existingFrames.length >= count) {
       return existingFrames;
     }
@@ -2052,12 +2061,23 @@ export class C64Client {
   private flushC64uVideoCaptureWaiters(session: C64uVideoCaptureSession): void {
     for (let index = session.waiters.length - 1; index >= 0; index -= 1) {
       const waiter = session.waiters[index];
-      const frames = collectCompleteVideoFrames(session.packets.slice(Math.max(0, waiter.startIndex - session.packetBase)), waiter.count);
+      const frames = this.sessionFramesFrom(session, waiter.startIndex, waiter.count);
       if (frames.length >= waiter.count) {
         session.waiters.splice(index, 1);
         waiter.resolve(frames);
       }
     }
+  }
+
+  /** The first `count` complete frames of the session whose packets all arrived at or after `startIndex`. */
+  private sessionFramesFrom(session: C64uVideoCaptureSession, startIndex: number, count: number): CapturedFrame[] {
+    const frames: CapturedFrame[] = [];
+    for (const entry of session.frames) {
+      if (entry.firstPacketIndex < startIndex) continue;
+      frames.push(entry.frame);
+      if (frames.length >= count) break;
+    }
+    return frames;
   }
 
   private rejectC64uVideoCaptureWaiters(session: C64uVideoCaptureSession, error: Error): void {

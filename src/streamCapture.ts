@@ -114,10 +114,11 @@ export function collectCompleteVideoFrames(
 ): readonly CapturedFrame[] {
   const completed: CapturedFrame[] = [];
   for (const group of groupVideoPackets(packets)) {
-    if (!isVideoFrameGroupComplete(group)) {
+    const height = completeVideoFrameHeight(group.packets);
+    if (height === null) {
       continue;
     }
-    completed.push(reconstructVideoFrame(group.packets));
+    completed.push(reconstructVideoFrame(group.packets, height));
     if (completed.length >= count) {
       break;
     }
@@ -125,7 +126,11 @@ export function collectCompleteVideoFrames(
   return completed;
 }
 
-export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[]): CapturedFrame {
+/**
+ * Rebuilds the pixels of one frame. `height` is the frame height announced by its last packet;
+ * lines at or below it are ignored. Without it the height is the highest line received.
+ */
+export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[], height?: number): CapturedFrame {
   if (packets.length === 0) {
     throw new Error("No video packets available");
   }
@@ -134,12 +139,11 @@ export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[]): Ca
   const width = reference.pixelsPerLine;
   const linesPerPacket = Math.max(1, reference.linesPerPacket);
   const bytesPerLine = Math.ceil((width * reference.bitsPerPixel) / 8);
-  const maxLine = Math.max(...packets.map((packet) => packet.lineNumber + packet.linesPerPacket));
-  const height = maxLine;
-  if (width < 1 || width > VIDEO_MAX_WIDTH || height > VIDEO_MAX_HEIGHT || reference.bitsPerPixel !== 4) {
-    throw new Error(`Video frame geometry ${width} x ${height} at ${reference.bitsPerPixel} bits per pixel is not supported`);
+  const frameHeight = height ?? Math.max(...packets.map((packet) => packet.lineNumber + packet.linesPerPacket));
+  if (width < 1 || width > VIDEO_MAX_WIDTH || frameHeight > VIDEO_MAX_HEIGHT || reference.bitsPerPixel !== 4) {
+    throw new Error(`Video frame geometry ${width} x ${frameHeight} at ${reference.bitsPerPixel} bits per pixel is not supported`);
   }
-  const pixels = new Uint8Array(width * height);
+  const pixels = new Uint8Array(width * frameHeight);
   const filledLines = new Set<number>();
 
   for (const packet of packets) {
@@ -147,7 +151,7 @@ export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[]): Ca
     const packetPayload = packet.payload.subarray(0, expectedPayloadBytes);
     for (let lineOffset = 0; lineOffset < linesPerPacket; lineOffset += 1) {
       const lineIndex = packet.lineNumber + lineOffset;
-      if (lineIndex >= height) {
+      if (lineIndex >= frameHeight) {
         continue;
       }
       const srcStart = lineOffset * bytesPerLine;
@@ -163,10 +167,10 @@ export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[]): Ca
   return {
     frameNumber: reference.frameNumber,
     width,
-    height,
+    height: frameHeight,
     bitsPerPixel: 4,
     pixels,
-    complete: height > 0 && filledLines.size === height,
+    complete: frameHeight > 0 && filledLines.size === frameHeight,
   };
 }
 
@@ -186,29 +190,128 @@ function groupVideoPackets(packets: readonly ParsedVideoPacket[]): readonly Vide
     }));
 }
 
-function isVideoFrameGroupComplete(group: VideoFrameGroup): boolean {
-  const lastPacket = group.packets.find((packet) => packet.isLastPacket);
+/** Lines of `packet` whose payload arrived, given the frame's line width in bytes. */
+function arrivedLines(packet: ParsedVideoPacket, bytesPerLine: number): number[] {
+  const lines: number[] = [];
+  for (let offset = 0; offset < packet.linesPerPacket; offset += 1) {
+    if (packet.payload.length < (offset + 1) * bytesPerLine) {
+      continue; // a line counts only when its payload arrived
+    }
+    lines.push(packet.lineNumber + offset);
+  }
+  return lines;
+}
+
+/**
+ * The height of a complete frame, or null. The last packet announces the height; the frame is
+ * complete when every line below it arrived. Lines at or beyond the height do not count.
+ */
+function completeVideoFrameHeight(packets: readonly ParsedVideoPacket[]): number | null {
+  const lastPacket = packets.find((packet) => packet.isLastPacket);
   if (!lastPacket) {
-    return false;
+    return null;
   }
 
   const expectedHeight = lastPacket.lineNumber + lastPacket.linesPerPacket;
   if (expectedHeight <= 0 || expectedHeight > VIDEO_MAX_HEIGHT) {
-    return false;
+    return null;
   }
 
   const coveredLines = new Set<number>();
-  for (const packet of group.packets) {
+  for (const packet of packets) {
     const bytesPerLine = Math.ceil((packet.pixelsPerLine * packet.bitsPerPixel) / 8);
-    for (let offset = 0; offset < packet.linesPerPacket; offset += 1) {
-      if (packet.payload.length < (offset + 1) * bytesPerLine) {
-        continue; // a line counts only when its payload arrived
-      }
-      coveredLines.add(packet.lineNumber + offset);
+    for (const line of arrivedLines(packet, bytesPerLine)) {
+      if (line < expectedHeight) coveredLines.add(line);
     }
   }
 
-  return coveredLines.size >= expectedHeight;
+  return coveredLines.size === expectedHeight ? expectedHeight : null;
+}
+
+interface PendingVideoFrame {
+  readonly packets: ParsedVideoPacket[];
+  readonly lines: Set<number>;
+  readonly bytesPerLine: number;
+  readonly firstPacketIndex: number;
+  expectedHeight: number | null;
+  /** Lines below expectedHeight that arrived; counted once expectedHeight is known. */
+  covered: number;
+}
+
+export interface AssembledVideoFrame {
+  readonly frame: CapturedFrame;
+  /** Index (counted from the first packet given to the assembler) of the frame's first packet. */
+  readonly firstPacketIndex: number;
+}
+
+/**
+ * Assembles frames from video packets as they arrive. Each packet costs work proportional to its
+ * own lines, and a frame's pixels are rebuilt once, when its last missing line arrives. Frames that
+ * never complete are dropped oldest first once more than `maxRetainedPackets` packets are held.
+ */
+export class VideoFrameAssembler {
+  private readonly pending = new Map<number, PendingVideoFrame>();
+  private retained = 0;
+  private seen = 0;
+
+  constructor(private readonly maxRetainedPackets = 4096) {}
+
+  /** Packets held in frames that are not complete yet. */
+  get retainedPackets(): number { return this.retained; }
+
+  /** Packets given to the assembler so far. */
+  get packetsSeen(): number { return this.seen; }
+
+  /** Adds one packet. Returns the frame it completed, or null. Throws when a completed frame's geometry is not supported. */
+  add(packet: ParsedVideoPacket): AssembledVideoFrame | null {
+    const index = this.seen;
+    this.seen += 1;
+    let frame = this.pending.get(packet.frameNumber);
+    if (!frame) {
+      frame = {
+        packets: [],
+        lines: new Set<number>(),
+        bytesPerLine: Math.ceil((packet.pixelsPerLine * packet.bitsPerPixel) / 8),
+        firstPacketIndex: index,
+        expectedHeight: null,
+        covered: 0,
+      };
+      this.pending.set(packet.frameNumber, frame);
+    } else if (Math.ceil((packet.pixelsPerLine * packet.bitsPerPixel) / 8) !== frame.bytesPerLine) {
+      return null; // a packet with another line width cannot fill this frame
+    }
+    frame.packets.push(packet);
+    this.retained += 1;
+    for (const line of arrivedLines(packet, frame.bytesPerLine)) {
+      if (frame.lines.has(line)) continue;
+      frame.lines.add(line);
+      if (frame.expectedHeight !== null && line < frame.expectedHeight) frame.covered += 1;
+    }
+    if (packet.isLastPacket && frame.expectedHeight === null) {
+      const height = packet.lineNumber + packet.linesPerPacket;
+      if (height > 0 && height <= VIDEO_MAX_HEIGHT) {
+        frame.expectedHeight = height;
+        let covered = 0;
+        for (const line of frame.lines) if (line < height) covered += 1;
+        frame.covered = covered;
+      }
+    }
+    if (frame.expectedHeight !== null && frame.covered === frame.expectedHeight) {
+      this.pending.delete(packet.frameNumber);
+      this.retained -= frame.packets.length;
+      return { frame: reconstructVideoFrame(frame.packets, frame.expectedHeight), firstPacketIndex: frame.firstPacketIndex };
+    }
+    this.evict();
+    return null;
+  }
+
+  private evict(): void {
+    for (const [frameNumber, frame] of this.pending) {
+      if (this.retained <= this.maxRetainedPackets) return;
+      this.pending.delete(frameNumber);
+      this.retained -= frame.packets.length;
+    }
+  }
 }
 
 function unpack4BitPixelsToRow(
