@@ -360,3 +360,45 @@ test("HARD06 PROGMEM-12 default lengths stop at $FFFF and every hex pattern acce
   const search = await toolRegistry.invoke("c64_memory", { op: "search_memory", startAddress: "$C000", endAddress: "$C00F", pattern: "EA_EA" }, ctx);
   assert.equal(search.isError, undefined, search.content[0].text);
 });
+
+test("HARD06 PROGMEM-14 range operations leave $D000-$DFFF alone on Ultimate hardware unless includeIo is set", async () => {
+  const { toolRegistry } = await import("../src/tools/registry/index.js");
+  const invoke = (op, args, ctx) => toolRegistry.invoke("c64_memory", { op, ...args }, { ...ctx, setPlatform: () => ctx.platform, rag: {} });
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const reads = [];
+  const client = {
+    async readMemoryRaw(address, length) { reads.push([address, length]); return new Uint8Array(length).fill(0x60); },
+    async writeMemoryRaw() {},
+  };
+  const touchesIo = () => reads.some(([a, l]) => a <= 0xdfff && a + l - 1 >= 0xd000);
+  const c64u = { client, logger, platform: platform("c64u") };
+  const search = await invoke("search_memory", { startAddress: "$C000", endAddress: "$E00F", pattern: "60 60" }, c64u);
+  assert.equal(search.isError, undefined, search.content[0].text);
+  assert.equal(touchesIo(), false);
+  const data = JSON.parse(search.content[0].text);
+  assert.equal(data.skippedIo, "$D000-$DFFF");
+  assert.ok(!data.matches.some((m) => m >= "$D000" && m <= "$DFFF"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h6-io-"));
+  try {
+    for (const [op, args] of [
+      ["compare_memory", { address1: "$D000", address2: "$C000", length: 16 }],
+      ["copy_memory", { source: "$DC00", dest: "$C000", length: 16 }],
+      ["save_memory", { startAddress: "$C000", endAddress: "$DFFF", filePath: path.join(dir, "dump.prg") }],
+    ]) {
+      const refused = await invoke(op, args, c64u);
+      assert.equal(refused.isError, true, op);
+      assert.match(refused.content[0].text, /includeIo/);
+    }
+    assert.equal(touchesIo(), false);
+    const allowed = await invoke("copy_memory", { source: "$DC00", dest: "$C000", length: 16, includeIo: true }, c64u);
+    assert.equal(allowed.isError, undefined);
+    assert.equal(touchesIo(), true);
+    reads.length = 0;
+    const vice = await invoke("compare_memory", { address1: "$D000", address2: "$C000", length: 16 }, { client, logger, platform: platform("vice") });
+    assert.equal(vice.isError, undefined);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

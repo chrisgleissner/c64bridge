@@ -27,6 +27,7 @@ import { petsciiToAscii } from "../petscii.js";
 import { acquireOwnedPause, resumeWarning } from "./pauseGuard.js";
 import { listBasicProgram } from "./translation/basicDetokenizer.js";
 import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../numericArg.js";
+import { IO_RANGE_END, IO_RANGE_START, rangeOverlapsIo } from "../ioRange.js";
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
   if (details && typeof details === "object") {
@@ -739,6 +740,28 @@ function validateRangeWithinAddressSpace(start: number, length: number, fieldPat
   }
 }
 
+
+// On Ultimate hardware a read of $D000-$DFFF reaches the I/O chips, and reading the CIA interrupt
+// control registers ($DC0D, $DD0D) clears pending interrupts of the running program. Range
+// operations therefore leave that area out unless includeIo is set. VICE reads without side effects.
+const includeIoSchema = optionalSchema(booleanSchema({
+  description: "Ultimate hardware: also read $D000-$DFFF. Reading there reaches the I/O chips and can clear pending CIA interrupts of the running program. Default false; VICE reads have no side effects.",
+  default: false,
+}));
+
+function ioReadsGuarded(ctx: ToolExecutionContext, includeIo: boolean | undefined): boolean {
+  return ctx.platform?.id !== "vice" && includeIo !== true;
+}
+
+function refuseIoRange(ctx: ToolExecutionContext, includeIo: boolean | undefined, start: number, length: number, fieldPath: string): void {
+  if (ioReadsGuarded(ctx, includeIo) && rangeOverlapsIo(start, length)) {
+    throw new ToolValidationError(
+      `${fmtAddr(start)}-${fmtAddr(start + length - 1)} overlaps the I/O area $D000-$DFFF; on Ultimate hardware reading it can clear pending CIA interrupts. Pass includeIo: true to read it anyway, or choose a range outside it.`,
+      { path: fieldPath },
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // copy_memory
 // ---------------------------------------------------------------------------
@@ -748,6 +771,7 @@ const copyMemoryArgsSchema = objectSchema({
     source: stringSchema({ description: "Source start address ($HHHH, decimal, or symbol).", minLength: 1 }),
     dest: stringSchema({ description: "Destination start address.", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to copy (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
+    includeIo: includeIoSchema,
   },
   required: ["source", "dest", "length"],
   additionalProperties: false,
@@ -761,6 +785,7 @@ async function executeCopyMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const len = parsed.length;
     validateRangeWithinAddressSpace(src, len, "$.source");
     validateRangeWithinAddressSpace(dst, len, "$.dest");
+    refuseIoRange(ctx, parsed.includeIo, src, len, "$.source");
     ctx.logger.info("Copying memory", { src: fmtAddr(src), dst: fmtAddr(dst), len });
     const bytes = await ctx.client.readMemoryRaw(src, len);
     await ctx.client.writeMemoryRaw(dst, bytes);
@@ -825,6 +850,7 @@ const searchMemoryArgsSchema = objectSchema({
       pattern: /^[\s_0-9A-Fa-f$]+$/,
     }),
     maxResults: optionalSchema(numberSchema({ description: "Maximum matches to return (default 10).", integer: true, minimum: 1, maximum: 100, default: 10 })),
+    includeIo: includeIoSchema,
   },
   required: ["startAddress", "endAddress", "pattern"],
   additionalProperties: false,
@@ -841,20 +867,27 @@ async function executeSearchMemory(rawArgs: unknown, ctx: ToolExecutionContext):
     const maxResults = parsed.maxResults ?? 10;
     const len = end - start + 1;
     ctx.logger.info("Searching memory", { start: fmtAddr(start), end: fmtAddr(end), pattern: parsed.pattern });
-    const haystack = await ctx.client.readMemoryRaw(start, len);
+    // On Ultimate hardware $D000-$DFFF is skipped unless includeIo is set; no match spans the gap.
+    const skipIo = ioReadsGuarded(ctx, parsed.includeIo) && rangeOverlapsIo(start, len);
+    const segments: Array<[number, number]> = skipIo
+      ? ([[start, Math.min(end, IO_RANGE_START - 1)], [Math.max(start, IO_RANGE_END + 1), end]] as Array<[number, number]>).filter(([a, b]) => a <= b)
+      : [[start, end]];
     const matches: string[] = [];
     // The whole range is already read, so counting past maxResults costs no device call.
     let totalMatches = 0;
-    outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
-      for (let j = 0; j < needle.length; j++) {
-        if (haystack[i + j] !== needle[j]) continue outer;
+    for (const [segmentStart, segmentEnd] of segments) {
+      const haystack = await ctx.client.readMemoryRaw(segmentStart, segmentEnd - segmentStart + 1);
+      outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
+        for (let j = 0; j < needle.length; j++) {
+          if (haystack[i + j] !== needle[j]) continue outer;
+        }
+        totalMatches += 1;
+        if (matches.length < maxResults) matches.push(fmtAddr(segmentStart + i));
       }
-      totalMatches += 1;
-      if (matches.length < maxResults) matches.push(fmtAddr(start + i));
     }
     const truncated = totalMatches > matches.length;
     return jsonResult(
-      { found: matches.length, totalMatches, truncated, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) } },
+      { found: matches.length, totalMatches, truncated, matches, pattern: parsed.pattern.trim(), range: { start: fmtAddr(start), end: fmtAddr(end) }, ...(skipIo ? { skippedIo: "$D000-$DFFF", note: "The I/O area was not searched (Ultimate hardware); pass includeIo: true to include it." } : {}) },
       { success: true, found: matches.length, totalMatches, truncated },
     );
   } catch (error) {
@@ -873,6 +906,7 @@ const compareMemoryArgsSchema = objectSchema({
     address2: stringSchema({ description: "Second region start address.", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to compare (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
     maxDiffs: optionalSchema(numberSchema({ description: "Max differences to report (default 10).", integer: true, minimum: 1, maximum: 200, default: 10 })),
+    includeIo: includeIoSchema,
   },
   required: ["address1", "address2", "length"],
   additionalProperties: false,
@@ -887,6 +921,8 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
     const maxDiffs = parsed.maxDiffs ?? 10;
     validateRangeWithinAddressSpace(a1, len, "$.address1");
     validateRangeWithinAddressSpace(a2, len, "$.address2");
+    refuseIoRange(ctx, parsed.includeIo, a1, len, "$.address1");
+    refuseIoRange(ctx, parsed.includeIo, a2, len, "$.address2");
     ctx.logger.info("Comparing memory regions", { a1: fmtAddr(a1), a2: fmtAddr(a2), len });
     const [r1, r2] = await Promise.all([
       ctx.client.readMemoryRaw(a1, len),
@@ -930,6 +966,7 @@ const saveMemoryArgsSchema = objectSchema({
     endAddress: stringSchema({ description: "End address (inclusive).", minLength: 1 }),
     filePath: stringSchema({ description: "Absolute or relative path for the output file.", minLength: 1 }),
     asPrg: optionalSchema(booleanSchema({ description: "Prepend a 2-byte little-endian load-address header (PRG format). Default: true.", default: true })),
+    includeIo: includeIoSchema,
   },
   required: ["startAddress", "endAddress", "filePath"],
   additionalProperties: false,
@@ -943,6 +980,7 @@ async function executeSaveMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     if (end < start) throw new ToolValidationError("endAddress must be ≥ startAddress", { path: "$.endAddress" });
     const asPrg = parsed.asPrg !== false;
     const len = end - start + 1;
+    refuseIoRange(ctx, parsed.includeIo, start, len, "$.startAddress");
     const resolvedPath = resolveHostPath(parsed.filePath, { purpose: "write" });
     ctx.logger.info("Saving memory to file", { start: fmtAddr(start), end: fmtAddr(end), filePath: resolvedPath, asPrg });
     const bytes = await ctx.client.readMemoryRaw(start, len);
@@ -969,11 +1007,11 @@ export interface MemoryOperationMap extends OperationMap {
   readonly read_screen: Record<string, never>;
   readonly list_basic: Record<string, never>;
   readonly disassemble: { readonly address: string; readonly length?: number; readonly instructionCount?: number };
-  readonly copy_memory: { readonly source: string; readonly dest: string; readonly length: number };
+  readonly copy_memory: { readonly source: string; readonly dest: string; readonly length: number; readonly includeIo?: boolean };
   readonly fill_memory: { readonly address: string; readonly length: number; readonly pattern: string };
-  readonly search_memory: { readonly startAddress: string; readonly endAddress: string; readonly pattern: string; readonly maxResults?: number };
-  readonly compare_memory: { readonly address1: string; readonly address2: string; readonly length: number; readonly maxDiffs?: number };
-  readonly save_memory: { readonly startAddress: string; readonly endAddress: string; readonly filePath: string; readonly asPrg?: boolean };
+  readonly search_memory: { readonly startAddress: string; readonly endAddress: string; readonly pattern: string; readonly maxResults?: number; readonly includeIo?: boolean };
+  readonly compare_memory: { readonly address1: string; readonly address2: string; readonly length: number; readonly maxDiffs?: number; readonly includeIo?: boolean };
+  readonly save_memory: { readonly startAddress: string; readonly endAddress: string; readonly filePath: string; readonly asPrg?: boolean; readonly includeIo?: boolean };
 }
 
 export const memoryOperationHandlers: OperationHandlerMap<MemoryOperationMap> = {
