@@ -616,7 +616,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
 
-    const result = await ctx.client.uploadAndRunAsm(parsed.program);
+    const result = await ctx.client.uploadAndRunAsm(parsed.program, asmResult);
     if (!result.success) {
       return toolErrorResult(
         new ToolExecutionError("C64 backend reported failure while running assembly program", {
