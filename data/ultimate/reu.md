@@ -1,8 +1,9 @@
 # REU (RAM Expansion Unit) on Ultimate Devices
 
-**Summary:** Ultimate devices emulate a 1750-compatible REU (128 KB to 16 MB) in SDRAM, registers at `$DF00-$DF0A`. DMA stalls the CPU, REU contents survive C64 resets, and the REU is disabled by default. No REST endpoint writes REU memory: data gets in through boot-time preload, UCI LOAD_REU from game code, or a stash stub. Games use it for level data, charset/sprite/bitmap streaming and sample storage.
+**Summary:** Ultimate devices emulate a 1750-compatible REU (128 KB to 16 MB) in SDRAM, registers at `$DF00-$DF0A`. DMA stalls the CPU, REU contents survive C64 resets, and the REU is disabled by default. No REST endpoint writes REU memory: data gets in through boot-time preload, UCI LOAD_REU from game code (DOS `21`, or Control `04 08` for the configured preload image), or a stash stub. Games use it for level data, charset/sprite/bitmap streaming and sample storage.
 **Read when:** storing or streaming game data via the REU, writing DMA routines, or deciding how to load an REU image.
 
+Checked against GideonZ/1541ultimate 700c7f2 (2026-11-13); the public source has no U64 / C64 Ultimate FPGA core, so core register behaviour is device-measured or marked unverified.
 Marks: "(unverified)" = inferred or single secondary source; "Measured" = benchmark. Related: c64://ultimate/uci (LOAD_REU commands), c64://ultimate/hardware (turbo, `$DE00-$DFFF` map), c64://memory/map, c64://io/spec.
 
 ## Configuration
@@ -17,7 +18,7 @@ Category "C64 and Cartridge Settings" (set with `c64_config`; changing it re-ini
 | `REU Preload Image` | path, max 31 characters | `/Usb0/preload.reu` |
 | `REU Preload Offset` | 0 KB, 128 KB ... 16 MB | 0 KB |
 
-- An active REU disables cartridges that use `$DF00-$DFFF` (EasyFlash, Final Cartridge III).
+- Each loaded `.crt` type declares which Ultimate I/O it prohibits; the firmware then switches the REU off for that run (types that use `$DFxx` I/O, e.g. EasyFlash non-subtype-1, Final Cartridge III; some types keep REU, UCI and Ultimate Audio). A CRT game cannot assume a REU; see c64://ultimate/hardware.
 - Reads beyond the configured size wrap and return plausible wrong data. Check the size at startup; a program should refuse to start with a text message naming the setting if the REU is missing or too small.
 - REU contents survive C64 reset, `machine:reset` and `run_prg`; assume they are lost at power off.
 
@@ -37,7 +38,7 @@ Command bytes: `$90` stash, `$91` fetch, `$92` swap, `$93` verify (execute, imme
 - Without autoload, after a transfer both base addresses point past the last byte and length reads 1: consecutive blocks can continue without rewriting REU address, but length and C64 address must be set again as needed. With autoload the base values are restored (repeat the same transfer with only `$DF01`).
 - Swap: both memories read, then both written. Verify: stops at first mismatch, FAULT set, END OF BLOCK not set; the address registers point at the mismatching byte on Ultimate devices (real REUs differ). Clear FAULT first by reading `$DF00`.
 - C64 address wraps at `$FFFF`. `$DF0A = $80` (fix C64 address): a fetch writes every REU byte to one location, at DMA speed (too fast to play samples). `$40` (fix REU address): a fetch fills memory with one byte.
-- Extended registers on some FPGA builds (existence on U64/C64U cores unverified): `$DF0C` size mask (`$01` 128 KB ... `$FF` 16 MB), `$DF0D` start delay, `$DF0E` rate divider, `$DF0F` length bits 23-16 (write-only, allows over 64 KB per transfer). Probe `$DF0C` before use; do not depend on it.
+- Extended registers exist only in FPGA builds with the extended-REU option: `$DF0C` size mask (read; `$01` 128 KB ... `$FF` 16 MB), `$DF0D` start delay (R/W), `$DF0E` rate divider (R/W), `$DF0F` length bits 23-16 (write-only, allows over 64 KB per transfer). Register meaning is confirmed in the public FPGA source; every public Ultimate II/II+/II+L build has them disabled. Whether the U64 / C64 Ultimate cores have them is unresolved (core not public, unverified): probe `$DF0C` before use; do not depend on it.
 - `$DF1B-$DF1F` are UCI (the REU logic aliases `$DF10-$DF1F`): use only `$DF00-$DF0A`.
 
 ## Timing, stall, size, wrap
@@ -141,10 +142,10 @@ one:    php               ; 1-byte DMA between zero-page byte tmp and REU offset
 | `REU Preload` (config) | partly | **boot only** (see below) |
 | Stash stub + `machine:writemem` | yes | slow but scriptable |
 | `runners:modplay` (PUT file / POST body) | yes | loads a MOD into REU offset 0 and plays it; overwrites the REU; needs the sampler |
-| UCI control LOAD_REU `04 08` | avoid | wedged the interface on firmware 3.14d |
+| UCI control LOAD_REU `04 08 <3+ filler bytes>` | by a running program | loads the file named in `REU Preload Image` at `REU Preload Offset` (needs `RAM Expansion Unit` Enabled, `REU Preload` may be Disabled): the run-time way to repeat the preload; reply 4-byte LE count + text; `04 09` saves the REU back to that file (old file kept as `.bu`). A wedge seen on firmware 3.14d is fixed in the 2026-11-13 source (device recheck advised); see c64://ultimate/uci |
 
 - There is no REST endpoint that writes REU memory. `machine:writemem`/`readmem` cover only C64 `$0000-$FFFF` (DMA on the cartridge bus, CPU stalls briefly).
-- **Preload runs once at firmware boot.** It starts only if `REU Preload` is already enabled at boot and the image file appears (volume mounted), waits about 125 ms (25 ticks at 200 Hz), loads `min(file size, REU size - offset)` bytes, then never runs again. `machine:reset`, C64 reboot and `run_prg` do not reload it; setting it by REST after boot does not arm it; a power cycle or menu reboot does. The image need not equal the REU size (VICE `-reuimage` does require exactly that size).
+- **Preload runs once at firmware boot.** It starts only if `REU Preload` is already enabled at boot and the image file appears (volume mounted), waits about 125 ms (25 ticks at 200 Hz), loads `min(file size, REU size - offset)` bytes, then never runs again. `machine:reset`, C64 reboot and `run_prg` do not reload it; setting it by REST after boot does not arm it; a power cycle or menu reboot does. To repeat it without reboot use UCI Control `04 08`. The image need not equal the REU size (VICE `-reuimage` does require exactly that size).
 - **Stash stub pattern:** a small resident PRG with a mailbox (REU address, C64 address, length, command, trigger byte written last). The host writes a 16 KB chunk to C64 RAM with `machine:writemem`, fills the mailbox, trigger last; the stub stashes it and clears the trigger; the host polls the trigger, then verifies by fetching back. Do not send a "terminate" command after every chunk (an early stub hung). Hash chunks to skip unchanged ones (REU survives resets).
 - `.reu` files are raw REU dumps without header. "Save REU Memory" writes the configured size. LOAD_REU/SAVE_REU assume 16 MB.
 - Image layout: header (magic, version, block table of id/flags/24-bit offset/length), per-block checksums checked at boot.
@@ -154,7 +155,7 @@ one:    php               ; 1-byte DMA between zero-page byte tmp and REU offset
 - **Level/map streaming:** keep tile maps in the REU page-aligned; once per frame, after the raster IRQ passed the visible area, fetch one 256-byte column or row into an off-screen buffer. Measured on a C64U at 64 MHz: one 256-byte fetch per frame for 500 frames, no glitches.
 - **Charset/sprite swap into a VIC bank** between frames: fetch the new 2 KB charset or sprite blocks into the inactive part of the VIC bank, then flip `$D018`/`$DD00` in the next IRQ. Fetching 2 KB costs about 2,000 phi2 at the conservative rate.
 - **Bitmap/screen swap:** 8000 + 1000 + 1000 bytes is about 10,000 phi2 (half a PAL frame at the slow rate): start after the bottom IRQ, flip in the next top IRQ, or hide it under a fade. Colour RAM needs I/O visible.
-- **Digi samples (design, unverified):** 4-bit samples in the REU, a 256-byte ring in RAM, a CIA timer IRQ writing one byte to `$D418` per tick (about 8 kHz), and a 64-byte fetch each time 64 samples were consumed. Let the IRQ own the REU or wrap access in `sei`. `$D418` bits 4-7 are filter/voice-3 bits: write the whole value. Alternative: the Ultimate Audio sampler (`$DF20-$DFFF`, `Map Ultimate Audio $DF20-DFFF`) plays from REU without the CPU (layout unverified).
+- **Digi samples (design, unverified):** 4-bit samples in the REU, a 256-byte ring in RAM, a CIA timer IRQ writing one byte to `$D418` per tick (about 8 kHz), and a 64-byte fetch each time 64 samples were consumed. Let the IRQ own the REU or wrap access in `sei`. `$D418` bits 4-7 are filter/voice-3 bits: write the whole value. Alternative: the Ultimate Audio sampler (`$DF20-$DFFF`, `Map Ultimate Audio $DF20-DFFF`) plays from REU without the CPU; register map and REU addressing in c64://ultimate/hardware (Ultimate Audio sampler).
 - A raster IRQ and the main loop must not both program the REU: one owner, or `sei`/`cli` around main-loop use. Overlays: architecture section 5C.
 
 ## Pitfalls (most often violated)
