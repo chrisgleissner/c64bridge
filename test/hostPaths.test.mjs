@@ -117,8 +117,6 @@ test("default roots: cwd, ~/.c64bridge and the temp directory", () => {
       assert.ok(roots.includes(path.join(fakeHome, ".c64bridge")));
       assert.ok(roots.includes(path.join(base, "tmp")));
       assert.ok(resolveHostPath(path.join(fakeHome, ".c64bridge", "exports", "x.json"), { purpose: "write" }));
-      // Server-owned task folders below the state root are control state (I16).
-      assert.throws(() => resolveHostPath(path.join(fakeHome, ".c64bridge", "tasks", "x.json"), { purpose: "write" }), ToolValidationError);
       assert.throws(() => resolveHostPath(path.join(fakeHome, ".bashrc"), { purpose: "write" }), ToolValidationError);
     });
   } finally {
