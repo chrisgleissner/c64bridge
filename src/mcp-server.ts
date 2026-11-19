@@ -640,6 +640,9 @@ async function main() {
     await new Promise<void>((resolve, reject) => httpServer.listen(port, "127.0.0.1", resolve).once("error", reject));
     installShutdown(client, "http");
     writeDiagnosticEvent("mcp_transport_connected", { mode: "http", port });
+    if (!httpToken) {
+      console.error("c64bridge: C64BRIDGE_HTTP_TOKEN is not set; any local process that can reach 127.0.0.1 on this port can call every tool.");
+    }
     console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
   } else {
     const server = createMcpServer();

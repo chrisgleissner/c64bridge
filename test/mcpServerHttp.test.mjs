@@ -181,3 +181,15 @@ test("S-03 C64BRIDGE_HTTP_TOKEN requires a matching bearer token and is not logg
   assert.equal(ok.status, 200);
   assert.ok(!getStderr().includes(token));
 });
+
+test("HARD04-005 HTTP mode warns on stderr when no bearer token is configured", async (t) => {
+  const { getStderr } = await startHttpServer(t, { C64BRIDGE_HTTP_TOKEN: "" });
+  assert.match(getStderr(), /C64BRIDGE_HTTP_TOKEN is not set/);
+  assert.match(getStderr(), /any local process/);
+});
+
+test("HARD04-005 HTTP mode prints no token warning and no token when one is set", async (t) => {
+  const { getStderr } = await startHttpServer(t, { C64BRIDGE_HTTP_TOKEN: "h4-secret-token-value" });
+  assert.equal(getStderr().includes("C64BRIDGE_HTTP_TOKEN is not set"), false);
+  assert.equal(getStderr().includes("h4-secret-token-value"), false);
+});
