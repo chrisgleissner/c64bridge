@@ -468,7 +468,7 @@ async function executeRenderPetscii(rawArgs: unknown, ctx: ToolExecutionContext)
       });
     }
 
-    return textResult("PETSCII screen rendered successfully.", {
+    return textResult("PETSCII screen rendered. The program stays running, waiting for a key; keys typed next end it instead of reaching READY.", {
       success: true,
       textLength: parsed.text.length,
       borderColor: parsed.borderColor ?? null,
@@ -599,7 +599,6 @@ async function executeCreatePetscii(rawArgs: unknown, ctx: ToolExecutionContext)
       ranOnC64,
       runDetails: runResult?.details ?? null,
       program: art.program,
-      bitmapHex: art.bitmapHex,
       rowHex: art.rowHex,
       width: art.bitmap.width,
       height: art.bitmap.height,
@@ -729,7 +728,7 @@ export const graphicsModule = defineToolModule({
     },
     {
       name: "render_petscii_art",
-      description: "Create PETSCII art from prompts, text, or bitmap input, and optionally display it on the C64. Returns metadata including PETSCII codes and glyphs. See c64://basic/spec, c64://graphics/vic/spec, and c64://graphics/character-set.",
+      description: "Create PETSCII art from prompts, text, or bitmap input, and optionally display it on the C64. Returns program, rowHex and PETSCII codes; the program waits for a key after drawing. Without a bitmap only three shapes exist (heart, smiley, star); other prompts render their text. See c64://basic/spec, c64://graphics/vic/spec, and c64://graphics/character-set.",
       summary: "Synthesises PETSCII art, generates a BASIC program with preview metadata (petsciiCodes, glyphs, dimensions), and uploads it unless dry-run is requested.",
       inputSchema: petsciiImageArgsSchema.jsonSchema,
       relatedResources: ["c64://basic/spec", "c64://graphics/vic/spec", "c64://graphics/character-set"],
