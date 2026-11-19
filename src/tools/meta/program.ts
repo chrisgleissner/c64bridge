@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "../translation/symbolRegistry.js";
 // Program testing and orchestration meta tools
 import { cancelledResult, type ToolDefinition, type ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
@@ -484,6 +485,7 @@ export const tools: ToolDefinition[] = [
               executionMode = "basic_program";
               return ctx.client.uploadAndRunBasic(program);
             });
+            if (runResult.success) clearViceSymbols(); // labels belong to one program
             if (prepareCapturePromise) {
               await prepareCapturePromise;
             }

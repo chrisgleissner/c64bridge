@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
@@ -867,6 +868,7 @@ export const audioModule = defineToolModule({
           ctx.logger.info("Playing SID file", { path: parsed.path, songnr: parsed.songnr ?? null });
 
           const result = await ctx.client.sidplayFile(parsed.path, parsed.songnr);
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while starting SID playback", {
               details: normaliseFailure(result.details),
@@ -908,6 +910,7 @@ export const audioModule = defineToolModule({
           ctx.logger.info("Playing MOD file", { path: parsed.path });
 
           const result = await ctx.client.modplayFile(parsed.path);
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while starting MOD playback", {
               details: normaliseFailure(result.details),
@@ -1085,6 +1088,7 @@ export const audioModule = defineToolModule({
             if (outputFormat === "sid") {
               const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
               const result = await ctx.client.sidplayAttachment(sid.sid);
+              if (result.success) clearViceSymbols(); // labels belong to one program
               if (!result.success) {
                 throw new ToolExecutionError("C64 backend reported failure while playing compiled SID", {
                   details: normaliseFailure(result.details),
@@ -1094,6 +1098,7 @@ export const audioModule = defineToolModule({
               runDetails = toRecord(result.details) ?? null;
             } else {
               const result = await ctx.client.runPrg(compiled.prg);
+              if (result.success) clearViceSymbols(); // labels belong to one program
               if (!result.success) {
                 throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
                   details: normaliseFailure(result.details),

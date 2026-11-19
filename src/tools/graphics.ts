@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { Buffer } from "node:buffer";
 import { createPetsciiArt, type Bitmap } from "../petsciiArt.js";
 import { importImageAsVicBitmap, type VicBitmapMode } from "../vicBitmap.js";
@@ -460,6 +461,7 @@ async function executeRenderPetscii(rawArgs: unknown, ctx: ToolExecutionContext)
     });
 
     const result = await ctx.client.renderPetsciiScreenAndRun(parsed);
+    if (result.success) clearViceSymbols(); // labels belong to one program
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while rendering PETSCII text", {
         details: normaliseFailure(result.details),
@@ -583,6 +585,7 @@ async function executeCreatePetscii(rawArgs: unknown, ctx: ToolExecutionContext)
     let runResult: { success: boolean; details?: unknown } | undefined;
     if (!parsed.dryRun) {
       runResult = await ctx.client.uploadAndRunBasic(art.program);
+      if (runResult.success) clearViceSymbols(); // labels belong to one program
       if (!runResult.success) {
         throw new ToolExecutionError("C64 backend reported failure while rendering PETSCII art", {
           details: normaliseFailure(runResult.details),
