@@ -29,8 +29,8 @@ test("PACKAGE-11/12 client setup snippets use the documented formats and no Linu
   assert.ok(agents.includes(".vscode/mcp.json"));
   assert.ok(!/node_modules\/c64bridge\/dist\/index\.js/.test(agents));
   assert.ok(readme.includes('"mcpServers"') && readme.includes(".cursor/mcp.json") && readme.includes("claude_desktop_config.json"));
-  const badges = [...readme.matchAll(/config=([^)&\s]+)/g)].map((match) => match[1]);
-  assert.ok(badges.length >= 3);
+  const badges = [...readme.matchAll(/(?:config=|mcp-install\?)([^)&\s]+)/g)].map((match) => match[1]);
+  assert.ok(badges.length >= 4);
   for (const badge of badges) {
     const text = badge.startsWith("eyJ") ? Buffer.from(badge, "base64").toString("utf8") : decodeURIComponent(badge);
     assert.ok(!text.includes("/usr/local"), text);
