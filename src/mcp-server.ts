@@ -7,7 +7,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -641,6 +640,8 @@ async function main() {
 
   const cli = parseCliOptions(process.argv.slice(2));
   if (cli.mode === "http") {
+    // Imported only in HTTP mode: stdio startup does not pay for the HTTP transport.
+    const { StreamableHTTPServerTransport } = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
     const port = cli.port ?? 3000;
     const httpToken = process.env.C64BRIDGE_HTTP_TOKEN || undefined;
     if (httpToken) {
@@ -657,6 +658,14 @@ async function main() {
       if (request.url?.split("?")[0] !== "/mcp") {
         response.statusCode = 404;
         response.end("Not found");
+        return;
+      }
+      // Stateless mode has no server-to-client stream and no session to delete. A GET would
+      // otherwise open an event stream that never ends and keeps a Server alive per request.
+      if (request.method !== "POST") {
+        response.statusCode = 405;
+        response.setHeader("Allow", "POST");
+        response.end("Method not allowed: this stateless MCP endpoint accepts POST only");
         return;
       }
       // Stateless mode: one Server and one transport per request.
