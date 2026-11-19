@@ -801,10 +801,19 @@ function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExec
     const warning = `symbolsFile contained no recognisable labels; accepted formats: ${SYMBOL_FILE_FORMATS}.`;
     return { loaded, note: ` Warning: ${warning}`, fields: { symbolsLoaded: 0, warnings: [warning] } as Record<string, unknown> };
   }
-  return { loaded, note: ` Loaded ${loaded} debug symbol(s).`, fields: { symbolsLoaded: loaded } as Record<string, unknown> };
+  // A bounded sample, lowest addresses first, so the next call can use a label without guessing.
+  const sample = [...newSymbols.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).slice(0, LABEL_SAMPLE_SIZE);
+  const labels: Record<string, string> = Object.fromEntries(sample.map(([name, address]) => [name, hex4(address)]));
+  const shown = sample.map(([name, address]) => `${name}=${hex4(address)}`).join(", ");
+  return {
+    loaded,
+    note: ` Loaded ${loaded} debug symbol(s)${loaded > sample.length ? `; the first ${sample.length} by address` : ""}: ${shown}.`,
+    fields: { symbolsLoaded: loaded, labels, ...(loaded > sample.length ? { labelsTruncated: true } : {}) } as Record<string, unknown>,
+  };
 }
 
 const MAX_UPLOAD_PRG_BYTES = 65538;
+const LABEL_SAMPLE_SIZE = 20;
 
 function hex4(value: number): string {
   return `$${value.toString(16).toUpperCase().padStart(4, "0")}`;

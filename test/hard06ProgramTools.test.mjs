@@ -265,3 +265,29 @@ test("HARD06 PROGMEM-11 program results state load range and entry in $HHHH, als
   const basic = await programRunnersModule.invoke("upload_run_basic", { program: "10 PRINT 1" }, { client: { async uploadAndRunBasic() { return { success: true }; } }, logger, platform: platform("vice") });
   assert.match(basic.content[0].text, /\$0801-\$08/);
 });
+
+test("HARD06 WORKFLOW-12 run_prg with a symbols file names a bounded sample of the loaded labels", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { clearViceSymbols } = await import("../src/tools/translation/symbolRegistry.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-h6-labels-"));
+  try {
+    const file = path.join(dir, "game.prg");
+    fs.writeFileSync(file, Buffer.from([0x00, 0xc0, 0x60]));
+    const labelsFile = path.join(dir, "game.vs");
+    fs.writeFileSync(labelsFile, Array.from({ length: 25 }, (_, i) => `al C:${(0xc000 + i).toString(16)} .label${String(i).padStart(2, "0")}`).join("\n"));
+    const vice = { async runPrgFile() { return { success: true }; } };
+    const result = await programRunnersModule.invoke("run_prg", { path: file, symbolsFile: labelsFile }, { client: vice, logger, platform: platform("vice") });
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+    const data = result.structuredContent.data;
+    assert.equal(data.symbolsLoaded, 25);
+    assert.equal(Object.keys(data.labels).length, 20);
+    assert.equal(data.labels.label00, "$C000");
+    assert.equal(data.labelsTruncated, true);
+    assert.match(result.content[0].text, /label00=\$C000/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    clearViceSymbols();
+  }
+});
