@@ -32,6 +32,9 @@ export function delegateViceSignalHandling(): void {
 
 export type DeviceType = "c64u" | "u2" | "vice";
 
+/** Disk image types the Ultimate firmware mounts (OpenAPI `/v1/drives/{drive}:mount` `type`). */
+export type DiskImageType = "d64" | "g64" | "d71" | "g71" | "d81";
+
 /**
  * The long-lived VICE monitor connection and what keeps it open. `cpu` is the logical CPU
  * state: operations leave it as they found it. The session exists while the CPU is stopped,
@@ -145,6 +148,8 @@ export interface C64Facade {
   loadPrgFile(path: string): Promise<RunResult>;
   runPrgFile(path: string): Promise<RunResult>;
   runCrtFile(path: string): Promise<RunResult>;
+  /** Uploads cartridge image bytes (.crt) and starts them. Optional: only the Ultimate backends have it. */
+  runCrt?(crt: Uint8Array | Buffer): Promise<RunResult>;
   sidplayFile(path: string, songnr?: number): Promise<RunResult>;
   sidplayAttachment(sid: Uint8Array | Buffer, options?: { songnr?: number; songlengths?: Uint8Array | Buffer }): Promise<RunResult>;
   // Memory/register access
@@ -181,6 +186,8 @@ export interface C64Facade {
   // Drives & files
   drivesList(): Promise<unknown>;
   driveMount(drive: string, imagePath: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult>;
+  /** Uploads disk image bytes and mounts them. Optional: only the Ultimate backends have it. */
+  driveMountImage?(drive: string, image: Uint8Array | Buffer, options: { type: DiskImageType; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult>;
   driveRemove(drive: string): Promise<RunResult>;
   driveReset(drive: string): Promise<RunResult>;
   driveOn(drive: string): Promise<RunResult>;
@@ -329,6 +336,8 @@ function driveImage(info: Record<string, unknown>): string | null {
   return typeof info.image === "string" && info.image ? info.image : null;
 }
 
+const DISK_IMAGE_TYPES: ReadonlySet<string> = new Set<DiskImageType>(["d64", "g64", "d71", "g71", "d81"]);
+
 function uploadFile(bytes: Uint8Array, name: string): File {
   return new File([Uint8Array.from(bytes)], name, { type: "application/octet-stream" });
 }
@@ -454,6 +463,17 @@ class C64uBackend implements C64Facade {
   }
   async runCrtFile(pathStr: string): Promise<RunResult> {
     const res = await this.api.v1.runnersRunCrtUpdate(":run_crt", { file: pathStr });
+    return this.actionResult(res.data);
+  }
+  /**
+   * POST /v1/runners:run_crt with the cartridge as a file part named upload.crt. The firmware keeps
+   * the part's file name for its temporary file (attachment_writer.h), so the extension is kept.
+   */
+  async runCrt(crt: Uint8Array | Buffer): Promise<RunResult> {
+    if (crt.length === 0) throw new Error("Cartridge image is empty");
+    const form = new FormData();
+    form.append("file", uploadFile(crt, "upload.crt"));
+    const res = await this.api.v1.runnersRunCrtCreate(":run_crt", form as unknown as File);
     return this.actionResult(res.data);
   }
   async sidplayFile(pathStr: string, songnr?: number): Promise<RunResult> {
@@ -605,6 +625,19 @@ class C64uBackend implements C64Facade {
     }));
   }
   async driveMount(d: string, img: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> { const res = await this.api.v1.drivesMountUpdate(await this.resolveDriveId(d), ":mount", { image: img, type: options?.type, mode: options?.mode }); return this.actionResult(res.data); }
+  /**
+   * POST /v1/drives/{drive}:mount with the image as a file part named upload.<type>. The firmware
+   * takes the type from the `type` query, else from the uploaded file's extension (route_drives.cc).
+   */
+  async driveMountImage(d: string, image: Uint8Array | Buffer, options: { type: DiskImageType; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> {
+    if (!DISK_IMAGE_TYPES.has(options.type)) throw new Error(`Unknown disk image type '${options.type}': use ${[...DISK_IMAGE_TYPES].join(", ")}`);
+    if (image.length === 0) throw new Error("Disk image is empty");
+    const drive = await this.resolveDriveId(d);
+    const form = new FormData();
+    form.append("file", uploadFile(image, `upload.${options.type}`));
+    const res = await this.api.v1.drivesMountCreate(drive, ":mount", form as unknown as File, { type: options.type, ...(options.mode ? { mode: options.mode } : {}) });
+    return this.actionResult(res.data);
+  }
   async driveRemove(d: string): Promise<RunResult> { const res = await this.api.v1.drivesRemoveUpdate(await this.resolveDriveId(d), ":remove"); return this.actionResult(res.data); }
   async driveReset(d: string): Promise<RunResult> { const res = await this.api.v1.drivesResetUpdate(await this.resolveDriveId(d), ":reset"); return this.actionResult(res.data); }
   async driveOn(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOnUpdate(await this.resolveDriveId(d), ":on"); return this.actionResult(res.data); }
