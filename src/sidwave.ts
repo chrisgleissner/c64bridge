@@ -271,6 +271,8 @@ function validatePattern(raw: unknown, path: string): SidwavePattern {
   if (p.groove !== undefined) {
     checkKeys(p, GROOVE_KEYS, path);
     if (!Array.isArray(p.groove) || p.groove.length === 0) throw new SidwaveValidationError(`${path}.groove`, "expected a non-empty list of notes, '-' rests or '~' ties");
+    // An unquoted ~ in YAML is null; it is the tie token, so read it as one.
+    p.groove = p.groove.map((n: unknown) => (n === null ? "~" : n));
     p.groove.forEach((n: unknown, i: number) => {
       const tok = String(n).trim();
       if (!isRestToken(tok) && !isTieToken(tok)) requireNote(n, `${path}.groove[${i}]`);

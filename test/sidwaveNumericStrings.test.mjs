@@ -24,3 +24,11 @@ test("SIDWAVE numeric string reverb delay_frames behaves like a number and input
   assert.deepEqual(a.voices.map((v) => v.notes), b.voices.map((v) => v.notes));
   assert.equal(input.global_fx.reverb_sim.delay_frames, "5");
 });
+
+test("SIDWAVE unquoted ~ (YAML null) in a groove is a tie (SOUND-12)", () => {
+  const yaml = "voices:\n  - id: 1\n    patterns:\n      A: { groove: [C4, ~, E4, \"-\"] }\ntimeline:\n  - { bars: 1, layers: { v1: A } }\n";
+  const notes = arrangeSidwave(parseSidwave(yaml)).voices[0].notes;
+  assert.equal(notes.length, 2);
+  const quoted = arrangeSidwave(parseSidwave(yaml.replace("~,", '"~",'))).voices[0].notes;
+  assert.deepEqual(notes, quoted);
+});
