@@ -733,10 +733,20 @@ test("sidplay_file wraps unexpected failures and modplay_file surfaces firmware 
   assert.ok(String(modResult.content[0].text).includes("MOD playback"));
 });
 
-test("analyze_audio returns guidance when no keywords detected", async () => {
-  const res = await audioModule.invoke("analyze_audio", { request: "just print status" }, { client: {} });
-  assert.equal(res.isError, undefined);
-  assert.ok(res.content[0].text.includes("No audio verification keywords"));
+test("analyze_audio records for any request wording and without a request (SOUND-9)", async () => {
+  for (const args of [{ request: "analyze" }, { request: "measure the pitch" }, {}]) {
+    let calls = 0;
+    const res = await audioModule.invoke("analyze_audio", args, {
+      client: { recordAndAnalyzeAudio: async () => { calls += 1; return { analysis: { durationSeconds: 3, voices: [{ id: 0, detected_notes: [{ note: "A4", frequency: 440 }], average_deviation: 1 }], global_metrics: { average_rms: 0.1, max_rms: 0.2 } } }; } },
+      logger: createLogger(),
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(calls, 1, JSON.stringify(args));
+    assert.equal(res.metadata.analyzed, true);
+    assert.ok(res.content[0].text.includes("mixed SID output"), res.content[0].text);
+    assert.ok(res.content[0].text.includes("Mix: 1 note(s)"), res.content[0].text);
+    assert.ok(!/3 voice/.test(res.content[0].text));
+  }
 });
 
 test("analyze_audio wraps backend errors when keywords present", async () => {

@@ -321,10 +321,10 @@ const recordAndAnalyzeArgsSchema = objectSchema({
 const analyzeAudioArgsSchema = objectSchema({
   description: "Analyze recent SID playback when a verification-style request is detected.",
   properties: {
-    request: stringSchema({
-      description: "Natural language user request describing the verification goal.",
+    request: optionalSchema(stringSchema({
+      description: "Optional wording of the verification goal; \"does it sound right\" style requests add a verdict to the notes.",
       minLength: 1,
-    }),
+    }), "analyze the SID output"),
     durationSeconds: optionalSchema(numberSchema({
       description: "Override capture duration in seconds.",
       minimum: 0.5,
@@ -332,7 +332,6 @@ const analyzeAudioArgsSchema = objectSchema({
     })),
     expectedSidwave: optionalSchema(sidwaveSourceSchema),
   },
-  required: ["request"],
   additionalProperties: false,
 });
 
@@ -403,14 +402,6 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function shouldAutoAnalyze(request: string): boolean {
-  const lowered = request.toLowerCase();
-  const actionMatch = /(check|verify|test|analyze|listen|hear)/.test(lowered);
-  const subjectMatch = /(sid|audio|music|sound|song|play)/.test(lowered);
-  const qualitativeMatch = /(does.*sound|how.*sound|sound.*right|sound.*good|sound.*correct)/.test(lowered);
-  return (actionMatch && subjectMatch) || qualitativeMatch;
-}
-
 type AudioAnalyzer = (options: {
   durationSeconds: number;
   expectedSidwave?: string | Record<string, unknown>;
@@ -478,23 +469,24 @@ function generateAudioFeedback(analysisResult: unknown, userRequest: string): st
     const voices = Array.isArray(analysis.voices) ? analysis.voices : [];
     const globalMetrics = (analysis.global_metrics ?? {}) as Record<string, unknown>;
 
-    let feedback = `Audio analysis detected ${voices.length} voice(s) over ${Math.round((analysis.durationSeconds ?? 0) * 10) / 10}s:\n\n`;
+    let feedback = `Audio analysis of the mixed SID output over ${Math.round((analysis.durationSeconds ?? 0) * 10) / 10}s (voices are not separated):\n\n`;
 
     voices.forEach((voice: any, index: number) => {
       const notes = Array.isArray(voice?.detected_notes) ? voice.detected_notes : [];
       const validNotes = notes.filter((n: any) => n?.note && n?.frequency);
       const voiceId = voice?.id ?? index + 1;
+      const label = voiceId === 0 ? "Mix" : `Voice ${voiceId}`;
 
       if (validNotes.length > 0) {
         const preview = validNotes.slice(0, 5).map((n: any) => `${n.note}(${Math.round(n.frequency)}Hz)`);
         const extra = validNotes.length > preview.length ? "..." : "";
-        feedback += `Voice ${voiceId}: ${validNotes.length} note(s) - ${preview.join(", ")}${extra}`;
+        feedback += `${label}: ${validNotes.length} note(s) - ${preview.join(", ")}${extra}`;
         if (typeof voice?.average_deviation === "number") {
           feedback += ` [avg deviation: ${Math.round(voice.average_deviation * 10) / 10} cents]`;
         }
         feedback += "\n";
       } else {
-        feedback += `Voice ${voiceId}: No clear notes detected\n`;
+        feedback += `${label}: No clear notes detected\n`;
       }
     });
 
@@ -1216,8 +1208,8 @@ export const audioModule = defineToolModule({
     },
     {
       name: "analyze_audio",
-      description: "Automatically analyze SID playback when the user requests verification feedback.",
-      summary: "Detects verification intent in natural language, records a short clip, and returns musical feedback.",
+      description: "Record a short clip (default 3 s) of the SID output and return the detected notes, pitch deviation, tempo and level.",
+      summary: "Records a short clip and returns musical feedback; requests such as 'does it sound right' add a verdict.",
       inputSchema: analyzeAudioArgsSchema.jsonSchema,
       relatedResources: ["c64://sound/sid/spec", "c64://sound/sid/file-format"],
       relatedPrompts: ["sid-music"],
@@ -1234,16 +1226,7 @@ export const audioModule = defineToolModule({
         try {
           const parsed = analyzeAudioArgsSchema.parse(args ?? {});
           if (ctx.signal?.aborted) return cancelledResult();
-          if (!shouldAutoAnalyze(parsed.request)) {
-            return textResult(
-              "No audio verification keywords detected. Use phrases like 'check the music' or 'verify the SID playback'.",
-              {
-                analyzed: false,
-                request: parsed.request,
-              },
-            );
-          }
-
+          const request = parsed.request ?? "analyze the SID output";
           const duration = parsed.durationSeconds ?? 3;
           ctx.logger.info("Auto-analyzing SID audio", { durationSeconds: duration });
 
@@ -1253,10 +1236,10 @@ export const audioModule = defineToolModule({
             expectedSidwave: normaliseSidwaveInput(parsed.expectedSidwave),
           });
 
-          const feedback = generateAudioFeedback(analysis, parsed.request);
+          const feedback = generateAudioFeedback(analysis, request);
           return textResult(feedback, {
             analyzed: true,
-            request: parsed.request,
+            request,
             durationSeconds: analysis.analysis?.durationSeconds ?? duration,
             analysis,
           });
