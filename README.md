@@ -694,24 +694,22 @@ This is representative of the intended workflow:
 ## HTTP Invocation
 
 - Preferred transport is `stdio`.
-- The HTTP bridge is disabled by default and is intended only for manual testing.
-- The following curl commands are illustrative so you can see what grouped MCP calls look like over HTTP.
+- The HTTP bridge is disabled by default and is intended only for manual testing. Start it with `npx -y c64bridge@latest --http 3000` (from a checkout: `npm start -- --http 3000`). The port defaults to 3000; the server binds to 127.0.0.1 only. Set `C64BRIDGE_HTTP_TOKEN` and send `Authorization: Bearer <token>` to require a token.
+- The single endpoint is `http://127.0.0.1:<port>/mcp` and speaks MCP JSON-RPC. Every request needs `Content-Type: application/json` and `Accept: application/json, text/event-stream`; the answer arrives as one server-sent event (`data: {...}`).
+- There are no per-tool REST routes. A grouped tool is called with `tools/call`, and `op` goes inside `arguments`.
 
 ```bash
-# Upload and run BASIC
-curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"op":"upload_run_basic","program":"10 PRINT \"HELLO\"\n20 GOTO 10"}' \
-  http://localhost:8000/tools/c64_program | jq
+# Read the current screen (PETSCII to ASCII)
+curl -s -X POST http://127.0.0.1:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"c64_memory","arguments":{"op":"read_screen"}}}'
 
-# Read current screen (PETSCII→ASCII)
-curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"op":"read_screen"}' \
-  http://localhost:8000/tools/c64_memory | jq
-
-# Reset the machine
-curl -s -X POST -H 'Content-Type: application/json' \
-  -d '{"op":"reset"}' \
-  http://localhost:8000/tools/c64_system
+# List the tools
+curl -s -X POST http://127.0.0.1:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 ```
 
 ## Build and Test
