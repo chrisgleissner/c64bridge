@@ -37,3 +37,19 @@ test("HARD03-041 npm package excludes repository maintenance instructions", asyn
   assert.ok(files.some((file) => file.startsWith(".github/prompts/")), "ordinary user prompts remain packaged");
   assert.deepEqual(files.filter(developerOnly), []);
 });
+
+test("KNOWLEDGE-3 index inputs exclude developer documents but keep C64 reference documents", async () => {
+  const embeddingsDir = await fs.mkdtemp(path.join(os.tmpdir(), "rag-developer-docs-"));
+  const excluded = ["AGENTS.md", "doc/developer.md", "doc/troubleshooting-mcp.md", "doc/agent-state-spec.md", "doc/hardening-behavior.md", "doc/audit/secret-handling.md"];
+  const kept = ["data/gamedev/techniques.md", "doc/c64u/c64-rest-api.md"];
+  try {
+    await buildAllIndexes({ model: new LocalMiniHashEmbedding(16), embeddingsDir, basicDirs: [], asmDirs: [], externalDirs: [],
+      docFiles: [...excluded, ...kept].map((file) => path.join(root, file)) });
+    const indexes = await loadIndexes({ embeddingsDir });
+    const sources = new Set(Object.values(indexes).flatMap((index) => index?.records ?? []).map((record) => (record.sourcePath ?? "").replaceAll("\\", "/").replace(`${root.replaceAll("\\", "/")}/`, "")));
+    for (const file of excluded) assert.equal([...sources].some((source) => source === file), false, `${file} is indexed`);
+    for (const file of kept) assert.ok([...sources].some((source) => source === file), `${file} is missing`);
+  } finally {
+    await fs.rm(embeddingsDir, { recursive: true, force: true });
+  }
+});
