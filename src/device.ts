@@ -1062,7 +1062,7 @@ export class ViceBackend implements C64Facade {
 
   private async withClient<T>(
     fn: (client: ViceClient) => Promise<T>,
-    options?: { resumeOnClose?: boolean; keepLostNotice?: boolean },
+    options?: { resumeOnClose?: boolean; keepLostNotice?: boolean; noLaunch?: boolean },
   ): Promise<T> {
     return this.exclusive(async () => {
       const session = this.liveSession();
@@ -1128,8 +1128,8 @@ export class ViceBackend implements C64Facade {
     }
   }
 
-  private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
-    if (!this.mockMode) await this.ensureProcess();
+  private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean; noLaunch?: boolean }): Promise<T> {
+    if (!this.mockMode && options?.noLaunch !== true) await this.ensureProcess();
     const client = new ViceClient();
     if (this.debugEnabled) console.error("[vice-backend] connecting to VICE monitor", { host: this.host, port: this.port });
     await client.connect(this.port, this.host);
@@ -1570,7 +1570,7 @@ export class ViceBackend implements C64Facade {
         } catch {
           // Ignore transport errors during quit; the emulator will terminate regardless.
         }
-      }, { resumeOnClose: false });
+      }, { resumeOnClose: false, noLaunch: true });
       if (managedHandle) {
         try {
           await managedHandle.stop();
@@ -1579,6 +1579,14 @@ export class ViceBackend implements C64Facade {
       }
       return { success: true };
     } catch (error) {
+      // Nothing listens: VICE is already off. Starting one only to quit it would take seconds and open a window.
+      if ((error as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED") {
+        if (managedHandle) {
+          try { await managedHandle.stop(); } catch {}
+          ViceBackend.supervisors.delete(key);
+        }
+        return { success: true, details: { running: false, note: "VICE was not running." } };
+      }
       const details = error instanceof Error
         ? { message: error.message }
         : error;

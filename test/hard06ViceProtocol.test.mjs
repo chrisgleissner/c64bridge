@@ -90,3 +90,30 @@ test("VICE-13 a missing explicit VICE binary is an error when a launch is needed
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
+
+test("VICE-14 poweroff of an emulator that is not running does not launch one", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-off-"));
+  const marker = path.join(dir, "launched");
+  const fake = path.join(dir, "x64sc");
+  fs.writeFileSync(fake, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+  const saved = { VICE_BINARY: process.env.VICE_BINARY, VICE_TEST_TARGET: process.env.VICE_TEST_TARGET };
+  process.env.VICE_BINARY = fake;
+  delete process.env.VICE_TEST_TARGET;
+  try {
+    const free = await startViceMockServer();
+    const port = free.port;
+    await free.stop();
+    const backend = new ViceBackend({ host: "127.0.0.1", port });
+    const result = await backend.poweroff();
+    assert.equal(result.success, true);
+    assert.equal(result.details.running, false);
+    assert.equal(fs.existsSync(marker), false, "no emulator was launched");
+  } finally {
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
