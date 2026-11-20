@@ -34,7 +34,7 @@ Items in store `U64 Specific Settings` (`software/u64/u64_config.cc:390-397`). A
 
 | Item | Accepted values | Default |
 |---|---|---|
-| `Turbo Control` | `Off`, `Manual`, `U64 Turbo Registers`, `TurboEnable Bit` | `Off` |
+| `Turbo Control` | `Off`, `Manual`, `U64 Turbo Registers` (U64 / Elite MK1) or `C64U Turbo Registers` (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20), `TurboEnable Bit` | `Off` |
 | `CPU Speed` | U64 / Elite MK1: ` 1` ` 2` ` 3` ` 4` ` 5` ` 6` ` 8` `10` `12` `14` `16` `20` `24` `32` `40` `48`; Elite II / C64U: ` 1` ` 2` ` 3` ` 4` ` 6` ` 8` `10` `12` `14` `16` `20` `24` `32` `40` `48` `64` (one-digit values carry a leading space; the menu shows them with ` MHz`) | ` 1` |
 | `Badline Timing` | `Disabled`, `Enabled` | `Enabled` |
 | `SuperCPU Detect (D0BC)` | `Disabled`, `Enabled` | `Disabled` |
@@ -45,19 +45,21 @@ Items in store `U64 Specific Settings` (`software/u64/u64_config.cc:390-397`). A
 |---|---|---|
 | `Off` | turbo enable `$00`, speed `$80` (index 0) | 1 MHz; `$D030`/`$D031` read `$FF` |
 | `Manual` | `$00` | `CPU Speed` applies; `$D031` reads `$FF`; `$D07A`/`$D07B` have no effect (measured U64) |
-| `U64 Turbo Registers` | `$01` | starts at `CPU Speed`; `$D031`, `$D07A`, `$D07B` change it |
-| `TurboEnable Bit` | `$05` | as `U64 Turbo Registers`, plus `$D030` bit 0 (0 = 1 MHz, 1 = selected speed) |
+| `U64 Turbo Registers` (C64U: `C64U Turbo Registers`) | `$01` | `$D031`, `$D07A`, `$D07B` change the speed. After a reset `$D031` reads `$00` and the CPU runs at 1 MHz; `CPU Speed` is only the speed that a write to `$D07B` selects (measured U64 3.15a) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20). Switching from `Manual` without a reset keeps the last `$D031` value |
+| `TurboEnable Bit` | `$05` | as the registers mode, plus `$D030` bit 0 (0 = 1 MHz, 1 = selected speed) |
+
+In `Manual` mode `$D031` reads `$FF` for the CPU and `CPU Speed` applies from 4.17 s after the reset; a reset in `Manual` mode does not clear a `$D031` value written earlier in a registers mode (the value reappears when a registers mode is selected without a reset) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20).
 
 `SuperCPU Detect (D0BC)` = `Enabled` adds `$02` to the turbo enable value in every mode except `Off`.
 
-**Rule for a `.cfg` file (UCI LOAD_CONFIG, file-browser load, sidecar `.cfg`).** Write exactly one `Turbo Control` line and one `CPU Speed` line, each with a value from the table above for the target model. The parser compares an enum value case-insensitively and ignores spaces before and after it (`software/userinterface/configio.cc:343-350,415-431`), so `CPU Speed=4` and `CPU Speed= 4` both select ` 4`, while `CPU Speed=4 MHz` is invalid. A value outside the list makes that line invalid: `CPU Speed=64` on a U64 / Elite MK1, `CPU Speed=5` on an Elite II or C64U, and any `Turbo Control` label other than the four above (for example `C64U Turbo Registers`). The consequence depends on how the file is loaded:
+**Rule for a `.cfg` file (UCI LOAD_CONFIG, file-browser load, sidecar `.cfg`).** Write exactly one `Turbo Control` line and one `CPU Speed` line, each with a value from the table above for the target model. The parser compares an enum value case-insensitively and ignores spaces before and after it (`software/userinterface/configio.cc:343-350,415-431`), so `CPU Speed=4` and `CPU Speed= 4` both select ` 4`, while `CPU Speed=4 MHz` is invalid. A value outside the list makes that line invalid: `CPU Speed=64` on a U64 / Elite MK1, `CPU Speed=5` on an Elite II or C64U, and any `Turbo Control` label other than the four of the target model (`U64 Turbo Registers` on a C64U, `C64U Turbo Registers` on a U64). The consequence depends on how the file is loaded:
 
 | Loader | Invalid line | Valid lines |
 |---|---|---|
 | UCI LOAD_CONFIG (`04 50`) | status `89,CONFIG FILE HAD ERRORS`; reply data = log line `Line N: Value '...' is not a valid choice for item ...` | values are stored in RAM but no store is applied to the hardware (`software/io/command_interface/control_target.cc:577-608`); they take effect at the next apply of that store (a later successful LOAD_CONFIG or a menu configuration change) |
 | File browser "Load Settings", sidecar `.cfg` of `run_prg`/`load_prg` | skipped | applied (`software/userinterface/configio.cc:445-467`) |
 
-Measured U64: a LOAD_CONFIG file with one invalid line returned `89` and the log line, and REST then showed the valid line's value. A line naming an unknown item or a `[store]` that the device lacks is skipped with a log line and does not cause `89` (`configio.cc:280-297,381-389`). REST `PUT /v1/configs/...` matches the value exactly apart from case (`software/api/route_configs.cc:79-89`), so it needs the leading space: `value=%204`.
+Measured U64: a LOAD_CONFIG file with one invalid line returned `89` and the log line, and REST then showed the valid line's value. A line naming an unknown item or a `[store]` that the device lacks is skipped with a log line and does not cause `89` (`configio.cc:280-297,381-389`). REST `PUT /v1/configs/...` matches the value exactly apart from case (`software/api/route_configs.cc:79-89`), so it needs the leading space: `value=%204`. The store name `[C64U Specific Settings]` is accepted as an alias in a `.cfg`; REST knows only `U64 Specific Settings` (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20).
 
 Registers in the VIC-II area (read `$FF` when the mode does not enable them, on a stock C64 and in VICE):
 
@@ -65,7 +67,7 @@ Registers in the VIC-II area (read `$FF` when the mode does not enable them, on 
 |---|---|
 | `$D031` | read/write. Bits 3-0 = speed index (table below). Bit 7 = 1 removes badline and sprite CPU stalls; 0 = stock stall timing. Measured U64: `Badline Timing` `Enabled` reads `$03` at index 3, `Disabled` reads `$83`; a 1 MHz loop with bit 7 set ran 1151 iterations against 1088 with bit 7 clear. Write bits 6-4 as 0. |
 | `$D030` | bit 0 = turbo enable, only in `TurboEnable Bit` mode |
-| `$D07A` / `$D07B` | write-only. A write to `$D07A` selects 1 MHz (`$D031` then reads `$00`), a write to `$D07B` selects `CPU Speed`; reads of `$D07A` return `$FF`. They act only in `U64 Turbo Registers` and `TurboEnable Bit` modes (measured U64). |
+| `$D07A` / `$D07B` | write-only. A write to `$D07A` selects 1 MHz (`$D031` then reads `$00`), a write to `$D07B` selects `CPU Speed`; reads of `$D07A` return `$FF`. They act only in the registers mode (`U64 Turbo Registers` on U64, `C64U Turbo Registers` on C64U) and `TurboEnable Bit` mode (measured U64) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20). |
 | `$D0BC` | read-only SuperCPU detection byte, present when `SuperCPU Detect (D0BC)` = `Enabled` |
 
 Speed index to MHz (index 15 = top speed of the model; the register does not report the model):
@@ -79,11 +81,11 @@ Code: `lda $d031 / cmp #$ff / beq no_turbo` (Off, Manual or no Ultimate); `lda #
 
 Timing (measured U64 and C64U 2026-11-13, PAL; rerun: c64://ultimate/hardware#rerun):
 - The CPU gets one sub-slot per phi2 less than the nominal factor at the two top entries: 47 cycles per phi2 at 48 MHz (2,961 per line), 63 at 64 MHz (3,969 per line). Up to 32 MHz the count equals the nominal factor. The VIC-II keeps priority, and CIA timers, raster and SID run in C64 time.
-- Cycles per PAL frame at 48 / 64 MHz: screen blanked 923,875 / 1,238,387; screen on 873,784 / 1,170,907; screen on plus 8 double-height sprites 836,375 / 1,121,520. At 1 MHz: 19,656 / 18,575 / 17,783. Badlines cost 5.5 % at every speed and 8 sprites a further 4.1 %. With `$D031` bit 7 set the screen-on loss is below 0.2 %. In `U64 Turbo Registers` mode the `Badline Timing` item did not change the loop counts.
+- Cycles per PAL frame at 48 / 64 MHz: screen blanked 923,875 / 1,238,387; screen on 873,784 / 1,170,907; screen on plus 8 double-height sprites 836,375 / 1,121,520. At 1 MHz: 19,656 / 18,575 / 17,783. Badlines cost 5.5 % at every speed and 8 sprites a further 4.1 %. With `$D031` bit 7 set the screen-on loss is below 0.2 %. In registers mode `Badline Timing` sets the starting value of `$D031` bit 7 (`Enabled` `$03`, `Disabled` `$83`; 4,351 against 4,603 loop passes at 4 MHz on the C64 Ultimate, 2026-11-20). The bench writes `$D031` bit 7 itself, so its counts do not depend on the item.
 - I/O reads are slower than RAM at high speed: a `lda $D012` loop ran at 42 of 47 cycles per phi2 at 48 MHz and 56.5 of 63 at 64 MHz. `sta $D020` runs at RAM speed. A CIA read loop reached 8.8 cycles per phi2 at most (7.5 at 8-12 MHz). `sta abs,x` to I/O adds a dummy read.
 - Accesses to the cartridge port and to real SID chips in the sockets run at 1 MHz; UltiSID writes stay inside the FPGA.
 - IEC bit-banging and cycle-counted 1 MHz raster code fail under turbo. KERNAL `LOAD` from a 1541 (IEC) worked at 16 and 48 MHz (measured U64).
-- After `run_prg` the core keeps 1 MHz for 2.55 s (U64) and 2.57 s (C64U) after program start, whatever `$D031` holds (measured 2026-11-13). Wait until two consecutive timing loops agree before timing-critical code.
+- The core keeps 1 MHz for a while after a start, whatever `$D031` or `CPU Speed` hold (U64 3.15a; same on both) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20): 4.17 s after a REST `machine:reset` (also in `Manual` mode), 2.6 s after the first instruction of a PRG started by `run_prg`, 3.9 s after the first instruction of a program loaded by `load_prg` and started with a typed `SYS` (`upload_run_asm`). One `$D031` write is enough; repeated writes do not shorten the wait. A program started later than 4.2 s after the last reset or start sees the speed at once. Wait until two consecutive timing loops agree before timing-critical code.
 - Measuring the speed: no register reports MHz. Disable interrupts, time a fixed-cycle loop against `$D012` or a CIA2 timer, accept when two consecutive results agree, else rewrite `$D031` and retry a bounded number of times. The benchmark programs (c64://ultimate/bench) do this.
 - A program that uses turbo also has a 1 MHz path and prints the setting that enables turbo.
 
@@ -200,6 +202,7 @@ All statements in this section are measured C64U (camera stills and video); the 
 - The colours stay until overwritten, also after the program ends or the C64 resets. Groups in `Programmatic` mode are not animated.
 - Keyboard hazard: after a session with the keyboard in `Programmatic`, the firmware stopped updating the keyboard LEDs; mode, pattern, colour and intensity changes, a C64 reset and clearing `$D037` had no effect, while direct register writes still worked. No action short of an Ultimate restart restored the firmware updates. The case light did not show this. Games use `Fixed Color` or `Rainbow` for the keyboard.
 - UCI and the config API have no per-LED control and no LED read-back.
+- Reading `$D200-$D3FF` after `$D037` = `$11` returns `$FF` (no read-back; a reset restores the VIC mirrors) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20).
 
 ## VICE versus an Ultimate
 
@@ -229,6 +232,6 @@ With c64bridge: `c64_config` `get`/`set` `Turbo Control` (never `save_flash`), `
 
 | Claim | What would settle it |
 |---|---|
-| A C64 Ultimate firmware other than 1.2.1 offers a `Turbo Control` label other than `U64 Turbo Registers` | `GET /v1/configs/U64%20Specific%20Settings/Turbo%20Control` on each C64U firmware |
+| A C64 Ultimate firmware other than 1.2.1 offers a `Turbo Control` label other than `C64U Turbo Registers` (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20) | `GET /v1/configs/U64%20Specific%20Settings/Turbo%20Control` on each C64U firmware |
 | Elite II `Programmatic` LED byte layout in `$D200-$D2FF` | camera test as in the C64U section on an Elite II |
 | An Ultimate restart ends the keyboard LED hazard | C64U: reproduce the hazard, restart the Ultimate, change `Fixed Color` |

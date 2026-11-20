@@ -206,7 +206,7 @@ function summarize(res) {
   const get = (run, idx, cond, load) => run?.points.find((p) => p.idx === idx && p.cond === cond && p.load === load);
   const cpu = res.runs["cpu-regs-all"], reu = res.runs["reu-regs-all"];
   if (cpu) {
-    out.push("### CPU, Turbo Control = U64 Turbo Registers, Badline Timing as configured, `$D031` bit 7 clear", "",
+    out.push("### CPU, Turbo Control = registers mode (`U64 Turbo Registers` on U64, `C64U Turbo Registers` on C64U), Badline Timing as configured, `$D031` bit 7 clear", "",
       "| idx | nominal MHz | blank RAM multiple of PHI2 | blank RAM MHz | on RAM MHz | blank $D020 MHz | blank $D012 MHz | blank CIA MHz | cycles/frame blank | on | on+sprites | blank+sprites | cycles/line on |",
       "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
     for (let i = 0; i < 16; i++) {

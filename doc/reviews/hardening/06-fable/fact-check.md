@@ -630,3 +630,24 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | U-6 (multisid.md): access to an undecoded SID address stalls the 6510 | multisid | NOT RUN (hangs the U64, needs a power cycle; run last and only with owner agreement); claim stays in Not verified | none |
 | REU extended registers `$DF0C-$DF0F` on every Ultimate product, including the C64 Ultimate | reu, hardware | CONFIRMED absent; C64U row removed from Not verified | public: `reu.vhd:253-266,469-471` (option `g_extended`), `slot_server_v4.vhd:33`, U2/U2+/U2+L top levels set it off; U64, U64 Elite II and C64 Ultimate: the non-public FPGA source of these images (checked 2026-11-20) builds the REU with the option off; measured U64 core 1.50: read `$FF`, write to `$DF0D` not kept |
 | REU read and write decode in `$DF00-$DF1F` | reu | ADDED | `reu.vhd:208-266` (writes change `$DF01-$DF0A` only), `reu.vhd:429-487` (reads drive `$DF00-$DF17` while idle; `$DF09` bits 4-0 and `$DF0A` bits 5-0 read 1) |
+
+## Part G: C64 Ultimate fact-check (2026-11-20)
+
+Source: `/home/chris/.c64bridge/h7/c64u-results.md`, C64 Ultimate firmware 1.2.1, FPGA 126, core 1.50, measured 2026-11-20 (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20). Measurement labels M1-M4 and U-3, U-4, G-1 to G-3 and row numbers refer to that report.
+
+| file | claim | verdict | evidence |
+|---|---|---|---|
+| data/ultimate/hardware.md | Turbo Control lists only `U64 Turbo Registers` | CORRECTED: C64U label added | M1 |
+| data/ultimate/hardware.md | `U64 Turbo Registers` starts at `CPU Speed` | CONTRADICTED: `$D031` reads `$00`, 1 MHz after reset | M2 |
+| data/ultimate/hardware.md | `.cfg` label rule; store alias | CORRECTED: foreign label fails, `[C64U Specific Settings]` accepted | M1 |
+| data/ultimate/hardware.md | 1 MHz hold 2.55 s / 2.57 s after `run_prg` | CORRECTED: 2.6 s run_prg, 3.9 s load_prg and SYS, 4.17 s reset | M4 |
+| data/gamedev/techniques.md (section 10 step 2) | 15 probes, 3 s wait | CORRECTED: 25 probes, 5 s | M4 |
+| data/gamedev/techniques.md (section 10 step 1) | registers label; index 15 is 48 MHz | CORRECTED: C64U index 15 is 64 MHz, index 14 is 48 MHz | M1, M3 |
+| data/gamedev/techniques.md (section 10 step 3) | probe saturates at 48 MHz | CONTRADICTED on C64U: 201 at 48 MHz, `$FF` at 64 MHz | M3, G-4 |
+| data/gamedev/toolchain.md | Turbo Control table and `.cfg` rules | CORRECTED: C64U label, error `89`, example added | M1, rows 37, 41 |
+| data/gamedev/toolchain.md (Not verified); data/ultimate/hardware.md:232 | C64U label list open | SETTLED for 1.2.1 (toolchain row replaced); hardware row kept for other firmware, narrowed to `C64U Turbo Registers` | M1 |
+| data/ultimate/upic.md, gamedev index and references, bench README and summary | `U64 Turbo Registers` for every device; 2.55 s / 2.57 s | CORRECTED | M1, M3, M4 |
+| data/ultimate/uci.md | "Strings need no terminator" | CONTRADICTED for LOAD_CONFIG: `88` without `$00` (7 of 8, 3 of 3) | row 14 |
+| data/ultimate/hardware.md (LED section) | `$D200-$D3FF` after `$D037` = `$11` | ADDED: reads `$FF`, no read-back | row 43 |
+| data/ultimate/hardware.md (Turbo section) | `Manual` mode and `$D031` after reset | ADDED | M2 |
+| data/ultimate/bench/results/summary.md, hardware.md | `run_prg` 2.55 s / 2.57 s wait | CORRECTED: run_prg path only; load_prg and SYS 3.9 s | M4 |

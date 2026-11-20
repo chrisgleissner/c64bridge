@@ -10,7 +10,7 @@ State the chosen target in your first reply.
 
 | | MODERN (C64U, Ultimate 64, Elite II) | AUTHENTIC (stock C64, VICE) |
 |---|---|---|
-| CPU | turbo through `$D031` only when `Turbo Control` is `U64 Turbo Registers` or `TurboEnable Bit`; probe, never assume (techniques section 10) | 1 MHz, count cycles |
+| CPU | turbo through `$D031` only when `Turbo Control` is the registers mode or `TurboEnable Bit`; probe, never assume (techniques section 10) | 1 MHz, count cycles |
 | RAM | 64 KB + REU of 128 KB to 16 MB when `RAM Expansion Unit` = `Enabled` | 64 KB (+ REU only if asked) |
 | Loading | PRG, D64, CRT, UCI file load, REU preload | PRG/D64/CRT, KERNAL or fastloader |
 | SID | one SID at `$D400` until a `.cfg` places more (`c64://ultimate/multisid`) | one SID at `$D400` |

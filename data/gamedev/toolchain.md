@@ -111,17 +111,25 @@ CPU Speed=48
 RAM Expansion Unit=Enabled
 REU Size=16 MB
 ```
+
+C64 Ultimate example (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20):
+
+```
+[U64 Specific Settings]
+Turbo Control=C64U Turbo Registers
+CPU Speed=48
+```
 Accepted values in `1541ultimate@700c7f2fa` (`u64/u64_config.cc:324-394`, `io/c64/c64.cc:61-95`):
 
 | Item | Ultimate 64 / Elite (MK1) | Ultimate 64 Elite II |
 |---|---|---|
-| `Turbo Control` | `Off`, `Manual`, `U64 Turbo Registers`, `TurboEnable Bit` | same |
+| `Turbo Control` | `Off`, `Manual`, `U64 Turbo Registers`, `TurboEnable Bit` | (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20): `Off`, `Manual`, `C64U Turbo Registers`, `TurboEnable Bit` |
 | `CPU Speed` (index 0-15) | 1 2 3 4 5 6 8 10 12 14 16 20 24 32 40 48 | 1 2 3 4 6 8 10 12 14 16 20 24 32 40 48 64 |
 | `RAM Expansion Unit` | `Disabled`, `Enabled`, `GeoRAM Mode` | same |
 | `REU Size` | `128 KB` ... `16 MB` (8 steps) | same |
 
 Rules for a game `.cfg`:
-- Write only values from this table. `CPU Speed=48` is valid on both products; `64` is an error on MK1. A second `Turbo Control` line with a label the firmware lacks (for example `C64U Turbo Registers`) is an error: the sidecar path skips it and keeps the valid line, `LOAD_CONFIG` applies nothing.
+- Write only values from this table. `CPU Speed=48` is valid on both products; `64` is an error on MK1. A `Turbo Control` line with a label the firmware lacks (`C64U Turbo Registers` on a U64, `U64 Turbo Registers` on a C64U) is an error: the sidecar path skips it and keeps the valid line, `LOAD_CONFIG` answers `89` and applies nothing (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20). A single `.cfg` that must work on both products cannot name the registers mode; ship one file per product or use `Manual` plus `CPU Speed`.
 - The same index means different speeds: index 4 is 5 MHz on MK1 and 6 MHz on Elite II. Choose by label in the `.cfg`; read the speed at run time (`c64://gamedev/techniques` section 10).
 - Keep the 1 MHz path: the `.cfg` is not applied on the paths marked "no" above, and a game started that way runs with the user's settings.
 - REU image: when `REU Preload` is `Enabled` at firmware start, the firmware loads `REU Preload Image` (default `/Usb0/preload.reu`) once, when that volume is mounted, at `REU Preload Offset`, up to the REU size (`io/c64/reu_preloader.cc:14-115`). A game that must not depend on that loads the file itself: UCI commands and recipes in `c64://ultimate/reu`. Build the image from level files:
@@ -141,4 +149,4 @@ open("preload.reu", "wb").write(img)
 Open-source games, libraries and licences (read for technique, never copy GPL-3.0 or unlicensed code): `c64://gamedev/references`.
 
 ## Not verified
-- `Turbo Control` labels on the C64 Ultimate. Public firmware has no C64 Ultimate build (`system/product.cc:91-104`), so its value list cannot be read from source. UltimateDemo2026 (`config/UltimateDemo2026.cfg`) ships both `Turbo Control=U64 Turbo Registers` and `Turbo Control=C64U Turbo Registers`. Settles it: `GET /v1/configs/C64U%20Specific%20Settings/Turbo%20Control` on a C64 Ultimate. Until then a `.cfg` for `LOAD_CONFIG` on a C64 Ultimate cannot be written error-free for both products in one file.
+- `Turbo Control` labels on C64 Ultimate firmware other than 1.2.1 (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20): `Off`, `Manual`, `C64U Turbo Registers`, `TurboEnable Bit`. The suggested request path `GET /v1/configs/C64U%20Specific%20Settings/Turbo%20Control` does not exist (404); the category is `U64 Specific Settings`.

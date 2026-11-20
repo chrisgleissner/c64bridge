@@ -64,7 +64,7 @@ Open-source projects used as "Seen in" examples in `c64://gamedev/techniques` (l
 
 ### What modern Ultimate games do differently
 - World in REU, fetched on demand (Doom C64U, ReadyOS); load by UCI or preload, not by disk.
-- Turbo is detected and measured against the raster counter; the code accepts a 48 MHz maximum (Ultimate 64 MK1) and waits out the forced 1 MHz window after the `run_prg` reset (2.55-2.57 s measured, `c64://gamedev/techniques` section 10).
+- Turbo is detected and measured against the raster counter; the code accepts a 48 MHz maximum (Ultimate 64 MK1) and waits out the forced 1 MHz window after the `run_prg` reset (2.6 s after `run_prg`, 3.9 s after `load_prg` and `SYS`, 4.17 s after a reset; `c64://gamedev/techniques` section 10) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20).
 - Turbo headroom buys software rendering and rich music engines (Doom, Heartbeat), not hardware tricks.
 - Upic (border colour changed per pixel) is used for still pictures (Order: Omega, mandelbrot-upic); it needs turbo registers and the UCI palette commands `04 53`/`04 54` (measured on Ultimate 64 Elite 3.15a). Requirements and limits: `c64://ultimate/upic`.
 - PCM from REU through Ultimate Audio next to several SIDs.
