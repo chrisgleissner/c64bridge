@@ -37,7 +37,7 @@ Configuration (category "U64 Specific Settings"; `c64_config` only, not a progra
 | Turbo Registers | `CPU Speed` default; `$D031`, `$D07A`/`$D07B` can change it |
 | TurboEnable Bit | As Registers, plus `$D030` bit 0 (0 = 1 MHz with badlines, 1 = menu speed) |
 
-Source check: config values written to the core are `Off` regs 0, `Manual` regs 0, `U64 Turbo Registers` `$01`, `TurboEnable Bit` `$05`, plus `$02` with SuperCPU detect; `$D030`, `$D031` (bit 7 `0` = badline timing enabled, `1` = disabled), `$D0BC` match the official page. Badline bit polarity inside the core and `$D07A/$D07B` are not in the public source (unverified; the firmware writes Enabled as 1 into its preference register, the core presumably inverts).
+Source check: config values written to the core are `Off` regs 0, `Manual` regs 0, `U64 Turbo Registers` `$01`, `TurboEnable Bit` `$05`, plus `$02` with SuperCPU detect; `$D030`, `$D031` (bit 7 `0` = badline timing enabled, `1` = disabled), `$D0BC` match the official page. Badline bit polarity inside the core is not in the public source; measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20: `Badline Timing` Enabled gives `$D031` = `$03`, Disabled gives `$83`, so bit 7 set means badline stalls are suppressed. `$D07A/$D07B` are not in the public source either (measured behaviour in the register table).
 
 Registers (VIC-II space; `$FF` when unavailable, also on stock C64 and VICE):
 
@@ -45,7 +45,7 @@ Registers (VIC-II space; `$FF` when unavailable, also on stock C64 and VICE):
 |---|---|
 | `$D031` | bits 3-0 speed index; bit 7 = 1 suppresses badline and sprite CPU stalls, 0 = stock timing (measured). Bits 4-6: write 0, no readback reliance. Read back after writing. |
 | `$D030` | bit 0 enable (TurboEnable Bit mode only) |
-| `$D07A` / `$D07B` | SuperCPU soft switches, write-only: normal / turbo (menu speed) (unverified: not in source or official page) |
+| `$D07A` / `$D07B` | SuperCPU soft switches, write-only: normal / turbo (menu speed) (not in the public source or official page; measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20: they act only in `U64 Turbo Registers` and `TurboEnable Bit` modes, `$D07A` writes select 1 MHz and `$D07B` writes select menu speed, and `$D07A` reads `$FF`; Off and Manual ignore them) |
 | `$D0BC` | SuperCPU detect, read-only, if `SuperCPU Detect` enabled |
 
 Speed index to MHz (only 0-3 portable; 15 = hardware maximum on every model; 64 MHz table public since 2025-05):
@@ -87,7 +87,7 @@ Full control recipe, address map, mixer and detection: c64://ultimate/multisid (
 
 | Range | Device |
 |---|---|
-| `$DF00-$DF0A` | REU (1750 set; extras at `$DF0C-$DF0F` unverified on U64 cores, absent on public U2 builds); c64://ultimate/reu |
+| `$DF00-$DF0A` | REU (1750 set; extras at `$DF0C-$DF0F` absent on the U64 Elite core 1.50 (read `$FF`, writes not kept; measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20), absent on public U2 builds; unverified on other cores); c64://ultimate/reu |
 | `$DF1B-$DF1F` | UCI at `$DF1C-$DF1F` (`$DF1B` device number); `$DE1B-$DE1F` under an EasyFlash CRT; see c64://ultimate/uci |
 | `$DF20-$DFFF` | Ultimate Audio sampler, if `Map Ultimate Audio $DF20-DFFF` enabled (default Disabled); register map below |
 | `$DE00`/`$DF00`/`$DF80` | ACIA 6551 SwiftLink, when `ACIA (6551) Mapping` is not Off (each IRQ or NMI) |
@@ -115,7 +115,7 @@ Sample player reading from Ultimate memory (usually the REU). Enable `Map Ultima
 - Start address is an absolute SDRAM address; the REU starts at `$1000000`, so REU offset X is `$1000000 + X` (reset default start = REU offset 0).
 - Read: even offsets return the 8-bit IRQ status vector, odd offsets `$10`. Writing control 0 does not mute a voice that keeps its last sample: also write volume 0.
 - Output: mixer channels `Vol Sampler L/R`, `Pan Sampler L/R` (c64://ultimate/multisid).
-- Sample rate is about 6.25 MHz / (rate + 1), about 22 kHz at the reset value 283 (derived from the VHDL, unverified: measure on a device). Byte order of the 24-bit fields and the interleave and 16-bit modes are read from VHDL, not device-tested (unverified).
+- Sample rate is about 6.25 MHz / (rate + 1), about 22 kHz at the reset value 283 (derived from the VHDL; measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20: roughly 6.2 MHz / (rate + 1), 21.95 kHz at 283, 43.5 kHz at 141, 10.9 kHz at 567, within 1.2 % of 6.25 MHz / (rate + 1)). Byte order of the 24-bit fields and the interleave and 16-bit modes are read from VHDL, not device-tested (unverified).
 - `runners:modplay` loads a MOD into REU offset 0 and plays it through this sampler (501 without it).
 
 ## Data streams (U64 / Elite / Elite II / C64 Ultimate; not Ultimate II+)
@@ -124,15 +124,18 @@ UDP streams to a host. Store `Data Streams`: `Stream VIC to` (default `239.0.1.6
 - REST: `PUT /v1/streams/{video|audio|debug}:start?ip=<addr[:port]>` and `:stop` (stop is safe when not running). Without a port: 11000 video, 11001 audio, 11002 debug. `ip` may be a host name or a multicast group 232.0.0.0-239.255.255.255. Errors: 404 unknown stream or name not resolvable, 500 no wired Ethernet link with an IP.
 - Streams leave only through the wired Ethernet port, even if WiFi carried the request. Video and debug share hardware: starting video stops debug.
 - `palette=1` (video only; 400 otherwise): the device also sends 60-byte palette packets (video header with line field 239, 384 pixels, 1 line, 4 bpp, type 1 in header bytes 10-11, 16 RGB triples from byte 12; bytes 0-1 carry a palette generation counter). The setting is device-wide: the most recent `start` sets it for every receiver. A video parser must skip or decode packets with type 1.
-- Video header (12 bytes): sequence u16, frame u16, line u16 (bit 15 = last packet), pixels per line u16, lines per packet u8, bits per pixel u8, encoding u16. Audio: 2-byte sequence then S16 stereo (192 frames per packet, 47982.89 Hz PAL / 47940.34 Hz NTSC: from the client code and device, payload format not in the public source, unverified). Ultimate II+ has a debug streamer started from the menu only.
+- Video header (12 bytes): sequence u16, frame u16, line u16 (bit 15 = last packet), pixels per line u16, lines per packet u8, bits per pixel u8, encoding u16. Audio: 2-byte sequence then S16 stereo (192 frames per packet, 47982.89 Hz PAL / 47940.34 Hz NTSC: from the client code and device, payload format not in the public source, unverified). Measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20: after each video or audio stream start the device sends one 2-byte datagram `00 00` from an ephemeral source port (receivers must tolerate it); the video frame was 384x272, 4 bpp, 68 packets of 4 lines, 50 fps, encoding 0 only (encoding 1 with `palette=1`); the audio capture limit of the bridge is 65536 sample pairs. Ultimate II+ has a debug streamer started from the menu only.
 
 ## Host REST and network (U64 / Elite / Elite II / C64 Ultimate; Ultimate II+ differs where noted)
 
 - `X-Password` header: when `Network Password` (store `Network Settings`, string, 3-31 characters) is non-empty, every REST call (and FTP and the socket services) needs it; a wrong or missing header on an existing route gives HTTP 403 `Forbidden.`.
 - U64-class only (501 on Ultimate II+): `PUT machine:poweroff`, `GET/POST machine:input` (keyboard, joystick, mouse injection), `machine:debugreg` (debug register `$D7FF`, diagnostics), the `streams` routes. Everywhere: `machine:reset|reboot|pause|resume|menu_button|menu_screen|readmem|writemem|measure|heap`, `runners:*`, `drives`, `configs`, `files/{path}:info|create_d64|create_d71|create_d81|create_dnp`, `GET /v1/help?command=`, `GET /v1/version` (`0.1`), `GET /v1/info`.
+- `machine:readmem` returns up to 65536 bytes (length 0 or 65537: 400 `Invalid length`; no length: 256 bytes; a range past `$FFFF`: 400). `PUT machine:writemem` data is limited to 128 bytes (400 beyond that, nothing written); `POST` takes up to 64 KB, and a body past `$FFFF` is silently truncated to the 64 KB that fit (a 65537-byte POST at `$0000` returned 200 `0000-FFFF`), while a start address plus length past `$FFFF` is a 400 (all measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20). A DMA read of `$DD0D` clears the CIA2 ICR flags like a CPU read.
+- Route matching: the firmware does not decode `%3A` or other escapes in the route name (`machine%3Areadmem` and `inf%6F` answer 404), while escapes inside a parameter segment are decoded (`files/%2FTemp:info` gives path `/Temp`, `configs/%2E%2E` gives category `..`) and `..` is not normalised (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20). The bridge rejects dot segments and encoded variants before sending as defence.
+- `files/{path}:info` with a wildcard returns only the first match; `**` behaves like `*`; no match: 404 `FILE DOESN'T EXIST`, missing root: 404 `PATH DOESN'T EXIST` (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20).
 - `configs` GET and PUT take category and item as wildcard patterns (`*`, `?`, case-insensitive); PUT uses the first match; POST `/v1/configs` matches exactly. REST changes are RAM only until `configs:save_to_flash`.
 - `runners:run_prg` and `load_prg` (PUT, `file=`) apply a sidecar `.cfg` / `.usr` (c64://gamedev/toolchain); `run_crt` and the POST upload variants do not.
-- A UDP "Ultimate Ident Service" on port 64 answers a broadcast, for finding a device (controlled by a network setting; item name not checked, unverified).
+- A UDP "Ultimate Ident Service" on port 64 answers a broadcast, for finding a device (controlled by the Network Settings item `Ultimate Ident Service`, Enabled on the measured device; a unicast `h6probe` or `jsonh6probe` datagram to port 64 is answered, measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20; the broadcast form was not sent).
 
 ## Other features
 
@@ -181,5 +184,5 @@ With c64bridge: `c64_config` `get`/`set` Turbo Control (never `save_flash`), `c6
 1. Never assume turbo: check `$D031`, keep a 1 MHz path.
 2. `$D030-$D03F`, `$D07A-$D0BC` are not scratch; no "index N = X MHz" beyond index 3.
 3. REST memory access (`c64_memory`) stalls the CPU; can glitch timing-critical code.
-4. IEC or fastloader code under a Manual speed: test first (unverified).
+4. IEC or fastloader code under a Manual speed: test first. KERNAL IEC LOAD worked at 16 and 48 MHz on Ultimate 64 Elite, firmware 3.15a, 2026-11-20; fastloaders were not tested (unverified).
 5. Unknown product names must not fail.
