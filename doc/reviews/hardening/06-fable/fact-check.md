@@ -488,3 +488,28 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | Speed probe returns 4 at 1 MHz | KEPT (VICE 3.10), hardware request G-4 | loop is 14 cycles |
 | UCI `$DF1D & $7F == $49` | CONFIRMED | `fpga/io/command_interface/vhdl_source/command_protocol.vhd:99` |
 | Quarter squares "speed unverified" | REMOVED marker | no routine given |
+
+### F4 - data/gamedev/references.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| Order: Omega facts "(unverified: page refused fetch)" | VERIFIED, corrected | sedor.itch.io/order-omega (HTTP 200, 2026-11-20): "Ultimate Elite Edition" for Elite and Elite II, Turbo Control `U64 Turbo Registers`, Command Interface, 16 MB REU, Upic 16 colours, EasyFlash `omega.crt`, 121 scenes, 94 illustrations; "UCI" and a 16 MB picture file are not stated |
+| UltimateDemo2026 `.cfg` with both Turbo Control values | CONFIRMED, qualified | `config/UltimateDemo2026.cfg` lines 2-3; works only on the sidecar path (F1) |
+| UE2-C64U-Emulator GPL-3.0; VibeC64 MIT | CONFIRMED | GitHub API |
+| GordonOS, Mappy REU port, Carrion engine | REMOVED | no primary page found |
+| Zzap!64 ratings column, Paradroid/Wizball ratings | REMOVED | zzap64.co.uk and lemon64 return 403; no scan reached |
+| Turrican and The Last Ninja rows | REMOVED | sources were Codebase64 (unreachable) and an article without URL |
+| Codebase64 page ids | REPLACED | Cadaver's own copies: cadaver.github.io/rants.html (HTTP 200) lists rants 3, 4, 9, 11, 15, 16, 17 with these file names |
+| c64u-radar "poll about 10 s" | QUOTED | README "Protocol summary" ("~10s"), up to 8 aircraft as sprites |
+| Forced 1 MHz window "about 2 s after reset" | CORRECTED | 2.55 / 2.57 s after the run_prg reset (bench summary) |
+| Upic palette "firmware 3.15 or later; older C64U lacks it" | REWRITTEN | palette commands measured on Ultimate 64 Elite 3.15a (row 36); C64U history not settled, removed |
+| "palette writes measured at tens of ms" | REMOVED | no measurement found |
+
+### F5 - data/gamedev/index.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| NTSC budget "about 15,000" | CORRECTED | 15,212 derived (F2) |
+| Turbo row "via `$D031` if enabled by config" | MADE precise | `Turbo Control` = `U64 Turbo Registers` or `TurboEnable Bit` (measured rows 31, 37) |
+| SID count 8 / 10 on C64U | MOVED to pointer | duplicated `c64://ultimate/multisid` |
+| Resource sizes | UPDATED | file sizes after this rewrite |
