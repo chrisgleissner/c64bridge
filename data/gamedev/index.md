@@ -17,7 +17,7 @@ State the chosen target in your first reply.
 | Extras | UCI, runtime palette, Upic (software hi-colour) | none |
 | Forbidden | assuming any feature without detection and fallback message | `$D030/$D031`, UCI, REU, SIDs above `$D400`, turbo-timed loops |
 | Test | VICE (logic, REU only) then hardware | VICE `x64sc`, then hardware at 1 MHz |
-A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17,783 cycles per PAL frame (`c64://gamedev/architecture` section 3) and 15,212 on NTSC (derived), one SID, no REU (levels from disk or RAM, `c64://gamedev/architecture` template A or D), 1 MHz timing, test in VICE.
+A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17,783 cycles per PAL frame (`c64://gamedev/architecture` section 3) and 15,219 on NTSC (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20), one SID, no REU (levels from disk or RAM, `c64://gamedev/architecture` template A or D), 1 MHz timing, test in VICE.
 
 ## Reading plan (in order; stop when you have enough)
 | Game type | Read |
