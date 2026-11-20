@@ -8,12 +8,12 @@
 |:--|:--|:--|
 | Normal | `ESC K n m ...data...` | ~60 dpi |
 | Double | `ESC L n m ...` | ~120 dpi |
-| Double (hi‑speed)* | `ESC Y n m ...` | ~120 dpi (maps to L on some emus) |
-| Quadruple | `ESC Z n m ...` | ~240 dpi |
+| Double (hi‑speed)* | `ESC Y n m ...` | 120 dpi, no two adjacent dots in a row |
+| Quadruple | `ESC Z n m ...` | 240 dpi, no two adjacent dots in a row |
 | Explicit | `ESC * d n m ...` | `d`=0:60,1:120,2:120(hi),3:240,4:80,5:72,6:90 dpi |
-| 9‑pin strips | `ESC ^ d n m h1 l1 ...` | `d` in {0,1} |
+| 9‑pin strips | `ESC ^ d n m b1 b2 ...` | `d` 0 single, 1 double density; 2 bytes per column: `b1` top 8 pins, bit 7 of `b2` the 9th pin |
 
-\* Ultimate‑II may treat `Y` as `L`. Always match `n,m` to **exact** data length.
+\* The Ultimate emulation draws `Y` with the same 120‑dpi spacing as `L`. Always match `n,m` to **exact** data length (`n + 256*m` columns).
 
 ### Minimal example
 

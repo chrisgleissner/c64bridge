@@ -1,7 +1,7 @@
 # C64 Game Techniques: IRQ, Sprites, Scrolling, Input, Sound
 
-**Summary:** Compact recipes for the techniques almost every C64 game needs, with fresh minimal 6502 snippets. Snippets use 64tass/KickAssembler-compatible syntax (`* = addr`, `.byte`, `<label`, `>label`, `;` comments); the bridge's built-in assembler (`upload_run_asm`) accepts the basic subset. Anonymous `+` branch labels are 64tass style; rename for other assemblers. Snippets for IRQ setup, joystick edge, NTSC skip, LFSR, PAL detect and the turbo speed probe assembled with 64tass and ran in VICE 3.10 x64sc; the multiplexer assembled but was not run; the stable-raster text is a sketch.
-**Read when:** implementing display timing, sprites, scrolling, collision, input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling or Ultimate start-up checks (section 10). Frame structure and budgets: `c64://gamedev/architecture`. Register detail: `c64://graphics/vic/spec`, `c64://io/cia/spec`, `c64://sound/sid/spec`.
+**Summary:** Compact recipes for the techniques almost every C64 game needs, with fresh minimal 6502 snippets. Snippets use 64tass/KickAssembler-compatible syntax (`* = addr`, `.byte`, `<label`, `>label`, `;` comments); the bridge's built-in assembler (`upload_run_asm`) accepts the basic subset. Anonymous `+` branch labels are 64tass style; rename for other assemblers. Snippets for IRQ setup, joystick edge, NTSC skip, LFSR, PAL detect and the turbo speed probe assembled with 64tass and ran in VICE 3.10 x64sc; the multiplexer assembled but was not run; the double-IRQ stable-raster text is a sketch; the open-border entries follow Bauer's steps and were not run.
+**Read when:** implementing display timing, sprites, scrolling, collision, input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling, Ultimate start-up checks (section 10) bitmap and multicolour modes (section 11) or multiply and divide (section 12). Frame structure and budgets: `c64://gamedev/architecture`. Register detail: `c64://graphics/vic/spec`, `c64://io/cia/spec`, `c64://sound/sid/spec`.
 
 Sections 1-3, 6 and 9 end with **Seen in** (open-source projects to study; URLs and licences in `c64://gamedev/references`). Marks: "(unverified)" = not confirmed against a primary source.
 
@@ -61,7 +61,18 @@ irq_top: pha
 - Chain rules: entries sorted by line; handler worst-case time shorter than the gap to the next entry; if the next line has already passed when you program `$D012`, run the next handler directly instead of waiting a whole frame; acknowledge `$D019` first; save `$01` if the main loop changes it. NMI must have a vector (RESTORE key).
 - Decimal flag is not cleared on interrupt on the NMOS 6510: use `cld` in any handler that touches arithmetic.
 - Latency: the IRQ entry sequence takes 7 cycles and starts after the instruction in progress completes; a taken branch without page crossing can delay it by one more instruction. Bad lines stall the CPU for 40-43 cycles (architecture).
-- Stable raster (cycle-exact bars, border opening): double IRQ. IRQ 1 on line N installs IRQ 2 for line N+1, saves SP (`tsx`), runs `cli` and a NOP sled; IRQ 2 hits during a NOP (jitter 0-1 cycles), restores SP (`txs`), waits out the line and compares `$D012` twice to remove the last cycle. Tune with a border-colour change and `capture_frame`. Sketch only (unverified).
+- Raster timing (Bauer VIC-II article 3.5, 3.6.3, 3.12): a line has 63 cycles (6569 PAL), 65 (6567R8 NTSC) or 64 (6567R56A). The raster compare is tested in cycle 1 of each line (cycle 2 for line 0) and fires at most once per line. A bad line stops the CPU for 40-43 cycles; each sprite with DMA on takes 2 cycles, and BA goes low 3 cycles before the first VIC access. The handler start therefore varies by the remaining cycles of the interrupted instruction (the longest documented instruction takes 7 cycles, c64ref `cpu_6502.txt`), plus bad-line and sprite stalls. Put cycle-critical IRQ lines where no bad line or sprite DMA falls.
+- Stable raster (cycle-exact bars, side border): double IRQ. IRQ 1 on line N installs IRQ 2 for line N+1, saves SP (`tsx`), runs `cli` and a NOP sled; IRQ 2 hits during a NOP (jitter 0-1 cycles), restores SP (`txs`), waits out the line and compares `$D012` twice to remove the last cycle. Tune with a border-colour change and `capture_frame`. Sketch only (unverified).
+- Open top/bottom border (line accuracy is enough; Bauer 3.14.1). The VIC turns the vertical border on at line 251 with RSEL=1 and at line 247 with RSEL=0; switching to RSEL=0 in lines 248-250 skips both. Two IRQ entries:
+```
+        lda #$13          ; IRQ at line 249: $D011 = RST8 0, DEN, RSEL 0, YSCROLL 3
+        sta $d011
+        ; ... IRQ at a line below 52 (for example 30): back to RSEL 1
+        lda #$1b
+        sta $d011
+```
+  Never switch RSEL from 0 to 1 in lines 52-54 (the border then stays on over the whole screen). Only sprites and the idle-state byte show in the opened area: the VIC repeats the byte at bank offset `$3FFF` (`$39FF` with ECM), set bits in black; write 0 there for a clean border. Keep RSEL=1 in every other `$D011` write of the chain.
+- Open side border: clear CSEL (`$D016` bit 3) exactly in cycle 56 of each line and set it again before the next line's cycle 56 (Bauer 3.14.1); needs a stable raster and exact cycle counts including bad lines and sprite DMA. To open it inside the top/bottom border area, open that border too (the main border flip-flop is only reset while the vertical flip-flop is clear).
 - MODERN: raster-exact code tuned for 1 MHz cycle counts is not cycle-exact in real time under turbo; keep cycle-critical effects at 1 MHz or measure on hardware. Prefer effects that need only line accuracy (scroll split, charset switch, colour changes).
 - Sprites reused below another sprite, status-bar splits, `$D018`/`$D016` switches all hang on this chain.
 **Seen in:** Oscar64 `rasterirq.h` library (IRQ chain with register-write lists), Tony (raster "copper" list), Cadaver multiplexer (hand-rolled precomputed chain).
@@ -256,3 +267,105 @@ full:   lda #$ff
         rts
 ```
 4. UCI: `$DF1D & $7F == $49` (needs Command Interface enabled). REU: `reu_present`, size probe and level load in `c64://ultimate/reu`. SIDs: `c64://ultimate/multisid`.
+
+## 11. Bitmap and multicolour modes
+Mode bits: `$D011` bit 5 BMM, `$D016` bit 4 MCM, `$D011` bit 6 ECM = 0 (Bauer 3.7.3).
+| Mode | BMM, MCM | Pixels | Colour of bit pattern |
+|---|---|---|---|
+| Multicolour text | 0, 1 | 4x8 per character whose colour RAM bit 3 is 1; others stay hires in colours 0-7 | `00` `$D021`, `01` `$D022`, `10` `$D023`, `11` colour RAM bits 0-2 |
+| Standard bitmap | 1, 0 | 320x200, colours per 8x8 cell | `0` screen byte bits 0-3, `1` screen byte bits 4-7 |
+| Multicolour bitmap | 1, 1 | 160x200, pixels twice as wide | `00` `$D021`, `01` screen bits 4-7, `10` screen bits 0-3, `11` colour RAM bits 0-3 |
+- Memory: the bitmap is 8 KB at bank offset `$0000` or `$2000` (`$D018` bit 3); the screen matrix (cell colours) at `$D018` bits 4-7 x `$400`. In banks 0 and 2 the character ROM image at offset `$1000-$1FFF` hides that RAM, so the bitmap goes to `$2000` there.
+- Setup, bank 0, colours at `$0400`, bitmap at `$2000`:
+```
+        lda #$3b          ; $D011: BMM, DEN, RSEL, YSCROLL 3 (RST8 0)
+        sta $d011
+        lda #$18          ; $D016: MCM, CSEL (use #$08 for hires bitmap)
+        sta $d016
+        lda #$18          ; $D018: screen $0400 (1 x $400), bitmap $2000 (bit 3)
+        sta $d018
+```
+- Layout: 8 consecutive bytes form one 8x8 cell, cells run left to right, 40 per row (320 bytes per cell row). Hires byte for (x, y): `base + 40 * (y AND 248) + (y AND 7) + (x AND 504)`, bit `7 - (x AND 7)` (leftmost pixel = bit 7). Multicolour (x = 0-159): byte `base + 40 * (y AND 248) + (y AND 7) + 2 * (x AND 252)`, bit pair `(3 - (x AND 3)) * 2` upwards.
+- Clear the bitmap (8000 bytes) and set the 1000 screen bytes (and colour RAM for multicolour) before turning the mode on, or blank the screen (`$D011` bit 4 = 0) while you do.
+
+## 12. Multiply and divide (unsigned, shift-and-add)
+All operands are zero-page bytes (`f1`, `f2`; 16-bit `m1`, `m2`, `dvd`, `dvs`, `rem`; 32-bit `prod`), low byte first; choose free bytes from `c64://gamedev/architecture` section 4. Decimal mode must be off (`cld`). X is used as the loop counter and ends at 0; Y is not touched. Local labels `_x` are 64tass style.
+| Routine | Bytes | Cycles (with `rts`, without `jsr`) | Divide by zero |
+|---|---|---|---|
+| `mul8` 8x8 -> 16 | 18 | 134-166 | - |
+| `mul16` 16x16 -> 32 | 39 | 623-927 | - |
+| `div8` 8/8 | 19 | 158-174 | quotient `$FF`; test the divisor first |
+| `div16` 16/16 | 44 | 655-1007 | quotient `$FFFF`; test the divisor first |
+Verified: assembled with 64tass 1.60 and run in a 6502 interpreter built from the c64ref opcode and cycle tables, against exact results for all 65,536 input pairs of `mul8` and `div8` and for 350,144 pairs of `mul16` and `div16` (all pairs of 12 edge values plus random pairs). Removing a `clc` or a `cmp` makes the check fail. Alternative for many 8x8 products: a table of squares, a*b = f(a+b) - f(a-b) with f(n) = floor(n*n/4) (arithmetic identity; no routine given, speed unverified).
+```
+; 8 x 8 -> 16 unsigned. In: f1, f2. Out: A = high byte, f1 = low byte. f2 kept.
+mul8    lda #0
+        ldx #8
+        lsr f1
+_m8     bcc _m8n
+        clc
+        adc f2
+_m8n    ror a
+        ror f1
+        dex
+        bne _m8
+        rts
+; 16 x 16 -> 32 unsigned. In: m1, m2. Out: prod..prod+3. m1 destroyed, m2 kept.
+mul16   lda #0
+        sta prod+2
+        sta prod+3
+        ldx #16
+_m16    lsr m1+1
+        ror m1
+        bcc _m16n
+        lda prod+2
+        clc
+        adc m2
+        sta prod+2
+        lda prod+3
+        adc m2+1
+        sta prod+3
+_m16n   ror prod+3
+        ror prod+2
+        ror prod+1
+        ror prod
+        dex
+        bne _m16
+        rts
+; 8 / 8 unsigned. In: f1 = dividend, f2 = divisor. Out: f1 = quotient, A = remainder.
+div8    lda #0
+        ldx #8
+        asl f1
+_d8     rol a          ; partial remainder < 128 before ROL: no carry out
+        cmp f2
+        bcc _d8n
+        sbc f2          ; C = 1 here: quotient bit 1
+_d8n    rol f1
+        dex
+        bne _d8
+        rts
+; 16 / 16 unsigned. In: dvd, dvs. Out: dvd = quotient, rem = remainder. dvs kept.
+div16   lda #0
+        sta rem
+        sta rem+1
+        ldx #16
+_d16    asl dvd
+        rol dvd+1
+        rol rem
+        rol rem+1      ; remainder < $8000 before ROL: no carry out
+        lda rem
+        cmp dvs
+        lda rem+1
+        sbc dvs+1
+        bcc _d16n
+        lda rem
+        sbc dvs
+        sta rem
+        lda rem+1
+        sbc dvs+1
+        sta rem+1
+        inc dvd
+_d16n   dex
+        bne _d16
+        rts
+```

@@ -124,8 +124,8 @@ Ultimate measurements), gamedev/techniques (except Ultimate parts).
 Partly verified: vice-binary-monitor-spec (RESET values 0x08-0x0b, CPU_HISTORY layout), gamedev/toolchain
 (BASIC stub bytes correct), gamedev/index, SKILL.md files (few C64 facts).
 
-Not checked: gamedev/references (URLs, licences, ratings), Ultimate measurement tables, sidwave.md, printer
-documents, character-set.csv, context/chat.md, context/fast-paths.md.
+Not checked: Ultimate measurement tables, character-set.csv, context/chat.md, context/fast-paths.md.
+gamedev/references, sidwave.md (C64 facts) and the printer documents: Part D (D6-D8).
 
 Unresolved: GOSUB nesting depth (basic-pitfalls:159 "~50"; ROM arithmetic suggests about 35, not run);
 "empty lines stored as $20" (basic-spec:41).
@@ -198,3 +198,167 @@ ERROR verdicts on other branches: none.
 
 Test: `test/knowledge.test.mjs` "VIC-II spec gives the $D011 bit layout" passes on bun and node, and fails
 on both with the previous `src/knowledge.ts` restored.
+
+## Part D - Wave 2 item 6: knowledge gaps and remaining documents (W6, 2026-11-20)
+
+Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64bridge/h6/W6-src`
+(not from memory). Sources:
+
+- cc65 `eebf54af545f4ae52f8489a2f6d4d5f93e7942d2` (https://github.com/cc65/cc65): `doc/cc65-intern.sgml`,
+  `doc/c64.sgml`, `cfg/c64.cfg`, `libsrc/c64/crt0.s`, `libsrc/c64/irq.s`, `libsrc/runtime/zeropage.s`, `asminc/zeropage.inc`.
+- Oscar64 `08b01c9ec14f0c6080c3a26be7adb16b1a0d6432` (https://github.com/drmortalwombat/oscar64): `oscar64.md`, `include/crt.c`.
+- llvm-mos-sdk `555253f65a0fa3b4bbe8a203fe21f160da27f931` (https://github.com/llvm-mos/llvm-mos-sdk):
+  `mos-platform/c64/{link.ld,clang.cfg,unmap-basic.S,basic-header.S}`, `mos-platform/commodore/{commodore.ld,save-basic.S}`,
+  `mos-platform/common/ldscripts/imag-regs.ld`. llvm-mos `ae72e49843c256272d89421942079cd623bedafb`
+  (https://github.com/llvm-mos/llvm-mos): `llvm/lib/Target/MOS/MOSCallingConv.td`, `MOSCallLowering.cpp`.
+  The llvm-mos wiki (llvm-mos.org) refused automated fetches (HTTP 403), so the compiler source is used instead.
+- mist64/c64ref `7cae8b9` and the Bauer VIC-II article, as in Part A.
+- Multiply/divide: routines assembled with 64tass 1.60 and run in `verify/sim6502.py`, a 6502 interpreter whose
+  opcode, addressing-mode and cycle tables are parsed from c64ref `src/6502/cpu_6502.txt` (`verify/test_muldiv.py`).
+
+### D1 - C compiler runtime facts (data/gamedev/toolchain.md section 1)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| cc65 runtime zero page `$02-$1B`, 26 bytes, names and 6-byte `regbank` | ADDED | `c64.cfg` "ZP: start = $0002, size = $001A"; `zeropage.s` (`c_sp` 2, `sreg` 2, `regsave` 4, `ptr1-4`, `tmp1-4`, `regbank`); `zeropage.inc` "zpspace = 26", "regbanksize = 6" |
+| cc65 `fastcall` default, A/X/`sreg` order, push order, return rules, free registers, `regbank` kept, variadic = `cdecl` with Y | ADDED | `cc65-intern.sgml` "Calling conventions", "Prologue", "Return requirements", "Clobbered state" |
+| cc65 `c64.cfg`: `$0801`, 13-byte HEADER, HIMEM `$D000`, stack `$800`; `c64-asm.cfg`, `--start-addr`, `-u __EXEHDR__`; `-Ln` label file | ADDED | `c64.cfg` ("size = $000D", "__HIMEM__ ... $D000", "__STACKSIZE__ ... $0800"); `c64.sgml` "c64-asm.cfg"; `cl65.sgml` "-Ln name Create a VICE label file" |
+| cc65 startup: `$01` AND `$F8` OR `$06`, saved SP and zero page, `c_sp`, `CHR$(14)`, constructors, BSS, exit to BASIC with code in ST; IRQ via `$0314` | ADDED | `crt0.s` ("ora #$06 ; Enable Kernal+I/O, disable BASIC", "sta STATUS"); `irq.s` (`IRQVec`) |
+| Oscar64 zero-page layout `$02` ... `$53-$8F`, "not yet final"; `__zeropage` usually `$80-$FF`; `-xz` | ADDED | `oscar64.md` "Zero page usage", "Usage of zero page", "Compiler arguments" |
+| Oscar64 calling convention per function, static stack, inline asm access, `__interrupt`/`__hwinterrupt` | ADDED | `oscar64.md` "Global Analyzer", "Avoid Recursion", "Accessing variables in assembler", "Interrupt routines" |
+| Oscar64 regions (`startup` `$0801-$0900`, `bytecode`, `main` `$0A00-$A000`), pragmas, stack 4 KB, heap 1 KB, `.lbl`, `-o=`, `-d64=` | ADDED | `oscar64.md` "Placement", "Heap and Stack sections", "Vice debugger .lbl", "Creating a d64" |
+| Oscar64 startup saves SP, clears BSS and zero-page BSS, calls `main` | ADDED | `crt.c` `startup` ("tsx / stx spentry", "Clear BSS Segment", "jsr main"); `oscar64.md` "-dNOBSSCLEAR", "-dNOZPCLEAR" |
+| `.lbl` lines `al 0801 .startup` are accepted as `symbolsFile` | ADDED | `src/tools/translation/symbolRegistry.ts:66` (device prefix optional) |
+| llvm-mos `__rc0` at `$02`, 32 imaginary registers, zero page `$22-$8F`, `-mlto-zp=110` | ADDED | `link.ld` "__basic_zp_start = 0x0002", "__basic_zp_end = 0x0090"; `commodore.ld` "__rc0 = __basic_zp_start", "zp : ORIGIN = __rc31 + 1"; `clang.cfg` "-mlto-zp=110" ($90 - $22 = 110) |
+| llvm-mos argument and return order, caller/callee-saved sets, variadic and struct rules | ADDED | `MOSCallingConv.td` (CC_MOS lists, header comment "A, X, Y, C, N, V, Z, and RS1-RS9 are caller-saved ... RS0, and RS10-RS15 are callee-saved"); `MOSCallLowering.cpp:54` uses CC_MOS for returns too |
+| llvm-mos `link.ld` RAM `$0801` length `$C7FF`, `__stack = $D000`, BASIC header; init `$00=$2F`, `$01=$3E`; exit loop, `save-basic.o` | ADDED | `link.ld`, `basic-header.S`, `unmap-basic.S` ("ldx #$3E ; LORAM = 0", ".fini.990 ... ldx #$3F"), `c64/CMakeLists.txt` (`common-exit-loop`), `save-basic.S` header comment |
+| Toolchain Makefile note: Oscar64 output flags "see its README"; label file "(unverified)" | IMPRECISE, replaced | `oscar64.md` "Compiler arguments" (`-o`), "Vice debugger .lbl" |
+
+### D2 - Raster timing, stable raster and open borders (data/gamedev/techniques.md section 1)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| 63 / 65 / 64 cycles per line (6569, 6567R8, 6567R56A) | ADDED | Bauer 3.6.3 "63 cycles on the 6569, 64 cycles on the 6567R56A, and 65 cycles on the 6567R8"; table in 3.4 |
+| Raster compare in cycle 1 (line 0: cycle 2), at most one IRQ per line | ADDED | Bauer 3.12 RST row |
+| Bad line 40-43 cycles; 2 cycles per sprite; BA low 3 cycles before | ADDED | Bauer 3.5 "stun the processor for 40-43 cycles"; 2.4.3/3.8.1 "three cycles before"; A8f |
+| Longest documented instruction 7 cycles | ADDED | c64ref `cpu_6502.txt` [timing]: maximum base value 7 (e.g. `00`, `1E`) |
+| Double-IRQ stable raster | UNVERIFIED, kept as sketch | no primary source fetched; not run |
+| Open top/bottom border: RSEL=0 in lines 248-250, back to RSEL=1 after 251; never 0 to 1 in 52-54; `$D011` values `$13`/`$1B` | ADDED | Bauer 3.14.1 steps 1-4 and "If you switch from RSEL=0 to RSEL=1 in the raster line range 52-54, the border never turns off"; bit layout Bauer register table ($D011 RST8 ECM BMM DEN RSEL YSCROLL) |
+| Opened border shows sprites and the idle byte at `$3FFF` (`$39FF` with ECM), set bits black | ADDED | Bauer 3.14.1 ("mainly limited to sprites"), 3.7.3.9 "the VIC reads the graphics data from address $3fff ($39ff if ... ECM)"; 3.7.1 |
+| Side border: CSEL 1 to 0 exactly in cycle 56; inside the vertical border area also open that border | ADDED | Bauer 3.14.1 "the change from CSEL=1 to CSEL=0 has to be exactly in cycle 56", "the main border flip-flop can only be reset if the vertical flip-flop is not set" |
+
+### D3 - Bitmap and multicolour setup (data/gamedev/techniques.md section 11)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| BMM `$D011` bit 5, MCM `$D016` bit 4, ECM `$D011` bit 6 | ADDED | Bauer register table; A3a, A3b |
+| Multicolour text: colour RAM bit 3 selects multicolour per character; `00` `$D021`, `01` `$D022`, `10` `$D023`, `11` colour RAM bits 0-2; otherwise colours 0-7 | ADDED | Bauer 3.7.3.2 ("If bit 11 of the c-data is zero ... colors 0-7", MC flag table) |
+| Standard bitmap: `0` = screen bits 0-3, `1` = bits 4-7 | ADDED | Bauer 3.7.3.3 c-access data table |
+| Multicolour bitmap 160x200; `00` `$D021`, `01` bits 4-7, `10` bits 0-3, `11` colour RAM | ADDED | Bauer 3.7.3.4 g-access data table (bits 8-11 of c-data = colour RAM) |
+| Bitmap 8 KB at bank offset `$0000`/`$2000` by `$D018` bit 3; screen matrix by bits 4-7; `$2000` in banks 0 and 2 because of the ROM image | ADDED | Mapping $D011 bit 5 text ("Only Bit 3 is significant", "the VIC-II chip sees an image of the character ROM ... $1000-$1FFF"); Bauer $D018 CB13 |
+| Setup values `$3B`, `$18`/`$08`, `$18` | ADDED | from the bit layouts above; `$D018 = $18` as A3d |
+| Byte `base + 40*(y AND 248) + (y AND 7) + (x AND 504)`, bit `7 - (x AND 7)`; multicolour form with `2*(x AND 252)` | ADDED | Mapping $D011 bit 5 program line 100 and "POKE BY,PEEK(BY) OR (2^(NOTX AND 7))"; multicolour form derived (x_hires = 2x) |
+| 8 bytes per cell, 40 cells per row | ADDED | Mapping ("The ninth byte controls the eight dots directly to the right"); Bauer g-access address VC/RC |
+
+### D4 - Multiply and divide (data/gamedev/techniques.md section 12)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| `mul8`, `mul16`, `div8`, `div16` give exact products, quotients and remainders | ADDED, verified | `verify/muldiv.asm` assembled with 64tass 1.60; `verify/test_muldiv.py` runs the bytes in `verify/sim6502.py` (tables parsed from c64ref `cpu_6502.txt`): all 65,536 pairs for `mul8`/`div8`, 350,144 pairs (12x12 edge grid plus random) for `mul16`/`div16`; result in `verify/result.txt` |
+| The checks can fail | CONFIRMED | `neg_mul8.asm` (first `clc` removed) fails at (1,0); `neg_div8.asm`, `neg_div16.asm` (`cmp` replaced by `nop`) fail at (1,1) |
+| Sizes 18/39/19/44 bytes; cycles 134-166, 623-927, 158-174, 655-1007 | ADDED | 64tass label file `muldiv.lbl` (routine start addresses, 120 bytes total); cycle counts from the interpreter using c64ref [timing] including branch-taken and page-cross extras |
+| Divide by zero returns quotient `$FF` / `$FFFF` | ADDED | `result.txt` divide-by-zero set |
+| An earlier draft guarded a carry out of `ROL` in the dividers; the guard was removed | NOTE | the guarded and unguarded versions agree on all pairs: the partial remainder is below 128 (`$8000`) before each `ROL` because it is less than the divisor and is built from at most 7 (15) dividend bits |
+| Quarter-square identity a*b = f(a+b) - f(a-b), f(n) = floor(n*n/4) | ADDED (arithmetic) | (a+b)^2 - (a-b)^2 = 4ab; a+b and a-b have the same parity, so the floors cancel |
+
+### D5 - Safe zero-page map (data/gamedev/architecture.md section 4)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| `$02` unused; `$FB-$FE` free and never altered by BASIC | ADDED | Mapping `$0002 Unused`; `$00FB-$00FE FREKZP` "it is guaranteed that BASIC will not alter these locations"; ROM: no access to `$02` or `$FB-$FE` except indexed `$FD53 STA $0002,Y` (RAMTAS) |
+| `$F7-$FA` used only by RS-232 OPEN/CLOSE/NMI | ADDED | Mapping RIBUF/ROBUF "When device number 2 (the RS-232 channel) is opened"; ROM accesses at `$EF26`, `$EFB1`, `$F026`, `$F096` (RS-232 NMI send/receive), `$F2B5-$F2C3` (CLOSE, after `CMP #$02` device test at `$F2A7`), `$F46B-$F47B` (RS-232 OPEN) |
+| KERNAL `$E4D3-$FFFF` does not access `$02-$8F` or `$FF` except RAMTAS | ADDED | `verify/zpscan.py` over c64ref `c64disasm_en.txt`: only `$FD53 STA $0002,Y` in `$02-$8F`; no access to `$FF` |
+| `$02-$8F` BASIC workspace, `CHRGET` at `$73-$8A`; `$90-$FA` KERNAL (jiffy `$A0-$A2`, editor/keyboard `$C5-$F6`) | ADDED | Mapping entries `$0003`-`$008F`, `$0073-$008A CHRGET`, `$0090`-`$00F6`; KERNAL IRQ `$EA31-$EB48` accesses `$C0`-`$F6` (zpscan) |
+| `$00/$01` CPU port | CONFIRMED | Mapping `$0000 D6510`, `$0001 R6510` |
+
+### D6 - data/gamedev/references.md
+
+Licences read with `gh api repos/<owner>/<repo>` (SPDX field) and the repositories' README/LICENSE files on
+2026-11-20 (`refs/github-licences.txt`, `refs/*.readme`); URLs fetched with curl.
+
+| Item | Verdict | Corrected wording | Source |
+|---|---|---|---|
+| Doom C64U licence "other" | IMPRECISE, fixed | CC BY-NC-SA 4.0: read, do not copy | slesinger/doom `LICENSE` (deed1f7) first line |
+| Doom test-map fps 0.83/7.15/16.78/50.1 | CONFIRMED | "(PAL, 1.1.0" version tag dropped (not in the table) | `pipeline.md:1523-1528` |
+| Doom E1M1 "disputed" 16.7 vs 25.05 fps | CONFIRMED-ERROR, fixed | different milestones: 25.05 flat-shaded (M1), 16.7 textured (M2, 64 MHz) | `IMPLEMENTATION_PLAN.md:3,16`; README:32-36; press article not checked, dropped |
+| ultimate-uci-oscar64 GPL-3.0, 78 of 179 untested in 1.4.0 | CONFIRMED | - | GitHub API; README:15-16 (2def4db) |
+| mandelbrot-upic GPL-3.0, 16 cycles per 2 pixels at 64 MHz | CONFIRMED | - | GitHub API; `docs/UPIC_VIEWER.md` "a pixel written every 8 cycles" (e71abb5) |
+| heartbeat-demo GPL-3.0, 8 SIDs + 7 PCM channels from one tick IRQ | CONFIRMED | - | GitHub API; README:7-8 |
+| c64u-radar GPL-3.0, gateway for TLS/JSON, fake 64 KB RAM harness, 8 sprites, poll about 10 s | CONFIRMED | - | GitHub API; README:28,49,126,158 |
+| ReadyOS MIT, REU suspend, acceptance at 1/16/64 MHz | CONFIRMED | - | GitHub API; README:4,74 |
+| ultimate-uci-sdk MIT, status "early" | CONFIRMED | - | GitHub API; README:38 "Status: early." |
+| Order: Omega facts | UNVERIFIED, marked | - | itch.io returned HTTP 429 |
+| Zzap!64 ratings, "Known for" column, Paradroid/Wizball ratings | UNVERIFIED, marked | - | no primary (magazine) source fetched |
+| Hessian MIT code, assets not free | CONFIRMED | - | README "Code license" and "Graphics, levels, music ... All rights reserved" |
+| Steel Ranger demo MIT code; c64gameframework MIT; Tetris C64 MIT (README); Tony MIT | CONFIRMED | - | READMEs; GitHub API (tony-demo MIT) |
+| UridiumFraktion, Monty, SquareDoom, Gridrunner: no licence | CONFIRMED | - | GitHub API `null`; no licence text in README |
+| CROSS-LIB "none stated" | CONFIRMED-ERROR, fixed | README: zlib-style terms, non-commercial use only | CROSS-LIB README "## LICENSE" ("for non-commercial applications") |
+| Oscar64, Corescape, Cadaver multiplexer GPL-3.0 | CONFIRMED | - | GitHub API |
+| codetapper, cadaver.github.io, elmerproductions, readthedocs, theweb.dk URLs | CONFIRMED (HTTP 200) | - | curl 2026-11-20 |
+| codebase64.net page ids | UNVERIFIED, marked | - | codebase64.net no connection; codebase64.org 404 |
+| generationamiga article | UNVERIFIED, marked | - | no URL given |
+
+### D7 - data/sound/sidwave.md (C64 facts only; compiler behaviour is code, not checked here)
+
+Calculations in `verify/` notes: PAL 985248 Hz, NTSC 1022727 Hz as in A1b.
+
+| Item | file:line | Verdict | Corrected wording | Source |
+|---|---|---|---|---|
+| PAL 985248 Hz, 50.12 (50.1245) frames/s; NTSC 1022727 Hz, 59.83 (59.8262) | sidwave.md:98,106 | CONFIRMED | - | Bauer 3.4 table (63 x 312, 65 x 263) and clock as A1b: 985248/19656 = 50.1245, 1022727/17095 = 59.8261 |
+| B7 exceeds the 16-bit register on PAL; highest PAL note A#7 | :134 | CONFIRMED | - | f x 2^24 / clock (Mapping $D400): B7 PAL 67280 > 65535, NTSC 64815; A#7 PAL 63504 |
+| Vibrato limits A#7 PAL 0.54, B7 NTSC 0.19 semitones | :140 | CONFIRMED | - | 12 log2(65535/63504) = 0.545; 12 log2(65535/64815) = 0.191 |
+| Frequency resolution "about 3 cents in the lowest octave" | :140 | IMPRECISE, fixed | about 6 cents at C0, 3 cents at C1 (PAL) | 1200 log2((r+1)/r): C0 r = 278.4 gives 6.2, C1 r = 556.8 gives 3.1 |
+| Hard restart "avoids the SID's ADSR delay bug" | :170 | UNVERIFIED, marked | - | no primary source fetched |
+| 20-65 raster lines = "about 1,400-4,100 cycles" | :174 | IMPRECISE, fixed | about 1,300-4,100 | 20 x 63 = 1260, 65 x 63 = 4095 |
+| 9,800 cycles = 155 lines, half a PAL frame | :174 | CONFIRMED | - | 9800 / 63 = 155.6; 312 / 2 = 156 |
+| ADSR nibbles 0-15; filter cutoff 0-2047 | :116,:159 | CONFIRMED | - | PRG $D405/$D406; A1c (11-bit cutoff) |
+| Program must end below $D000, about 50 KB | :173 | CONFIRMED | - | $D000 - $0801 = 51199 bytes |
+| KERNAL IRQ normally 60 Hz; TI about 16.5 % slow on a PAL song, 0.3 % on NTSC | :181 | CONFIRMED | - | ROM $FDE2-$FDF0: CIA1 timer A = $4025 (PAL) / $4295 (NTSC), 985248/16422 = 59.996 Hz, 1022727/17046 = 59.998 Hz; 1 - 50.1245/59.996 = 16.45 %, 1 - 59.826/59.998 = 0.29 % |
+| `10 SYS2061` | :179 | CONFIRMED | - | 2061 = $080D |
+
+### D8 - Printer documents (data/printer/*.md)
+
+Sources fetched 2026-11-20 (`printer/` in W6-src): Commodore MPS-801 manual, zimmers mirror
+`.../manuals/printers/mps801.txt`; MPS-803 User's Guide (`MPS-803_Printer_Users_Guide.pdf`, pdftotext);
+Epson FX-80 Printer User Manual 1984, archive.org `Epson_FX-80_Printer_User_Manual_1984_Epson_America_Inc`
+(`_djvu.txt` OCR). Ultimate emulation: 1541ultimate `18bea13` `software/io/printer/{mps_printer_cbm.cc,
+mps_printer_epson.cc,mps_printer.cc,iec_printer.cc}` and 1541u-documentation `9b06839` `ultimate_printer.rst`.
+KERNAL registers: c64ref ROM disassembly.
+
+| Item | file | Verdict | Corrected wording | Source |
+|---|---|---|---|---|
+| sa 0 upper case/graphics (default), sa 7 business | commodore, spec | CONFIRMED | - | MPS-801 "sa = 0: graphic mode.. . (default)", "sa = 7: business mode"; Ultimate `iec_printer.cc` `_push_command` 0x00/0x07 |
+| CHR$(8, 10, 13, 14, 15, 17, 18, 26, 27, 145, 146) meanings | commodore, spec | CONFIRMED | - | MPS-801 "5. Printing Modes and Control Codes" list; MPS-803 Table 1 |
+| Column position `CHR$(16);CHR$(n)`, n = 0-79 | commodore, spec | CONFIRMED-ERROR, fixed | two ASCII digits `CHR$(16);"nn"` | MPS-801 5.4 ("2-digit number following the CHR$(16)", `CHR$(16)"08MPS-801"`); Ultimate `case 0x10` (`input & 0x0F`, two digits) |
+| Dot position `ESC CHR$(16) HP LP`, 0-479 | commodore, bitmap, spec | CONFIRMED | - | MPS-801 5.5 (9-bit address, dots 0-479) |
+| Local charset modes until CR | commodore | CONFIRMED for MPS; Ultimate differs, added | - | MPS-803 "CHR$(17) functions until CHR$(145) or carriage return"; MPS-801 5.8; Ultimate CR handler does not reset `charset_variant` |
+| CR/LF: "use CR+LF if overprinting occurs" | commodore, spec | IMPRECISE, fixed | CR and LF each advance; CR+LF leaves a blank line (Ultimate) | Ultimate `mps_printer_cbm.cc` "LF: line feed (LF+CR)", "CR: carriage return (CR+LF)" |
+| CHR$(9) tab, CHR$(12) form feed, ESC "-" underline on MPS | commodore | IMPRECISE, marked *Ultimate* | not in MPS-801/803 lists; handled by the Ultimate (MPS-1230) emulation | MPS-801/803 code lists; Ultimate `case 0x09`, `case 0x0C`, ESC `case 0x2D` |
+| Bit image: 7 dots, LSB top, add 128 | bitmap, spec | CONFIRMED | - | MPS-801 5.3 (rows 1..64 top to bottom, "add 128"); Ultimate `CBMBim` "LSB is up" |
+| Exit bit image with CHR$(15) "or any printable char" | bitmap | IMPRECISE, fixed | CHR$(15) per manual; the Ultimate also exits on a printable byte below 128 | MPS-801 example `CHR$(8)A$;CHR$(15)`; MPS-803 "CHR$(14) and CHR$(15) cancel ... bit image"; Ultimate default case `bim_mode = false` |
+| "~60 dpi H, 72 dpi V", "~480 dots" | bitmap, spec | IMPRECISE, fixed | 60 dpi H, about 63 dpi V, at most 480 columns | MPS-801 Appendix A: 480 columns, 10 char/in x 6 dots, 9 lines/in in bit image mode with 7 dots |
+| CHR$(26) repeat: count then byte | bitmap, spec | CONFIRMED; Ultimate count 0 = 256 added | - | MPS-801 5.6 figure 3.19; Ultimate `case 0x1A` |
+| "16 columns x 3 rows" example comment | bitmap | CONFIRMED-ERROR, fixed | 48 columns in one row | the program prints A$ three times on one line |
+| "printer auto-prints when ~480 dots are filled" | bitmap | UNVERIFIED, marked | - | not in the manuals |
+| FX-80: ESC @, ESC M/P, SO/DC4, ESC W, SI/DC2, ESC E/F, ESC 4/5, ESC - n, ESC 0/1/2/3/A, ESC D/B/l/Q, ESC J/j | epson, spec | CONFIRMED | - | FX-80 manual index of ESC sequences (p. 242 ff.), Elite 12 cpi (p. 52), compressed 17.16 cpi, SO "turns off after each print line" |
+| `ESC x n` NLQ | epson | IMPRECISE, marked | not on the FX-80; accepted by the Ultimate emulation | FX-80 command index (no ESC x); Ultimate `case 0x78` |
+| `ESC $` absolute position, `ESC t n` charset | spec | CONFIRMED-ERROR, fixed | none on FX-80; charset via `ESC R n` | FX-80 command index; Ultimate Epson interpreter has no `0x24`/`0x74` case |
+| "Condensed / Elite (12 cpi) = ESC M" | spec | IMPRECISE, fixed | Elite = ESC M; condensed = SI/DC2 | FX-80 p. 52-53 |
+| Graphics K 60, L 120, Y 120 high speed, Z 240, `ESC *` 0-6 = 60/120/120/240/80/72/90 dpi, MSB top, 72 dpi vertical | epson-bitmap, spec | CONFIRMED; "no adjacent dots" for Y and Z added | - | FX-80 graphics density table ("does not print consecutive dots in any one row"), "Single-Density graphics dots are printed 60 per inch horizontally and 72 per inch vertically", "fire the top pin ... CHR$(128)" |
+| `ESC ^ d n m h1 l1`, d in {0,1} | epson-bitmap | IMPRECISE, fixed | two bytes per column: first = top 8 pins, bit 7 of second = 9th pin; d 0 single, 1 double | FX-80 9-pin section and figure 11-5 |
+| Epson "Exit bit image: any printable char or LF" | spec | CONFIRMED-ERROR, fixed | mode ends after `n + 256*m` columns | FX-80 "Width = n1+256*n2"; Ultimate `ESC K/L/Y/Z` end after `param_build` bytes |
+| "Ultimate-II may treat Y as L" | epson-bitmap, spec | CONFIRMED (same spacing) | - | Ultimate `density_tab` rows 1 and 2 both `{2,2,2}` |
+| Assembly example: SETLFS A=device X=SA Y=file; SETNAM `lda #<msg / ldx #>msg / ldy #5`; CHKOUT with A | spec | CONFIRMED-ERROR, fixed | SETLFS A=file X=device Y=SA; SETNAM A=length X/Y=address (length 0 here); CHKOUT X=file | ROM $FE00-$FE04 (`STA $B8` file, `STX $BA` device, `STY $B9` SA), $FDF9-$FDFD, $F30F/$F313 "copy the logical file number to A" from X (B18) |
+| Ultimate emulation "supports both PETSCII and ESC/P", "Ignores DLL" | spec, prompts | IMPRECISE, fixed | emulation chosen in the settings (Commodore MPS default, Epson FX-80, IBM GP, IBM PP); Commodore mode ignores `ESC =`, Epson mode has `ESC &` | `ultimate_printer.rst` "Printer emulation" setting; Ultimate CBM `case 0x3D` "parse but ignore", Epson `case 0x26` |
+| 256-byte buffer, Flush Printer/Eject Page | spec | ADDED | - | `ultimate_printer.rst` "Flushing the printer spool" |
+| `$033C-$03FB` free for print buffers | spec | CONFIRMED | - | A8b (Mapping TBUFFR) |

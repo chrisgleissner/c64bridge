@@ -14,8 +14,8 @@
 **Bitmap (Commodore/Epson)**
 > Print this bitmap at [density]. Provide columns as bytes and desired repeats/line spacing.
 
-**Custom chars (Commodore only)**
-> Define downloadable chars (DLL) and print <text>.
+**Custom chars (Epson mode only)**
+> Define user characters with `ESC &` and print <text>. The Commodore mode of the Ultimate emulation parses and ignores downloadable characters (`ESC =`).
 
 ## Tooling guidance
 
