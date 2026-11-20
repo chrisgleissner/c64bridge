@@ -1278,6 +1278,9 @@ function tokenize(line: string): Token[] {
       continue;
     }
 
+    if (char === "@") {
+      throw new Error("Unexpected character '@': cheap local labels (ca65 @name) are not supported; use a local label such as .loop:");
+    }
     const codePoint = line.codePointAt(index) ?? 0;
     throw new Error(`Unexpected character '${codePoint < 0x20 || codePoint === 0x7f ? "" : String.fromCodePoint(codePoint)}' (U+${codePoint.toString(16).toUpperCase().padStart(4, "0")})`);
   }
