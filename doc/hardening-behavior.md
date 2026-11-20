@@ -107,6 +107,32 @@ The built-in assembler accepts the spellings of ACME, 64tass, ca65 and Kick Asse
 - **Initialize instructions.** The `initialize` response carries short instructions: `op` on grouped calls, platform status, backend selection, skills, the game-development index, RAG, address syntax, host paths and `location: "host"`, labels and progress.
 - **Prompts and annotations.** `prompts/get` carries tool names and resource references in `_meta` instead of full tool descriptors. `destructiveHint` is true for every tool that has a write or destructive operation. Invalid prompt arguments are reported as InvalidParams.
 
+### Debugging and VICE
+
+- **`set_registers`.** Previously a value wider than the register was masked silently (`A=300` wrote 44). Now it is refused with the allowed range. A value may also be a string in the address syntax (`"$C000"`, a loaded label, `label+n`), so the program counter can be set to a label.
+- **Debug results.** `step` and `step_return` return the PC and registers they stopped at. `get_registers`, `get_monitor_state` and `wait_for_state` report the CPU as `stopped` or `running`; a stopped CPU also lists the enabled execute checkpoints whose range contains the PC. Every register has a hex value, and 8-bit status registers list their flags.
+- **`wait_for_state`.** Previously `expectedPC` with a CPU stopped at another address polled until the timeout (up to 60 s). Now the call returns at once with `matched: false`, `timedOut: false`, `stoppedElsewhere: true` and the reason.
+- **`load_prg` on VICE.** A load at `$0801` moves BASIC's end pointers behind the program, so `list_basic` sees it; the result reports `reset`, `loadAddress`, `endAddress` and `basicPointersSet`. A PRG that does not load at `$0801` is started with `SYS <load address>` instead of `RUN`. A PRG that runs past `$FFFF` is refused before the reset.
+- **Restarted emulator.** When VICE had exited and the next call started a new one, that call returned the state of a freshly reset machine without notice. Now the first operation after such a restart fails once with a session-lost error. Repeat the call.
+- **Frames.** VICE frames are cropped to the inner area VICE reports instead of by pixel content; `includeBorder` returns the whole canvas. Only an empty frame is retried; other errors are reported at once.
+- **`waitForReady`.** `reset`, `reboot` and `power_cycle` no longer wait a fixed 3 s when the screen equals the old one. A backend result with `promptOk: true` counts as the observed prompt, and the wait ends when a read differs from the old screen.
+
+### Streams, printer and greeting
+
+- **Audio capture.** Previously a capture whose datagrams never arrived could block for minutes (171 s for 65536 pairs) while holding the stream lock. Now the wait is three times the capture duration plus 1.5 s, and the capture fails after 1.5 s with "No audio datagram arrived" when none came from the device.
+- **Video capture.** Frames are assembled as packets arrive, so capturing many frames at the firmware rate no longer drops datagrams and times out.
+- **Printer bitmaps.** Previously a row of more than 255 columns stopped the generated BASIC program with `?STRING TOO LONG ERROR` while the tool reported success. Rows are now sent in strings of at most 255 bytes. Rows up to 255 columns send the same bytes as before. The Epson builder prints each row once per line by default, matching the reported `timesPerLine` of 1.
+- **Greeting.** The direct-write greeting maps all upper-case-set characters (previously `(`, `#`, `+`, `=`, `@` and others became spaces) and wraps at spaces over up to 21 rows. Characters without a glyph are listed in `details.warnings`.
+
+### Validation, MCP and knowledge
+
+- **Validation errors.** A pattern mismatch names the field's description, the expected pattern, an example and the received value. An unexpected property names the closest valid property and lists the allowed ones. This check runs before the required-property check, so a misspelt required name is reported as misspelt.
+- **Progress.** When `tools/call` carries `_meta.progressToken`, the server sends `notifications/progress` every 10 s and handlers can report step progress, so SDK clients with a 60 s request timeout no longer cancel long waits. `c64_batch` reports one step per command.
+- **Resources.** `resources/templates/list` returns an empty list instead of an error. A `#fragment` in a resource link, as returned by `c64_rag`, is ignored when reading.
+- **Result text.** The text of a result carries the result data as compact JSON after the message. Above 16 KiB, long strings that the text already holds are replaced by a note in `structuredContent`. Error results redact secrets per value, not per substring, so a short password no longer corrupts other hex data.
+- **`c64_rag`.** All scopes search every index and rank with BM25. Result text keeps line breaks. A query of only spaces is a validation error. Developer documents (`AGENTS.md`, `doc/hardening-behavior.md` and others) are not indexed.
+- **`c64_sound` SIDWAVE.** A song that reaches 20000 notes in one voice is rejected before arranging. An unquoted `~` in a groove is a tie. Numeric strings in pattern length, transpositions and reverb delay are stored as numbers.
+
 ## Limits and knowledge
 
 Raw graphics/audio output is capped at 2 MiB, PNG captures at four images, including aggregate batch output. Artifact snapshots accept at most 256 memory ranges and 2 MiB of aggregate raw memory before reading the device. SIDWAVE input is limited to 4096 bars. Regex waits on runtimes without interruptible evaluation enforce a conservative repetition budget. Knowledge queries (`c64_rag` operations `basic`, `asm`, `docs`) are limited to 500 characters and lexical ranking to 32 distinct terms.
