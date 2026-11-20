@@ -1772,3 +1772,16 @@ test("the eight new library instruments write original waveform, pitch, gate and
     if (recipe === "crash") assert.equal(regFreq(states[15], 0), freqAt("D6"));
   }
 });
+
+test("the CIA2 digi NMI load can push a score over the stock CPU budget", () => {
+  const score = multiScore(sidMap(2), [scoreVoice(1, ["C4"])]);
+  const stock = compileSidwaveToPrg(parseSidwave(score));
+  assert.ok(stock.worstCaseCyclesPerCall < 18_056);
+  const digis = { ...score, samples: { rate: 8000, voices: [
+    { sid: "chip1", at: [0], kit: "kick" }, { sid: "chip2", at: [0], kit: "snare" },
+  ] } };
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(digis)), /including \d+ for the CIA2 digi NMI.*use cpu: turbo.*at least 2 MHz/);
+  const turbo = compileSidwaveToPrg(parseSidwave({ ...digis, cpu: "turbo" }));
+  assert.equal(turbo.requiresTurbo, true);
+  assert.ok(turbo.worstCaseCyclesPerCall > 18_056);
+});

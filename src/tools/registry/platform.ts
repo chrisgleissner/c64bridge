@@ -68,7 +68,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
     const alreadyActive = active === backend;
     if (!alreadyActive) {
       await cancelGeneratedSidPlayback(ctx.client);
-      ctx.client.switchBackend(backend);
+      await ctx.client.switchBackend(backend);
       clearViceSymbols(); // labels belong to one program on one backend
     }
     ctx.setPlatform(backend);
@@ -110,7 +110,7 @@ export const platformModuleGroup = defineToolModule({
         description: "Runtime backend selection operations.",
         variants: [selectBackendSchema],
       }),
-      // Selecting a backend changes the server's routing, not machine state, so read-only mode allows it.
+      // Selecting a backend is read-only except for releasing previously authorized playback.
       operationEffects: { select: "read" },
       tags: ["platform", "backend", "switch"],
       execute: createOperationDispatcher<PlatformOperations>(

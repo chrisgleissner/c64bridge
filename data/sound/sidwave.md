@@ -401,6 +401,16 @@ The compiler reports `worstCaseCyclesPerCall` and refuses a 1.2 score above the 
 
 For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and delays playback past the startup hold, which can keep the CPU at 1 MHz for up to 4.2 seconds. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
 
+### Playback setup
+
+The `c64_sound` operations `compile_play`, `pipeline`, `play_preset`, and `generate` accept `configure: true`. On supported Ultimate firmware, the server snapshots the SID addressing, sockets, mixer, and UltiSID stores in memory. It applies the song's map for playback and restores the settings it changed when playback is stopped, replaced, the machine is reset, or the active backend switches. A dry run leaves the device alone.
+
+The three `ultisid8` layouts disable mirroring and split both UltiSIDs with `1/4 (A7,A8)`. The bases are `$D400` and `$D420`. The layouts map and enable the required sockets at `$D440` and `$D460`. For explicit maps, the server can configure subsets of those windows and maps using up to four unsplit decoders. Other maps require manual setup. [Owner configurations](../ultimate/multisid.md#owner-configurations-and-settings)
+
+For an explicit SID entry, `pan` takes `Center`, `Left 1` through `Left 5`, or `Right 1` through `Right 5`. All four parts of an UltiSID share its hardware mixer pan. The score can omit pan or repeat the same value across those parts. Conflicting values are refused. For `cpu: turbo`, the server snapshots the turbo settings store and selects the registers mode advertised by firmware. Without `configure`, the playback result lists the needed device settings. [Ultimate turbo registers](../ultimate/hardware.md)
+
+VICE playback automatically sets and restores `SidStereo` and `Sid2AddressStart` through `Sid8AddressStart` using the Binary Monitor. These are the resources for the VICE 3.10 options `-sidextra` and `-sid2address` through `-sid8address`. VICE requires a primary SID at `$D400` and supports up to eight SIDs. Ultimate mixer pan and turbo settings apply to Ultimate hardware.
+
 ## Advanced techniques (1.2)
 
 ### Echo and unison

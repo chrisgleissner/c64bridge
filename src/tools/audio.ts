@@ -1,7 +1,7 @@
 import { DEFAULT_MUSIC_SEED, generateSidwave, MUSIC_STYLES, type MusicStyle } from "../audio/generateSidwave.js";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, type CompileResult } from "../sidwaveCompiler.js";
-import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
+import { midiToHz, noteNameToMidi, parseSidwave, type ParsedSidwave } from "../sidwave.js";
 import { noAudioMeasurement, recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
@@ -22,6 +22,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 
+import { sidwaveSetupWarnings, validateViceSidwaveMap } from "../sidwavePlaybackConfig.js";
 import { getPlatformStatus } from "../platform.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -39,22 +40,29 @@ const generatedPlaybacks = new WeakMap<AudioClient, { facade?: PinnedFacade; sta
 /** Detach a generated score before another tool takes over the machine or SID. */
 export async function cancelGeneratedSidPlayback(client: AudioClient): Promise<void> {
   const playback = generatedPlaybacks.get(client);
-  if (!playback) return;
+  if (!playback) {
+    await client.stopManagedSidwavePlayback?.();
+    return;
+  }
   await playback.started.catch(() => {});
   if (generatedPlaybacks.get(client) !== playback) return;
   await client.stopSidwavePlayback?.(playback.facade);
   if (generatedPlaybacks.get(client) === playback) generatedPlaybacks.delete(client);
 }
 
-async function playCompiledPrg(compiled: CompileResult, client: AudioClient, facade?: PinnedFacade) {
-  const result = await client.runPrg(compiled.prg, facade);
-  if (!result.success) {
-    throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
-      details: normaliseFailure(result.details),
-    });
-  }
-  clearViceSymbols();
-  return result;
+export async function startCompiledSidwave(
+  client: AudioClient, document: ParsedSidwave, compiled: CompileResult, backend: string,
+  options: { configure?: boolean; sid?: Uint8Array; facade?: PinnedFacade } = {},
+) {
+  if (backend === "vice") validateViceSidwaveMap(document);
+  if (typeof client.playSidwave === "function") return client.playSidwave(document, compiled, options);
+  // Lightweight clients used by callers for a plain one-SID playback.
+  if (options.configure) throw new ToolExecutionError("This client does not support SIDWAVE configuration");
+  return options.sid ? client.sidplayAttachment(options.sid) : client.runPrg(compiled.prg, options.facade);
+}
+
+export function playbackSetupWarnings(document: ParsedSidwave, backend: string, configured?: boolean): string[] {
+  return configured && backend !== "vice" ? [] : sidwaveSetupWarnings(document, backend);
 }
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
@@ -233,11 +241,12 @@ const modplayFileArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
-export const MUSIC_GENERATE_DESCRIPTION = "Compose and play an eight-bar SIDWAVE song as a PRG, which replaces the program in memory. root: key and register; pattern: lead offsets; steps: lead notes; tempoMs: classic spacing; waveform: lead sound; preset: phrasing; system: PAL/NTSC.";
+export const MUSIC_GENERATE_DESCRIPTION = "Compose and play a seeded SIDWAVE PRG. Replaces the program in memory.";
 
 const musicGenerateArgsSchema = objectSchema({
   description: "Compose and play a seeded SIDWAVE piece.",
   properties: {
+    configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     root: stringSchema({ description: "Tonic and lead register.", pattern: NOTE_PATTERN, default: "C4" }),
     pattern: optionalSchema(stringSchema({ description: "Repeating lead semitone offsets from root.", minLength: 1 })),
     steps: optionalSchema(numberSchema({ description: "Lead notes to play.", integer: true, minimum: 1, maximum: 128 })),
@@ -275,6 +284,7 @@ const sidwaveSourceSchema: Schema<string | Record<string, unknown>> = {
 const musicCompileArgsSchema = objectSchema({
   description: "Compile a SIDWAVE composition and optionally play it immediately.",
   properties: {
+    configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     sidwave: optionalSchema(sidwaveSourceSchema),
     cpg: optionalSchema(sidwaveSourceSchema),
     format: optionalSchema(stringSchema({
@@ -977,9 +987,17 @@ export const audioModule = defineToolModule({
           });
           for (const { note } of leadTimeline) assertPlayableFrequency(noteHz(note), note, system, "$.root");
           const sidwave = JSON.stringify(score);
-          const compiled = compileSidwaveToPrg(parseSidwave(sidwave), { loop: false });
+          const document = parseSidwave(sidwave);
+          const compiled = compileSidwaveToPrg(document, { loop: false });
+          const backend = facade?.type ?? ctx.platform?.id ?? getPlatformStatus().id;
+          const warnings = [...compiled.warnings, ...playbackSetupWarnings(document, backend, parsed.configure)];
           await cancelGeneratedSidPlayback(ctx.client);
-          const started = playCompiledPrg(compiled, ctx.client, facade);
+          const started = startCompiledSidwave(ctx.client, document, compiled, backend, { configure: parsed.configure, facade }).then((result) => {
+            if (!result.success) throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
+              details: normaliseFailure(result.details),
+            });
+            clearViceSymbols();
+          });
           const playback = { facade, started };
           generatedPlaybacks.set(ctx.client, playback);
           try {
@@ -997,6 +1015,7 @@ export const audioModule = defineToolModule({
             durationSeconds: compiled.totalFrames / compiled.framesPerSecond,
             ...(leadTimeline.length ? { timeline: leadTimeline } : {}),
             prgSize: compiled.prg.length,
+            ...(warnings.length ? { warnings } : {}),
           });
         } catch (error) {
           return unknownErrorResult(error);
@@ -1047,6 +1066,7 @@ export const audioModule = defineToolModule({
           });
 
           const document = parseSidwave(source);
+          if (!parsed.dryRun && platform === "vice") validateViceSidwaveMap(document);
           const compiled = compileSidwaveToPrg(document);
           const sidFile = outputFormat === "sid" ? compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress }) : undefined;
           let outputFile: string | undefined;
@@ -1061,22 +1081,18 @@ export const audioModule = defineToolModule({
 
           if (!parsed.dryRun) {
             await cancelGeneratedSidPlayback(ctx.client);
-            if (outputFormat === "sid") {
-              const result = await ctx.client.sidplayAttachment(sidFile!.sid);
-              if (result.success) clearViceSymbols(); // labels belong to one program
-              if (!result.success) {
-                throw new ToolExecutionError("C64 backend reported failure while playing compiled SID", {
-                  details: normaliseFailure(result.details),
-                });
-              }
-              ranOnC64 = true;
-              runDetails = toRecord(result.details) ?? null;
-            } else {
-              const result = await playCompiledPrg(compiled, ctx.client);
-              ranOnC64 = true;
-              runDetails = toRecord(result.details) ?? null;
-            }
+            const result = await startCompiledSidwave(ctx.client, document, compiled, platform, {
+              configure: parsed.configure,
+              sid: sidFile?.sid,
+            });
+            if (!result.success) throw new ToolExecutionError("C64 backend reported failure while playing SIDWAVE", {
+              details: normaliseFailure(result.details),
+            });
+            clearViceSymbols();
+            ranOnC64 = true;
+            runDetails = toRecord(result.details) ?? null;
           }
+          const warnings = [...compiled.warnings, ...playbackSetupWarnings(document, platform, !parsed.dryRun && parsed.configure)];
 
           const durationSeconds = Math.round((compiled.totalFrames / compiled.framesPerSecond) * 10) / 10;
           const entry = `$${compiled.entryAddress.toString(16).toUpperCase().padStart(4, "0")}`;
@@ -1090,7 +1106,7 @@ export const audioModule = defineToolModule({
           }));
 
           // Warnings (for example a PRG that leaves no room for BASIC) go into the text that clients show.
-          const warningText = compiled.warnings.length > 0 ? `\nWarning: ${compiled.warnings.join("\nWarning: ")}` : "";
+          const warningText = warnings.length > 0 ? `\nWarning: ${warnings.join("\nWarning: ")}` : "";
           return textResult(`${message}${warningText}`, {
             success: true,
             ranOnC64,
@@ -1104,7 +1120,8 @@ export const audioModule = defineToolModule({
             durationSeconds,
             entryAddress: compiled.entryAddress,
             basicFreeBytes: compiled.basicFreeBytes,
-            warnings: compiled.warnings,
+            worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
+            warnings,
             song: document.song,
             voices: voiceSummaries,
             runDetails,

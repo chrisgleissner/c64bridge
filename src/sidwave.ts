@@ -128,6 +128,7 @@ interface SidMapEntry {
   id: string;
   address: number;
   volume: number;
+  pan?: string;
   model?: SidModel;
   filter?: SidFilter;
 }
@@ -153,6 +154,7 @@ export interface SidwaveDocument {
   sids?: Array<{
     id: string | number;
     address: string;
+    pan?: string;
     model?: SidModel;
     volume?: number;
     filter?: Record<string, unknown>;
@@ -339,7 +341,7 @@ function normalizeSids(raw: unknown): SidMapEntry[] {
   const ids = new Set<string>();
   return raw.map((entry, i) => {
     const path = `$.sids[${i}]`;
-    const sid = requireObject(entry, path, ["id", "address", "model", "volume", "filter"]);
+    const sid = requireObject(entry, path, ["id", "address", "model", "volume", "filter", "pan"]);
     const id = typeof sid.id === "number" && Number.isSafeInteger(sid.id) ? String(sid.id) : sid.id;
     if (typeof id !== "string" || !id.trim()) throw new SidwaveValidationError(`${path}.id`, "expected a non-empty string or integer SID identifier");
     if (ids.has(id)) throw new SidwaveValidationError(`${path}.id`, "SID id is duplicated");
@@ -369,7 +371,11 @@ function normalizeSids(raw: unknown): SidMapEntry[] {
         };
       }
     }
-    return { id, address, volume, model: sid.model, filter };
+    const pan = sid.pan;
+    if (pan !== undefined && (typeof pan !== "string" || !/^(?:Center|(?:Left|Right) [1-5])$/.test(pan))) {
+      throw new SidwaveValidationError(`${path}.pan`, "use Center, Left 1 through Left 5, or Right 1 through Right 5");
+    }
+    return { id, address, volume, model: sid.model, filter, pan };
   });
 }
 

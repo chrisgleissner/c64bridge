@@ -1,4 +1,4 @@
-import { cancelGeneratedSidPlayback } from "../audio.js";
+import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "../../sidwaveCompiler.js";
 import { parseSidwave } from "../../sidwave.js";
@@ -228,6 +228,7 @@ export function getMusicPresetSidwave(name: "chiptune_drive" | "ambient_filter" 
 const musicCompilePlayAnalyzeArgsSchema = objectSchema({
   description: "Compile a SIDWAVE score, play it, then record and analyze the audio output.",
   properties: {
+    configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     sidwave: optionalSchema(stringSchema({ description: "SIDWAVE source in YAML or JSON format.", minLength: 1 })),
     cpg: optionalSchema(stringSchema({ description: "Legacy CPG input format.", minLength: 1 })),
     output: optionalSchema(stringSchema({ description: "Playback artifact format. PRG works on all backends; SID attachment playback requires C64U/U64 or U2.", enum: ["prg", "sid"], default: "prg" }), "prg"),
@@ -247,6 +248,7 @@ const musicCompilePlayAnalyzeArgsSchema = objectSchema({
 const musicPlayPresetArgsSchema = objectSchema({
   description: "Play a built-in SID preset with optional backend switching and audio verification.",
   properties: {
+    configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     preset: optionalSchema(stringSchema({
       description: "Named SID preset to compile and play. Defaults to chiptune_drive.",
       minLength: 1,
@@ -522,18 +524,20 @@ export const tools: ToolDefinition[] = [
 
         try {
           for (const [backendIndex, backend] of requestedBackends.entries()) {
-            context.client.switchBackend(backend);
+            await context.client.switchBackend(backend);
             context.setPlatform(backend);
             await trySilenceSid(context);
 
             await cancelGeneratedSidPlayback(context.client);
-            const playback = await context.client.runPrg(compiled.prg);
+            const playback = await startCompiledSidwave(context.client, document, compiled, backend, { configure: parsed.configure });
+            const warnings = [...compiled.warnings, ...playbackSetupWarnings(document, backend, parsed.configure)];
             if (playback.success) clearViceSymbols(); // labels belong to one program
             const backendResult: Record<string, unknown> = {
               backend,
               preset: preset.key,
               title: preset.title,
               details: playback.details ?? null,
+              ...(warnings.length ? { warnings } : {}),
             };
 
             if (!playback.success) {
@@ -572,8 +576,8 @@ export const tools: ToolDefinition[] = [
               }
             }
 
-            // Stop this backend's playback only before moving on to the next one;
-            // the last backend keeps playing so the preset can be heard in full.
+            // Silence intermediate backends before moving on. The client also
+            // releases session-owned playback when leaving the final backend.
             if (backendIndex < requestedBackends.length - 1) {
               await trySilenceSid(context);
             }
@@ -585,7 +589,7 @@ export const tools: ToolDefinition[] = [
         } finally {
           if (restoreActiveBackend) {
             try {
-              context.client.switchBackend(startingBackend);
+              await context.client.switchBackend(startingBackend);
               context.setPlatform(startingBackend);
             } catch (error) {
               restoreError = error instanceof Error ? error.message : String(error);
@@ -685,27 +689,17 @@ export const tools: ToolDefinition[] = [
         const playbackMethod = format === "sid" ? "sidplay_attachment" : "run_prg";
         let playbackDetails: Record<string, unknown> | null = null;
 
-        if (format === "sid") {
-          const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
-          const playback = await context.client.sidplayAttachment(sid.sid);
-          if (playback.success) clearViceSymbols(); // labels belong to one program
-          playbackDetails = normaliseDetails(playback.details);
-          if (!playback.success) {
-            throw new ToolExecutionError("Playback failed", {
-              details: { response: playbackDetails ?? playback.details ?? playback },
-            });
-          }
-        } else {
-          await cancelGeneratedSidPlayback(context.client);
-          const playback = await context.client.runPrg(compiled.prg);
-          if (playback.success) clearViceSymbols(); // labels belong to one program
-          playbackDetails = normaliseDetails(playback.details);
-          if (!playback.success) {
-            throw new ToolExecutionError("Playback failed", {
-              details: { response: playbackDetails ?? playback.details ?? playback },
-            });
-          }
+        const sid = format === "sid" ? compileSidwaveToSid(document, compiled.prg).sid : undefined;
+        await cancelGeneratedSidPlayback(context.client);
+        const playback = await startCompiledSidwave(context.client, document, compiled, platform, { configure: parsed.configure, sid });
+        if (!playback.success) {
+          throw new ToolExecutionError("Playback failed", {
+            details: { response: normaliseDetails(playback.details) ?? playback.details ?? playback },
+          });
         }
+        clearViceSymbols();
+        playbackDetails = normaliseDetails(playback.details);
+        const compilationWarnings = [...compiled.warnings, ...playbackSetupWarnings(document, platform, parsed.configure)];
 
         const playedWithoutMeasurement = (verification: NoAudioMeasurement) =>
           jsonResult({
@@ -716,13 +710,13 @@ export const tools: ToolDefinition[] = [
               title: document.song?.title ?? null,
               basicFreeBytes: compiled.basicFreeBytes,
               worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
-              warnings: compiled.warnings,
+              warnings: compilationWarnings,
             },
             playback: { method: playbackMethod, details: playbackDetails },
             analysis: null,
             playing: true,
             verification,
-            warnings: [verification.message],
+            warnings: [...compilationWarnings, verification.message],
           }, { success: true, format, method: playbackMethod, analyzed: false });
 
         if (unavailable) return playedWithoutMeasurement(unavailable);
@@ -782,7 +776,7 @@ export const tools: ToolDefinition[] = [
             title: document.song?.title ?? null,
             basicFreeBytes: compiled.basicFreeBytes,
             worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
-            warnings: compiled.warnings,
+            warnings: compilationWarnings,
           },
           playback: {
             method: playbackMethod,

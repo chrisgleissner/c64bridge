@@ -60,6 +60,10 @@ export interface CompileResult {
   warnings: string[];
   /** Conservative NMOS 6502 cycle estimate, excluding the host IRQ and VIC stalls. */
   worstCaseCyclesPerCall: number;
+  requiresTurbo: boolean;
+  irqAddress: number;
+  digiNmiAddress?: number;
+  digiChainAddress?: number;
 }
 
 /**
@@ -74,10 +78,12 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
   const arrangement = arrangeSidwave(doc);
   const streams = arrangement.voices.map((v) => encodeVoiceStream(v.events, arrangement.totalFrames));
   const musicCycles = estimatePlayerCycles(arrangement);
-  const cyclesAt = (system: SystemMode) => musicCycles + (arrangement.samples
-    ? digiCyclesPerCall(arrangement.samples, sidwaveFrameRate(system) * doc.speed) : 0);
-  const worstCaseCyclesPerCall = cyclesAt(arrangement.system);
-  const requiresTurbo = (system: SystemMode) => cyclesAt(system) > stockPlayerBudget(system, doc.speed);
+  const digiCyclesAt = (system: SystemMode) => arrangement.samples
+    ? digiCyclesPerCall(arrangement.samples, sidwaveFrameRate(system) * doc.speed) : 0;
+  const digiCycles = digiCyclesAt(arrangement.system);
+  const worstCaseCyclesPerCall = musicCycles + digiCycles;
+  const requiresTurbo = (system: SystemMode) =>
+    musicCycles > stockPlayerBudget(system, doc.speed) - digiCyclesAt(system);
   const turboOnly = Number(requiresTurbo("PAL")) | (Number(requiresTurbo("NTSC")) << 1);
   // Check the size before assembling the streams: the player and its tables are assembled once with
   // empty streams, which gives the exact start of the stream data. Songs larger than 64 KB would
@@ -99,14 +105,14 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
   }
   const warnings: string[] = [];
   if (arrangement.samples) {
-    warnings.push(`CIA2 digi playback reserves up to ${worstCaseCyclesPerCall - musicCycles} CPU cycles per player call and temporarily replaces the sample SID's master volume.`);
+    warnings.push(`CIA2 digi playback reserves up to ${digiCycles} CPU cycles per player call and temporarily replaces the sample SID's master volume.`);
   }
   if (arrangement.chips) {
     const availableCycles = stockPlayerBudget(arrangement.system, doc.speed);
     const required = worstCaseCyclesPerCall / availableCycles;
     if (requiresTurbo(arrangement.system) && !doc.cpu) {
       throw new SidwaveValidationError("$.cpu",
-        `the player needs up to ${worstCaseCyclesPerCall} cycles per call at speed ${doc.speed} (${availableCycles} available at 1 MHz ${arrangement.system}); use cpu: turbo for a CPU speed of at least ${Math.ceil(required)} MHz`);
+        `the player needs up to ${worstCaseCyclesPerCall} cycles per call at speed ${doc.speed}${digiCycles ? ` including ${digiCycles} for the CIA2 digi NMI` : ""} (${availableCycles} available at 1 MHz ${arrangement.system}); use cpu: turbo for a CPU speed of at least ${Math.ceil(required)} MHz`);
     }
     const level = arrangement.chips.reduce((sum, chip, i) => {
       const sustain = arrangement.voices.slice(i * 3, i * 3 + 3).reduce((total, voice) => {
@@ -151,6 +157,10 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
     basicFreeBytes,
     warnings,
     worstCaseCyclesPerCall,
+    requiresTurbo: requiresTurbo(arrangement.system),
+    irqAddress: assembled.symbols.get("irq")!,
+    digiNmiAddress: assembled.symbols.get("digi_nmi"),
+    digiChainAddress: assembled.symbols.get("digi_chain"),
   };
 }
 

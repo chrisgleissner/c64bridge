@@ -227,6 +227,7 @@
         "id": { "$ref": "#/$defs/sidId" },
         "address": { "type": "string", "pattern": "^[$][Dd][4-7][02468AaCcEe]0$" },
         "model": { "enum": ["6581", "8580"] },
+        "pan": { "type": "string", "pattern": "^(Center|(Left|Right) [1-5])$" },
         "volume": { "type": "integer", "minimum": 0, "maximum": 15, "default": 15 },
         "filter": {
           "anyOf": [

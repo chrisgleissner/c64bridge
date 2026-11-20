@@ -486,7 +486,7 @@ export const tools: ToolDefinition[] = [
             };
 
             await timedStep("switch_backend", async () => {
-              ctx.client.switchBackend(backend);
+              await ctx.client.switchBackend(backend);
               ctx.setPlatform(backend);
             });
 
@@ -615,7 +615,7 @@ export const tools: ToolDefinition[] = [
             try {
               const restoreStartedAt = Date.now();
               await withDiagnosticSpan("greeting", "restore_backend", { backend: startingBackend }, async () => {
-                ctx.client.switchBackend(startingBackend);
+                await ctx.client.switchBackend(startingBackend);
                 ctx.setPlatform(startingBackend);
               });
               restoreBackendLatencyMs = Date.now() - restoreStartedAt;
