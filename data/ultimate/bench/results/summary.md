@@ -35,7 +35,7 @@ Findings.
   tick. The U64 stash is 3.0 to 5.1 B/us from 6 MHz up and the fetch 2.0 to 3.6 B/us (index 3 fetch equals index 1, index 5
   stash equals index 2); the C64U stash reaches 7.8 B/us and the fetch 4.3 B/us (stash at 10 MHz and 20 MHz is lower than at the
   neighbouring settings). With the screen on and badlines the rate is about 5 percent lower.
-* After the reset done by `run_prg`, a `$D031` speed request was ignored for 2.55 s (U64) and 2.57 s (C64U) after program start.
+* After the reset done by `run_prg`, a `$D031` speed request was ignored for 2.55 s (U64) and 2.57 s (C64U) after program start (run_prg path only; load_prg and SYS start: 3.9 s) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20).
 
 Flagged points. In the `Manual` and `TurboEnable Bit` runs the first point (screen on, RAM load, repetition 1) carries the
 interference flag on both devices (for example U64 manual 12 MHz repetitions 2536245, 416596, 416596 ticks; C64U manual
@@ -139,7 +139,7 @@ Attempts: 30; first attempt that ran faster than 1 MHz: 30, 2551 ms after progra
 
 Firmware 1.2.1, FPGA 126, core 1.50. PAL (frame 19657 ticks). Multiples are relative to PHI2 (0.985248 MHz).
 
-### CPU, Turbo Control = U64 Turbo Registers, Badline Timing as configured, `$D031` bit 7 clear
+### CPU, Turbo Control = C64U Turbo Registers, Badline Timing as configured, `$D031` bit 7 clear (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20)
 
 | idx | nominal MHz | blank RAM multiple of PHI2 | blank RAM MHz | on RAM MHz | blank $D020 MHz | blank $D012 MHz | blank CIA MHz | cycles/frame blank | on | on+sprites | blank+sprites | cycles/line on |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
