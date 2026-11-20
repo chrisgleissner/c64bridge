@@ -402,3 +402,36 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | 39 | $D031 bit 7 set = badline stalls suppressed | CONFIRMED | hardware.md, written |
 | 40 | GET /v1/info fields | CONFIRMED | hardware.md (already stated) |
 | 41-44 | C64 Ultimate only | SKIPPED | C64 Ultimate statements left as they are |
+
+## Part F: precision rewrite
+
+### F-U: data/ultimate (hardware, uci, reu, upic, multisid, bench)
+
+Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured U64 = Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`); measured C64U = C64 Ultimate 1.2.1, 2026-11-13 (bench data and earlier rounds).
+
+| Claim | File | Verdict | Source |
+|---|---|---|---|
+| Turbo Control values Off, Manual, U64 Turbo Registers, TurboEnable Bit; `a`/`b` entries outside range 0-3 | hardware | CONFIRMED, written as the complete list | software/u64/u64_config.cc:328,390 |
+| `C64U Turbo Registers` label | hardware, upic | REMOVED from rules; moved to Not verified (not in source, no measurement) | u64_config.cc:328; bench README (C64U 1.2.1 used U64 Turbo Registers) |
+| CPU Speed lists per build; `5` absent on Elite II/C64U, `64` absent on MK1 | hardware | CONFIRMED, written as rule | u64_config.cc:325-326,392-395 |
+| .cfg enum match: case-insensitive, outer spaces ignored; `4 MHz` invalid | hardware, uci | ADDED | software/userinterface/configio.cc:343-350,415-431 |
+| REST PUT enum match is exact apart from case (leading space needed) | hardware | ADDED | software/api/route_configs.cc:79-89 |
+| LOAD_CONFIG with an invalid line: status 89, values stored, no store effectuated; effect at next apply | hardware, uci | CORRECTED ("rejects the whole file" was imprecise) | control_target.cc:559-609; configio.cc:399-431; measured U64 row 14 |
+| File browser / sidecar load applies valid lines, skips invalid | hardware, uci | CONFIRMED | configio.cc:436-478 |
+| Unknown item or store: skipped, no error | hardware, uci | CONFIRMED | configio.cc:280-297,381-389 |
+| setCpuSpeed register values Off $00/$80, Manual $00, Registers $01, TurboEnable $05, +$02 SuperCPU | hardware | CONFIRMED | u64_config.cc:1696-1708 |
+| System Mode timing per value (63/65 cycles, 50/60 Hz, encoding, locked carrier) | hardware | ADDED (replaced "hybrid modes decouple") | software/u64/color_timings.cc:6-29 |
+| Speaker items only on MK1 build | hardware | CONFIRMED (table row) | u64_config.cc:381-384 |
+| Elite II Programmatic LED window $D200-$D2FF | hardware | CORRECTED (was "$D2xx/$D3xx (2026-05)") | software/u64/led_strip.cc:420-423 |
+| Sampler register reset values 63/7/283/REU 0 | hardware | CORRECTED: registers have no reset; power-up volume 32, pan 8, rate 0, start 0, length 0 | fpga/io/sampler/vhdl_source/sampler_regs.vhd (c_voice_control_init unused) |
+| Sampler voice n at $DF20+32n, n = 0-6 | hardware | CONFIRMED | slot_server_v4.vhd:953-958; slot_to_io_bridge.vhd:61-65 |
+| Sample rate 6.25 MHz/(rate+1) | hardware | CONFIRMED (VHDL + measured U64 row 30) | sampler2.vhd |
+| 24-bit field byte order, 16-bit/interleave modes "(unverified)" | hardware | RESOLVED from VHDL (high byte first; bits 5-4, bit 6) | sampler_regs.vhd |
+| REU decodes $DF00-$DF17; $DF0B, $DF10-$DF17 read $FF ("aliases $DF10-$DF1F") | hardware, reu | CORRECTED | fpga/cart_slot/vhdl_source/reu.vhd:429-483 |
+| CRT prohibit table; ALL_BUT_REU = EasyFlash 1, C128 IO 1, FC3 1 (not GeoRAM); EasyFlash and C128 IO 1/2 force UCI on | hardware | CORRECTED | software/io/c64/c64.h:243-258; c64_crt.cc:468-648; c64.cc:1358-1430 |
+| ACIA mapping values | hardware | ADDED | software/io/acia/modem.cc:46,69 |
+| Streams routes on U2 family: "501" | hardware | CORRECTED to 404 (route not built) | 1541ultimate@700c7f2fa target/u64*/…/Makefile list route_streams.cc, U2 makefiles do not |
+| debugreg on U2 family: 501 | hardware | CORRECTED to 404 (`#if U64`) | software/api/route_machine.cc:453 |
+| Ident service JSON reply trigger | hardware | ADDED | software/network/socket_dma.cc:650 |
+| "IEC activity can re-trigger the 1 MHz window" | hardware | REMOVED (no source, no measurement) | - |
+| C64U LED section "UNRESOLVED" hedge | hardware | REWRITTEN as measured C64U facts; restart recovery to Not verified | earlier camera measurements |
