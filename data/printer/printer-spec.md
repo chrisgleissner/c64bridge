@@ -2,7 +2,7 @@
 
 **Scope:** C64 → Printer via serial device **4**. Two protocols:
 
-- **Commodore MPS** (PETSCII + MPS-801 protocol; all later MPS follow this)
+- **Commodore MPS** (PETSCII + MPS-801 control codes; the MPS-803 uses the same codes)
 - **Epson FX (ESC/P)** (ASCII + ESC sequences; widely compatible)
 
 **Defaults & Routing:** If user/printer is unspecified → **Commodore MPS**.  
@@ -17,7 +17,7 @@ See `printer-prompts.md` for routing logic and prompt templates.
 ```basic
 10 OPEN1,4,0 : REM Commodore MPS, PETSCII upper/graphics (sa=0)
 20 PRINT#1,"HELLO"
-30 PRINT#1,CHR$(13);CHR$(10)
+30 REM PRINT# ALREADY ENDS THE LINE WITH CR
 40 PRINT#1,CHR$(12)
 50 CLOSE1
 ```
@@ -43,19 +43,17 @@ The C64 KERNAL provides complete device-independent I/O through standardized ent
 ```asm
 ; Print "HELLO" to printer device #4 via KERNAL
 
-    lda #4       ; Device number (printer)
-    ldx #0       ; Secondary address
-    ldy #1       ; Logical file number
-    jsr $ffba    ; SETLFS
+    lda #1       ; Logical file number
+    ldx #4       ; Device number (printer)
+    ldy #0       ; Secondary address (0 = upper case/graphics)
+    jsr $ffba    ; SETLFS: A = file, X = device, Y = secondary address
 
-    lda #<msg
-    ldx #>msg
-    ldy #5       ; Length of message
-    jsr $ffbd    ; SETNAM
+    lda #0       ; no file name
+    jsr $ffbd    ; SETNAM: A = length, X/Y = name address low/high
 
     jsr $ffc0    ; OPEN
-    lda #1
-    jsr $ffc9    ; CHKOUT (select output channel)
+    ldx #1
+    jsr $ffc9    ; CHKOUT: X = logical file number
 
     ldx #0
 next:
@@ -76,7 +74,7 @@ msg: .text "HELLO"
 ### (B) Epson FX Version in Assembly
 
 Same code as above, but `msg` should contain **ASCII** (not PETSCII) characters.  
-For example, to print bold text before HELLO:
+For example, to print bold text before HELLO (set the `cpx` count to the new length, 9):
 
 ```asm
 msg: .byte 27,"E",'H','E','L','L','O',27,"F"
@@ -108,7 +106,8 @@ msg: .byte 27,"E",'H','E','L','L','O',27,"F"
 | **Horizontal Tab** | `CHR$(9)` | `09` | `CHR$(9)` | `09` |
 | **Standard Width** | `CHR$(15)` | `0F` | `DC4` / `ESC W 0` | `14` / `1B 57 00` |
 | **Double Width** | `CHR$(14)` | `0E` | `SO` / `ESC W 1` | `0E` / `1B 57 01` |
-| **Condensed / Elite (12 cpi)** | — | — | `ESC M` | `1B 4D` |
+| **Elite (12 cpi)** | — | — | `ESC M` | `1B 4D` |
+| **Condensed (17.16 cpi) ON / OFF** | — | — | `SI` / `DC2` | `0F` / `12` |
 | **Pica (10 cpi)** | — | — | `ESC P` | `1B 50` |
 | **Bold ON / OFF** | — | — | `ESC E` / `ESC F` | `1B 45` / `1B 46` |
 | **Italic ON / OFF** | — | — | `ESC 4` / `ESC 5` | `1B 34` / `1B 35` |
@@ -117,14 +116,14 @@ msg: .byte 27,"E",'H','E','L','L','O',27,"F"
 | **Set Line Spacing (n×1/72")** | — | — | `ESC A n` | `1B 41 nn` |
 | **Set Left Margin** | — | — | `ESC l n` | `1B 6C nn` |
 | **Set Right Margin** | — | — | `ESC Q n` | `1B 51 nn` |
-| **Horizontal Position (col)** | `CHR$(16);CHR$(n)` | `10 nn` | `ESC $ nL nH` | `1B 24 nL nH` |
-| **Horizontal Position (dots)** | `ESC(27);CHR$(16);HP;LP` | `1B 10 HP LP` | `ESC $ nL nH` | `1B 24 nL nH` |
+| **Horizontal Position (col)** | `CHR$(16);"nn"` (2 digits) | `10 3x 3y` | — (FX-80 has no absolute position) | — |
+| **Horizontal Position (dots)** | `CHR$(27);CHR$(16);CHR$(HP);CHR$(LP)` | `1B 10 HP LP` | — | — |
 | **Enter Bit Image Mode** | `CHR$(8)` | `08` | `ESC K/L/Y/Z/*/^ n m ...` | `1B 4B/4C/59/5A/2A/5E nn mm ...` |
 | **Repeat Next Data Byte (MPS only)** | `CHR$(26);CHR$(n);CHR$(byte)` | `1A nn dd` | — | — |
-| **Exit Bit Image Mode** | `CHR$(15)` | `0F` | Any printable char or `LF` | — |
+| **Exit Bit Image Mode** | `CHR$(15)` | `0F` | ends after `n + 256·m` columns | — |
 | **Graphics Data Format** | 7 bits/byte (**bit7=1**) | — | 8 bits/byte (MSB=top) | — |
-| **Vertical Line Spacing (8-dot rows)** | CR + LF | `0D 0A` | `ESC A 8` | `1B 41 08` |
-| **Switch Charset (upper/lower)** | `sa=0` or `7` | — | `ESC t n` | `1B 74 nn` |
+| **Vertical Line Spacing (graphics rows)** | CR (bit image lines are 7 dots apart) | `0D` | `ESC A 8` | `1B 41 08` |
+| **Switch Charset** | `sa=0` or `7` | — | `ESC R n` (international set) | `1B 52 nn` |
 | **Reset / End Job** | `CLOSE ch` | — | `ESC @` + `FF` + `CLOSE ch` | `1B 40 0C` |
 
 ---
@@ -147,7 +146,7 @@ msg: .byte 27,"E",'H','E','L','L','O',27,"F"
 - **Character set:** MPS expects **PETSCII**; Epson expects **ASCII** with ESC/P sequences.  
 - **Mode switching:** MPS uses single-byte PETSCII controls; Epson uses multi-byte ESC (27) commands.  
 - **Graphics:** MPS Bit Image = 7-dot columns (bit7=1); Epson = 8-dot columns `(n,m)` pairs.  
-- **Line endings:** Always send CR (13); often LF (10). FF (12) for page eject.
+- **Line endings:** MPS: one CR (13) or LF (10) ends the line and advances (`PRINT#` sends CR itself); CR+LF gives an empty line on the Ultimate emulation. Epson: CR + LF (FX-80 DIP switch 2-4 can add the line feed automatically). FF (12) for page eject.
 
 ---
 
@@ -169,12 +168,12 @@ msg: .byte 27,"E",'H','E','L','L','O',27,"F"
 
 ## Graphics Summary
 
-- **MPS:** 7 dots/byte; bit7=1; ≈60×72 dpi; max ~480 dots/line.  
+- **MPS:** 7 dots/byte; bit7=1; 60 dpi horizontal, about 63 dpi vertical; at most 480 columns.  
 - **Epson:** 8 dots/byte; multiple densities via `ESC K/L/Y/Z/*/^`; use `ESC A 8` for 8-dot rows.
 
 ---
 
 ## Emulation Notes
 
-- **C64 Ultimate Printer Emulation:** supports both PETSCII (MPS) and ESC/P (Epson).  
-  Ignores advanced DLL commands; `ESC Y` behaves like `ESC L`. Prefer FF (12) for eject.
+- **Ultimate printer emulation** (an MPS-1230): the printer setting selects Commodore MPS (default), Epson FX-80, IBM Graphics Printer or IBM Proprinter; it does not detect the protocol.  
+  Commodore mode parses and ignores downloadable characters (`ESC =`); `ESC Y` uses the same spacing as `ESC L`. Send FF (12) or use "Flush Printer/Eject Page" to finish a page (256-byte buffer).

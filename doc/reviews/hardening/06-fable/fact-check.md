@@ -325,3 +325,40 @@ Calculations in `verify/` notes: PAL 985248 Hz, NTSC 1022727 Hz as in A1b.
 | Program must end below $D000, about 50 KB | :173 | CONFIRMED | - | $D000 - $0801 = 51199 bytes |
 | KERNAL IRQ normally 60 Hz; TI about 16.5 % slow on a PAL song, 0.3 % on NTSC | :181 | CONFIRMED | - | ROM $FDE2-$FDF0: CIA1 timer A = $4025 (PAL) / $4295 (NTSC), 985248/16422 = 59.996 Hz, 1022727/17046 = 59.998 Hz; 1 - 50.1245/59.996 = 16.45 %, 1 - 59.826/59.998 = 0.29 % |
 | `10 SYS2061` | :179 | CONFIRMED | - | 2061 = $080D |
+
+### D8 - Printer documents (data/printer/*.md)
+
+Sources fetched 2026-11-20 (`printer/` in W6-src): Commodore MPS-801 manual, zimmers mirror
+`.../manuals/printers/mps801.txt`; MPS-803 User's Guide (`MPS-803_Printer_Users_Guide.pdf`, pdftotext);
+Epson FX-80 Printer User Manual 1984, archive.org `Epson_FX-80_Printer_User_Manual_1984_Epson_America_Inc`
+(`_djvu.txt` OCR). Ultimate emulation: 1541ultimate `18bea13` `software/io/printer/{mps_printer_cbm.cc,
+mps_printer_epson.cc,mps_printer.cc,iec_printer.cc}` and 1541u-documentation `9b06839` `ultimate_printer.rst`.
+KERNAL registers: c64ref ROM disassembly.
+
+| Item | file | Verdict | Corrected wording | Source |
+|---|---|---|---|---|
+| sa 0 upper case/graphics (default), sa 7 business | commodore, spec | CONFIRMED | - | MPS-801 "sa = 0: graphic mode.. . (default)", "sa = 7: business mode"; Ultimate `iec_printer.cc` `_push_command` 0x00/0x07 |
+| CHR$(8, 10, 13, 14, 15, 17, 18, 26, 27, 145, 146) meanings | commodore, spec | CONFIRMED | - | MPS-801 "5. Printing Modes and Control Codes" list; MPS-803 Table 1 |
+| Column position `CHR$(16);CHR$(n)`, n = 0-79 | commodore, spec | CONFIRMED-ERROR, fixed | two ASCII digits `CHR$(16);"nn"` | MPS-801 5.4 ("2-digit number following the CHR$(16)", `CHR$(16)"08MPS-801"`); Ultimate `case 0x10` (`input & 0x0F`, two digits) |
+| Dot position `ESC CHR$(16) HP LP`, 0-479 | commodore, bitmap, spec | CONFIRMED | - | MPS-801 5.5 (9-bit address, dots 0-479) |
+| Local charset modes until CR | commodore | CONFIRMED for MPS; Ultimate differs, added | - | MPS-803 "CHR$(17) functions until CHR$(145) or carriage return"; MPS-801 5.8; Ultimate CR handler does not reset `charset_variant` |
+| CR/LF: "use CR+LF if overprinting occurs" | commodore, spec | IMPRECISE, fixed | CR and LF each advance; CR+LF leaves a blank line (Ultimate) | Ultimate `mps_printer_cbm.cc` "LF: line feed (LF+CR)", "CR: carriage return (CR+LF)" |
+| CHR$(9) tab, CHR$(12) form feed, ESC "-" underline on MPS | commodore | IMPRECISE, marked *Ultimate* | not in MPS-801/803 lists; handled by the Ultimate (MPS-1230) emulation | MPS-801/803 code lists; Ultimate `case 0x09`, `case 0x0C`, ESC `case 0x2D` |
+| Bit image: 7 dots, LSB top, add 128 | bitmap, spec | CONFIRMED | - | MPS-801 5.3 (rows 1..64 top to bottom, "add 128"); Ultimate `CBMBim` "LSB is up" |
+| Exit bit image with CHR$(15) "or any printable char" | bitmap | IMPRECISE, fixed | CHR$(15) per manual; the Ultimate also exits on a printable byte below 128 | MPS-801 example `CHR$(8)A$;CHR$(15)`; MPS-803 "CHR$(14) and CHR$(15) cancel ... bit image"; Ultimate default case `bim_mode = false` |
+| "~60 dpi H, 72 dpi V", "~480 dots" | bitmap, spec | IMPRECISE, fixed | 60 dpi H, about 63 dpi V, at most 480 columns | MPS-801 Appendix A: 480 columns, 10 char/in x 6 dots, 9 lines/in in bit image mode with 7 dots |
+| CHR$(26) repeat: count then byte | bitmap, spec | CONFIRMED; Ultimate count 0 = 256 added | - | MPS-801 5.6 figure 3.19; Ultimate `case 0x1A` |
+| "16 columns x 3 rows" example comment | bitmap | CONFIRMED-ERROR, fixed | 48 columns in one row | the program prints A$ three times on one line |
+| "printer auto-prints when ~480 dots are filled" | bitmap | UNVERIFIED, marked | - | not in the manuals |
+| FX-80: ESC @, ESC M/P, SO/DC4, ESC W, SI/DC2, ESC E/F, ESC 4/5, ESC - n, ESC 0/1/2/3/A, ESC D/B/l/Q, ESC J/j | epson, spec | CONFIRMED | - | FX-80 manual index of ESC sequences (p. 242 ff.), Elite 12 cpi (p. 52), compressed 17.16 cpi, SO "turns off after each print line" |
+| `ESC x n` NLQ | epson | IMPRECISE, marked | not on the FX-80; accepted by the Ultimate emulation | FX-80 command index (no ESC x); Ultimate `case 0x78` |
+| `ESC $` absolute position, `ESC t n` charset | spec | CONFIRMED-ERROR, fixed | none on FX-80; charset via `ESC R n` | FX-80 command index; Ultimate Epson interpreter has no `0x24`/`0x74` case |
+| "Condensed / Elite (12 cpi) = ESC M" | spec | IMPRECISE, fixed | Elite = ESC M; condensed = SI/DC2 | FX-80 p. 52-53 |
+| Graphics K 60, L 120, Y 120 high speed, Z 240, `ESC *` 0-6 = 60/120/120/240/80/72/90 dpi, MSB top, 72 dpi vertical | epson-bitmap, spec | CONFIRMED; "no adjacent dots" for Y and Z added | - | FX-80 graphics density table ("does not print consecutive dots in any one row"), "Single-Density graphics dots are printed 60 per inch horizontally and 72 per inch vertically", "fire the top pin ... CHR$(128)" |
+| `ESC ^ d n m h1 l1`, d in {0,1} | epson-bitmap | IMPRECISE, fixed | two bytes per column: first = top 8 pins, bit 7 of second = 9th pin; d 0 single, 1 double | FX-80 9-pin section and figure 11-5 |
+| Epson "Exit bit image: any printable char or LF" | spec | CONFIRMED-ERROR, fixed | mode ends after `n + 256*m` columns | FX-80 "Width = n1+256*n2"; Ultimate `ESC K/L/Y/Z` end after `param_build` bytes |
+| "Ultimate-II may treat Y as L" | epson-bitmap, spec | CONFIRMED (same spacing) | - | Ultimate `density_tab` rows 1 and 2 both `{2,2,2}` |
+| Assembly example: SETLFS A=device X=SA Y=file; SETNAM `lda #<msg / ldx #>msg / ldy #5`; CHKOUT with A | spec | CONFIRMED-ERROR, fixed | SETLFS A=file X=device Y=SA; SETNAM A=length X/Y=address (length 0 here); CHKOUT X=file | ROM $FE00-$FE04 (`STA $B8` file, `STX $BA` device, `STY $B9` SA), $FDF9-$FDFD, $F30F/$F313 "copy the logical file number to A" from X (B18) |
+| Ultimate emulation "supports both PETSCII and ESC/P", "Ignores DLL" | spec, prompts | IMPRECISE, fixed | emulation chosen in the settings (Commodore MPS default, Epson FX-80, IBM GP, IBM PP); Commodore mode ignores `ESC =`, Epson mode has `ESC &` | `ultimate_printer.rst` "Printer emulation" setting; Ultimate CBM `case 0x3D` "parse but ignore", Epson `case 0x26` |
+| 256-byte buffer, Flush Printer/Eject Page | spec | ADDED | - | `ultimate_printer.rst` "Flushing the printer spool" |
+| `$033C-$03FB` free for print buffers | spec | CONFIRMED | - | A8b (Mapping TBUFFR) |
