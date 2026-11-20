@@ -64,8 +64,9 @@
         "integer",
         "null"
       ],
-      "description": "Interval milliseconds (minimum 100)",
+      "description": "Interval milliseconds (100 to 86400000)",
       "minimum": 100,
+      "maximum": 86400000,
       "default": 1000
     },
     "maxIterations": {

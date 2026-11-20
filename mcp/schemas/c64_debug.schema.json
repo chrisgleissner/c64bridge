@@ -29,7 +29,7 @@
     },
     "address": {
       "type": "string",
-      "description": "Start address (e.g. $0801).",
+      "description": "Start address: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
       "minLength": 1
     },
     "endAddress": {
@@ -37,7 +37,7 @@
         "string",
         "null"
       ],
-      "description": "Optional end address for range.",
+      "description": "End address (inclusive) of an address range, in the same forms as address.",
       "minLength": 1
     },
     "stopOnHit": {
@@ -171,9 +171,11 @@
             "minimum": 0
           },
           "value": {
-            "type": "integer",
-            "description": "Value to write.",
-            "minimum": 0
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Value to write: an integer, or a string such as \"$C000\", \"0xC000\", a loaded label or label+n."
           }
         },
         "required": [
@@ -208,7 +210,7 @@
         "string",
         "null"
       ],
-      "description": "Target PC address to wait for (e.g. $0810).",
+      "description": "PC address to wait for: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
       "minLength": 1
     },
     "timeoutMs": {

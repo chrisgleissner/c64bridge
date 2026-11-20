@@ -17,7 +17,7 @@
     },
     "path": {
       "type": "string",
-      "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
+      "description": "Path to the PRG file: on c64u/u2 an Ultimate-visible path such as //USB0/demo.prg, or a host path with location host; on VICE a host path.",
       "minLength": 1
     },
     "location": {
@@ -37,7 +37,7 @@
         "string",
         "null"
       ],
-      "description": "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
+      "description": "Label file (VICE .vs, 64tass, ACME or KickAssembler). Its labels annotate disassemble listings and are accepted wherever c64_memory and c64_debug take an address (label, label+n).",
       "minLength": 1
     },
     "program": {
@@ -50,18 +50,19 @@
         "boolean",
         "null"
       ],
-      "description": "Run post-execution polling to ensure the BASIC program executed without errors. Limits depend on op."
+      "description": "Poll the screen until the program ends, shows a BASIC error or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) passes; an error is reported with its line. Without verify the program is started and nothing is observed. Limits depend on op."
     },
     "autoFix": {
       "type": [
         "boolean",
         "null"
       ],
-      "description": "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      "description": "With verify:true, when a BASIC error is seen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
       "default": true
     },
     "programs": {
       "type": "array",
+      "description": "Programs to run in order (at most 64).",
       "items": {
         "type": "object",
         "description": "Program to run with assertions",
@@ -125,7 +126,9 @@
           "path"
         ],
         "additionalProperties": false
-      }
+      },
+      "minItems": 1,
+      "maxItems": 64
     },
     "continueOnError": {
       "type": [

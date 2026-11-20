@@ -101,6 +101,7 @@
         "description": "File extensions to include (without dot)",
         "minLength": 1
       },
+      "maxItems": 8,
       "default": [
         "prg",
         "crt"

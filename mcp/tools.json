@@ -23,7 +23,7 @@
           },
           "path": {
             "type": "string",
-            "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
+            "description": "Path to the PRG file: on c64u/u2 an Ultimate-visible path such as //USB0/demo.prg, or a host path with location host; on VICE a host path.",
             "minLength": 1
           },
           "location": {
@@ -43,7 +43,7 @@
               "string",
               "null"
             ],
-            "description": "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
+            "description": "Label file (VICE .vs, 64tass, ACME or KickAssembler). Its labels annotate disassemble listings and are accepted wherever c64_memory and c64_debug take an address (label, label+n).",
             "minLength": 1
           },
           "program": {
@@ -56,18 +56,19 @@
               "boolean",
               "null"
             ],
-            "description": "Run post-execution polling to ensure the BASIC program executed without errors. Limits depend on op."
+            "description": "Poll the screen until the program ends, shows a BASIC error or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) passes; an error is reported with its line. Without verify the program is started and nothing is observed. Limits depend on op."
           },
           "autoFix": {
             "type": [
               "boolean",
               "null"
             ],
-            "description": "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+            "description": "With verify:true, when a BASIC error is seen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
             "default": true
           },
           "programs": {
             "type": "array",
+            "description": "Programs to run in order (at most 64).",
             "items": {
               "type": "object",
               "description": "Program to run with assertions",
@@ -131,7 +132,9 @@
                 "path"
               ],
               "additionalProperties": false
-            }
+            },
+            "minItems": 1,
+            "maxItems": 64
           },
           "continueOnError": {
             "type": [
@@ -289,7 +292,7 @@
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -345,12 +348,12 @@
           },
           "address": {
             "type": "string",
-            "description": "Start address expressed as $HHHH, decimal, or a documented symbol name.",
+            "description": "Start address: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
             "minLength": 1
           },
           "length": {
             "type": "integer",
-            "description": "Number of bytes to read starting from the resolved address. Limits depend on op.",
+            "description": "Number of bytes to read starting from the resolved address (default 256, cut at $FFFF when not given). Limits depend on op.",
             "minimum": 1,
             "maximum": 16384
           },
@@ -402,7 +405,7 @@
           },
           "pattern": {
             "type": "string",
-            "description": "Substring or regex to find (at most 200 characters; on runtimes without evaluation timeout, backreferences and nested quantifiers are rejected) Limits depend on op.",
+            "description": "Substring or regex to find (^ and $ match at screen row boundaries; at most 200 characters; on runtimes without evaluation timeout, backreferences and nested quantifiers are rejected) Limits depend on op.",
             "minLength": 1
           },
           "isRegex": {
@@ -451,22 +454,30 @@
           },
           "source": {
             "type": "string",
-            "description": "Source start address ($HHHH, decimal, or symbol).",
+            "description": "Source start address: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
             "minLength": 1
           },
           "dest": {
             "type": "string",
-            "description": "Destination start address.",
+            "description": "Destination start address, in the same forms as source.",
             "minLength": 1
+          },
+          "includeIo": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Ultimate hardware: also read $D000-$DFFF. Reading there reaches the I/O chips and can clear pending CIA interrupts of the running program. Default false; VICE reads have no side effects.",
+            "default": false
           },
           "startAddress": {
             "type": "string",
-            "description": "Start of search range ($HHHH, decimal, or symbol).",
+            "description": "Start of the search range: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
             "minLength": 1
           },
           "endAddress": {
             "type": "string",
-            "description": "End of search range (inclusive).",
+            "description": "End of the search range (inclusive), in the same forms as startAddress.",
             "minLength": 1
           },
           "maxResults": {
@@ -481,12 +492,12 @@
           },
           "address1": {
             "type": "string",
-            "description": "First region start address.",
+            "description": "First region start address: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
             "minLength": 1
           },
           "address2": {
             "type": "string",
-            "description": "Second region start address.",
+            "description": "Second region start address, in the same forms as address1.",
             "minLength": 1
           },
           "maxDiffs": {
@@ -516,12 +527,12 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: none.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: none.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
         "additionalProperties": false
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -599,7 +610,7 @@
           },
           "volume": {
             "type": "number",
-            "description": "Desired SID master volume. Values outside 0-15 are clamped.",
+            "description": "SID master volume 0-15 (other values are rejected). Writes all of $D418, so filter mode bits set by a running program are cleared.",
             "minimum": 0,
             "maximum": 15
           },
@@ -631,8 +642,11 @@
             "minimum": 1
           },
           "system": {
-            "type": "string",
-            "description": "Video system for frequency calculation.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Video system for frequency calculation. Limits depend on op.",
             "enum": [
               "PAL",
               "NTSC"
@@ -689,7 +703,8 @@
               "boolean",
               "null"
             ],
-            "description": "When true, record audio after silencing to confirm the SID output is quiet. Limits depend on op."
+            "description": "When true, record audio after silencing to confirm the SID output is quiet.",
+            "default": false
           },
           "path": {
             "type": "string",
@@ -781,8 +796,16 @@
               "boolean",
               "null"
             ],
-            "description": "When true, skip playback and only return compilation metadata.",
+            "description": "When true, skip playback and only return compilation metadata (combine with outputPath to export the file).",
             "default": false
+          },
+          "outputPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host file to write the compiled PRG or SID (per output) to, inside the allowed directories. Works with dryRun on every backend.",
+            "minLength": 1
           },
           "platforms": {
             "type": [
@@ -839,16 +862,16 @@
               "boolean",
               "null"
             ],
-            "description": "Run silence verification before playback to ensure a quiet baseline.",
-            "default": true
+            "description": "Record a quiet baseline before playback (adds the silence duration to the call). Default false.",
+            "default": false
           },
           "verifySilenceAfter": {
             "type": [
               "boolean",
               "null"
             ],
-            "description": "Run silence verification after playback to ensure voices are released.",
-            "default": true
+            "description": "Record after playback to confirm the voices were released (adds the silence duration). Default false: the SID is just silenced.",
+            "default": false
           },
           "silenceDurationSeconds": {
             "type": [
@@ -891,9 +914,13 @@
             "default": 150
           },
           "request": {
-            "type": "string",
-            "description": "Natural language user request describing the verification goal.",
-            "minLength": 1
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional wording of the verification goal; \"does it sound right\" style requests add a verdict to the notes.",
+            "minLength": 1,
+            "default": "analyze the SID output"
           },
           "durationSeconds": {
             "type": [
@@ -908,12 +935,12 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset [write]: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun.\n- play_preset [write]: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: request. Optional inputs: durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. Required inputs: none. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset [write]: Soft or hard reset of SID registers to clear glitches. Required inputs: none. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Required inputs: none. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Required inputs: none. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Generate a lightweight SID arpeggio playback sequence. Required inputs: none. Optional inputs: root, pattern, steps, tempoMs, waveform, preset, system.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Required inputs: none. Optional inputs: sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset such as Für Elise by Beethoven. Required inputs: none. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play it, and analyze the recording. Required inputs: none. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Automatically analyze SID playback when verification is requested. Required inputs: none. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
         "additionalProperties": false
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -1041,8 +1068,9 @@
               "integer",
               "null"
             ],
-            "description": "Interval milliseconds (minimum 100)",
+            "description": "Interval milliseconds (100 to 86400000)",
             "minimum": 100,
+            "maximum": 86400000,
             "default": 1000
           },
           "maxIterations": {
@@ -1164,11 +1192,11 @@
         "required": [
           "op"
         ],
-        "description": "Runtime backend selection operations.\n\nOperations:\n- select [write]: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
+        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
         "additionalProperties": false
       },
       "annotations": {
-        "readOnlyHint": false,
+        "readOnlyHint": true,
         "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false
@@ -1182,7 +1210,7 @@
           "vice"
         ],
         "operationEffects": {
-          "select": "write"
+          "select": "read"
         }
       }
     },
@@ -1430,7 +1458,7 @@
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -1666,6 +1694,7 @@
               "array",
               "null"
             ],
+            "maxItems": 16,
             "items": {
               "type": "string",
               "description": "File extensions to include (without dot)",
@@ -2017,7 +2046,7 @@
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -2142,6 +2171,7 @@
               "description": "File extensions to include (without dot)",
               "minLength": 1
             },
+            "maxItems": 8,
             "default": [
               "prg",
               "crt"
@@ -2293,8 +2323,8 @@
               "integer",
               "null"
             ],
-            "description": "Stride between sprite candidates in bytes",
-            "minimum": 1,
+            "description": "Stride between sprite candidates in bytes (at least 63; sprite blocks are 64 bytes apart)",
+            "minimum": 63,
             "default": 64
           },
           "maxSprites": {
@@ -2332,8 +2362,16 @@
               "boolean",
               "null"
             ],
-            "description": "Include base64 data in response",
-            "default": true
+            "description": "Also include each sprite as base64 (bytesHex already carries the data)",
+            "default": false
+          },
+          "includeRows": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Include the per-row bit activation of each sprite",
+            "default": false
           },
           "outputDir": {
             "type": [
@@ -2408,10 +2446,9 @@
               "integer",
               "null"
             ],
-            "description": "Chunk size for reads",
+            "description": "Bytes per read request (default: the whole range in one read)",
             "minimum": 1,
-            "maximum": 4096,
-            "default": 512
+            "maximum": 65536
           },
           "retries": {
             "type": [
@@ -2441,7 +2478,8 @@
               "type": "string",
               "description": "Limit to these extensions (without dot)",
               "minLength": 1
-            }
+            },
+            "maxItems": 16
           },
           "includeContainers": {
             "type": [
@@ -2465,12 +2503,12 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
+        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, includeRows, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
         "additionalProperties": false
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -2535,7 +2573,7 @@
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -2586,7 +2624,7 @@
           },
           "address": {
             "type": "string",
-            "description": "Start address (e.g. $0801).",
+            "description": "Start address: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
             "minLength": 1
           },
           "endAddress": {
@@ -2594,7 +2632,7 @@
               "string",
               "null"
             ],
-            "description": "Optional end address for range.",
+            "description": "End address (inclusive) of an address range, in the same forms as address.",
             "minLength": 1
           },
           "stopOnHit": {
@@ -2728,9 +2766,11 @@
                   "minimum": 0
                 },
                 "value": {
-                  "type": "integer",
-                  "description": "Value to write.",
-                  "minimum": 0
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "description": "Value to write: an integer, or a string such as \"$C000\", \"0xC000\", a loaded label or label+n."
                 }
               },
               "required": [
@@ -2765,7 +2805,7 @@
               "string",
               "null"
             ],
-            "description": "Target PC address to wait for (e.g. $0810).",
+            "description": "PC address to wait for: $HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3).",
             "minLength": 1
           },
           "timeoutMs": {
@@ -2864,7 +2904,7 @@
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },
@@ -2917,7 +2957,7 @@
           },
           "key": {
             "type": "string",
-            "description": "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.).",
+            "description": "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.). STOP and RUN only type codes 3 and 131 into the keyboard buffer and may not break a running program; use op keyboard with run_stop on C64U.",
             "minLength": 1,
             "maxLength": 32
           },
@@ -3068,7 +3108,7 @@
       },
       "annotations": {
         "readOnlyHint": false,
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false
       },

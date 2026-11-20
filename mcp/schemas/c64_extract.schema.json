@@ -31,8 +31,8 @@
         "integer",
         "null"
       ],
-      "description": "Stride between sprite candidates in bytes",
-      "minimum": 1,
+      "description": "Stride between sprite candidates in bytes (at least 63; sprite blocks are 64 bytes apart)",
+      "minimum": 63,
       "default": 64
     },
     "maxSprites": {
@@ -70,8 +70,16 @@
         "boolean",
         "null"
       ],
-      "description": "Include base64 data in response",
-      "default": true
+      "description": "Also include each sprite as base64 (bytesHex already carries the data)",
+      "default": false
+    },
+    "includeRows": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Include the per-row bit activation of each sprite",
+      "default": false
     },
     "outputDir": {
       "type": [
@@ -146,10 +154,9 @@
         "integer",
         "null"
       ],
-      "description": "Chunk size for reads",
+      "description": "Bytes per read request (default: the whole range in one read)",
       "minimum": 1,
-      "maximum": 4096,
-      "default": 512
+      "maximum": 65536
     },
     "retries": {
       "type": [
@@ -179,7 +186,8 @@
         "type": "string",
         "description": "Limit to these extensions (without dot)",
         "minLength": 1
-      }
+      },
+      "maxItems": 16
     },
     "includeContainers": {
       "type": [
@@ -203,6 +211,6 @@
   "required": [
     "op"
   ],
-  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
+  "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, includeRows, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Required inputs: none. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Required inputs: none. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics. Required inputs: none.",
   "additionalProperties": false
 }

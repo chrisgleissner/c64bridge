@@ -871,8 +871,8 @@ Grouped entry point for sprite/charset extraction, memory dumps, filesystem stat
 | `charset` | Locate and extract 2KB character sets from RAM. | — | `address`, `scanRange="common"`, `outputPath`, `pauseDuringRead=true`, `minNonEmptyChars=32`, `minEntropy=0.3` | ✅ | ✅ | ✅ |
 | `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ | ✅ | ✅ |
 | `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ | ✅ |  |
-| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize=512`, `pauseDuringRead=true`, `retries=1` | ✅ | ✅ | ✅ |
-| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=true`, `outputDir`, `pauseDuringRead=true` | ✅ | ✅ | ✅ |
+| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize`, `pauseDuringRead=true`, `retries=1` | ✅ | ✅ | ✅ |
+| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=false`, `includeRows=false`, `outputDir`, `pauseDuringRead=true` | ✅ | ✅ | ✅ |
 
 #### c64_graphics
 
@@ -906,15 +906,15 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | `maxDiffs=10` | ✅ | ✅ | ✅ |
-| `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | — | ✅ | ✅ | ✅ |
+| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | `maxDiffs=10`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | `includeIo=false` | ✅ | ✅ | ✅ |
 | `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ | ✅ |
 | `list_basic` | List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE. | — | — | ✅ | ✅ | ✅ |
 | `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"` | ✅ | ✅ | ✅ |
 | `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ | ✅ |
-| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true` | ✅ | ✅ | ✅ |
-| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10` | ✅ | ✅ | ✅ |
+| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | ✅ | ✅ | ✅ |
 | `write` | Write a hexadecimal byte sequence into RAM. Supports verification. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | ✅ | ✅ | ✅ |
 
@@ -967,15 +967,15 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `analyze` | Automatically analyze SID playback when verification is requested. | `request` | `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
+| `analyze` | Automatically analyze SID playback when verification is requested. | — | `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
-| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false` | ✅ | ✅ | ✅ |
-| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"` | ✅ | ✅ | ✅ |
+| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
+| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"`, `system="PAL"` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system="PAL"`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
-| `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=true`, `verifySilenceAfter=true`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
+| `pipeline` | Compile a SIDWAVE score, play it, and analyze the recording. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ | ✅ |  |
-| `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. Supports verification. | — | `preset="fuer_elise"`, `platforms`, `verify=true`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
+| `play_preset` | Compile and play a built-in SID preset such as Für Elise by Beethoven. Supports verification. | — | `preset="fuer_elise"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | ✅ | ✅ |  |
 | `record_analyze` | Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `reset` | Soft or hard reset of SID registers to clear glitches. | — | `hard=false` | ✅ | ✅ | ✅ |

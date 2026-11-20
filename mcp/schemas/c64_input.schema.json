@@ -31,7 +31,7 @@
     },
     "key": {
       "type": "string",
-      "description": "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.).",
+      "description": "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.). STOP and RUN only type codes 3 and 131 into the keyboard buffer and may not break a running program; use op keyboard with run_stop on C64U.",
       "minLength": 1,
       "maxLength": 32
     },
