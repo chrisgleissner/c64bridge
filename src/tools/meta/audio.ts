@@ -220,6 +220,11 @@ const MUSIC_PRESETS: Record<MusicPresetName, MusicPresetDefinition> = {
   },
 };
 
+/** Source-level fixtures for compiler compatibility checks. */
+export function getMusicPresetSidwave(name: "chiptune_drive" | "ambient_filter" | "funk_bass"): string {
+  return MUSIC_PRESETS[name].sidwave;
+}
+
 const musicCompilePlayAnalyzeArgsSchema = objectSchema({
   description: "Compile a SIDWAVE score, play it, then record and analyze the audio output.",
   properties: {
