@@ -349,7 +349,7 @@ Constants: `π`, `TI`, `TI$`.
 | `ST` | Device status byte | Bit6=EOF, Bit7=No device |
 | `TI` | System tick counter | 1/60s resolution |
 | `TI$` | Time string | "hhmmss" |
-| `FRE(0)` | Free memory in bytes | 0–38911 |
+| `FRE(0)` | Free memory in bytes, as a signed 16-bit value (negative above 32767; add 65536) | 0–38911 |
 | `TRUE` | −1 ($FFFF) | Boolean |
 | `FALSE` | 0 | Boolean |
 
