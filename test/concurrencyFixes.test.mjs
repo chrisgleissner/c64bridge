@@ -217,11 +217,15 @@ test("a background task start that is stopped and replaced while pinning does no
   try {
     let releasePin;
     const pinGate = new Promise((resolve) => { releasePin = resolve; });
+    let markPinned;
+    const firstPinReached = new Promise((resolve) => { markPinned = resolve; });
     let pins = 0;
-    const slowCtx = { client: { pinFacade: async () => { pins += 1; if (pins === 1) await pinGate; return { type: "vice" }; }, readMemory: async () => ({ success: true, data: "$00" }) }, logger: quietLogger };
+    const slowCtx = { client: { pinFacade: async () => { pins += 1; if (pins === 1) { markPinned(); await pinGate; } return { type: "vice" }; }, readMemory: async () => ({ success: true, data: "$00" }) }, logger: quietLogger };
     const start = backgroundTool("start_background_task");
     const startA = start.execute({ name: "bg-super", operation: "read", intervalMs: 100 }, slowCtx);
-    await new Promise((resolve) => setTimeout(resolve, 20)); // A is now suspended in pinFacade
+    // Wait until A is suspended in pinFacade. A fixed delay let B take the first pin on a busy machine,
+    // and B then waited for a gate that is only released after B returns.
+    await firstPinReached;
     await backgroundTool("stop_background_task").execute({ name: "bg-super" }, slowCtx);
     const startB = await start.execute({ name: "bg-super", operation: "read", intervalMs: 5000 }, slowCtx);
     assert.ok(!startB.isError, JSON.stringify(startB.content));
