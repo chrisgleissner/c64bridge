@@ -1471,7 +1471,8 @@ for (const count of [4, 8]) {
       }
       for (const [i, base] of bases.entries()) {
         assert.ok(io.some(([address]) => address === base + 4), `frame ${frame}, SID ${i + 1} control write`);
-        assert.ok(io.some(([address]) => address === base + 24), `frame ${frame}, SID ${i + 1} volume write`);
+        // The player writes $D418 only when the value changes: during the ramp to the SID's volume.
+        if (frame < sids[i].volume) assert.ok(io.some(([address]) => address === base + 24), `frame ${frame}, SID ${i + 1} volume write`);
         assert.equal(mem[base] | (mem[base + 1] << 8), hzToSidFrequency(midiToHz(noteNameToMidi(pitches[i])), "PAL"));
         assert.equal(mem[base + 24] & 15, Math.min(frame + 1, sids[i].volume));
       }
@@ -1529,7 +1530,8 @@ test("SIDWAVE refuses illegal SID maps, unsupported PSID maps and songs crossing
     id: i + 1, patterns: { A: { groove: ["C4", "E4"], length: 0.25 } },
   })));
   large.timeline[0].bars = 60;
-  assert.throws(() => compileSidwaveToPrg(parseSidwave(large)), /past the \$D000 limit/);
+  // Identical repeats share one stream subroutine (CALL/RET), so the overflow check runs on the flat streams.
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(large), { compress: false }), /past the \$D000 limit/);
 });
 
 test("SIDWAVE measures the peak of a 30-voice table score and sets Ultimate turbo at PRG init", () => {

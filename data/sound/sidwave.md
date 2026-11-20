@@ -581,6 +581,157 @@ Time signatures other than 3/4 and 4/4, per-note velocity, multiple subtunes, an
 
 ---
 
+## Arrangement, dynamics and long form (1.2)
+
+Everything in this chapter applies to `sidwave: 1.2` documents only. SIDWAVE 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
+
+### Time units
+
+Every duration field of a 1.2 document counts **video frames** (PAL 50.12 Hz, NTSC 59.83 Hz), independent of `speed`: table `frames`, vibrato `delay`, `slide.speed`, `portamento`, `bend.frames`, chord-arp `speed`, `gate_off`, `hard_restart.frames`, numeric echo `delay` and `reverb_sim.delay_frames`. The compiler multiplies by `speed`. A table step may use `calls: N` instead of `frames` for sub-frame steps at `speed` above 1. `add` is a delta per frame (`add / speed` per call when that is an integer, otherwise `add` once per frame). A frame lasts 19 % longer on PAL than on NTSC; the player does not compensate.
+
+### Pattern text
+
+```yaml
+kit: { k: lib:kick, s: lib:snare }          # default kit; k and s are also groove tokens
+voices:
+  - id: 1
+    patterns:
+      a: { length: 0.5, bars: 1, groove: "k C2 C2 /G2! s (C2 D2 E2)" }   # 8 entries x 0.5 beat = one bar
+```
+
+- `groove` and `motif` accept one string of space-separated tokens. `|` is a bar line and has no duration. When a pattern contains `|`, every group must last exactly one bar; the error names the pattern, the group number and its length in beats. `bars: N` checks the total.
+- Unknown motif words are rejected (1.0 and 1.1 ignore them).
+- Slur: `(C4 D4 E4)` makes every note after the first `legato`. Groups do not nest and may cross a `|`.
+- Accent: `D5!` raises that note's level by the song's `accent` (default 3, range 0-8).
+- Glide: `/G2` is a portamento from the previous note, with the instrument's `portamento` or 3 frames.
+- Order: `[/]NOTE[!][@inst]`, for example `/G2!@bass`.
+- A kit key plays its instrument at C3 and is exempt from every transposition. A key that parses as a note, chord, rest or tie is rejected.
+
+### Sequences, named sections and the timeline
+
+```yaml
+sections:
+  intro:  { bars: 4, level: mp, layers: { v1: a } }
+  verse:  { bars: 8, level: mf, layers: { v1: "a*3 f", v2: am, v3: "m1 -*2" } }
+  chorus: { level: ff, layers: { v1: "a*3 f", v3: "(m1 m2)*2" } }   # bars: the longest layer pass
+timeline: [intro, verse, chorus, "verse+2", { use: chorus, transpose: 3, layers: { v2: "-" } }, "intro*2"]
+loop_to: verse
+```
+
+- A layer value with a space, `*` or parentheses is a **sequence**: `ref [*count]`, `-` (one bar of rest) and `( ... )*count` (one nesting level). Each ref plays the pattern once for its natural length. The sequence repeats until the section ends; an item cut by the section end is reported as `SEQ-CUT`. The fade suffix is not accepted inside a sequence. `transpositions` keeps cycling per repetition and adds to the reference's transposition (`a+12`).
+- A timeline entry is an inline section, a name with `+N`/`-N` transposition and `*count`, or `{ use: name, ...overrides }`. Overrides replace fields; `layers` merge per voice (`"-"` silences a voice).
+- `transpose: N` shifts every pitched note; kit tokens, drums and absolute table notes are exempt.
+- `level`, `levels`, `volume`, `filter`, `tempo` and `swing` belong to one timeline entry and do not carry into the next.
+- `loop_to` (a section name or a 1-based index) loops to the first entry with that name. The loop target replays the absolute state of its entry (levels, volume target, filter offset). `loop_to`, `end` and `length_bars` exclude each other. `LOOP-TIE` reports a tie at the target whose predecessor differs between the first and the loop pass.
+- The `arrangement` field of the compile result has one line per entry, for example `3 chorus bars 13-20 0:23-0:38 level ff est -14.2 dB v1,v2,v3`, plus `durationSeconds`, `loopTo` and `streamBytes` per voice. The estimate is the sum over voices of sustain x chip volume x gate duty, in dB relative to one voice at full sustain and volume; use it to compare sections.
+- Onsets come from the absolute beat position, never from accumulated durations, so voices stay aligned over any length. `swing: 0.5-0.75` delays every second `swing_unit` (default 0.25 beats); a section `tempo: 96` or `tempo: { to: 72 }` changes the speed linearly over the entry. Both are compile-time only.
+
+### Dynamics: level and chip volume
+
+The SID has no per-voice volume. Three quantities are kept apart:
+
+| Quantity | Field | Mechanism | Use |
+| --- | --- | --- | --- |
+| Envelope shape | instrument `adsr` | as before | timbre |
+| Level | voice `level`, section `level` / `levels`, note `!` | scales the sustain nibble written **at the attack** | mix balance, musical dynamics |
+| Chip volume | `sids[].volume`, section `volume` | `$D418` low nibble, slewed | long builds, drum SIDs, final fade |
+
+Levels are 1-15 or `pp` 4, `p` 6, `mp` 8, `mf` 10, `f` 12, `ff` 15 (default 15). The sustain written at an attack is `clamp(max(1, round(S x voice/15 x section/15)) + accent, 1, 15)`; `S = 0` stays 0 and `LEVEL-NOOP` names the instrument. A section sets `level: mf`, a ramp `level: { from: mp, to: ff }` (linear over the section, or over `bars: N` and then held) and `levels: { v2: p }` for single voices. A level is sampled at each attack and never raised while the gate is on: the envelope generator decays while its counter differs from the sustain level (reSID `EnvelopeGenerator::clock` in envelope.h: in the decay/sustain state the counter keeps decrementing while `envelope_counter != sustain_level[sustain]`), so a raised sustain would decay to zero. An instrument with a decay above 6 reacts slowly to a level and suits dynamic parts poorly.
+
+Chip volume: `volume: 12`, `volume: { from: 9, to: 15 }` or `volume: { sid2: 10 }`. A `$D418` volume step is a DC click (data/ultimate/multisid.md: 900-1400 of 32767 per step), so the player moves one step at a time, at most one step per two frames, and the compiler places ramp steps on beat boundaries. The same slew applies at section boundaries and at the loop. A ramp with more steps than beats gives `VOL-STEP`. The player writes `$D418` only when its value changes. The per-voice fade suffix lowers sustain only; a whole-mix fade is an explicit `volume: { to: 0 }`. A volume change on a SID that plays digis is an error: the digi owns the low nibble. At start-up the chip ramps from 0 to its volume one step per call.
+
+### Table timing, pitch sweep and library drums
+
+```yaml
+instruments:
+  zap: { waveform: pulse, adsr: [0, 8, 0, 0], wavetable: [{ note: G3, slide_to: C2, frames: 4 }, { gate: false, note: C2 }] }
+```
+
+`slide_to` (a note or `+N`/`-N`) moves the frequency linearly from the step's start pitch and reaches the target on the step's last call. A 1.2 document gets the revised library drums: every recipe ends with sustain 0 and holds no pitch. `lib:kick` falls from E3 (165 Hz) to G#1 (52 Hz) in 5 frames, ADSR `[0, 9, 0, 0]`; `lib:snare` is one triangle frame near 200 Hz and then noise, `[0, 8, 0, 0]`; `lib:hat` is noise with decay 4. `tom`, `clap`, `open_hat` and `crash` use sustain 0. When the next attack on a voice cuts a table in more than a quarter of its uses, `TABLE-CUT` gives the frames needed and available.
+
+### Filter model, cutoffs in Hz and ownership
+
+`sids[].model` is `"6581"` or `"8580"`. Absolute cutoffs (`cutoff`, `cutoff_base`) accept `900Hz` or `1.2kHz`; deltas (`add`, `sweep`, section offsets) stay in register units. Hz without a declared model is an error, and a filter without a model gives `FILTER-MODEL`. The curves are the nominal `f0_points_6581` and `f0_points_8580` tables of reSID 0.16 (`filter.cc`, read from the copy vendored in DOSBox-X, `src/hardware/reSID/filter.cpp`), interpolated linearly. The 8580 reaches 12.5 kHz at 2047 (also stated in resid `filter.cc`, `Filter::set_w0`: "MOS 8580 cutoff: 0 - 12.5kHz"). Real 6581 chips vary; UltiSID filter ranges for split parts are not verified (data/ultimate/multisid.md). For playback on an Ultimate, set the UltiSID filter curve to `8580 Lo` or `6581` to match `model`; the player does not change it, and the playback result lists the setting. 1.2 library instruments define cutoffs in Hz: `lib:filter_bass` sweeps from 1.2 kHz to 300 Hz and `lib:pad_slow` cycles between 400 Hz and 2 kHz.
+
+```yaml
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1, 3] } }
+sections:
+  build: { bars: 8, filter: { cutoff: { from: -400, to: 300 }, resonance: 13 }, layers: { ... } }
+```
+
+- `filter.owner` names one voice of the SID. Only its filter tables run; other voices' tables are ignored (`FILTER-IGNORED`). `route` lists the local channels 1-3 that pass through the filter (default: the owner's). The `$D417` routing bits are written once and never change; the cutoff is `clamp(table value + filter_mod offset + section offset, 0, 2047)`. While the owner is silent the filter holds its last table value plus the current offset.
+- Section `filter: { cutoff, resonance }` is an offset in register units (a number or a ramp) and replaces the table's resonance for that entry; address another SID with `filter: { sid2: { ... } }`.
+- Without an owner the old rule holds (the most recent table wins); several voices with filter tables sounding together give `FILTER-SHARED`.
+
+### End of the song
+
+`end: { hold_beats: 2, release: true }` (`end: true` means 0 beats and release). Notes sounding at the last bar line are held for `hold_beats`, then the gate is released. With `release: true` the player keeps running for the longest nominal release time of those instruments (6 ms to 24 s, capped at 4 s; the table is the datasheet's decay/release time, 3 x the attack times of reSID `rate_counter_period`, and approximate). Tables, vibrato and echo copies run during the hold. The player never writes `$D418` at the end and writes nothing after the tail; the PSID `play` routine becomes a no-op. `durationSeconds` includes the tail. A document without `end` keeps the previous behaviour.
+
+### Articulation and hard restart
+
+Use slurs for phrases: attack at the start, legato inside. `lib:pad_slow` and `lib:wide_pwm_pad` default to `legato: true` and `hard_restart: { frames: 0 }` in 1.2. A hard restart now counts video frames (default 2) so it lasts the same at every `speed`: after the restart ADSR is written the envelope rate counter can need up to 32768 CPU cycles before the envelope moves (33.3 ms PAL), which 2 calls at `speed: 4` do not cover. A gate-off shorter than 32768 cycles is accepted with `HR-SHORT`; `frames: 0` is the explicit soft re-gate. The minimum note length is the hard-restart frames plus 1 frame. `hard_restart: { test: true }` on bass and kick resets the oscillator phase at every attack.
+
+### Centre placement
+
+`sids: { layout: ultisid8, pan: wide }` sets UltiSID 1 to `Left 5` and UltiSID 2 to `Right 5` (`narrow`: `Left 3` / `Right 3`); with `ultisid8+socket1` the socket SID is `Center`. The four parts of one UltiSID share its pan (data/ultimate/multisid.md). `center: true` on a voice mirrors it onto the same channel of the paired SID (`sidN` and `sidN+4`); write `center: { sid: sid6, channel: 2 }` for explicit maps. The mirror channel must be unscored. Both copies restart with TEST set and the player writes the mirror registers directly after the voice's own, so the two oscillators start in phase; both copies are scaled by 0.75 (`center: { level: N }` overrides). A centred voice counts in the CPU budget. `role: bass | lead | drums | pad | arp` is used only by the lint; `ONE-SIDE` reports a bass, lead or drum part on one pan side only.
+
+### Sync and ring source
+
+With hard sync the perceived pitch is the source oscillator's, with ring modulation the source sets the sidebands; the source is the preceding channel on the same chip. `source_note: "+0"` (relative to the played note) or `source_note: C2` on an instrument makes the compiler drive the source channel to that pitch with a silent hidden note (no waveform selected). The source channel must be unscored while the note sounds. `RINGSYNC-SRC` reports a ring or sync note without `source_note` whose source changes pitch.
+
+### Echo
+
+`echo: { voice: 1, delay_beats: 0.75, volume: 0.4, adsr: [3, 6, 6, 6] }`: `delay_beats` follows tempo and swing; `adsr` replaces the copy's envelope. A numeric `delay` counts frames. Feedback taps: declare a second echo voice with twice the delay.
+
+### Pulse and filter table reset
+
+`pulsetable: { reset: false, loop: 1, steps: [...] }` (also `filtertable`) keeps the table running across attacks, so successive notes differ.
+
+### Digi voices on the timeline
+
+```yaml
+samples: { rate: 4000, defs: { kick: { kit: kick }, snare: { kit: snare } } }
+voices:
+  - { id: d1, digi: sid2, patterns: { beat: { length: 0.5, drums: { kit: { k: "sample:kick", s: "sample:snare" }, steps: "k.s." } } } }
+sections: { main: { bars: 8, layers: { v1: a, d1: "beat*4" } } }
+```
+
+A kit entry `sample:<name>` starts that sample. Triggers follow sections, sequences, repeats and `loop_to`, and are exempt from transposition. `digiTriggers` in src/sidwaveForm.ts maps (timeline entry, sequence item, pattern entry) to player calls; the PCM code uses it. A digi SID that also plays pitched voices gives `DIGI-SHARED`. The IRQ player never writes `$D418` of a SID while a sample is active: it updates a shadow byte (volume and filter-mode nibble) that the NMI restores.
+
+### Stream subroutines and memory
+
+Voice streams are flat command lists. In 1.2 the compiler replaces identical repeated runs of commands with one subroutine (`CALL address` / `RET`, one level, no nesting) and reports the resulting `streamBytes` per voice. A run is shared only when its commands, including every wait, are identical, so a 2-bar pattern repeated 32 times costs one copy and 32 three-byte calls. Frame rounding that differs between repeats (tempos that do not give a whole number of frames per beat) splits runs; choose a tempo without `TEMPO-GRID`. Transposed repeats are stored in full. A 1.2 score with calls costs about 110 more cycles per call in the budget estimate.
+
+### Lint
+
+The compile operations return `lint` (at most 12 aggregated entries, most severe first: `{ code, count, first, message }`) and the same text in `warnings`.
+
+| Code | Condition |
+| --- | --- |
+| `SEQ-CUT` | a sequence item is cut by the section end |
+| `LOOP-TIE` | tie at the loop target with different predecessors |
+| `LEVEL-NOOP` | level or accent on an instrument with sustain 0 |
+| `FLAT` | estimated loudness spans less than 3 dB across the song |
+| `REPEAT` | more than 75 % of the bars repeat an earlier bar across all voices |
+| `VOL-STEP` | volume ramp with more steps than beats, or a slew longer than a beat |
+| `HR-GAP` | all sounding voices (at least 2) restart on the same beat for 4 or more beats |
+| `HR-SHORT` | gate-off before an attack shorter than 32768 cycles |
+| `TABLE-CUT` | a wavetable cut by the next attack in more than a quarter of its uses |
+| `FILTER-SHARED`, `FILTER-IGNORED`, `FILTER-MODEL` | filter ownership and model |
+| `FILTER-BASS` | low-pass on the bass voice settles above 2.5 kHz |
+| `FILTER-MUTED` | low-pass cutoff below the fundamental for more than half the note |
+| `FILTER-STEP` | `cutoff` set steps of 2 or more frames jump more than 100 units at resonance 10 or more |
+| `PW-EDGE` | a pulse table leaves 5-95 % duty |
+| `ARP-FAST` | an arpeggio or table tone shorter than 1 video frame |
+| `NO-BASS` | no note below C3 for 8 or more bars while 2 or more voices sound |
+| `DUP` | two voices play the same notes at the same onsets for 2 or more bars without detune, echo or unison |
+| `CLASH` | minor second or minor ninth held for an eighth note or longer, starting on a beat |
+| `TEMPO-GRID` (info) | a sixteenth is not a whole number of calls; gives the two nearest exact tempos |
+| `RINGSYNC-SRC`, `ONE-SIDE`, `DIGI-SHARED` | see above |
+
+Errors, not warnings: noise combined with another waveform in a wavetable `wave` (it can lock the noise register), a volume change on a digi SID, and a mirror or source channel that another voice scores.
+
 ## Playable examples
 
 Open the composition index and use the names with `c64_sound` `play_preset`.
@@ -609,7 +760,36 @@ guide in its header. [Composition index](c64://sound/examples)
 
 ## LLM Prompt Template
 
-> Compose a 3–5 minute atmospheric, modern electronic SID composition using the **SIDWAVE** format.
-> Use SIDWAVE 1.1 instruments, drum transients, a one-voice chord arpeggio, filter sweeps, PWM, delayed vibrato, octave variation, and delayed phrase echoes where a voice is free.
-> Output valid YAML conforming to `sidwave.schema.json`; quote silent layers as `"-"`. Keep the score original and leave room below $D000.
-> Avoid direct note repetition; reuse and transpose patterns.
+> Compose an original 2-4 minute SID piece as **SIDWAVE 1.2** YAML conforming to `sidwave.schema.json`. Quote silent layers as `"-"`. Check `lint`, `arrangement` and `durationSeconds` in the compile result and fix every warning.
+
+SIDWAVE 1.2 quick reference:
+
+- Header: `sidwave: 1.2`, `title`, `tempo`; `sids: [{ id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }]`; `kit: { k: lib:kick, s: lib:snare }`.
+- Durations of tables, vibrato, slides, portamento and hard restart count video frames at any `speed`.
+- Patterns: `groove: "k A1 A1 A2 s A1 | ..."` (string, `|` = bar line, every `|` group is one bar), `( )` slur, `D5!` accent, `/G2` glide, `C3@inst`, `Am@arp` chord, kit keys. Set `length` (beats per entry) and optionally `bars`.
+- Form: `sections: { name: { bars, level, volume, filter, layers: { v1: "a*3 f", v2: "-" } } }`, `timeline: [intro, verse, "verse+2", { use: chorus, transpose: 3 }]`, `loop_to: verse` or `end: { hold_beats: 2, release: true }`.
+- Dynamics: `level` pp p mp mf f ff or `{ from, to }` scales the sustain at attacks (needs sustain above 0); `volume` moves the chip volume one step per two frames.
+- Filter: cutoffs as `900Hz` need `model`; one `owner` voice runs the tables; section `filter: { cutoff: { from: 0, to: 300 } }` is an offset.
+- Sync or ring lead: `source_note: "+0"` on the instrument. Bass and kick: `hard_restart: { test: true }`. Centred bass: `center: true` with `sids: { layout: ultisid8, pan: wide }`.
+- Echo: `echo: { voice: 1, delay_beats: 0.75, volume: 0.4, adsr: [3, 6, 6, 6] }`.
+- Reuse patterns through sequences and sections, vary them with `transpose` and `level`, and keep the piece original.
+
+```yaml
+sidwave: 1.2
+title: Skeleton
+tempo: 125
+sids: [{ id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }]
+kit: { k: lib:kick, s: lib:snare }
+instruments:
+  bass: { waveform: sawtooth, adsr: [0, 6, 9, 2], hard_restart: { test: true }, filtertable: [{ cutoff: 1.2kHz, resonance: 12, type: lowpass }, { add: -6, frames: 40 }] }
+  lead: { waveform: pulse, adsr: [1, 5, 11, 5], pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 24, frames: 32 }, { add: -24, frames: 32 }] } }
+voices:
+  - { id: 1, role: bass, instrument: bass, patterns: { a: { length: 0.25, groove: "k A1 A1 A2 s A1 A2 A1 k A1 A1 A2 s A1 G1 G2" } } }
+  - { id: 3, role: lead, instrument: lead, patterns: { m1: { length: 0.5, groove: "(A4 C5 E5) ~ D5! ~ (C5 B4) | A4 ~ ~ ~ - - E4 G4" } } }
+sections:
+  intro:  { bars: 4, level: mp, layers: { v1: a } }
+  verse:  { bars: 8, level: mf, layers: { v1: "a*3 a", v3: m1 } }
+  chorus: { bars: 8, level: ff, filter: { cutoff: { from: 0, to: 300 } }, layers: { v1: a, v3: "m1+12" } }
+timeline: [intro, verse, chorus, "verse+2", { use: chorus, transpose: 2 }, { use: intro, level: { from: mf, to: pp } }]
+end: { hold_beats: 2, release: true }
+```

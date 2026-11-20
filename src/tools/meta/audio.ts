@@ -555,6 +555,9 @@ export const tools: ToolDefinition[] = [
               title: document.song?.title ?? null,
               basicFreeBytes: compiled.basicFreeBytes,
               worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
+              streamBytes: compiled.streamBytes,
+              durationSeconds: compiled.durationSeconds,
+              ...(compiled.arrangement ? { arrangement: compiled.arrangement, loopTo: compiled.loopTo, lint: compiled.lint } : {}),
               ...(document.samples && {
                 sampleDefinitions: compiled.sampleDefinitions,
                 sampleBytes: compiled.sampleBytes,

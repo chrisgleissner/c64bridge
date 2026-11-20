@@ -7,9 +7,13 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
+import { cutoffHz, resolveCutoff } from "./sidwaveFilterModel.js";
+import { RELEASE_MS, SidwaveFindings, lintArrangement, arrangementReport, formatFinding, type SidwaveFinding } from "./sidwaveLint.js";
+import { digiTriggers, makeTimelineClock, rampValue, timelinePatternPasses, type TimelineClock } from "./sidwaveForm.js";
 import type { SampleStats } from "./sidwavePcm.js";
 import { addDigiPlayer, digiCyclesPerCall, digiDataAsm, digiPeakCycles, digiPeriod, validateDigiRate } from "./sidwaveDigi.js";
 import { assemblyToPrgDetailed } from "./tools/translation/assembler.js";
+import { patternBeats } from "./sidwave.js";
 import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, SidwavePatternGroove, MotifEntry, SidwaveRegisterTable, FilterModSpec, SidwaveSamples, SidwaveGrooveNote } from "./sidwave.js";
 import {
   SidwaveValidationError,
@@ -55,6 +59,10 @@ export interface CompileResult {
   instrumentCount: number;
   /** Per-voice command stream sizes in bytes. */
   streamBytes: number[];
+  arrangement?: string[];
+  durationSeconds: number;
+  loopTo?: number;
+  lint?: SidwaveFinding[];
   /** Bytes of BASIC memory left after the standalone PRG returns to BASIC (program and variables live behind the player). */
   basicFreeBytes: number;
   /** Conditions the caller should pass on, such as a PRG that leaves no BASIC memory. */
@@ -83,9 +91,25 @@ export interface CompileResult {
  * streams once per frame and runs the per-note modulation itself: hard restart, fast arpeggio,
  * pitch slide, vibrato, pulse-width sweep, and per-SID filters with sweep and per-pattern ramp.
  */
-export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?: boolean } = {}): CompileResult {
+export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress = true }: { loop?: boolean; compress?: boolean } = {}): CompileResult {
   const arrangement = arrangeSidwave(doc);
-  const streams = arrangement.voices.map((v) => encodeVoiceStream(v.events, arrangement.totalFrames));
+  loop = loop && !doc.end;
+  const loopOffsets: number[] = [];
+  let streamCalls = 0;
+  const streams: StreamByte[][] = arrangement.voices.map((v, i) => {
+    const tokens = encodeVoiceTokens(v.events, arrangement.totalFrames, loop ? arrangement.clock?.loopFrame : undefined);
+    if (doc.version !== "1.2" || !compress) {
+      const bytes: number[] = [];
+      for (const token of tokens) { if (!token.length) loopOffsets[i] = bytes.length; bytes.push(...token); }
+      return bytes;
+    }
+    const packed = compressVoiceTokens(tokens, i, (offset) => { loopOffsets[i] = offset; });
+    streamCalls += packed.calls;
+    return packed.bytes;
+  });
+  arrangement.loopOffsets = loopOffsets;
+  arrangement.streamCalls = streamCalls;
+
   if (arrangement.samples) validateDigiRate(arrangement.samples, Object.values(CLOCK_HZ));
   const musicCycles = estimatePlayerCycles(arrangement);
   const digiCyclesAt = (system: SystemMode) => arrangement.samples
@@ -117,6 +141,10 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
     );
   }
   const warnings: string[] = [];
+  if (arrangement.findings) {
+    lintArrangement(doc, arrangement, arrangement.findings);
+    for (const finding of arrangement.findings.list()) warnings.push(formatFinding(finding));
+  }
   if (arrangement.samples) {
     warnings.push(`CIA2 digi playback reserves up to ${digiCycles} CPU cycles per player call and temporarily replaces the sample SID's master volume.`);
   }
@@ -167,6 +195,11 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
     framesPerSecond: arrangement.fps,
     instrumentCount: arrangement.instruments.length - 1,
     streamBytes: streams.map((s) => s.length),
+    durationSeconds: arrangement.totalFrames / arrangement.fps,
+    loopTo: doc.loopTo === undefined ? undefined : doc.loopTo + 1,
+    arrangement: arrangementReport(doc, arrangement),
+    lint: arrangement.findings?.list(),
+
     basicFreeBytes,
     warnings,
     worstCaseCyclesPerCall,
@@ -299,6 +332,7 @@ export interface Instrument {
   filter: number;
   ring?: boolean;
   sync?: boolean;
+  sourceNote?: string;
   wavetable?: Array<Record<string, any>>;
   waveloop?: number;
   pulsetable?: SidwaveRegisterTable;
@@ -315,13 +349,23 @@ export interface ArrangedNote {
   portamento?: number;
   glideFrom?: number;
   gateOff?: number;
+  sustain?: number;
+  /** Silent note that only drives a sync or ring source oscillator (source_note). */
+  hidden?: boolean;
+  beat?: number;
+  path?: string;
+  volume?: number;
+  section?: number;
+  attack?: number;
+  release?: number;
   /** Fade window applied to this note's sustain level, if any. */
   fade?: { start: number; end: number };
 }
 
 type GlobalEvent =
   | { frame: number; kind: "filtermod"; step: number; count: number }
-  | { frame: number; kind: "volume"; value: number };
+  | { frame: number; kind: "volume"; value: number }
+  | { frame: number; kind: "foffset"; value: number; res: number };
 
 interface ChipArrangement {
   address: number;
@@ -329,6 +373,10 @@ interface ChipArrangement {
   filter: Arrangement["filter"];
   hasFilterTable: boolean;
   hasFilterMod: boolean;
+  /** filter.owner: global voice slot and static routing bits ($D417 low nibble) of this chip. */
+  owner?: number;
+  route?: number;
+  hasOffset?: boolean;
 }
 
 export interface Arrangement {
@@ -342,6 +390,16 @@ export interface Arrangement {
   chips?: ChipArrangement[];
   turbo?: boolean;
   softVolume?: boolean;
+  clock?: TimelineClock;
+  findings?: SidwaveFindings;
+  loopOffsets?: number[];
+  explicitEnd?: boolean;
+  /** CALL commands in the voice streams (stream subroutines). */
+  streamCalls?: number;
+  /** Centred voices as [source slot, mirror slot] pairs. */
+  mirrors?: Array<[number, number]>;
+  /** Release tail in player calls that follows the held end of the song. */
+  endTail?: number;
   tuning?: number[];
   samples?: SidwaveSamples;
   filter: { base: number; sweep: number; stepFixed: number; resonance: number; mode: number; used: boolean };
@@ -376,13 +434,49 @@ function createInstrumentPool() {
   return { instruments, instIndex };
 }
 
+/** Maps every `center` voice to the channel of its paired SID on the other pan side. */
+function resolveCenterMirrors(doc: ParsedSidwave): Array<[number, number]> {
+  const pairs: Array<[number, number]> = [];
+  const used = new Set(doc.voiceSlots.values());
+  for (const voice of doc.voices) {
+    if (!voice.center) continue;
+    const path = `$.voices.v${voice.id}.center`;
+    const slot = doc.voiceSlots.get(voice.id)!;
+    let mirror: number;
+    if (voice.center.sid !== undefined) {
+      const chip = doc.sids.findIndex((sid) => sid.id === voice.center!.sid);
+      if (chip < 0) throw new SidwaveValidationError(path, `SID ${voice.center.sid} is not mapped`);
+      mirror = chip * 3 + voice.center.channel! - 1;
+    } else {
+      const chip = Math.floor(slot / 3);
+      if (!doc.layout || chip >= 8) throw new SidwaveValidationError(path, "this SID has no paired SID; write center: { sid, channel }");
+      mirror = ((chip + 4) % 8) * 3 + slot % 3;
+    }
+    if (mirror === slot || Math.floor(mirror / 3) === Math.floor(slot / 3)) throw new SidwaveValidationError(path, "the mirror channel must be on another SID");
+    if (used.has(mirror)) throw new SidwaveValidationError(path, `the mirror channel (SID ${doc.sids[Math.floor(mirror / 3)]!.id}, channel ${mirror % 3 + 1}) is scored by another voice; centre needs an unscored channel`);
+    used.add(mirror);
+    pairs.push([slot, mirror]);
+  }
+  return pairs;
+}
+
 export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
+  if (doc.version !== "1.2" || !doc.end) return arrangeAll(doc, 0);
+  // The release tail depends on the instruments that sound at the last bar line, so arrange once to find it.
+  const probe = arrangeAll(doc, 0);
+  return doc.end.release && probe.endTail ? arrangeAll(doc, probe.endTail) : probe;
+}
+
+function arrangeAll(doc: ParsedSidwave, endTail: number): Arrangement {
   const first = doc.sids[0]!;
   const extended = doc.version === "1.2" || doc.sids.length > 1 || first.address !== 0xd400 || first.volume !== 15 ||
     first.filter || doc.cpu || doc.voices.some(({ id }) => doc.voiceSlots.get(id) !== id - 1);
   if (!extended) return arrangeChip(doc, createInstrumentPool());
 
   const pool = createInstrumentPool();
+  const mirrors = resolveCenterMirrors(doc);
+  const findings = doc.version === "1.2" ? new SidwaveFindings() : undefined;
+  const clock = doc.version === "1.2" ? makeTimelineClock(doc, sidwaveFrameRate(doc.song.mode) * doc.speed) : undefined;
   const parts = doc.sids.map((sid, chip) => {
     const idByChannel = new Map<number, number>();
     const voices = doc.voices.flatMap((voice) => {
@@ -402,14 +496,21 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
     return arrangeChip({
       ...doc, voices, timeline,
       song: { ...doc.song, global_fx: { reverb_sim: globalFx.reverb_sim, filter_env: filterEnv } },
-    }, pool, sid.volume, sid.filter?.filter_mod, idByChannel);
+    }, pool, sid.volume, sid.filter?.filter_mod, idByChannel, clock, findings, sid, endTail);
   });
   const voices = parts.flatMap((part) => part.voices);
+  // A centred voice sounds on its own channel and on the mirror channel; the player writes both back to back.
+  for (const [source, mirror] of mirrors) voices[mirror]!.notes = voices[source]!.notes;
   const tuning = arrangeDoubles(doc, voices, pool, parts[0]!);
   const samples = arrangeSamples(doc, parts[0]!, voices);
   return {
     ...parts[0]!,
     voices,
+    clock, findings,
+    endTail: Math.max(...parts.map((part) => part.endTail ?? 0)),
+    mirrors: mirrors.length ? mirrors : undefined,
+    explicitEnd: !!doc.end,
+    totalFrames: Math.max(...parts.map((part) => part.totalFrames)),
     tuning,
     samples,
     chips: doc.sids.map((sid, i) => {
@@ -420,6 +521,11 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
         filter: part.filter,
         hasFilterTable: part.voices.some(({ notes }) => notes.some(({ inst }) => !!pool.instruments[inst]!.filtertable)),
         hasFilterMod: part.voices[0]!.events.some(({ bytes }) => bytes[0] === OP.FILTERMOD),
+        hasOffset: part.voices[0]!.events.some(({ bytes }) => bytes[0] === OP.FILTEROFFSET),
+        ...(sid.filter?.owner === undefined ? {} : {
+          owner: doc.voiceSlots.get(sid.filter.owner)!,
+          route: (sid.filter.route ?? [(doc.voiceSlots.get(sid.filter.owner)! % 3) + 1]).reduce((bits, ch) => bits | (1 << (ch - 1)), 0),
+        }),
       };
     }),
     turbo: doc.cpu === "turbo",
@@ -432,8 +538,13 @@ function arrangeSamples(doc: ParsedSidwave, timing: Arrangement, voices: Arrange
   if (!schedule) return;
   const { rate, defs } = schedule;
   const { fps, framesPerBeat, totalFrames } = timing;
-  const frameAt = (beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS);
-  const triggers = schedule.triggers.map((trigger) => ({
+  const frameAt = timing.clock?.frameAt ?? ((beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS));
+  const digi = doc.digiVoices?.length && timing.clock ? digiTriggers(doc, timing.clock) : [];
+  for (const d of digi) {
+    if (!defs.has(d.name)) throw new SidwaveValidationError(d.path, `sample ${JSON.stringify(d.name)} is not defined in samples.defs`);
+  }
+  const scheduled: typeof schedule.triggers = [...schedule.triggers, ...digi.map((d) => ({ chip: d.chip, name: d.name, path: d.path, pitch: 0, at: d.frame }))];
+  const triggers = scheduled.map((trigger) => ({
     ...trigger, frame: trigger.at ?? frameAt(trigger.beat!),
     periods: Object.values(CLOCK_HZ).map((hz) => digiPeriod(hz, rate, trigger.pitch)),
   })).sort((a, b) => a.frame - b.frame);
@@ -521,25 +632,32 @@ function arrangeDoubles(
     const cents = tuning[sourceSlot]! + (fx.detune ?? 0);
     if (Math.abs(cents) > 100) throw new SidwaveValidationError(path, "combined detune must stay within ±100 cents");
     tuning[slot] = cents;
-    const delay = voice.echo?.delay ?? 0;
+    const delay = (voice.echo?.delay ?? 0) * doc.speed;
     const volume = voice.echo?.volume ?? 1;
     const sid = doc.sids[chip]!;
     const env = sid.filter?.filter_env ?? (chip === 0 ? doc.song.global_fx.filter_env as Record<string, unknown> | undefined : undefined);
     const channels = (env?.voices ?? [1, 2, 3]) as number[];
     const target = voices[slot]!;
     target.notes = voices[sourceSlot]!.notes.flatMap((note) => {
-      const start = note.start + delay;
-      const end = Math.min(note.end + delay, timing.totalFrames);
+      const shift = voice.echo?.delay_beats !== undefined && note.beat !== undefined
+        ? timing.clock!.frameAt(note.beat + voice.echo.delay_beats, true) - note.start : delay;
+      const start = note.start + shift;
+      const end = Math.min(note.end + shift, timing.totalFrames);
       if (end - start < 2) return [];
       const inst = pool.instruments[note.inst]!;
       checkDetunedPitch(note.midi, inst, cents, timing.system, path);
       if (note.glideFrom !== undefined) checkDetunedPitch(note.glideFrom, inst, cents, timing.system, path);
-      const sustain = Math.round((inst.sr >> 4) * volume);
+      const envelope = voice.echo?.adsr;
+      const sustain = (envelope?.[2] ?? (inst.sr >> 4)) > 0
+        ? Math.max(1, Math.round((envelope?.[2] ?? (note.sustain ?? inst.sr >> 4)) * volume)) : 0;
       const filter = sameChip ? inst.filter : Number(env ? channels.map(Number).includes(slot % 3 + 1) : !!sid.filter?.filter_mod);
-      const fade = note.fade ? { start: note.fade.start + delay, end: note.fade.end + delay } : undefined;
-      return [{ ...note, start, end, fade, inst: pool.instIndex({ ...inst, sr: (sustain << 4) | (inst.sr & 15), filter }) }];
+      const fade = note.fade ? { start: note.fade.start + shift, end: note.fade.end + shift } : undefined;
+      return [{ ...note, start, end, fade, sustain,
+        beat: note.beat === undefined ? undefined : note.beat + (voice.echo?.delay_beats ?? 0),
+        inst: pool.instIndex({ ...inst, ...(envelope ? { ad: envelope[0] << 4 | envelope[1] } : {}),
+          sr: (sustain << 4) | (envelope?.[3] ?? (inst.sr & 15)), filter }) }];
     });
-    target.events.push(...buildVoiceEvents(target.notes, pool.instruments, timing.totalFrames, timing.framesPerBeat, [], cents));
+    target.events.push(...buildVoiceEvents(target.notes, pool.instruments, timing.totalFrames, timing.framesPerBeat, [], cents, timing.clock?.loopFrame, doc.end ? timing.totalFrames : undefined));
     visiting.delete(voice.id);
     resolved.add(voice.id);
   };
@@ -566,16 +684,21 @@ function checkDetunedPitch(midi: number, inst: Instrument, cents: number, system
 function arrangeChip(
   doc: ParsedSidwave, { instruments, instIndex }: ReturnType<typeof createInstrumentPool>,
   volume = 15, sidMod?: FilterModSpec, idByChannel?: ReadonlyMap<number, number>,
+  clock?: TimelineClock, findings?: SidwaveFindings, sid?: ParsedSidwave["sids"][number], endTail = 0,
 ): Arrangement {
   const modern = doc.version === "1.2";
   const system: SystemMode = doc.song.mode ?? "PAL";
   const fps = sidwaveFrameRate(system) * doc.speed;
   const framesPerBeat = (fps * 60) / doc.song.tempo;
-  const frameAt = (beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS);
+  const frameAt = clock?.frameAt ?? ((beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS));
   const maxMidi = maxSidwaveMidi(system);
   const totalBars = doc.song.length_bars;
   const beatsPerBar = doc.song.meter;
-  const totalFrames = frameAt(totalBars * beatsPerBar);
+  const musicFrames = frameAt(totalBars * beatsPerBar);
+  const end = modern ? doc.end : undefined;
+  // Notes sounding at the last bar line are held for end.hold_beats; the release tail follows.
+  const holdFrames = end && clock ? clock.frameAt(clock.endBeat + end.holdBeats) - musicFrames : 0;
+  const totalFrames = musicFrames + holdFrames + endTail;
 
   const gfx = doc.song.global_fx as Record<string, any>;
   const fenv = gfx.filter_env as Record<string, any> | undefined;
@@ -583,10 +706,14 @@ function arrangeChip(
   let filterUsed = !!fenv || !!sidMod;
 
   const voicesById = new Map<number, SidwaveVoice>(doc.voices.map((v) => [v.id, v]));
+  // filter.owner: only the owner's tables run and the routing bits are written once (static route).
+  const ownerChannel = modern && sid?.filter?.owner !== undefined
+    ? [...(idByChannel ?? [])].find(([, voiceId]) => voiceId === sid.filter!.owner)?.[0] : undefined;
+  const ownerRoute = ownerChannel === undefined ? undefined : (sid!.filter!.route ?? [ownerChannel]).map((slot) => slot);
   const notes: ArrangedNote[][] = [[], [], []];
   const globals: GlobalEvent[] = [];
   if (sidMod) {
-    const unitFrames = { steps: framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: 1 }[sidMod.unit];
+    const unitFrames = { steps: framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: modern ? doc.speed : 1 }[sidMod.unit];
     const count = Math.max(1, Math.min(0xffff, Math.round(sidMod.amount * unitFrames)));
     globals.push({ frame: 0, kind: "filtermod", step: Math.round(sidMod.sweep * 32 / count), count });
   }
@@ -613,32 +740,44 @@ function arrangeChip(
       const ref = section.layers[`v${id}`];
       if (ref === undefined) continue;
       const voice = voicesById.get(id);
-      const parsed = parseLayerRef(ref, Object.keys(voice?.patterns ?? {}));
-      if (parsed.pattern === null || !voice) continue;
-      const pattern = voice.patterns![parsed.pattern]!;
-      const patPath = `${secPath}.layers.v${idByChannel?.get(id) ?? id} (${parsed.pattern})`;
-      active.push(id);
-      if (parsed.fade) {
-        fading.push(id);
-        fadeWindows[id - 1]!.push({ start: sf, end: ef });
-      }
-      const fxRaw = (pattern.fx ?? {}) as Record<string, any>;
-      const filterMod = fxRaw.filter_mod ? parseFilterMod(fxRaw.filter_mod, `${patPath}.fx.filter_mod`) : undefined;
-      if (filterMod) filterUsed = true;
-      const routed = filterVoices.has(id) || !!filterMod || (!fenv && !!sidMod) ? 1 : 0;
-      const entries = patternEntries(pattern, patPath, modern);
-      const lengthBeats = pattern.length ?? 1;
-      const transpositions = pattern.transpositions ?? [0];
-      const durations = entries.map((entry) => entry.kind === "note" ? entry.len ?? lengthBeats : lengthBeats);
-      const variableLength = durations.some((duration) => duration !== lengthBeats);
-      const cycleBeats = variableLength ? durations.reduce((sum, duration) => sum + duration, 0) : entries.length * lengthBeats;
+      if (!voice) continue;
+      const patterns = voice.patterns ?? {};
+      const legacy = parseLayerRef(ref, Object.keys(patterns));
+      const patPath = `${secPath}.layers.v${idByChannel?.get(id) ?? id}`;
+      const passes = modern ? timelinePatternPasses(ref, patterns, sec.startBeat, sec.endBeat, beatsPerBar, patPath)
+        : (function* () {
+            if (!legacy.pattern) return;
+            const length = patternBeats(patterns[legacy.pattern]!);
+            for (let repetition = 0; sec.startBeat + repetition * length < sec.endBeat - BEAT_EPS; repetition++) {
+              yield { ...legacy, beat: sec.startBeat + repetition * length, length, repetition, sequence: false, cut: false };
+            }
+          })();
+      let hasPattern = false;
+      let hasFilterMod = false;
       const out = notes[id - 1]!;
-      for (let c = 0; ; c += 1) {
-        const cycleStart = sec.startBeat + c * cycleBeats;
-        if (cycleStart >= sec.endBeat - BEAT_EPS) break;
-        const tr = transpositions[c % transpositions.length]! + parsed.transpose;
+      for (const pass of passes) {
+        if (!pass.pattern) continue;
+        const pattern = patterns[pass.pattern]!;
+        const cycleStart = pass.beat;
+        if (!hasPattern) active.push(id);
+        hasPattern = true;
+        if (pass.fade && !fading.includes(id)) {
+          fading.push(id);
+          fadeWindows[id - 1]!.push({ start: sf, end: ef });
+        }
+        if (pass.sequence && pass.cut) findings?.add("SEQ-CUT", `bar ${Math.floor(cycleStart / beatsPerBar) + 1} v${idByChannel?.get(id) ?? id}`, "Match the sequence length to the section");
+        const fxRaw = (pattern.fx ?? {}) as Record<string, any>;
+        const filterMod = fxRaw.filter_mod ? parseFilterMod(fxRaw.filter_mod, `${patPath}.fx.filter_mod`) : undefined;
+        if (filterMod) filterUsed = hasFilterMod = true;
+        const routed = ownerRoute ? Number(ownerRoute.includes(id)) : filterVoices.has(id) || !!filterMod || (!fenv && !!sidMod) ? 1 : 0;
+        const entries = patternEntries(pattern, patPath, modern);
+        const lengthBeats = pattern.length ?? 1;
+        const transpositions = pattern.transpositions ?? [0];
+        const durations = entries.map((entry) => entry.kind === "note" ? entry.len ?? lengthBeats : lengthBeats);
+        const variableLength = durations.some((duration) => duration !== lengthBeats);
+        const tr = transpositions[pass.repetition % transpositions.length]! + pass.transpose + (section.transpose ?? 0);
         if (filterMod) {
-          const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: 1 }[filterMod.unit];
+          const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: modern ? doc.speed : 1 }[filterMod.unit];
           const count = Math.max(1, Math.min(0xffff, Math.round(filterMod.amount * unitFrames)));
           // Offset and step are in cutoff x 32 units and signed 24-bit in the player, so the full ±2047 range ramps smoothly.
           const step = Math.round((filterMod.sweep * 32) / count);
@@ -651,8 +790,8 @@ function arrangeChip(
           offset += duration;
           if (b >= sec.endBeat - BEAT_EPS) break;
           const truncated = b + duration > sec.endBeat + BEAT_EPS;
-          const f0 = frameAt(b);
-          const f1 = frameAt(Math.min(b + duration, sec.endBeat));
+          const f0 = frameAt(b, true);
+          const f1 = frameAt(Math.min(b + duration, sec.endBeat), true);
           const entry = entries[k]!;
           if (entry.kind === "rest") continue;
           if (entry.kind === "tie") {
@@ -668,7 +807,8 @@ function arrangeChip(
               `each entry lasts ${(duration * framesPerBeat).toFixed(2)} frames at ${doc.song.tempo} BPM; the player needs at least ${SIDWAVE_MIN_NOTE_FRAMES} frames per note (one sounding frame plus the ${SIDWAVE_HARD_RESTART_FRAMES}-frame hard restart); raise 'length' or lower the tempo`,
             );
           }
-          const base = entry.notes[0]! + tr;
+          const transpose = entry.kitNote ? 0 : tr;
+          const base = entry.notes[0]! + transpose;
           const offsets = entry.chord?.offsets ?? entry.notes.map((n) => n - entry.notes[0]!);
           for (const off of offsets) {
             const midi = base + off;
@@ -701,7 +841,7 @@ function arrangeChip(
           }
           const instrumentName = entry.instrument ?? voice.instrument;
           const isLibrary = instrumentName?.startsWith("lib:");
-          const bank = isLibrary ? SIDWAVE_INSTRUMENT_LIBRARY : doc.instruments;
+          const bank = isLibrary ? (modern ? MODERN_LIBRARY : SIDWAVE_INSTRUMENT_LIBRARY) : doc.instruments;
           const key = isLibrary ? instrumentName!.slice(4) : instrumentName;
           const namedInstrument = key && Object.prototype.hasOwnProperty.call(bank, key) ? bank[key] : undefined;
           if (instrumentName && !namedInstrument) throw new SidwaveValidationError(`${patPath}.instrument`, `instrument ${JSON.stringify(instrumentName)} is not defined`);
@@ -711,23 +851,38 @@ function arrangeChip(
             fx.wavetable = offsets.map((offset) => ({ note: offset < 0 ? String(offset) : `+${offset}`, frames: entry.chord!.speed }));
             fx.loop = 0;
           }
-          let inst = buildInstrument(instVoice, fx, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps, modern);
-          const minFrames = Math.max(2, (inst.restart?.frames ?? SIDWAVE_HARD_RESTART_FRAMES) + 1);
+          if (modern && voice.center) {
+            // Both copies restart with TEST set so their oscillators start in phase.
+            const hr = fx.hard_restart as { frames?: number; adsr?: number[] } | undefined;
+            fx.hard_restart = { frames: hr?.frames || SIDWAVE_HARD_RESTART_FRAMES, adsr: hr?.adsr ?? [0, 0, 0, 0], test: true };
+          }
+          if (modern && ownerChannel !== undefined && id !== ownerChannel && fx.filtertable) {
+            fx.filtertable = undefined;
+            findings?.once("FILTER-IGNORED", String(instrumentName ?? `v${id}`), `bar ${Math.floor(b / beatsPerBar) + 1} v${idByChannel?.get(id) ?? id}`, "Move the filter table to the owner voice or remove it");
+          }
+          if (modern && !sid?.model && !isLibrary && JSON.stringify(fx.filtertable ?? "").includes('"hz"')) {
+            throw new SidwaveValidationError(`${patPath}.instrument`, "declare sids[].model before using a cutoff in Hz");
+          }
+          let inst = buildInstrument(instVoice, fx, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps, modern, doc.speed, base, sid?.model);
+          const previous = out[out.length - 1];
+          const legato = (entry.legato ?? namedInstrument?.legato) && previous?.end === f0 && f0 !== clock?.loopFrame;
+          const minFrames = legato ? 1 : (inst.restart?.frames ?? SIDWAVE_HARD_RESTART_FRAMES) + (modern ? doc.speed : 1);
           if (modern && f1 - f0 < minFrames) {
             if (truncated) continue;
             throw new SidwaveValidationError(patPath, `the note needs at least ${minFrames} frames including its hard restart`);
           }
           let midi = base;
           let glideFrom: number | undefined;
-          let portamento = entry.portamento ?? namedInstrument?.portamento;
+          let portamento = entry.portamento ?? (entry.glide ? namedInstrument?.portamento || 3 : namedInstrument?.portamento);
           if (entry.bend) {
-            midi = typeof entry.bend.to === "number" ? base + entry.bend.to : noteNameToMidi(entry.bend.to)! + tr;
+            midi = typeof entry.bend.to === "number" ? base + entry.bend.to : noteNameToMidi(entry.bend.to)! + transpose;
             glideFrom = base;
             portamento = entry.bend.frames;
           } else if (entry.slideFrom !== undefined) {
-            glideFrom = entry.slideFrom + tr;
+            glideFrom = entry.slideFrom + transpose;
             portamento ||= inst.slideSpeed || SIDWAVE_HARD_RESTART_FRAMES * 2;
           }
+          if (modern && portamento) portamento = Math.min(255, portamento * doc.speed);
           if (glideFrom !== undefined) {
             if (midi < 12 || midi > maxMidi || glideFrom < 12 || glideFrom > maxMidi) {
               throw new SidwaveValidationError(patPath, "bend or slide_from lies outside the playable note range");
@@ -739,14 +894,22 @@ function arrangeChip(
             inst = { ...inst, slideSemis: 0, slideSpeed: 0, slideRecip: 0 };
             if (portamento >= f1 - f0) throw new SidwaveValidationError(patPath, "bend or slide_from must reach its target during the note");
           }
-          if (entry.gateOff !== undefined && entry.gateOff >= f1 - f0) {
+          const gateOff = entry.gateOff === undefined ? undefined : entry.gateOff * (modern ? doc.speed : 1);
+          if (gateOff !== undefined && gateOff >= f1 - f0) {
             throw new SidwaveValidationError(patPath, "gate_off must leave at least one sounding frame");
           }
           if (out.length >= MAX_NOTES_PER_VOICE) {
             throw new SidwaveValidationError(patPath, `voice ${id} has more than ${MAX_NOTES_PER_VOICE} notes; every note takes at least 3 bytes, so the song would end past the $D000 limit (about 50 KB); use longer note lengths or fewer bars`);
           }
-          const previous = out[out.length - 1];
-          const legato = (entry.legato ?? namedInstrument?.legato) && previous?.end === f0;
+          const voiceId = idByChannel?.get(id) ?? id;
+          const level = section.levels?.[`v${voiceId}`] ?? section.level;
+          const mark = level !== undefined || voice.level !== undefined || entry.level !== undefined || entry.accented || !!voice.center;
+          const sustain = inst.sr >> 4;
+          const centerScale = voice.center ? (voice.center.level ?? 11.25) / 15 : 1;
+          const effective = sustain ? Math.min(15, Math.max(1, Math.round(sustain * centerScale * (entry.level ?? voice.level ?? 15) / 15 *
+            rampValue(level, 15, b - sec.startBeat, sec.endBeat - sec.startBeat, beatsPerBar) / 15) +
+            (entry.accented ? doc.accent ?? 3 : 0))) : 0;
+          if (mark && !sustain) findings?.once("LEVEL-NOOP", instrumentName ?? `v${voiceId}`, `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`, "Use chip volume or a kit variant for sustain-zero sounds");
           const sounding = legato ? instruments[previous!.inst]! : inst;
           if (modern) {
             checkDetunedPitch(midi, sounding, voice.detune ?? 0, system, patPath);
@@ -759,20 +922,55 @@ function arrangeChip(
             start: f0, end: f1, midi,
             inst: legato ? previous!.inst : instIndex(inst),
             legato,
-            portamento, glideFrom, gateOff: entry.gateOff,
+            portamento, glideFrom, gateOff,
+            ...(modern ? { sustain: mark && !legato ? effective : legato ? previous?.sustain : undefined, beat: b,
+              section: sec.index, path: `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`,
+              volume: rampValue(section.volume?.[sid?.id ?? ""], volume, b - sec.startBeat, sec.endBeat - sec.startBeat, beatsPerBar) } : {}),
+
           });
         }
       }
-      if (filterMod) globals.push({ frame: ef, kind: "filtermod", step: 0, count: 0 });
+      if (hasFilterMod) globals.push({ frame: ef, kind: "filtermod", step: 0, count: 0 });
     }
 
     // Master volume fade when every sounding voice of the section fades.
-    if (fading.length > 0 && fading.length === active.length) {
+    if (!modern && fading.length > 0 && fading.length === active.length) {
       for (let beat = sec.startBeat; beat < sec.endBeat - BEAT_EPS; beat += 1) {
         const f = frameAt(beat);
         globals.push({ frame: f, kind: "volume", value: Math.round(volume * (1 - (f - sf) / (ef - sf))) });
       }
       globals.push({ frame: ef, kind: "volume", value: volume });
+    }
+
+    if (modern && sid && (doc.timeline.some((s) => s.volume?.[sid.id] !== undefined))) {
+      const ramp = section.volume?.[sid.id];
+      const span = sec.endBeat - sec.startBeat;
+      if (typeof ramp === "object" && Math.abs(ramp.to - (ramp.from ?? volume)) > (ramp.bars ?? span / beatsPerBar) * beatsPerBar) {
+        findings?.add("VOL-STEP", `bar ${sec.startBeat / beatsPerBar + 1} ${sid.id}`, "Give each volume step a beat");
+      }
+      if (doc.samples?.triggers.some((trigger) => doc.sids[trigger.chip]?.id === sid.id) || doc.digiVoices?.some((digi) => doc.sids[digi.chip]?.id === sid.id)) {
+        throw new SidwaveValidationError(secPath + ".volume", `cannot change volume on digi SID ${sid.id}`);
+      }
+      let previous = -1;
+      for (let beat = sec.startBeat; beat < sec.endBeat - BEAT_EPS; beat++) {
+        const value = Math.round(rampValue(ramp, volume, beat - sec.startBeat, span, beatsPerBar));
+        if (value !== previous) globals.push({ frame: frameAt(beat), kind: "volume", value });
+        previous = value;
+      }
+    }
+
+    if (modern && sid && doc.timeline.some((t) => t.filter?.[sid.id] !== undefined)) {
+      // Section cutoff offset (register units) and resonance: absolute state at every section start, ramps stepped per beat.
+      const move = section.filter?.[sid.id];
+      const span = sec.endBeat - sec.startBeat;
+      let previous = "";
+      for (let beat = sec.startBeat; beat < sec.endBeat - BEAT_EPS; beat++) {
+        const offset = Math.round(rampValue(move?.cutoff, 0, beat - sec.startBeat, span, beatsPerBar));
+        const res = move?.resonance === undefined ? 0 : move.resonance + 1;
+        const key = `${offset}:${res}`;
+        if (key !== previous) globals.push({ frame: frameAt(beat), kind: "foffset", value: offset * 32, res });
+        previous = key;
+      }
     }
 
     // Reverb simulation: a free voice echoes the lowest active voice, delayed and quieter.
@@ -782,7 +980,7 @@ function arrangeChip(
     });
     if (reverb && active.length > 0 && tgt) {
       const src = Math.min(...active);
-      const delay = reverb.delay_frames;
+      const delay = reverb.delay_frames * (modern ? doc.speed : 1);
       for (const n of notes[src - 1]!) {
         if (n.start < sf || n.start >= ef) continue;
         const start = n.start + delay;
@@ -805,12 +1003,47 @@ function arrangeChip(
     }
   }
 
+  if (modern) {
+    // source_note: hidden, silent notes keep the source oscillator (the preceding channel) at the pitch that
+    // sets the pitch of a sync or ring voice. A waveform of 0 keeps the channel inaudible.
+    let hiddenInst = -1;
+    for (const [channel, list] of notes.entries()) {
+      for (const n of [...list]) {
+        const spec = instruments[n.inst]!.sourceNote;
+        if (spec === undefined || n.hidden) continue;
+        const source = (channel + 2) % 3;
+        const midi = /^[+-]/.test(spec) ? n.midi + Number(spec) : noteNameToMidi(spec)!;
+        const label = `bar ${Math.floor((n.beat ?? 0) / beatsPerBar) + 1} v${idByChannel?.get(source + 1) ?? source + 1}`;
+        if (midi < 12 || midi > maxMidi) throw new SidwaveValidationError(`$.voices.v${idByChannel?.get(channel + 1) ?? channel + 1}`, `source_note ${spec} lies outside the playable note range at ${label}`);
+        if (notes[source]!.some((m) => !m.hidden && m.start < n.end && m.end > n.start)) {
+          throw new SidwaveValidationError(`$.voices.v${idByChannel?.get(source + 1) ?? source + 1}`, `the source channel of a source_note instrument must be unscored while the note sounds (${label})`);
+        }
+        if (hiddenInst < 0) hiddenInst = instIndex({ ...instruments[0]!, wave: 0, ad: 0, sr: 0 });
+        notes[source]!.push({ start: n.start, end: n.end, midi, inst: hiddenInst, hidden: true, beat: n.beat });
+      }
+    }
+    for (const list of notes) list.sort((a, b) => a.start - b.start);
+  }
+  let tail = 0;
+  if (end) {
+    for (const list of notes) {
+      for (const n of list) {
+        if (n.end < musicFrames - 1 || n.start >= musicFrames) continue;
+        n.end += holdFrames;
+        // Release times are nominal values of the SID's release table (see RELEASE_MS in sidwaveLint.ts).
+        tail = Math.max(tail, RELEASE_MS[instruments[n.inst]!.sr & 15]! / 1000 * fps);
+      }
+    }
+  }
   const voices = notes.map((list, v) => ({
     notes: list,
-    events: buildVoiceEvents(list, instruments, totalFrames, framesPerBeat, v === 0 ? globals : [], voicesById.get(v + 1)?.detune),
+    events: buildVoiceEvents(list, instruments, totalFrames, framesPerBeat, v === 0 ? globals : [], voicesById.get(v + 1)?.detune, clock?.loopFrame, end ? musicFrames : undefined),
   }));
 
-  const base = fenv ? Math.round(Number(fenv.cutoff_base)) : 1024;
+  if (modern && fenv && typeof fenv.cutoff_base === "string" && !sid?.model) {
+    throw new SidwaveValidationError("$.filter_env.cutoff_base", "declare sids[].model before using a cutoff in Hz");
+  }
+  const base = fenv ? resolveCutoff(fenv.cutoff_base, sid?.model, "$.filter_env.cutoff_base") : 1024;
   const sweep = fenv?.sweep !== undefined ? Math.round(Number(fenv.sweep)) : 0;
   const sweepFrames = fenv?.speed !== undefined ? Number(fenv.speed) * framesPerBeat : 0;
   const stepFixed = sweep !== 0 && sweepFrames > 0 ? Math.max(1, Math.round((Math.abs(sweep) * 32) / sweepFrames)) : 0;
@@ -823,6 +1056,8 @@ function arrangeChip(
     speed: doc.speed,
     framesPerBeat,
     totalFrames,
+    clock,
+    endTail: end && end.release ? Math.min(Math.ceil(tail), Math.ceil(4 * fps)) : 0,
     system,
     instruments,
     voices,
@@ -835,6 +1070,7 @@ type PatternEntry =
   | { kind: "tie" }
   | ({
     kind: "note"; notes: number[]; instrument?: string; len?: number; legato?: boolean; portamento?: number;
+    level?: number; accented?: boolean; glide?: boolean; kitNote?: boolean;
     chord?: ReturnType<typeof parseChordArp>; bend?: SidwaveGrooveNote["bend"]; slideFrom?: number; gateOff?: number;
   } & ({ arp: false; arpSpeed: 0 } | { arp: true; arpSpeed: number }));
 
@@ -850,10 +1086,12 @@ function patternEntries(pattern: SidwavePattern, path: string, modern: boolean):
       if (typeof raw === "object") {
         if ("chord" in raw) {
           const chord = parseChordArp(raw, path);
-          return { kind: "note", notes: [chord.base], arp: false, arpSpeed: 0, chord, instrument: raw.inst, len: raw.len };
+          return { kind: "note", notes: [chord.base], arp: false, arpSpeed: 0, chord, instrument: raw.inst, len: raw.len,
+            legato: raw.legato, level: raw.level, accented: raw.accented, glide: raw.glide };
         }
         const { note, inst: instrument, len, legato, portamento, slide_from } = raw;
         return { kind: "note", notes: [noteNameToMidi(note)!], arp: false, arpSpeed: 0, instrument, len, legato, portamento,
+          level: raw.level, accented: raw.accented, glide: raw.glide, kitNote: raw.kitNote,
           bend: raw.bend, slideFrom: modern && slide_from ? noteNameToMidi(slide_from) : undefined, gateOff: raw.gate_off,
         };
       }
@@ -872,7 +1110,56 @@ function patternEntries(pattern: SidwavePattern, path: string, modern: boolean):
   return entries.map((e) => (e === null ? { kind: "rest" } : e === "~" ? { kind: "tie" } : { kind: "note", notes: [e], arp: false, arpSpeed: 0 }));
 }
 
-function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: number[], arpSpeed: number, filter: number, fps: number, modern: boolean): Instrument {
+function tablePitch(note: string | undefined, base: number): number {
+  return note === undefined ? base : /^[+-]/.test(note) ? base + Number(note) : noteNameToMidi(note)!;
+}
+
+function scaleWaveTable(table: Array<Record<string, any>> | undefined, loop: number | undefined, speed: number, midi: number) {
+  if (!table) return { steps: undefined, loop };
+  const steps: Array<Record<string, any>> = [];
+  let start: number | undefined;
+  let pitch = midi;
+  for (const [i, row] of table.entries()) {
+    if (i === loop) start = steps.length;
+    const calls = row.calls ?? (row.frames ?? 1) * speed;
+    pitch = row.note === undefined ? midi : tablePitch(row.note, midi);
+    if (row.slide_to !== undefined) {
+      const from = midiToHz(pitch);
+      const to = midiToHz(tablePitch(row.slide_to, midi));
+      for (let c = 0; c < calls; c++) {
+        const fraction = calls === 1 ? 1 : c / (calls - 1);
+        steps.push({ ...row, frames: 1, hz: from + (to - from) * fraction });
+      }
+    } else {
+      for (let left = calls; left > 0; left -= 255) steps.push({ ...row, frames: Math.min(left, 255) });
+    }
+  }
+  return { steps, loop: start };
+}
+
+function scaleRegisterTable(table: SidwaveRegisterTable | undefined, speed: number,
+  model?: ParsedSidwave["sids"][number]["model"]): SidwaveRegisterTable | undefined {
+  if (!table) return;
+  const steps: SidwaveRegisterTable["steps"] = [];
+  let loop: number | undefined;
+  for (const [i, step] of table.steps.entries()) {
+    if (i === table.loop) loop = steps.length;
+    const factor = step.calls ? 1 : speed;
+    const calls = step.calls ?? step.frames * factor;
+    let value = step.hz ? resolveCutoff(step.hz, model, "$.instruments.filtertable.cutoff") : step.value;
+    const cadence = step.add && value % factor !== 0 ? factor : 1;
+    if (step.add && cadence === 1) value /= factor;
+    // Split without disturbing the per-frame cadence at the boundary.
+    const chunk = Math.floor(255 / cadence) * cadence;
+    for (let left = calls; left > 0; left -= chunk) {
+      steps.push({ ...step, value, frames: Math.min(left, chunk), ...(cadence > 1 ? { cadence } : {}) });
+    }
+  }
+  return { steps, loop, reset: table.reset };
+}
+
+function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: number[], arpSpeed: number, filter: number, fps: number, modern: boolean,
+  speed = 1, midi = 60, model?: ParsedSidwave["sids"][number]["model"]): Instrument {
   const adsr = voice.adsr ?? [2, 2, 10, 3];
   const wave = waveformToCtrl(voice.waveform ?? "pulse");
   const baseWidth = voice.pulse_width ?? 0x800;
@@ -891,7 +1178,9 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
   const vib = fx.vibrato;
   const slide = fx.slide;
   const depth = vib ? Number(vib.depth) : 0;
-  const slideSpeed = slide ? Number(slide.speed) : 0;
+  const factor = modern ? speed : 1;
+  const slideSpeed = slide ? Math.min(255, Number(slide.speed) * factor) : 0;
+  const waves = modern ? scaleWaveTable(fx.wavetable, fx.loop, factor, midi) : { steps: fx.wavetable, loop: fx.loop };
   const slideRecip = slideSpeed > 1 ? Math.round(65536 / slideSpeed) : 0;
   return {
     ad: ((adsr[0] & 0xf) << 4) | (adsr[1] & 0xf),
@@ -905,22 +1194,23 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
     vibUp: vib ? mantissaShift((128 / 126) * (Math.pow(2, depth / 12) - 1)) : [0, 0],
     vibDown: vib ? mantissaShift((128 / 126) * (1 - Math.pow(2, -depth / 12))) : [0, 0],
     vibRate: vib ? Math.max(1, Math.min(255, Math.round((256 * Number(vib.rate)) / fps))) : 0,
-    vibDelay: vib ? Number(vib.delay ?? 0) : 0,
+    vibDelay: vib ? Math.min(255, Number(vib.delay ?? 0) * factor) : 0,
     arp,
-    arpSpeed,
+    arpSpeed: Math.min(255, arpSpeed * factor),
     slideSemis: slide ? Number(slide.depth) : 0,
     slideSpeed,
     slideRecip,
     filter,
-    wavetable: Array.isArray(fx.wavetable) ? fx.wavetable.map((s: any) => ({ ...s })) : undefined,
-    waveloop: fx.loop,
-    pulsetable: fx.pulsetable,
-    filtertable: fx.filtertable,
-    restart: modern && fx.hard_restart ? {
-      frames: fx.hard_restart.frames,
-      ad: (fx.hard_restart.adsr[0] << 4) | fx.hard_restart.adsr[1],
-      sr: (fx.hard_restart.adsr[2] << 4) | fx.hard_restart.adsr[3],
-      test: fx.hard_restart.test,
+    wavetable: Array.isArray(waves.steps) ? waves.steps.map((s: any) => ({ ...s })) : undefined,
+    waveloop: waves.loop,
+    pulsetable: modern ? scaleRegisterTable(fx.pulsetable, factor) : fx.pulsetable,
+    filtertable: modern ? scaleRegisterTable(fx.filtertable, factor, model) : fx.filtertable,
+    ...(modern && fx.source_note ? { sourceNote: String(fx.source_note) } : {}),
+    restart: modern && (fx.hard_restart || speed !== 1) ? {
+      frames: (fx.hard_restart?.frames ?? SIDWAVE_HARD_RESTART_FRAMES) * factor,
+      ad: ((fx.hard_restart?.adsr?.[0] ?? 0) << 4) | (fx.hard_restart?.adsr?.[1] ?? 0),
+      sr: ((fx.hard_restart?.adsr?.[2] ?? 0) << 4) | (fx.hard_restart?.adsr?.[3] ?? 0),
+      test: fx.hard_restart?.test ?? false,
     } : undefined,
   };
 }
@@ -1010,6 +1300,30 @@ export const SIDWAVE_INSTRUMENT_LIBRARY: Record<string, Record<string, any>> = {
   },
 };
 
+const MODERN_LIBRARY = {
+  ...SIDWAVE_INSTRUMENT_LIBRARY,
+  kick: { waveform: "tri", adsr: [0, 9, 0, 0], wavetable: [
+    { note: "E3", slide_to: "G#1", frames: 5 }, { gate: false, note: "G#1" },
+  ] },
+  snare: { waveform: "noise", adsr: [0, 8, 0, 0], wavetable: [
+    { wave: "tri", note: "G3" }, { wave: "noise", note: "A6", frames: 5 },
+  ] },
+  hat: { ...SIDWAVE_INSTRUMENT_LIBRARY.hat, adsr: [0, 4, 0, 0] },
+  ...Object.fromEntries(["tom", "clap", "open_hat", "crash"].map((name) => {
+    const recipe = SIDWAVE_INSTRUMENT_LIBRARY[name]!;
+    return [name, { ...recipe, adsr: [recipe.adsr[0], recipe.adsr[1], 0, recipe.adsr[3]] }];
+  })),
+  filter_bass: { ...SIDWAVE_INSTRUMENT_LIBRARY.filter_bass, filtertable: { steps: [
+    { value: 0, hz: "1.2kHz", add: false, frames: 1, resonance: 8, type: 0x10 },
+    { value: 0, hz: "900Hz", add: false, frames: 2 }, { value: 0, hz: "600Hz", add: false, frames: 2 },
+    { value: 0, hz: "300Hz", add: false, frames: 1 },
+  ] } },
+  pad_slow: { ...SIDWAVE_INSTRUMENT_LIBRARY.pad_slow, legato: true, hard_restart: { frames: 0 }, filtertable: { steps:
+    [400, 800, 1200, 1600, 2000, 1600, 1200, 800].map((hz) => ({ value: 0, hz: hz + "Hz", add: false, frames: 8 })),
+    loop: 0, reset: false } },
+  wide_pwm_pad: { ...SIDWAVE_INSTRUMENT_LIBRARY.wide_pwm_pad, legato: true, hard_restart: { frames: 0 } },
+} as Record<string, Record<string, any>>;
+
 /** Represents 0 < k < 1 as mant / 2^(8 + shift) with the largest shift that keeps mant <= 255 (at least 7 bits of precision). */
 function mantissaShift(k: number): [number, number] {
   let shift = 0;
@@ -1035,24 +1349,28 @@ export const OP = {
   PORTAMENTO: 0xe8, // duration, direction, PAL and NTSC magnitude (16-bit) and step (16.8)
   RESTART: 0xe9, // attack/decay, sustain/release, TEST flag
   SAMPLE: 0xea, // index into the sample start table
+  CALL: 0xec, // stream subroutine address (16-bit); one level, no nesting
+  RET: 0xed,
+  FILTEROFFSET: 0xeb, // section cutoff offset (signed 24-bit, cutoff x 32), resonance + 1 (0 = table value)
 } as const;
 
 const ORDER = { gate: 0, filterReset: 1, inst: 2, note: 3, sustain: 4, filterStart: 5, volume: 6, sample: 7 } as const;
 
-function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], total: number, framesPerBeat: number, globals: GlobalEvent[], cents = 0): StreamEvent[] {
+function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], total: number, framesPerBeat: number, globals: GlobalEvent[], cents = 0, loopFrame?: number, gateFrame?: number): StreamEvent[] {
   const events: StreamEvent[] = [];
-  const wrap = (f: number) => (f >= total ? f - total : f);
+  const wrap = (f: number) => (f >= total && gateFrame === undefined ? f - total + (loopFrame ?? 0) : f);
   let currentInst = -1;
   for (let i = 0; i < notes.length; i += 1) {
     const n = notes[i]!;
     const nextNote = notes[i + 1];
-    const next = nextNote?.start ?? notes[0]!.start + total;
-    const restart = instruments[(nextNote ?? notes[0]!).inst]!.restart;
+    const loopNote = loopFrame === undefined ? notes[0] : notes.find((note) => note.start >= loopFrame);
+    const next = nextNote?.start ?? (gateFrame === undefined && loopNote ? loopNote.start + total - (loopFrame ?? 0) : total + 256);
+    const restart = instruments[(nextNote ?? loopNote ?? n).inst]!.restart;
     const restartFrames = restart?.frames ?? SIDWAVE_HARD_RESTART_FRAMES;
     const hr = Math.max(n.start + 1, next - Math.max(1, restartFrames));
     const continues = nextNote?.legato && nextNote.start === n.end;
     const gateOff = continues ? n.end : Math.max(n.start + 1, Math.min(n.end - (n.gateOff ?? 0), hr));
-    if (!continues) {
+    if (!continues && (nextNote || (gateFrame === undefined && !!loopNote))) {
       if (restart?.frames && next - n.start <= restart.frames) {
         throw new SidwaveValidationError("$.timeline", `note on call ${next % total} needs ${restart.frames} hard restart calls after the preceding note`);
       }
@@ -1060,8 +1378,10 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
       const bytes = !restart ? [OP.HARDRESTART] : !restart.frames
         ? [OP.GATEOFF] : [OP.RESTART, restart.ad, restart.sr, restart.test ? 8 : 0];
       events.push({ frame: wrap(hr), order: ORDER.gate, bytes });
+    } else if (!continues) {
+      events.push({ frame: gateOff, order: ORDER.gate, bytes: [OP.GATEOFF] });
     }
-    if (n.inst !== currentInst) {
+    if (n.inst !== currentInst || (loopFrame !== undefined && (i === 0 || notes[i - 1]!.start < loopFrame) && n.start >= loopFrame)) {
       events.push({ frame: n.start, order: ORDER.inst, bytes: [OP.INST + n.inst] });
       currentInst = n.inst;
     }
@@ -1078,9 +1398,14 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
       }
     }
     events.push({ frame: n.start, order: ORDER.note, bytes });
+    // reSID envelope.h EnvelopeGenerator::clock: decay steps until sustain equality,
+    // so an increased sustain during a held note can drive the envelope to zero.
+    if (!n.legato && n.sustain !== undefined && !n.fade) {
+      events.push({ frame: n.start, order: ORDER.sustain, bytes: [OP.SETSR, (n.sustain << 4) | (instruments[n.inst]!.sr & 15)] });
+    }
     if (n.fade) {
       const inst = instruments[n.inst]!;
-      const sustain = inst.sr >> 4;
+      const sustain = n.sustain ?? inst.sr >> 4;
       const level = (f: number) => (Math.round(sustain * Math.max(0, 1 - (f - n.fade!.start) / (n.fade!.end - n.fade!.start))) << 4) | (inst.sr & 0x0f);
       events.push({ frame: n.start, order: ORDER.sustain, bytes: [OP.SETSR, level(n.start)] });
       const firstBeat = Math.ceil((n.start + 1) / framesPerBeat - BEAT_EPS);
@@ -1094,6 +1419,9 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
   for (const g of globals) {
     if (g.kind === "volume") {
       events.push({ frame: wrap(g.frame), order: ORDER.volume, bytes: [OP.SETVOL, g.value] });
+    } else if (g.kind === "foffset") {
+      const value = g.value & 0xffffff;
+      events.push({ frame: wrap(g.frame), order: ORDER.volume, bytes: [OP.FILTEROFFSET, value & 0xff, (value >> 8) & 0xff, value >> 16, g.res] });
     } else {
       const step = g.step & 0xffffff;
       events.push({
@@ -1106,18 +1434,19 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
   return events;
 }
 
-export function encodeVoiceStream(events: StreamEvent[], total: number): number[] {
-  const sorted = [...events].sort((a, b) => a.frame - b.frame || a.order - b.order);
-  const out: number[] = [];
+/** The voice's commands as tokens (waits and events); an empty token marks the loop target. */
+function encodeVoiceTokens(events: StreamEvent[], total: number, loopFrame?: number): number[][] {
+  const sorted = [...events, ...(loopFrame === undefined ? [] : [{ frame: loopFrame, order: -1, bytes: [] }])].sort((a, b) => a.frame - b.frame || a.order - b.order);
+  const out: number[][] = [];
   const pushWait = (frames: number) => {
     let left = frames;
     while (left > 256) {
-      out.push(OP.WAITLONG, 0);
+      out.push([OP.WAITLONG, 0]);
       left -= 256;
     }
     if (left <= 0) return;
-    if (left <= 64) out.push(OP.WAIT + left - 1);
-    else out.push(OP.WAITLONG, left & 0xff);
+    if (left <= 64) out.push([OP.WAIT + left - 1]);
+    else out.push([OP.WAITLONG, left & 0xff]);
   };
   let cursor = 0;
   for (const e of sorted) {
@@ -1125,11 +1454,100 @@ export function encodeVoiceStream(events: StreamEvent[], total: number): number[
       pushWait(e.frame - cursor);
       cursor = e.frame;
     }
-    out.push(...e.bytes);
+    out.push(e.bytes);
   }
   pushWait(total - cursor);
-  out.push(OP.LOOP);
+  out.push([OP.LOOP]);
   return out;
+}
+
+export function encodeVoiceStream(events: StreamEvent[], total: number, loopFrame?: number, setLoopOffset?: (offset: number) => void): number[] {
+  const out: number[] = [];
+  for (const token of encodeVoiceTokens(events, total, loopFrame)) {
+    if (!token.length) setLoopOffset?.(out.length);
+    out.push(...token);
+  }
+  return out;
+}
+
+export type StreamByte = number | string;
+
+/**
+ * Replaces repeated token runs with one stream subroutine: CALL <address> runs the shared copy, RET returns.
+ * A copy is shared only when its commands, including every wait, are identical, so the sound is unchanged.
+ * Subroutines do not nest and never contain the loop target or the final LOOP command.
+ */
+export function compressVoiceTokens(tokens: number[][], voice: number, setLoopOffset: (offset: number) => void): { bytes: StreamByte[]; calls: number } {
+  const key = tokens.map((t) => t.join(","));
+  const barrier = tokens.map((t) => !t.length || t[0] === OP.LOOP);
+  const size = (from: number, to: number) => tokens.slice(from, to).reduce((sum, t) => sum + t.length, 0);
+  const subs: Array<{ start: number; length: number; uses: number }> = [];
+  const matchAt = (i: number, sub: { start: number; length: number }) => {
+    if (i + sub.length > tokens.length) return false;
+    for (let k = 0; k < sub.length; k++) if (barrier[i + k] || key[i + k] !== key[sub.start + k]) return false;
+    return true;
+  };
+  const signature = (i: number) => key[i] + "|" + key[i + 1] + "|" + key[i + 2];
+  const later = new Map<string, number[]>();
+  for (let i = 0; i + 2 < tokens.length; i++) {
+    if (barrier[i] || barrier[i + 1] || barrier[i + 2]) continue;
+    const sig = signature(i);
+    if (!later.has(sig)) later.set(sig, []);
+    later.get(sig)!.push(i);
+  }
+  const plan = (discover: boolean, allowed: typeof subs) => {
+    const steps: Array<{ token?: number; sub?: number }> = [];
+    for (let i = 0; i < tokens.length;) {
+      if (barrier[i]) { steps.push({ token: i++ }); continue; }
+      const hit = allowed.findIndex((sub) => matchAt(i, sub));
+      if (hit >= 0) { allowed[hit]!.uses++; steps.push({ sub: hit }); i += allowed[hit]!.length; continue; }
+      if (discover && i + 2 < tokens.length) {
+        const positions = later.get(signature(i));
+        const next = positions?.find((p) => p > i);
+        if (next !== undefined) {
+          let run = 0;
+          while (run < next - i && !barrier[i + run] && !barrier[next + run] && key[i + run] === key[next + run]) run++;
+          if (size(i, i + run) >= 12) {
+            allowed.push({ start: i, length: run, uses: 1 });
+            steps.push({ sub: allowed.length - 1 });
+            i += run;
+            continue;
+          }
+        }
+      }
+      steps.push({ token: i++ });
+    }
+    return steps;
+  };
+  const found: typeof subs = [];
+  plan(true, found);
+  // Keep a subroutine only when sharing it saves bytes: (uses - 1) copies minus the CALLs and the RET.
+  const kept = found.filter((sub) => (sub.uses - 1) * size(sub.start, sub.start + sub.length) - 3 * sub.uses - 1 > 0)
+    .map((sub) => ({ start: sub.start, length: sub.length, uses: 0 }));
+  const steps = plan(false, kept);
+  const used = kept.filter((sub) => sub.uses > 0);
+  const remap = new Map(kept.map((sub, i) => [i, used.indexOf(sub)]));
+  let mainLength = 0;
+  for (const step of steps) mainLength += step.token !== undefined ? tokens[step.token]!.length : 3;
+  const offsets: number[] = [];
+  let at = mainLength;
+  for (const sub of used) { offsets.push(at); at += size(sub.start, sub.start + sub.length) + 1; }
+  const bytes: StreamByte[] = [];
+  for (const step of steps) {
+    if (step.token !== undefined) {
+      const token = tokens[step.token]!;
+      if (!token.length) setLoopOffset(bytes.length);
+      bytes.push(...token);
+    } else {
+      const offset = offsets[remap.get(step.sub!)!]!;
+      bytes.push(OP.CALL, `<(stream${voice}+${offset})`, `>(stream${voice}+${offset})`);
+    }
+  }
+  for (const sub of used) {
+    for (let k = 0; k < sub.length; k++) bytes.push(...tokens[sub.start + k]!);
+    bytes.push(OP.RET);
+  }
+  return { bytes, calls: steps.filter((step) => step.sub !== undefined).length };
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,7 +1564,7 @@ function estimatePlayerCycles(arr: Arrangement): number {
   const hasSweep = arr.chips?.some((chip) => chip.filter.stepFixed);
   const bursts = new Map<number, number>();
   const add = (frame: number, cycles: number) => bursts.set(frame, (bursts.get(frame) ?? 0) + cycles);
-  let regular = 140 + (arr.softVolume ? 35 + 105 * (arr.chips?.length ?? 1) : 0) + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
+  let regular = 140 + (arr.softVolume ? 35 + 135 * (arr.chips?.length ?? 1) : 0) + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
   for (const chip of arr.chips ?? [{ filter: arr.filter, hasFilterTable: hasFilter }]) {
     regular += arr.chips ? 155 : 0; // base table lookup, 3-channel dispatch and unfiltered volume
     if (chip.filter.used || chip.hasFilterTable || !arr.chips) {
@@ -1154,6 +1572,8 @@ function estimatePlayerCycles(arr: Arrangement): number {
       if (hasMod || !arr.chips) regular += arr.chips ? 160 : 60; // ramp and chip state copy
       if (hasSweep || !arr.chips) regular += arr.chips ? 165 : 85; // sweep and chip state copy
       if (chip.hasFilterTable) regular += 135; // ownership and winning chip's four filter writes
+      if (("owner" in chip && chip.owner !== undefined) && chip.hasFilterTable) regular += 190; // owner offset sum, shift and clamp, ramp
+      if ("hasOffset" in chip && chip.hasOffset) regular += 80; // section offset added to the cutoff and the resonance override
     }
   }
   for (const [slot, { events, notes }] of arr.voices.entries()) {
@@ -1161,6 +1581,10 @@ function estimatePlayerCycles(arr: Arrangement): number {
     if (chip && !events.length && !(slot % 3 === 0 && chip.filter.used)) continue;
     const used = [...new Set(notes.map(({ inst }) => arr.instruments[inst]!))];
     if (arr.tuning) regular += 135;
+    if (arr.mirrors?.some(([source]) => source === slot)) regular += 150;
+    if (used.some((inst) => inst.wavetable?.some((step) => step.hz !== undefined))) regular += 32;
+    if (used.some((inst) => inst.pulsetable?.steps.some((step) => step.cadence))) regular += 25;
+    if (used.some((inst) => inst.filtertable?.steps.some((step) => step.cadence))) regular += 25;
     if (arr.samples) regular += 16;
     regular += 220; // ordinary wait (including WAITLONG), register output and inactive effects
     if (hasWave) regular += used.some((inst) => inst.wavetable?.length) ? 100 : 20;
@@ -1170,7 +1594,8 @@ function estimatePlayerCycles(arr: Arrangement): number {
     if (notes.some((note) => note.portamento || arr.instruments[note.inst]!.slideSpeed)) regular += 110;
     if (used.some((inst) => inst.vibRate)) regular += 330;
     if (used.some((inst) => inst.pwStep)) regular += 95;
-    add(0, 100 + (slot % 3 === 0 && (!chip || chip.filter.used) ? 60 : 0)); // stream wrap and envelope reset
+    if (arr.streamCalls) regular += 110; // CALL and RET
+    add(arr.clock?.loopFrame ?? 0, 100 + (slot % 3 === 0 && (!chip || chip.filter.used) ? 60 : 0)); // stream wrap and envelope reset
     let currentInst = 0;
     for (const { frame, bytes: [op, ...args] } of [...events].sort((a, b) => a.frame - b.frame || a.order - b.order)) {
       if (op! >= OP.INST && op! < OP.WAIT) {
@@ -1213,10 +1638,14 @@ function multiplexSids(
   const filtered = chips.some((c) => c.filter.used || c.hasFilterTable);
   const hasMod = chips.some((c) => c.hasFilterMod);
   const hasSweep = chips.some((c) => c.filter.stepFixed);
+  const owners = chips.some((c) => c.owner !== undefined);
+  const offsets = chips.some((c) => c.hasOffset);
   const filterState = [
     ...(hasSweep ? ["g_cutlo", "g_cuthi", "g_edir"] : []),
     ...(hasMod ? ["g_mofflo", "g_moffmd", "g_moffhi", "g_mstlo", "g_mstmd", "g_msthi", "g_mcntlo", "g_mcnthi"] : []),
     ...(hasFilterTable ? ["g_ftactive"] : []),
+    ...(owners && hasFilterTable ? ["g_fthold"] : []),
+    ...(offsets ? ["g_so0", "g_so1", "g_so2", "g_sres"] : []),
   ];
   const constants = ["fenv_init", "fenv_init+1", "fenv_init+2", "res_route", "fmode",
     ...(hasSweep ? ["fenv_step", "fenv_step+1", "fenv_min", "fenv_min+1", "fenv_max", "fenv_max+1"] : []),
@@ -1230,6 +1659,7 @@ function multiplexSids(
   const rangeStart = (label: string) => `  ldx chip_last\n${label}:`;
   const rangeEnd = (label: string) => `  cpx chip_first\n  beq ${label}_done\n  dex\n  jmp ${label}\n${label}_done:`;
 
+  if (owners && hasFilterTable) code = ownerFilterCode(code, hasMod, offsets);
   // Descending across the active chip's three slots, with channel bit masks
   // repeated in vbit. Filter ownership can only refer to voices in this group.
   code = code.replace("  ldx #2\ngl_route:", rangeStart("gl_route"))
@@ -1238,6 +1668,50 @@ function multiplexSids(
     .replace("  dex\n  bpl ft_voice", rangeEnd("ft_voice"))
     .replace("  ldy #2\nft_mark_newer:", "  ldy chip_last\nft_mark_newer:")
     .replace("  dey\n  bpl ft_mark_newer", "  cpy chip_first\n  beq ft_mark_done\n  dey\n  bpl ft_mark_newer\nft_mark_done:");
+  if (owners) {
+    // Static routing: an owner chip writes its route bits from a constant instead of the sounding instruments.
+    code = code.replace("  lda #0\n  sta tmp\n  ldx chip_last\ngl_route:", `  ldy chip_index
+  lda chip_owner,y
+  cmp #$FF
+  beq gl_route_dyn
+  lda chip_route,y
+  sta tmp
+  jmp gl_route_set
+gl_route_dyn:
+  lda #0
+  sta tmp
+  ldx chip_last
+gl_route:`).replace("  lda tmp\n  ora res_route\n  sta $D417", `gl_route_set:
+${offsets ? `  lda g_sres
+  beq gl_res_table
+  sec
+  sbc #1
+  asl
+  asl
+  asl
+  asl
+  ora tmp
+  jmp gl_res_set
+gl_res_table:
+` : ""}  lda tmp
+  ora res_route
+gl_res_set:
+  sta $D417`);
+  }
+  if (offsets) {
+    code = code.replace("  sta t_xx\n  bmi gl_low", `  sta t_xx
+  clc
+  lda t_lo
+  adc g_so0
+  sta t_lo
+  lda t_hi
+  adc g_so1
+  sta t_hi
+  lda t_xx
+  adc g_so2
+  sta t_xx
+  bmi gl_low`);
+  }
   if (hasMod) {
     code = code.replace("  sta g_edir\n  rts\n\nv_save:", `  sta g_edir
   lda #0
@@ -1447,6 +1921,181 @@ ${filterState.map((name) => `chip_${name}: .res ${count}`).join("\n")}
 `;
 }
 
+/**
+ * filter.owner: only the owner's table runs, and while the owner is silent the filter keeps the last table
+ * value. The section offset (g_so, cutoff x 32) and the filter_mod offset are added to the table value.
+ */
+function ownerFilterCode(code: string, hasMod: boolean, offsets: boolean): string {
+  const sum = (hasMod: boolean) => [0, 1, 2].map((i) => {
+    const reg = ["t_lo", "t_hi", "t_xx"][i]!;
+    const mod = ["g_mofflo", "g_moffmd", "g_moffhi"][i]!;
+    const so = offsets ? `g_so${i}` : "";
+    const first = i === 0;
+    if (!hasMod && !so) return `  lda #0\n  sta ${reg}`;
+    return (first ? "  clc\n" : "") + `  lda ${hasMod ? mod : so}\n${hasMod && so ? `  adc ${so}\n` : ""}  sta ${reg}`;
+  }).join("\n");
+  const ramp = hasMod ? `ft_ramp:
+  lda g_mcntlo
+  ora g_mcnthi
+  beq ft_ramp_done
+  clc
+  lda g_mofflo
+  adc g_mstlo
+  sta g_mofflo
+  lda g_moffmd
+  adc g_mstmd
+  sta g_moffmd
+  lda g_moffhi
+  adc g_msthi
+  sta g_moffhi
+  lda g_mcntlo
+  bne ft_ramp_dec
+  dec g_mcnthi
+ft_ramp_dec:
+  dec g_mcntlo
+ft_ramp_done:
+  rts
+` : "";
+  const owner = `ft_globals:
+  ldy chip_index
+  ldx chip_owner,y
+  lda vbit,x
+  and g_ftactive
+  beq ft_hold
+  jsr ft_tick
+ft_hold:
+  jsr ft_offset
+  lda t_lo
+  and #7
+  sta $D415
+  lda t_hi
+  lsr
+  ror t_lo
+  lsr
+  ror t_lo
+  lsr
+  ror t_lo
+  lda t_lo
+  sta $D416
+  ldy chip_index
+${offsets ? `  lda g_sres
+  beq ft_res_table
+  sec
+  sbc #1
+  asl
+  asl
+  asl
+  asl
+  jmp ft_res_set
+ft_res_table:
+` : ""}  lda v_ftres,x
+ft_res_set:
+  ora chip_route,y
+  sta $D417
+  lda v_fttype,x
+  ora g_vol
+  sta $D418
+${hasMod ? "  jmp ft_ramp" : "  rts"}
+; t = clamp(v_cut + ((filter_mod offset + section offset) >> 5), 0, 2047)
+ft_offset:
+${sum(hasMod)}
+  ldy #5
+ft_off_shift:
+  lda t_xx
+  cmp #$80
+  ror t_xx
+  ror t_hi
+  ror t_lo
+  dey
+  bne ft_off_shift
+  clc
+  lda t_lo
+  adc v_cutlo,x
+  sta t_lo
+  lda t_hi
+  adc v_cuthi,x
+  sta t_hi
+  bmi ft_off_neg
+  cmp #8
+  bcc ft_off_done
+  lda #$FF
+  sta t_lo
+  lda #7
+  sta t_hi
+  rts
+ft_off_neg:
+  lda #0
+  sta t_lo
+  sta t_hi
+ft_off_done:
+  rts
+${ramp}`;
+  const next = /ft_globals:\n[\s\S]*?ft_next_voice:\n  dex\n  bpl ft_voice\n  rts\n/;
+  if (!next.test(code)) throw new Error("SIDWAVE player code changed: the filter owner patch point was not found");
+  return code.replace(next, owner).replace("  beq ft_stop\n  lda vbit,x\n  ora g_ftactive", "  beq ft_stop\n  lda #1\n  sta g_fthold\n  lda vbit,x\n  ora g_ftactive")
+    .replace("globals:\n  lda g_ftactive\n  beq gl_regular", "globals:\n  lda g_fthold\n  beq gl_regular");
+}
+
+/** Writes a centred voice's registers to its mirror channel straight after its own, with the same values. */
+function addCenterMirrors(code: string, arr: Arrangement): string {
+  const anchor = "  dey\n  dey\n  lda v_ctrl,x\n  sta (sid_io),y";
+  if (!code.includes(anchor)) throw new Error("SIDWAVE player code changed: the centre mirror patch point was not found");
+  const slotCount = arr.voices.length;
+  const base = (slot: number) => arr.chips![Math.floor(slot / 3)]!.address + (slot % 3) * 7;
+  const lo = Array(slotCount).fill(0);
+  const hi = Array(slotCount).fill(0);
+  for (const [source, mirror] of arr.mirrors!) {
+    const address = arr.chips![Math.floor(mirror / 3)]!.address;
+    lo[source] = address & 255;
+    hi[source] = address >> 8;
+  }
+  return code.replace(anchor, `${anchor}
+  lda mirror_hi,x
+  beq vr_no_mirror
+  jsr vr_mirror
+vr_no_mirror:`) + `
+vr_mirror:
+  lda sid_io
+  pha
+  lda sid_io+1
+  pha
+  lda mirror_lo,x
+  sta sid_io
+  lda mirror_hi,x
+  sta sid_io+1
+  ldy voff,x
+  lda f_lo
+  sta (sid_io),y
+  iny
+  lda f_hi
+  sta (sid_io),y
+  iny
+  lda v_pwlo,x
+  sta (sid_io),y
+  iny
+  lda v_pwhi,x
+  sta (sid_io),y
+  iny
+  iny
+  lda v_ad,x
+  sta (sid_io),y
+  iny
+  lda v_sr,x
+  sta (sid_io),y
+  dey
+  dey
+  lda v_ctrl,x
+  sta (sid_io),y
+  pla
+  sta sid_io+1
+  pla
+  sta sid_io
+  rts
+mirror_lo: .byte ${lo.join(", ")}
+mirror_hi: .byte ${hi.join(", ")}
+`;
+}
+
 function stockPlayerBudget(system: SystemMode, speed: number): number {
   // Allow for VIC badlines and the host IRQ. Speed increases the call rate.
   return Math.floor((CYCLES_PER_FRAME[system] - 1_100) / speed) - 500;
@@ -1497,14 +2146,20 @@ turbo_required: .byte ${turboOnly & 1}, ${turboOnly >> 1}`);
 
 /** 1.2 owns the actual level per chip. g_vol remains the musical target. */
 function addSoftVolume(code: string, count: number, speed: number, loop: boolean): string {
+  // The chip starts silent and ramps to its configured volume (one step per call, the 1.2 start-up behaviour);
+  // every later change slews one step per two video frames.
   code = code.replace("  lda chip_volume,x\n  ldy #$18\n  sta (sid_io),y\n", "")
     .replace("  sta chip_g_vol,x\n  lda #0\n", `  sta chip_g_vol,x
   lda #0
   sta soft_level,x
   sta soft_mode,x
   sta soft_phase
+  sta soft_last,x
+  lda #1
+  sta soft_boot,x
+  lda #0
 ${loop ? "" : "  sta soft_end_state\n"}`)
-    .replace(/(  ldy #\$18\n  sta \(sid_io\),y)/g, "  jsr soft_mix\n$1")
+    .replace(/  ldy #\$18\n  sta \(sid_io\),y/g, "  jsr soft_write")
     .replace("  lda ptr\n  pha", "  jsr soft_clock\n  lda ptr\n  pha");
   const shared = `
 soft_clock:
@@ -1513,25 +2168,43 @@ soft_clock:
   dec soft_phase
   lda #0
   sta soft_step
+  sta soft_slow
   rts
 soft_pulse:
   lda #${speed - 1}
   sta soft_phase
   lda #1
   sta soft_step
+  lda soft_odd
+  eor #1
+  sta soft_odd
+  sta soft_slow
   rts
 soft_mix:
   stx soft_saved_x
   ldx chip_index
   pha
   and #15
+  sta soft_target
   cmp soft_level,x
-  beq soft_mix_out
+  bne soft_mix_move
+  lda #0
+  sta soft_boot,x
+  jmp soft_mix_out
+soft_mix_move:
+  lda soft_boot,x
+  bne soft_mix_fast
+  lda soft_slow
+  jmp soft_mix_gate
+soft_mix_fast:
   lda soft_step
+soft_mix_gate:
   beq soft_mix_out
-  bcc soft_mix_down
+  lda soft_level,x
+  cmp soft_target
+  bcs soft_mix_down
   inc soft_level,x
-  bne soft_mix_out
+  jmp soft_mix_out
 soft_mix_down:
   dec soft_level,x
 soft_mix_out:
@@ -1541,6 +2214,26 @@ soft_mix_out:
   ora soft_level,x
   ldx soft_saved_x
   rts
+; Writes $D418 only when the value changed; every volume step is a DC click on the SID.
+soft_write:
+  jsr soft_mix
+  stx soft_wx
+  ldx chip_index
+  cmp soft_last,x
+  beq soft_write_skip
+  sta soft_last,x
+  ldy #$18
+  sta (sid_io),y
+soft_write_skip:
+  ldx soft_wx
+  ldy #$18
+  rts
+soft_wx: .res 1
+soft_boot: .res ${count}
+soft_slow: .res 1
+soft_odd: .res 1
+soft_target: .res 1
+soft_last: .res ${count}
 soft_level: .res ${count}
 soft_mode: .res ${count}
 soft_phase: .res 1
@@ -1805,20 +2498,27 @@ ${banks.join("\n")}
 `;
 }
 
-function buildPlayerAsm(arr: Arrangement, streams: number[][], loop: boolean, turboOnly: number, includeSamples = true): string {
+function buildPlayerAsm(arr: Arrangement, streams: StreamByte[][], loop: boolean, turboOnly: number, includeSamples = true): string {
   const L: string[] = [];
   const insts = arr.instruments;
   const hasRestart = arr.voices.some(({ events }) => events.some(({ bytes }) => bytes[0] === OP.RESTART));
   const hasLegato = arr.voices.some(({ events }) => events.some((event) => event.order === ORDER.note && event.bytes[0] === OP.LEGATO));
   const hasPortamento = arr.voices.some(({ events }) => events.some((event) => event.order === ORDER.note && event.bytes.length > 2));
+  const hasRawWavePitch = insts.some((i) => i.wavetable?.some((step) => step.hz !== undefined));
   const hasWavetable = insts.some((i) => i.wavetable?.length);
   const hasPulseTable = insts.some((i) => i.pulsetable?.steps?.length);
   const hasFilterTable = insts.some((i) => i.filtertable?.steps?.length);
   const channels = arr.voices.length;
-  const voiceVars = VOICE_VARS.filter((name) => hasWavetable || !["wtpos", "wtleft", "wtnote"].includes(name));
-  const pulseVars = hasPulseTable ? ["ptpos", "ptleft"] : [];
-  const filterVars = hasFilterTable ? ["ftpos", "ftleft", "cutlo", "cuthi", "ftres", "fttype", "ftnewer"] : [];
-  const stateBytes = channels * (voiceVars.length + pulseVars.length + filterVars.length) + GLOBAL_VARS.length + Number(hasFilterTable);
+  const voiceVars = [...VOICE_VARS.filter((name) => hasWavetable || !["wtpos", "wtleft", "wtnote"].includes(name)),
+    ...(arr.streamCalls ? ["retlo", "rethi"] : [])];
+  const pulseCadence = insts.some((i) => i.pulsetable?.steps.some((step) => step.cadence));
+  const filterCadence = insts.some((i) => i.filtertable?.steps.some((step) => step.cadence));
+  const pulseReset = insts.some((i) => i.pulsetable?.reset === false);
+  const filterReset = insts.some((i) => i.filtertable?.reset === false);
+  const pulseVars = hasPulseTable ? ["ptpos", "ptleft", ...(pulseCadence ? ["ptclock"] : []), ...(pulseReset ? ["ptinst"] : [])] : [];
+  const filterVars = hasFilterTable ? ["ftpos", "ftleft", "cutlo", "cuthi", "ftres", "fttype", "ftnewer", ...(filterCadence ? ["ftclock"] : []), ...(filterReset ? ["ftinst"] : [] )] : [];
+  const stateBytes = channels * (voiceVars.length + pulseVars.length + filterVars.length) + GLOBAL_VARS.length + Number(hasFilterTable)
+    + Number(hasFilterTable && !!arr.chips?.some((chip) => chip.owner !== undefined)) + (arr.chips?.some((chip) => chip.hasOffset) ? 4 : 0);
   const clockIndex = arr.system === "NTSC" ? 1 : 0;
   // The PRG's CIA timer reproduces the song's video frame rate on whichever clock the machine has.
   const ciaLatch = (clock: number) => Math.round(clock / (arr.fps)) - 1;
@@ -1865,13 +2565,71 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][], loop: boolean, tu
     addNoteHook("pt_start");
     addReleaseHook("pt_stop");
     playerCode = playerCode.replace("vr_write:\n", "vr_write:\n  jsr pt_tick\n");
-    playerCode += PULSE_TABLE_CODE + registerTableCode("pt", "pw", 1, 4094);
+    playerCode += PULSE_TABLE_CODE + registerTableCode("pt", "pw", 1, 4094, pulseCadence);
   }
   if (hasFilterTable) {
     addNoteHook("ft_start");
     addReleaseHook("ft_stop");
     playerCode = playerCode.replace("globals:\n", "globals:\n  lda g_ftactive\n  beq gl_regular\n  jmp ft_globals\ngl_regular:\n");
-    playerCode += FILTER_TABLE_CODE + registerTableCode("ft", "cut", 0, 2047);
+    playerCode += FILTER_TABLE_CODE + registerTableCode("ft", "cut", 0, 2047, filterCadence);
+  }
+  if (pulseReset) {
+    playerCode = playerCode.replace("pt_start:\n", `pt_start:
+  ldy v_inst,x
+  lda i_ptreset,y
+  bne pt_reseed
+  tya
+  cmp v_ptinst,x
+  bne pt_reseed
+  rts
+pt_reseed:
+  tya
+  sta v_ptinst,x
+`).replace(/ {2}jsr pt_stop\n/g, "  jsr pt_maybe_stop\n");
+    playerCode += `
+pt_maybe_stop:
+  ldy v_inst,x
+  lda i_ptreset,y
+  beq pt_keep
+  jmp pt_stop
+pt_keep:
+  rts
+`;
+  }
+  if (filterReset) {
+    playerCode = playerCode.replace("  sta g_ftactive\n  ; Each voice", `  sta g_ftactive
+  tya
+  cmp v_ftinst,x
+  bne ft_reseed
+  lda i_ftreset,y
+  bne ft_reseed
+  rts
+ft_reseed:
+  tya
+  sta v_ftinst,x
+  ; Each voice`);
+  }
+  if (hasRawWavePitch) {
+    playerCode = playerCode.replace("init_core:\n", "init_core:\n  sta wt_clock\n")
+      .replace("  cmp #1\n  bne vr_abs_table_note", `  cmp #3
+  bne vr_wt_integer
+  lda wt_clock
+  bne vr_wt_ntsc
+  lda wt_raw_pal_lo,y
+  sta f_lo
+  lda wt_raw_pal_hi,y
+  sta f_hi
+  jmp vr_write
+vr_wt_ntsc:
+  lda wt_raw_ntsc_lo,y
+  sta f_lo
+  lda wt_raw_ntsc_hi,y
+  sta f_hi
+  jmp vr_write
+vr_wt_integer:
+  cmp #1
+  bne vr_abs_table_note`);
+    playerCode += "\nwt_clock: .byte 0\n";
   }
   if (hasWavetable) {
     // Stop the table on release so its gate bit cannot undo a rest or hard restart.
@@ -1925,18 +2683,58 @@ init_core:`);
   sta song_left+2
   pla`);
     playerCode = playerCode.replace("play:\n", "play:\n  jmp play_once\nplay_tick:\n");
-    playerCode += PLAY_ONCE_CODE;
+    playerCode += arr.explicitEnd ? PLAY_ONCE_CODE.replace(/  lda #0\n  sta \$D404[\s\S]*?  sta \$D418\n/, "") : PLAY_ONCE_CODE;
   }
+  if (arr.streamCalls) playerCode += `
+c_call:
+  jsr fetch
+  sta tmp
+  jsr fetch
+  pha
+  lda ptr
+  sta v_retlo,x
+  lda ptr+1
+  sta v_rethi,x
+  lda tmp
+  sta ptr
+  pla
+  sta ptr+1
+  jmp v_read
+c_ret:
+  lda v_retlo,x
+  sta ptr
+  lda v_rethi,x
+  sta ptr+1
+  jmp v_read
+`;
+  if (arr.chips?.some((chip) => chip.hasOffset)) playerCode += "\n"+`c_foff:
+  jsr fetch
+  sta g_so0
+  jsr fetch
+  sta g_so1
+  jsr fetch
+  sta g_so2
+  jsr fetch
+  sta g_sres
+  jmp v_read
+`;
   if (arr.chips) {
     playerCode = omitUnusedVoiceEffects(playerCode, insts, hasPortamento);
     playerCode = multiplexSids(playerCode, arr.chips, Boolean(hasFilterTable), stateBytes);
-    if (arr.softVolume) playerCode = addSoftVolume(playerCode, arr.chips.length, arr.speed, loop);
+    if (arr.mirrors) playerCode = addCenterMirrors(playerCode, arr);
+    if (arr.softVolume) playerCode = addSoftVolume(playerCode, arr.chips.length, arr.speed, loop || !!arr.explicitEnd);
     if (arr.turbo) {
       playerCode = addTurboInit(playerCode, arr.speed, turboOnly, arr.softVolume);
       if (arr.softVolume) playerCode = measureTurboStartup(playerCode);
     }
     if (arr.tuning) playerCode = addTunedLookup(playerCode, arr.tuning);
     if (arr.samples) playerCode = addDigiPlayer(playerCode, arr.samples, arr.chips, [CLOCK_HZ.PAL, CLOCK_HZ.NTSC]);
+  }
+  if (loop && arr.clock?.loopFrame !== undefined) {
+    playerCode = playerCode.replace("c_loop:\n  lda start_lo,x\n  sta ptr\n  lda start_hi,x", "c_loop:\n  lda loop_lo,x\n  sta ptr\n  lda loop_hi,x");
+    const targets = streams.map((stream, i) => `(stream${i}+${stream.length === 1 ? 0 : arr.loopOffsets?.[i] ?? 0})`);
+    L.push(`loop_lo: .byte ${targets.map((t) => "<" + t).join(",")}`);
+    L.push(`loop_hi: .byte ${targets.map((t) => ">" + t).join(",")}`);
   }
   L.push(playerCode);
   // Constants
@@ -1961,6 +2759,10 @@ init_core:`);
     chipColumn("first_slot", (_, i) => i * 3);
     chipColumn("volume", (chip) => chip.volume);
     chipColumn("has_filter", (chip) => Number(chip.filter.used || chip.hasFilterTable));
+    if (arr.chips.some((chip) => chip.owner !== undefined)) {
+      chipColumn("owner", (chip) => chip.owner ?? 255);
+      chipColumn("route", (chip) => chip.route ?? 0);
+    }
     if (arr.chips.some((chip) => chip.filter.used || chip.hasFilterTable)) {
       const start = ({ filter }: ChipArrangement) => filter.base * 32;
       const end = ({ filter }: ChipArrangement) => Math.max(0, Math.min(2047, filter.base + filter.sweep)) * 32;
@@ -1987,6 +2789,11 @@ init_core:`);
   if (hasPortamento || hasRestart || arr.samples) commands.push(hasPortamento ? "c_portamento" : "c_loop");
   if (hasRestart || arr.samples) commands.push(hasRestart ? "c_restart" : "c_loop");
   if (arr.samples) commands.push("c_sample");
+  if (arr.chips?.some((chip) => chip.hasOffset) || arr.streamCalls) {
+    while (commands.length < 11) commands.push("c_loop");
+    commands.push(arr.chips?.some((chip) => chip.hasOffset) ? "c_foff" : "c_loop");
+  }
+  if (arr.streamCalls) commands.push("c_call", "c_ret");
   for (const name of commands) L.push(`  .byte <(${name}-1), >(${name}-1)`);
 
   // Instrument tables
@@ -2027,7 +2834,7 @@ init_core:`);
   col("i_slreclo", insts.map((i) => i.slideRecip & 0xff));
   col("i_slrechi", insts.map((i) => i.slideRecip >> 8));
   col("i_filt", insts.map((i) => i.filter));
-  const wt: Array<{ ctrl: number; note: number; mode: number; frames: number }> = [];
+  const wt: Array<{ ctrl: number; note: number; mode: number; frames: number; hz?: number }> = [];
   const wtStart = insts.map((inst) => {
     if (!inst.wavetable?.length) return 0;
     const start = wt.length;
@@ -2039,7 +2846,7 @@ init_core:`);
       const n = s.note === undefined ? "" : String(s.note);
       const mode = !n ? 0 : /^[+-]/.test(n) ? 1 : 2;
       const note = mode === 0 ? 0 : mode === 1 ? (Number(n) & 255) : (noteNameToMidi(n)! - 12);
-      wt.push({ ctrl, note, mode, frames: Number(s.frames ?? 1) });
+      wt.push({ ctrl, note, mode: s.hz === undefined ? mode : 3, frames: Number(s.frames ?? 1), hz: s.hz });
     }
     return start;
   });
@@ -2052,6 +2859,11 @@ init_core:`);
     col("wt_note", wt.length ? wt.map((s) => s.note) : [0]);
     col("wt_mode", wt.length ? wt.map((s) => s.mode) : [0]);
     col("wt_frames", wt.length ? wt.map((s) => s.frames) : [1]);
+    if (hasRawWavePitch) for (const system of ["PAL", "NTSC"] as const) {
+      const freq = wt.map(({ hz }) => hz === undefined ? 0 : hzToSidFrequency(hz, system));
+      col(`wt_raw_${system.toLowerCase()}_lo`, freq.map((v) => v & 255));
+      col(`wt_raw_${system.toLowerCase()}_hi`, freq.map((v) => v >> 8));
+    }
   }
   for (const [enabled, prefix, name] of [
     [hasPulseTable, "pt", "pulsetable"], [hasFilterTable, "ft", "filtertable"],
@@ -2073,6 +2885,8 @@ init_core:`);
     col(`${prefix}_hi`, steps.map((step) => (step.value >> 8) & 255));
     col(`${prefix}_add`, steps.map((step) => +step.add));
     col(`${prefix}_frames`, steps.map((step) => step.frames));
+    if (prefix === "pt" ? pulseCadence : filterCadence) col(`${prefix}_cadence`, steps.map((step) => step.cadence ?? 1));
+    if (prefix === "pt" ? pulseReset : filterReset) col(`i_${prefix}reset`, tables.map((table) => Number(table?.reset !== false)));
     if (prefix === "ft") {
       col("ft_res", steps.map((step) => step.resonance === undefined ? 255 : step.resonance << 4));
       col("ft_type", steps.map((step) => step.type ?? 255));
@@ -2104,10 +2918,12 @@ init_core:`);
   if (hasFilterTable) {
     for (const name of filterVars) L.push(`v_${name}: .res ${channels}`);
     L.push("g_ftactive: .res 1");
+    if (arr.chips?.some((chip) => chip.owner !== undefined)) L.push("g_fthold: .res 1");
   }
+  if (arr.chips?.some((chip) => chip.hasOffset)) for (const name of ["g_so0", "g_so1", "g_so2", "g_sres"]) L.push(`${name}: .res 1`);
   L.push(`vars_end:`);
 
-  streams.forEach((s, i) => pushByteRows(L, `stream${i}`, s.map((b) => `$${hex2(b)}`)));
+  streams.forEach((s, i) => pushByteRows(L, `stream${i}`, s.map((b) => typeof b === "string" ? b : `$${hex2(b)}`)));
   if (arr.samples) L.push(includeSamples ? digiDataAsm(arr.samples) :
     [...arr.samples.defs.keys()].map((_, i) => `digi_data${i}:`).join("\n"));
   L.push(`prg_end:`);
@@ -3050,7 +3866,7 @@ gl_done:
 
 // Both tables use the same cursor and signed arithmetic. A zero counter holds the
 // previous register value. A new note seeds the cursor so its first call enters row 0.
-function registerTableCode(prefix: "pt" | "ft", value: "pw" | "cut", min: number, max: number): string {
+function registerTableCode(prefix: "pt" | "ft", value: "pw" | "cut", min: number, max: number, cadence = false): string {
   return `
 ${prefix}_tick:
   lda v_${prefix}left,x
@@ -3076,14 +3892,22 @@ ${prefix}_next:
   tay
   lda ${prefix}_frames,y
   sta v_${prefix}left,x
-  jmp ${prefix}_step
+${cadence ? `  lda ${prefix}_cadence,y
+  sta v_${prefix}clock,x
+` : ""}  jmp ${prefix}_step
 ${prefix}_current:
-  ldy v_inst,x
+${cadence ? `  dec v_${prefix}clock,x
+  beq ${prefix}_advance
+  rts
+${prefix}_advance:
+` : ""}  ldy v_inst,x
   lda i_${prefix}st,y
   clc
   adc v_${prefix}pos,x
   tay
-${prefix}_step:
+${cadence ? `  lda ${prefix}_cadence,y
+  sta v_${prefix}clock,x
+` : ""}${prefix}_step:
 ${prefix === "ft" ? `  lda ft_res,y
   cmp #$FF
   beq ft_keep_res

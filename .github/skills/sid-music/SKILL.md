@@ -24,6 +24,8 @@ Use this skill for preset music demos, SIDWAVE composition, direct voice control
 
 ## Validation
 
+For a 2-4 minute piece, read the chapter "Arrangement, dynamics and long form (1.2)" of `c64://sound/sidwave/spec`: write patterns once, build the form with `sections`, a `timeline` and `loop_to` or `end`, shape dynamics with `level` and `volume`, and fix every `lint` entry and check the `arrangement` lines in the compile result before playing.
+
 For SIDWAVE 1.2 PCM digis, never send more than a few hundred raw samples in tool arguments. Use a procedural `synth:` definition or generate PCM on the host and reference it with `file:`. Reserve inline `b64:` for tiny sounds, with two 4-bit levels per byte, high nibble first. Use `c64_sound` with `op: "sample_render"` to preview a definition, then `op: "analyze"` with the returned WAV path as `wavPath`. Check the compiler's sample size and CPU report before playback. A digi changes the master volume for all voices on its SID.
 
 1. On `c64u`, prefer `c64_sound` analysis results when verification is enabled.

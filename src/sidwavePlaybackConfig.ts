@@ -67,6 +67,11 @@ export function sidwaveSetupWarnings(doc: ParsedSidwave, backend: string): strin
       warnings.push(`Match the device SID map to ${doc.sids.map((sid) => hex(sid.address)).join(", ")}. ${(error as Error).message}`);
     }
   }
+  const models = [...new Set(doc.sids.flatMap((sid) => sid.model ? [sid.model] : []))];
+  if (doc.version === "1.2" && backend !== "vice" && models.length) {
+    // data/ultimate/multisid.md, Differences in sound: the curve is set per UltiSID in store UltiSID Configuration.
+    warnings.push(`Filter cutoffs in Hz assume the declared SID model. Set the filter curve of each UltiSID (store UltiSID Configuration) to ${models.map((m) => m === "8580" ? "8580 Lo for an 8580" : "6581 for a 6581").join(" and ")}; the player does not change it.`);
+  }
   if (doc.cpu === "turbo") {
     warnings.push(backend === "vice"
       ? "VICE does not provide Ultimate Turbo Registers. A score above the stock CPU budget will not start."

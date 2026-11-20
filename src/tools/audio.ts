@@ -1127,6 +1127,8 @@ export const audioModule = defineToolModule({
             entryAddress: compiled.entryAddress,
             basicFreeBytes: compiled.basicFreeBytes,
             worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
+            streamBytes: compiled.streamBytes,
+            ...(compiled.arrangement ? { arrangement: compiled.arrangement, loopTo: compiled.loopTo, lint: compiled.lint } : {}),
             ...(document.samples && {
               sampleDefinitions: compiled.sampleDefinitions,
               sampleBytes: compiled.sampleBytes,
