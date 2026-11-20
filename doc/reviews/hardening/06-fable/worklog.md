@@ -10,7 +10,7 @@ Branch: `feat/hardening-6` (stacked on `feat/hardening-5` at `44822528`), docume
 - Hardware: two sessions on an Ultimate 64 Elite (firmware 3.15a, core 1.50, FPGA 126). Session 1 ran a 44-row checklist: 32 confirmed, 5 contradicted, 1 inconclusive, 6 skipped (counted from `hw/results.md`; the lead's notes say 25 confirmed and 6 contradicted, which does not match the results file). The contradictions led to five code fixes (HW6-6, 23, 24a, 24b, 27) and two documentation fixes (HW6-19, HW6-11/33). Session 2 re-ran all five fixes against the device and confirmed them. The C64U at 192.168.1.146 was never contacted.
 - End-to-end: eight MCP client sessions (s1 to s8) on mock servers: seven FIXED, one CHANGED (s7: the mock accepts any configuration item, so no defect could be confirmed). No session shows a defect still present. Several verify paths cannot run on the mocks.
 - Open items: PACKAGE-7, 13, 14 (owner decisions); META-17 untouched; KickAss `.text` uppercase differs silently; `c64_rag` returns duplicate section chunks; `search_memory` has no ASCII mode; `bundle_run` description not reviewed; the progress hook is not wired into any loop (no loop over 2 s in the wave 2 files); VICE bank ids in the mock are a guess (the real ones start at 0x82); the double-IRQ stable-raster recipe is unverified; nothing of round 6 is merged or in a pull request yet.
-- The line `MOCK SUITE NETWORK TRACE: <lead fills in>` below is a placeholder.
+- Network: the hardware sessions sent nothing to the C64U (Node preload guard). The mock suites, traced with an `LD_PRELOAD` shim, sent nothing to either device. The lead contacted the C64U twice by mistake (one TCP connect, one `GET /v1/version`, both read-only) while testing that shim; see "Hardware sessions".
 
 ## Status per finding
 
@@ -98,7 +98,7 @@ Column meanings:
 | WORKFLOW-14 | done | `fdac9868` | `test/hard06McpSkillResources.test.mjs`, `test/promptsRegistry.test.mjs` | author only | n/a |
 | MCP-5 | done | `ae3f4256` | `test/hard06McpWireResult.test.mjs`, `test/resultRedaction.test.mjs` | author only | n/a |
 | MEDIA-10 | done | `ae3f4256`, `6d612d67` | `test/hard06McpWireResult.test.mjs`, `test/resultRedaction.test.mjs`, `test/developerModule.test.mjs` | author only | n/a |
-| MCP-6 | done | `46d3a054` | `test/hard06McpProgress.test.mjs` | author only | n/a |
+| MCP-6 | done | `46d3a054`, follow-up `bb2a9b4b` (the result no longer overtakes the last progress notification) | `test/hard06McpProgress.test.mjs` | yes (`bb2a9b4b`) | n/a |
 | WORKFLOW-1 | done | `0e43d109` | `test/accessMode.test.mjs`, `test/hard06McpSelectBackend.test.mjs` | author only | n/a |
 | WORKFLOW-3 | done | `ae3f4256` | `test/hard06McpWireResult.test.mjs`, `test/resultRedaction.test.mjs` | author only | no |
 | WORKFLOW-9 | done | `ac866bb5` | `test/hard06McpValidationHints.test.mjs` | author only | no |
@@ -254,7 +254,9 @@ How the C64U (192.168.1.146) was never contacted in the hardware sessions:
 - Row 34 used unicast UDP to 192.168.1.13:64 only, with no broadcast.
 - `power_cycle` was not run, and no outlet was switched.
 
-MOCK SUITE NETWORK TRACE: <lead fills in>
+Mock suites. `mock.json` is `{}`, so the server's default host `c64u` stays configured in mock runs, and `C64BRIDGE_TEST_ASSERT_HERMETIC=1` only checks the state directory, not the network. To check the network, both mock suites were run once more on the final head with an `LD_PRELOAD` shim (`/home/chris/.c64bridge/h6/netshim/netshim.c`) that wraps `connect`, `sendto` and `sendmsg` in every Bun and Node process, logs each non-loopback destination and refuses 192.168.1.146, 192.168.1.13 and broadcast addresses. The shim was first tested against the reserved address 192.0.2.99 under Node and Bun (both refused). Result for the full c64u mock suite (1866 tests) and the VICE mock suite (334 tests): one non-loopback attempt, to 192.0.2.5:64, which is the reserved address a test uses on purpose; no attempt to 192.168.1.146 or 192.168.1.13. The earlier mock runs used the same tests, so they did not contact either device. An earlier attempt to trace the suites with `strace` stopped at timing-sensitive tests and was abandoned; its partial trace also showed only loopback and 192.0.2.5.
+
+Contact with the C64U by the lead (rule violation). While building the shim at about 11:27, the lead ran a self-test of the shim against 192.168.1.146 itself. The shim had not been built (a `pkill -f` in the same command ended the shell before the source file was written), so the loader ignored `LD_PRELOAD` and the self-test ran unguarded. It opened one TCP connection to 192.168.1.146 port 80 from Node (no data sent by the script) and one `GET /v1/version` from Bun. Both are read-only; no state on the C64U was changed. These two requests are the only contact with the C64U in this round. The self-test was then rebuilt to use the reserved address 192.0.2.99 and to stop when the shim file is missing.
 
 ## E2E sessions
 
@@ -298,3 +300,4 @@ STILL-PRESENT: none. The original review transcripts were not available (`/tmp/h
 - Mock-limited verify paths in the E2E sessions (`verify: true` for BASIC and assembly, checkpoint hits, bank-specific sprite placement, configuration validation).
 - SOUND-16 is blocked: the review records only its ID, with no description. KNOWLEDGE-6 to 14 and WORKFLOW-15 were applied by package K through the fact-check rows, whose commits name the row and the source instead of the review ID.
 - Nothing of round 6 is merged or in a pull request. The final step of the plan is one pull request `feat/hardening-6` with base `feat/hardening-5`.
+- `dist/` was found incomplete twice after a successful `npm run build` (for example `dist/tools/translation/assembler.js` missing); `scripts/prebuild.mjs` detected it and a rebuild restored it. The cause was not found: no test references `dist/`. Release builds start from a clean checkout in CI.
