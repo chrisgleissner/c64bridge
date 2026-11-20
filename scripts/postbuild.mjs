@@ -11,9 +11,26 @@
 import { readdir, rename, rm, stat, mkdir, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 const distRoot = path.resolve('dist');
 const distSrc = path.join(distRoot, 'src');
+
+export async function mergeInto(fromDir, toDir) {
+  await mkdir(toDir, { recursive: true });
+  for (const entry of await readdir(fromDir, { withFileTypes: true })) {
+    const from = path.join(fromDir, entry.name);
+    const to = path.join(toDir, entry.name);
+    if (entry.isDirectory()) {
+      const existing = await stat(to).catch(() => undefined);
+      if (existing && !existing.isDirectory()) await rm(to, { force: true });
+      await mergeInto(from, to);
+    } else {
+      await rm(to, { recursive: true, force: true });
+      await rename(from, to);
+    }
+  }
+}
 
 async function main() {
   try {
@@ -28,14 +45,9 @@ async function main() {
     throw err;
   }
 
-  const entries = await readdir(distSrc, { withFileTypes: true });
-  for (const entry of entries) {
-    const from = path.join(distSrc, entry.name);
-    const to = path.join(distRoot, entry.name);
-    // Remove any existing destination to allow rename.
-    await rm(to, { recursive: true, force: true });
-    await rename(from, to);
-  }
+  // Merge file by file. An incremental tsc run emits only the changed modules into dist/src, so
+  // replacing a whole dist/<dir> with dist/src/<dir> would drop every unchanged module.
+  await mergeInto(distSrc, distRoot);
 
   await rm(distSrc, { recursive: true, force: true });
 
@@ -61,7 +73,8 @@ async function main() {
   await syncGeneratedRuntimeArtifacts();
 }
 
-main().catch((error) => {
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (invokedDirectly) main().catch((error) => {
   console.error('[postbuild] Failed to normalize dist layout:', error);
   process.exitCode = 1;
 });
