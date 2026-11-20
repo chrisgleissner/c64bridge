@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { HttpClient, type ApiConfig } from "../generated/c64/index.js";
-import { isSensitiveConfigItem, REDACTED_PLACEHOLDER, redactConfigValue, registerSecret, scrubRequestError } from "./redact.js";
+import { isSensitiveConfigItem, REDACTED_PLACEHOLDER, redactConfigValue, redactText, registerSecret, scrubRequestError } from "./redact.js";
 import { formatErrorMessage, formatPayloadForDebug, loggerFor, payloadByteLength, type PrefixedLogger } from "./logger.js";
 
 type RequestMeta = {
@@ -209,8 +209,9 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
   queue?: RequestQueue,
   limits?: { readonly totalDeadlineMs?: number },
 ): HttpClient<SecurityDataType> {
-  // Device requests go straight to the LAN address; HTTP_PROXY must not apply.
-  const http = new HttpClient<SecurityDataType>({ proxy: false, maxContentLength: REST_MAX_RESPONSE_BYTES, ...config } as ApiConfig<SecurityDataType>);
+  // Device requests go straight to the LAN address; HTTP_PROXY must not apply. The firmware never
+  // redirects, and a redirect would carry X-Password and request bodies to another host: none is followed.
+  const http = new HttpClient<SecurityDataType>({ proxy: false, maxContentLength: REST_MAX_RESPONSE_BYTES, ...config, maxRedirects: 0 } as ApiConfig<SecurityDataType>);
   const totalDeadlineMs = limits?.totalDeadlineMs ?? REST_TOTAL_DEADLINE_MS;
   registerSecret(readPasswordHeader(config?.headers));
 
@@ -280,12 +281,43 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
         error.code = "ECONNABORTED";
         error.message = `Request exceeded the total deadline of ${deadline.ms} ms`;
       }
+      appendFirmwareErrors(error);
       handleError(error, logger);
       return Promise.reject(scrubRequestError(error));
     },
   );
 
   return http;
+}
+
+/** Longest firmware error text appended to an error message. */
+const FIRMWARE_ERROR_TEXT_MAX = 500;
+
+/**
+ * The firmware answers a failed request with an HTTP error status and a JSON body whose `errors`
+ * array says why ("Cannot open file"). A binary route (readmem, menu_screen) receives that body as
+ * bytes; it is decoded to the JSON object here. The `errors` text is appended to the message, which
+ * otherwise reads only "Request failed with status code 404".
+ */
+function appendFirmwareErrors(error: AxiosError): void {
+  const response = error.response;
+  if (!response) return;
+  let data: unknown = response.data;
+  if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+    const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    const text = new TextDecoder().decode(bytes.subarray(0, 64 * 1024)).trim();
+    if (!text.startsWith("{")) return;
+    try { data = JSON.parse(text); } catch { return; }
+    response.data = data;
+  }
+  if (!data || typeof data !== "object" || !Array.isArray((data as { errors?: unknown }).errors)) return;
+  const errors = (data as { errors: unknown[] }).errors
+    .filter((entry) => entry !== undefined && entry !== null && String(entry).trim() !== "")
+    .map((entry) => String(entry).replace(/\s+/g, " ").trim());
+  if (errors.length === 0) return;
+  let text = redactText(errors.join("; "));
+  if (text.length > FIRMWARE_ERROR_TEXT_MAX) text = `${text.slice(0, FIRMWARE_ERROR_TEXT_MAX)}...`;
+  error.message = `${error.message}: ${text}`;
 }
 
 function readPasswordHeader(headers: unknown): string | undefined {

@@ -124,7 +124,7 @@ async function withConfigScenario({
     process.chdir(cwdDir);
     return await withEnv({
       HOME: homeDir,
-      C64BRIDGE_CONFIG: envConfig !== undefined ? envConfigPath : undefined,
+      C64BRIDGE_CONFIG: envConfig !== undefined && envConfig !== null ? envConfigPath : undefined,
       C64_MODE: mode ?? undefined,
     }, fn);
   } finally {

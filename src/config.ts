@@ -64,6 +64,11 @@ export function loadConfig(): C64BridgeConfig {
       rawConfig = JSON.parse(readFileSync(candidatePath, "utf-8"));
       break;
     } catch (error) {
+      if (candidatePath === configPath && (error as NodeJS.ErrnoException).code === "ENOENT") {
+        // A named file that does not exist (for example a typo) must not hand control to the
+        // working-directory or home configuration either, which may name another machine.
+        throw new Error(`C64BRIDGE_CONFIG file '${candidatePath}' does not exist; fix the path or unset C64BRIDGE_CONFIG`);
+      }
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         if (candidatePath === configPath) {
           // An explicitly named file that cannot be used must not silently
@@ -90,14 +95,20 @@ export function loadConfig(): C64BridgeConfig {
   // has neither a c64u nor a u2 section. Each backend otherwise uses its own
   // section, so one device's host, port or password never reaches the other.
   const legacyUltimateEndpoint = !c64u && !u2 && LEGACY_ENDPOINT_KEYS.some((key) => hasLegacyValue(rawConfig?.[key]));
+  // Without a u2 section the U2 profile borrows the C64U settings. When U2_HOST names the U2,
+  // that host is another device, so the borrowed C64U password is left out (a credential goes only
+  // to the host it was configured for); U2_PASSWORD still applies.
+  const u2Borrowed = !u2 && nonEmptyString(process.env.U2_HOST) !== undefined;
+  const u2Section = u2 ?? (u2Borrowed && c64u ? withoutPassword(c64u) : c64u);
+  const u2Legacy = u2Borrowed ? withoutPassword(rawConfig) : rawConfig;
   const ultimate = {
     c64u: resolveUltimateEndpoint("c64u", c64u, c64u || !u2 ? rawConfig : undefined),
-    u2: resolveUltimateEndpoint("u2", u2 ?? c64u, u2 ? undefined : rawConfig, Boolean(u2)),
+    u2: resolveUltimateEndpoint("u2", u2Section, u2 ? undefined : u2Legacy, Boolean(u2)),
   };
   // The selected profile reported by loadConfig keeps the documented fallback
   // between sections and to the legacy fields.
   const selected = useU2
-    ? resolveUltimateEndpoint("u2", u2 ?? c64u, rawConfig, Boolean(u2))
+    ? resolveUltimateEndpoint("u2", u2Section, u2Legacy, Boolean(u2))
     : resolveUltimateEndpoint("c64u", c64u ?? u2, rawConfig);
   const vice = rawConfig?.vice as {
     prewarm?: boolean | string | number;
@@ -128,6 +139,12 @@ export function loadConfig(): C64BridgeConfig {
 /** Top-level fields from the pre-profile config schema that name an endpoint. */
 const LEGACY_ENDPOINT_KEYS = ["baseUrl", "c64_host", "c64_ip", "c64_port"] as const;
 
+function withoutPassword<T extends object>(value: T): T {
+  if (!value || typeof value !== "object" || !("networkPassword" in value)) return value;
+  const { networkPassword: _omitted, ...rest } = value as T & { networkPassword?: unknown };
+  return rest as T;
+}
+
 function hasLegacyValue(value: unknown): boolean {
   return (typeof value === "string" && value.trim().length > 0) || (typeof value === "number" && Number.isFinite(value));
 }
@@ -156,7 +173,9 @@ export function resolveUltimateEndpoint(
   const u2UsesC64uEnv = profile === "u2" && !hasU2Section;
   const envHost = profile === "u2" ? process.env.U2_HOST ?? (u2UsesC64uEnv ? process.env.C64U_HOST : undefined) : process.env.C64U_HOST;
   const envPort = profile === "u2" ? process.env.U2_PORT ?? (u2UsesC64uEnv ? process.env.C64U_PORT : undefined) : process.env.C64U_PORT;
-  const envPassword = profile === "u2" ? process.env.U2_PASSWORD ?? (u2UsesC64uEnv ? process.env.C64U_PASSWORD : undefined) : process.env.C64U_PASSWORD;
+  // A U2 host set through U2_HOST is another device than the C64U, so C64U_PASSWORD never goes to it.
+  const u2UsesC64uPassword = u2UsesC64uEnv && nonEmptyString(process.env.U2_HOST) === undefined;
+  const envPassword = profile === "u2" ? process.env.U2_PASSWORD ?? (u2UsesC64uPassword ? process.env.C64U_PASSWORD : undefined) : process.env.C64U_PASSWORD;
 
   const envHostName = profile === "u2" && process.env.U2_HOST !== undefined ? "U2_HOST" : "C64U_HOST";
   const envPortName = profile === "u2" && process.env.U2_PORT !== undefined ? "U2_PORT" : "C64U_PORT";
