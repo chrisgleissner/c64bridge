@@ -62,7 +62,7 @@
 
 ## Timers (A/B) — Operation
 
-- **16‑bit down‑counters** with separate **latches** (write low→high). **Start** or **CRA/CRB b4** forces latch→counter.  
+- **16‑bit down‑counters** with separate **latches** (write low→high). The latch is loaded into the counter by **CRA/CRB b4** (force load) and on every underflow; a high‑byte write while the timer is stopped also loads it (unverified).  
 - **Clock sources:** Φ2 (system cycles) or **CNT** pulses; **Timer B** can count **Timer A underflows**, gated by CNT if mode `11`.  
 - **Underflow:** Sets ICR bit (and asserts IRQ/NMI). Optional **PB6/PB7** **pulse** (b2=0) or **toggle** (b2=1). **b3=1** one‑shot; else auto‑reload.  
 - **Readback:** Reads return current counter; device internally manages proper two‑byte read behavior.  
