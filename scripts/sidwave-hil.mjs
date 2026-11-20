@@ -139,7 +139,9 @@ async function record(host, base, headers, seconds, sampleRate, startSong) {
   let onFirst; const firstSeen = new Promise((r) => { onFirst = r; });
   let done; const finished = new Promise((r) => { done = r; });
   socket.on("message", (msg) => {
-    if (msg.length < 2) return;
+    // The device sends a 2-byte packet without samples when the stream starts; it carries no audio and
+    // its sequence number is not part of the sample sequence.
+    if (msg.length <= 2) return;
     const seq = msg.readUInt16LE(0);
     if (lastSeq !== null) {
       const gap = ((seq - lastSeq - 1) & 0xffff);
@@ -167,7 +169,7 @@ async function record(host, base, headers, seconds, sampleRate, startSong) {
   }
   const all = new Int16Array(Math.min(values, wanted));
   let o = 0;
-  for (const c of chunks) { const k = Math.min(c.length, all.length - o); if (k <= 0) break; all.set(c.subarray(0, k), o); o += k; }
+  for (const c of chunks) { if (o >= all.length) break; const k = Math.min(c.length, all.length - o); all.set(c.subarray(0, k), o); o += k; }
   return all;
 }
 
