@@ -33,7 +33,7 @@ Each BASIC program in memory (and on disk/tape) is a contiguous block:
 |--------|------|-------------|
 | Load address | 2 bytes | `$0801` little-endian |
 | Next line pointer | 2 bytes | Absolute address of next line |
-| Line number | 2 bytes | 0–65535 |
+| Line number | 2 bytes | 0–63999 (the ROM rejects larger values) |
 | Tokenised PETSCII text | variable | Zero-terminated statement list |
 | Terminator | 2 bytes | Final `$0000` sentinel |
 
