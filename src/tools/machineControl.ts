@@ -1,3 +1,4 @@
+import { cancelGeneratedSidPlayback } from "./audio.js";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { cancelledResult, defineToolModule } from "./types.js";
 import { booleanSchema, numberSchema, objectSchema, optionalSchema } from "./schema.js";
@@ -199,6 +200,7 @@ export const machineControlModule = defineToolModule({
           ctx.logger.info("Resetting C64");
 
           const before = await screenBeforeReset(ctx, parsed);
+          cancelGeneratedSidPlayback(); // The reset clears the SID; a running generated sequence would keep writing to it.
           const result = await ctx.client.reset();
           if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
@@ -242,6 +244,7 @@ export const machineControlModule = defineToolModule({
           ctx.logger.info("Rebooting C64");
 
           const before = await screenBeforeReset(ctx, parsed);
+          cancelGeneratedSidPlayback();
           const result = await ctx.client.reboot();
           if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
@@ -411,6 +414,7 @@ export const machineControlModule = defineToolModule({
             return cancelledResult("power_cycle was cancelled by the client before it started; no menu input was sent and the machine was not touched.");
           }
           const before = await screenBeforeReset(ctx, parsed);
+          cancelGeneratedSidPlayback();
           const result = await ctx.client.powerCycle();
           if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
