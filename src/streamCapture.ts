@@ -6,6 +6,11 @@ export const DEFAULT_VIDEO_STREAM_PORT = 11000;
 export const DEFAULT_AUDIO_STREAM_PORT = 11001;
 export const C64U_PAL_AUDIO_SAMPLE_RATE = 47_982.8869047619;
 export const C64U_NTSC_AUDIO_SAMPLE_RATE = 47_940.3408482143;
+/**
+ * Largest audio capture in one request, in stereo sample pairs: about 1.37 s at the PAL rate
+ * (65536 / 47983 Hz) and 1.37 s at the NTSC rate. Longer captures are refused, not shortened.
+ */
+export const MAX_AUDIO_CAPTURE_PAIRS = 65_536;
 
 export interface ParsedVideoPacket {
   readonly sequence: number;

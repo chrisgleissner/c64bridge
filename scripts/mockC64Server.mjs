@@ -796,6 +796,15 @@ export async function startMockC64Server(options = {}) {
       const dataValue = normaliseHexString(routeUrl.searchParams.get("data") ?? "");
       const address = parseNumeric(addressValue);
       const bytes = Buffer.from(dataValue, "hex");
+      // Firmware 3.15a (Ultimate 64 Elite, 2026-11-20): PUT takes at most 128 bytes and writes nothing beyond that.
+      if (bytes.length > 128) {
+        sendJson(res, { errors: ["Maximum length of 128 bytes exceeded"] }, 400);
+        return;
+      }
+      if (address + bytes.length > 0x10000) {
+        sendJson(res, { errors: ["Memory write exceeds location $FFFF"] }, 400);
+        return;
+      }
 
       state.memory.set(bytes, address);
       state.lastWrite = { address, bytes };
@@ -816,7 +825,16 @@ export async function startMockC64Server(options = {}) {
       for await (const chunk of req) {
         chunks.push(chunk);
       }
-      const bytes = Buffer.concat(chunks);
+      let bytes = Buffer.concat(chunks);
+      // Firmware 3.15a (Ultimate 64 Elite, 2026-11-20): a body that runs past $FFFF is refused with 400,
+      // except at $0000, where 65537 bytes were answered with 200 and only $0000-$FFFF was written.
+      if (address + bytes.length > 0x10000) {
+        if (address !== 0) {
+          sendJson(res, { errors: ["Memory write exceeds location $FFFF"] }, 400);
+          return;
+        }
+        bytes = bytes.subarray(0, 0x10000);
+      }
 
       state.memory.set(bytes, address);
       state.lastWrite = { address, bytes };

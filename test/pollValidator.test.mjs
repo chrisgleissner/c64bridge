@@ -683,7 +683,7 @@ test("BASIC verification of a finished program returns after the first poll", as
   let reads = 0;
   const client = {
     async readScreen() { reads += 1; return "RUN\nHI\n\nREADY.\n"; },
-    async readMemoryRaw() { return Uint8Array.of(0xff); }, // CURLIN high byte: direct mode
+    async readMemoryRaw() { return Uint8Array.of(0x00); }, // cursor enable $CC: waiting for a key
   };
   const started = Date.now();
   const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 2000, intervalMs: 200, stabilizeMs: 0 }, undefined, "READY.\n");
@@ -714,16 +714,16 @@ test("pollForProgramOutcome BASIC keeps polling when the program prints READY. a
     "RUN\nREADY.\n",
     "RUN\nREADY.\n?UNDEF'D STATEMENT ERROR IN 50\nREADY.\n",
   ];
-  const memory = [0x00, 0x00, 0x00, 0xff];
+  const memory = [0x01, 0x01, 0x01, 0x00]; // cursor enable $CC: non-zero while the program runs
   let screenIndex = 0;
   const client = {
     async readScreen() {
       return screens[Math.min(screenIndex++, screens.length - 1)];
     },
     async readMemoryRaw(address, length) {
-      assert.equal(address, 0x3a);
+      assert.equal(address, 0xcc);
       assert.equal(length, 1);
-      return Uint8Array.of(memory.shift() ?? 0xff);
+      return Uint8Array.of(memory.shift() ?? 0x00);
     },
   };
   const result = await pollForProgramOutcome("BASIC", client, createLogger(), { maxMs: 500, intervalMs: 5, stabilizeMs: 0 });

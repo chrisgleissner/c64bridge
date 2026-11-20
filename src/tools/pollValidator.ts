@@ -34,6 +34,14 @@ export interface BasicPollResult {
   text?: string;
   /** The last screen read: the error screen, or the screen when the poll ended. */
   screen?: string;
+  /**
+   * Set when status is ok. true: BASIC was observed back at the READY. prompt
+   * waiting for input. false: no BASIC error appeared, but no READY. prompt was
+   * observed within the window either, so the program was still running.
+   */
+  finished?: boolean;
+  /** Set when finished is false: how long the poll watched the program. */
+  observedMs?: number;
 }
 
 /**
@@ -185,15 +193,28 @@ function endsAtReadyPrompt(screen: string): boolean {
 }
 
 /**
- * Reads the high byte of CURLIN ($3A), which is $FF while BASIC is in direct
- * mode and holds the current line number's high byte while a program runs.
+ * True when the KERNAL screen editor is waiting for a key with an empty
+ * keyboard buffer, which is where BASIC sits at the READY. prompt.
+ *
+ * The wait loop at $E5CD copies the keyboard buffer count $C6 into the cursor
+ * enable flag $CC on every pass ($E5CD LDA $C6, $E5CF STA $CC), so $CC is $00
+ * only while that loop runs with no key queued. The only other write is CINT
+ * at $E542, which stores $0C. Once RUN arrives through the keyboard buffer,
+ * $CC keeps a non-zero value while the program runs and returns to $00 when
+ * BASIC waits for the next direct line (source: mist64/c64ref ROM disassembly).
+ *
+ * CURLIN high byte $3A is not used: BASIC sets it to $FF only after a direct
+ * line has been entered ($A490 LDX #$FF, $A492 STX $3A). END ($A831) and the
+ * warm start keep the last line's high byte, measured as $3A = $00 after a
+ * finished program on an Ultimate 64 Elite (firmware 3.15a, 2026-11-20).
+ *
  * Returns undefined when memory cannot be read, so the caller can fall back to
  * screen evidence.
  */
-async function inDirectMode(client: C64Client): Promise<boolean | undefined> {
+async function waitingForInput(client: C64Client): Promise<boolean | undefined> {
   try {
-    const bytes = await client.readMemoryRaw(0x3a, 1);
-    return bytes[0] === undefined ? undefined : bytes[0] === 0xff;
+    const bytes = await client.readMemoryRaw(0xcc, 1);
+    return bytes[0] === undefined ? undefined : bytes[0] === 0x00;
   } catch {
     return undefined;
   }
@@ -205,11 +226,12 @@ async function inDirectMode(client: C64Client): Promise<boolean | undefined> {
  * Evidence that the program ran: the screen shows RUN or an error, differs
  * from the screen captured before the run (a program that clears the screen
  * removes the RUN echo), or is blank. A BASIC error returns immediately. Once
- * there is evidence, the screen ends at the READY. prompt and BASIC is back in
- * direct mode (CURLIN high byte $FF; without memory access, the same READY.
- * screen on two consecutive polls), the program has finished without an error
- * and the poll returns at once. A program that is
- * still running (no prompt) is watched for errors for the full window.
+ * there is evidence, the screen ends at the READY. prompt and BASIC is waiting
+ * for input (cursor enable $CC = $00; without memory access, the same
+ * READY. screen on two consecutive polls), the program has finished without an
+ * error and the poll returns at once with finished: true. A program that is
+ * still running (no prompt) is watched for errors for the full window and is
+ * then reported with finished: false.
  */
 async function pollBasicOutcome(
   client: C64Client,
@@ -269,13 +291,13 @@ async function pollBasicOutcome(
 
       if (runDetected && endsAtReadyPrompt(screen)) {
         // A program can print READY. itself and keep running, so the prompt alone is not proof that it finished.
-        const direct = await inDirectMode(client);
+        const direct = await waitingForInput(client);
         const settled = direct === undefined
           ? previousReadyScreen !== undefined && previousReadyScreen === normaliseScreen(screen)
           : direct;
         if (settled) {
           logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime, direct });
-          return { status: "ok", type: "BASIC", screen };
+          return { status: "ok", type: "BASIC", screen, finished: true };
         }
         previousReadyScreen = normaliseScreen(screen);
       } else {
@@ -295,10 +317,12 @@ async function pollBasicOutcome(
       ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
     };
   }
-  logger.debug("BASIC polling completed without errors", { pollCount, elapsed: Date.now() - startTime });
+  logger.debug("BASIC polling ended without an error and without a READY. prompt", { pollCount, elapsed: Date.now() - startTime });
   return {
     status: "ok",
     type: "BASIC",
+    finished: false,
+    observedMs: Date.now() - startTime,
     ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
   };
 }

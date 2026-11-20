@@ -55,6 +55,7 @@ import { forgetUserStream, rememberUserStream, userStreamTarget, withStreamLock 
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
+  MAX_AUDIO_CAPTURE_PAIRS,
   VideoFrameAssembler,
   parseAudioPacket,
   parseVideoPacket,
@@ -1795,7 +1796,12 @@ export class C64Client {
 
   async captureSamples(options?: { readonly count?: number; readonly signal?: AbortSignal }): Promise<SampleCaptureResult> {
     options?.signal?.throwIfAborted();
-    const requestedPairs = Math.max(1, Math.min(65_536, Math.trunc(options?.count ?? 256)));
+    const requestedPairs = Math.trunc(options?.count ?? 256);
+    if (!Number.isFinite(requestedPairs) || requestedPairs < 1 || requestedPairs > MAX_AUDIO_CAPTURE_PAIRS) {
+      // A request is refused rather than shortened, so a result never holds less audio than was asked for without saying so.
+      const seconds = (MAX_AUDIO_CAPTURE_PAIRS / C64U_PAL_AUDIO_SAMPLE_RATE).toFixed(2);
+      throw new Error(`Audio sample capture takes 1 to ${MAX_AUDIO_CAPTURE_PAIRS} stereo sample pairs (at most about ${seconds} s at ${Math.round(C64U_PAL_AUDIO_SAMPLE_RATE)} Hz); ${options?.count} was requested. Capture longer audio in several requests.`);
+    }
     const facade = await this.facadePromise;
     if (facade.type !== "c64u") {
       throw new Error("Audio sample capture is only available on C64 Ultimate");
