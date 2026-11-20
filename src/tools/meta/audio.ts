@@ -92,16 +92,6 @@ const MUSIC_PRESETS: Record<MusicPresetName, MusicPresetDefinition> = {
   },
 };
 
-const silenceAndVerifyArgsSchema = objectSchema({
-  description: "Arguments for the silence_and_verify meta tool",
-  properties: {
-    durationSeconds: optionalSchema(numberSchema({ description: "Recording length in seconds for the silence probe.", minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
-    rmsThreshold: optionalSchema(numberSchema({ description: "Maximum allowed RMS to consider the capture silent.", minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
-    waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Delay in milliseconds after silencing before recording starts.", minimum: 0, maximum: 5000 }), DEFAULT_SILENCE_WAIT_MS),
-  },
-  additionalProperties: false,
-});
-
 const musicCompilePlayAnalyzeArgsSchema = objectSchema({
   description: "Compile a SIDWAVE score, play it, then record and analyze the audio output.",
   properties: {
@@ -111,8 +101,8 @@ const musicCompilePlayAnalyzeArgsSchema = objectSchema({
     waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Delay between starting playback and beginning analysis capture (milliseconds).", minimum: 0, maximum: 5000 }), DEFAULT_PLAYBACK_WAIT_MS),
     analysisDurationSeconds: optionalSchema(numberSchema({ description: "Audio capture length in seconds.", minimum: 0.5, maximum: 20 }), DEFAULT_ANALYSIS_DURATION_SECONDS),
     expectedSidwave: optionalSchema(stringSchema({ description: "Optional expected SIDWAVE used to refine analysis comparisons.", minLength: 1 })),
-    verifySilenceBefore: optionalSchema(booleanSchema({ description: "Run silence verification before playback to ensure a quiet baseline.", default: true }), true),
-    verifySilenceAfter: optionalSchema(booleanSchema({ description: "Run silence verification after playback to ensure voices are released.", default: true }), true),
+    verifySilenceBefore: optionalSchema(booleanSchema({ description: "Record a quiet baseline before playback (adds the silence duration to the call). Default false.", default: false }), false),
+    verifySilenceAfter: optionalSchema(booleanSchema({ description: "Record after playback to confirm the voices were released (adds the silence duration). Default false: the SID is just silenced.", default: false }), false),
     silenceDurationSeconds: optionalSchema(numberSchema({ description: "Audio capture length used for silence verification.", minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
     silenceRmsThreshold: optionalSchema(numberSchema({ description: "RMS threshold applied to silence verification captures.", minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
     postSilenceWaitMs: optionalSchema(numberSchema({ description: "Delay between main analysis capture and the post-playback silence check (milliseconds).", minimum: 0, maximum: 5000 }), DEFAULT_POST_SILENCE_WAIT_MS),
@@ -135,9 +125,9 @@ const musicPlayPresetArgsSchema = objectSchema({
       minLength: 1,
     }))),
     verify: optionalSchema(booleanSchema({
-      description: "Capture and analyze audio after playback starts: native streaming on C64U/U64, host audio input on U2/VICE (PortAudio required).",
-      default: true,
-    }), true),
+      description: "Opt in to capturing and analyzing the audio after playback starts (adds the wait and the analysis duration): native streaming on C64U/U64, host audio input on U2/VICE (PortAudio required). Default false.",
+      default: false,
+    }), false),
     analysisDurationSeconds: optionalSchema(numberSchema({
       description: "Length of the verification recording on analyzable backends.",
       minimum: 0.5,
@@ -195,6 +185,23 @@ async function silenceSid(context: ToolExecutionContext) {
       details: { response },
     });
   }
+}
+
+let hostCaptureProbe: Promise<boolean> | undefined;
+
+/** True when audio can be captured: the client provides its own capture (C64U stream) or the host PortAudio module loads. */
+async function audioCaptureAvailable(context: ToolExecutionContext): Promise<boolean> {
+  if (typeof (context.client as any)?.recordAndAnalyzeAudio === "function") return true;
+  hostCaptureProbe ??= (async () => {
+    try {
+      const specifier = "naudiodon" as unknown as string;
+      await import(specifier as any);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  return hostCaptureProbe;
 }
 
 function resolveAnalyzer(context: ToolExecutionContext): AnalyzeAudioFn {
@@ -259,7 +266,7 @@ async function performSilenceCheck(
   const { logger } = context;
   const label = options.label ?? "silence";
 
-  logger?.debug?.("silence_and_verify: running silence check", {
+  logger?.debug?.("silence check: running silence check", {
     stage: label,
     durationSeconds: options.durationSeconds,
     rmsThreshold: options.rmsThreshold,
@@ -285,7 +292,7 @@ async function performSilenceCheck(
   const maxRms = metrics.max ?? metrics.average ?? 0;
   const silent = maxRms <= options.rmsThreshold;
 
-  logger?.debug?.("silence_and_verify: silence check metrics", {
+  logger?.debug?.("silence check: silence check metrics", {
     stage: label,
     averageRms,
     maxRms,
@@ -356,7 +363,7 @@ export const tools: ToolDefinition[] = [
         const document = parseSidwave(preset.sidwave);
         const compiled = compileSidwaveToPrg(document);
         const analyzer = resolveAnalyzer(context);
-        const verify = parsed.verify !== false;
+        const verify = parsed.verify === true;
         const waitBeforeCaptureMs = parsed.waitBeforeCaptureMs ?? DEFAULT_PRESET_WAIT_MS;
         const analysisDurationSeconds = parsed.analysisDurationSeconds ?? DEFAULT_PRESET_ANALYSIS_DURATION_SECONDS;
         const restoreActiveBackend = parsed.restoreActiveBackend !== false;
@@ -471,48 +478,6 @@ export const tools: ToolDefinition[] = [
     },
   },
   {
-    name: "silence_and_verify",
-    description:
-      "Silence all SID voices, capture a short sample, and ensure the output is below an RMS threshold.",
-    inputSchema: silenceAndVerifyArgsSchema.jsonSchema,
-    async execute(args, context) {
-      try {
-        const parsed = silenceAndVerifyArgsSchema.parse(args ?? {});
-        const durationSeconds = parsed.durationSeconds ?? DEFAULT_SILENCE_DURATION_SECONDS;
-        const rmsThreshold = parsed.rmsThreshold ?? DEFAULT_RMS_THRESHOLD;
-        const waitBeforeCaptureMs = parsed.waitBeforeCaptureMs ?? DEFAULT_SILENCE_WAIT_MS;
-
-        const analyzer = resolveAnalyzer(context);
-        const check = await performSilenceCheck(context, analyzer, {
-          durationSeconds,
-          rmsThreshold,
-          waitBeforeCaptureMs,
-          label: "primary",
-        });
-
-        return jsonResult(
-          {
-            silent: check.silent,
-            durationSeconds: check.durationSeconds,
-            waitBeforeCaptureMs,
-            threshold: rmsThreshold,
-            metrics: check.metrics,
-          },
-          {
-            success: check.silent,
-            silent: check.silent,
-          },
-        );
-      } catch (error) {
-        if (error instanceof ToolExecutionError) {
-          return toolErrorResult(error);
-        }
-
-        return unknownErrorResult(error);
-      }
-    },
-  },
-  {
     name: "music_compile_play_analyze",
     description: "Compile a SIDWAVE score, play it on the C64, capture the output, and analyze the recording.",
     inputSchema: musicCompilePlayAnalyzeArgsSchema.jsonSchema,
@@ -532,8 +497,8 @@ export const tools: ToolDefinition[] = [
         }
         const waitBeforeCaptureMs = parsed.waitBeforeCaptureMs ?? DEFAULT_PLAYBACK_WAIT_MS;
         const analysisDurationSeconds = parsed.analysisDurationSeconds ?? DEFAULT_ANALYSIS_DURATION_SECONDS;
-        const verifySilenceBefore = parsed.verifySilenceBefore ?? true;
-        const verifySilenceAfter = parsed.verifySilenceAfter ?? true;
+        const verifySilenceBefore = parsed.verifySilenceBefore ?? false;
+        const verifySilenceAfter = parsed.verifySilenceAfter ?? false;
         const silenceDurationSeconds = parsed.silenceDurationSeconds ?? DEFAULT_SILENCE_DURATION_SECONDS;
         const silenceRmsThreshold = parsed.silenceRmsThreshold ?? DEFAULT_RMS_THRESHOLD;
         const postSilenceWaitMs = parsed.postSilenceWaitMs ?? DEFAULT_POST_SILENCE_WAIT_MS;
@@ -541,8 +506,14 @@ export const tools: ToolDefinition[] = [
         const expectedSidwave = normalizeSidwaveInput(parsed.expectedSidwave ?? parsed.sidwave ?? parsed.cpg);
 
         const analyzer = resolveAnalyzer(context);
+        // Without an audio capture backend the score is still compiled and played; the analysis is skipped and said so.
+        const canCapture = await audioCaptureAvailable(context);
+        const warnings: string[] = [];
+        if (!canCapture) {
+          warnings.push("No audio capture backend is available (install the naudiodon/PortAudio dependency, or use a C64U with streaming); played without silence checks or analysis.");
+        }
         let preSilence: SilenceCheckResult | null = null;
-        if (verifySilenceBefore) {
+        if (verifySilenceBefore && canCapture) {
           preSilence = await performSilenceCheck(context, analyzer, {
             durationSeconds: silenceDurationSeconds,
             rmsThreshold: silenceRmsThreshold,
@@ -582,6 +553,23 @@ export const tools: ToolDefinition[] = [
               details: { response: playbackDetails ?? playback.details ?? playback },
             });
           }
+        }
+
+        if (!canCapture) {
+          return jsonResult({
+            format,
+            compilation: {
+              entryAddress: compiled.entryAddress,
+              prgBytes: compiled.prg.length,
+              title: document.song?.title ?? null,
+              basicFreeBytes: compiled.basicFreeBytes,
+              warnings: compiled.warnings,
+            },
+            playback: { method: playbackMethod, details: playbackDetails },
+            analysis: null,
+            playing: true,
+            warnings,
+          }, { success: true, format, method: playbackMethod, analyzed: false });
         }
 
         if (waitBeforeCaptureMs > 0) {

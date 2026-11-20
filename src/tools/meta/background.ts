@@ -8,6 +8,10 @@ import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
 import type { C64Facade } from "../../device.js";
 import { screenCodesToAscii } from "../../petscii.js";
+import { screenLayoutFromRegisters } from "../../device.js";
+import { resolveAddressSymbol } from "../../knowledge.js";
+import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../../numericArg.js";
+import { stripHexByteSeparators } from "../hex.js";
 import { loggerFor } from "../../logger.js";
 import { formatTimestampSpec, parseTimestampSpec } from "./util.js";
 import { stateRootDir } from "../../hostPaths.js";
@@ -51,12 +55,15 @@ const logger = loggerFor("background");
 export const MIN_INTERVAL_MS = 100;
 export const MAX_RUNNING_TASKS = 16;
 export const MAX_ITERATIONS_LIMIT = 100_000;
+/** One day. A larger value cannot be a setTimeout delay (Node runs a delay above 2^31-1 ms after 1 ms). */
+export const MAX_INTERVAL_MS = 86_400_000;
 const MAX_FINISHED_TASKS = 200;
 const MAX_LOG_BYTES = 256 * 1024;
 
 // Operations runOperation implements, including the *_memory aliases.
 const SUPPORTED_OPERATIONS = ["read", "write", "read_screen", "menu_button", "read_memory", "write_memory"] as const;
-const MAX_STORED_RESULT_CHARS = 4096;
+// The registry file is rewritten on every persist, so a stored result stays small (a screen is 1000 characters).
+const MAX_STORED_RESULT_CHARS = 1024;
 
 function summariseResult(result: unknown): unknown {
   let text: string;
@@ -199,6 +206,16 @@ async function moveCorruptStateAside(path: string, reason: string): Promise<void
   }
 }
 
+/**
+ * True when the process that wrote an owner record is still running. A record with this process's
+ * PID but another session was left by an earlier process: a restarted server, typically in a
+ * container, often gets the same PID, and that record is dead.
+ */
+function ownerIsLive(pid: unknown, session: unknown): boolean {
+  if (pid === process.pid && session !== SESSION_ID) return false;
+  return processIsAlive(pid);
+}
+
 function isOwned(task: BackgroundTask): boolean {
   return task.ownerPid === process.pid && task.ownerSession === SESSION_ID;
 }
@@ -242,7 +259,7 @@ async function readTasks(): Promise<void> {
   }
   for (const pt of parsed.tasks as PersistedTask[]) {
     const t = fromPersistedTask(pt);
-    const liveOwner = processIsAlive(t.ownerPid);
+    const liveOwner = ownerIsLive(t.ownerPid, t.ownerSession);
     if (!liveOwner) { t.ownerPid = process.pid; t.ownerSession = SESSION_ID; }
     if (t.status === "running" && !liveOwner) {
       t.status = "stopped";
@@ -258,7 +275,7 @@ async function readTasks(): Promise<void> {
   const localById = new Map([...TASKS.values()].map((task) => [task.id, task]));
   const snapshot: PersistedTask[] = parsed.tasks.map((task: PersistedTask) => {
     const local = localById.get(task.id);
-    return local && !processIsAlive(task.ownerPid) ? toPersistedTask(local) : task;
+    return local && !ownerIsLive(task.ownerPid, task.ownerSession) ? toPersistedTask(local) : task;
   });
   const finished = snapshot.filter((task) => task.status !== "running").sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   const retained = new Set(finished.slice(0, MAX_FINISHED_TASKS).map((task) => task.id));
@@ -341,7 +358,7 @@ async function pruneFinishedTasks(): Promise<void> {
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   for (const task of finished.slice(MAX_FINISHED_TASKS)) {
     TASKS.delete(task.name);
-    if (isOwned(task) || !processIsAlive(task.ownerPid)) {
+    if (isOwned(task) || !ownerIsLive(task.ownerPid, task.ownerSession)) {
       try { await fs.rm(getBackgroundTaskFolderAbsolute(task.id), { recursive: true, force: true }); }
       catch (error) { logger.warn(`Unable to prune finished task artifacts: ${String(error)}`); }
     }
@@ -361,7 +378,7 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         catch (error: any) { if (error?.code !== "ENOENT") throw error; }
         const owned = [...TASKS.values()].filter(isOwned);
         for (const task of changedTasks) {
-          if (task.status === "running" && disk.some((other) => other.name === task.name && other.id !== task.id && other.status === "running" && processIsAlive(other.ownerPid))) {
+          if (task.status === "running" && disk.some((other) => other.name === task.name && other.id !== task.id && other.status === "running" && ownerIsLive(other.ownerPid, other.ownerSession))) {
             throw new ToolValidationError("Task with this name is already running in another MCP process", { path: "$.name" });
           }
         }
@@ -392,6 +409,25 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
   return run;
 }
 
+/** Reads the text screen where the VIC-II shows it (screen base and character set from $D018/$DD00) through the pinned facade. */
+async function readPinnedScreen(ctx: Parameters<ToolDefinition["execute"]>[1], facade: C64Facade): Promise<string> {
+  if (facade.readScreenState) {
+    const state = await facade.readScreenState();
+    return screenCodesToAscii(state.bytes, { columns: 40, rows: 25, charset: state.charset });
+  }
+  let d018: number | undefined;
+  let dd00: number | undefined;
+  try {
+    d018 = (await ctx.client.readMemoryRaw(0xd018, 1, facade))[0];
+    dd00 = (await ctx.client.readMemoryRaw(0xdd00, 1, facade))[0];
+  } catch {
+    // Keep the defaults ($0400, upper case) when the registers cannot be read.
+  }
+  const layout = screenLayoutFromRegisters(d018, dd00);
+  const bytes = await ctx.client.readMemoryRaw(layout.baseAddress, Math.min(0x03e8, 0x10000 - layout.baseAddress), facade);
+  return screenCodesToAscii(bytes, { columns: 40, rows: 25, charset: layout.charset });
+}
+
 function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]) {
   const args = task.args;
   const facade = task._facade;
@@ -407,11 +443,7 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
       return ctx.client.writeMemory(address, bytes, facade);
     }
     case "read_screen": {
-      if (facade) {
-        return ctx.client
-          .readMemoryRaw(0x0400, 0x03e8, facade)
-          .then((bytes) => screenCodesToAscii(bytes, { columns: 40, rows: 25 }));
-      }
+      if (facade) return readPinnedScreen(ctx, facade);
       return ctx.client.readScreen();
     }
     case "menu_button": {
@@ -424,7 +456,7 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
 
 function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]): void {
   if (task.status !== "running") return;
-  const delay = Math.max(0, task.intervalMs);
+  const delay = Math.min(MAX_INTERVAL_MS, Math.max(0, task.intervalMs));
   task.nextRunAt = new Date(Date.now() + delay);
   task._timer = setTimeout(async () => {
     if (task.status !== "running") return;
@@ -457,8 +489,13 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
       task.lastError = err instanceof Error ? err.message : String(err);
       task.stoppedAt = new Date();
       task._timer = null;
-      await appendTaskLog(task, `error: ${task.lastError}`);
-      await persistTasks([task]);
+      // Nothing may escape this timer callback: an unhandled rejection ends the process when no handler is installed.
+      try {
+        await appendTaskLog(task, `error: ${task.lastError}`);
+        await persistTasks([task]);
+      } catch (persistError) {
+        logger.warn(`Unable to record the failure of background task ${task.name}: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+      }
     }
   }, delay);
   // A pending task timer must never keep the process alive on its own.
@@ -493,7 +530,8 @@ function validateTaskOperation(operation: string, args: Record<string, unknown>)
       { path: "$.operation" },
     );
   }
-  if (normaliseOperation(operation) === "write") {
+  const normalised = normaliseOperation(operation);
+  if (normalised === "write") {
     for (const key of ["address", "bytes"] as const) {
       const value = args[key];
       if (value === undefined || value === null || String(value).trim() === "") {
@@ -501,6 +539,36 @@ function validateTaskOperation(operation: string, args: Record<string, unknown>)
       }
     }
   }
+  if (normalised === "read" || normalised === "write") {
+    // Checked now, so a bad argument fails the start instead of killing the task after one interval.
+    const address = parseTaskAddress(String(args.address ?? "$0400"));
+    let length: number;
+    if (normalised === "read") {
+      const rawLength = String(args.length ?? "16");
+      const parsedLength = parseNumericLiteral(rawLength, "$.arguments.length");
+      if (parsedLength === undefined || !Number.isInteger(parsedLength) || parsedLength < 1) {
+        throw new ToolValidationError(`arguments.length must be a number of bytes of at least 1, got "${rawLength}"`, { path: "$.arguments.length" });
+      }
+      length = parsedLength;
+    } else {
+      const hex = stripHexByteSeparators(String(args.bytes ?? "$00"));
+      if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
+        throw new ToolValidationError("arguments.bytes must be whole hex bytes, for example $AA55", { path: "$.arguments.bytes" });
+      }
+      length = hex.length / 2;
+    }
+    assertAddressRange(address, length, "$.arguments.address");
+  }
+}
+
+function parseTaskAddress(raw: string): number {
+  const literal = parseNumericLiteral(raw, "$.arguments.address");
+  const address = literal ?? resolveAddressSymbol(raw);
+  if (address === undefined) {
+    assertNotBareHex(raw, "$.arguments.address");
+    throw new ToolValidationError(`Invalid address "${raw}"`, { path: "$.arguments.address" });
+  }
+  return address;
 }
 
 const noArgsSchema = objectSchema<Record<string, never>>({ description: "No arguments", properties: {}, additionalProperties: false });
@@ -516,7 +584,7 @@ const startBackgroundTaskArgsSchema = objectSchema({
     }),
     operation: stringSchema({ description: "Operation name: read, write, read_screen or menu_button (read_memory and write_memory are aliases). write requires arguments.address and arguments.bytes.", minLength: 1 }),
     arguments: optionalSchema(objectSchema({ description: "Operation-specific arguments", properties: {}, additionalProperties: true }), {} as any),
-    intervalMs: optionalSchema(numberSchema({ description: `Interval milliseconds (minimum ${MIN_INTERVAL_MS})`, integer: true, minimum: MIN_INTERVAL_MS, default: 1000 }), 1000),
+    intervalMs: optionalSchema(numberSchema({ description: `Interval milliseconds (${MIN_INTERVAL_MS} to ${MAX_INTERVAL_MS})`, integer: true, minimum: MIN_INTERVAL_MS, maximum: MAX_INTERVAL_MS, default: 1000 }), 1000),
     maxIterations: optionalSchema(numberSchema({ description: `Maximum number of iterations (1 to ${MAX_ITERATIONS_LIMIT}; omit for indefinite)`, integer: true, minimum: 1, maximum: MAX_ITERATIONS_LIMIT }), undefined),
   },
   required: ["name", "operation"],
@@ -624,7 +692,7 @@ export const tools: ToolDefinition[] = [
           throw startError;
         }
         await persistTasks([task]);
-        if (existing && existing.id !== task.id && (isOwned(existing) || !processIsAlive(existing.ownerPid))) {
+        if (existing && existing.id !== task.id && (isOwned(existing) || !ownerIsLive(existing.ownerPid, existing.ownerSession))) {
           await fs.rm(getBackgroundTaskFolderAbsolute(existing.id), { recursive: true, force: true });
         }
         return jsonResult({ started: true, task: { id: task.id, name: task.name, operation: task.operation, backendId: task.backendId ?? null, intervalMs: task.intervalMs, maxIterations: task.maxIterations ?? null, folder: task.folder } }, { success: true });

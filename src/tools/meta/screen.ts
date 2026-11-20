@@ -227,7 +227,8 @@ export function compileScreenPattern(pattern: string, isRegex: boolean, caseInse
   }
   assertSafeScreenPattern(pattern);
   try {
-    return new RegExp(pattern, flags);
+    // "m": the screen is 25 lines joined by newlines, so ^ and $ anchor each screen row.
+    return new RegExp(pattern, `${flags ?? ""}m`);
   } catch (error) {
     throw new ToolValidationError(`Invalid regular expression: ${error instanceof Error ? error.message : String(error)}`, { path: "$.pattern" });
   }
@@ -313,7 +314,7 @@ export async function waitForScreenText(
 const waitForScreenTextArgsSchema = objectSchema({
   description: "Poll screen until text or regex matches, or timeout elapses.",
   properties: {
-    pattern: stringSchema({ description: "Substring or regex to find (at most 200 characters; on runtimes without evaluation timeout, backreferences and nested quantifiers are rejected)", minLength: 1, maxLength: 200 }),
+    pattern: stringSchema({ description: "Substring or regex to find (^ and $ match at screen row boundaries; at most 200 characters; on runtimes without evaluation timeout, backreferences and nested quantifiers are rejected)", minLength: 1, maxLength: 200 }),
     isRegex: optionalSchema(booleanSchema({ description: "Interpret pattern as regular expression", default: false }), false),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive search", default: true }), true),
     timeoutMs: optionalSchema(numberSchema({ description: "Overall timeout in milliseconds (1-120000)", integer: true, minimum: 1, maximum: 120000, default: 3000 }), 3000),

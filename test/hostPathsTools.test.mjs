@@ -153,9 +153,6 @@ test("program and compilation workflows reject output paths outside the roots", 
 
   const greeting = outsideTarget("greeting");
   assertRejectedWithRoots(await metaModule.invoke("cross_platform_greeting", { platforms: ["c64u"], outputPath: greeting.dir }, ctx), greeting);
-
-  const cycle = outsideTarget("cycle");
-  assertRejectedWithRoots(await metaModule.invoke("compile_run_verify_cycle", { sourceType: "basic", source: "10 PRINT 1", durationMs: 1, outputPath: cycle.dir }, ctx), cycle);
 });
 
 test("run_prg symbolsFile outside the roots is rejected before it is read", async () => {

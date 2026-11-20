@@ -87,12 +87,36 @@ function normaliseAssertionHex(value: string): string {
   return stripHexByteSeparators(value).toUpperCase();
 }
 
+/**
+ * Upper-cased text without any whitespace. The screen is 40-column rows joined by newlines, so a
+ * text that wraps at column 40 gets a line break (and trimmed spaces) inside a word; comparing
+ * without whitespace keeps such a text matching.
+ */
 function normaliseScreenText(screen: string): string {
-  return screen.replace(/\r\n?/g, "\n").replace(/\s+/g, " ").trim().toUpperCase();
+  return screen.replace(/\s+/g, "").toUpperCase();
 }
 
 function screenContainsExpectedText(screen: string, expectedText: string): boolean {
   return normaliseScreenText(screen).includes(normaliseScreenText(expectedText));
+}
+
+const MAX_REPORT_SCREEN_CHARS = 1000;
+
+function truncateScreen(screen: string): string {
+  return screen.length <= MAX_REPORT_SCREEN_CHARS ? screen : `${screen.slice(0, MAX_REPORT_SCREEN_CHARS)}...`;
+}
+
+/** Rejects assertions that would pass without checking anything, before any program runs. */
+function assertAssertionsComplete(programs: ReadonlyArray<{ assertions?: Array<{ type: string; pattern?: string; address?: string; expected?: string }> }>): void {
+  programs.forEach((program, index) => {
+    (program.assertions ?? []).forEach((assertion, position) => {
+      const base = `$.programs[${index}].assertions[${position}]`;
+      // An empty pattern is contained in every screen, so the assertion would pass without checking anything.
+      if (assertion.type === "screen_contains" && (typeof assertion.pattern !== "string" || assertion.pattern.trim() === "")) {
+        throw new ToolValidationError('Assertion screen_contains requires "pattern"; without it the assertion would pass without checking anything', { path: `${base}.pattern` });
+      }
+    });
+  });
 }
 
 function applyGreetingTemplate(template: string, backend: GreetingBackend): string {
@@ -266,7 +290,7 @@ const programShuffleArgsSchema = objectSchema({
   description: "Discover PRG/CRT files under root path, run each for a duration, capture screen, then reset.",
   properties: {
     root: optionalSchema(stringSchema({ description: "Directory to search for programs (not recursive; the firmware lookup returns one match per extension)", minLength: 1 }), "/"),
-    extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 })), ["prg", "crt"] as any),
+    extensions: optionalSchema(arraySchema(stringSchema({ description: "File extensions to include (without dot)", minLength: 1 }), { maxItems: 8 }), ["prg", "crt"] as any),
     durationMs: optionalSchema(numberSchema({ description: "Duration to run each program in milliseconds", integer: true, minimum: 1, maximum: 600000, default: 5000 }), 5000),
     captureScreen: optionalSchema(booleanSchema({ description: "Capture screen after each run", default: true }), true),
     maxPrograms: optionalSchema(numberSchema({ description: "Maximum number of programs to run", integer: true, minimum: 1, default: 10 }), 10),
@@ -298,7 +322,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
       },
       required: ["path"],
       additionalProperties: false,
-    })),
+    }), { description: "Programs to run in order (at most 64).", minItems: 1, maxItems: 64 }),
     continueOnError: optionalSchema(booleanSchema({ description: "Continue running programs after assertion failure", default: false }), false),
     durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions", integer: true, minimum: 1, maximum: 600000, default: 2000 }), 2000),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for test results", minLength: 1 })),
@@ -667,7 +691,8 @@ export const tools: ToolDefinition[] = [
         // ({files:{filename}}) or 404, so each extension finds at most one program in the root directory.
         const programs: string[] = [];
         const searchDir = root.replace(/\/+$/, "");
-        for (const ext of extensions) {
+        for (const ext of new Set(extensions)) {
+          if (ctx.signal?.aborted) return cancelledResult("program_shuffle was cancelled during discovery; nothing was run.");
           const pattern = `${searchDir}/*.${ext}`;
           let info: unknown;
           try {
@@ -693,6 +718,7 @@ export const tools: ToolDefinition[] = [
         await fs.mkdir(outputPath, { recursive: true });
 
         const results: Array<{ path: string; started: string; ended: string; durationMs: number; screen?: string; error?: string }> = [];
+        const reported = () => results.map((entry) => ({ path: entry.path, durationMs: entry.durationMs, ...(entry.error ? { error: entry.error } : {}), ...(entry.screen !== undefined ? { screen: truncateScreen(entry.screen) } : {}) }));
 
         // Run each program
         let cancelled = false;
@@ -755,10 +781,12 @@ export const tools: ToolDefinition[] = [
 
         if (cancelled) {
           const message = `program_shuffle was cancelled by the client after ${results.length} programs; the machine was reset`;
-          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, programs: results.length, logPath } } };
+          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, programs: results.length, results: reported(), logPath } } };
         }
 
-        return jsonResult({ outputPath, programs: results.length, errors: results.filter(r => r.error).length, logPath }, { success: true });
+        const failedRuns = results.filter((r) => r.error).length;
+        const shuffleOutcome = jsonResult({ outputPath, programs: results.length, errors: failedRuns, results: reported(), logPath }, { success: failedRuns === 0 });
+        return failedRuns === 0 ? shuffleOutcome : { ...shuffleOutcome, isError: true };
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
@@ -796,6 +824,7 @@ export const tools: ToolDefinition[] = [
             throw new ToolValidationError(`Unsupported program type for "${program.path}": batch_run_with_assertions runs .prg and .crt files only`, { path: `$.programs[${index}].path` });
           }
         });
+        assertAssertionsComplete(programs);
         const continueOnError = parsed.continueOnError ?? false;
         const durationMs = parsed.durationMs ?? 2000;
   const resetDelayMs = parsed.resetDelayMs ?? 100;
@@ -805,7 +834,7 @@ export const tools: ToolDefinition[] = [
           : await createDefaultRunDirectory("batch");
         await fs.mkdir(outputPath, { recursive: true });
 
-        const results: Array<{ path: string; status: "pass" | "fail" | "error"; assertions: Array<{ type: string; status: "pass" | "fail"; message?: string }>; error?: string }> = [];
+        const results: Array<{ path: string; status: "pass" | "fail" | "error"; assertions: Array<{ type: string; status: "pass" | "fail"; message?: string }>; error?: string; screen?: string }> = [];
 
         let cancelled = false;
         for (const program of programs) {
@@ -818,6 +847,7 @@ export const tools: ToolDefinition[] = [
           let status: "pass" | "fail" | "error" = "pass";
           let error: string | undefined;
           let verified = false;
+          let lastScreen: string | undefined;
 
           try {
             // Run program
@@ -842,8 +872,10 @@ export const tools: ToolDefinition[] = [
               }
               if (assertion.type === "screen_contains") {
                 const screen = await (ctx.client as any).readScreen();
+                lastScreen = screen;
                 const pattern = assertion.pattern ?? "";
-                const matched = screen.includes(pattern);
+                // Case-insensitive and whitespace-insensitive, like the greeting check (screen text is upper case).
+                const matched = screenContainsExpectedText(screen, pattern);
                 assertionResults.push({
                   type: assertion.type,
                   status: matched ? "pass" : "fail",
@@ -910,6 +942,7 @@ export const tools: ToolDefinition[] = [
             status,
             assertions: assertionResults,
             error,
+            ...(status !== "pass" && lastScreen !== undefined ? { screen: truncateScreen(lastScreen) } : {}),
           });
 
           if (ctx.signal?.aborted) {
@@ -939,10 +972,12 @@ export const tools: ToolDefinition[] = [
 
         if (cancelled) {
           const message = `batch_run was cancelled by the client after ${results.length} of ${programs.length} programs; the machine was reset`;
-          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, summary, reportPath } } };
+          return { ...cancelledResult(message), structuredContent: { type: "json", data: { message, cancelled: true, outputPath, summary, results, reportPath } } };
         }
 
-        return jsonResult({ outputPath, summary, reportPath }, { success: summary.failed === 0 && summary.errors === 0 });
+        const allPassed = summary.failed === 0 && summary.errors === 0;
+        const outcome = jsonResult({ outputPath, summary, results, reportPath }, { success: allPassed });
+        return allPassed ? outcome : { ...outcome, isError: true };
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

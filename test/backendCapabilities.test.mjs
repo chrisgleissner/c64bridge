@@ -94,7 +94,7 @@ for (const platform of platforms) {
   test(`preset routing on ${platform} analyzes actual audio and restores the active backend`, async () => {
     const switches = [];
     const recordings = [];
-    const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", platforms: [platform], waitBeforeCaptureMs: 0, analysisDurationSeconds: 1 }, context(platform, {
+    const result = await toolRegistry.invoke("c64_sound", { op: "play_preset", platforms: [platform], verify: true, waitBeforeCaptureMs: 0, analysisDurationSeconds: 1 }, context(platform, {
       async getActiveBackendType() { return platform; }, getAvailableBackends() { return [platform]; },
       switchBackend(backend) { switches.push(backend); }, async sidSilenceAll() { return { success: true }; },
       async runPrg(prg) { assert.ok(prg.length > 100); return { success: true }; },
