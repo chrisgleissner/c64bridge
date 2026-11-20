@@ -45,7 +45,7 @@ This document captures the successful approach for creating pleasant, musical SI
 
 ### 4. Timing is Everything
 
-- **Note Duration**: a `FOR I=1 TO 3000:NEXT I` loop (3000 iterations, not CPU cycles; the duration in seconds is unverified)
+- **Note Duration**: a `FOR I=1 TO 3000:NEXT I` loop (3000 BASIC loop iterations, not CPU cycles; the loop time is linear in the count, see Not verified)
 - **Pause Duration**: a 500-iteration loop between notes for clear separation
 - **GATE Control**: Keep GATE on during entire note, then turn off cleanly
 
@@ -171,7 +171,7 @@ REM ... continued with varied timing for musical expression
 
 ### Timing Patterns for Different Musical Effects
 
-Values are FOR-loop iteration counts; durations in seconds are unverified.
+Values are FOR-loop iteration counts (see Not verified for their duration).
 
 - **Emphasis/Importance**: 250-400+ iterations
 - **Normal melody notes**: 180-200 iterations  
@@ -198,3 +198,7 @@ This methodology can be applied to create more complex musical compositions whil
 
 *Document created: December 2024*  
 *Based on successful MCP server + C64 Ultimate testing session*
+
+## Not verified
+
+- Duration of one empty `FOR I=1 TO n:NEXT I` iteration in milliseconds at 1 MHz. No primary source gives it: it depends on the BASIC interpreter's execution path. Settled by measurement request O-1 in `precise-hw-requests-O.md` (time the loop with `TI` on an Ultimate 64 at 1 MHz).
