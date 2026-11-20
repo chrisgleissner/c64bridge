@@ -981,6 +981,18 @@ export class C64Client {
     }
   }
 
+  /** Uploads a cartridge image and runs it (Ultimate only). */
+  async runCrt(crt: Uint8Array | Buffer): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      if (!facade.runCrt) throw new Error("Uploading a CRT image is not supported by the selected backend");
+      const res = await facade.runCrt(crt);
+      return { success: res.success, details: res.details };
+    } catch (error) {
+      return { success: false, details: this.normaliseError(error) };
+    }
+  }
+
   async sidplayFile(path: string, songnr?: number): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
@@ -1672,6 +1684,19 @@ export class C64Client {
     options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" },
   ): Promise<RunBasicResult> {
     try { const facade = await this.facadePromise; return await facade.driveMount(drive, imagePath, options); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** Uploads a disk image and mounts it (Ultimate only). */
+  async driveMountImage(
+    drive: string,
+    image: Uint8Array | Buffer,
+    options: { type: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" },
+  ): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      if (!facade.driveMountImage) throw new Error("Uploading a disk image is not supported by the selected backend");
+      return await facade.driveMountImage(drive, image, options);
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async driveRemove(drive: string): Promise<RunBasicResult> {

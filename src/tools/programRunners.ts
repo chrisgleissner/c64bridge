@@ -45,7 +45,7 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
 const BASIC_MAX_LINE = 63999;
 
 const prgPathDescription = "Path to the PRG file: Ultimate path such as //USB0/demo.prg on c64u/u2 (or a host path with location host); host path on VICE.";
-const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE).";
+const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE), or a host path with location host.";
 
 type OperationlessArgs<T extends Record<string, unknown>> = Omit<T, typeof OPERATION_DISCRIMINATOR>;
 
@@ -357,12 +357,16 @@ const prgFileArgsSchema = objectSchema({
 });
 
 const crtFileArgsSchema = objectSchema({
-  description: "Arguments for running a CRT image stored on Ultimate-visible storage.",
+  description: "Arguments for running a CRT image from Ultimate-visible storage or from the host.",
   properties: {
     path: stringSchema({
       description: crtPathDescription,
       minLength: 1,
     }),
+    location: optionalSchema(stringSchema({
+      description: "device (default): Ultimate path. host: read the file from the host and upload it.",
+      enum: ["device", "host"],
+    })),
   },
   required: ["path"],
   additionalProperties: false,
@@ -984,9 +988,15 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = crtFileArgsSchema.parse(rawArgs ?? {});
-    ctx.logger.info("Running CRT file", { path: parsed.path });
+    ctx.logger.info("Running CRT file", { path: parsed.path, location: parsed.location ?? "device" });
 
-    const result = await ctx.client.runCrtFile(parsed.path);
+    const location = parsed.location === "host" ? "host" : "device";
+    // A host file is read and size-checked here, so nothing reaches the device when the path is unacceptable.
+    const hostBytes = location === "host" ? await readHostFile(parsed.path) : undefined;
+    if (hostBytes && hostBytes.length === 0) {
+      throw new ToolValidationError(`CRT file is empty: ${parsed.path}`, { path: "$.path" });
+    }
+    const result = hostBytes ? await ctx.client.runCrt(hostBytes) : await ctx.client.runCrtFile(parsed.path);
     if (result.success) clearViceSymbols(); // labels belong to one program
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running CRT", {
@@ -1000,10 +1010,12 @@ async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      location,
     };
-    const base = textResult(`PRG ${parsed.path} loaded and executed.`, {
+    const base = textResult(`CRT ${parsed.path}${hostBytes ? ` (${hostBytes.length} bytes uploaded from the host)` : ""} started.`, {
       success: true,
       path: parsed.path,
+      location,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
     });
@@ -1158,37 +1170,7 @@ export const programRunnersModule = defineToolModule({
       ],
       supportedPlatforms: ["c64u", "u2"] as const,
       async execute(args, ctx) {
-        try {
-          const parsed = crtFileArgsSchema.parse(args ?? {});
-          ctx.logger.info("Running CRT file", { path: parsed.path });
-
-          const result = await ctx.client.runCrtFile(parsed.path);
-          if (result.success) clearViceSymbols(); // labels belong to one program
-          if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while running CRT", {
-              details: extractFailureDetails(result.details),
-            });
-          }
-
-          const data = {
-            kind: "run_crt" as const,
-            format: "crt" as const,
-            path: parsed.path,
-            entryAddress: null as number | null,
-            resources: ["c64://guide/bootstrap"],
-          };
-          const base = textResult(`CRT ${parsed.path} mounted and started.`, {
-            success: true,
-            path: parsed.path,
-            details: toRecord(result.details) ?? null,
-          });
-          return { ...base, structuredContent: { type: "json", data } };
-        } catch (error) {
-          if (error instanceof ToolError) {
-            return toolErrorResult(error);
-          }
-          return unknownErrorResult(error);
-        }
+        return executeRunCrt(args, ctx);
       },
     },
   ],
