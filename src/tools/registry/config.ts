@@ -146,7 +146,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "batch_update",
       ensureDescriptor(developerDescriptorIndex, "config_batch_update").inputSchema,
-      { description: "Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime." },
+      { description: "Apply several configuration updates at once. Pass `updates` as {category: {item: value}}." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_batch_update", rawArgs, ctx),
   },
@@ -155,7 +155,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "load_flash",
       ensureDescriptor(developerDescriptorIndex, "config_load_from_flash").inputSchema,
-      { description: "Load configuration from flash storage." },
+      { description: "Load configuration from flash." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_load_from_flash", rawArgs, ctx),
   },
@@ -164,7 +164,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "save_flash",
       ensureDescriptor(developerDescriptorIndex, "config_save_to_flash").inputSchema,
-      { description: "Persist the current configuration to flash storage." },
+      { description: "Persist the configuration to flash." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_save_to_flash", rawArgs, ctx),
   },
@@ -173,7 +173,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "reset_defaults",
       ensureDescriptor(developerDescriptorIndex, "config_reset_to_default").inputSchema,
-      { description: "Reset firmware configuration to factory defaults." },
+      { description: "Reset configuration to factory defaults." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_reset_to_default", rawArgs, ctx),
   },
@@ -218,7 +218,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "snapshot",
       configSnapshotArgsSchema.jsonSchema as JsonSchema,
-      { description: "Snapshot configuration to disk for later restore or diff." },
+      { description: "Snapshot configuration to disk." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -234,7 +234,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "restore",
       configRestoreArgsSchema.jsonSchema as JsonSchema,
-      { description: "Restore configuration from a snapshot file. Writes only the items that differ from the device; if the device refuses a category (for example 403 when the network password is missing or wrong), the other categories are still restored and the result is an error naming the failed categories." },
+      { description: "Restore configuration from a snapshot file. Writes only items that differ from the device; if the device refuses a category (e.g. 403 for a wrong network password), the others are still restored and the error names the failed categories." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -258,7 +258,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "diff",
       configDiffArgsSchema.jsonSchema as JsonSchema,
-      { description: "Compare the current configuration with a snapshot." },
+      { description: "Compare configuration with a snapshot." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -274,7 +274,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "shuffle",
       ensureDescriptor(metaDescriptorIndex, "program_shuffle").inputSchema,
-      { description: "Discover PRG/CRT files and run each with optional screen capture." },
+      { description: "Discover PRG/CRT files and run each, optionally capturing the screen." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "program_shuffle", rawArgs, ctx),
   },

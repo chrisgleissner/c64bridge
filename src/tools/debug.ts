@@ -114,7 +114,7 @@ const registerSelectorSchema = objectSchema<RegisterSelectorRecord>({
 const registerValueSchema: Schema<number> = {
   jsonSchema: {
     type: ["integer", "string"],
-    description: "Value to write: an integer, or a string such as \"$C000\", \"0xC000\", a loaded label or label+n.",
+    description: "Value: integer, or string such as \"$C000\" or a label[+n].",
   },
   parse(value: unknown, path?: string): number {
     const at = path ?? "$.value";
@@ -274,10 +274,10 @@ const getMonitorStateArgsSchema = objectSchema({
 });
 
 const waitForStateArgsSchema = objectSchema({
-  description: "Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled.",
+  description: "Wait until the CPU is stopped (checkpoint hit or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled.",
   properties: {
     op: literalSchema("wait_for_state"),
-    expectedPC: optionalSchema(stringSchema({ description: `PC address to wait for: ${ADDRESS_FORMS}.`, minLength: 1 })),
+    expectedPC: optionalSchema(stringSchema({ description: "PC address to wait for, in the same forms as address.", minLength: 1 })),
     timeoutMs: optionalSchema(numberSchema({ description: "Maximum wait time in milliseconds.", integer: true, minimum: 1, maximum: 60000, default: 5000 })),
     pollMs: optionalSchema(numberSchema({ description: "Poll interval in milliseconds.", integer: true, minimum: 10, maximum: 1000, default: 100 })),
   },

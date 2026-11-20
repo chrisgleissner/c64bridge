@@ -45,11 +45,11 @@ const captureFrameArgsSchema = objectSchema({
       default: 1,
     }), 1),
     includePixels: optionalSchema(booleanSchema({
-      description: "Include raw pixel payload bytes in the response. Off by default because a frame is about 100 KB; the response is rejected above 2 MiB, so lower count when it is on.",
+      description: "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected, so lower count).",
       default: false,
     }), false),
     format: optionalSchema(stringSchema({
-      description: "Set to png to receive each frame as an MCP image block (C64 palette). At most 4 frames per call.",
+      description: "png returns each frame as an MCP image block (max 4 frames per call).",
       enum: ["png"],
     })),
     encoding: optionalSchema(stringSchema({
@@ -180,7 +180,7 @@ function parseVicState(d011: number, d016: number, d018: number, dd00: number, d
 }
 
 const getDisplayStateArgsSchema = objectSchema({
-  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical.",
+  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
   properties: {
     op: literalSchema("get_display_state"),
   },
@@ -282,7 +282,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_petscii_art",
       ensureDescriptor(graphicsDescriptorIndex, "render_petscii_art").inputSchema,
-      { description: "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64." },
+      { description: "Create PETSCII art from a prompt, text or bitmap data, optionally displaying it." },
     ),
     handler: groupedGraphicsHandlers.render_petscii_art,
   },
@@ -300,7 +300,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_sprite",
       ensureDescriptor(graphicsDescriptorIndex, "render_sprite").inputSchema,
-      { description: "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly." },
+      { description: "Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers." },
     ),
     handler: groupedGraphicsHandlers.render_sprite,
   },
@@ -309,7 +309,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_bitmap",
       ensureDescriptor(graphicsDescriptorIndex, "render_bitmap").inputSchema,
-      { description: "Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it." },
+      { description: "Convert an image file to VIC-II bitmap memory, write it to RAM and display it." },
     ),
     handler: groupedGraphicsHandlers.render_bitmap,
   },

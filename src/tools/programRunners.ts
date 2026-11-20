@@ -44,7 +44,7 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
 
 const BASIC_MAX_LINE = 63999;
 
-const prgPathDescription = "Path to the PRG file: on c64u/u2 an Ultimate-visible path such as //USB0/demo.prg, or a host path with location host; on VICE a host path.";
+const prgPathDescription = "Path to the PRG file: Ultimate path such as //USB0/demo.prg on c64u/u2 (or a host path with location host); host path on VICE.";
 const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE).";
 
 type OperationlessArgs<T extends Record<string, unknown>> = Omit<T, typeof OPERATION_DISCRIMINATOR>;
@@ -308,11 +308,11 @@ const uploadBasicArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Poll the screen until the program ends, shows a BASIC error or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) passes; an error is reported with its line. Without verify the program is started and nothing is observed.",
+      description: "Poll the screen until the program ends, shows a BASIC error (reported with its line) or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) ends. Without verify nothing is observed.",
       default: false,
     }),
     autoFix: optionalSchema(booleanSchema({
-      description: "With verify:true, when a BASIC error is seen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      description: "With verify:true, on a BASIC error append a missing closing quote or parenthesis to the failing line and run again (default true; rewritten lines are reported). Set false for programs with side effects.",
       default: true,
     })),
   },
@@ -328,7 +328,7 @@ const uploadAsmArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Poll the screen for evidence of execution (up to C64BRIDGE_POLL_MAX_MS, default 2 s); a program that changes nothing on screen and does not return to BASIC is then an error. With verify:false (default) nothing is polled: the load is checked with one read and execution is reported as \"unconfirmed\". The bytes at the load address must match the assembled program either way.",
+      description: "Poll the screen for evidence of execution (up to C64BRIDGE_POLL_MAX_MS, default 2 s); a program that changes nothing on screen and does not return to BASIC is an error. Without verify nothing is polled and execution is reported as \"unconfirmed\". The bytes at the load address must match the assembled program either way.",
       default: false,
     }),
   },
@@ -348,7 +348,7 @@ const prgFileArgsSchema = objectSchema({
       enum: ["auto", "host", "device"],
     })),
     symbolsFile: optionalSchema(stringSchema({
-      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler). Its labels annotate disassemble listings and are accepted wherever c64_memory and c64_debug take an address (label, label+n).",
+      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler); labels annotate disassembly and are accepted where c64_memory and c64_debug take an address.",
       minLength: 1,
     })),
   },

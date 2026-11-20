@@ -21,7 +21,7 @@ const streamStartArgsSchema = objectSchema({
   properties: {
     stream: streamIdentifierSchema,
     target: stringSchema({
-      description: "Destination of the UDP stream: IPv4 address or hostname with an optional :port (1-65535), e.g. 192.168.1.10, 192.168.1.10:11000 or pc.local:11000. The device sends the stream unencrypted over UDP to this address.",
+      description: "UDP stream destination: IPv4 address or hostname, optional :port (1-65535), e.g. 192.168.1.10:11000. Sent unencrypted.",
       minLength: 1,
     }),
   },

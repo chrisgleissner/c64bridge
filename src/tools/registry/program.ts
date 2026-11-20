@@ -78,7 +78,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "bundle_run",
       ensureDescriptor(metaDescriptorIndex, "bundle_run_artifacts").inputSchema,
-      { description: "Capture screen, memory, and debug registers into an artifact bundle." },
+      { description: "Capture screen, memory and debug registers into a bundle." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "bundle_run_artifacts", rawArgs, ctx),
   },
@@ -87,7 +87,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "cross_platform_greeting",
       ensureDescriptor(metaDescriptorIndex, "cross_platform_greeting").inputSchema,
-      { description: "Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results." },
+      { description: "Show a platform-specific greeting on configured backends, capture screenshots and verify." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "cross_platform_greeting", rawArgs, ctx),
   },

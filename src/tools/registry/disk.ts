@@ -214,7 +214,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "list_drives",
       ensureDescriptor(storageDescriptorIndex, "drives_list").inputSchema,
-      { description: "List Ultimate drive slots and their mounted images." },
+      { description: "List drive slots and mounted images." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(storageModule, "drives_list", rawArgs, ctx),
   },
@@ -223,7 +223,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "mount",
       diskMountArgsSchema.jsonSchema as JsonSchema,
-      { description: "Mount a disk image with optional verification and retries." },
+      { description: "Mount a disk image with optional verification/retries." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -269,7 +269,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "unmount",
       ensureDescriptor(storageDescriptorIndex, "drive_remove").inputSchema,
-      { description: "Remove the mounted image from an Ultimate drive slot." },
+      { description: "Unmount the image from a drive slot." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(storageModule, "drive_remove", rawArgs, ctx),
   },
@@ -278,7 +278,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "file_info",
       ensureDescriptor(storageDescriptorIndex, "file_info").inputSchema,
-      { description: "Inspect metadata for a file on the Ultimate filesystem." },
+      { description: "Inspect a file on the Ultimate filesystem." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(storageModule, "file_info", rawArgs, ctx),
   },
@@ -347,7 +347,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "find_paths",
       ensureDescriptor(metaDescriptorIndex, "find_paths_by_name").inputSchema,
-      { description: "Search Ultimate storage for paths whose names contain a substring, without running anything." },
+      { description: "Search Ultimate storage for paths containing a name substring, without running anything." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "find_paths_by_name", rawArgs, ctx),
   },
