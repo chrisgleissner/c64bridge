@@ -412,3 +412,115 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | Beyond 480 bit image columns: MPS-801 prints the line once more than 480 dots are used; the Ultimate emulation discards dots past pixel 1920 and does not wrap | data/printer/printer-commodore-bitmap.md | CONFIRMED | MPS-801 manual section 6; 1541ultimate@700c7f2fa:software/io/printer/mps_printer.cc:945, mps_printer_cbm.cc:133, mps_printer.h:50 |
 | SIDWAVE hard restart: gate off and AD=SR=0 two frames before each note; release 0 empties the envelope in 6 ms; rate 0 avoids the ADSR delay bug (rate counter wrap at 32768) | data/sound/sidwave.md | CONFIRMED | src/sidwaveCompiler.ts c_hr and SIDWAVE_HARD_RESTART_FRAMES; Mapping the Commodore 64 $D406; reSID envelope.h/envelope.cc (VICE 3.10 src/resid), ENV3-sampled on a MOS SID |
 | Duration in seconds of the FOR-loop note timings | data/sound/sid-programming-best-practices.md | NOT VERIFIED (no primary source; U64 measurement requested as O-1) | inline markers moved to a "Not verified" section |
+
+## Part F: precision rewrite
+
+Gamedev documents (`data/gamedev/*.md`), 2026-11-20. Firmware citations are `1541ultimate@700c7f2fa:software/<path>:<line>`
+(GideonZ/1541ultimate master, 2026-11-13) unless a row names `fpga/`. "Measured" = measured on Ultimate 64 Elite,
+firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were produced locally on 2026-11-20 with
+64tass 1.60, KickAssembler 5.25, VICE 3.10 `c1541`/`cartconv`; VICE source is vice-3.10.
+
+### F1 - data/gamedev/toolchain.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| Sidecar `.cfg` paths: PRG run/load (`.usr` fallback), REST run_prg/load_prg `file=`, CRT, TAP Run, Run Disk (D64/D81/G64); not Mount Disk, REST run_crt, host uploads | CONFIRMED, made a table | `filetypes/filetype_prg.cc:164-168,188-190`, `filetype_crt.cc:72`, `filetype_tap.cc:235`, `filetype_d64.cc:118`, `filetype_g64.cc:87`; results.md row 13 |
+| Unknown section/item skipped without error; bad enum value is an error and only that line is skipped | CONFIRMED | `userinterface/configio.cc:230-430` |
+| Enum match case-insensitive, outer spaces ignored, label without unit (`CPU Speed=48`) | ADDED | `configio.cc:338-345,416-428`; `u64/u64_config.cc:392-394` ("%s MHz" display format) |
+| Store matched by name or alternate name; `C64U Specific Settings` is the alternate name of `U64 Specific Settings` | ADDED | `components/config.cc:196-207`; `u64/u64_config.cc:948` |
+| "Settings are RAM only (lost at power cycle)" | IMPRECISE, fixed | values are marked unsaved and are written to flash when the user leaves the config menu with `Auto Save Config` = Yes (or Ask + Yes): `userinterface/config_menu.cc:169-200`, `userinterface.cc:128,143` |
+| LOAD_CONFIG "all-or-nothing, nothing applied" | IMPRECISE, fixed | valid lines change the stored values; on any error no store is effectuated: `io/command_interface/control_target.cc:559-610`; status 89/88/00 texts measured (row 14) |
+| `Turbo Control` values Off, Manual, U64 Turbo Registers, TurboEnable Bit, same on MK1 and Elite II | CONFIRMED | `u64/u64_config.cc:328,390` (enum max 3; entries "a", "b" unreachable); measured row 37 |
+| `C64U Turbo Registers` "reported by one test script" | REWRITTEN | not a value in public source: an error in any `.cfg`; C64 Ultimate list moved to Not verified (UltimateDemo2026 `config/UltimateDemo2026.cfg` lines 2-3) |
+| `CPU Speed=64` invalid on MK1 (max 48) | CONFIRMED, extended | `u64_config.cc:324-325,391-395`: MK1 table has 5 MHz and no 64, Elite II no 5 MHz; index 4 = 5 vs 6 MHz |
+| `RAM Expansion Unit` values, `REU Size` labels | ADDED | `io/c64/c64.cc:61,71,91-92` |
+| REU preload "read at firmware boot only" | IMPRECISE, fixed | `io/c64/reu_preloader.cc:14-115`: setting read when the preloader starts; image loaded once when its volume is mounted, at the offset, up to the REU size; UCI 04 08 detail moved to `c64://ultimate/reu` |
+| KickAssembler label file "format unverified" | VERIFIED | KickAss 5.25 `-symbolfile` wrote `.label start=$810`; accepted by `symbolRegistry.ts:49-81` |
+| 64tass `-l` format | VERIFIED | 64tass 1.60 wrote `start\t\t= $0810` |
+| ACME `-l` "unverified" | CORRECTED | ACME `src/symbol.c:29-62` (meonwax/acme mirror) writes `+2`/`+3`/`!addr` forms; `--vicelabels` writes `al C:%04x .%s` (`symbol.c:75`): use that |
+| llvm-mos label file "unverified" | CORRECTED | llvm-mos-sdk 555253f README: ELF output beside the PRG, no label file; conversion with `llvm-nm` given |
+| `cc1541` "(unverified)" | VERIFIED | cc1541 README (rtlprmft/cc1541 fork of the Bitbucket repository): `-f name -w file.prg image.d64`, MIT, `-s` interleave |
+| `cartconv` from a binary | VERIFIED | VICE 3.10 `cartconv` usage text (`-t`, `-i`, `-o`, `--types`) |
+| `c1541 -format "game,01" d64 ... -write ... game` | VERIFIED | run locally: image with one PRG `game` |
+| Exomizer `sfx sys`, `mem -l none file@addr` | VERIFIED | Exomizer `exo20info.txt` ("sfx" and "mem" sub commands, `-l <address>\|none`, `<file name>@<load address>`); `exodecrs/exodecrunch.s` |
+| Oscar64 `__zeropage` "usually `$80-$FF`" | CORRECTED | `oscar64/Compiler.cpp:575-582` (08b01c9): `$F7-$FF` on the C64 by default, `$80-$FF` with `-xz` |
+| Oscar64 hazards "reordered constant I/O stores" | REWRITTEN | `oscar64.md` "volatile" (`volatile`, `volatile __memmap`) and `__asm volatile {}` |
+| Oscar64 libraries | CONFIRMED | `include/c64/{rasterirq,sprites,memmap,reu,joystick}.h` |
+| Oscar64 `-O2` | CONFIRMED | `oscar64.md:128` |
+| VICE: REU image must match the size; DMA 1 byte per cycle; no turbo | CONFIRMED, made precise | vice-3.10 `src/util.c:373`, `src/c64/cart/reu.c:694,819-849`; Bauer 3.2 (`$D02F-$D03F` read `$FF`) |
+| VICE `-warp`, `-pal`, `-ntsc`, `-autostart` | CONFIRMED | vice-3.10 `doc/vice.texi:1323,4006,13238,13243` |
+| Opinions ("richest", "best C64 libraries", "cc65 C code is slow", Charpad loader) | REMOVED | no primary source |
+
+### F2 - data/gamedev/architecture.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| Frame loop snippet | CONFIRMED (assembles) | 64tass 1.60, 2026-11-20 |
+| "VIC takes about 43 cycles, the CPU keeps about 20 of 63" | CORRECTED | Bauer 3.5: bad line stops the CPU for 40-43 cycles |
+| 25 bad lines 1,081, 8 sprites 802 cycles per PAL frame | CONFIRMED | `data/ultimate/bench/results/summary.md` (bench, 2026-11-13) |
+| "Border/vblank lines fully free (about 112 lines PAL)" | IMPRECISE, fixed | 312 - 200 = 112 lines without bad lines; sprite DMA still stalls (Bauer 3.8.1) |
+| "PAL about 17,800 ... NTSC about 15,000" | IMPRECISE, fixed | PAL 17,783 (bench); NTSC 15,212 derived (17,095 - 1,081 - 802), not measured: hardware request G-2 |
+| Per-frame cost estimates (music, sprites, scroll, sort) | REMOVED | estimates without source |
+| Turbo budget table | CONFIRMED | bench summary rows idx 8/15 (U64), 8/15 (C64U), badbit80 rows |
+| I/O, REU and Upic figures in "MODERN budget" | MOVED to pointers | duplicated `c64://ultimate/hardware`, `reu`, `upic` |
+| VIC bank notes; "good for bitmap games", "best for large games" | REWRITTEN as facts | Mapping `$DD00`; character ROM image in banks 0 and 2 |
+| `$0900-$8FFF` "about 32 KB" | CORRECTED | 34,560 bytes |
+| `$E000-$FFFF` "128 sprite shapes" | CORRECTED | vectors `$FFFA-$FFFF` fall in shape 127 |
+| `$EA31` / `$EA81` exits | CONFIRMED, made precise | c64ref `c64disasm_en.txt:6147-6186` (`$EA81` skips clock, keyboard and the CIA ICR read) |
+| "VICE wraps at 512 KB"; length 0 = 64 KB | CONFIRMED, made precise | vice-3.10 `src/c64/cart/reu.c:1085-1093,1534` |
+| Host writes limited to 64 KB; preload not re-run on reset | CONFIRMED | measured (row 6); `io/c64/reu_preloader.cc:58-77` |
+
+### F3 - data/gamedev/techniques.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| KERNAL exits `$EA31`/`$EA81` | CONFIRMED, made precise | c64ref `c64disasm_en.txt:6147-6186` |
+| IRQ delayed one instruction by a taken branch without page cross | CONFIRMED | `K-src/nesdev-irq.html` "Interrupts during branches" |
+| Double-IRQ stable raster "sketch (unverified)" | MOVED to Not verified | no primary source; hardware request G-3 (test programs `~/.c64bridge/h6/hw/media/precise-g/stable.prg`, `single.prg`) |
+| Multiplexer reuse line "Y+21 ... code uses +22" | CORRECTED | Bauer 3.8.1 rules 2, 4, 7: display Y+1..Y+21, DMA off in line Y+22, new Y needs DMA off: reuse needs `Y(k) >= Y(k-8)+22` |
+| "~24 virtual sprites", "16-24 practical" | REWRITTEN | 24 in Cadaver/Corescape; cost counted: 74 / 115 cycles per sprite (c64ref cycle table) |
+| Scroll copy "about 9 cycles per byte, ~9,000" | MADE precise | `lda abs,x` 4(+1), `sta abs,x` 5; 960 bytes = 8,640 |
+| Collision "multicolour counts only %10/%11" | CORRECTED | Bauer 3.8.2: background `%01` does not collide (sprite-background only) |
+| Sprite coordinates X 24-343, Y 50-249 | CONFIRMED | Bauer 3.8.1 (display from line Y+1), 3.9 (window from line 51 with RSEL=1) |
+| Paddles/1351 "unverified" | SETTLED (paddles), 1351 REMOVED | Mapping `$D419`/`$D41A` (POTX/POTY, `$DC00` bits 7-6, fire bits 2/3); no primary 1351 source |
+| PSID init A = song-1; play `$0000` = own IRQ | CONFIRMED | `SID_file_format.txt` initAddress, playAddress |
+| "20 % fast at 60 Hz" | CORRECTED | 59.826/50.125 = 1.194; skip 1 in 6 gives 49.86 calls/s |
+| Multi-speed "CIA timer (unverified for each player)" | SETTLED | `SID_file_format.txt` "speed": bit 1 = CIA 1 timer A, default 60 Hz |
+| Several-SID design paragraph "(unverified)" | REMOVED, pointer to `c64://ultimate/multisid` | duplicated multisid; design part unsourced |
+| "SID writes under turbo at 1 MHz" bullet | REMOVED | unsourced; I/O speed in `c64://ultimate/hardware` |
+| LFSR `$1D` period 255 | CONFIRMED | exhaustive run of the recurrence |
+| Voice 3 mute | MADE precise | Mapping `$D41B`: `$D418` bit 7 disconnects voice 3 |
+| NTSC max `$D012` above 255 "`$06`" | CORRECTED | 6567R8 263 lines (`$06`), 6567R56A 262 (`$05`); Bauer 3.4 |
+| System Mode values | CORRECTED | `u64/u64_config.cc:278` six values; measured row 38 |
+| Packer comparison "(unverified comparisons)" | REWRITTEN | measure on own data; no claim kept |
+| `$D031` probe and `$0F` speed | MADE precise | measured rows 31, 39; `u64_config.cc:324-325` (index 15 = 48 / 64 MHz) |
+| Forced 1 MHz window "about 2.6 s after program start or reset" | NARROWED | bench summary: after the `run_prg` reset, 2.55 s / 2.57 s |
+| Speed probe returns 4 at 1 MHz | KEPT (VICE 3.10), hardware request G-4 | loop is 14 cycles |
+| UCI `$DF1D & $7F == $49` | CONFIRMED | `fpga/io/command_interface/vhdl_source/command_protocol.vhd:99` |
+| Quarter squares "speed unverified" | REMOVED marker | no routine given |
+
+### F4 - data/gamedev/references.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| Order: Omega facts "(unverified: page refused fetch)" | VERIFIED, corrected | sedor.itch.io/order-omega (HTTP 200, 2026-11-20): "Ultimate Elite Edition" for Elite and Elite II, Turbo Control `U64 Turbo Registers`, Command Interface, 16 MB REU, Upic 16 colours, EasyFlash `omega.crt`, 121 scenes, 94 illustrations; "UCI" and a 16 MB picture file are not stated |
+| UltimateDemo2026 `.cfg` with both Turbo Control values | CONFIRMED, qualified | `config/UltimateDemo2026.cfg` lines 2-3; works only on the sidecar path (F1) |
+| UE2-C64U-Emulator GPL-3.0; VibeC64 MIT | CONFIRMED | GitHub API |
+| GordonOS, Mappy REU port, Carrion engine | REMOVED | no primary page found |
+| Zzap!64 ratings column, Paradroid/Wizball ratings | REMOVED | zzap64.co.uk and lemon64 return 403; no scan reached |
+| Turrican and The Last Ninja rows | REMOVED | sources were Codebase64 (unreachable) and an article without URL |
+| Codebase64 page ids | REPLACED | Cadaver's own copies: cadaver.github.io/rants.html (HTTP 200) lists rants 3, 4, 9, 11, 15, 16, 17 with these file names |
+| c64u-radar "poll about 10 s" | QUOTED | README "Protocol summary" ("~10s"), up to 8 aircraft as sprites |
+| Forced 1 MHz window "about 2 s after reset" | CORRECTED | 2.55 / 2.57 s after the run_prg reset (bench summary) |
+| Upic palette "firmware 3.15 or later; older C64U lacks it" | REWRITTEN | palette commands measured on Ultimate 64 Elite 3.15a (row 36); C64U history not settled, removed |
+| "palette writes measured at tens of ms" | REMOVED | no measurement found |
+
+### F5 - data/gamedev/index.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| NTSC budget "about 15,000" | CORRECTED | 15,212 derived (F2) |
+| Turbo row "via `$D031` if enabled by config" | MADE precise | `Turbo Control` = `U64 Turbo Registers` or `TurboEnable Bit` (measured rows 31, 37) |
+| SID count 8 / 10 on C64U | MOVED to pointer | duplicated `c64://ultimate/multisid` |
+| Resource sizes | UPDATED | file sizes after this rewrite |
+| Built-in assembler "basic directives only"; `run_prg` path "host-local on VICE, device-visible on Ultimate" | CORRECTED (also toolchain section 1) | `src/tools/translation/assembler.ts:16-46,330-334` (macros, `.if`, `.include`, `.incbin`, repeat); `run_prg` `location: "host"` measured row 8 |
