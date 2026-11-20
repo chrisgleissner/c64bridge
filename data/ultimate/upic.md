@@ -31,7 +31,7 @@ Sources: the public implementations below (renderer, file format, layout); turbo
 
 - Per picture line: wait for the raster line, resync turbo by writing `$D031` = `$80` then `$8F` (so the CPU resumes at the same sub-slot on every line), then call a generated, page-aligned routine: patch-list loads, a delay loop, then per byte column: load byte, store to `$D020` (low nybble), table lookup `nyb[i] = i >> 4`, store to `$D020` (high nybble). End with two NOPs (without them pixel 383 is lost) and `$D020` = 0.
 - 64 MHz: 63 CPU cycles per phi2 (VIC takes one of 64 sub-slots), 3,969 per PAL line; two pixels per 16 cycles, 16 pixels in 126 cycles; all 384 pixels one dot wide.
-- 48 MHz: 47 cycles per phi2, 2,961 per line; 3 of every 4 pixels are shown (288 effective), some pixels 2 dots wide or off by one dot; free CPU time 0.75 of the 64 MHz figure (2,961 against 3,969 cycles per PAL line, screen blanked, measured 2026-11-13).
+- 48 MHz: 47 cycles per phi2, 2,961 per line; free CPU time 0.75 of the 64 MHz figure (2,961 against 3,969 cycles per PAL line, screen blanked, measured 2026-11-13). The mandelbrot-upic picture is shown at 48 MHz (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20). The number of pixels shown per line at 48 MHz is in Not verified.
 - Never use indexed stores to I/O in the renderer (extra dummy read changes timing); a VIC register read costs one extra sub-slot, a write none.
 - Free CPU cycles per 64 MHz frame (1,238,387 cycles), measured C64U (50 samples, status marker row on); at 256 rows the renderer takes 83.5 % of the frame:
 
@@ -67,7 +67,7 @@ Sources: the public implementations below (renderer, file format, layout); turbo
 
 ## Detection and fallback
 
-- Run all checks on the normal text screen BEFORE setting DEN = 0 and print a plain message naming the setting to change: Command Interface off (`$DF1D & $7F != $49`), turbo registers missing (`$D031 = $FF`: `Turbo Control` is `Off` or `Manual`), speed not 64 MHz (a 48 MHz machine shows 3 of 4 pixels), palette commands missing (GET_PALETTE `04 51` answers `21,UNKNOWN COMMAND` on a U2-family cartridge or firmware without them), REU too small (size probe in c64://ultimate/reu).
+- Run all checks on the normal text screen BEFORE setting DEN = 0 and print a plain message naming the setting to change: Command Interface off (`$DF1D & $7F != $49`), turbo registers missing (`$D031 = $FF`: `Turbo Control` is `Off` or `Manual`), speed not 64 MHz (the 48 MHz pixel count is in Not verified), palette commands missing (GET_PALETTE `04 51` answers `21,UNKNOWN COMMAND` on a U2-family cartridge or firmware without them), REU too small (size probe in c64://ultimate/reu).
 - Speed probe and model: c64://ultimate/hardware. The speed probe, not the product string, decides 48 versus 64 MHz.
 - No graphical fallback exists in the libraries: without turbo the renderer produces garbage. Offer a normal VIC mode path or refuse to start.
 - Exit: undo every change the program made: stop the raster IRQ, set DEN = 1 in `$D011`, write `$D031` = 0, restore `$01`, the vectors and `$D020`, and send `04 54` to reset the palette.
@@ -86,5 +86,5 @@ Sources: the public implementations below (renderer, file format, layout); turbo
 
 | Claim | What would settle it |
 |---|---|
-| The Upic renderer and the 48 MHz picture (3 of 4 pixels) on an Ultimate 64 Elite | U64 request U-5 (run mandelbrot-upic) |
+| The 48 MHz pixel count on an Ultimate 64 Elite: 288 of 384 pixels per line, and some pixels 2 dots wide or off by one dot | U64 request U-5 (picture shown on firmware 3.15a, 2026-11-20). The four captured frames did not confirm a fixed dropped pixel per group of four: colour changes fell on all four x mod 4 phases (1480, 1454, 1680 and 2000 changes per phase), and runs of length 1 are common (1846). The count cannot be read from the picture content. |
 | NTSC operation | not supported by the public implementations; would need an NTSC renderer |
