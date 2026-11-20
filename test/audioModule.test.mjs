@@ -72,11 +72,11 @@ test("music_generate builds timeline and triggers SID sequence", async () => {
         return { success: true };
       },
       sidNoteOn: async (payload) => {
-        noteCalls.push(payload);
+        if (payload.voice === 1) noteCalls.push(payload);
         return { success: true };
       },
-      sidNoteOff: async () => {
-        noteOffCount += 1;
+      sidNoteOff: async (voice) => {
+        if (voice === 1) noteOffCount += 1;
         return { success: true };
       },
     },
@@ -110,8 +110,8 @@ test("music_generate holds the gate for most of each note and clears it only bri
   const ctx = {
     client: {
       sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async () => { events.push({ op: "on", at: Date.now() }); return { success: true }; },
-      sidNoteOff: async () => { events.push({ op: "off", at: Date.now() }); return { success: true }; },
+      sidNoteOn: async ({ voice }) => { if (voice === 1) events.push({ op: "on", at: Date.now() }); return { success: true }; },
+      sidNoteOff: async (voice) => { if (voice === 1) events.push({ op: "off", at: Date.now() }); return { success: true }; },
     },
     logger: createLogger(),
   };
@@ -136,8 +136,8 @@ test("music_generate replacing a running sequence does not cut off the new note"
   const ctx = {
     client: {
       sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async (payload) => { events.push({ op: `on-${payload.note}`, at: Date.now() }); return { success: true }; },
-      sidNoteOff: async () => { events.push({ op: "off", at: Date.now() }); return { success: true }; },
+      sidNoteOn: async (payload) => { if (payload.voice === 1) events.push({ op: `on-${payload.note}`, at: Date.now() }); return { success: true }; },
+      sidNoteOff: async (voice) => { if (voice === 1) events.push({ op: "off", at: Date.now() }); return { success: true }; },
     },
     logger: createLogger(),
   };
@@ -164,8 +164,8 @@ test("music_generate defaults to triangle waveform and best-practice ADSR", asyn
   const ctx = {
     client: {
       sidSetVolume: async (v) => { volumeCalls.push(v); return { success: true }; },
-      sidNoteOn: async (p) => { noteCalls.push(p); return { success: true }; },
-      sidNoteOff: async () => { noteOffCount += 1; return { success: true }; },
+      sidNoteOn: async (p) => { if (p.voice === 1) noteCalls.push(p); return { success: true }; },
+      sidNoteOff: async (voice) => { if (voice === 1) noteOffCount += 1; return { success: true }; },
     },
     logger: createLogger(),
   };
@@ -263,7 +263,7 @@ test("HARD01-030 music_generate pins its facade so a mid-playback backend switch
         return { success: true };
       },
       async sidNoteOff(voice, facade) {
-        events.push({ op: "note-off", facade: facade?.type });
+        events.push({ op: "note-off", voice, facade: facade?.type });
         return { success: true };
       },
     },
@@ -277,12 +277,43 @@ test("HARD01-030 music_generate pins its facade so a mid-playback backend switch
   );
   assert.equal(result.isError, undefined);
 
-  await waitUntil(() => events.filter((event) => event.op === "note-off").length >= 3);
+  await waitUntil(() => events.filter((event) => event.op === "note-off" && event.voice === 1).length >= 3);
 
   // Every write must have used the facade pinned when the arpeggio started
   // (vice), never the one made active by the mid-flight switch (c64u).
   assert.ok(events.length > 0);
   assert.ok(events.every((event) => event.facade === "vice"), JSON.stringify(events));
+});
+
+test("music_generate plays library drum transients and tails on voice 2", async () => {
+  const drums = [];
+  let done = false;
+  let leadReleases = 0;
+  const ctx = {
+    client: {
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOn: async ({ voice, note, waveform }) => {
+        if (voice === 2) drums.push([note, waveform]);
+        return { success: true };
+      },
+      sidNoteOff: async (voice) => {
+        if (voice === 1 && ++leadReleases === 6) done = true;
+        return { success: true };
+      },
+    },
+    logger: createLogger(),
+  };
+  const result = await audioModule.invoke("music_generate", { steps: 5, tempoMs: 120, system: "PAL" }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(result.metadata.drums, [
+    { t: 0, instrument: "lib:kick" }, { t: 240, instrument: "lib:hat" }, { t: 480, instrument: "lib:snare" },
+  ]);
+  await waitUntil(() => done);
+  assert.deepEqual(drums, [
+    ["C6", "noise"], ["C3", "pulse"], ["C2", "pulse"], ["C1", "tri"],
+    ["G7", "noise"], ["C7", "noise"],
+    ["A6", "noise"], ["C6", "noise"], ["C4", "pulse"], ["C3", "tri"],
+  ]);
 });
 
 test("music_compile_and_play compiles SIDWAVE to PRG and runs on C64", async () => {

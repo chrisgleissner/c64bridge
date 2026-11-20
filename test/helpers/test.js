@@ -1,7 +1,8 @@
 let testImpl;
+let describeImpl;
 
 if (typeof globalThis.Bun !== "undefined") {
-  const { test: bunTest, afterAll, afterEach: bunAfterEach, beforeAll, beforeEach: bunBeforeEach } = await import("bun:test");
+  const { describe: bunDescribe, test: bunTest, afterAll, afterEach: bunAfterEach, beforeAll, beforeEach: bunBeforeEach } = await import("bun:test");
   const DEFAULT_TIMEOUT_MS = 30_000;
 
   function parseArgs(name, optionsOrFn, maybeFn) {
@@ -89,10 +90,12 @@ if (typeof globalThis.Bun !== "undefined") {
   bunWrapper.beforeEach = bunBeforeEach;
 
   testImpl = bunWrapper;
+  describeImpl = bunDescribe;
 } else {
   const nodeTestModule = await import("node:test");
   const defaultExport = nodeTestModule.default ?? nodeTestModule.test;
   testImpl = defaultExport;
+  describeImpl = nodeTestModule.describe;
   testImpl.skip = nodeTestModule.skip.bind(nodeTestModule);
   testImpl.only = nodeTestModule.only.bind(nodeTestModule);
   testImpl.todo = nodeTestModule.todo.bind(nodeTestModule);
@@ -103,3 +106,4 @@ if (typeof globalThis.Bun !== "undefined") {
 }
 
 export default testImpl;
+export { describeImpl as describe };

@@ -1,5 +1,5 @@
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
-import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, SIDWAVE_INSTRUMENT_LIBRARY, sidwaveFrameRate } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
@@ -221,8 +221,29 @@ const modplayFileArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+const GENERATED_DRUM_PATTERN = ["kick", null, "hat", null, "snare", null, "hat", null] as const;
+type GeneratedDrum = NonNullable<(typeof GENERATED_DRUM_PATTERN)[number]>;
+type GeneratedNote = Parameters<ToolExecutionContext["client"]["sidNoteOn"]>[0];
+type GeneratedEvent = { t: number; on: GeneratedNote } | { t: number; off: 1 | 2 };
+
+function generatedDrumEvents(drum: GeneratedDrum, t: number, duration: number, system: "PAL" | "NTSC"): GeneratedEvent[] {
+  const recipe = SIDWAVE_INSTRUMENT_LIBRARY[drum]!;
+  const [attack, decay, sustain, release] = recipe.adsr;
+  const frameMs = 1000 / sidwaveFrameRate(system);
+  const events: GeneratedEvent[] = [];
+  let elapsed = 0;
+  for (const step of recipe.wavetable) {
+    if (elapsed >= duration || step.gate === false) break;
+    events.push({ t: t + elapsed, on: { voice: 2, note: step.note, waveform: step.wave, system, attack, decay, sustain, release } });
+    elapsed += (step.frames ?? 1) * frameMs;
+  }
+  // Let the last table row sound briefly before the release.
+  events.push({ t: t + Math.min(duration, elapsed), off: 2 });
+  return events;
+}
+
 const musicGenerateArgsSchema = objectSchema({
-  description: "Generate a simple arpeggio pattern and schedule playback on voice 1.",
+  description: "Generate a melody with library drums and schedule SID playback.",
   properties: {
     root: stringSchema({
       description: "Root note for the arpeggio such as C4 or A#3.",
@@ -970,8 +991,8 @@ export const audioModule = defineToolModule({
     },
     {
       name: "music_generate",
-      description: "Generate a lightweight arpeggio and schedule playback on SID voice 1.",
-      summary: "Builds a note timeline from semitone offsets and triggers SID playback asynchronously.",
+      description: "Generate a SID melody with a library drum pattern.",
+      summary: "Schedules a melody from semitone offsets with a drum pattern on the second voice.",
       lifecycle: "fire-and-forget",
       inputSchema: musicGenerateArgsSchema.jsonSchema,
       relatedResources: ["c64://sound/sid/spec"],
@@ -1003,7 +1024,25 @@ export const audioModule = defineToolModule({
             timestamp += durationMs;
           }
 
-          ctx.logger.info("Scheduling SID arpeggio", {
+          const waveform = parsed.waveform as GeneratedNote["waveform"];
+          const events: GeneratedEvent[] = [];
+          const drums: Array<{ t: number; instrument: string }> = [];
+          for (const [i, { t, note, durationMs }] of timeline.entries()) {
+            events.push({ t, on: {
+              voice: 1, note, waveform, system, pulseWidth: 0x0800,
+              attack: 1, decay: 7, sustain: 15, release: 0,
+            } });
+            const gateGap = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
+            events.push({ t: t + durationMs - gateGap, off: 1 });
+            const drum = GENERATED_DRUM_PATTERN[i % GENERATED_DRUM_PATTERN.length];
+            if (drum) {
+              drums.push({ t, instrument: `lib:${drum}` });
+              events.push(...generatedDrumEvents(drum, t, durationMs - gateGap, system));
+            }
+          }
+          events.push({ t: timestamp, off: 1 });
+          events.sort((a, b) => a.t - b.t);
+          ctx.logger.info("Scheduling SID melody and drums", {
             root: parsed.root,
             intervals,
             steps: parsed.steps,
@@ -1011,48 +1050,36 @@ export const audioModule = defineToolModule({
             waveform: parsed.waveform,
           });
 
-          cancelGeneratedSidPlayback(); // Replace any prior generated arpeggio rather than letting two run at once.
+          cancelGeneratedSidPlayback();
           const controller = new AbortController();
           generatedPlaybacks.add(controller);
-          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined); // Pin once so a later select_backend can't retarget notes mid-arpeggio (HARD01-030).
-          // A replaced sequence sends its final gate-off on voice 1; waiting for it
-          // keeps that gate-off from cutting off this sequence's first note.
+          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined); // Pin once for the full sequence.
           const previousPlayback = lastGeneratedPlayback;
           lastGeneratedPlayback = (async () => {
             try {
               await previousPlayback;
               const pinnedFacade = await pinnedFacadePromise;
+              if (controller.signal.aborted) return;
               await ctx.client.sidSetVolume(8, pinnedFacade);
-              // Steps are scheduled against the start time, so REST latency does not accumulate as tempo drift.
               const startedAt = Date.now();
-              let stepStart = 0;
-              const sleepUntil = (offsetMs: number) => sleep(Math.max(0, startedAt + offsetMs - Date.now()), controller.signal);
-              for (let i = 0; i < parsed.steps; i += 1) {
-                if (controller.signal.aborted) break;
-                const iv = intervals[i % intervals.length]!;
-                const note = transposeNote(parsed.root, iv);
-                await ctx.client.sidNoteOn({
-                  voice: 1,
-                  note,
-                  waveform: (parsed.waveform ?? "tri") as "pulse" | "saw" | "tri" | "noise",
-                  system,
-                  pulseWidth: 0x0800,
-                  attack: 1,
-                  decay: 7,
-                  sustain: 15,
-                  release: 0,
-                }, pinnedFacade);
-                const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                // Hold GATE for most of the note, then clear it for a short gap so the next note retriggers ADSR.
-                const gateGapMs = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
-                // Cancellation ends the sleep at once, so the final gate-off below follows promptly.
-                await sleepUntil(stepStart + durationMs - gateGapMs);
-                if (controller.signal.aborted) break;
-                await ctx.client.sidNoteOff(1, pinnedFacade);
-                await sleepUntil(stepStart + durationMs);
-                stepStart += durationMs;
+              const active = new Set<1 | 2>();
+              try {
+                for (const event of events) {
+                  const delay = startedAt + event.t - Date.now();
+                  if (delay > 0) await sleep(delay, controller.signal);
+                  if (controller.signal.aborted) break;
+                  if ("on" in event) {
+                    const voice = event.on.voice === 2 ? 2 : 1;
+                    active.add(voice);
+                    await ctx.client.sidNoteOn(event.on, pinnedFacade);
+                  } else {
+                    await ctx.client.sidNoteOff(event.off, pinnedFacade);
+                    active.delete(event.off);
+                  }
+                }
+              } finally {
+                for (const voice of active) await ctx.client.sidNoteOff(voice, pinnedFacade);
               }
-              await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {
               const message = playbackError instanceof Error ? playbackError.message : String(playbackError);
               ctx.logger.warn("music_generate playback failed", { error: message });
@@ -1061,7 +1088,7 @@ export const audioModule = defineToolModule({
             }
           })();
 
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root} (${system} pitch table, ${systemSource}). Playback is running and will be replaced by the next generated sequence.`, {
+          return textResult(`Scheduled ${parsed.steps} melody notes starting on ${parsed.root} with library drums (${system} pitch table, ${systemSource}). Playback is running and will be replaced by the next generated sequence.`, {
             success: true,
             root: parsed.root,
             intervals,
@@ -1072,6 +1099,7 @@ export const audioModule = defineToolModule({
             system,
             systemSource,
             timeline,
+            drums,
           });
         } catch (error) {
           if (error instanceof ToolError) {

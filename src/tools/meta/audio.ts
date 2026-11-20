@@ -83,14 +83,134 @@ timeline:
     layers: { v1: theme, v2: accomp, v3: bass }
 `;
 
-const CHiptuneDrive = `sidwave: 1.1\ntitle: Neon Run\ntempo: 132\nspeed: 2\ninstruments:\n  bass: { waveform: saw, adsr: [0, 7, 9, 3], ring: true }\nvoices:\n  - id: 1\n    instrument: bass\n    patterns: { bass: { groove: [C2, G1, C2, G1] } }\n  - id: 2\n    instrument: lib:chip_arp_major\n    patterns: { arp: { type: arpeggio, notes: [C4, E4, G4], frame_rate: 2 } }\n  - id: 3\n    instrument: lib:lead_pwm\n    patterns: { lead: { groove: [C5, G4, E5, G4], fx: { vibrato: { depth: 0.4, rate: 5, delay: 8 } } } }\ntimeline:\n  - { section: A, bars: 4, layers: { v1: bass, v2: arp, v3: lead } }\n`;
-const AMBIENT_FILTER = `sidwave: 1.1\ntitle: Blue Current\ntempo: 72\ninstruments:\n  pad: { waveform: tri, adsr: [5, 4, 11, 7] }\nvoices:\n  - id: 1\n    instrument: lib:pad_slow\n    patterns: { pad: { groove: [C3, G2, A2, F2] } }\n  - id: 2\n    instrument: lib:bell_ring\n    patterns: { bell: { groove: [G4, E4, C4, A3] } }\ntimeline:\n  - { section: Drift, bars: 8, layers: { v1: pad, v2: bell } }\n`;
-const FUNK_BASS = `sidwave: 1.1\ntitle: Copper Steps\ntempo: 124\ninstruments:\n  bass: { waveform: saw, adsr: [0, 5, 8, 2], sync: true }\nvoices:\n  - id: 1\n    instrument: bass\n    patterns: { bass: { groove: [C2, C2, G1, Bb1, C2, E2, G1, C2] } }\n  - id: 2\n    instrument: lib:chip_arp_minor\n    patterns: { chord: { type: arpeggio, notes: [C4, Eb4, G4], frame_rate: 3 } }\n  - id: 3\n    instrument: lib:hat\n    patterns: { ticks: { groove: [C5, "-", C5, C5] } }\ntimeline:\n  - { section: Groove, bars: 4, layers: { v1: bass, v2: chord, v3: ticks } }\n`;
+const CHIPTUNE_DRIVE = `
+sidwave: 1.1
+title: Neon Run
+mode: PAL
+tempo: 132
+speed: 2
+voices:
+  - id: 1
+    instrument: lib:filter_bass
+    patterns:
+      launch:
+        length: 0.5
+        groove: [C2, C2@lib:hat, G1, C2@lib:snare, Bb1, C2@lib:hat, G1, C2@lib:kick]
+        transpositions: [0, 0, 5, 3]
+      sprint:
+        length: 0.25
+        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.h.s.h.k.khsh.h" }
+  - id: 2
+    instrument: lib:chip_arp_major
+    patterns:
+      lights:
+        groove: [C4, Bb3, F4, Eb4@lib:chip_arp_minor]
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns:
+      hook:
+        length: 0.5
+        groove:
+          - G4
+          - { note: C5, legato: true, portamento: 4 }
+          - D5
+          - { note: Bb4, legato: true, portamento: 3 }
+          - F5@lib:sync_lead
+          - "-"
+          - Eb5
+          - { note: G4, legato: true, portamento: 5 }
+        fx: { vibrato: { depth: 0.32, rate: 6, delay: 3 } }
+timeline:
+  - { section: Launch, bars: 4, layers: { v1: launch, v2: lights, v3: hook } }
+  - { section: Sprint, bars: 2, layers: { v1: sprint, v2: lights+12, v3: hook } }
+`;
+
+const AMBIENT_FILTER = `
+sidwave: 1.1
+title: Blue Current
+mode: PAL
+tempo: 72
+voices:
+  - id: 1
+    instrument: lib:filter_bass
+    patterns:
+      current:
+        length: 0.5
+        groove:
+          - { note: D2, len: 1.5 }
+          - D3@lib:hat
+          - { note: A1, len: 1 }
+          - D3@lib:snare
+          - D3@lib:kick
+        transpositions: [0, -2, -5, 3]
+      tide:
+        length: 0.5
+        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k..h.s.." }
+  - id: 2
+    instrument: lib:chip_arp_minor
+    patterns:
+      ripples: { length: 2, groove: [D3, C3@lib:chip_arp_major, A2@lib:chip_arp_major, F3@lib:chip_arp_major] }
+      depth: { length: 2, groove: [D3@lib:pad_slow, A3@lib:chip_arp_minor] }
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns:
+      reflections:
+        length: 1
+        groove:
+          - { note: A4, len: 1.5 }
+          - { note: E5, legato: true, portamento: 16 }
+          - D5@lib:bell_ring
+          - { note: A4, len: 0.5 }
+        fx: { vibrato: { depth: 0.2, rate: 3, delay: 12 } }
+timeline:
+  - { section: Drift, bars: 4, layers: { v1: current, v2: ripples, v3: reflections } }
+  - { section: Tide, bars: 2, layers: { v1: tide, v2: depth, v3: reflections } }
+`;
+
+const FUNK_BASS = `
+sidwave: 1.1
+title: Copper Steps
+mode: PAL
+tempo: 118
+voices:
+  - id: 1
+    instrument: lib:filter_bass
+    patterns:
+      pocket:
+        length: 0.25
+        groove: [E2, "-", E3@lib:hat, B1, E3@lib:snare, G2, D2, E3@lib:hat, E2, "-", E3@lib:kick, F#2, E3@lib:snare, G2, B1, "-"]
+        transpositions: [0, 0, 5, 0]
+      break:
+        length: 0.25
+        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.hhs.h.k.khs.hh" }
+  - id: 2
+    instrument: lib:chip_arp_minor
+    patterns:
+      chops: { length: 0.5, groove: ["-", E3, "-", G3@lib:chip_arp_major, "-", A3@lib:chip_arp_major, B3, "-"] }
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns:
+      answer:
+        length: 0.5
+        groove:
+          - B4
+          - { note: D5, legato: true, portamento: 3 }
+          - "-"
+          - G4@lib:sync_lead
+          - E5
+          - { note: B4, legato: true, portamento: 4 }
+          - D5@lib:bell_ring
+          - "-"
+        fx: { vibrato: { depth: 0.38, rate: 7, delay: 3 } }
+timeline:
+  - { section: Pocket, bars: 4, layers: { v1: pocket, v2: chops, v3: answer } }
+  - { section: Break, bars: 2, layers: { v1: break, v2: chops, v3: answer } }
+`;
 
 const MUSIC_PRESETS: Record<MusicPresetName, MusicPresetDefinition> = {
-  chiptune_drive: { key: "chiptune_drive", title: "Neon Run", description: "An original fast pulse arpeggio and bass composition.", sidwave: CHiptuneDrive },
-  ambient_filter: { key: "ambient_filter", title: "Blue Current", description: "An original slow pad and bell composition.", sidwave: AMBIENT_FILTER },
-  funk_bass: { key: "funk_bass", title: "Copper Steps", description: "An original sync bass, arpeggio and percussion groove.", sidwave: FUNK_BASS },
+  chiptune_drive: { key: "chiptune_drive", title: "Neon Run", description: "A fast tune with chip arpeggios, gliding pulse lead and a drum break.", sidwave: CHIPTUNE_DRIVE },
+  ambient_filter: { key: "ambient_filter", title: "Blue Current", description: "A slow piece with a sweeping pad, sparse percussion and ring modulated bells.", sidwave: AMBIENT_FILTER },
+  funk_bass: { key: "funk_bass", title: "Copper Steps", description: "A syncopated filtered bass line with chord chops, drums and hard sync accents.", sidwave: FUNK_BASS },
   fuer_elise: {
     key: "fuer_elise",
     title: "Für Elise",

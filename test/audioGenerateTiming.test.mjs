@@ -9,7 +9,7 @@ test("music_generate passes the video system to every note and reports it (SOUND
   const systems = [];
   const client = {
     sidSetVolume: async () => ({ success: true }),
-    sidNoteOn: async (o) => { systems.push(o.system); return { success: true }; },
+    sidNoteOn: async (o) => { if (o.voice === 1) systems.push(o.system); return { success: true }; },
     sidNoteOff: async () => ({ success: true }),
   };
   try {
@@ -29,7 +29,7 @@ test("music_generate note onsets keep the tempo when every REST call takes time 
   const onsets = [];
   const client = {
     sidSetVolume: async () => ({ success: true }),
-    sidNoteOn: async () => { onsets.push(Date.now()); await sleep(20); return { success: true }; },
+    sidNoteOn: async ({ voice }) => { if (voice === 1) onsets.push(Date.now()); await sleep(20); return { success: true }; },
     sidNoteOff: async () => { await sleep(20); return { success: true }; },
   };
   try {
