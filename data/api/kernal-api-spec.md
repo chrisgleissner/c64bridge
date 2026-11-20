@@ -32,7 +32,7 @@ and maintains IRQ/NMI linkage through `$0314–$0318`. Avoid overwriting these u
 | `$FF87` | 65415 | **RAMTAS** | RAM test; set MEMBOT/MEMTOP; zp/pages clear | — | Power‑up | MEMBOT=`$0281/2`, MEMTOP=`$0283/4` | Sets screen base via `$0288` |
 | `$FF8A` | 65418 | **RESTOR** | Restore default RAM vectors | — | — | Vectors at `$0314–$0333` reset | Uses ROM table at `$FD30` |
 | `$FF8D` | 65421 | **VECTOR** | Read/Write RAM vector table | C=1 read; C=0 write; X/Y=table addr | SEI recommended | Vectors copied to/from (X,Y) | Affects IRQ/NMI; use SEI/CLI |
-| `$FF90` | 65424 | **SETMSG** | Enable/disable control & error messages | A: bit6=control, bit7=errors | — | — | Does not suppress cassette prompts |
+| `$FF90` | 65424 | **SETMSG** | Enable/disable control & error messages | A: bit7=control messages, bit6=KERNAL error messages | — | — | Does not suppress cassette prompts |
 | `$FF93` | 65427 | **SECOND** | Send secondary addr after LISTEN (serial) | A=sec addr | Device is LISTENing | — | For serial LISTEN path |
 | `$FF96` | 65430 | **TKSA** | Send secondary addr after TALK (serial) | A=sec addr | Device is TALKing | — | For serial TALK path |
 | `$FF99` | 65433 | **MEMTOP** | Get/Set top of BASIC RAM pointer | C=1 get; C=0 set; (get→X/Y; set: X/Y=in) | — | On get: X=lo,Y=hi | Pointer at `$0283/4` |

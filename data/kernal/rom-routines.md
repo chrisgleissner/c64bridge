@@ -183,7 +183,7 @@
 | `$FDF9` | 65017 | **SETNAM** | Set filename pointer/len | A=len, X=lo, Y=hi | — | — | For OPEN/LOAD/SAVE |
 | `$FE00` | 65024 | **SETLFS** | Set LFN/dev/SA | A=lfn, X=dev, Y=sa or `$FF` | — | — | For OPEN/LOAD/SAVE |
 | `$FE07` | 65031 | **READST** | Read I/O status word | — | — | A=status | RS‑232 clears own |
-| `$FE18` | 65048 | **SETMSG** | Control/error messages | A bits6–7 | — | — | — |
+| `$FE18` | 65048 | **SETMSG** | Control/error messages | A bit7=control, bit6=KERNAL errors | — | — | — |
 | `$FF81` | 65409 | **CINT** | Init screen/keyboard | — | — | — | Jump table |
 | `$FF84` | 65412 | **IOINIT** | Initialize I/O | — | — | — | Jump table |
 | `$FF87` | 65415 | **RAMTAS** | RAM test/setup | — | — | — | Jump table |
