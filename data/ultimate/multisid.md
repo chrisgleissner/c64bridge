@@ -1,11 +1,10 @@
 # Ultimate Devices: Multi-SID Control for Games
 
 **Summary:** A C64 Ultimate (C64U) has two UltiSIDs (FPGA SIDs) that split into up to 8 SIDs, plus two SID sockets. A game places them with a `.cfg` and UCI `LOAD_CONFIG`, writes only to mapped windows and verifies each with ENV3. 
-**Limit:** the commonly quoted 8 SIDs / 24 voices (official MultiSID guide, 1541u-documentation.readthedocs.io/en/latest/config/multi_sid.html) counts the two UltiSIDs split 1/4 only, and is the limit with empty sockets. The decoder has four independent slots (UltiSID 1, UltiSID 2, Socket 1, Socket 2; source: `get_sid_addresses`, base/mask/split per slot), so a real SID or replacement in each socket adds one SID each: 10 / 30 (device: ENV3 identity matrix over all ten windows, two ARMSID, C64U 1.2.1). Dual-SID chips with `Ext DualSID Range Split`: up to 12 / 36 (the address arithmetic is confirmed in source; audible result with real dual chips unverified). The older Ultimate 64 manual says 4 SIDs / 12 voices (unsplit).
+**Limit:** the commonly quoted 8 SIDs / 24 voices (official MultiSID guide, 1541u-documentation.readthedocs.io/en/latest/config/multi_sid.html) counts the two UltiSIDs split 1/4 only, and is the limit with empty sockets. The decoder has four independent slots (UltiSID 1, UltiSID 2, Socket 1, Socket 2; source: `get_sid_addresses`, base/mask/split per slot), so a real SID or replacement in each socket adds one SID each: 10 / 30 (device: ENV3 identity matrix over all ten windows, two ARMSID). Dual-SID chips with `Ext DualSID Range Split` address 12 / 36 (address arithmetic in `software/u64/u64_config.cc`; see Not verified). The older Ultimate 64 manual counts 4 SIDs / 12 voices (no split).
 **Read when:** a modern C64U/Ultimate game uses more than one SID, sets SID addresses or stereo at run time, or must work with empty sockets, one or two real SIDs or SID replacements (ARMSID, ARM2SID, FPGASID, SwinSID); not on a stock C64 or in VICE.
 
-Checked against GideonZ/1541ultimate 700c7f2 (2026-11-13); the public source has no U64 / C64 Ultimate FPGA core, so core register behaviour is device-measured or marked unverified.
-Marks: "device" = measured on a C64U 1.2.1, PAL, 2026-11-13; "source" = public firmware repository GideonZ/1541ultimate (`software/u64/u64_config.cc`, `software/io/command_interface/control_target.cc`). FPGA internals are not public.
+Marks: "device" = measured on a C64 Ultimate, firmware 1.2.1, PAL, 2026-11-13; "source" = GideonZ/1541ultimate master 700c7f2fa (`software/u64/u64_config.cc`, `software/io/command_interface/control_target.cc`). The SID address decoder in the U64-family FPGA is not public.
 
 ## Owner configurations and settings
 
@@ -16,7 +15,7 @@ All use `Auto Address Mirroring=Disabled`. Counts: SIDs / voices.
 | UltiSIDs only | 8 / 24 | `UltiSID Range Split=1/4 (A7,A8)`, `UltiSID 1 Address=$D400`, `UltiSID 2 Address=$D420`, both sockets `Unmapped` |
 | plus one socket SID | 9 / 27 | add `SID Socket 1 Address=$D440` |
 | plus two socket SIDs | 10 / 30 | add `SID Socket 2 Address=$D460` (device: verified with two ARMSID) |
-| dual-SID chips in sockets | up to 12 / 36 | as above plus `Ext DualSID Range Split=A9`; second SIDs at `$D640`, `$D660` (source; not verified, no dual device) |
+| dual-SID chips in sockets | 12 / 36 | as above plus `Ext DualSID Range Split=A9`; second SIDs at `$D640`, `$D660` (source; Not verified) |
 
 Windows (32 bytes each, registers `$00-$1C`): UltiSID 1 parts `$D400, $D480, $D500, $D580`; UltiSID 2 parts `$D420, $D4A0, $D520, $D5A0`; Socket 1 `$D440`; Socket 2 `$D460`. The default is all four decoders at `$D400` with mirroring on, so every chip hears every write.
 
@@ -27,8 +26,8 @@ Windows (32 bytes each, registers `$00-$1C`): UltiSID 1 parts `$D400, $D480, $D5
 - `Ext DualSID Range Split` (sockets): `Off`, `A5` to `A9`; the bit is removed from both socket decoders and drives the chip's address-select line. A9 is the only choice that keeps the 10-SID map free of overlaps.
 - Two decoders at one address both receive the write (no priority).
 - `Auto Address Mirroring`: after the split bits are removed, an address bit A5-A9 becomes "don't care" if all mapped decoders agree on it, so the map repeats. The 10-SID map repeats at plus `$200`; with both sockets `Unmapped` it repeats at plus `$40` and `$200`. `Disabled` leaves exactly the listed windows (device).
-- Write or read of an unmapped (undecoded) address in `$D400-$D7FF`: the maintainers' research on an Ultimate 64 Elite (fw 3.15) found that a 6510 access never completes (CPU stalls until reset) and a REST or DMA access hangs the Ultimate. Not tested on the C64U (needs a power cycle to recover): assume it hangs. Touch only mapped windows, never probe candidate addresses, and no REST `readmem` of the whole I/O area with a split map.
-- The freezer writes `$D41F`, `$D43F`, `$D51F` on return: keep `$D400`, `$D420`, `$D500` decoded (the 10-SID map does).
+- Access only mapped windows: never probe candidate addresses in `$D400-$D7FF`, and never REST `readmem` the whole I/O area while a split map is active. The effect of an access to an undecoded address is listed under Not verified.
+- The firmware writes `$D41F`, `$D43F` and `$D51F` when the C64 returns from the menu (`restore_io`, `software/io/c64/c64.cc:1119-1121`): keep `$D400`, `$D420` and `$D500` decoded (the 10-SID map does).
 
 ## Recipe: 3 independent SIDs, sockets empty, SID 2 hard right
 
@@ -46,14 +45,14 @@ Pan is per UltiSID, not per part: parts of one UltiSID cannot be panned apart. T
 - All parts of an UltiSID share its volume and pan. Per-part level uses `$D418` of that part: linear, independent of every other part (device: volume 8 gives 0.53, 4 gives 0.27 of volume 15; other parts unchanged). Amplitude panning between a left part and a right part works by the level ratio (device).
 - Stereo separation (device): with `Pan UltiSID 1=Left 5` and `Pan UltiSID 2=Right 5` an UltiSID 1 part is absent on the right channel (more than 95 dB down) and an UltiSID 2 part on the left.
 - The UDP audio stream (`PUT /v1/streams/audio:start`, 192 stereo S16 frames per packet, 47982.89 Hz PAL) is the final mixer output, all parts and sockets (device); use it to test from the host.
-- Level (device, sawtooth, volume 15): one voice about 0.24 of full scale; 12 voices on one pan side 0.92; 24 clip. Keep per pan side the sum of (volume/15 times sustain/15) at or below about 10 (saw).
+- Level (device, sawtooth, volume 15): one voice 0.24 of full scale; 12 voices on one pan side 0.92; 24 clip. Keep the sum of (volume/15 x sustain/15) per pan side at or below 10 for sawtooth, below the 12 full voices that measured 0.92 of full scale.
 
 ## Run-time control from the C64
 
 - UCI is off by default: `C64 and Cartridge Settings / Command Interface=Enabled` is required; read `$DF1D` for `$C9`. Registers `$DF1C-$DF1F` (see c64://ultimate/uci). The game cannot enable UCI itself.
-- `LOAD_CONFIG` (target 4, command `$50`, message `04 50 <path>`) applies a `.cfg` and effectuates the changed stores at once while the program runs. Device: works on 1.2.1 with `/Temp/name.cfg` (put there by FTP; a game writes it via the DOS target). The reply data is the parse log; a store the device lacks gives `Line N: Store name '...' not found; section ignored.` and status `00,OK`.
+- `LOAD_CONFIG` (target 4, command `$50`, message `04 50 <path>`) applies a `.cfg` and effectuates the changed stores at once while the program runs, when every line is valid (status `00,OK`). Any invalid line gives `89` and applies no store (c64://ultimate/uci). Device: works with `/Temp/name.cfg` (put there by FTP; a game writes it via the DOS target). The reply data is the parse log; a store the device lacks gives `Line N: Store name '...' not found; section ignored.` and status `00,OK`.
 - Labels equal the REST names; example: Recipe above.
-- Registers cannot be written by the 6510; there is no UCI command to read a setting. A `.cfg` with the same name as a PRG, CRT or disk is applied when started from the file browser.
+- The 6510 cannot write the decoder settings directly, and no UCI command reads a setting. A `.cfg` with the same name as a PRG, CRT, TAP, D64 or G64 file is applied when that file is started from the file browser (`software/filetypes/filetype_{prg,crt,tap,d64,g64}.cc`).
 - Restore: make a restore `.cfg` at install time from the host (`GET /v1/configs/<store>` for `SID Addressing`, `Audio Mixer`, ...) and `LOAD_CONFIG` it on exit after silencing the chips (device: restores exactly the listed items).
 - Flash: changes live in RAM; they are saved only by `configs:save_to_flash` or the menu's save prompt, so a later menu visit can persist the game's map (source).
 - Host: `PUT /v1/configs/<store>/<item>?value=...` (RAM only) or `c64_config`.
@@ -69,6 +68,14 @@ Pan is per UltiSID, not per part: parts of one UltiSID cannot be panned apart. T
 
 - UltiSID: filter curve per UltiSID (`8580 Lo`, `8580 Hi`, `6581`, `6581 Alt`, `U2 Low`, `U2 Mid`, `U2 High`), `Filter Resonance` `Low`/`High`, `Combined Waveforms` `6581`/`8580`, `Digis Level` (`Off`, `Low`, `Medium`, `High`), set in store `UltiSID Configuration`; both UltiSIDs can differ. Defaults: curve `8580 Lo`, `Filter Resonance` `Low`, `Combined Waveforms` `6581`, `Digis Level` `Medium`. Use single waveforms and curve-tolerant filters.
 - Sockets hold chips with their own filter, DC and noise; the two ARMSID differed ten times in volume click and two times in triangle level (device).
-- A `$D418` volume step clicks: about 900 (UltiSID) to 1400 (ARMSID) of 32767 per step; 0 to 15 is 0.4 to 0.6 of full scale (device). Step by one at most, only on silent chips.
+- A `$D418` volume step clicks: 900 (UltiSID) to 1400 (ARMSID) of 32767 per step; 0 to 15 is 0.4 to 0.6 of full scale (device). Step by one at most, only on silent chips.
 - Same-frequency unison: two UltiSID parts add to 0.71 of the sum; UltiSID against ARMSID gave 0.32 (triangle), 0.74 (saw), 0.99 (pulse) (device). Do not rely on unison for level; detune slightly. The same 440 Hz on four chips panned apart gave a moving, spacious beating field by ear (device): stereo movement without modulation.
-- Not measured: ADSR delay bug, filter range of split parts, cost of socket writes (behind the 1 MHz bridge, source). Plan for note starts up to two frames late.
+- Socket chips are written over the 1 MHz cartridge-side bus (c64://ultimate/hardware).
+
+## Not verified
+
+| Claim | What would settle it |
+|---|---|
+| Dual-SID chips in both sockets with `Ext DualSID Range Split=A9` give 12 independent SIDs | a C64U or U64 with two dual-SID chips and the ENV3 test over 12 windows |
+| ADSR delay behaviour and filter range of split UltiSID parts | ENV3 and audio-stream capture on a U64 with `UltiSID Range Split=1/4 (A7,A8)` |
+| An access to an undecoded `$D400-$D7FF` address stalls the 6510 until reset, and a REST/DMA access hangs the Ultimate (maintainer report for Ultimate 64 Elite firmware 3.15) | U64 request U-6 (needs a power cycle of the U64 to recover); C64U not tested |
