@@ -1003,15 +1003,17 @@ export class ViceBackend implements C64Facade {
 
   /**
    * Connects a client. When the emulator that an earlier probe found has gone away, the probe is repeated
-   * (which starts a managed emulator when allowed) and the connection is tried once more.
+   * (which starts a managed emulator when allowed) and the connection is tried once more. With `allowLaunch`
+   * false (poweroff) a failed connection is only reported: nothing is started.
    */
-  private async connectClient(client: ViceClient, report = true): Promise<ViceClient> {
+  private async connectClient(client: ViceClient, report = true, allowLaunch = true): Promise<ViceClient> {
     let connected = client;
     try {
       await client.connect(this.port, this.host);
     } catch (error) {
       if (!this.externalVerified || this.mockMode) throw error;
       this.externalVerified = false;
+      if (!allowLaunch) throw error;
       this.noteRestart("The VICE emulator that was in use is gone.");
       await this.ensureProcess();
       connected = new ViceClient();
@@ -1178,7 +1180,8 @@ export class ViceBackend implements C64Facade {
   private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean; noLaunch?: boolean; keepLostNotice?: boolean }): Promise<T> {
     if (!this.mockMode && options?.noLaunch !== true) await this.ensureProcess();
     if (this.debugEnabled) console.error("[vice-backend] connecting to VICE monitor", { host: this.host, port: this.port });
-    const client = await this.connectClient(new ViceClient(), options?.keepLostNotice !== true);
+    const launch = options?.noLaunch !== true;
+    const client = await this.connectClient(new ViceClient(), launch && options?.keepLostNotice !== true, launch);
     if (this.manageProcess && this.lastProcessStart > 0) {
       const sinceStart = Date.now() - this.lastProcessStart;
       const settleDelay = 500 - sinceStart;
@@ -1685,6 +1688,7 @@ export class ViceBackend implements C64Facade {
         }
       }, { resumeOnClose: false, noLaunch: true });
       this.externalVerified = false;
+      this.restartNotice = null; // the emulator is off on purpose: the next start is not an unnoticed restart
       if (managedHandle) {
         try {
           await managedHandle.stop();
@@ -1695,6 +1699,7 @@ export class ViceBackend implements C64Facade {
     } catch (error) {
       // Nothing listens: VICE is already off. Starting one only to quit it would take seconds and open a window.
       if ((error as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED") {
+        this.restartNotice = null;
         if (managedHandle) {
           try { await managedHandle.stop(); } catch {}
           ViceBackend.supervisors.delete(key);

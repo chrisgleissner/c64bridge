@@ -386,3 +386,31 @@ test("VICE-10 client methods: version, banks, bank read, snapshot dump and undum
     await assert.rejects(() => client.dumpSnapshot(""), /1-255 bytes/);
   });
 });
+
+test("VICE-14 poweroff after a verified external emulator went away does not launch one", async () => {
+  const { ViceBackend } = await import("../src/device.js");
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vice-off-gone-"));
+  const marker = path.join(dir, "launched");
+  const fake = path.join(dir, "x64sc");
+  fs.writeFileSync(fake, `#!/bin/sh\ntouch ${marker}\n`, { mode: 0o755 });
+  const saved = { VICE_BINARY: process.env.VICE_BINARY, VICE_TEST_TARGET: process.env.VICE_TEST_TARGET };
+  process.env.VICE_BINARY = fake;
+  delete process.env.VICE_TEST_TARGET;
+  const server = await startViceMockServer();
+  try {
+    const backend = new ViceBackend({ host: "127.0.0.1", port: server.port });
+    await backend.readMemory(0x0400, 4); // the probe succeeds: the emulator counts as verified
+    await server.stop();
+    const result = await backend.poweroff();
+    assert.equal(result.success, true);
+    assert.equal(result.details?.running, false);
+    assert.equal(fs.existsSync(marker), false, "no emulator was launched");
+  } finally {
+    await server.stop();
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
