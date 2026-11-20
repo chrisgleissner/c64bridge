@@ -311,6 +311,8 @@ export async function startMockC64Server(options = {}) {
   const state = createInitialState();
   const streamRuntime = createStreamRuntime();
   state.configWrites = [];
+  state.faults = options.faults ?? null;
+  state.faultCounts = { hangup: 0, error: 0, truncate: 0, stall: 0 };
   state.forbiddenConfigCategories = Array.isArray(options.forbiddenConfigCategories) ? [...options.forbiddenConfigCategories] : [];
   state.networkPassword = typeof options.networkPassword === "string" && options.networkPassword.trim()
     ? options.networkPassword
@@ -440,6 +442,46 @@ export async function startMockC64Server(options = {}) {
     res.once("close", releaseInFlight);
     if (state.responseDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, state.responseDelayMs));
+    }
+
+    // Opt-in fault injection for stress tests (scripts/stress-mcp.mjs). Off unless
+    // options.faults or state.faults is set; each rate is a probability per request.
+    const faults = state.faults;
+    if (faults) {
+      if (faults.delayMs > 0 || faults.delayJitterMs > 0) {
+        const delay = (faults.delayMs ?? 0) + Math.floor(Math.random() * (faults.delayJitterMs ?? 0));
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      const roll = Math.random();
+      let edge = 0;
+      const pick = (rate) => {
+        edge += rate ?? 0;
+        return roll < edge;
+      };
+      if (pick(faults.hangupRate)) {
+        state.faultCounts.hangup += 1;
+        req.socket.destroy();
+        return;
+      }
+      if (pick(faults.errorRate)) {
+        state.faultCounts.error += 1;
+        for await (const _chunk of req) { /* discard */ }
+        sendJson(res, { message: "Injected fault", errors: ["injected 503"] }, 503);
+        return;
+      }
+      if (pick(faults.truncateRate)) {
+        state.faultCounts.truncate += 1;
+        for await (const _chunk of req) { /* discard */ }
+        res.writeHead(200, { "Content-Type": "application/json", "Content-Length": "200" });
+        res.write('{"result":"ok","da');
+        setTimeout(() => req.socket.destroy(), 5);
+        return;
+      }
+      if (pick(faults.stallRate)) {
+        state.faultCounts.stall += 1;
+        // Never answer; the client must time out. The socket closes when the client gives up.
+        return;
+      }
     }
 
     if (state.networkPassword && req.headers["x-password"] !== state.networkPassword) {
