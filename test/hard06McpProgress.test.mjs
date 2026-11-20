@@ -26,6 +26,19 @@ test("MCP-6 progress strictly increases, carries the total and keeps a heartbeat
   assert.equal(sent.at(-1).params.total, 2);
 });
 
+test("MCP-6 flush waits until every progress notification has been handed to the transport", async () => {
+  const delivered = [];
+  const reporter = createProgressReporter("tok", (notification) => new Promise((resolve) => {
+    setTimeout(() => { delivered.push(notification.params.progress); resolve(); }, 30);
+  }), { heartbeatMs: 60_000 });
+  reporter.report(1, 2);
+  reporter.report(2, 2);
+  reporter.stop();
+  assert.equal(typeof reporter.flush, "function");
+  await reporter.flush();
+  assert.deepEqual(delivered, [1, 2], "the tool result is sent only after its progress notifications");
+});
+
 test("MCP-6 c64_batch reports one progress step per command through the context hook", async () => {
   const reports = [];
   const ctx = {

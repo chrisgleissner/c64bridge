@@ -16,6 +16,8 @@ export interface ProgressReporter {
   readonly report: (completed: number, total?: number, message?: string) => void;
   /** Stops the heartbeat; later reports are ignored. */
   readonly stop: () => void;
+  /** Resolves once every notification sent so far has been handed to the transport. */
+  readonly flush: () => Promise<void>;
 }
 
 export const PROGRESS_HEARTBEAT_MS = 10_000;
@@ -30,6 +32,7 @@ export function createProgressReporter(
   let last = 0;
   let total: number | undefined;
   let stopped = false;
+  const pending = new Set<Promise<void>>();
   const emit = (progress: number, message?: string) => {
     if (stopped) return;
     last = progress;
@@ -40,7 +43,9 @@ export function createProgressReporter(
       ...(message ? { message } : {}),
     };
     try {
-      void Promise.resolve(send({ method: "notifications/progress", params })).catch(() => {});
+      const sent: Promise<void> = Promise.resolve(send({ method: "notifications/progress", params })).catch(() => {});
+      pending.add(sent);
+      void sent.finally(() => pending.delete(sent));
     } catch {
       // A closed transport must not fail the tool call.
     }
@@ -57,6 +62,10 @@ export function createProgressReporter(
     stop() {
       stopped = true;
       clearInterval(timer);
+    },
+    async flush() {
+      // The tool result must not overtake its own progress notifications on the transport.
+      await Promise.all([...pending]);
     },
   };
 }

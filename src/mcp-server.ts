@@ -519,6 +519,7 @@ async function main() {
         signal: extra?.signal,
         ...(progress ? { reportProgress: progress.report } : {}),
       }).finally(() => progress?.stop());
+      await progress?.flush();
 
       const response = toCallToolResult(result);
       const latency = Date.now() - startedAt;
