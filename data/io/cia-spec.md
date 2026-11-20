@@ -29,7 +29,7 @@
 | `$DC08` | 56328 | **TOD10TH** | TOD tenths BCD (0–9). **CRB7=0:** writes set **time**; **=1:** set **alarm**. |
 | `$DC09` | 56329 | **TODSEC** | TOD seconds BCD. |
 | `$DC0A` | 56330 | **TODMIN** | TOD minutes BCD. |
-| `$DC0B` | 56331 | **TODHR** | TOD hours BCD; **b7 AM/PM** (1=PM). **Write halts** TOD until `$DC08` read. |
+| `$DC0B` | 56331 | **TODHR** | TOD hours BCD; **b7 AM/PM** (1=PM). **Write** stops the clock until tenths (`$DC08`) is written; **read** latches the registers until tenths is read. |
 | `$DC0C` | 56332 | **SDR** | Serial shift data. **CRA6:** 0=input (SP→SDR on CNT↑); 1=output (SDR→SP, CNT strobes). |
 | `$DC0D` | 56333 | **ICR** | **R:** b0 TA UF, b1 TB UF, b2 TOD=ALARM, b3 serial byte, b4 FLAG; **b7**=any pending. **W:** b7=1 set mask bits0–4; b7=0 clear them. **Read clears** status bits. |
 | `$DC0E` | 56334 | **CRA** | **Timer A ctrl**/**serial/TOD**: **b0** start; **b1** PB6 enable; **b2** PB6 mode (1 toggle / 0 pulse); **b3** one‑shot; **b4** force load; **b5** count src (1=CNT / 0=Φ2); **b6** SDR dir (1 out); **b7** TOD freq (1=50 Hz/0=60 Hz). |
@@ -72,7 +72,7 @@
 
 - **Regs:** `$xx08–$xx0B` (10th, sec, min, hr). **Hours b7**=AM/PM.  
 - **Write target:** **CRB7=0** write **time**; **CRB7=1** write **alarm**.  
-- **Halt rule:** Writing **TODHR** halts update until **TOD10TH** is read (for read‑latch/write‑latch coherency).  
+- **Halt rule:** Writing **TODHR** stops the clock until **TOD10TH** is written. Reading **TODHR** freezes the register contents (the clock keeps running) until **TOD10TH** is read.  
 - **Tick source:** **CRA7** selects 60 Hz/50 Hz. **Alarm match** sets ICR bit2 (IRQ/NMI by CIA).  
 
 ## Serial Shift (SDR) — SP/CNT
