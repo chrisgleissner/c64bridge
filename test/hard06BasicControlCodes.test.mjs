@@ -105,13 +105,10 @@ test("every control-code name of the keyboard tool and of skill and data example
   const { readFileSync, readdirSync, statSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { lookupNamedPetscii } = await import("../src/petscii.js");
-  // src/tools/input.ts keeps its own table until it imports the shared one (wave 2); the names must agree.
+  // src/tools/input.ts uses the shared table (wave 2) and must not keep a copy of its own.
   const input = readFileSync(new URL("../src/tools/input.ts", import.meta.url), "utf8");
-  const table = /const PETSCII_TOKENS: Readonly<Record<string, number>> = \{([\s\S]*?)\};/.exec(input);
-  assert.ok(table, "control-key table in src/tools/input.ts");
-  const entries = [...table[1].matchAll(/^\s*([A-Z0-9_]+): (\d+),/gm)];
-  assert.ok(entries.length >= 40, `${entries.length} names`);
-  for (const [, name, code] of entries) assert.equal(lookupNamedPetscii(name), Number(code), name);
+  assert.match(input, /import \{[^}]*lookupNamedPetscii[^}]*\} from "\.\.\/petscii\.js"/, "input.ts imports the shared table");
+  assert.doesNotMatch(input, /const PETSCII_TOKENS\b/, "input.ts has no table of its own");
   // Brace codes inside quoted strings of BASIC lines in .github/skills and data/.
   const files = [];
   const walk = (dir) => {
