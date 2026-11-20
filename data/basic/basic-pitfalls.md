@@ -208,14 +208,15 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 
 ## RESTORE Statement
 
-**Problem:** `RESTORE` without line number resets `READ` pointer to the first `DATA` statement. If you need to re-read from a specific line, use `RESTORE linenum`.
+**Problem:** In BASIC V2, `RESTORE` takes no line number. It always resets the `READ` pointer to the start of the program, so the next `READ` uses the first `DATA` statement. To reach later data, `READ` and discard the values before it.
 
 ```basic
 10 DATA 1,2,3
 20 DATA 4,5,6
 30 READ A:READ B:READ C
-40 RESTORE 20  :REM RESET TO LINE 20
-50 READ D:READ E:READ F
+40 RESTORE  :REM BACK TO THE FIRST DATA ITEM
+50 FOR I=1 TO 3:READ X:NEXT I  :REM SKIP LINE 10
+60 READ D:READ E:READ F  :REM 4,5,6
 ```
 
 ## Summary
