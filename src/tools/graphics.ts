@@ -34,6 +34,7 @@ interface SpriteArgs extends Record<string, unknown> {
   y: number;
   color: number;
   multicolour: boolean;
+  dataAddress?: number;
 }
 
 interface PetsciiImageArgs extends Record<string, unknown> {
@@ -217,6 +218,12 @@ const spriteArgsSchema = objectSchema<SpriteArgs>({
       description: "Enable multicolour mode for the sprite.",
       default: false,
     }),
+    dataAddress: optionalSchema(numberSchema({
+      description: "Where to write the 64-byte block (multiple of 64, inside the current VIC bank); default is chosen clear of screen, charset and bitmap.",
+      integer: true,
+      minimum: 0,
+      maximum: 0xFFC0,
+    })),
   },
   required: ["sprite"],
   additionalProperties: false,
@@ -423,6 +430,7 @@ async function executeGenerateSprite(rawArgs: unknown, ctx: ToolExecutionContext
       y: parsed.y,
       color: parsed.color,
       multicolour: parsed.multicolour,
+      ...(parsed.dataAddress !== undefined ? { dataAddress: parsed.dataAddress } : {}),
     });
 
     if (!result.success) {
