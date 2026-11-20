@@ -271,3 +271,12 @@ test("configure refuses a map that needs a socket without a detected chip and wr
   assert.equal(calls.filter(([op]) => op === "write").length, 0);
   assert.equal(calls.filter(([op]) => op === "run").length, 0);
 });
+
+test("the socket layout refuses an explicitly empty socket before applying settings", async () => {
+  const { facade, calls, config } = hardware();
+  const client = clientFor(facade);
+  config[SOCKETS]["SID Detected Socket 1"] = "None";
+  const doc = parseSidwave(score({ layout: "ultisid8+socket1" }));
+  await assert.rejects(() => client.playSidwave(doc, compileSidwaveToPrg(doc), { configure: true }), /SID socket 1, but no chip is detected/);
+  assert.ok(calls.every(([op]) => op !== "write" && op !== "run"));
+});

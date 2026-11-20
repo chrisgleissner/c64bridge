@@ -1,0 +1,78 @@
+# Electro digi groove | 112 BPM | C minor | 1 SID
+# Techniques: CIA2 4-bit sampled kick, snare and clap through $D418; syncopated synth bass and wavetable chord arp.
+# Learn: Listen for offset kick and clap accents and use a quieter bass to leave room for the volume digis
+sidwave: 1.2
+title: Paper Circuit
+tempo: 112
+mode: PAL
+sids: [{"id": "sid1", "address": "$D400", "volume": 9}]
+samples: {"rate": 4000, "voices": [{"sid": "sid1", "at": [0, 67, 107, 128, 161, 201, 215, 282, 322, 342, 376, 416, 430, 497, 537, 557, 591, 631, 644, 685, 718, 752, 806, 859, 900, 933, 967, 1020, 1074, 1141, 1182, 1202, 1235, 1275, 1289, 1356, 1396, 1416, 1450, 1490, 1504, 1571, 1611], "kit": "kick"}, {"sid": "sid1", "at": [134, 188, 242, 295, 349, 403, 456, 510, 564, 618, 671, 725, 779, 832, 886, 940, 994, 1041, 1061, 1101, 1155, 1208, 1262, 1316, 1369, 1423, 1477, 1531, 1584], "kit": "snare"}, {"sid": "sid1", "at": [389, 470, 604, 705, 846, 920, 1034, 1114, 1249, 1329, 1463, 1544, 1638], "kit": "clap"}]}
+instruments:
+  fold: {"waveform": "pulse", "adsr": [0, 5, 8, 4], "pulse_width": 1550}
+  glass: {"waveform": "triangle", "adsr": [2, 4, 5, 6]}
+voices:
+  - id: 1
+    name: "Folded-paper bass"
+    instrument: "fold"
+    patterns:
+      Contact:
+        length: 0.5
+        groove:
+          ["C2", "~", "-", "G2", "-", "Bb2", "G2", "-", "C2", "-", "Eb2", "~", "F2", "-", "G2", "-"]
+      Gears:
+        length: 0.5
+        groove:
+          ["C2", "-", "G2", "C3", "-", "Bb2", "-", "G2", "Ab1", "-", "Eb2", "G2", "-", "Ab2", "-", "C3", "Eb2", "-", "Bb2", "-", "G2", "Bb2", "-", "Eb3", "G1", "G2", "-", "D3", "C3", "-", "Bb2", "G2"]
+      Fold:
+        length: 0.5
+        groove:
+          ["F2", "~", "-", "C3", "Eb3", "-", "Ab2", "-", "Ab1", "-", "Eb2", "-", "C3", "Bb2", "Ab2", "-", "Bb1", "-", "F2", "Bb2", "D3", "F2", "-", "Ab2", "G1", "-", "G2", "Bb2", "-", "B2", "D3", "G2"]
+      Crease:
+        length: 0.5
+        groove:
+          ["C2", "G2", "-", "Bb2", "C3", "-", "Eb3", "D3", "Ab1", "-", "Eb2", "Ab2", "Bb2", "-", "C3", "Eb2", "F2", "-", "Ab2", "C3", "-", "Eb3", "D3", "F2", "G1", "G2", "Bb2", "-", "B2", "D3", "-", "G2"]
+      Tail:
+        length: 1
+        groove:
+          ["C2", "G2", "-", "C3", "C2", "~", "~", "~"]
+  - id: 2
+    name: "Circuit arpeggios"
+    instrument: "glass"
+    patterns:
+      Contact:
+        length: 4
+        groove:
+          - {"chord": "Cm7", "speed": 4}
+          - {"chord": "Cm7", "speed": 4}
+      Gears:
+        length: 4
+        groove:
+          - {"chord": "Cm7", "speed": 4}
+          - {"chord": "Abmaj7", "speed": 4}
+          - {"chord": "Ebmaj7", "speed": 4}
+          - {"chord": "G7", "speed": 4}
+      Fold:
+        length: 4
+        groove:
+          - {"chord": "Fm7", "speed": 4}
+          - {"chord": "Abmaj7", "speed": 4}
+          - {"chord": "Bb7", "speed": 4}
+          - {"chord": "G7", "speed": 4}
+      Crease:
+        length: 4
+        groove:
+          - {"chord": "Cm9", "speed": 4}
+          - {"chord": "Abmaj7", "speed": 4}
+          - {"chord": "Fm7", "speed": 4}
+          - {"chord": "G7", "speed": 4}
+      Tail:
+        length: 4
+        groove:
+          - {"chord": "Cm7", "speed": 4}
+          - {"chord": "Cm", "speed": 4}
+timeline:
+  - {"section": "Contact", "bars": 2, "layers": {"v1": "Contact", "v2": "Contact"}}
+  - {"section": "Paper gears", "bars": 4, "layers": {"v1": "Gears", "v2": "Gears"}}
+  - {"section": "Reverse fold", "bars": 4, "layers": {"v1": "Fold", "v2": "Fold"}}
+  - {"section": "Creases", "bars": 4, "layers": {"v1": "Crease", "v2": "Crease"}}
+  - {"section": "Power down", "bars": 2, "layers": {"v1": "Tail–", "v2": "Tail–"}}

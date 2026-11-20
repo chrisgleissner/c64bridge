@@ -1,0 +1,126 @@
+# Minor synth ballad | 76 BPM | A minor | 1 SID
+# Techniques: Chord shorthand arpeggios, slow PWM, delayed vibrato, legato portamento and triangle bass.
+# Learn: Put elastic note lengths in the lead against a steady chord pulse and let the final phrase descend
+sidwave: 1.2
+title: A Window in Rain
+tempo: 76
+mode: PAL
+instruments:
+  droplets: {"waveform": "pulse", "adsr": [0, 4, 6, 4], "pulse_width": 1050}
+  anchor: {"waveform": "triangle", "adsr": [2, 3, 8, 5]}
+  breath: {"waveform": "pulse", "adsr": [3, 4, 9, 6], "pulse_width": 1300, "pulsetable": {"steps": [{"set": 1300}, {"add": 16, "frames": 34}, {"add": -16, "frames": 34}], "loop": 1}, "vibrato": {"depth": 0.27, "rate": 3.2, "delay": 16}}
+voices:
+  - id: 1
+    name: "Rain arpeggios"
+    instrument: "droplets"
+    patterns:
+      Glass:
+        length: 4
+        groove:
+          - {"chord": "Am7", "speed": 5}
+          - {"chord": "Fmaj7", "speed": 5}
+      Thread:
+        length: 4
+        groove:
+          - {"chord": "Am7", "speed": 4}
+          - {"chord": "G", "speed": 4}
+          - {"chord": "Em7", "speed": 4}
+          - {"chord": "Fmaj7", "speed": 4}
+      Lift:
+        length: 4
+        groove:
+          - {"chord": "Dm9", "speed": 4}
+          - {"chord": "Fmaj7", "speed": 4}
+          - {"chord": "Am7", "speed": 4}
+          - {"chord": "E7", "speed": 4}
+      Return:
+        length: 4
+        groove:
+          - {"chord": "Am7", "speed": 4}
+          - {"chord": "Fmaj7", "speed": 4}
+          - {"chord": "Dm7", "speed": 4}
+          - {"chord": "Am", "speed": 4}
+  - id: 2
+    name: "Long breath"
+    instrument: "breath"
+    patterns:
+      Glass:
+        length: 1
+        groove:
+          - {"note": "E4", "len": 1.5}
+          - {"note": "A4", "len": 0.5}
+          - {"note": "C5", "len": 2}
+          - {"note": "G4", "len": 1}
+          - {"note": "E4", "len": 1.5}
+          - {"note": "F4", "len": 1.5}
+      Thread:
+        length: 1
+        groove:
+          - {"note": "A4", "len": 1.5}
+          - {"note": "B4", "len": 0.5, "legato": true, "portamento": 5}
+          - {"note": "C5", "len": 2, "legato": true, "portamento": 9}
+          - {"note": "D5", "len": 1}
+          - {"note": "B4", "len": 0.75, "legato": true, "portamento": 8}
+          - {"note": "G4", "len": 2.25}
+          - {"note": "B4", "len": 1}
+          - {"note": "E5", "len": 1.5}
+          - {"note": "D5", "len": 1.5, "legato": true, "portamento": 7}
+          - {"note": "C5", "len": 1.5}
+          - {"note": "A4", "len": 0.5, "legato": true, "portamento": 5}
+          - {"note": "G4", "len": 1}
+          - {"note": "F4", "len": 1}
+      Lift:
+        length: 1
+        groove:
+          - {"note": "F4", "len": 1}
+          - {"note": "A4", "len": 1.5}
+          - {"note": "D5", "len": 1.5}
+          - {"note": "C5", "len": 0.75, "legato": true, "portamento": 9}
+          - {"note": "A4", "len": 1.25}
+          - {"note": "E5", "len": 2}
+          - {"note": "C5", "len": 1}
+          - {"note": "G5", "len": 1.5}
+          - {"note": "E5", "len": 1.5, "legato": true, "portamento": 7}
+          - {"note": "B4", "len": 1}
+          - {"note": "G#4", "len": 1.25}
+          - {"note": "B4", "len": 0.75}
+          - {"note": "E5", "len": 1}
+      Return:
+        length: 1
+        groove:
+          - {"note": "E5", "len": 1.5}
+          - {"note": "C5", "len": 0.5, "legato": true, "portamento": 5}
+          - {"note": "A4", "len": 2, "legato": true, "portamento": 9}
+          - {"note": "G4", "len": 1}
+          - {"note": "A4", "len": 1}
+          - {"note": "C5", "len": 2}
+          - {"note": "D5", "len": 1.5}
+          - {"note": "C5", "len": 0.5, "legato": true, "portamento": 6}
+          - {"note": "A4", "len": 2}
+          - {"note": "E4", "len": 1}
+          - {"note": "A4", "len": 3}
+  - id: 3
+    name: "Window frame"
+    instrument: "anchor"
+    patterns:
+      Glass:
+        length: 1
+        groove:
+          ["A2", "~", "E3", "~", "F2", "~", "C3", "~"]
+      Thread:
+        length: 1
+        groove:
+          ["A2", "~", "E3", "~", "G2", "~", "D3", "~", "E2", "~", "B2", "~", "F2", "~", "C3", "~"]
+      Lift:
+        length: 1
+        groove:
+          ["D3", "~", "A2", "~", "F2", "~", "C3", "~", "A2", "~", "E3", "~", "E2", "~", "B2", "~"]
+      Return:
+        length: 1
+        groove:
+          ["A2", "~", "E3", "~", "F2", "~", "C3", "~", "D3", "~", "A2", "~", "A2", "~", "~", "~"]
+timeline:
+  - {"section": "Rain on glass", "bars": 2, "layers": {"v1": "Glass", "v2": "Glass", "v3": "Glass"}}
+  - {"section": "A thread of light", "bars": 4, "layers": {"v1": "Thread", "v2": "Thread", "v3": "Thread"}}
+  - {"section": "The room lifts", "bars": 4, "layers": {"v1": "Lift", "v2": "Lift", "v3": "Lift"}}
+  - {"section": "The first image returns", "bars": 4, "layers": {"v1": "Return–", "v2": "Return–", "v3": "Return–"}}

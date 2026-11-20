@@ -1,0 +1,42 @@
+# Ambient | 72 BPM | D minor | 1 SID
+# Techniques: Filter tables, delayed vibrato, ring modulation and legato.
+# Learn: Let long pads and silence answer a sparse bass and drum line.
+sidwave: 1.1
+title: Blue Current
+mode: PAL
+tempo: 72
+voices:
+  - id: 1
+    instrument: lib:filter_bass
+    patterns:
+      current:
+        length: 0.5
+        groove:
+          - { note: D2, len: 1.5 }
+          - D3@lib:hat
+          - { note: A1, len: 1 }
+          - D3@lib:snare
+          - D3@lib:kick
+        transpositions: [0, -2, -5, 3]
+      tide:
+        length: 0.5
+        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k..h.s.." }
+  - id: 2
+    instrument: lib:chip_arp_minor
+    patterns:
+      ripples: { length: 2, groove: [D3, C3@lib:chip_arp_major, A2@lib:chip_arp_major, F3@lib:chip_arp_major] }
+      depth: { length: 2, groove: [D3@lib:pad_slow, A3@lib:chip_arp_minor] }
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns:
+      reflections:
+        length: 1
+        groove:
+          - { note: A4, len: 1.5 }
+          - { note: E5, legato: true, portamento: 16 }
+          - D5@lib:bell_ring
+          - { note: A4, len: 0.5 }
+        fx: { vibrato: { depth: 0.2, rate: 3, delay: 12 } }
+timeline:
+  - { section: Drift, bars: 4, layers: { v1: current, v2: ripples, v3: reflections } }
+  - { section: Tide, bars: 2, layers: { v1: tide, v2: depth, v3: reflections } }

@@ -1,0 +1,78 @@
+# Chamber waltz | 132 BPM, 3/4 | D minor | 1 SID
+# Techniques: Three-voice counterpoint, triangle and pulse, no filter or drums.
+# Learn: Hear the soprano turn against the answering alto and bass, then recognize the opening figure in the last four bars
+sidwave: 1.2
+title: Gilt Footsteps
+tempo: 132
+mode: PAL
+meter: 3
+instruments:
+  upper: {"waveform": "tri", "adsr": [2, 4, 9, 4]}
+  answer: {"waveform": "pulse", "adsr": [2, 5, 6, 5], "pulse_width": 1100}
+  cello: {"waveform": "tri", "adsr": [3, 3, 8, 5]}
+voices:
+  - id: 1
+    name: "Soprano"
+    instrument: "upper"
+    patterns:
+      Portico:
+        length: 1
+        groove:
+          ["D5", "A4", "F4", "G4", "Bb4", "D5", "C#5", "E5", "A5", "F5", "E5", "D5"]
+      Hall:
+        length: 1
+        groove:
+          ["A4", "D5", "F5", "Bb4", "D5", "G5", "A5", "G5", "E5", "F5", "A4", "D5", "C5", "F5", "A5", "G5", "E5", "C5", "F5", "D5", "Bb4", "A4", "C#5", "E5"]
+      Gallery:
+        length: 1
+        groove:
+          ["F5", "~", "A5", "G5", "E5", "D5", "F5", "D5", "Bb4", "A4", "C#5", "E5", "G5", "D5", "Bb4", "A4", "F5", "D5", "E5", "G5", "E5", "D5", "~", "~"]
+      Stairs:
+        length: 1
+        groove:
+          ["D5", "A4", "F4", "G4", "Bb4", "D5", "E5", "C#5", "A4", "D5", "~", "~"]
+  - id: 2
+    name: "Alto"
+    instrument: "answer"
+    patterns:
+      Portico:
+        length: 1
+        groove:
+          ["F4", "E4", "D4", "D4", "E4", "F4", "E4", "D4", "C#4", "A4", "G4", "F4"]
+      Hall:
+        length: 1
+        groove:
+          ["F4", "E4", "D4", "G4", "F4", "D4", "C#5", "E4", "G4", "A4", "G4", "F4", "A4", "G4", "F4", "E4", "G4", "Bb4", "D4", "F4", "G4", "G4", "E4", "C#4"]
+      Gallery:
+        length: 1
+        groove:
+          ["A4", "C5", "F4", "C5", "Bb4", "G4", "D4", "F4", "D4", "A4", "G4", "E4", "Bb4", "F4", "D4", "F4", "A4", "D4", "G4", "Bb4", "C#4", "F4", "A4", "F4"]
+      Stairs:
+        length: 1
+        groove:
+          ["F4", "A4", "D4", "D4", "F4", "G4", "G4", "E4", "C#4", "F4", "~", "~"]
+  - id: 3
+    name: "Bass"
+    instrument: "cello"
+    patterns:
+      Portico:
+        length: 1
+        groove:
+          ["D3", "~", "A2", "G2", "~", "D3", "A2", "~", "E3", "D3", "~", "A2"]
+      Hall:
+        length: 1
+        groove:
+          ["D3", "A2", "D3", "G2", "D3", "G2", "A2", "E3", "A2", "D3", "A2", "D3", "F2", "C3", "F3", "C3", "G2", "C3", "Bb2", "F3", "Bb2", "A2", "E3", "A2"]
+      Gallery:
+        length: 1
+        groove:
+          ["F3", "C3", "A2", "C3", "E3", "G3", "Bb2", "F3", "D3", "A2", "~", "E3", "G2", "D3", "G3", "D3", "A2", "F3", "A2", "E3", "G3", "D3", "~", "~"]
+      Stairs:
+        length: 1
+        groove:
+          ["D3", "A2", "D3", "G2", "D3", "Bb2", "A2", "E3", "A2", "D3", "~", "~"]
+timeline:
+  - {"section": "The portico", "bars": 4, "layers": {"v1": "Portico", "v2": "Portico", "v3": "Portico"}}
+  - {"section": "The hall", "bars": 8, "layers": {"v1": "Hall", "v2": "Hall", "v3": "Hall"}}
+  - {"section": "The gallery", "bars": 8, "layers": {"v1": "Gallery", "v2": "Gallery", "v3": "Gallery"}}
+  - {"section": "The staircase", "bars": 4, "layers": {"v1": "Stairs–", "v2": "Stairs–", "v3": "Stairs–"}}

@@ -78,6 +78,10 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
       );
       const bytes = Buffer.byteLength(JSON.stringify(listResult));
       assert.ok(bytes < 71_000, `tools/list is ${bytes} bytes`);
+      const soundSchema = JSON.stringify(listResult.tools.find(({ name }) => name === "c64_sound").inputSchema);
+      for (const name of ["chiptune_drive", "stereo_echo", "wall_of_sid"]) {
+        assert.ok(soundSchema.includes(`"${name}"`), `play_preset advertises ${name}`);
+      }
       for (const tool of listResult.tools) {
         assert.ok(
           !("x-c64bridge-operations" in (tool.inputSchema ?? {})),

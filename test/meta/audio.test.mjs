@@ -488,3 +488,29 @@ describe("meta/audio", () => {
     });
   }
 });
+
+test("every composition resource is playable by its preset name and wall_of_sid requires configuration", async () => {
+  const { SIDWAVE_EXAMPLES, readSidwaveExample } = await import("../../src/sidwaveExamples.js");
+  const stages = [];
+  const ctx = { client: {
+    getActiveBackendType: async () => "c64u", getAvailableBackends: () => ["c64u"],
+    switchBackend() {}, sidSilenceAll: async () => ({ success: true }),
+    playSidwave: async (doc, compiled, options) => {
+      stages.push([doc.song.title, compiled.prg.length, options.configure]);
+      return { success: true };
+    },
+  }, setPlatform() {}, logger: createLogger() };
+  for (const { name, title } of SIDWAVE_EXAMPLES) {
+    const args = { preset: name, ...(name === "wall_of_sid" ? { configure: true } : {}) };
+    const result = await metaModule.invoke("music_play_preset", args, ctx);
+    assert.equal(result.isError, undefined, name);
+    assert.equal(result.metadata.preset, name);
+    assert.equal(result.structuredContent.data.sidwave, readSidwaveExample(name));
+    assert.equal(stages.at(-1)[0], title);
+    assert.ok(stages.at(-1)[1] > 100);
+  }
+  const result = await metaModule.invoke("music_play_preset", { preset: "wall_of_sid" }, ctx);
+  assert.equal(result.isError, true);
+  assert.match(JSON.stringify(result), /requires configure: true and a fitted SID/);
+  assert.equal(stages.length, SIDWAVE_EXAMPLES.length);
+});

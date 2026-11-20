@@ -1,3 +1,4 @@
+import { SIDWAVE_EXAMPLES, readSidwaveExample, type SidwaveExampleName } from "../../sidwaveExamples.js";
 import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "../../sidwaveCompiler.js";
@@ -20,7 +21,8 @@ const DEFAULT_PRESET_ANALYSIS_DURATION_SECONDS = 4;
 const DEFAULT_PRESET_WAIT_MS = 400;
 
 type PresetBackend = "vice" | "c64u" | "u2";
-type MusicPresetName = "chiptune_drive" | "ambient_filter" | "funk_bass" | "fuer_elise";
+type MusicPresetName = SidwaveExampleName | "fuer_elise";
+const MUSIC_PRESET_NAMES = [...SIDWAVE_EXAMPLES.map(({ name }) => name), "fuer_elise"] as const;
 
 interface MusicPresetDefinition {
   readonly key: MusicPresetName;
@@ -84,146 +86,15 @@ timeline:
     layers: { v1: theme, v2: accomp, v3: bass }
 `;
 
-const CHIPTUNE_DRIVE = `
-sidwave: 1.1
-title: Neon Run
-mode: PAL
-tempo: 132
-speed: 2
-voices:
-  - id: 1
-    instrument: lib:filter_bass
-    patterns:
-      launch:
-        length: 0.5
-        groove: [C2, C2@lib:hat, G1, C2@lib:snare, Bb1, C2@lib:hat, G1, C2@lib:kick]
-        transpositions: [0, 0, 5, 3]
-      sprint:
-        length: 0.25
-        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.h.s.h.k.khsh.h" }
-  - id: 2
-    instrument: lib:chip_arp_major
-    patterns:
-      lights:
-        groove: [C4, Bb3, F4, Eb4@lib:chip_arp_minor]
-  - id: 3
-    instrument: lib:lead_pwm
-    patterns:
-      hook:
-        length: 0.5
-        groove:
-          - G4
-          - { note: C5, legato: true, portamento: 4 }
-          - D5
-          - { note: Bb4, legato: true, portamento: 3 }
-          - F5@lib:sync_lead
-          - "-"
-          - Eb5
-          - { note: G4, legato: true, portamento: 5 }
-        fx: { vibrato: { depth: 0.32, rate: 6, delay: 3 } }
-timeline:
-  - { section: Launch, bars: 4, layers: { v1: launch, v2: lights, v3: hook } }
-  - { section: Sprint, bars: 2, layers: { v1: sprint, v2: lights+12, v3: hook } }
-`;
-
-const AMBIENT_FILTER = `
-sidwave: 1.1
-title: Blue Current
-mode: PAL
-tempo: 72
-voices:
-  - id: 1
-    instrument: lib:filter_bass
-    patterns:
-      current:
-        length: 0.5
-        groove:
-          - { note: D2, len: 1.5 }
-          - D3@lib:hat
-          - { note: A1, len: 1 }
-          - D3@lib:snare
-          - D3@lib:kick
-        transpositions: [0, -2, -5, 3]
-      tide:
-        length: 0.5
-        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k..h.s.." }
-  - id: 2
-    instrument: lib:chip_arp_minor
-    patterns:
-      ripples: { length: 2, groove: [D3, C3@lib:chip_arp_major, A2@lib:chip_arp_major, F3@lib:chip_arp_major] }
-      depth: { length: 2, groove: [D3@lib:pad_slow, A3@lib:chip_arp_minor] }
-  - id: 3
-    instrument: lib:lead_pwm
-    patterns:
-      reflections:
-        length: 1
-        groove:
-          - { note: A4, len: 1.5 }
-          - { note: E5, legato: true, portamento: 16 }
-          - D5@lib:bell_ring
-          - { note: A4, len: 0.5 }
-        fx: { vibrato: { depth: 0.2, rate: 3, delay: 12 } }
-timeline:
-  - { section: Drift, bars: 4, layers: { v1: current, v2: ripples, v3: reflections } }
-  - { section: Tide, bars: 2, layers: { v1: tide, v2: depth, v3: reflections } }
-`;
-
-const FUNK_BASS = `
-sidwave: 1.1
-title: Copper Steps
-mode: PAL
-tempo: 118
-voices:
-  - id: 1
-    instrument: lib:filter_bass
-    patterns:
-      pocket:
-        length: 0.25
-        groove: [E2, "-", E3@lib:hat, B1, E3@lib:snare, G2, D2, E3@lib:hat, E2, "-", E3@lib:kick, F#2, E3@lib:snare, G2, B1, "-"]
-        transpositions: [0, 0, 5, 0]
-      break:
-        length: 0.25
-        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.hhs.h.k.khs.hh" }
-  - id: 2
-    instrument: lib:chip_arp_minor
-    patterns:
-      chops: { length: 0.5, groove: ["-", E3, "-", G3@lib:chip_arp_major, "-", A3@lib:chip_arp_major, B3, "-"] }
-  - id: 3
-    instrument: lib:lead_pwm
-    patterns:
-      answer:
-        length: 0.5
-        groove:
-          - B4
-          - { note: D5, legato: true, portamento: 3 }
-          - "-"
-          - G4@lib:sync_lead
-          - E5
-          - { note: B4, legato: true, portamento: 4 }
-          - D5@lib:bell_ring
-          - "-"
-        fx: { vibrato: { depth: 0.38, rate: 7, delay: 3 } }
-timeline:
-  - { section: Pocket, bars: 4, layers: { v1: pocket, v2: chops, v3: answer } }
-  - { section: Break, bars: 2, layers: { v1: break, v2: chops, v3: answer } }
-`;
-
-const MUSIC_PRESETS: Record<MusicPresetName, MusicPresetDefinition> = {
-  chiptune_drive: { key: "chiptune_drive", title: "Neon Run", description: "A fast tune with chip arpeggios, gliding pulse lead and a drum break.", sidwave: CHIPTUNE_DRIVE },
-  ambient_filter: { key: "ambient_filter", title: "Blue Current", description: "A slow piece with a sweeping pad, sparse percussion and ring modulated bells.", sidwave: AMBIENT_FILTER },
-  funk_bass: { key: "funk_bass", title: "Copper Steps", description: "A syncopated filtered bass line with chord chops, drums and hard sync accents.", sidwave: FUNK_BASS },
-  fuer_elise: {
-    key: "fuer_elise",
-    title: "Für Elise",
-    description: "Play a compact SID arrangement of Beethoven's Bagatelle in A minor.",
-    sidwave: FUER_ELISE_SIDWAVE,
-  },
-};
+const EXAMPLE_PRESETS = new Map<string, typeof SIDWAVE_EXAMPLES[number]>(
+  SIDWAVE_EXAMPLES.map((entry) => [entry.name, entry]),
+);
 
 /** Source-level fixtures for compiler compatibility checks. */
-export function getMusicPresetSidwave(name: "chiptune_drive" | "ambient_filter" | "funk_bass"): string {
-  return MUSIC_PRESETS[name].sidwave;
-}
+export const getMusicPresetSidwave = readSidwaveExample;
+
+const presetInput = stringSchema({ minLength: 1, default: "chiptune_drive" });
+const presetSchema = { ...presetInput, jsonSchema: { ...presetInput.jsonSchema, enum: MUSIC_PRESET_NAMES } };
 
 const musicCompilePlayAnalyzeArgsSchema = objectSchema({
   description: "Compile a SIDWAVE score, play it, then record and analyze the audio output.",
@@ -231,16 +102,16 @@ const musicCompilePlayAnalyzeArgsSchema = objectSchema({
     configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     sidwave: optionalSchema(stringSchema({ description: "SIDWAVE source in YAML or JSON format.", minLength: 1 })),
     cpg: optionalSchema(stringSchema({ description: "Legacy CPG input format.", minLength: 1 })),
-    output: optionalSchema(stringSchema({ description: "Playback artifact format. PRG works on all backends; SID attachment playback requires C64U/U64 or U2.", enum: ["prg", "sid"], default: "prg" }), "prg"),
-    waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Delay between starting playback and beginning analysis capture (milliseconds).", minimum: 0, maximum: 5000 }), DEFAULT_PLAYBACK_WAIT_MS),
-    analysisDurationSeconds: optionalSchema(numberSchema({ description: "Audio capture length in seconds.", minimum: 0.5, maximum: 20 }), DEFAULT_ANALYSIS_DURATION_SECONDS),
-    expectedSidwave: optionalSchema(stringSchema({ description: "Optional expected SIDWAVE used to refine analysis comparisons.", minLength: 1 })),
-    verifySilenceBefore: optionalSchema(booleanSchema({ description: "Record a quiet baseline before playback (adds the silence duration). Default false.", default: false }), false),
-    verifySilenceAfter: optionalSchema(booleanSchema({ description: "Record after playback to confirm the voices were released (adds the silence duration). Default false.", default: false }), false),
-    silenceDurationSeconds: optionalSchema(numberSchema({ description: "Audio capture length used for silence verification.", minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
-    silenceRmsThreshold: optionalSchema(numberSchema({ description: "RMS threshold applied to silence verification captures.", minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
-    postSilenceWaitMs: optionalSchema(numberSchema({ description: "Delay between main analysis capture and the post-playback silence check (milliseconds).", minimum: 0, maximum: 5000 }), DEFAULT_POST_SILENCE_WAIT_MS),
-    silenceWaitMs: optionalSchema(numberSchema({ description: "Delay between silencing the SID and recording during pre/post checks (milliseconds).", minimum: 0, maximum: 5000 }), DEFAULT_SILENCE_WAIT_MS),
+    output: optionalSchema(stringSchema({ description: "PRG or Ultimate SID attachment.", enum: ["prg", "sid"], default: "prg" }), "prg"),
+    waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Capture delay in ms.", minimum: 0, maximum: 5000 }), DEFAULT_PLAYBACK_WAIT_MS),
+    analysisDurationSeconds: optionalSchema(numberSchema({ description: "Capture seconds.", minimum: 0.5, maximum: 20 }), DEFAULT_ANALYSIS_DURATION_SECONDS),
+    expectedSidwave: optionalSchema(stringSchema({ description: "Reference SIDWAVE.", minLength: 1 })),
+    verifySilenceBefore: optionalSchema(booleanSchema({ description: "Measure silence before playback.", default: false }), false),
+    verifySilenceAfter: optionalSchema(booleanSchema({ description: "Measure silence after playback.", default: false }), false),
+    silenceDurationSeconds: optionalSchema(numberSchema({ description: "Silence capture seconds.", minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
+    silenceRmsThreshold: optionalSchema(numberSchema({ description: "Silence RMS threshold.", minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
+    postSilenceWaitMs: optionalSchema(numberSchema({ description: "Post-capture delay in ms.", minimum: 0, maximum: 5000 }), DEFAULT_POST_SILENCE_WAIT_MS),
+    silenceWaitMs: optionalSchema(numberSchema({ description: "Delay before silence capture in ms.", minimum: 0, maximum: 5000 }), DEFAULT_SILENCE_WAIT_MS),
   },
   additionalProperties: false,
 });
@@ -249,34 +120,30 @@ const musicPlayPresetArgsSchema = objectSchema({
   description: "Play a built-in SID preset with optional backend switching and audio verification.",
   properties: {
     configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
-    preset: optionalSchema(stringSchema({
-      description: "Named SID preset to compile and play. Defaults to chiptune_drive.",
-      minLength: 1,
-      default: "chiptune_drive",
-    }), "chiptune_drive"),
+    preset: optionalSchema(presetSchema, "chiptune_drive"),
     platforms: optionalSchema(arraySchema(stringSchema({
       description: "Backends to target in sequence.",
       enum: ["vice", "c64u", "u2"],
       minLength: 1,
     }))),
     verify: optionalSchema(booleanSchema({
-      description: "Opt in to capturing and analyzing the audio after playback starts (adds the wait and the analysis duration): native streaming on C64U/U64, host audio input on U2/VICE (PortAudio required). Default false.",
+      description: "Verify audio after playback starts.",
       default: false,
     }), false),
     analysisDurationSeconds: optionalSchema(numberSchema({
-      description: "Length of the verification recording on analyzable backends.",
+      description: "Verification seconds.",
       minimum: 0.5,
       maximum: 20,
       default: DEFAULT_PRESET_ANALYSIS_DURATION_SECONDS,
     }), DEFAULT_PRESET_ANALYSIS_DURATION_SECONDS),
     waitBeforeCaptureMs: optionalSchema(numberSchema({
-      description: "Delay between starting playback and beginning verification capture.",
+      description: "Verification delay in ms.",
       minimum: 0,
       maximum: 5000,
       default: DEFAULT_PRESET_WAIT_MS,
     }), DEFAULT_PRESET_WAIT_MS),
     restoreActiveBackend: optionalSchema(booleanSchema({
-      description: "Restore the backend that was active before the workflow started.",
+      description: "Return to the starting backend.",
       default: true,
     }), true),
   },
@@ -371,12 +238,18 @@ function uniquePresetBackends(backends: readonly PresetBackend[]): PresetBackend
 function resolveMusicPreset(preset?: string): ResolvedMusicPreset {
   const requestedKey = preset?.trim().toLowerCase() || "chiptune_drive";
   const normalizedKey = requestedKey === LEGACY_PRESET_ALIAS ? "fuer_elise" : requestedKey;
-  const definition = MUSIC_PRESETS[normalizedKey as MusicPresetName];
+  const example = EXAMPLE_PRESETS.get(normalizedKey);
+  const definition: MusicPresetDefinition | undefined = example ? {
+    key: example.name, title: example.title, description: example.style, sidwave: readSidwaveExample(example.name),
+  } : normalizedKey === "fuer_elise" ? {
+    key: "fuer_elise", title: "Für Elise", description: "A compact SID arrangement of Beethoven's Bagatelle in A minor.",
+    sidwave: FUER_ELISE_SIDWAVE,
+  } : undefined;
   if (!definition) {
     throw new ToolExecutionError("Unknown music preset", {
       details: {
         preset,
-        supportedPresets: Object.keys(MUSIC_PRESETS),
+        supportedPresets: MUSIC_PRESET_NAMES,
       },
     });
   }
@@ -491,6 +364,9 @@ export const tools: ToolDefinition[] = [
         const parsed = musicPlayPresetArgsSchema.parse(args ?? {});
         const resolvedPreset = resolveMusicPreset(parsed.preset);
         const preset = resolvedPreset.definition;
+        if (preset.key === "wall_of_sid" && !parsed.configure) {
+          throw new ToolExecutionError("wall_of_sid requires configure: true and a fitted SID in socket 1.");
+        }
         const startingBackend = await context.client.getActiveBackendType();
         const availableBackends = uniquePresetBackends(
           canonicalPresetBackends().filter((backend) => context.client.getAvailableBackends().includes(backend)),
@@ -513,7 +389,7 @@ export const tools: ToolDefinition[] = [
         }
 
         const document = parseSidwave(preset.sidwave);
-        const compiled = compileSidwaveToPrg(document);
+        const compiled = compileSidwaveToPrg(document, { loop: preset.key !== "title_fanfare" });
         const analyzer = resolveAnalyzer(context);
         const verify = parsed.verify === true;
         const waitBeforeCaptureMs = parsed.waitBeforeCaptureMs ?? DEFAULT_PRESET_WAIT_MS;

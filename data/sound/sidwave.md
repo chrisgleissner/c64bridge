@@ -96,6 +96,7 @@ timeline:
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
 | `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
+| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
@@ -192,7 +193,7 @@ separately.
 
 The legacy shape with a `song: { title, author, tempo, mode, length_bars, global_fx }` block next to `voices` and `timeline` is also accepted.
 
-Time is 4/4: a bar has four beats. The player runs `speed` times per video frame (50.1245 Hz on PAL, 59.8262 Hz on NTSC). Each onset is rounded to the nearest player call using `beat × 60 / tempo × frame rate × speed`. Individual notes can differ by a call as a result of rounding.
+A bar lasts four beats by default. A score with `meter: 3` has three beats to a bar, including durations specified in bars. The player runs `speed` times per video frame (50.1245 Hz on PAL, 59.8262 Hz on NTSC). Each onset is rounded to the nearest player call using `beat × 60 / tempo × frame rate × speed`. Individual notes can differ by a call as a result of rounding.
 
 ## Voices
 
@@ -371,7 +372,7 @@ List the SID windows in playback order, or use a layout from [Owner configuratio
 | `ultisid8+socket1` | The eight bases above, then `$D440` |
 | `ultisid8+sockets` | The eight bases above, then `$D440 $D460` |
 
-The layouts assign IDs `sid1` through `sid10` in list order. Numeric voice IDs address groups of three, so `v4` is channel 1 of the second SID and `v30` is channel 3 of the tenth. Set `sid` and `channel` instead to select a named chip and a channel. The voice ID defaults to its physical slot (1–30). You can supply an explicit `id` to label that voice in the timeline. Ring and sync use the preceding oscillator on the same chip, with channel 3 as the source for channel 1.
+The layouts assign IDs `sid1` through `sid10` in list order. Use `overrides: { sid1: { volume: 9, pan: "Left 5" } }` inside a layout to set mixer preferences without changing its addresses. Numeric voice IDs address groups of three, so `v4` is channel 1 of the second SID and `v30` is channel 3 of the tenth. Set `sid` and `channel` instead to select a named chip and a channel. The voice ID defaults to its physical slot (1–30). You can supply an explicit `id` to label that voice in the timeline. Ring and sync use the preceding oscillator on the same chip, with channel 3 as the source for channel 1.
 
 ```yaml
 sidwave: 1.2
@@ -418,7 +419,7 @@ VICE playback automatically sets and restores `SidStereo` and `Sid2AddressStart`
 Declare a destination voice with `echo: { voice: 1, delay: 6, volume: 0.4, detune: -7 }` or `unison: { voice: 1, detune: 8 }`. The destination takes its notes and instruments from the named source voice. Put the source in the timeline. The copy follows that source automatically.
 
 - Echo shifts note onsets and releases by `delay` player calls and scales sustain by `volume` (0–1). The initial attack still uses the source attack and decay. Echoes that run beyond the end of the song are clipped. Place the echo on another SID and pan it separately on the mixer to spread it in stereo.
-- Unison starts on the same call on another SID. Detune is in cents (±100), defaults to +5 for unison and 0 for echo, and also applies to arpeggios, wavetable pitch changes and glides. Doubling an oscillator at the same pitch does not produce a predictable increase in level. [Ultimate multi-SID measurements](../ultimate/multisid.md)
+- Unison starts on the same call on another SID. Detune is in cents (±100), defaults to +5 for unison and 0 for echo, and also applies to arpeggios, wavetable pitch changes and glides. Doubling an oscillator at the same pitch does not produce a predictable increase in level. To tune a separately scored voice, give it `detune` in cents (±100). Two independently programmed oscillators can be detuned on the same SID. [Ultimate multi-SID measurements](../ultimate/multisid.md)
 
 ### Chord arpeggios and pitch bends
 
@@ -464,9 +465,18 @@ One active sample SID typically uses about 90 CPU cycles per timer tick includin
 
 ### Not supported
 
-Time signatures other than 4/4, per-note velocity, multiple subtunes, sample data loaded from external files, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than 3/4 and 4/4, per-note velocity, multiple subtunes, sample data loaded from external files, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
+
+## Playable examples
+
+Open [the composition index](c64://sound/examples) and use the names with `c64_sound` `play_preset`. Each YAML has a technique and form guide in its header.
+
+- Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). These three scores keep their pinned SIDWAVE 1.1 output.
+- Use [acid bass](c64://sound/examples/acid_line) for filter accents, [the ballad](c64://sound/examples/arp_ballad) for chord arps and PWM, [drum and bass](c64://sound/examples/drum_and_bass) for multispeed breakbeats, and [the digi groove](c64://sound/examples/digi_groove) for CIA2 samples.
+- Use [metal](c64://sound/examples/metal_sync) for sync, ring and bends, [the chamber waltz](c64://sound/examples/chamber_waltz) for 3/4 counterpoint, and [the fanfare](c64://sound/examples/title_fanfare) for filtered brass and a held cadence.
+- Use [stereo echo](c64://sound/examples/stereo_echo) for panning, [the orchestra](c64://sound/examples/ultisid_orchestra) for 24 voices, and [the nine-SID finale](c64://sound/examples/wall_of_sid) for the build to 27 voices. The last piece needs `configure: true` and a fitted SID in socket 1.
 
 ## Authoring and Validation
 

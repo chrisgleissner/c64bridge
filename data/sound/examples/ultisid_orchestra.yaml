@@ -1,0 +1,539 @@
+# Chip orchestra | 100 BPM | D minor | 8 SIDs, 24 voices
+# Techniques: Detuned unison strings, two spatial echo leads, bass, harp arpeggios and a six-part kit; split UltiSID stereo.
+# Learn: Bring the orchestra in by desks, pull back for the reed answer, then let both winds and percussion meet in the return
+sidwave: 1.2
+title: An Atlas of Wind
+tempo: 100
+mode: PAL
+cpu: "turbo"
+sids: {"layout": "ultisid8", "overrides": {"sid1": {"volume": 9, "pan": "Left 5"}, "sid2": {"volume": 9}, "sid3": {"volume": 7}, "sid4": {"volume": 7}, "sid5": {"volume": 9, "pan": "Right 5"}, "sid6": {"volume": 9}, "sid7": {"volume": 7}, "sid8": {"volume": 7}}}
+instruments:
+  wind: {"waveform": "pulse", "adsr": [2, 3, 8, 5], "pulse_width": 1310, "vibrato": {"depth": 0.23, "rate": 4, "delay": 12}}
+  reed: {"waveform": "tri", "adsr": [2, 4, 7, 4], "vibrato": {"depth": 0.19, "rate": 3, "delay": 10}}
+  silk: {"waveform": "pulse", "adsr": [6, 4, 7, 8], "pulse_width": 1550, "pulsetable": {"steps": [{"set": 1550}, {"add": 8, "frames": 47}, {"add": -8, "frames": 47}], "loop": 1}}
+  low: {"waveform": "saw", "adsr": [1, 5, 8, 4]}
+  bassoon: {"waveform": "tri", "adsr": [3, 4, 6, 5]}
+  harp: {"waveform": "pulse", "adsr": [0, 5, 4, 4], "pulse_width": 975}
+  bow: {"waveform": "tri", "adsr": [4, 4, 6, 5]}
+  kettle: {"waveform": "tri", "adsr": [0, 4, 7, 4], "wavetable": [{"wave": "noise", "note": "D5"}, {"wave": "tri", "note": "+7"}, {"note": "+0", "frames": 6}]}
+voices:
+  - id: 1
+    name: "First wind call"
+    instrument: "wind"
+    patterns:
+      Dawn:
+        length: 1
+        groove:
+          ["A4", "-", "C5", "D5", "-", "F5", "E5", "D5"]
+      Wind:
+        length: 1
+        groove:
+          ["A4", "C5", "D5", "~", "F5", "E5", "D5", "~", "A4", "C5", "F5", "~", "E5", "D5", "C5", "-"]
+      Cross:
+        length: 1
+        groove:
+          ["Bb4", "D5", "G5", "~", "F5", "D5", "Bb4", "-", "G5", "E5", "D5", "~", "C#5", "E5", "A5", "-"]
+      Return:
+        length: 1
+        groove:
+          ["D5", "F5", "A5", "~", "G5", "A5", "C6", "~", "A5", "F5", "D5", "~", "E5", "G5", "C#5", "-"]
+      Harbor:
+        length: 1
+        groove:
+          ["A5", "F5", "E5", "D5", "D5", "~", "~", "~"]
+  - id: 2
+    name: "String desk high L"
+    instrument: "silk"
+    patterns:
+      Dawn:
+        length: 4
+        groove:
+          ["A4", "F4"]
+      Wind:
+        length: 4
+        groove:
+          ["A4", "F4", "C4", "G4"]
+      Cross:
+        length: 4
+        groove:
+          ["D4", "F4", "Bb4", "E4"]
+      Return:
+        length: 4
+        groove:
+          ["A4", "C4", "F4", "E4"]
+      Harbor:
+        length: 4
+        groove:
+          ["A4", "A4"]
+  - id: 3
+    name: "Contrabass"
+    instrument: "low"
+    patterns:
+      Dawn:
+        length: 1
+        groove:
+          ["D2", "~", "A2", "~", "Bb2", "~", "F2", "Bb3"]
+      Wind:
+        length: 1
+        groove:
+          ["D2", "~", "A2", "~", "Bb2", "~", "F2", "Bb3", "F2", "~", "C2", "~", "C2", "~", "G2", "C3"]
+      Cross:
+        length: 1
+        groove:
+          ["G2", "~", "D2", "~", "Bb2", "~", "F2", "Bb3", "E2", "~", "Bb2", "~", "A2", "~", "E2", "A3"]
+      Return:
+        length: 1
+        groove:
+          ["D2", "~", "A2", "~", "F2", "~", "C2", "F3", "Bb2", "~", "F2", "~", "A2", "~", "E2", "A3"]
+      Harbor:
+        length: 1
+        groove:
+          ["D2", "~", "A2", "~", "D2", "~", "A2", "D3"]
+  - id: 4
+    name: "Second wind call"
+    instrument: "reed"
+    patterns:
+      Dawn:
+        length: 1
+        groove:
+          ["-", "-", "-", "-", "F4", "A4", "D5", "~"]
+      Wind:
+        length: 1
+        groove:
+          ["F4", "-", "A4", "C5", "D5", "~", "A4", "-", "F4", "A4", "C5", "E5", "G4", "E4", "C5", "-"]
+      Cross:
+        length: 1
+        groove:
+          ["D5", "Bb4", "G4", "~", "F4", "Bb4", "D5", "~", "G4", "Bb4", "E5", "D5", "C#5", "Bb4", "G4", "E4"]
+      Return:
+        length: 1
+        groove:
+          ["A4", "D5", "F5", "~", "C5", "-", "A4", "F4", "Bb4", "D5", "F5", "~", "E5", "C#5", "Bb4", "-"]
+      Harbor:
+        length: 1
+        groove:
+          ["F5", "E5", "C5", "A4", "A4", "~", "~", "~"]
+  - id: 5
+    name: "String desk middle L"
+    instrument: "silk"
+    patterns:
+      Dawn:
+        length: 4
+        groove:
+          ["F4", "D4"]
+      Wind:
+        length: 4
+        groove:
+          ["F4", "D4", "A4", "E4"]
+      Cross:
+        length: 4
+        groove:
+          ["Bb4", "D4", "G4", "C#4"]
+      Return:
+        length: 4
+        groove:
+          ["F4", "A4", "D4", "C#4"]
+      Harbor:
+        length: 4
+        groove:
+          ["F4", "F4"]
+  - id: 6
+    name: "Harp"
+    instrument: "harp"
+    patterns:
+      Dawn:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "speed": 4}
+          - {"chord": "Bbmaj7", "speed": 4}
+      Wind:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "speed": 4}
+          - {"chord": "Bbmaj7", "speed": 4}
+          - {"chord": "Fmaj7", "speed": 4}
+          - {"chord": "C", "speed": 4}
+      Cross:
+        length: 4
+        groove:
+          - {"chord": "Gm7", "speed": 4}
+          - {"chord": "Bbmaj7", "speed": 4}
+          - {"chord": "Em7b5", "speed": 4}
+          - {"chord": "A7", "speed": 4}
+      Return:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "speed": 4}
+          - {"chord": "Fmaj7", "speed": 4}
+          - {"chord": "Bbmaj7", "speed": 4}
+          - {"chord": "A7", "speed": 4}
+      Harbor:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "speed": 4}
+          - {"chord": "Dm", "speed": 4}
+  - id: 7
+    name: "Violin reply"
+    instrument: "bow"
+    patterns:
+      Dawn:
+        length: 1
+        groove:
+          ["-", "F4", "A4", "D5", "F4", "D4", "Bb4", "-"]
+      Wind:
+        length: 1
+        groove:
+          ["-", "F4", "A4", "D5", "F4", "D4", "Bb4", "-", "-", "A4", "C4", "F5", "G4", "E4", "C4", "-"]
+      Cross:
+        length: 1
+        groove:
+          ["-", "Bb4", "D4", "G5", "F4", "D4", "Bb4", "-", "-", "G4", "Bb4", "E5", "E4", "C#4", "A4", "-"]
+      Return:
+        length: 1
+        groove:
+          ["-", "F4", "A4", "D5", "C4", "A4", "F4", "-", "-", "D4", "F4", "Bb5", "E4", "C#4", "A4", "-"]
+      Harbor:
+        length: 1
+        groove:
+          ["-", "F4", "A4", "D5", "A4", "F4", "D4", "-"]
+  - id: 8
+    name: "String desk low L"
+    instrument: "silk"
+    patterns:
+      Dawn:
+        length: 4
+        groove:
+          ["D4", "Bb4"]
+      Wind:
+        length: 4
+        groove:
+          ["D4", "Bb4", "F4", "C4"]
+      Cross:
+        length: 4
+        groove:
+          ["G4", "Bb4", "E4", "A4"]
+      Return:
+        length: 4
+        groove:
+          ["D4", "F4", "Bb4", "A4"]
+      Harbor:
+        length: 4
+        groove:
+          ["D4", "D4"]
+  - id: 9
+    name: "Broken octaves"
+    instrument: "harp"
+    patterns:
+      Dawn:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Bbmaj7", "arp": "0,7,12,7", "speed": 3}
+      Wind:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Bbmaj7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Fmaj7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "C", "arp": "0,7,12,7", "speed": 3}
+      Cross:
+        length: 4
+        groove:
+          - {"chord": "Gm7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Bbmaj7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Em7b5", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "A7", "arp": "0,7,12,7", "speed": 3}
+      Return:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Fmaj7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Bbmaj7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "A7", "arp": "0,7,12,7", "speed": 3}
+      Harbor:
+        length: 4
+        groove:
+          - {"chord": "Dm7", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Dm", "arp": "0,7,12,7", "speed": 3}
+  - id: 10
+    name: "Kick"
+    patterns:
+      Dawn:
+        length: 0.25
+        groove:
+          ["D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-"]
+      Wind:
+        length: 0.25
+        groove:
+          ["D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "D3@lib:kick"]
+      Cross:
+        length: 0.25
+        groove:
+          ["D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "-", "-", "D3@lib:kick", "D3@lib:kick"]
+      Return:
+        length: 0.25
+        groove:
+          ["D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "-", "D3@lib:kick", "D3@lib:kick", "-", "-", "-", "D3@lib:kick", "-", "D3@lib:kick", "D3@lib:kick"]
+      Harbor:
+        length: 0.25
+        groove:
+          ["D3@lib:kick", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+  - id: 11
+    name: "Snare"
+    patterns:
+      Dawn:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-"]
+      Wind:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare"]
+      Cross:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare"]
+      Return:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare", "-", "-", "D3@lib:snare"]
+      Harbor:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@lib:snare", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+  - id: 12
+    name: "Hi hat"
+    patterns:
+      Dawn:
+        length: 0.25
+        groove:
+          ["-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-"]
+      Wind:
+        length: 0.25
+        groove:
+          ["-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat"]
+      Cross:
+        length: 0.25
+        groove:
+          ["-", "-", "D3@lib:hat", "-", "-", "-", "-", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "-", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "-", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "-", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "D3@lib:hat"]
+      Return:
+        length: 0.25
+        groove:
+          ["-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat", "D3@lib:hat"]
+      Harbor:
+        length: 0.25
+        groove:
+          ["-", "-", "D3@lib:hat", "-", "-", "-", "D3@lib:hat", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+  - id: 13
+    name: "First wind echo R"
+    echo: {"voice": 1, "delay": 9, "volume": 0.45, "detune": -5}
+  - id: 14
+    name: "String desk high R"
+    unison: {"voice": 2, "detune": 6}
+  - id: 15
+    name: "Cello answer"
+    instrument: "bassoon"
+    patterns:
+      Dawn:
+        length: 1
+        groove:
+          ["D3", "~", "F3", "~", "Bb3", "~", "D3", "Bb4"]
+      Wind:
+        length: 1
+        groove:
+          ["D3", "~", "F3", "~", "Bb3", "~", "D3", "Bb4", "F3", "~", "A3", "~", "C3", "~", "E3", "C4"]
+      Cross:
+        length: 1
+        groove:
+          ["G3", "~", "Bb3", "~", "Bb3", "~", "D3", "Bb4", "E3", "~", "G3", "~", "A3", "~", "C#3", "A4"]
+      Return:
+        length: 1
+        groove:
+          ["D3", "~", "F3", "~", "F3", "~", "A3", "F4", "Bb3", "~", "D3", "~", "A3", "~", "C#3", "A4"]
+      Harbor:
+        length: 1
+        groove:
+          ["D3", "~", "F3", "~", "D3", "~", "F3", "D4"]
+  - id: 16
+    name: "Second wind echo R"
+    echo: {"voice": 4, "delay": 13, "volume": 0.5, "detune": 5}
+  - id: 17
+    name: "String desk middle R"
+    unison: {"voice": 5, "detune": -8}
+  - id: 18
+    name: "High harp answer"
+    instrument: "harp"
+    patterns:
+      Dawn:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+      Wind:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Fmaj7", "speed": 4}
+          - "-"
+          - {"chord": "C", "speed": 4}
+      Cross:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Gm7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Em7b5", "speed": 4}
+          - "-"
+          - {"chord": "A7", "speed": 4}
+      Return:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm7", "speed": 4}
+          - "-"
+          - {"chord": "Fmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "A7", "speed": 4}
+      Harbor:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm7", "speed": 4}
+          - "-"
+          - {"chord": "Dm", "speed": 4}
+  - id: 19
+    name: "Viola answer"
+    instrument: "bow"
+    patterns:
+      Dawn:
+        length: 1
+        groove:
+          ["-", "D3", "F3", "A4", "D3", "Bb3", "F3", "-"]
+      Wind:
+        length: 1
+        groove:
+          ["-", "D3", "F3", "A4", "D3", "Bb3", "F3", "-", "-", "F3", "A3", "C4", "E3", "C3", "G3", "-"]
+      Cross:
+        length: 1
+        groove:
+          ["-", "G3", "Bb3", "D4", "D3", "Bb3", "F3", "-", "-", "E3", "G3", "Bb4", "C#3", "A3", "E3", "-"]
+      Return:
+        length: 1
+        groove:
+          ["-", "D3", "F3", "A4", "A3", "F3", "C3", "-", "-", "Bb3", "D3", "F4", "C#3", "A3", "E3", "-"]
+      Harbor:
+        length: 1
+        groove:
+          ["-", "D3", "F3", "A4", "F3", "D3", "A3", "-"]
+  - id: 20
+    name: "String desk low R"
+    unison: {"voice": 8, "detune": 9}
+  - id: 21
+    name: "Organ pedal"
+    instrument: "bassoon"
+    patterns:
+      Dawn:
+        length: 4
+        groove:
+          ["A2", "F2"]
+      Wind:
+        length: 4
+        groove:
+          ["A2", "F2", "C2", "G2"]
+      Cross:
+        length: 4
+        groove:
+          ["D2", "F2", "Bb2", "E2"]
+      Return:
+        length: 4
+        groove:
+          ["A2", "C2", "F2", "E2"]
+      Harbor:
+        length: 4
+        groove:
+          ["A2", "A2"]
+  - id: 22
+    name: "Timpani"
+    patterns:
+      Dawn:
+        length: 0.25
+        groove:
+          ["D3@kettle", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+      Wind:
+        length: 0.25
+        groove:
+          ["D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "D3@kettle"]
+      Cross:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "D3@kettle"]
+      Return:
+        length: 0.25
+        groove:
+          ["D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "-", "-", "-", "-", "-", "D3@kettle", "-", "-", "-", "D3@kettle", "-", "-", "D3@kettle"]
+      Harbor:
+        length: 0.25
+        groove:
+          ["D3@kettle", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+  - id: 23
+    name: "Clap"
+    patterns:
+      Dawn:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-"]
+      Wind:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "D3@lib:clap"]
+      Cross:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "D3@lib:clap"]
+      Return:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "D3@lib:clap"]
+      Harbor:
+        length: 0.25
+        groove:
+          ["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:clap", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+  - id: 24
+    name: "Crash"
+    patterns:
+      Dawn:
+        length: 0.25
+        groove:
+          ["D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+      Wind:
+        length: 0.25
+        groove:
+          ["D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "D3@lib:crash"]
+      Cross:
+        length: 0.25
+        groove:
+          ["D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash"]
+      Return:
+        length: 0.25
+        groove:
+          ["D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "D3@lib:crash", "-", "-", "-", "-", "-", "D3@lib:crash", "D3@lib:crash"]
+      Harbor:
+        length: 0.25
+        groove:
+          ["D3@lib:crash", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+timeline:
+  - {"section": "First light", "bars": 2, "layers": {"v1": "Dawn", "v2": "Dawn", "v3": "Dawn", "v5": "Dawn", "v6": "Dawn", "v8": "Dawn", "v15": "Dawn", "v18": "Dawn", "v19": "Dawn", "v21": "Dawn", "v22": "Dawn", "v24": "Dawn"}}
+  - {"section": "The wind gathers", "bars": 4, "layers": {"v1": "Wind", "v2": "Wind", "v3": "Wind", "v4": "Wind", "v5": "Wind", "v6": "Wind", "v7": "Wind", "v8": "Wind", "v9": "Wind", "v10": "Wind", "v11": "Wind", "v12": "Wind", "v15": "Wind", "v18": "Wind", "v19": "Wind", "v21": "Wind", "v22": "Wind"}}
+  - {"section": "Crosswind", "bars": 4, "layers": {"v2": "Cross", "v3": "Cross", "v4": "Cross", "v5": "Cross", "v7": "Cross", "v8": "Cross", "v10": "Cross", "v12": "Cross", "v15": "Cross", "v18": "Cross", "v19": "Cross", "v21": "Cross", "v22": "Cross", "v23": "Cross", "v24": "Cross"}}
+  - {"section": "The full map", "bars": 4, "layers": {"v1": "Return", "v2": "Return", "v3": "Return", "v4": "Return", "v5": "Return", "v6": "Return", "v7": "Return", "v8": "Return", "v9": "Return", "v10": "Return", "v11": "Return", "v12": "Return", "v15": "Return", "v18": "Return", "v19": "Return", "v21": "Return", "v22": "Return", "v23": "Return", "v24": "Return"}}
+  - {"section": "Safe harbor", "bars": 2, "layers": {"v1": "Harbor–", "v2": "Harbor–", "v3": "Harbor–", "v4": "Harbor–", "v5": "Harbor–", "v6": "Harbor–", "v8": "Harbor–", "v10": "Harbor–", "v11": "Harbor–", "v12": "Harbor–", "v15": "Harbor–", "v19": "Harbor–", "v21": "Harbor–", "v22": "Harbor–", "v23": "Harbor–", "v24": "Harbor–"}}

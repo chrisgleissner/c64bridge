@@ -1,3 +1,5 @@
+import { SIDWAVE_EXAMPLES, SIDWAVE_EXAMPLES_URI } from "../sidwaveExamples.js";
+
 export const RESOURCE_URIS = {
   guide: {
     index: "c64://guide/index",
@@ -31,6 +33,7 @@ export const RESOURCE_URIS = {
     spec6510: "c64://assembly/6510-spec",
   },
   sound: {
+    examples: SIDWAVE_EXAMPLES_URI,
     sid: {
       spec: "c64://sound/sid/spec",
       fileFormat: "c64://sound/sid/file-format",
@@ -101,6 +104,8 @@ export const CANONICAL_KNOWLEDGE_RESOURCE_URIS: readonly string[] = Object.freez
   RESOURCE_URIS.assembly.spec6510,
   RESOURCE_URIS.sound.sid.spec,
   RESOURCE_URIS.sound.sidwave.spec,
+  RESOURCE_URIS.sound.examples,
+  ...SIDWAVE_EXAMPLES.map(({ name }) => `${SIDWAVE_EXAMPLES_URI}/${name}`),
   RESOURCE_URIS.sound.sid.fileFormat,
   RESOURCE_URIS.sound.sid.bestPractices,
   RESOURCE_URIS.graphics.vic.spec,

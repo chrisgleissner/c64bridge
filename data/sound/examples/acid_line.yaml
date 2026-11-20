@@ -1,0 +1,174 @@
+# Acid house | 128 BPM | D minor | 1 SID
+# Techniques: Per-note resonant low-pass filter tables, resonance accents, bends and four-on-the-floor kick.
+# Learn: Keep the groove steady while D minor opens to Bb and G minor, then sharpen the A pedal
+sidwave: 1.2
+title: Pressure Glass
+tempo: 128
+mode: PAL
+instruments:
+  core: {"waveform": "saw", "adsr": [0, 5, 9, 3], "filtertable": [{"cutoff": 1380, "resonance": 7, "type": "lowpass"}, {"add": -69, "frames": 12}]}
+  spark: {"waveform": "saw", "adsr": [0, 4, 12, 3], "filtertable": [{"cutoff": 1950, "resonance": 12, "type": "lowpass"}, {"add": -85, "frames": 16}]}
+  reed: {"waveform": "triangle", "adsr": [3, 2, 4, 5]}
+voices:
+  - id: 1
+    name: "Acid line"
+    instrument: "core"
+    patterns:
+      Intro:
+        length: 0.5
+        groove:
+          ["D2", "-", "A2", "D3", "-", "C3", "A2", "-", "D2", "D2", "-", "F2", "Ab2", "A2", "-", "C3"]
+      A:
+        length: 0.5
+        groove:
+          - "D2"
+          - "-"
+          - "D2"
+          - "F2"
+          - "A2@spark"
+          - "-"
+          - {"note": "D3", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "C3@spark"
+          - "D2"
+          - "-"
+          - {"note": "A2", "bend": {"to": 2, "frames": 4}, "inst": "spark"}
+          - "C3"
+          - "F2@spark"
+          - "-"
+          - {"note": "E2", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "C2@spark"
+          - "Bb1"
+          - "-"
+          - {"note": "F2", "bend": {"to": 2, "frames": 4}, "inst": "spark"}
+          - "Bb2"
+          - "A2@spark"
+          - "-"
+          - {"note": "F2", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "E2@spark"
+          - "A1"
+          - "A2"
+          - "-"
+          - "C#3"
+          - "G2@spark"
+          - "-"
+          - {"note": "E2", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "C#2@spark"
+      B:
+        length: 0.5
+        groove:
+          - "G2"
+          - "-"
+          - {"note": "D3", "bend": {"to": 2, "frames": 4}, "inst": "spark"}
+          - "-"
+          - "G3@spark"
+          - "F3"
+          - {"note": "D3", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "-"
+          - "Bb1"
+          - "F2"
+          - "-"
+          - "A2"
+          - "Bb2@spark"
+          - "D3"
+          - "-"
+          - "F2@spark"
+          - "D2"
+          - "A2"
+          - "-"
+          - "F3"
+          - "E3@spark"
+          - "-"
+          - {"note": "C3", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "A2@spark"
+          - "A1"
+          - "-"
+          - {"note": "E2", "bend": {"to": 2, "frames": 4}, "inst": "spark"}
+          - "G2"
+          - "A2@spark"
+          - "-"
+          - "C#3"
+          - "E3@spark"
+      Recap:
+        length: 0.5
+        groove:
+          - "D2"
+          - "D3"
+          - "-"
+          - "F2"
+          - "A2@spark"
+          - "-"
+          - {"note": "C3", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "D3@spark"
+          - "Bb1"
+          - "-"
+          - {"note": "F2", "bend": {"to": 2, "frames": 4}, "inst": "spark"}
+          - "A2"
+          - "D3@spark"
+          - "-"
+          - {"note": "C3", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "A2@spark"
+          - "G2"
+          - "D3"
+          - "-"
+          - "F3"
+          - "G3@spark"
+          - "-"
+          - "Bb2"
+          - "A2@spark"
+          - "A1"
+          - "-"
+          - {"note": "A2", "bend": {"to": 2, "frames": 4}, "inst": "spark"}
+          - "C#3"
+          - "E3@spark"
+          - "-"
+          - {"note": "A2", "bend": {"to": -1, "frames": 4}, "inst": "spark"}
+          - "C#2@spark"
+      Exit:
+        length: 1
+        groove:
+          ["D2", "A2", "F2", "D2", "D2", "~", "-", "-"]
+  - id: 2
+    name: "Four on the floor"
+    patterns:
+      Intro:
+        length: 0.5
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:kick", "-"]
+      A:
+        length: 0.5
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:snare"]
+      Break:
+        length: 0.5
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:snare", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat"]
+      Exit:
+        length: 0.5
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat"]
+  - id: 3
+    name: "Bleached skyline"
+    instrument: "reed"
+    patterns:
+      A:
+        length: 1
+        groove:
+          ["-", "-", "A4", "C5", "-", "-", "-", "D5", "F5", "~", "-", "-", "E5", "C#5", "-", "-"]
+      B:
+        length: 1
+        groove:
+          ["Bb4", "D5", "F5", "-", "D5", "-", "A4", "-", "F5", "E5", "D5", "~", "-", "G5", "E5", "-"]
+      Recap:
+        length: 1
+        groove:
+          ["A4", "-", "D5", "C5", "-", "F4", "A4", "D5", "Bb4", "-", "D5", "-", "E5", "G5", "C#5", "-"]
+      Exit:
+        length: 1
+        groove:
+          ["F5", "E5", "D5", "~", "A4", "D5", "~", "~"]
+timeline:
+  - {"section": "Ignition", "bars": 2, "layers": {"v1": "Intro", "v2": "Intro"}}
+  - {"section": "Pressure rises", "bars": 4, "layers": {"v1": "A", "v2": "A", "v3": "A"}}
+  - {"section": "Glass wall", "bars": 4, "layers": {"v1": "B", "v2": "Break", "v3": "B"}}
+  - {"section": "Shards and return", "bars": 4, "layers": {"v1": "Recap", "v2": "A", "v3": "Recap"}}
+  - {"section": "Exhale", "bars": 2, "layers": {"v1": "Exit–", "v2": "Exit–", "v3": "Exit–"}}

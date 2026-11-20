@@ -421,9 +421,10 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
 function arrangeDoubles(
   doc: ParsedSidwave, voices: Arrangement["voices"], pool: ReturnType<typeof createInstrumentPool>, timing: Arrangement,
 ): number[] | undefined {
-  if (!doc.voices.some((voice) => voice.echo || voice.unison)) return;
+  if (!doc.voices.some((voice) => voice.echo || voice.unison || voice.detune)) return;
   const byId = new Map(doc.voices.map((voice) => [voice.id, voice]));
   const tuning = voices.map(() => 0);
+  for (const voice of doc.voices) tuning[doc.voiceSlots.get(voice.id)!] = voice.detune ?? 0;
   const visiting = new Set<number>();
   const resolved = new Set<number>();
   const resolve = (voice: SidwaveVoice) => {
@@ -496,7 +497,8 @@ function arrangeChip(
   const frameAt = (beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS);
   const maxMidi = maxSidwaveMidi(system);
   const totalBars = doc.song.length_bars;
-  const totalFrames = frameAt(totalBars * 4);
+  const beatsPerBar = doc.song.meter;
+  const totalFrames = frameAt(totalBars * beatsPerBar);
 
   const gfx = doc.song.global_fx as Record<string, any>;
   const fenv = gfx.filter_env as Record<string, any> | undefined;
@@ -507,7 +509,7 @@ function arrangeChip(
   const notes: ArrangedNote[][] = [[], [], []];
   const globals: GlobalEvent[] = [];
   if (sidMod) {
-    const unitFrames = { steps: framesPerBeat, beats: framesPerBeat, bars: 4 * framesPerBeat, frames: 1 }[sidMod.unit];
+    const unitFrames = { steps: framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: 1 }[sidMod.unit];
     const count = Math.max(1, Math.min(0xffff, Math.round(sidMod.amount * unitFrames)));
     globals.push({ frame: 0, kind: "filtermod", step: Math.round(sidMod.sweep * 32 / count), count });
   }
@@ -519,7 +521,7 @@ function arrangeChip(
   for (let bar = 0, i = 0; bar < totalBars; i += 1) {
     const s = doc.timeline[i % doc.timeline.length]!;
     const bars = Math.min(s.bars, totalBars - bar);
-    sections.push({ index: i % doc.timeline.length, startBeat: bar * 4, endBeat: (bar + bars) * 4 });
+    sections.push({ index: i % doc.timeline.length, startBeat: bar * beatsPerBar, endBeat: (bar + bars) * beatsPerBar });
     bar += bars;
   }
 
@@ -559,7 +561,7 @@ function arrangeChip(
         if (cycleStart >= sec.endBeat - BEAT_EPS) break;
         const tr = transpositions[c % transpositions.length]! + parsed.transpose;
         if (filterMod) {
-          const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: 4 * framesPerBeat, frames: 1 }[filterMod.unit];
+          const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: 1 }[filterMod.unit];
           const count = Math.max(1, Math.min(0xffff, Math.round(filterMod.amount * unitFrames)));
           // Offset and step are in cutoff x 32 units and signed 24-bit in the player, so the full ±2047 range ramps smoothly.
           const step = Math.round((filterMod.sweep * 32) / count);
@@ -670,7 +672,8 @@ function arrangeChip(
           const legato = (entry.legato ?? namedInstrument?.legato) && previous?.end === f0;
           const sounding = legato ? instruments[previous!.inst]! : inst;
           if (modern) {
-            checkDetunedPitch(midi, sounding, 0, system, patPath);
+            checkDetunedPitch(midi, sounding, voice.detune ?? 0, system, patPath);
+            if (glideFrom !== undefined && voice.detune) checkDetunedPitch(glideFrom, sounding, voice.detune, system, patPath);
             if (glideFrom !== undefined && sounding.wavetable?.some((step) => step.note !== undefined)) {
               throw new SidwaveValidationError(patPath, "bend and slide_from require a wavetable without pitch steps");
             }
@@ -727,7 +730,7 @@ function arrangeChip(
 
   const voices = notes.map((list, v) => ({
     notes: list,
-    events: buildVoiceEvents(list, instruments, totalFrames, framesPerBeat, v === 0 ? globals : []),
+    events: buildVoiceEvents(list, instruments, totalFrames, framesPerBeat, v === 0 ? globals : [], voicesById.get(v + 1)?.detune),
   }));
 
   const base = fenv ? Math.round(Number(fenv.cutoff_base)) : 1024;

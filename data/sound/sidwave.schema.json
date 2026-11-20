@@ -15,6 +15,7 @@
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
+    "meter": { "enum": [3, 4], "default": 4, "description": "Quarter-note beats per bar." },
     "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
     "cpu": { "type": "string", "enum": ["turbo"] },
     "samples": { "$ref": "#/$defs/samples" },
@@ -25,13 +26,27 @@
         {
           "type": "object",
           "required": ["layout"],
-          "properties": { "layout": { "enum": ["ultisid8", "ultisid8+socket1", "ultisid8+sockets"] } },
+          "properties": {
+            "layout": { "enum": ["ultisid8", "ultisid8+socket1", "ultisid8+sockets"] },
+            "overrides": {
+              "type": "object",
+              "propertyNames": { "pattern": "^sid([1-9]|10)$" },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "volume": { "type": "integer", "minimum": 0, "maximum": 15 },
+                  "pan": { "type": "string", "pattern": "^(Center|(Left|Right) [1-5])$" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
           "additionalProperties": false
         }
       ]
     },
     "instruments": { "type": "object", "additionalProperties": { "$ref": "#/$defs/instrument" } },
-    "length_bars": { "type": "integer", "minimum": 1, "description": "Truncates or repeats the timeline to this many 4/4 bars." },
+    "length_bars": { "type": "integer", "minimum": 1, "description": "Truncates or repeats the timeline to this many bars." },
     "global_fx": {
       "type": "object",
       "properties": {
@@ -62,6 +77,7 @@
           "channel": { "type": "integer", "minimum": 1, "maximum": 3 },
           "name": { "type": "string" },
           "instrument": { "$ref": "#/$defs/instrumentRef" },
+          "detune": { "$ref": "#/$defs/detune" },
           "echo": { "$ref": "#/$defs/echo" },
           "unison": { "$ref": "#/$defs/unison" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },

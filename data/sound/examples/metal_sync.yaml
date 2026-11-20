@@ -1,0 +1,145 @@
+# Metal | 150 BPM | E minor | 1 SID
+# Techniques: Hard-sync and triangle ring modulation, power-chord wavetable arpeggios, double kick and pitch bends.
+# Learn: Write the power-chord oscillator as the source for the lead; trade tight E pedal hits for a broad C–G–D answer
+sidwave: 1.2
+title: Iron Weather
+tempo: 150
+mode: PAL
+instruments:
+  stack: {"waveform": "saw", "adsr": [0, 4, 8, 3]}
+  synchron: {"waveform": "saw+pulse", "adsr": [1, 4, 9, 4], "sync": true, "pulse_width": 1300}
+  ring: {"waveform": "tri", "adsr": [1, 3, 7, 5], "ring": true, "sync": true}
+voices:
+  - id: 1
+    name: "Power-chord oscillator"
+    instrument: "stack"
+    patterns:
+      Intro:
+        length: 4
+        groove:
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+      A:
+        length: 4
+        groove:
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "C", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "B", "arp": "0,7,12,7", "speed": 3}
+      B:
+        length: 4
+        groove:
+          - {"chord": "C", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "G", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "D", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+      Variation:
+        length: 4
+        groove:
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "G", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "C", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "B", "arp": "0,7,12,7", "speed": 3}
+      End:
+        length: 4
+        groove:
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+          - {"chord": "Em", "arp": "0,7,12,7", "speed": 3}
+  - id: 2
+    name: "Serrated lead"
+    instrument: "synchron"
+    patterns:
+      Intro:
+        length: 1
+        groove:
+          ["-", "-", "-", "-", "B4", "~", "-", "E5"]
+      A:
+        length: 1
+        groove:
+          - {"note": "E4", "bend": {"to": 12, "frames": 6}}
+          - "-"
+          - "G4"
+          - "A4"
+          - "B4@ring"
+          - "-"
+          - "G4"
+          - "E4"
+          - "E5"
+          - "D5"
+          - {"note": "A4", "bend": {"to": "B4", "frames": 5}}
+          - "G4"
+          - "F#4"
+          - "A4"
+          - "B4@ring"
+          - "-"
+      B:
+        length: 1
+        groove:
+          - "E5"
+          - "~"
+          - "G5"
+          - "E5"
+          - "D5"
+          - "B4"
+          - "G4"
+          - "~"
+          - "A4"
+          - "D5"
+          - "F#5"
+          - "E5"
+          - {"note": "G5", "bend": {"to": -3, "frames": 6}}
+          - "E5"
+          - "B4"
+          - "-"
+      Variation:
+        length: 1
+        groove:
+          - "E5"
+          - "G5"
+          - "B5"
+          - "A5"
+          - {"note": "G5", "bend": {"to": 2, "frames": 6}}
+          - "D5"
+          - "G5"
+          - "B4@ring"
+          - "C5"
+          - "E5"
+          - "G5"
+          - "~"
+          - "F#5"
+          - "D#5"
+          - "B4"
+          - "B4@ring"
+      End:
+        length: 1
+        groove:
+          ["E5", "D5", "B4", "G4", "E4", "~", "~", "~"]
+  - id: 3
+    name: "Double kick and metal hats"
+    patterns:
+      Intro:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-"]
+      A:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "C3@lib:kick", "C3@lib:kick", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:kick", "C3@lib:kick", "-"]
+      B:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat"]
+      Variation:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:kick", "C3@lib:kick", "C3@lib:kick", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:kick", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-"]
+      End:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "C3@lib:kick", "C3@lib:kick", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:kick", "C3@lib:kick", "-", "C3@lib:kick", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+timeline:
+  - {"section": "Far thunder", "bars": 2, "layers": {"v1": "Intro", "v2": "Intro", "v3": "Intro"}}
+  - {"section": "The first downpour", "bars": 4, "layers": {"v1": "A", "v2": "A", "v3": "A"}}
+  - {"section": "Open sky", "bars": 4, "layers": {"v1": "B", "v2": "B", "v3": "B"}}
+  - {"section": "Teeth of the storm", "bars": 4, "layers": {"v1": "Variation", "v2": "Variation", "v3": "Variation"}}
+  - {"section": "Grounded", "bars": 2, "layers": {"v1": "End–", "v2": "End–", "v3": "End–"}}

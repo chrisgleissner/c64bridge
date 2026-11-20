@@ -43,6 +43,9 @@ const GOLDEN = [
   ["docs", "detect PAL or NTSC at start", [T]],
   ["docs", "UCI command interface", ["c64://ultimate/uci"]],
   ["docs", "PSID header load address init play", ["c64://sound/sid/file-format"]],
+  ["docs", "Pressure Glass SIDWAVE acid line resonance accents", ["c64://sound/examples/acid_line"]],
+  ["docs", "An Atlas of Wind 24 voice SIDWAVE orchestra unison strings", ["c64://sound/examples/ultisid_orchestra"]],
+  ["docs", "Gilt Footsteps waltz three independent voices 3/4", ["c64://sound/examples/chamber_waltz"]],
   // asm scope
   ["asm", "sprite multiplexer", [T]],
   ["asm", "scroll screen left one column", [T]],

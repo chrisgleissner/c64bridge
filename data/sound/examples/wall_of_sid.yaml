@@ -1,0 +1,539 @@
+# Nine-SID ensemble build | 112 BPM | C# minor | 9 SIDs, 27 voices
+# Techniques: Gradual 27-voice build, layered lines with PWM and filtering, and a fitted SID in socket 1.
+# Learn: Bring in three desks at a time, move through E major, and reserve every oscillator for the final C#-minor chord; use configure: true
+sidwave: 1.2
+title: Twenty-Seven Lanterns
+tempo: 112
+mode: PAL
+cpu: "turbo"
+sids: {"layout": "ultisid8+socket1", "overrides": {"sid1": {"volume": 8, "pan": "Left 4"}, "sid2": {"volume": 7}, "sid3": {"volume": 7}, "sid4": {"volume": 7}, "sid5": {"volume": 8, "pan": "Right 4"}, "sid6": {"volume": 7}, "sid7": {"volume": 7}, "sid8": {"volume": 7}, "sid9": {"volume": 8, "pan": "Center"}}}
+instruments:
+  flare: {"waveform": "saw", "adsr": [1, 4, 9, 4], "vibrato": {"depth": 0.21, "rate": 4, "delay": 9}}
+  sub: {"waveform": "tri", "adsr": [2, 4, 7, 5]}
+  reed: {"waveform": "pulse", "adsr": [2, 4, 6, 5], "pulse_width": 1300}
+  halo: {"waveform": "pulse", "adsr": [4, 4, 5, 6], "pulse_width": 1900, "pulsetable": {"steps": [{"set": 1900}, {"add": 12, "frames": 34}, {"add": -12, "frames": 34}], "loop": 1}}
+  upper: {"waveform": "tri", "adsr": [3, 5, 6, 5], "filtertable": [{"cutoff": 900, "resonance": 5}, {"add": 27, "frames": 16}]}
+voices:
+  - id: 1
+    name: "Lantern theme"
+    instrument: "flare"
+    patterns:
+      Flame:
+        length: 1
+        groove:
+          ["-", "-", "G#4", "C#5", "B4", "G#4", "E4", "~"]
+      Arcade:
+        length: 1
+        groove:
+          ["G#4", "C#5", "E5", "~", "C#5", "B4", "G#4", "~", "B4", "E5", "G#5", "~", "F#5", "D#5", "B4", "-"]
+      Vistas:
+        length: 1
+        groove:
+          ["B4", "E5", "G#5", "~", "F#5", "-", "D#5", "B4", "C#5", "F#5", "A5", "~", "G#5", "E5", "C#5", "-"]
+      Procession:
+        length: 1
+        groove:
+          ["A4", "C#5", "F#5", "~", "E5", "A5", "C#6", "~", "B5", "G#5", "E5", "~", "F#5", "D#5", "C5", "-"]
+      Crown:
+        length: 1
+        groove:
+          ["G#4", "C#5", "E5", "G#5", "B5", "G#5", "E5", "B4", "C#5", "E5", "A5", "G#5", "F#5", "D#5", "C5", "G#4"]
+      Still:
+        length: 1
+        groove:
+          ["E5", "C#5", "B4", "G#4", "C#5", "~", "~", "~"]
+  - id: 2
+    name: "Desk 1 inner answer"
+    instrument: "reed"
+    patterns:
+      Flame:
+        length: 1
+        groove:
+          ["E3", "~", "~", "~", "C#3", "~", "~", "~"]
+      Arcade:
+        length: 1
+        groove:
+          ["E3", "~", "~", "~", "C#3", "~", "~", "~", "G#3", "~", "~", "~", "D#3", "~", "~", "~"]
+      Vistas:
+        length: 1
+        groove:
+          ["G#3", "~", "~", "~", "D#3", "~", "~", "~", "A3", "~", "~", "~", "C#3", "~", "~", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["A3", "~", "~", "~", "C#3", "~", "~", "~", "E3", "~", "~", "~", "C3", "~", "~", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["E3", "~", "~", "~", "G#3", "~", "~", "~", "C#3", "~", "~", "~", "C3", "~", "~", "~"]
+      Still:
+        length: 1
+        groove:
+          ["E3", "~", "~", "~", "E3", "~", "~", "~"]
+  - id: 3
+    name: "Desk 1 upper counterline"
+    instrument: "halo"
+    patterns:
+      Flame:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "-", "G#4", "E4", "~"]
+      Arcade:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "A4", "C#4", "E4", "C#4", "-", "F#4", "B4", "~", "B4", "D#4", "F#4", "D#4"]
+      Vistas:
+        length: 1
+        groove:
+          ["E4", "G#4", "B4", "G#4", "-", "A4", "F#4", "~", "F#4", "A4", "C#4", "A4", "-", "G#4", "E4", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["-", "E4", "C#4", "~", "A4", "C#4", "E4", "C#4", "-", "B4", "G#4", "~", "G#4", "C4", "D#4", "C4"]
+      Crown:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "-", "F#4", "B4", "~", "A4", "C#4", "E4", "C#4", "-", "F#4", "D#4", "~"]
+      Still:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "G#4", "~", "~", "~"]
+  - id: 4
+    name: "Desk 2 bass figure"
+    instrument: "sub"
+    patterns:
+      Arcade:
+        length: 1
+        groove:
+          ["C#2", "G#2", "C#3", "G#2", "A2", "~", "E2", "~", "E2", "B2", "E3", "B2", "B2", "F#2", "B3", "F#2"]
+      Vistas:
+        length: 1
+        groove:
+          ["E2", "~", "B2", "~", "B2", "F#2", "B3", "F#2", "F#2", "C#2", "F#3", "C#2", "A2", "~", "E2", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["F#2", "C#2", "F#3", "C#2", "A2", "E2", "A3", "E2", "C#2", "~", "G#2", "~", "G#2", "D#2", "G#3", "D#2"]
+      Crown:
+        length: 1
+        groove:
+          ["C#2", "G#2", "C#3", "G#2", "E2", "~", "B2", "~", "A2", "E2", "A3", "E2", "G#2", "D#2", "G#3", "D#2"]
+      Still:
+        length: 1
+        groove:
+          ["C#2", "~", "G#2", "~", "E3", "~", "~", "~"]
+  - id: 5
+    name: "Desk 2 inner answer"
+    instrument: "halo"
+    patterns:
+      Arcade:
+        length: 1
+        groove:
+          ["-", "G#4", "E4", "B4", "G#4", "E4", "C#4", "~", "-", "B4", "G#4", "F#4", "A4", "F#4", "D#4", "~"]
+      Vistas:
+        length: 1
+        groove:
+          ["F#4", "B4", "G#4", "~", "-", "F#4", "D#4", "A4", "E4", "C#4", "A4", "~", "-", "E4", "C#4", "G#4"]
+      Procession:
+        length: 1
+        groove:
+          ["-", "C#4", "A4", "E4", "G#4", "E4", "C#4", "~", "-", "G#4", "E4", "B4", "F#4", "D#4", "C4", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["B4", "G#4", "E4", "~", "-", "B4", "G#4", "F#4", "G#4", "E4", "C#4", "~", "-", "D#4", "C4", "F#4"]
+      Still:
+        length: 1
+        groove:
+          ["-", "G#4", "E4", "B4", "G#4", "~", "~", "~"]
+  - id: 6
+    name: "Desk 2 upper counterline"
+    instrument: "upper"
+    patterns:
+      Arcade:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "-", "G#4", "E4", "~", "E4", "G#4", "B4", "G#4", "-", "A4", "F#4", "~"]
+      Vistas:
+        length: 1
+        groove:
+          ["-", "F#4", "B4", "~", "B4", "D#4", "F#4", "D#4", "-", "E4", "C#4", "~", "A4", "C#4", "E4", "C#4"]
+      Procession:
+        length: 1
+        groove:
+          ["F#4", "A4", "C#4", "A4", "-", "G#4", "E4", "~", "C#4", "E4", "G#4", "E4", "-", "F#4", "D#4", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "E4", "G#4", "B4", "G#4", "-", "G#4", "E4", "~", "G#4", "C4", "D#4", "C4"]
+      Still:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "C#5", "~", "~", "~"]
+  - id: 7
+    name: "Desk 3 bass figure"
+    instrument: "sub"
+    patterns:
+      Arcade:
+        length: 1
+        groove:
+          ["C#2", "~", "G#2", "~", "A2", "E2", "A3", "E2", "E2", "B2", "E3", "B2", "B2", "~", "F#2", "~"]
+      Vistas:
+        length: 1
+        groove:
+          ["E2", "B2", "E3", "B2", "B2", "F#2", "B3", "F#2", "F#2", "~", "C#2", "~", "A2", "E2", "A3", "E2"]
+      Procession:
+        length: 1
+        groove:
+          ["F#2", "C#2", "F#3", "C#2", "A2", "~", "E2", "~", "C#2", "G#2", "C#3", "G#2", "G#2", "D#2", "G#3", "D#2"]
+      Crown:
+        length: 1
+        groove:
+          ["C#2", "~", "G#2", "~", "E2", "B2", "E3", "B2", "A2", "E2", "A3", "E2", "G#2", "~", "D#2", "~"]
+      Still:
+        length: 1
+        groove:
+          ["C#2", "G#2", "C#3", "G#2", "G#4", "~", "~", "~"]
+  - id: 8
+    name: "Desk 3 inner answer"
+    instrument: "reed"
+    patterns:
+      Arcade:
+        length: 1
+        groove:
+          ["B3", "G#3", "E3", "~", "-", "E3", "C#3", "G#3", "F#3", "B3", "G#3", "~", "-", "F#3", "D#3", "A3"]
+      Vistas:
+        length: 1
+        groove:
+          ["-", "B3", "G#3", "F#3", "A3", "F#3", "D#3", "~", "-", "C#3", "A3", "E3", "G#3", "E3", "C#3", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["E3", "C#3", "A3", "~", "-", "E3", "C#3", "G#3", "B3", "G#3", "E3", "~", "-", "D#3", "C3", "F#3"]
+      Crown:
+        length: 1
+        groove:
+          ["-", "G#3", "E3", "B3", "F#3", "B3", "G#3", "~", "-", "E3", "C#3", "G#3", "F#3", "D#3", "C3", "~"]
+      Still:
+        length: 1
+        groove:
+          ["B3", "G#3", "E3", "~", "C#5", "~", "~", "~"]
+  - id: 9
+    name: "Desk 3 upper counterline"
+    instrument: "halo"
+    patterns:
+      Arcade:
+        length: 1
+        groove:
+          ["-", "B5", "G#5", "~", "A5", "C#5", "E5", "C#5", "-", "F#5", "B5", "~", "B5", "D#5", "F#5", "D#5"]
+      Vistas:
+        length: 1
+        groove:
+          ["E5", "G#5", "B5", "G#5", "-", "A5", "F#5", "~", "F#5", "A5", "C#5", "A5", "-", "G#5", "E5", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["-", "E5", "C#5", "~", "A5", "C#5", "E5", "C#5", "-", "B5", "G#5", "~", "G#5", "C5", "D#5", "C5"]
+      Crown:
+        length: 1
+        groove:
+          ["C#5", "E5", "G#5", "E5", "-", "F#5", "B5", "~", "A5", "C#5", "E5", "C#5", "-", "F#5", "D#5", "~"]
+      Still:
+        length: 1
+        groove:
+          ["-", "B5", "G#5", "~", "E2", "~", "~", "~"]
+  - id: 10
+    name: "Desk 4 bass figure"
+    instrument: "reed"
+    patterns:
+      Vistas:
+        length: 1
+        groove:
+          ["E3", "B3", "E4", "B3", "B3", "~", "F#3", "~", "F#3", "C#3", "F#4", "C#3", "A3", "E3", "A4", "E3"]
+      Procession:
+        length: 1
+        groove:
+          ["F#3", "~", "C#3", "~", "A3", "E3", "A4", "E3", "C#3", "G#3", "C#4", "G#3", "G#3", "~", "D#3", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "E3", "B3", "E4", "B3", "A3", "~", "E3", "~", "G#3", "D#3", "G#4", "D#3"]
+      Still:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "C#5", "~", "~", "~"]
+  - id: 11
+    name: "Desk 4 inner answer"
+    instrument: "halo"
+    patterns:
+      Vistas:
+        length: 1
+        groove:
+          ["G#4", "~", "~", "~", "D#4", "~", "~", "~", "A4", "~", "~", "~", "C#4", "~", "~", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["A4", "~", "~", "~", "C#4", "~", "~", "~", "E4", "~", "~", "~", "C4", "~", "~", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["E4", "~", "~", "~", "G#4", "~", "~", "~", "C#4", "~", "~", "~", "C4", "~", "~", "~"]
+      Still:
+        length: 1
+        groove:
+          ["E4", "~", "~", "~", "E2", "~", "~", "~"]
+  - id: 12
+    name: "Desk 4 upper counterline"
+    instrument: "upper"
+    patterns:
+      Vistas:
+        length: 1
+        groove:
+          ["-", "F#4", "B4", "~", "B4", "D#4", "F#4", "D#4", "-", "E4", "C#4", "~", "A4", "C#4", "E4", "C#4"]
+      Procession:
+        length: 1
+        groove:
+          ["F#4", "A4", "C#4", "A4", "-", "G#4", "E4", "~", "C#4", "E4", "G#4", "E4", "-", "F#4", "D#4", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "E4", "G#4", "B4", "G#4", "-", "G#4", "E4", "~", "G#4", "C4", "D#4", "C4"]
+      Still:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "G#3", "~", "~", "~"]
+  - id: 13
+    name: "Desk 5 bass figure"
+    instrument: "sub"
+    patterns:
+      Vistas:
+        length: 1
+        groove:
+          ["E2", "~", "B2", "~", "B2", "F#2", "B3", "F#2", "F#2", "C#2", "F#3", "C#2", "A2", "~", "E2", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["F#2", "C#2", "F#3", "C#2", "A2", "E2", "A3", "E2", "C#2", "~", "G#2", "~", "G#2", "D#2", "G#3", "D#2"]
+      Crown:
+        length: 1
+        groove:
+          ["C#2", "G#2", "C#3", "G#2", "E2", "~", "B2", "~", "A2", "E2", "A3", "E2", "G#2", "D#2", "G#3", "D#2"]
+      Still:
+        length: 1
+        groove:
+          ["C#2", "~", "G#2", "~", "E2", "~", "~", "~"]
+  - id: 14
+    name: "Desk 5 inner answer"
+    instrument: "reed"
+    patterns:
+      Vistas:
+        length: 1
+        groove:
+          ["-", "B3", "G#3", "F#3", "A3", "F#3", "D#3", "~", "-", "C#3", "A3", "E3", "G#3", "E3", "C#3", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["E3", "C#3", "A3", "~", "-", "E3", "C#3", "G#3", "B3", "G#3", "E3", "~", "-", "D#3", "C3", "F#3"]
+      Crown:
+        length: 1
+        groove:
+          ["-", "G#3", "E3", "B3", "F#3", "B3", "G#3", "~", "-", "E3", "C#3", "G#3", "F#3", "D#3", "C3", "~"]
+      Still:
+        length: 1
+        groove:
+          ["B3", "G#3", "E3", "~", "G#3", "~", "~", "~"]
+  - id: 15
+    name: "Desk 5 upper counterline"
+    instrument: "halo"
+    patterns:
+      Vistas:
+        length: 1
+        groove:
+          ["E4", "G#4", "B4", "G#4", "-", "A4", "F#4", "~", "F#4", "A4", "C#4", "A4", "-", "G#4", "E4", "~"]
+      Procession:
+        length: 1
+        groove:
+          ["-", "E4", "C#4", "~", "A4", "C#4", "E4", "C#4", "-", "B4", "G#4", "~", "G#4", "C4", "D#4", "C4"]
+      Crown:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "-", "F#4", "B4", "~", "A4", "C#4", "E4", "C#4", "-", "F#4", "D#4", "~"]
+      Still:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "C#4", "~", "~", "~"]
+  - id: 16
+    name: "Desk 6 bass figure"
+    instrument: "sub"
+    patterns:
+      Procession:
+        length: 1
+        groove:
+          ["F#3", "C#3", "F#4", "C#3", "A3", "~", "E3", "~", "C#3", "G#3", "C#4", "G#3", "G#3", "D#3", "G#4", "D#3"]
+      Crown:
+        length: 1
+        groove:
+          ["C#3", "~", "G#3", "~", "E3", "B3", "E4", "B3", "A3", "E3", "A4", "E3", "G#3", "~", "D#3", "~"]
+      Still:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "G#3", "~", "~", "~"]
+  - id: 17
+    name: "Desk 6 inner answer"
+    instrument: "halo"
+    patterns:
+      Procession:
+        length: 1
+        groove:
+          ["-", "C#4", "A4", "E4", "G#4", "E4", "C#4", "~", "-", "G#4", "E4", "B4", "F#4", "D#4", "C4", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["B4", "G#4", "E4", "~", "-", "B4", "G#4", "F#4", "G#4", "E4", "C#4", "~", "-", "D#4", "C4", "F#4"]
+      Still:
+        length: 1
+        groove:
+          ["-", "G#4", "E4", "B4", "C#4", "~", "~", "~"]
+  - id: 18
+    name: "Desk 6 upper counterline"
+    instrument: "upper"
+    patterns:
+      Procession:
+        length: 1
+        groove:
+          ["F#5", "A5", "C#5", "A5", "-", "G#5", "E5", "~", "C#5", "E5", "G#5", "E5", "-", "F#5", "D#5", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["-", "B5", "G#5", "~", "E5", "G#5", "B5", "G#5", "-", "G#5", "E5", "~", "G#5", "C5", "D#5", "C5"]
+      Still:
+        length: 1
+        groove:
+          ["C#5", "E5", "G#5", "E5", "E5", "~", "~", "~"]
+  - id: 19
+    name: "Desk 7 bass figure"
+    instrument: "reed"
+    patterns:
+      Procession:
+        length: 1
+        groove:
+          ["F#3", "~", "C#3", "~", "A3", "E3", "A4", "E3", "C#3", "G#3", "C#4", "G#3", "G#3", "~", "D#3", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "E3", "B3", "E4", "B3", "A3", "~", "E3", "~", "G#3", "D#3", "G#4", "D#3"]
+      Still:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "C#4", "~", "~", "~"]
+  - id: 20
+    name: "Desk 7 inner answer"
+    instrument: "reed"
+    patterns:
+      Procession:
+        length: 1
+        groove:
+          ["A3", "~", "~", "~", "C#3", "~", "~", "~", "E3", "~", "~", "~", "C3", "~", "~", "~"]
+      Crown:
+        length: 1
+        groove:
+          ["E3", "~", "~", "~", "G#3", "~", "~", "~", "C#3", "~", "~", "~", "C3", "~", "~", "~"]
+      Still:
+        length: 1
+        groove:
+          ["E3", "~", "~", "~", "E5", "~", "~", "~"]
+  - id: 21
+    name: "Desk 7 upper counterline"
+    instrument: "halo"
+    patterns:
+      Procession:
+        length: 1
+        groove:
+          ["-", "E4", "C#4", "~", "A4", "C#4", "E4", "C#4", "-", "B4", "G#4", "~", "G#4", "C4", "D#4", "C4"]
+      Crown:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "-", "F#4", "B4", "~", "A4", "C#4", "E4", "C#4", "-", "F#4", "D#4", "~"]
+      Still:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "G#2", "~", "~", "~"]
+  - id: 22
+    name: "Desk 8 bass figure"
+    instrument: "sub"
+    patterns:
+      Crown:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "E3", "~", "B3", "~", "A3", "E3", "A4", "E3", "G#3", "D#3", "G#4", "D#3"]
+      Still:
+        length: 1
+        groove:
+          ["C#3", "~", "G#3", "~", "E5", "~", "~", "~"]
+  - id: 23
+    name: "Desk 8 inner answer"
+    instrument: "halo"
+    patterns:
+      Crown:
+        length: 1
+        groove:
+          ["B4", "G#4", "E4", "~", "-", "B4", "G#4", "F#4", "G#4", "E4", "C#4", "~", "-", "D#4", "C4", "F#4"]
+      Still:
+        length: 1
+        groove:
+          ["-", "G#4", "E4", "B4", "G#2", "~", "~", "~"]
+  - id: 24
+    name: "Desk 8 upper counterline"
+    instrument: "upper"
+    patterns:
+      Crown:
+        length: 1
+        groove:
+          ["-", "B4", "G#4", "~", "E4", "G#4", "B4", "G#4", "-", "G#4", "E4", "~", "G#4", "C4", "D#4", "C4"]
+      Still:
+        length: 1
+        groove:
+          ["C#4", "E4", "G#4", "E4", "C#3", "~", "~", "~"]
+  - id: 25
+    name: "Socket bass figure"
+    instrument: "sub"
+    patterns:
+      Crown:
+        length: 1
+        groove:
+          ["C#3", "~", "G#3", "~", "E3", "B3", "E4", "B3", "A3", "E3", "A4", "E3", "G#3", "~", "D#3", "~"]
+      Still:
+        length: 1
+        groove:
+          ["C#3", "G#3", "C#4", "G#3", "G#2", "~", "~", "~"]
+  - id: 26
+    name: "Socket inner answer"
+    instrument: "reed"
+    patterns:
+      Crown:
+        length: 1
+        groove:
+          ["-", "G#3", "E3", "B3", "F#3", "B3", "G#3", "~", "-", "E3", "C#3", "G#3", "F#3", "D#3", "C3", "~"]
+      Still:
+        length: 1
+        groove:
+          ["B3", "G#3", "E3", "~", "C#3", "~", "~", "~"]
+  - id: 27
+    name: "Socket upper counterline"
+    instrument: "halo"
+    patterns:
+      Crown:
+        length: 1
+        groove:
+          ["C#5", "E5", "G#5", "E5", "-", "F#5", "B5", "~", "A5", "C#5", "E5", "C#5", "-", "F#5", "D#5", "~"]
+      Still:
+        length: 1
+        groove:
+          ["-", "B5", "G#5", "~", "E4", "~", "~", "~"]
+timeline:
+  - {"section": "A single flame", "bars": 2, "layers": {"v1": "Flame", "v2": "Flame", "v3": "Flame"}}
+  - {"section": "Light the arcade", "bars": 4, "layers": {"v1": "Arcade", "v2": "Arcade", "v3": "Arcade", "v4": "Arcade", "v5": "Arcade", "v6": "Arcade", "v7": "Arcade", "v8": "Arcade", "v9": "Arcade"}}
+  - {"section": "Across the rooftops", "bars": 4, "layers": {"v1": "Vistas", "v2": "Vistas", "v3": "Vistas", "v4": "Vistas", "v5": "Vistas", "v6": "Vistas", "v7": "Vistas", "v8": "Vistas", "v9": "Vistas", "v10": "Vistas", "v11": "Vistas", "v12": "Vistas", "v13": "Vistas", "v14": "Vistas", "v15": "Vistas"}}
+  - {"section": "The procession", "bars": 4, "layers": {"v1": "Procession", "v2": "Procession", "v3": "Procession", "v4": "Procession", "v5": "Procession", "v6": "Procession", "v7": "Procession", "v8": "Procession", "v9": "Procession", "v10": "Procession", "v11": "Procession", "v12": "Procession", "v13": "Procession", "v14": "Procession", "v15": "Procession", "v16": "Procession", "v17": "Procession", "v18": "Procession", "v19": "Procession", "v20": "Procession", "v21": "Procession"}}
+  - {"section": "All lanterns", "bars": 4, "layers": {"v1": "Crown", "v2": "Crown", "v3": "Crown", "v4": "Crown", "v5": "Crown", "v6": "Crown", "v7": "Crown", "v8": "Crown", "v9": "Crown", "v10": "Crown", "v11": "Crown", "v12": "Crown", "v13": "Crown", "v14": "Crown", "v15": "Crown", "v16": "Crown", "v17": "Crown", "v18": "Crown", "v19": "Crown", "v20": "Crown", "v21": "Crown", "v22": "Crown", "v23": "Crown", "v24": "Crown", "v25": "Crown", "v26": "Crown", "v27": "Crown"}}
+  - {"section": "Hold the light", "bars": 2, "layers": {"v1": "Still", "v2": "Still", "v3": "Still", "v4": "Still", "v5": "Still", "v6": "Still", "v7": "Still", "v8": "Still", "v9": "Still", "v10": "Still", "v11": "Still", "v12": "Still", "v13": "Still", "v14": "Still", "v15": "Still", "v16": "Still", "v17": "Still", "v18": "Still", "v19": "Still", "v20": "Still", "v21": "Still", "v22": "Still", "v23": "Still", "v24": "Still", "v25": "Still", "v26": "Still", "v27": "Still"}}

@@ -1,0 +1,91 @@
+# Drum and bass | 172 BPM | G minor | 1 SID
+# Techniques: Speed 4; noise and pitched wavetable drums; two slightly detuned Reese bass oscillators; breakbeat fills.
+# Learn: Keep the G–Eb–C–D bass shape recognizable through half-time cuts and denser ghost-note fills
+sidwave: 1.2
+title: Switchyard
+tempo: 172
+mode: PAL
+speed: 4
+instruments:
+  sawline: {"waveform": "saw", "adsr": [0, 4, 9, 3]}
+  line: {"waveform": "pulse", "adsr": [0, 5, 7, 3], "pulse_width": 1530}
+voices:
+  - id: 1
+    name: "Breakbeat"
+    patterns:
+      Intro:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "-", "-", "C3@lib:hat", "-", "-", "-", "C3@lib:snare", "-", "-", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "-", "C3@lib:hat", "-", "-", "C3@lib:snare", "-", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "-", "C3@lib:snare", "-", "-"]
+      Switch:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:kick", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:snare", "C3@lib:hat"]
+      Cut:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "-", "-", "C3@lib:hat", "-", "-", "-", "C3@lib:snare", "-", "-", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "-", "C3@lib:hat", "-", "-", "C3@lib:snare", "-", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "-", "C3@lib:snare", "-", "-", "C3@lib:kick", "-", "C3@lib:hat", "-", "-", "-", "C3@lib:snare", "-", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:snare", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:snare", "-", "C3@lib:kick"]
+      Splice:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "C3@lib:snare", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:kick", "-", "C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:kick", "C3@lib:hat", "C3@lib:hat", "C3@lib:kick", "-", "C3@lib:kick", "C3@lib:hat", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "C3@lib:kick", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:snare", "C3@lib:snare", "C3@lib:hat", "C3@lib:kick", "C3@lib:snare", "-", "C3@lib:hat", "C3@lib:snare"]
+      Out:
+        length: 0.25
+        groove:
+          ["C3@lib:kick", "-", "C3@lib:hat", "-", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "C3@lib:hat", "C3@lib:hat", "C3@lib:snare", "-", "C3@lib:hat", "-", "C3@lib:kick", "-", "-", "-", "C3@lib:hat", "-", "-", "-", "C3@lib:snare", "-", "-", "-", "C3@lib:hat", "-", "C3@lib:kick", "-"]
+  - id: 2
+    name: "Reese saw"
+    instrument: "sawline"
+    detune: -11
+    patterns:
+      Intro:
+        length: 0.5
+        groove:
+          ["G2", "~", "~", "~", "F2", "~", "~", "~", "Bb2", "~", "~", "~", "D3", "~", "~", "~"]
+      Switch:
+        length: 0.5
+        groove:
+          ["G2", "~", "-", "G2", "Bb2", "A2", "-", "D3", "Eb2", "~", "Eb2", "-", "Bb2", "~", "F2", "-", "C2", "~", "-", "G2", "C3", "-", "Eb3", "D3", "D2", "D2", "-", "A2", "C3", "~", "A2", "F#2"]
+      Cut:
+        length: 0.5
+        groove:
+          ["Eb2", "~", "~", "Bb2", "-", "G2", "-", "-", "F2", "-", "C3", "-", "A2", "~", "-", "F2", "G2", "~", "~", "~", "-", "D3", "-", "Bb2", "D2", "-", "-", "~", "A2", "-", "C3", "F#2"]
+      Splice:
+        length: 0.5
+        groove:
+          ["G2", "~", "Bb2", "D3", "-", "Bb2", "A2", "G2", "Eb2", "-", "G2", "Bb2", "D3", "-", "C3", "Bb2", "C2", "~", "G2", "-", "C3", "Eb3", "-", "F3", "D2", "A2", "C3", "A2", "-", "C3", "F#2", "-"]
+      Out:
+        length: 0.5
+        groove:
+          ["G2", "~", "~", "~", "D3", "-", "G2", "~", "C2", "~", "D2", "~", "G2", "~", "~", "~"]
+  - id: 3
+    name: "Reese pulse"
+    instrument: "line"
+    detune: 9
+    patterns:
+      Intro:
+        length: 0.5
+        groove:
+          ["G2", "~", "~", "~", "F2", "~", "~", "~", "Bb2", "~", "~", "~", "D3", "~", "~", "~"]
+      Switch:
+        length: 0.5
+        groove:
+          ["G2", "~", "-", "G2", "Bb2", "A2", "-", "D3", "Eb2", "~", "Eb2", "-", "Bb2", "~", "F2", "-", "C2", "~", "-", "G2", "C3", "-", "Eb3", "D3", "D2", "D2", "-", "A2", "C3", "~", "A2", "F#2"]
+      Cut:
+        length: 0.5
+        groove:
+          ["Eb2", "~", "~", "Bb2", "-", "G2", "-", "-", "F2", "-", "C3", "-", "A2", "~", "-", "F2", "G2", "~", "~", "~", "-", "D3", "-", "Bb2", "D2", "-", "-", "~", "A2", "-", "C3", "F#2"]
+      Splice:
+        length: 0.5
+        groove:
+          ["G2", "~", "Bb2", "D3", "-", "Bb2", "A2", "G2", "Eb2", "-", "G2", "Bb2", "D3", "-", "C3", "Bb2", "C2", "~", "G2", "-", "C3", "Eb3", "-", "F3", "D2", "A2", "C3", "A2", "-", "C3", "F#2", "-"]
+      Out:
+        length: 0.5
+        groove:
+          ["G2", "~", "~", "~", "D3", "-", "G2", "~", "C2", "~", "D2", "~", "G2", "~", "~", "~"]
+timeline:
+  - {"section": "Signals", "bars": 2, "layers": {"v1": "Intro", "v2": "Intro", "v3": "Intro"}}
+  - {"section": "Points switch", "bars": 4, "layers": {"v1": "Switch", "v2": "Switch", "v3": "Switch"}}
+  - {"section": "Cut to half time", "bars": 4, "layers": {"v1": "Cut", "v2": "Cut", "v3": "Cut"}}
+  - {"section": "Break splice", "bars": 4, "layers": {"v1": "Splice", "v2": "Splice", "v3": "Splice"}}
+  - {"section": "Brake lights", "bars": 2, "layers": {"v1": "Out", "v2": "Out–", "v3": "Out–"}}

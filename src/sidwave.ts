@@ -102,6 +102,7 @@ export interface SidwaveVoice {
   id: number; // 1..30
   name?: string;
   waveform?: Waveform;
+  detune?: number;
   pulse_width?: number;
   adsr?: [number, number, number, number];
   instrument?: string;
@@ -149,6 +150,7 @@ export interface SidwaveDocument {
   length_bars?: number;
   global_fx?: Record<string, unknown>;
   speed?: number;
+  meter?: 3 | 4;
   cpu?: "turbo";
   samples?: { rate: number; voices: SidwaveSampleSource[] };
   sids?: Array<{
@@ -158,7 +160,7 @@ export interface SidwaveDocument {
     model?: SidModel;
     volume?: number;
     filter?: Record<string, unknown>;
-  }> | { layout: SidLayout };
+  }> | { layout: SidLayout; overrides?: Record<string, { pan?: string; volume?: number }> };
   instruments?: Record<string, Record<string, unknown>>;
   voices?: SidVoiceSource[];
   timeline?: SidwaveTimelineSection[];
@@ -178,6 +180,7 @@ export interface ParsedSidwave {
   song: Required<Pick<SidwaveSongMeta, "title" | "tempo" | "mode">> & {
     author?: string;
     length_bars: number;
+    meter: 3 | 4;
     global_fx: Record<string, unknown>;
   };
   voices: SidwaveVoice[];
@@ -203,10 +206,10 @@ export const SIDWAVE_TEMPO_RANGE = { min: 30, max: 220 } as const;
 /** MIDI numbers of C0 and B7, the note range of the player's frequency table. */
 export const SIDWAVE_NOTE_RANGE = { min: 12, max: 107 } as const;
 
-const TOP_LEVEL_KEYS = new Set(["sidwave", "title", "author", "tempo", "mode", "length_bars", "global_fx", "voices", "timeline", "instruments", "speed", "sids", "cpu", "samples"]);
+const TOP_LEVEL_KEYS = new Set(["sidwave", "title", "author", "tempo", "mode", "length_bars", "global_fx", "voices", "timeline", "instruments", "speed", "meter", "sids", "cpu", "samples"]);
 const LEGACY_KEYS = new Set(["song", "voices", "timeline"]);
 const LEGACY_SONG_KEYS = new Set(["title", "author", "tempo", "mode", "length_bars", "global_fx"]);
-const VOICE_KEYS = new Set(["id", "sid", "channel", "name", "waveform", "pulse_width", "adsr", "patterns", "instrument", "echo", "unison"]);
+const VOICE_KEYS = new Set(["id", "sid", "channel", "name", "waveform", "pulse_width", "adsr", "patterns", "instrument", "echo", "unison", "detune"]);
 const ARP_KEYS = new Set(["type", "notes", "frame_rate", "length", "transpositions", "fx"]);
 const GROOVE_KEYS = new Set(["groove", "drums", "length", "transpositions", "fx"]);
 const MOTIF_KEYS = new Set(["motif", "root", "length", "transpositions", "fx"]);
@@ -310,7 +313,9 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     length_bars = requireNumber(header.length_bars, `${headerPath}.length_bars`, { min: 1, max: MAX_SIDWAVE_BARS, integer: true });
   }
 
-  const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, global_fx };
+  const meter = obj.meter === undefined ? 4 : requireNumber(obj.meter, "$.meter", { min: 3, max: 4, integer: true }) as 3 | 4;
+  if (meter !== 4 && !modern) throw new SidwaveValidationError("$.meter", "3/4 requires sidwave: 1.2");
+  const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, meter, global_fx };
   if (author !== undefined) song.author = author;
   const speed = obj.speed === undefined ? 1 : requireNumber(obj.speed, "$.speed", { min: 1, max: 4, integer: true });
   if (obj.cpu !== undefined && obj.cpu !== "turbo") throw new SidwaveValidationError("$.cpu", "expected turbo");
@@ -330,11 +335,19 @@ const SID_LAYOUTS: Record<SidLayout, number[]> = {
 function normalizeSids(raw: unknown): SidMapEntry[] {
   if (raw === undefined) return [{ id: "sid1", address: 0xd400, volume: 15 }];
   if (!Array.isArray(raw)) {
-    const value = requireObject(raw, "$.sids", ["layout"]);
+    const value = requireObject(raw, "$.sids", ["layout", "overrides"]);
     if (typeof value.layout !== "string" || !Object.prototype.hasOwnProperty.call(SID_LAYOUTS, value.layout)) {
       throw new SidwaveValidationError("$.sids.layout", "expected ultisid8, ultisid8+socket1 or ultisid8+sockets");
     }
-    return SID_LAYOUTS[value.layout as SidLayout].map((address, i) => ({ id: `sid${i + 1}`, address, volume: 15 }));
+    const entries = SID_LAYOUTS[value.layout as SidLayout].map((address, i) => ({ id: `sid${i + 1}`, address, volume: 15 }));
+    if (value.overrides === undefined) return entries;
+    if (!isPlainObject(value.overrides)) throw new SidwaveValidationError("$.sids.overrides", "expected a mapping of layout SID IDs");
+    checkKeys(value.overrides, new Set(entries.map(({ id }) => id)), "$.sids.overrides");
+    return entries.map((entry) => {
+      const path = `$.sids.overrides.${entry.id}`;
+      if (value.overrides[entry.id] === undefined) return entry;
+      return { ...entry, ...parseSidMix(requireObject(value.overrides[entry.id], path, ["volume", "pan"]), path) };
+    });
   }
   if (raw.length < 1 || raw.length > 10) throw new SidwaveValidationError("$.sids", "expected 1..10 SIDs");
   const addresses = new Set<number>();
@@ -355,7 +368,6 @@ function normalizeSids(raw: unknown): SidMapEntry[] {
     if (sid.model !== undefined && sid.model !== "6581" && sid.model !== "8580") {
       throw new SidwaveValidationError(`${path}.model`, 'expected "6581" or "8580"');
     }
-    const volume = sid.volume === undefined ? 15 : requireNumber(sid.volume, `${path}.volume`, { min: 0, max: 15, integer: true });
     let filter: SidFilter | undefined;
     if (sid.filter !== undefined) {
       const fp = `${path}.filter`;
@@ -371,12 +383,17 @@ function normalizeSids(raw: unknown): SidMapEntry[] {
         };
       }
     }
-    const pan = sid.pan;
-    if (pan !== undefined && (typeof pan !== "string" || !/^(?:Center|(?:Left|Right) [1-5])$/.test(pan))) {
-      throw new SidwaveValidationError(`${path}.pan`, "use Center, Left 1 through Left 5, or Right 1 through Right 5");
-    }
-    return { id, address, volume, model: sid.model, filter, pan };
+    return { id, address, model: sid.model, filter, ...parseSidMix(sid, path) };
   });
+}
+
+function parseSidMix(sid: Record<string, unknown>, path: string): { volume: number; pan?: string } {
+  const volume = sid.volume === undefined ? 15 : requireNumber(sid.volume, `${path}.volume`, { min: 0, max: 15, integer: true });
+  const pan = sid.pan;
+  if (pan !== undefined && (typeof pan !== "string" || !/^(?:Center|(?:Left|Right) [1-5])$/.test(pan))) {
+    throw new SidwaveValidationError(`${path}.pan`, "use Center, Left 1 through Left 5, or Right 1 through Right 5");
+  }
+  return { volume, pan };
 }
 
 function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean): SidwaveSamples | undefined {
@@ -635,8 +652,12 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
       unison = { voice, detune };
     }
   }
+  const detune = v.detune === undefined ? undefined : requireNumber(v.detune, `${path}.detune`, { min: -100, max: 100 });
+  if (detune !== undefined && (!modern || echo || unison)) {
+    throw new SidwaveValidationError(`${path}.detune`, "standalone voice detune requires SIDWAVE 1.2 and no echo or unison");
+  }
   return {
-    id, name: v.name === undefined ? `Voice${id}` : String(v.name), waveform, pulse_width: pulseWidth, adsr,
+    id, detune, name: v.name === undefined ? `Voice${id}` : String(v.name), waveform, pulse_width: pulseWidth, adsr,
     instrument: v.instrument === undefined ? undefined : String(v.instrument), patterns, echo, unison,
   };
 }

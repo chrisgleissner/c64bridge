@@ -1,0 +1,152 @@
+# Stereo synth pop | 108 BPM | D minor | 2 SIDs
+# Techniques: Hard left/right SID pans, lead echo, detuned unison pad and alternate half-bar arps.
+# Learn: Follow the delayed lead across the speakers while staggered arpeggios outline the chord changes
+sidwave: 1.2
+title: Parallax Letters
+tempo: 108
+mode: PAL
+sids: [{"id": "sid1", "address": "$D400", "volume": 10, "pan": "Left 5"}, {"id": "sid2", "address": "$D420", "volume": 10, "pan": "Right 5"}]
+instruments:
+  solo: {"waveform": "pulse", "adsr": [2, 3, 9, 5], "pulse_width": 1450, "vibrato": {"depth": 0.22, "rate": 4, "delay": 10}}
+  linen: {"waveform": "tri", "adsr": [6, 4, 9, 8]}
+  spark: {"waveform": "pulse", "adsr": [0, 5, 5, 3], "pulse_width": 1000}
+voices:
+  - id: 1
+    name: "Left lead"
+    instrument: "solo"
+    patterns:
+      Intro:
+        length: 1
+        groove:
+          ["-", "-", "-", "-", "A4", "C5", "D5", "~"]
+      A:
+        length: 1
+        groove:
+          ["A4", "C5", "D5", "~", "F5", "E5", "D5", "~", "C5", "A4", "F4", "A4", "G4", "C5", "E5", "-"]
+      B:
+        length: 1
+        groove:
+          ["Bb4", "D5", "F5", "~", "D5", "F5", "A5", "~", "G5", "E5", "D5", "Bb4", "C#5", "E5", "A5", "-"]
+      Return:
+        length: 1
+        groove:
+          ["D5", "F5", "A5", "~", "G5", "E5", "C5", "~", "F5", "D5", "C5", "A4", "D5", "~", "~", "~"]
+  - id: 2
+    name: "Left pad"
+    instrument: "linen"
+    patterns:
+      Intro:
+        length: 1
+        groove:
+          ["D3", "~", "~", "~", "Bb2", "~", "~", "~"]
+      A:
+        length: 1
+        groove:
+          ["D3", "~", "A3", "~", "Bb2", "~", "F3", "~", "F3", "~", "C4", "~", "C3", "~", "G3", "~"]
+      B:
+        length: 1
+        groove:
+          ["G3", "~", "D3", "~", "Bb2", "~", "F3", "~", "E3", "~", "Bb3", "~", "A3", "~", "E3", "~"]
+      Return:
+        length: 1
+        groove:
+          ["D3", "~", "~", "~", "F3", "~", "C4", "~", "Bb2", "~", "F3", "~", "D3", "~", "~", "~"]
+  - id: 3
+    name: "Left arpeggio"
+    instrument: "spark"
+    patterns:
+      Intro:
+        length: 2
+        groove:
+          - {"chord": "Dm9", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+      A:
+        length: 2
+        groove:
+          - {"chord": "Dm9", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Fmaj7", "speed": 4}
+          - "-"
+          - {"chord": "C", "speed": 4}
+          - "-"
+      B:
+        length: 2
+        groove:
+          - {"chord": "Gm7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Em7b5", "speed": 4}
+          - "-"
+          - {"chord": "A7", "speed": 4}
+          - "-"
+      Return:
+        length: 2
+        groove:
+          - {"chord": "Dm9", "speed": 4}
+          - "-"
+          - {"chord": "Fmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Dm7", "speed": 4}
+          - "-"
+  - id: 4
+    name: "Right lead reflection"
+    echo: {"voice": 1, "delay": 12, "volume": 0.42, "detune": -5}
+  - id: 5
+    name: "Right pad doubling"
+    unison: {"voice": 2, "detune": 9}
+  - id: 6
+    name: "Right arpeggio"
+    instrument: "spark"
+    patterns:
+      Intro:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm9", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+      A:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm9", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Fmaj7", "speed": 4}
+          - "-"
+          - {"chord": "C", "speed": 4}
+      B:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Gm7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Em7b5", "speed": 4}
+          - "-"
+          - {"chord": "A7", "speed": 4}
+      Return:
+        length: 2
+        groove:
+          - "-"
+          - {"chord": "Dm9", "speed": 4}
+          - "-"
+          - {"chord": "Fmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Bbmaj7", "speed": 4}
+          - "-"
+          - {"chord": "Dm7", "speed": 4}
+timeline:
+  - {"section": "First letter", "bars": 2, "layers": {"v1": "Intro", "v2": "Intro", "v3": "Intro", "v6": "Intro"}}
+  - {"section": "Between windows", "bars": 4, "layers": {"v1": "A", "v2": "A", "v3": "A", "v6": "A"}}
+  - {"section": "Far side", "bars": 4, "layers": {"v1": "B", "v2": "B", "v3": "B", "v6": "B"}}
+  - {"section": "Reply and dissolve", "bars": 4, "layers": {"v1": "Return–", "v2": "Return–", "v3": "Return–", "v6": "Return–"}}

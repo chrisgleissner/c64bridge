@@ -1,0 +1,96 @@
+# Heroic title fanfare | 120 BPM | Eb major | 2 SIDs
+# Techniques: Saw+pulse brass with filter attack, wavetable timpani and a held Eb-major cadence.
+# Learn: Use a short fourth-and-fifth call, answer from the other register, and leave the curtain open on the tonic
+sidwave: 1.2
+title: The Gate Opens
+tempo: 120
+mode: PAL
+sids: [{"id": "sid1", "address": "$D400", "volume": 12, "pan": "Left 3"}, {"id": "sid2", "address": "$D420", "volume": 10, "pan": "Right 3"}]
+instruments:
+  brass: {"waveform": "saw+pulse", "adsr": [1, 4, 11, 5], "pulse_width": 1750, "filtertable": [{"cutoff": 690, "type": "lowpass", "resonance": 5}, {"add": 90, "frames": 10}, {"add": -18, "frames": 18}]}
+  timp: {"waveform": "tri", "adsr": [0, 4, 6, 3], "wavetable": [{"wave": "noise", "note": "D5"}, {"wave": "tri", "note": "+7"}, {"note": "+0", "frames": 5}]}
+voices:
+  - id: 1
+    name: "Trumpet"
+    instrument: "brass"
+    patterns:
+      Call:
+        length: 1
+        groove:
+          ["Eb4", "Bb4", "Eb5", "~"]
+      Answer:
+        length: 1
+        groove:
+          ["G5", "F5", "Eb5", "~", "Bb4", "D5", "F5", "~"]
+      Coda:
+        length: 1
+        groove:
+          ["Ab5", "G5", "F5", "D5", "Eb5", "~", "~", "~"]
+  - id: 2
+    name: "Cornet"
+    instrument: "brass"
+    patterns:
+      Call:
+        length: 1
+        groove:
+          ["-", "Eb4", "G4", "~"]
+      Answer:
+        length: 1
+        groove:
+          ["Eb5", "D5", "C5", "~", "G4", "Bb4", "D5", "~"]
+      Coda:
+        length: 1
+        groove:
+          ["F5", "Eb5", "D5", "Bb4", "G4", "~", "~", "~"]
+  - id: 3
+    name: "Trombone"
+    instrument: "brass"
+    patterns:
+      Call:
+        length: 1
+        groove:
+          ["Eb3", "~", "Bb3", "~"]
+      Answer:
+        length: 1
+        groove:
+          ["Ab3", "~", "Eb4", "~", "Bb3", "~", "F4", "~"]
+      Coda:
+        length: 1
+        groove:
+          ["Bb3", "Eb4", "Bb3", "~", "Eb4", "~", "~", "~"]
+  - id: 4
+    name: "Kettle drums"
+    instrument: "timp"
+    patterns:
+      Call:
+        length: 1
+        groove:
+          ["Eb2", "-", "Bb2", "-"]
+      Answer:
+        length: 1
+        groove:
+          ["Ab2", "-", "Eb2", "-", "Bb2", "-", "Bb2", "Bb2"]
+      Coda:
+        length: 1
+        groove:
+          ["Bb2", "-", "Bb2", "Bb2", "Eb2", "-", "-", "-"]
+  - id: 5
+    name: "Low brass answer"
+    instrument: "brass"
+    patterns:
+      Call:
+        length: 1
+        groove:
+          ["G3", "~", "~", "~"]
+      Answer:
+        length: 1
+        groove:
+          ["C4", "~", "Ab3", "~", "D4", "~", "Bb3", "~"]
+      Coda:
+        length: 1
+        groove:
+          ["F4", "Eb4", "D4", "~", "Bb3", "~", "~", "~"]
+timeline:
+  - {"section": "Summons", "bars": 1, "layers": {"v1": "Call", "v2": "Call", "v3": "Call", "v4": "Call", "v5": "Call"}}
+  - {"section": "The doors answer", "bars": 2, "layers": {"v1": "Answer", "v2": "Answer", "v3": "Answer", "v4": "Answer", "v5": "Answer"}}
+  - {"section": "Banner and held tonic", "bars": 2, "layers": {"v1": "Coda", "v2": "Coda", "v3": "Coda", "v4": "Coda", "v5": "Coda"}}
