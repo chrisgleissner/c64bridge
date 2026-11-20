@@ -6,6 +6,66 @@
 
 
 
+## 1.3.0 - 2026-11-20
+
+### Features
+
+- add location "host" to run_prg, load_prg, run_crt and disk mount so host-built files are uploaded to Ultimate hardware
+- read VICE, 64tass/ACME and KickAssembler label files through symbolsFile on every backend and return the labels from upload_run_asm
+- accept loaded labels as addresses in c64_memory and c64_debug, including set_registers values such as label+n
+- resolve .include and .incbin in upload_run_asm through the host-file rules and list assembler warnings and BASIC replacedLines in results
+- add c64_vice snapshot_save, snapshot_restore and version, and a bank argument for c64_memory read on VICE
+- report CPU state, PC and registers from step, step_return, get_registers and wait_for_state
+- list every packaged skill as a c64://skills/<name> resource and send initialize instructions
+- send progress notifications every 10 s when the client supplies a progress token
+- add c64_system delete_task, task ownership per server process and retention of 200 finished tasks and 200 run directories
+- add C64BRIDGE_STATE_DIR and C64BRIDGE_ALLOW_HIDDEN_PATHS, and apply C64BRIDGE_ACCESS to nested batches and tasks
+- read the PAL/NTSC default for SID playback from $02A6 and accept filterMode in set_volume
+- add the MCP stress and soak harness (npm run test:stress) and an opt-in fault mode in the REST mock
+- state every claim in the game-development and Ultimate resources exactly, checked against the 1541ultimate source or measured on an Ultimate 64 Elite; open C64 Ultimate questions are listed under Not verified
+
+### Bug Fixes
+
+- confine host paths to the allowed roots after resolving symlinks and protect configuration files and server state
+- reject . and .. segments, control characters and backslashes in configuration names and device file paths
+- limit REST bodies to 16 MiB, add a 120 s request deadline and treat a wrong-length memory read as an error
+- validate video packets, cap capture sessions and fail an audio capture within 1.5 s when no datagram arrives
+- keep secrets out of logs and diagnostics per value, and stop passing C64BRIDGE_* and credential variables to VICE
+- stop sending the C64U password to a U2_HOST
+- fail the first call after VICE restarted unnoticed instead of returning a fresh machine
+- load a PRG on VICE so list_basic sees it, start non-BASIC PRGs with SYS and refuse a PRG that runs past $FFFF
+- return from wait_for_state at once when the CPU is stopped away from expectedPC
+- send the tool result only after its progress notifications
+- exit with code 0 and run shutdown when the client closes stdout, and answer non-POST requests in stateless HTTP mode with 405
+- check for finished programs through $CC, report an endless BASIC program as running and shorten waitForReady to about 0.2 s on Ultimate
+- refuse Ultimate memory writes past $FFFF and audio captures above 65,536 sample pairs
+- reject graphics and charset spans over $D000-$DFFF and gaps across it in assembled PRGs
+- keep labels per program and clear them after program starts, resets and backend switches
+- stop generated SID sequences when another program, reset or sound operation starts
+- print render_petscii_text as data, send printer bitmap rows longer than 255 columns in valid strings and fix the greeting character map
+- reject BASIC characters that have no PETSCII mapping and keep listing and tokenising round trips byte-exact
+- reject mistyped mnemonics, fix ACME !text, !pet and !scr and check opcodes against ACME, 64tass, ca65 and KickAssembler
+- make c64_rag rank with BM25, reject blank queries and leave developer documents out of the index
+- keep unchanged modules when an incremental build moves dist/src into dist
+- correct the REU decode (no Ultimate product has $DF0C-$DF0F), the UCI TCP connect timeout, the turbo speed probe at 48 MHz and $D031 bit 7 after a reset
+- run the GitHub Actions workflows on the Node 24 releases of their actions
+
+### Breaking or behaviour changes
+
+- a missing C64BRIDGE_CONFIG file is an error; fix or unset the variable
+- redirects are no longer followed; the HTTP status is returned
+- U2_HOST no longer uses the C64U password; set U2_PASSWORD or a u2 section
+- a missing VICE_BINARY is an error instead of falling back to x64sc
+- upload_run_basic and upload_run_asm observe the program only with verify: true
+- play_preset and c64_sound pipeline no longer verify by default; pass verify: true for a measurement
+- unsupported assembler directives (.scr, .screen, .petscii, .endr, .dw) are errors that name the replacement
+- bare numbers such as 0400 are rejected as ambiguous; write $0400 or 1024
+- search_memory skips $D000-$DFFF on Ultimate; compare_memory, copy_memory and save_memory refuse ranges that overlap it unless includeIo is true
+- set_registers refuses values wider than the register instead of masking them
+- run_prg without symbolsFile clears earlier labels on every backend
+- read_screen shows graphics screen codes as U+2592
+- non-POST requests in stateless --http mode get 405 instead of an event stream
+
 ## 1.2.0 - 2026-11-14
 
 ### Features
