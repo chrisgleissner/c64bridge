@@ -77,12 +77,17 @@ test("disassembler annotates symbols and renders labels in formatted output", ()
   const bytes = Uint8Array.of(0x20, 0x00, 0xC0, 0x4C, 0x03, 0xC0);
   const lines = disassemble(bytes, 0xC000, undefined, symbols);
   assert.equal(lines[0].label, "INIT");
-  assert.match(lines[0].operand, /INIT \(\$C000\)/);
-  assert.match(lines[1].operand, /MAIN \(\$C003\)/);
+  // The operand stays assemblable (TRANSLATE-16); the symbol is a separate field and a comment.
+  assert.equal(lines[0].operand, "$C000");
+  assert.equal(lines[0].operandLabel, "INIT");
+  assert.equal(lines[1].operand, "$C003");
+  assert.equal(lines[1].operandLabel, "MAIN");
 
   const formatted = formatDisassembly(lines);
   assert.match(formatted, /INIT:/);
   assert.match(formatted, /MAIN:/);
+  assert.match(formatted, /JSR \$C000 {2}; INIT/);
+  assert.match(formatted, /JMP \$C003 {2}; MAIN/);
 });
 
 test("isUndocumentedOpcode classifies opcodes consistently with disassembly output", () => {

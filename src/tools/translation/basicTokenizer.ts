@@ -7,7 +7,7 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
-import { asciiToPetscii, encodeStringWithNames } from "../../petscii.js";
+import { parseBraceToken } from "../../petscii.js";
 import { ToolValidationError } from "../errors.js";
 
 const DEFAULT_START_ADDRESS = 0x0801;
@@ -34,7 +34,21 @@ export function basicTokenText(byte: number): string | undefined {
   return TOKEN_TABLE.find((entry) => entry.byte === byte)?.text;
 }
 
+export interface BasicPrgResult {
+  readonly prg: Buffer;
+  /**
+   * Line numbers whose earlier text was replaced by a later line with the same number
+   * (as when typing a line again on the C64), in source order, without repeats.
+   */
+  readonly replacedLines: number[];
+}
+
 export function basicToPrg(source: string, options?: { startAddress?: number }): Buffer {
+  return basicToPrgDetailed(source, options).prg;
+}
+
+export function basicToPrgDetailed(source: string, options?: { startAddress?: number }): BasicPrgResult {
+  const replacedLines: number[] = [];
   const startAddress = options?.startAddress ?? DEFAULT_START_ADDRESS;
   const normalizedSource = normalize(source);
   const lines = normalizedSource.split("\n");
@@ -64,7 +78,9 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
       programLines.delete(lineNumber);
       continue;
     }
-    programLines.set(lineNumber, tokenize(content));
+    const tokenised = tokenize(content, lineIndex + 1);
+    if (programLines.has(lineNumber) && !replacedLines.includes(lineNumber)) replacedLines.push(lineNumber);
+    programLines.set(lineNumber, tokenised);
   }
 
   const lineBuffers: Buffer[] = [];
@@ -95,7 +111,7 @@ export function basicToPrg(source: string, options?: { startAddress?: number }):
   const header = Buffer.alloc(2);
   header.writeUInt16LE(startAddress, 0);
 
-  return Buffer.concat([header, ...lineBuffers, Buffer.from([0x00, 0x00])]);
+  return { prg: Buffer.concat([header, ...lineBuffers, Buffer.from([0x00, 0x00])]), replacedLines };
 }
 
 function normalize(input: string): string {
@@ -104,7 +120,68 @@ function normalize(input: string): string {
   return `${withoutTrailingNewlines}\n`;
 }
 
-function tokenize(content: string): Uint8Array {
+function describeCharacter(char: string): string {
+  const codePoint = char.codePointAt(0) ?? 0;
+  return `${codePoint < 0x20 ? "control character" : `'${char}'`} (U+${codePoint.toString(16).toUpperCase().padStart(4, "0")})`;
+}
+
+/**
+ * One source character to its PETSCII byte. `inCode` is true outside strings, REM and DATA,
+ * where the pi sign is the BASIC token $FF; elsewhere it is the PETSCII pi glyph $DE.
+ * ASCII a-z become the letters $41-$5A (lowercase would be graphics); the pound sign is
+ * $5C. Everything else outside printable ASCII is an error naming the line: a raw byte
+ * such as NUL would end the line, and "e acute" or curly quotes have no PETSCII letter.
+ */
+function encodeSourceChar(char: string, lineNumber: number, inCode: boolean): number {
+  const code = char.charCodeAt(0);
+  if (code >= 0x20 && code <= 0x7e) {
+    return code >= 0x61 && code <= 0x7a ? code - 0x20 : code;
+  }
+  if (char === "\u00a3") return 0x5c;
+  if (char === "\u03c0") return inCode ? 0xff : 0xde;
+  throw new ToolValidationError(
+    `Source line ${lineNumber} contains ${describeCharacter(char)}, which has no PETSCII equivalent in a BASIC program. Use a {name} or {$xx} code in a string, or CHR$(n).`,
+    { path: "$.program" },
+  );
+}
+
+/**
+ * Handles "{name}", "{$xx}" and "{nn}" at `index`. Inside a string an unknown name is an
+ * error; elsewhere an unknown brace stays literal text. Code 0 is refused: a NUL byte ends
+ * a tokenised line. Returns undefined when `{` is not a token candidate.
+ */
+function encodeBraceToken(text: string, index: number, lineNumber: number, strict: boolean): { value: number; endIndex: number } | undefined {
+  const token = parseBraceToken(text, index);
+  if (!token) return undefined;
+  if (!token.ok) {
+    if (!strict) return undefined;
+    throw new ToolValidationError(
+      `Source line ${lineNumber}: ${token.token} is not a known control code (${token.reason}). Use a name such as {clr}, {red}, {down}, {rvs on}, {f1}, a code such as {$93} or {147}, or CHR$(123) for a literal brace.`,
+      { path: "$.program" },
+    );
+  }
+  if (token.value === 0) {
+    throw new ToolValidationError(
+      `Source line ${lineNumber}: ${text.slice(index, token.endIndex)} would put a NUL byte in the line, which ends the BASIC line; use CHR$(0) in the program instead.`,
+      { path: "$.program" },
+    );
+  }
+  return { value: token.value, endIndex: token.endIndex };
+}
+
+/**
+ * Bytes of one line's text (after the line number), or undefined when the text is not valid.
+ * For the listing, which checks that its text tokenises back to the same bytes.
+ */
+export function tokenizeLineContent(content: string): Uint8Array | undefined {
+  try {
+    return tokenize(content);
+  } catch {
+    return undefined;
+  }
+}
+
+function tokenize(content: string, lineNumber = 0): Uint8Array {
   // ASCII-only folding keeps every index aligned with content; full Unicode
   // upper-casing changes the length for characters such as the German sharp s.
   const upper = content.replace(/[a-z]/g, (letter) => letter.toUpperCase());
@@ -136,41 +213,54 @@ function tokenize(content: string): Uint8Array {
       }
     }
 
-    const char = content[index]!;
+    // Use code points so characters above U+FFFF are reported whole.
+    const char = String.fromCodePoint(content.codePointAt(index)!);
 
     // Special handling for string literals: encode the inner text in one go
     if (!inRemark && char === '"') {
-      bytes.push(asciiToPetscii('"'));
+      bytes.push(0x22);
       inString = !inString;
       index += 1;
 
       if (inString) {
         // capture until next quote or end of line
-        const start = index;
-        let end = start;
+        let end = index;
         while (end < content.length && content[end] !== '"') {
           end += 1;
         }
-        const segment = content.slice(start, end);
-        // Lowercase letters would print as graphics characters in the default
-        // character set, so string text is stored as the PETSCII letters.
-        const encoded = encodeStringWithNames(segment, { foldLowercase: true });
-        for (const b of encoded) bytes.push(b);
-        index = end; // leave closing quote to be processed next iteration
+        while (index < end) {
+          if (content[index] === "{") {
+            const brace = encodeBraceToken(content.slice(0, end), index, lineNumber, true);
+            if (brace) {
+              bytes.push(brace.value);
+              index = brace.endIndex;
+              continue;
+            }
+          }
+          const stringChar = String.fromCodePoint(content.codePointAt(index)!);
+          bytes.push(encodeSourceChar(stringChar, lineNumber, false));
+          index += stringChar.length;
+        }
       }
       continue;
     }
 
-    // REM text folds only ASCII a-z, like string text (LIST would show them as
-    // graphics); full Unicode upper-casing could change length or leave Latin-1.
-    const plainChar = inRemark
-      ? (char >= "a" && char <= "z" ? char.toUpperCase() : char)
-      : (!inString ? upper[index]! : char) ?? char;
-    bytes.push(asciiToPetscii(plainChar));
+    if (char === "{" && !inString) {
+      const brace = encodeBraceToken(content, index, lineNumber, false);
+      if (brace) {
+        bytes.push(brace.value);
+        index = brace.endIndex;
+        continue;
+      }
+    }
+
+    // Outside a string a tab is just a space; the other control characters are errors.
+    const plainChar = char === "\t" ? " " : char;
+    bytes.push(encodeSourceChar(plainChar, lineNumber, !inRemark && !inData));
     if (inData && !inString && plainChar === ":") {
       inData = false;
     }
-    index += 1;
+    index += char.length;
   }
 
   if (bytes.length === 0) {

@@ -917,7 +917,7 @@ test("upload_run_asm reports assembly diagnostics with file and line", async () 
 
   const result = await programRunnersModule.invoke(
     "upload_run_asm",
-    { program: ".org $0801\nstart\n lda #$00" },
+    { program: ".org $0801\n lda #$00\nbogus #1" },
     ctx,
   );
 

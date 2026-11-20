@@ -117,25 +117,24 @@ test("basicToPrg stores lowercase string text as PETSCII letters but keeps named
   assert.deepEqual(body, [0x99, 0x20, 0x22, 0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x73, 0x22]);
 });
 
-test("basicToPrg folds only ASCII letters in REM text", () => {
-  // "ß".toUpperCase() is "SS" and "µ".toUpperCase() is outside Latin-1, so REM must not use full upper-casing.
-  const prg = basicToPrg("10 REM stra\u00dfe x\n20 REM \u00b5\n");
+test("basicToPrg folds ASCII letters in REM text and rejects characters with no PETSCII equivalent (TRANSLATE-9)", () => {
+  const prg = basicToPrg("10 REM strasse x\n20 REM \u00a3\u03c0\n");
   const body = [...prg];
   const rem1 = body.indexOf(0x8f);
-  assert.deepEqual(body.slice(rem1 + 1, rem1 + 10), [0x20, 0x53, 0x54, 0x52, 0x41, 0xdf, 0x45, 0x20, 0x58]);
+  assert.deepEqual(body.slice(rem1 + 1, rem1 + 10), [0x20, 0x53, 0x54, 0x52, 0x41, 0x53, 0x53, 0x45, 0x20]);
   const rem2 = body.indexOf(0x8f, rem1 + 1);
-  assert.deepEqual(body.slice(rem2 + 1, rem2 + 3), [0x20, 0xb5]);
+  // The pound sign is PETSCII $5C; pi inside REM is the glyph $DE.
+  assert.deepEqual(body.slice(rem2 + 1, rem2 + 4), [0x20, 0x5c, 0xde]);
+  // The error names the line and the character; sharp s and curly quotes have no PETSCII code.
+  assert.throws(() => basicToPrg("10 PRINT 1\n20 REM stra\u00dfe"), (error) => error.name === "ToolValidationError" && /line 2/.test(error.message) && /U\+00DF/.test(error.message));
+  assert.throws(() => basicToPrg('10 PRINT "\u201cX\u201d"'), (error) => error.name === "ToolValidationError" && /U\+201C/.test(error.message));
 });
 
-test("basicToPrg keeps token positions after characters whose upper-case form is longer", () => {
-  // "ß".toUpperCase() is "SS", which used to shift every later index by one.
-  const withSharpS = basicToPrg('10 PRINT "ß":GOTO 10');
-  const control = basicToPrg('10 PRINT "a":GOTO 10');
+test("basicToPrg keeps token positions in lines with multi-code-unit text and maps pi outside strings to token $FF", () => {
   const tail = (prg) => [...prg.subarray(prg.length - 8, prg.length - 3)];
-  assert.deepEqual(tail(withSharpS), [0x3a, 0x89, 0x20, 0x31, 0x30]);
-  assert.deepEqual(tail(control), [0x3a, 0x89, 0x20, 0x31, 0x30]);
-  // Outside a string the character is passed through, and the GOTO target stays intact.
-  assert.deepEqual(tail(basicToPrg("10 PRINT \u00df:GOTO 10")), [0x3a, 0x89, 0x20, 0x31, 0x30]);
+  assert.deepEqual(tail(basicToPrg('10 PRINT "\u03c0":GOTO 10')), [0x3a, 0x89, 0x20, 0x31, 0x30]);
+  assert.deepEqual([...basicToPrg("10 X=\u03c0")].slice(6, 9), [0x58, 0xb2, 0xff]);
+  assert.deepEqual([...basicToPrg('10 PRINT "\u00a3"')].slice(6, 11), [0x99, 0x20, 0x22, 0x5c, 0x22]);
 });
 
 test("basicToPrg reports a program that does not fit in BASIC memory as a validation error", () => {
