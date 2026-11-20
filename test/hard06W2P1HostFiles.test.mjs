@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { C64Client } from "../src/c64Client.js";
-import { programRunnersModule } from "../src/tools/programRunners.js";
+import { assemblyToPrgDetailed } from "../src/tools/translation/assembler.js";
+import { programRunnersModule, assemblerHostResolvers } from "../src/tools/programRunners.js";
 import { storageModule, diskImageTypeFromPath } from "../src/tools/storage.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
 
@@ -72,5 +73,39 @@ test("DEVICE-6 drive mount with location host uploads the image and takes the ty
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     await mock.close();
+  }
+});
+
+function asmClient(source) {
+  const prg = assemblyToPrgDetailed(source, assemblerHostResolvers).prg;
+  const load = prg.readUInt16LE(0);
+  return {
+    async uploadAndRunAsm() { return { success: true }; },
+    async readScreen() { return "READY.\n"; },
+    async readMemoryRaw(address, length) {
+      const out = new Uint8Array(length);
+      for (let i = 0; i < length; i += 1) out[i] = prg[2 + address + i - load] ?? 0;
+      return out;
+    },
+  };
+}
+
+test("assembler .include and .incbin read files inside the allowed host directories", async () => {
+  const dir = tmp();
+  try {
+    fs.writeFileSync(path.join(dir, "inc.asm"), "lda #$05\n");
+    fs.writeFileSync(path.join(dir, "data.bin"), Buffer.from([1, 2, 3]));
+    const source = `*=$C000\n.include "${path.join(dir, "inc.asm")}"\n.incbin "${path.join(dir, "data.bin")}"\nrts\n`;
+    let assembled;
+    const client = { ...asmClient(source), async uploadAndRunAsm(_program, result) { assembled = result; return { success: true }; } };
+    const result = await programRunnersModule.invoke("upload_run_asm", { program: source }, { client, logger, platform: platform("c64u") });
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+    assert.deepEqual([...assembled.prg.subarray(2)], [0xa9, 0x05, 1, 2, 3, 0x60]);
+
+    const outside = await programRunnersModule.invoke("upload_run_asm", { program: '*=$C000\n.incbin "/etc/hostname"\n' }, { client, logger, platform: platform("c64u") });
+    assert.equal(outside.isError, true);
+    assert.match(JSON.stringify(outside.content), /outside the allowed directories/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

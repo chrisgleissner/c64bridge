@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { readHostFile, resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
 import { basicToPrg } from "./translation/basicTokenizer.js";
@@ -611,6 +612,47 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
   }
 }
 
+/** Largest file an `.include` or `.incbin` may read (a C64 program cannot use more than 64 KiB of data). */
+const MAX_ASM_INCLUDE_BYTES = 1024 * 1024;
+
+/**
+ * Reads a file for `.include`/`.incbin` with the same confinement, hidden-path and size rules as
+ * readHostFile. The assembler calls its resolvers synchronously, so the read is synchronous too.
+ * A relative path is taken relative to the including file when that is a real file, else to the working directory.
+ */
+function readAssemblerHostFile(requested: string, fromFile: string): Buffer {
+  const base = path.isAbsolute(fromFile) ? path.dirname(fromFile) : process.cwd();
+  const real = resolveHostPath(path.resolve(base, requested), { purpose: "read", maxBytes: MAX_ASM_INCLUDE_BYTES });
+  const fd = fs.openSync(real, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) throw new ToolValidationError(`Host path is not a regular file: ${real}`, { path: real });
+    if (stat.size > MAX_ASM_INCLUDE_BYTES) {
+      throw new ToolValidationError(`Host file is too large to read: ${real} is ${stat.size} bytes, limit is ${MAX_ASM_INCLUDE_BYTES} bytes.`, { path: real });
+    }
+    const out = Buffer.allocUnsafe(stat.size);
+    let total = 0;
+    while (total < out.length) {
+      const n = fs.readSync(fd, out, total, out.length - total, null);
+      if (n === 0) break;
+      total += n;
+    }
+    return out.subarray(0, total);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Resolvers that let assembly source use `.include`/`.incbin` (`!source`/`!binary`) with files inside the allowed host directories. */
+export const assemblerHostResolvers = {
+  resolveInclude: (requested: string, fromFile: string) => {
+    const base = path.isAbsolute(fromFile) ? path.dirname(fromFile) : process.cwd();
+    const real = resolveHostPath(path.resolve(base, requested), { purpose: "read", maxBytes: MAX_ASM_INCLUDE_BYTES });
+    return { contents: readAssemblerHostFile(requested, fromFile).toString("utf8"), fileName: real };
+  },
+  resolveIncbin: (requested: string, fromFile: string) => readAssemblerHostFile(requested, fromFile),
+};
+
 async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = uploadAsmArgsSchema.parse(rawArgs ?? {});
@@ -621,7 +663,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     });
 
     // Assemble locally to expose structured metadata and capture symbols
-    const asmResult = assemblyToPrgDetailed(parsed.program);
+    const asmResult = assemblyToPrgDetailed(parsed.program, assemblerHostResolvers);
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
 
