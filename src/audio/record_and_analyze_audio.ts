@@ -1,4 +1,5 @@
-import { parseSidwave, midiToHz, noteNameToMidi } from "../sidwave.js";
+import { parseSidwave, midiToHz } from "../sidwave.js";
+import { arrangeSidwave } from "../sidwaveCompiler.js";
 
 // Minimal ambient types for dynamic imports
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,7 +20,10 @@ export interface DetectedNote {
 }
 
 export interface VoiceAnalysis {
+  /** 0 = the mixed SID output: the analysis does not separate the three voices. */
   id: number;
+  /** What the notes were measured from. */
+  source?: string;
   detected_notes: DetectedNote[];
   average_deviation: number | null;
 }
@@ -115,7 +119,7 @@ export async function recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Pro
   const pcm16 = Buffer.concat(chunks);
   const float32 = convertInt16ToFloat32(pcm16);
 
-  const analysis = await analyzePcm(float32, sampleRate, "microphone", params.expectedSidwave);
+  const analysis = await analyzePcm(float32, sampleRate, "microphone", params.expectedSidwave, undefined, params.signal);
   return analysis;
 }
 
@@ -132,9 +136,10 @@ export async function analyzeStereoStream(
   interleaved: Int16Array,
   sampleRate: number,
   expectedSidwave?: unknown,
+  signal?: AbortSignal,
 ): Promise<AnalysisResult> {
   const [left, right] = stereoToCenteredChannels(interleaved);
-  return analyzePcm(left, sampleRate, "ultimate-stream", expectedSidwave, right);
+  return analyzePcm(left, sampleRate, "ultimate-stream", expectedSidwave, right, signal);
 }
 
 function stereoToCenteredChannels(interleaved: Int16Array): [Float32Array, Float32Array] {
@@ -181,6 +186,7 @@ async function analyzePcm(
   source: AnalysisResult["analysis"]["source"],
   expectedSidwave?: unknown,
   secondChannel?: Float32Array,
+  abortSignal?: AbortSignal,
 ): Promise<AnalysisResult> {
   let Pitchfinder: AnyFn;
   let Meyda: AnyFn | null = null;
@@ -204,8 +210,20 @@ async function analyzePcm(
 
   const frames: Array<{ t0: number; t1: number; freq: number | null; rms: number }> = [];
 
+  // A 2048-sample window cannot resolve notes below about 100 Hz (YIN needs a few periods), so a frame
+  // that finds no pitch is retried once with a 4096-sample window (down to about 50 Hz). Frames that fail
+  // both windows (noise, silence-like content) skip the retry for the next few frames to bound the cost.
+  const longWindow = 4096;
+  let retryCooldown = 0;
+  let frameCount = 0;
   for (let i = 0; i + windowSize <= signal.length; i += hopSize) {
+    // The loop is synchronous CPU work: give the event loop and the abort signal a turn regularly.
+    if (frameCount++ % 16 === 15) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      abortSignal?.throwIfAborted();
+    }
     let win = signal.subarray(i, i + windowSize);
+    let longSource = signal;
     let rms = computeRms(win, Meyda, sampleRate, windowSize);
     if (secondChannel) {
       const otherWin = secondChannel.subarray(i, i + windowSize);
@@ -213,21 +231,21 @@ async function analyzePcm(
       if (otherRms > rms) {
         rms = otherRms;
         win = otherWin;
+        longSource = secondChannel;
       }
     }
     const minRms = 0.01; // simple noise gate
     let freq: number | null = null;
     if (rms >= minRms) {
-      try {
-        // pitchfinder's YIN seeds its difference sum with 1, making low-level
-        // normalized PCM produce spurious ultrasonic pitches. Normalize only
-        // the detector input; RMS and the noise gate retain the original level.
-        let peak = 0;
-        for (const value of win) peak = Math.max(peak, Math.abs(value));
-        const pitchInput = peak > 0 ? Float32Array.from(win, (value) => value / peak) : win;
-        const f = yin(pitchInput);
-        if (Number.isFinite(f) && f > 20 && f < 8000) freq = f;
-      } catch {}
+      freq = detectPitch(yin, win);
+      if (freq === null) {
+        if (retryCooldown > 0) {
+          retryCooldown -= 1;
+        } else if (i + longWindow <= longSource.length) {
+          freq = detectPitch(yin, longSource.subarray(i, i + longWindow));
+          if (freq === null) retryCooldown = 7;
+        }
+      }
     }
     frames.push({ t0: i / sampleRate, t1: (i + windowSize) / sampleRate, freq, rms });
   }
@@ -252,6 +270,7 @@ async function analyzePcm(
   }
 
   const expectedMidiSet = extractExpectedMidiSet(expected);
+  const analyzedVoiceSource = "mixed SID output (the voices are not separated)";
 
   const detected_notes: DetectedNote[] = segments.map((seg) => {
     if (seg.freq == null) {
@@ -307,9 +326,7 @@ async function analyzePcm(
   );
 
   const voices: VoiceAnalysis[] = [
-    { id: 1, detected_notes, average_deviation: avgDev },
-    { id: 2, detected_notes: [], average_deviation: null },
-    { id: 3, detected_notes: [], average_deviation: null },
+    { id: 0, source: analyzedVoiceSource, detected_notes, average_deviation: avgDev },
   ];
 
   return {
@@ -326,6 +343,21 @@ async function analyzePcm(
       },
     },
   };
+}
+
+/** Runs YIN on one window, normalised to its peak. Returns a plausible pitch in Hz or null. */
+function detectPitch(yin: AnyFn, win: Float32Array): number | null {
+  try {
+    // pitchfinder's YIN seeds its difference sum with 1, making low-level
+    // normalized PCM produce spurious ultrasonic pitches. Normalize only
+    // the detector input; RMS and the noise gate retain the original level.
+    let peak = 0;
+    for (const value of win) peak = Math.max(peak, Math.abs(value));
+    const pitchInput = peak > 0 ? Float32Array.from(win, (value) => value / peak) : win;
+    const f = yin(pitchInput);
+    if (Number.isFinite(f) && f > 20 && f < 8000) return f;
+  } catch {}
+  return null;
 }
 
 // Test-only helper: bypasses microphone capture and analyzes provided PCM buffer.
@@ -394,41 +426,24 @@ function average(xs: number[]): number | null {
   return s / xs.length;
 }
 
+/** Every pitch the arranged song sounds (after transposition, layer modifiers and arpeggio offsets). */
 function extractExpectedMidiSet(expected?: ReturnType<typeof parseSidwave>): number[] | null {
   if (!expected) return null;
+  let arrangement: ReturnType<typeof arrangeSidwave>;
+  try {
+    arrangement = arrangeSidwave(expected);
+  } catch {
+    return null; // an unplayable score: report plain deviation from the nearest semitone
+  }
   const set = new Set<number>();
-  for (const v of expected.voices ?? []) {
-    const p = v.patterns ?? {} as Record<string, any>;
-    for (const name of Object.keys(p)) {
-      const pat = (p as any)[name];
-      const notes: string[] | undefined = Array.isArray(pat?.notes) ? pat.notes : Array.isArray(pat?.groove) ? pat.groove : undefined;
-      if (!notes) continue;
-      for (const n of notes) {
-        const m = noteNameToMidiSafe(n);
-        if (typeof m === "number") set.add(m);
-      }
+  for (const voice of arrangement.voices) {
+    for (const note of voice.notes) {
+      const arp = arrangement.instruments[note.inst]?.arp ?? [];
+      set.add(note.midi);
+      for (const offset of arp) set.add(note.midi + offset);
     }
   }
   return Array.from(set.values()).sort((a, b) => a - b);
-}
-
-function noteNameToMidiSafe(note: string): number | undefined {
-  try {
-    // noteNameToMidi is imported indirectly via sidwave types; fallback if missing
-    const m = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec((note || "").trim());
-    if (!m) return undefined;
-    const letter = m[1].toUpperCase();
-    const accidental = m[2];
-    const octave = Number(m[3]);
-    const base: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-    let semi = base[letter] ?? 0;
-    if (accidental === "#") semi += 1;
-    if (accidental === "b") semi -= 1;
-    const midi = (octave + 1) * 12 + semi;
-    return midi;
-  } catch {
-    return undefined;
-  }
 }
 
 function computeRms(win: Float32Array, Meyda: AnyFn | null, sampleRate: number, bufferSize: number): number {

@@ -247,13 +247,14 @@ function normalizeVoice(raw: unknown, path: string): SidwaveVoice {
 
 function validatePattern(raw: unknown, path: string): SidwavePattern {
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a pattern mapping (groove, motif or type: arpeggio)");
-  const p = raw as Record<string, any>;
-  if (p.length !== undefined) requireNumber(p.length, `${path}.length`, { min: 1 / 64, max: 64 });
+  // Copy first: numeric strings are stored as numbers, and the caller's object stays untouched.
+  const p = { ...(raw as Record<string, any>) };
+  if (p.length !== undefined) p.length = requireNumber(p.length, `${path}.length`, { min: 1 / 64, max: 64 });
   if (p.transpositions !== undefined) {
     if (!Array.isArray(p.transpositions) || p.transpositions.length === 0) {
       throw new SidwaveValidationError(`${path}.transpositions`, "expected a non-empty list of semitone offsets");
     }
-    p.transpositions.forEach((t: unknown, i: number) => requireNumber(t, `${path}.transpositions[${i}]`, { min: -48, max: 48, integer: true }));
+    p.transpositions = p.transpositions.map((t: unknown, i: number) => requireNumber(t, `${path}.transpositions[${i}]`, { min: -48, max: 48, integer: true }));
   }
   if (p.fx !== undefined) validatePatternFx(p.fx, `${path}.fx`);
 
@@ -270,6 +271,8 @@ function validatePattern(raw: unknown, path: string): SidwavePattern {
   if (p.groove !== undefined) {
     checkKeys(p, GROOVE_KEYS, path);
     if (!Array.isArray(p.groove) || p.groove.length === 0) throw new SidwaveValidationError(`${path}.groove`, "expected a non-empty list of notes, '-' rests or '~' ties");
+    // An unquoted ~ in YAML is null; it is the tie token, so read it as one.
+    p.groove = p.groove.map((n: unknown) => (n === null ? "~" : n));
     p.groove.forEach((n: unknown, i: number) => {
       const tok = String(n).trim();
       if (!isRestToken(tok) && !isTieToken(tok)) requireNote(n, `${path}.groove[${i}]`);
@@ -339,12 +342,13 @@ function checkFilterMod(spec: FilterModSpec, path: string): FilterModSpec {
 function parseGlobalFx(raw: unknown, path: string): Record<string, unknown> {
   if (raw === undefined || raw === null) return {};
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping");
-  const fx = raw as Record<string, any>;
+  const fx = { ...(raw as Record<string, any>) };
   checkKeys(fx, GLOBAL_FX_KEYS, path);
   if (fx.reverb_sim !== undefined) {
-    const v = requireObject(fx.reverb_sim, `${path}.reverb_sim`, ["depth", "delay_frames"]);
+    const v = { ...requireObject(fx.reverb_sim, `${path}.reverb_sim`, ["depth", "delay_frames"]) };
+    fx.reverb_sim = v;
     requireNumber(v.depth, `${path}.reverb_sim.depth`, { min: 0, max: 1, exclusiveMin: true });
-    requireNumber(v.delay_frames, `${path}.reverb_sim.delay_frames`, { min: 1, max: 50, integer: true });
+    v.delay_frames = requireNumber(v.delay_frames, `${path}.reverb_sim.delay_frames`, { min: 1, max: 50, integer: true });
   }
   if (fx.filter_env !== undefined) {
     const v = requireObject(fx.filter_env, `${path}.filter_env`, ["cutoff_base", "sweep", "speed", "resonance", "type", "voices"]);

@@ -241,6 +241,8 @@ export interface StreamEvent {
 }
 
 const BEAT_EPS = 1e-9;
+/** A note costs at least 3 stream bytes (note, wait, hard restart) and the song has about 52,000 bytes: 20,000 notes in one voice can never fit. Rejecting early avoids arranging millions of notes first. */
+const MAX_NOTES_PER_VOICE = 20_000;
 
 export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   const system: SystemMode = doc.song.mode ?? "PAL";
@@ -379,6 +381,9 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
             }
           }
           const inst = buildInstrument(voice, fxRaw, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps);
+          if (out.length >= MAX_NOTES_PER_VOICE) {
+            throw new SidwaveValidationError(patPath, `voice ${id} has more than ${MAX_NOTES_PER_VOICE} notes; every note takes at least 3 bytes, so the song would end past the $D000 limit (about 50 KB); use longer note lengths or fewer bars`);
+          }
           out.push({ start: f0, end: f1, midi: base, inst: instIndex(inst) });
         }
       }
