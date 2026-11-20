@@ -20,7 +20,6 @@ const ASM_DATA_DIR = path.join(assetRoot, "data/assembly/examples");
 const DOC_DIR = path.join(assetRoot, "doc");
 const CONTEXT_DIR = path.join(assetRoot, "data/context");
 const BOOTSTRAP_PATH = path.join(CONTEXT_DIR, "bootstrap.md");
-const AGENTS_PATH = path.join(assetRoot, "AGENTS.md");
 const PROMPTS_DIR = path.join(assetRoot, ".github/prompts");
 const CHAT_PATH = path.join(CONTEXT_DIR, "chat.md");
 
@@ -171,17 +170,16 @@ async function needsRebuild(): Promise<boolean> {
     return true;
   }
   const oldestIndex = Math.min(...(indexTimes as number[]));
-  const [basicDataM, asmDataM, externalM, docsM, bootstrapM, agentsM, promptsM, chatM] = await Promise.all([
+  const [basicDataM, asmDataM, externalM, docsM, bootstrapM, promptsM, chatM] = await Promise.all([
     dirMtimeRecursive(BASIC_DATA_DIR),
     dirMtimeRecursive(ASM_DATA_DIR),
     dirMtimeRecursive(EXTERNAL_DIR),
     dirMtimeRecursive(DOC_DIR).catch(() => 0),
     fileMtime(BOOTSTRAP_PATH).then((v) => v ?? 0),
-    fileMtime(AGENTS_PATH).then((v) => v ?? 0),
     promptFilesMtime().then((v) => v ?? 0),
     fileMtime(CHAT_PATH).then((v) => v ?? 0),
   ]);
-  const newestSource = Math.max(basicDataM, asmDataM, externalM, docsM, bootstrapM, agentsM, promptsM, chatM);
+  const newestSource = Math.max(basicDataM, asmDataM, externalM, docsM, bootstrapM, promptsM, chatM);
   return newestSource > oldestIndex;
 }
 

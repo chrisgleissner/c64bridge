@@ -207,7 +207,7 @@ LOOP    STA $D020
         ...buildOptions,
         docFiles: [
           path.join(repoRoot, 'doc', 'reviews', 'vice-support-review.md'),
-          path.join(repoRoot, 'doc', 'developer.md'),
+          path.join(repoRoot, 'doc', 'c64u', 'c64-rest-api.md'),
         ],
       });
       const docIndexes = await loadIndexes({ embeddingsDir });
@@ -218,7 +218,7 @@ LOOP    STA $D020
         ...(docIndexes.hardware?.records ?? []),
         ...(docIndexes.other?.records ?? []),
       ].map((record) => record.origin ?? record.sourcePath);
-      assert.ok(origins.some((origin) => origin.startsWith('doc/developer.md')), 'expected doc/developer.md to be indexed');
+      assert.ok(origins.some((origin) => origin.startsWith('doc/c64u/c64-rest-api.md')), 'expected doc/c64u/c64-rest-api.md to be indexed');
       assert.ok(!origins.some((origin) => origin.includes('doc/reviews/')), 'doc/reviews must not be indexed');
     });
   } finally {
