@@ -155,3 +155,24 @@ for (const tool of ["run_prg", "load_prg"]) {
     }
   });
 }
+
+test("DEVICE-4 injectKeyboardQueue passes its AbortSignal to feedKeyboard and stops polling when aborted", async () => {
+  const seen = [];
+  const facade = { type: "vice", async feedKeyboard(bytes, options) { seen.push(options); return { delivered: bytes.length, status: "drained", pending: 0 }; } };
+  const client = new C64Client("http://127.0.0.1:1", { forceC64uFacade: true });
+  Reflect.set(client, "facadePromise", Promise.resolve(facade));
+  const controller = new AbortController();
+  await client.injectKeyboardQueue(Buffer.from("A"), { signal: controller.signal });
+  assert.equal(seen[0].signal, controller.signal);
+
+  const reads = [];
+  const plain = { type: "c64u", async readMemory() { reads.push(1); return Uint8Array.of(3); }, async writeMemory() {} };
+  const client2 = new C64Client("http://127.0.0.1:1", { forceC64uFacade: true });
+  Reflect.set(client2, "facadePromise", Promise.resolve(plain));
+  const aborting = new AbortController();
+  const pending = client2.injectKeyboardQueue(Buffer.from("A"), { signal: aborting.signal, drainTimeoutMs: 5_000 }).catch((e) => e);
+  await new Promise((r) => setTimeout(r, 40));
+  aborting.abort();
+  const error = await pending;
+  assert.equal(error.name, "AbortError");
+});

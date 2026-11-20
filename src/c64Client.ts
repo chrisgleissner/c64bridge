@@ -2771,6 +2771,8 @@ export class C64Client {
       readonly drainPollMs?: number;
       readonly drainTimeoutMs?: number;
       readonly pinnedFacade?: C64Facade;
+      /** Stops waiting for the queue to drain (and aborts the VICE feed) when the request is cancelled. */
+      readonly signal?: AbortSignal;
     },
   ): Promise<{ delivered: number; status?: "drained" | "queued" | "stopped"; pending?: number; stoppedAt?: number }> {
     const data = Buffer.isBuffer(bytes)
@@ -2789,7 +2791,7 @@ export class C64Client {
         // VICE counts the bytes it queues (a NUL is dropped) and needs about 150 ms per key at least.
         const queuedBytes = data.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
         const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, queuedBytes * 150));
-        const fed = await facade.feedKeyboard(data, { drainTimeoutMs: timeoutMs });
+        const fed = await facade.feedKeyboard(data, { drainTimeoutMs: timeoutMs, ...(options?.signal ? { signal: options.signal } : {}) });
         if (fed.status === "timeout") {
           throw new KeyboardQueueDrainTimeoutError(fed.delivered, data.length, timeoutMs, fed.pending);
         }
@@ -2808,6 +2810,7 @@ export class C64Client {
       const waitForEmptyQueue = async (): Promise<number> => {
         const drainStart = Date.now();
         for (;;) {
+          options?.signal?.throwIfAborted();
           const ndx = (await facade.readMemory(NDX, 1))[0] ?? 0;
           if (ndx === 0) return 0;
           if (Date.now() - drainStart >= totalTimeoutMs) return ndx;
