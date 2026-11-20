@@ -315,13 +315,18 @@ function textToPetsciiBytes(text: string): Uint8Array {
   return Uint8Array.from(bytes);
 }
 
+/** The request abort signal, so a cancelled call stops waiting for the keyboard queue to drain. */
+function signalOption(ctx: { readonly signal?: AbortSignal }): { signal: AbortSignal } | undefined {
+  return ctx.signal ? { signal: ctx.signal } : undefined;
+}
+
 const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
   write_text: async (args, ctx) => {
     try {
       const parsed = writeTextArgsSchema.parse(args);
       const expanded = expandPetsciiTokens(parsed.text);
       const petsciiBytes = textToPetsciiBytes(expanded);
-      const fed = feedFields(await ctx.client.injectKeyboardQueue(petsciiBytes));
+      const fed = feedFields(await ctx.client.injectKeyboardQueue(petsciiBytes, signalOption(ctx)));
       if (parsed.delayMs && parsed.delayMs > 0) {
         await new Promise<void>((res) => setTimeout(res, parsed.delayMs));
       }
@@ -354,12 +359,12 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       let presses = 0;
       if (durationMs === 0 && count > 1) {
         // No pause between presses: one injection of count bytes, not count round trips.
-        const raw = await ctx.client.injectKeyboardQueue(new Uint8Array(count).fill(keyByte));
+        const raw = await ctx.client.injectKeyboardQueue(new Uint8Array(count).fill(keyByte), signalOption(ctx));
         fed = feedFields(raw);
         presses = fed.status === "drained" ? count : Math.min(count, raw.delivered ?? 0);
       } else {
         for (let i = 0; i < count; i++) {
-          fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte)));
+          fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte), signalOption(ctx)));
           presses += 1;
           // Stop at the first feed that did not drain: later presses would queue behind a stopped feed.
           if (fed.status !== "drained") break;
