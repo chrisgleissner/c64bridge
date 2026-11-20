@@ -454,3 +454,20 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | SoftwareIEC CHKOUT layout "(unverified)" | uci | RESOLVED from source: `<sec> <unused> <data>`, `$Fx` open, `$Ex` close; status 00,OK text | software/io/command_interface/softiec_target.cc:305-333 |
 | SoftwareIEC status 04 missing; store name | uci | ADDED `04` unknown command; store `SoftIEC Drive Settings` | softiec_target.cc:12-21; iec_drive.cc:165 |
 | HTTPS "a device check decides" | uci | REWRITTEN: https only selects port 443, plain socket | io/command_interface/http_target.h:77-86; software/network/http_request.cc:6-40 |
+| REU config "changing it re-initialises the cartridge, a reset follows" | reu | REMOVED (no source) | - |
+| Status b3-0 version; b4 = REU Size >= 256 KB | reu | CONFIRMED, version is 0 | fpga/cart_slot/vhdl_source/reu.vhd:429-437 |
+| $DF06 reads bits 7-3 as 1 without extended regs | reu | ADDED | reu.vhd:461-465 |
+| Extended registers "(unverified)" on other cores | reu | REWRITTEN: VHDL meaning, U2 builds disabled, U64 core 1.50 absent (measured); C64U to Not verified | reu.vhd:253-266,469-471; results.md row 33 |
+| 512 KB wrap mechanism | reu | CONFIRMED and explained (bits 23-19 from base) | reu.vhd:137-140 |
+| Wrap at configured size | reu | CONFIRMED | reu.vhd:127-140 |
+| "CPU store loop about 12 B/us" | reu | CORRECTED to 15.75 B/us for unrolled sta abs (63 cycles/us measured) | bench summary |
+| $FF00 trigger under I/O "(unverified)" | reu | MOVED to Not verified, request U-3 | - |
+| Turbo DMA start "firmware before 2026-08-28" | reu | CORRECTED: gateware change g_no_dma_delay, commit 59594060b | reu.vhd:288-295; 1541ultimate git log |
+| DOS LOAD_REU "chunk at 32 KB or less" | reu | CORRECTED: one command up to 16 MB minus start | software/filemanager/dos.cc:255-323 |
+| Preload timing "about 125 ms" | reu | CONFIRMED: 25 ticks at configTICK_RATE_HZ 200 | software/io/c64/reu_preloader.cc:14-80; FreeRTOSConfig.h:22 |
+| Save REU Memory writes the configured size | reu | CONFIRMED | software/io/c64/c64_subsys.cc:296-315 |
+| Stash stub "early stub hung" anecdote, 3.14d wedge history | reu | REMOVED | - |
+| Charset/bitmap swap timing "about 2,000 phi2" | reu | REWRITTEN from measured fetch rates | bench summary |
+| Digi sample design "(unverified)", "about 8 kHz" | reu | REWRITTEN as design pattern with CIA value 122 for 8000 Hz on PAL | c64ref (PAL phi2 985,248 Hz) |
+| GeoRAM layout "(unverified)" | reu | RESOLVED: $DE00 window, $DF80-$DFFF even = page, odd = block | fpga/cart_slot/vhdl_source/all_carts_v5.vhd:644-653 |
+| CRT types that keep the REU | reu | CORRECTED (EasyFlash 1, C128 IO 1/2, FC3 1) | software/io/c64/c64_crt.cc:468-648 |
