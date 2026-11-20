@@ -25,7 +25,11 @@ export async function keyboardIdle(facade: C64Facade): Promise<boolean> {
 }
 
 export async function basicReady(facade: C64Facade): Promise<boolean> {
-  const direct = (await facade.readMemory(0x3a, 1))[0] === 0xff;
+  // CURLIN+1 ($3A) is $FF in direct mode after a direct command, and $00 at the READY prompt that follows a
+  // reset (measured on the Ultimate 64 Elite, firmware 3.15a, 2026-11-20). The READY line and the idle
+  // editor state below separate both from a running program.
+  const curlinHigh = (await facade.readMemory(0x3a, 1))[0];
+  const direct = curlinHigh === 0xff || curlinHigh === 0x00;
   const editor = await facade.readMemory(0xc5, 0x12);
   // LSTX = no key held, NDX = no pending input, PNTR = left margin.
   const cursor = editor[0xd6 - 0xc5] ?? 0;

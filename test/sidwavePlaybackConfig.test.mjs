@@ -282,9 +282,9 @@ test("the socket layout refuses an explicitly empty socket before applying setti
   assert.ok(calls.every(([op]) => op !== "write" && op !== "run"));
 });
 
-function readyBasic(memory) {
+function readyBasic(memory, curlinHigh = 0xff) {
   memory.set([0x31, 0xea], 0x0314);
-  memory[0x3a] = 0xff;
+  memory[0x3a] = curlinHigh;
   memory[0xc5] = 0x40;
   memory[0xc6] = 0;
   memory[0xd3] = 0;
@@ -376,3 +376,12 @@ for (const scenario of ["other IRQ", "busy keyboard", "no READY prompt"]) {
   });
 }
 
+test("the READY prompt right after a reset ($3A = $00) also launches by DMA and SYS", async () => {
+  const { facade, memory, calls } = hardware();
+  readyBasic(memory, 0x00);
+  const client = clientFor(facade);
+  const doc = parseSidwave(score([{ id: "main", address: "$D400" }]));
+  const result = await client.playSidwave(doc, compileSidwaveToPrg(doc));
+  assert.deepEqual(result, { success: true, details: { launch: "dma_sys" } });
+  assert.ok(!calls.some(([op]) => op === "run" || op === "reset"));
+});
