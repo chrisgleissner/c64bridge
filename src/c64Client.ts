@@ -3024,6 +3024,43 @@ export class C64Client {
       await this.withViceMonitor((client) => client.resourceSet(name, value));
     }
 
+    /** Saves the emulator state to a snapshot file (Binary Monitor 0x41). The path is a path on the VICE host. */
+    async viceSnapshotSave(path: string, options?: { readonly saveRoms?: boolean; readonly saveDisks?: boolean }): Promise<void> {
+      await this.withViceMonitor((client) => client.dumpSnapshot(path, options));
+    }
+
+    /** Restores a snapshot file (Binary Monitor 0x42); returns the program counter afterwards. */
+    async viceSnapshotRestore(path: string): Promise<number> {
+      return this.withViceMonitor((client) => client.undumpSnapshot(path));
+    }
+
+    async viceVersionInfo(): Promise<{ readonly version: string; readonly svnRevision: number }> {
+      return this.withViceMonitor((client) => client.versionInfo());
+    }
+
+    /** Bank ids and names as the running VICE reports them (Binary Monitor 0x82). */
+    async viceBanksAvailable(): Promise<Array<{ readonly id: number; readonly name: string }>> {
+      return this.withViceMonitor((client) => client.banksAvailable());
+    }
+
+    /**
+     * Reads memory of a named VICE bank. The name is matched (case-insensitive) against the banks the
+     * running VICE reports; an unknown name is an error that lists the valid names.
+     */
+    async readMemoryBank(address: number, length: number, bank: string): Promise<{ readonly bytes: Uint8Array; readonly bank: string; readonly bankId: number }> {
+      validateMemoryRange(address, length);
+      return this.withViceMonitor(async (client) => {
+        const banks = await client.banksAvailable();
+        const wanted = bank.trim().toLowerCase();
+        const found = banks.find((entry) => entry.name.toLowerCase() === wanted);
+        if (!found) {
+          throw new Error(`Unknown VICE memory bank "${bank}". Available banks: ${banks.map((entry) => entry.name).join(", ") || "none reported"}.`);
+        }
+        const data = await client.memGetBank(address, address + length - 1, found.id);
+        return { bytes: Uint8Array.from(data.subarray(0, length)), bank: found.name, bankId: found.id };
+      });
+    }
+
     private normaliseMemspace(value: number | undefined): ViceMemspace {
       const allowed: readonly ViceMemspace[] = [0, 1, 2, 3, 4];
       if (value === undefined) {

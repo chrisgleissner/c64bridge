@@ -5,9 +5,12 @@ import {
   type OperationHandlerMap,
   type OperationMap,
 } from "./types.js";
+import { resolveHostPath } from "../hostPaths.js";
 import {
+  booleanSchema,
   literalSchema,
   objectSchema,
+  optionalSchema,
   stringSchema,
   type Schema,
 } from "./schema.js";
@@ -24,6 +27,9 @@ interface ViceOperationMap extends OperationMap {
   readonly resource_get: {
     readonly name: string;
   };
+  readonly snapshot_save: { readonly path: string };
+  readonly snapshot_restore: { readonly path: string };
+  readonly version: Record<string, never>;
   readonly resource_set: {
     readonly name: string;
     readonly value: string | number;
@@ -78,9 +84,39 @@ const resourceSetArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+const snapshotSaveArgsSchema = objectSchema({
+  description: "Save snapshot.",
+  properties: {
+    op: literalSchema("snapshot_save"),
+    path: stringSchema({ description: "File path." }),
+  },
+  required: ["op", "path"],
+  additionalProperties: false,
+});
+
+const snapshotRestoreArgsSchema = objectSchema({
+  description: "Restore snapshot.",
+  properties: {
+    op: literalSchema("snapshot_restore"),
+    path: stringSchema({ description: "File path." }),
+  },
+  required: ["op", "path"],
+  additionalProperties: false,
+});
+
+const versionArgsSchema = objectSchema({
+  description: "VICE version.",
+  properties: { op: literalSchema("version") },
+  required: ["op"],
+  additionalProperties: false,
+});
+
 const viceOperationSchemas = [
   resourceGetArgsSchema,
   resourceSetArgsSchema,
+  snapshotSaveArgsSchema,
+  snapshotRestoreArgsSchema,
+  versionArgsSchema,
 ] as const;
 
 const viceOperationHandlers: OperationHandlerMap<ViceOperationMap> = {
@@ -102,6 +138,35 @@ const viceOperationHandlers: OperationHandlerMap<ViceOperationMap> = {
         },
         { success: true, name: parsed.name, type: value.type },
       );
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  snapshot_save: async (args, ctx) => {
+    try {
+      const parsed = snapshotSaveArgsSchema.parse(args);
+      const path = resolveHostPath(parsed.path, { purpose: "write" });
+      await ctx.client.viceSnapshotSave(path);
+      return textResult(`Saved VICE snapshot to ${path}.`, { success: true, path });
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  snapshot_restore: async (args, ctx) => {
+    try {
+      const parsed = snapshotRestoreArgsSchema.parse(args);
+      const path = resolveHostPath(parsed.path, { purpose: "read" });
+      const pc = await ctx.client.viceSnapshotRestore(path);
+      const pcText = `$${pc.toString(16).toUpperCase().padStart(4, "0")}`;
+      return textResult(`Restored VICE snapshot ${path}; program counter ${pcText}.`, { success: true, path, pc: pcText });
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  version: async (_args, ctx) => {
+    try {
+      const info = await ctx.client.viceVersionInfo();
+      return textResult(`VICE ${info.version} (SVN revision ${info.svnRevision}).`, { success: true, version: info.version, svnRevision: info.svnRevision });
     } catch (error) {
       return handleToolError(error);
     }
@@ -151,13 +216,13 @@ export const viceModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_vice",
-      description: "Grouped entry point for reading and updating selected VICE resources.",
+      description: "VICE resources, snapshots.",
       summary: "Reads or updates selected VICE resources that are safe to expose through MCP.",
       inputSchema: discriminatedUnionSchema({
         description: "VICE emulator operations available via the c64_vice tool.",
         variants: viceOperationSchemas.map((schema) => schema.jsonSchema),
       }),
-      operationEffects: { resource_get: "read", resource_set: "write" },
+      operationEffects: { resource_get: "read", resource_set: "write", snapshot_save: "write", snapshot_restore: "destructive", version: "read" },
       tags: ["vice", "resource", "grouped"],
       examples: [
         {

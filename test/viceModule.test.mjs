@@ -282,7 +282,7 @@ test("c64_vice wraps unexpected client errors", async () => {
 test("c64_vice describes a flattened Claude-compatible input schema", () => {
   const [descriptor] = viceModuleGroup.describeTools();
 
-  assert.deepEqual(descriptor.inputSchema.properties.op.enum, ["resource_get", "resource_set"]);
+  assert.deepEqual(descriptor.inputSchema.properties.op.enum, ["resource_get", "resource_set", "snapshot_save", "snapshot_restore", "version"]);
   assert.deepEqual(descriptor.inputSchema.properties.value.type, ["string", "integer"]);
   assert.equal(descriptor.inputSchema.oneOf, undefined);
   assert.equal(descriptor.inputSchema.discriminator, undefined);
