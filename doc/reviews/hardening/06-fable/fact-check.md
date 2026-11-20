@@ -169,7 +169,7 @@ Prose in the same file (outside the name-to-address pairs; not edited, reported 
 
 | Fact | branch:file:line | Verdict | Source |
 |---|---|---|---|
-| Multicolour pixels are twice as wide (pixel width ratio 2) | G1:src/vicBitmap.ts:163 | CONFIRMED | Bauer 3.7.3: "each pixel being twice as wide" |
+| Multicolour pixels are twice as wide (pixel width ratio 2) | G1:src/vicBitmap.ts:163 | CONFIRMED | Bauer 3.7.3.2 (multicolor text mode): "each pixel being twice as wide" |
 | Bottom-right cell at screen $07E7 (2023) and colour RAM $DBE7 (56295) | G1:src/petsciiArt.ts:413-415 | CONFIRMED | $0400 + 999 = $07E7; Mapping "$D800-$DBFF Color RAM"; $D800 + 999 = $DBE7 |
 | Cursor (text) colour at 646 ($0286) | G1:src/petsciiArt.ts:396,415 | CONFIRMED | Mapping "$0286 COLOR Current Foreground Color for Text" |
 | $D016 bits 6-7, $D018 bit 0, $D020/$D021 bits 4-7 read as 1 (masked `& 0x3f`, `& 0xfe`, `& 0x0f`) | G1:src/tools/registry/graphics.ts:129-130,173-176 | CONFIRMED | Bauer register table and note "bits marked with '-' are not connected and yield '1' on reading" |
