@@ -137,7 +137,7 @@ New strings are created whenever:
 - substring (`LEFT$`, `MID$`, `RIGHT$`),
 - or runtime expression evaluation occurs.
 
-No garbage collection exists. `CLR` or `NEW` frees all strings.
+Garbage collection exists (`$B526`): it runs when string space is exhausted and on every `FRE()` call, and can pause the program noticeably. `CLR` or `NEW` frees all strings.
 
 **Efficiency notes**
 
@@ -399,7 +399,7 @@ C64 BASIC V2 is fully interpreted and float-based. Optimise by reducing parsing,
 
 ### 10.5 Strings
 
-- Heap grows downward, no garbage collection.
+- Heap grows downward; garbage collection runs when it is exhausted and on `FRE()`.
 - Avoid `A$=A$+B$` in loops; prefer `PRINT A$;B$`.
 - Reuse string vars; overwrite via `MID$` instead of reallocating.
 - Use `CLR` to reclaim heap; `LEFT$/RIGHT$/MID$` create new descriptors—use sparingly.
