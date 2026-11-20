@@ -1449,10 +1449,10 @@ for (const count of [4, 8]) {
     cpu.call(compiled.initAddress);
     assert.deepEqual([...mem.slice(0xfd, 0xff)], [0x12, 0x34]);
     const bases = doc.sids.map((sid) => sid.address);
-    for (const [i, base] of bases.entries()) assert.equal(mem[base + 24], sids[i].volume);
+    for (const base of bases) assert.deepEqual([...mem.slice(base, base + 25)], Array(25).fill(0));
 
     const cutoff = (base) => mem[base + 21] | (mem[base + 22] << 3);
-    for (let frame = 0; frame <= compiled.totalFrames + 1; frame++) {
+    for (let frame = 0; frame <= compiled.totalFrames + 15; frame++) {
       writes.length = 0;
       const cycles = cpu.call(compiled.playAddress);
       assert.ok(cycles <= compiled.worstCaseCyclesPerCall);
@@ -1460,26 +1460,30 @@ for (const count of [4, 8]) {
       const io = writes.filter(([address]) => address >= 0xd000 && address < 0xe000);
       assert.ok(io.every(([address]) => bases.some((base) => address >= base && address <= base + 24)));
       if (frame >= compiled.totalFrames) {
-        assert.ok(bases.every((base) => mem[base + 4] === 0 && mem[base + 24] === 0));
-        if (frame > compiled.totalFrames) assert.deepEqual(io, []);
+        const step = frame - compiled.totalFrames + 1;
+        for (const [i, base] of bases.entries()) {
+          assert.equal(mem[base + 4] & 1, 0, "the gate releases at the start of the tail");
+          assert.equal(mem[base + 24] & 15, Math.max(0, sids[i].volume - step));
+        }
+        if (step > 15) assert.deepEqual(io, []);
         continue;
       }
       for (const [i, base] of bases.entries()) {
         assert.ok(io.some(([address]) => address === base + 4), `frame ${frame}, SID ${i + 1} control write`);
         assert.ok(io.some(([address]) => address === base + 24), `frame ${frame}, SID ${i + 1} volume write`);
         assert.equal(mem[base] | (mem[base + 1] << 8), hzToSidFrequency(midiToHz(noteNameToMidi(pitches[i])), "PAL"));
-        assert.equal(mem[base + 24] & 15, sids[i].volume);
+        assert.equal(mem[base + 24] & 15, Math.min(frame + 1, sids[i].volume));
       }
       if (frame < 10) {
         assert.equal(cutoff(0xd420), 800 + frame * 8);
         assert.equal(cutoff(0xd460), 1024 + frame * 30);
         assert.equal(mem[0xd437], 0x91);
-        assert.equal(mem[0xd438], 0x2e);
+        assert.equal(mem[0xd438], 0x20 | (frame + 1));
       }
       if (frame === 0) {
         assert.equal(cutoff(0xd500), 1200);
         assert.equal(mem[0xd517], 0x73);
-        assert.equal(mem[0xd518], 0x4d);
+        assert.equal(mem[0xd518], 0x41);
         assert.equal(mem[0xd507] | (mem[0xd508] << 8), hzToSidFrequency(midiToHz(noteNameToMidi("G4")), "PAL"));
       }
       if (frame === 26) {
@@ -1545,8 +1549,9 @@ test("SIDWAVE measures the peak of a 30-voice table score and sets Ultimate turb
   cpu.call(compiled.entryAddress);
   assert.deepEqual(writes.filter(([address]) => address === 0xd031), [[0xd031, 0x8f]]);
   const irq = mem[0x0314] | (mem[0x0315] << 8);
-  const holdCalls = Math.ceil(4.25 * sidwaveFrameRate("PAL"));
-  for (let i = 0; i < holdCalls; i++) {
+  cpu.hooks.read = (address) => address === 0xd012 ? (Math.floor(cpu.cycles / 63) & 255) : undefined;
+  const holdCalls = Math.floor(4.25 * sidwaveFrameRate("PAL"));
+  for (let i = 1; i < holdCalls; i++) {
     writes.length = 0;
     cpu.call(irq);
     assert.ok(writes.every(([a]) => a < 0xd400 || a >= 0xd800), "no SID writes during the startup hold");
@@ -1583,7 +1588,8 @@ test("SIDWAVE 1.2 keeps existing note effects when they are used", () => {
     sids: sidMap(2), cpu: "turbo" });
   const { compiled } = loadMultiPlayer(mapped);
   const observed = runPsid(compileSidwaveToSid(mapped, compiled.prg).sid, compiled.totalFrames * 2);
-  assert.deepEqual(observed.states, expected.states);
+  const withoutVolume = (states) => states.map((s) => [...s.slice(0, 24), s[24] & 0xf0]);
+  assert.deepEqual(withoutVolume(observed.states), withoutVolume(expected.states));
   assert.ok(observed.maxPlayCycles <= compiled.worstCaseCyclesPerCall);
 });
 
@@ -1710,8 +1716,8 @@ test("CIA2 digi NMI uses the timer clock independently and preserves each SID's 
   mem[1] = 0x37;
   writes.length = 0;
   for (let sample = 0; sample < 7; sample++) tick();
-  assert.deepEqual(writes.filter(([a]) => a === 0xd438).map(([, v]) => v), [0x20, 0x21, 0x28, 0x2f, 0x2a, 0x2e]);
-  assert.deepEqual(writes.filter(([a]) => a === 0xd418).map(([, v]) => v), [12, 2, 14, 5, 15]);
+  assert.deepEqual(writes.filter(([a]) => a === 0xd438).map(([, v]) => v), [0x20, 0x21, 0x28, 0x2f, 0x2a, 0x22]);
+  assert.deepEqual(writes.filter(([a]) => a === 0xd418).map(([, v]) => v), [12, 2, 14, 5, 2]);
   assert.deepEqual([cpu.a, cpu.x, cpu.y, cpu.c, mem[1]], [17, 38, 59, 1, 0x37]);
   assert.equal(mem[0xdd0e], 0, "the timer stops after the last active sample");
   for (let i = 2; i <= compiled.totalFrames; i++) cpu.call(irq);
@@ -1743,7 +1749,7 @@ test("CIA2 plays original kick, snare and clap sample data, including page cross
   }
   const { voices } = parseSidwave(score).samples;
   for (const [i, { data }] of voices.entries()) {
-    assert.deepEqual(recorded[i], [...data, 15], "writes each nibble, then restores the SID volume");
+    assert.deepEqual(recorded[i], [...data, i === 0 ? 10 : 15], "writes each nibble, then restores the SID volume");
     assert.ok(new Set(recorded[i]).size > 4);
   }
   assert.equal(new Set(recorded.map((levels) => levels.slice(0, 32).join(","))).size, 3);
@@ -1921,3 +1927,33 @@ for (const { name } of SIDWAVE_EXAMPLES) {
     console.info(`SIDWAVE example ${name}: ${seconds.toFixed(2)}s, ${max} measured / ${compiled.worstCaseCyclesPerCall} estimated cycles per call`);
   });
 }
+
+test("SIDWAVE 1.2 opens the volume ramp once per video frame at speed 2 and tails off", () => {
+  const doc = parseSidwave(multiScore(sidMap(1), [scoreVoice(1, ["C4"])], { speed: 2 }));
+  const { cpu, compiled, mem } = loadMultiPlayer(doc, { loop: false });
+  mem.fill(0xff, 0xd400, 0xd419);
+  cpu.call(compiled.initAddress);
+  assert.deepEqual([...mem.slice(0xd400, 0xd419)], Array(25).fill(0));
+  const levels = [];
+  for (let frame = 0; frame < compiled.totalFrames; frame++) {
+    cpu.call(compiled.playAddress);
+    levels.push(mem[0xd418] & 15);
+  }
+  assert.deepEqual(levels.slice(0, 8), [1, 1, 2, 2, 3, 3, 4, 4]);
+  for (let call = 0; call < 30; call++) {
+    cpu.call(compiled.playAddress);
+    assert.equal(mem[0xd404] & 1, 0);
+    assert.equal(mem[0xd418] & 15, Math.max(0, 14 - Math.floor(call / 2)));
+  }
+});
+
+test("the turbo probe starts on the first IRQ when the raster shows a faster CPU", () => {
+  const doc = parseSidwave(multiScore(sidMap(1), [scoreVoice(1, ["C4"])], { cpu: "turbo" }));
+  const { cpu, compiled, mem } = loadMultiPlayer(doc);
+  cpu.call(compiled.entryAddress);
+  cpu.hooks.read = (address) => address === 0xd012 ? (Math.floor(cpu.cycles / (2.5 * 63)) & 255) : undefined;
+  const irq = mem[0x0314] | (mem[0x0315] << 8);
+  cpu.call(irq);
+  assert.equal(mem[0xd404] & 1, 1);
+  assert.equal(mem[0xd418] & 15, 1);
+});

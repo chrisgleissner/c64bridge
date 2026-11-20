@@ -89,7 +89,10 @@ digi_next${chip}:
   code = code.split(volumeStore).join("  jsr digi_volume")
     .replace("  lda chip_volume,x\n  jsr digi_volume", "  lda chip_volume,x\n" + volumeStore)
     .replace("  txa\n  jsr init_core", "  jsr digi_init\n  txa\n  jsr init_core")
-    .replace("finish_song:\n", "finish_song:\n  jsr digi_stop\n");
+    .replace(code.includes("soft_release:") ? "soft_release:\n" : "finish_song:\n",
+      code.includes("soft_release:") ? "soft_release:\n  jsr digi_stop\n" : "finish_song:\n  jsr digi_stop\n");
+  // The fade owns the register after stopping CIA2. Bypass the digi mixer.
+  code = code.replace(/(  ora soft_mode,x\n)  jsr digi_volume/, (_, mode: string) => mode + volumeStore);
   return code + `
 digi_init:
   lda #1
@@ -123,7 +126,7 @@ digi_reset:
   lda #0
   sta digi_active,y
   sta digi_mode,y
-  lda chip_volume,y
+  ${code.includes("soft_mix:") ? "lda #0" : "lda chip_volume,y"}
   sta digi_mix,y
   dey
   bpl digi_reset

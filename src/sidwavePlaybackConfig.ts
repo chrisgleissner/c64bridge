@@ -76,6 +76,7 @@ export function sidwaveSetupWarnings(doc: ParsedSidwave, backend: string): strin
 }
 
 export interface SidwaveSetup {
+  clearsUltimateSidWindows?: boolean;
   apply(): Promise<void>;
   restore(): Promise<void>;
 }
@@ -87,6 +88,47 @@ function settingsOf(category: string, response: unknown): Record<string, unknown
     throw new Error(`Could not snapshot ${category}`);
   }
   return settings;
+}
+
+const ADDRESS_BITS: Record<string, number[]> = {
+  Off: [], A5: [5], A6: [6], A7: [7], A8: [8], A9: [9],
+};
+const settingValue = (entry: unknown) => object(entry)?.current ?? entry;
+
+function sidWindows(settings: Record<string, unknown>): number[] {
+  const result: number[] = [];
+  for (const [i, name] of ["UltiSID 1", "UltiSID 2", "SID Socket 1", "SID Socket 2"].entries()) {
+    const address = String(settingValue(settings[`${name} Address`] ?? ""));
+    if (!/^\$d[4-7][02468ace]0$/i.test(address)) continue; // Never clear the cartridge I/O space.
+    const value = Number.parseInt(address.slice(1), 16);
+    const mode = String(settingValue(settings[i < 2 ? "UltiSID Range Split" : "Ext DualSID Range Split"]));
+    const bits = ADDRESS_BITS[mode] ?? [...mode.matchAll(/A([5-9])/g)].map((match) => Number(match[1]));
+    let offsets = [0];
+    let base = value;
+    for (const bit of bits) {
+      base &= ~(1 << bit);
+      offsets = [...offsets, ...offsets.map((offset) => offset | (1 << bit))];
+    }
+    result.push(...offsets.map((offset) => base | offset));
+  }
+  return result.filter((address) => address >= 0xd400 && address <= 0xd7e0);
+}
+
+export async function readUltimateSidWindows(facade: C64Facade): Promise<number[]> {
+  const configured = await facade.configGet(ADDRESSING).then((response) => sidWindows(settingsOf(ADDRESSING, response))).catch(() => []);
+  return configured.length ? configured : [0xd400];
+}
+
+export async function clearUltimateSidWindows(facade: C64Facade, bases: readonly number[]): Promise<void> {
+  const addresses = [...new Set(bases)].filter((base) => base >= 0xd400 && base <= 0xd7e0 && base % 32 === 0).sort((a, b) => a - b);
+  for (let i = 0; i < addresses.length;) {
+    const first = addresses[i++]!;
+    let last = first;
+    while (addresses[i] === last + 0x20) last = addresses[i++]!;
+    // $00..$18 are writable. Include inter-window padding only when every
+    // window in the DMA write is mapped.
+    await facade.writeMemory(first, new Uint8Array(last - first + 0x19));
+  }
 }
 
 async function prepareUltimate(facade: C64Facade, doc: ParsedSidwave): Promise<SidwaveSetup> {
@@ -152,12 +194,27 @@ async function prepareUltimate(facade: C64Facade, doc: ParsedSidwave): Promise<S
       (restore[category] ??= {})[name] = original;
     }
   }
+  const before = snapshot.get(ADDRESSING);
+  const oldWindows = before ? sidWindows(before) : [];
+  const newWindows = plan[ADDRESSING] ? sidWindows(plan[ADDRESSING]) : [];
   const write = async (settings: Settings, action: string) => {
     if (!Object.keys(settings).length) return;
     const result = await facade.configBatchUpdate(settings);
     if (!result.success) throw new Error(`Could not ${action} SIDWAVE settings: ${JSON.stringify(result.details ?? {})}`);
   };
-  return { apply: () => write(plan, "apply"), restore: () => write(restore, "restore") };
+  const remap = async (settings: Settings, action: string, from: number[], to: number[]) => {
+    if (settings[ADDRESSING]) await clearUltimateSidWindows(facade, from);
+    try {
+      await write(settings, action);
+    } finally {
+      if (settings[ADDRESSING]) await clearUltimateSidWindows(facade, to);
+    }
+  };
+  return {
+    clearsUltimateSidWindows: !!plan[ADDRESSING],
+    apply: () => remap(plan, "apply", oldWindows, newWindows),
+    restore: () => remap(restore, "restore", newWindows, oldWindows),
+  };
 }
 
 export function validateViceSidwaveMap(doc: ParsedSidwave): void {

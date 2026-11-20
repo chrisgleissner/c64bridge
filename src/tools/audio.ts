@@ -1,3 +1,4 @@
+import { SIDWAVE_EXAMPLES_URI } from "../sidwaveExamples.js";
 import { DEFAULT_MUSIC_SEED, generateSidwave, MUSIC_STYLES, type MusicStyle } from "../audio/generateSidwave.js";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, type CompileResult } from "../sidwaveCompiler.js";
@@ -246,6 +247,7 @@ export const MUSIC_GENERATE_DESCRIPTION = "Compose and play a seeded SIDWAVE PRG
 const musicGenerateArgsSchema = objectSchema({
   description: "Compose and play a seeded SIDWAVE piece.",
   properties: {
+    includeScore: optionalSchema(booleanSchema()),
     configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     root: stringSchema({ description: "Tonic and lead register.", pattern: NOTE_PATTERN, default: "C4" }),
     pattern: optionalSchema(stringSchema({ description: "Repeating lead semitone offsets from root.", minLength: 1 })),
@@ -1009,11 +1011,13 @@ export const audioModule = defineToolModule({
 
           return textResult(`Playing ${bars} ${bars === 1 ? "bar" : "bars"} of ${style} in ${key} at ${tempo} BPM (${progression.join("–")}, seed ${parsed.seed}).`, {
             success: true,
-            key, progression, tempo, style, seed: parsed.seed, bars, speed, sidwave,
+            key, progression, tempo, style, seed: parsed.seed, bars, speed,
+            resourceUri: `${SIDWAVE_EXAMPLES_URI}/${{ ambient: "ambient_filter", chiptune: "chiptune_drive", funk: "funk_bass" }[style]}`,
+            ...(parsed.includeScore ? { sidwave } : {}),
             root: parsed.root, intervals, steps: parsed.steps ?? (leadTimeline.length || undefined),
             tempoMs: parsed.tempoMs, waveform: parsed.waveform ?? "pulse", preset, system, systemSource,
             durationSeconds: compiled.totalFrames / compiled.framesPerSecond,
-            ...(leadTimeline.length ? { timeline: leadTimeline } : {}),
+            ...(parsed.includeScore && leadTimeline.length ? { timeline: leadTimeline } : {}),
             prgSize: compiled.prg.length,
             ...(warnings.length ? { warnings } : {}),
           });

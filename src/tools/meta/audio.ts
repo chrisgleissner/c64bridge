@@ -1,4 +1,4 @@
-import { SIDWAVE_EXAMPLES, readSidwaveExample, type SidwaveExampleName } from "../../sidwaveExamples.js";
+import { SIDWAVE_EXAMPLES, SIDWAVE_EXAMPLES_URI, readSidwaveExample, type SidwaveExampleName } from "../../sidwaveExamples.js";
 import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "../../sidwaveCompiler.js";
@@ -53,39 +53,6 @@ const LEGACY_PRESET_ALIAS = String.fromCharCode(
   109,
 );
 
-const FUER_ELISE_SIDWAVE = `
-song:
-  title: "Für Elise"
-  mode: PAL
-  tempo: 76
-voices:
-  - id: 1
-    name: "Lead"
-    waveform: triangle
-    adsr: [1, 4, 9, 4]
-    patterns:
-      theme:
-        groove: ["E5", "D#5", "E5", "D#5", "E5", "B4", "D5", "C5", "A4", "-", "A3", "C4", "E4", "-", "A4", "B4", "-", "E4", "G#4", "B4", "C5", "-", "E5", "D#5", "E5", "D#5", "E5", "B4", "D5", "C5", "A4", "-"]
-  - id: 2
-    name: "Harmony"
-    waveform: triangle
-    adsr: [2, 5, 8, 5]
-    patterns:
-      accomp:
-        groove: ["-", "-", "-", "-", "-", "-", "-", "-", "A2", "E3", "A3", "E3", "A2", "E3", "A3", "E3", "E2", "B2", "E3", "B2", "E2", "B2", "E3", "B2", "-", "-", "-", "-", "-", "-", "-", "-"]
-  - id: 3
-    name: "Bass"
-    waveform: triangle
-    adsr: [1, 3, 10, 5]
-    patterns:
-      bass:
-        groove: ["-", "-", "-", "-", "-", "-", "-", "-", "A1", "-", "-", "-", "A1", "-", "-", "-", "E2", "-", "-", "-", "E2", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
-timeline:
-  - section: "Theme"
-    bars: 8
-    layers: { v1: theme, v2: accomp, v3: bass }
-`;
-
 const EXAMPLE_PRESETS = new Map<string, typeof SIDWAVE_EXAMPLES[number]>(
   SIDWAVE_EXAMPLES.map((entry) => [entry.name, entry]),
 );
@@ -119,6 +86,7 @@ const musicCompilePlayAnalyzeArgsSchema = objectSchema({
 const musicPlayPresetArgsSchema = objectSchema({
   description: "Play a built-in SID preset with optional backend switching and audio verification.",
   properties: {
+    includeScore: optionalSchema(booleanSchema()),
     configure: optionalSchema(booleanSchema({ description: "Set up SID playback." })),
     preset: optionalSchema(presetSchema, "chiptune_drive"),
     platforms: optionalSchema(arraySchema(stringSchema({
@@ -243,7 +211,7 @@ function resolveMusicPreset(preset?: string): ResolvedMusicPreset {
     key: example.name, title: example.title, description: example.style, sidwave: readSidwaveExample(example.name),
   } : normalizedKey === "fuer_elise" ? {
     key: "fuer_elise", title: "Für Elise", description: "A compact SID arrangement of Beethoven's Bagatelle in A minor.",
-    sidwave: FUER_ELISE_SIDWAVE,
+    sidwave: readSidwaveExample("fuer_elise"),
   } : undefined;
   if (!definition) {
     throw new ToolExecutionError("Unknown music preset", {
@@ -486,7 +454,8 @@ export const tools: ToolDefinition[] = [
           availableBackends,
           restoredBackend: restoreActiveBackend ? startingBackend : await context.client.getActiveBackendType(),
           verificationEnabled: verify,
-          sidwave: preset.sidwave,
+          resourceUri: `${SIDWAVE_EXAMPLES_URI}/${preset.key}`,
+          ...(parsed.includeScore ? { sidwave: preset.sidwave } : {}),
           results,
           ...(restoreError ? { restoreError } : {}),
         };

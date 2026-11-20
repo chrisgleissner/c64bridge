@@ -66,7 +66,7 @@ function clientFor(facade, others = []) {
     facadePromise, activeType: facade.type, initPromise: Promise.resolve(),
     allFacades: new Map([[facade.type, facadePromise], ...others.map((other) => [other.type, Promise.resolve(other)])]),
     sidwaveSessions: new Map(), sidwaveQueue: new WeakMap(), pendingSidwave: 0,
-    sidControl: new WeakMap(), sidVolume: new WeakMap(), pauseStates: new WeakMap(),
+    sidControl: new WeakMap(), sidVolume: new WeakMap(), pauseStates: new WeakMap(), keyboardLocks: new WeakMap(),
   });
 }
 
@@ -120,7 +120,7 @@ for (const [action, replace] of [
     const first = calls.length;
     await replace(client, doc, compiled);
     const tail = calls.slice(first);
-    assert.deepEqual(tail[0], ["write", { [ADDRESSING]: configBaseline[ADDRESSING] }]);
+    assert.deepEqual(tail.find(([op]) => op === "write"), ["write", { [ADDRESSING]: configBaseline[ADDRESSING] }]);
     if (action === "replace SIDWAVE") {
       assert.deepEqual(tail.filter(([op]) => op === "write").at(-1), ["write", { [ADDRESSING]: expectedAddressing(0) }]);
       await client.stopSidwavePlayback();
@@ -248,7 +248,8 @@ test("stopping a configured digi PRG detaches its CIA2 NMI before restoring the 
   await client.stopSidwavePlayback();
   assert.deepEqual(calls.slice(first, first + 4), [["mem", 0x0314], ["mem", 0xdd0d], ["mem", 0xdd0e], ["mem", 0x0318]]);
   assert.deepEqual([...memory.slice(0x0318, 0x031a)], [0x47, 0xfe]);
-  assert.equal(calls.at(-1)[0], "write");
+  assert.equal(calls.findLastIndex(([op]) => op === "write") < calls.length - 1, true);
+  assert.equal(calls.at(-1)[0], "mem");
   assert.deepEqual(config, configBaseline);
 });
 
@@ -280,3 +281,98 @@ test("the socket layout refuses an explicitly empty socket before applying setti
   await assert.rejects(() => client.playSidwave(doc, compileSidwaveToPrg(doc), { configure: true }), /SID socket 1, but no chip is detected/);
   assert.ok(calls.every(([op]) => op !== "write" && op !== "run"));
 });
+
+function readyBasic(memory) {
+  memory.set([0x31, 0xea], 0x0314);
+  memory[0x3a] = 0xff;
+  memory[0xc5] = 0x40;
+  memory[0xc6] = 0;
+  memory[0xd3] = 0;
+  memory[0xd6] = 5;
+  memory[0x0288] = 4;
+  memory.fill(0x20, 0x0400 + 4 * 40, 0x0400 + 6 * 40);
+  memory.set([18, 5, 1, 4, 25, 46], 0x0400 + 4 * 40);
+}
+
+for (const backend of ["c64u", "u2"]) {
+  test(`${backend} launches a SIDWAVE PRG at BASIC READY by DMA and SYS`, async () => {
+    const { facade, memory, calls, config } = hardware(backend);
+    readyBasic(memory);
+    config[ADDRESSING]["UltiSID 1 Address"] = "$D400";
+    config[ADDRESSING]["UltiSID 2 Address"] = "$D420";
+    config[ADDRESSING]["Ext DualSID Range Split"] = "Off";
+    memory.fill(0x99, 0xd400, 0xd460);
+    const client = clientFor(facade);
+    const doc = parseSidwave(score([{ id: "main", address: "$D400" }, { id: "second", address: "$D420" }]));
+    const compiled = compileSidwaveToPrg(doc);
+    const result = await client.playSidwave(doc, compiled);
+    assert.deepEqual(result, { success: true, details: { launch: "dma_sys" } });
+    assert.ok(!calls.some(([op]) => op === "run" || op === "reset"));
+    assert.deepEqual(memory.slice(compiled.loadAddress, compiled.endAddress), Uint8Array.from(compiled.prg.subarray(2)));
+    assert.equal(Buffer.from(memory.slice(0x0277, 0x0277 + memory[0xc6])).toString(), "SYS 2061\r");
+    for (const base of [0xd400, 0xd420]) assert.deepEqual([...memory.slice(base, base + 25)], Array(25).fill(0));
+    assert.deepEqual(calls.filter(([op]) => op === "mem").slice(-3), [["mem", compiled.loadAddress], ["mem", 0x0277], ["mem", 0xc6]]);
+  });
+}
+
+test("replacing the managed player unhooks its IRQ and clears old and remapped windows before SYS", async () => {
+  const { facade, memory, calls, config } = hardware();
+  const client = clientFor(facade);
+  const previous = parseSidwave(score([{ id: "old", address: "$D460" }]));
+  const oldProgram = compileSidwaveToPrg(previous);
+  await client.playSidwave(previous, oldProgram);
+  memory.set([oldProgram.irqAddress & 255, oldProgram.irqAddress >> 8], 0x0314);
+  memory[0xc6] = 0;
+  const fresh = parseSidwave(score({ layout: "ultisid8" }));
+  const next = compileSidwaveToPrg(fresh);
+  const stages = [];
+  const write = facade.writeMemory;
+  facade.writeMemory = async (address, bytes) => {
+    stages.push([address, bytes.length, bytes.every((byte) => byte === 0)]);
+    return write(address, bytes);
+  };
+  const set = facade.configBatchUpdate;
+  facade.configBatchUpdate = async (plan) => {
+    stages.push(["remap"]);
+    return set(plan);
+  };
+  const result = await client.playSidwave(fresh, next, { configure: true });
+  assert.equal(result.details.launch, "dma_sys");
+  assert.deepEqual(stages[0].slice(0, 2), [0x0314, 2]);
+  const remap = stages.findIndex(([step]) => step === "remap");
+  assert.ok(stages.slice(1, remap).some(([base, size, zero]) => base <= 0xd460 && base + size >= 0xd460 + 25 && zero), "old SID cleared before remap");
+  assert.ok(stages.slice(remap + 1).some(([base, size, zero]) => base === 0xd400 && size >= 0x39 && zero), "new SID windows cleared after remap");
+  assert.equal(config[ADDRESSING]["UltiSID Range Split"], "1/4 (A7,A8)");
+  assert.equal(calls.filter(([op]) => op === "run").length, 1);
+});
+
+test("a player started by an earlier session can be identified by its IRQ stub", async () => {
+  const { facade, memory, calls } = hardware();
+  const client = clientFor(facade);
+  const doc = parseSidwave(score([{ id: "old", address: "$D460" }]));
+  const compiled = compileSidwaveToPrg(doc);
+  memory.set(compiled.prg.subarray(2), compiled.loadAddress);
+  memory.set([compiled.irqAddress & 255, compiled.irqAddress >> 8], 0x0314);
+  memory.set([0x47, 0xfe], 0x0318);
+  memory[0xd464] = 0x21;
+  const result = await client.playSidwave(doc, compiled);
+  assert.equal(result.details.launch, "dma_sys");
+  assert.deepEqual(calls[0], ["mem", 0x0314]);
+  assert.deepEqual([...memory.slice(0x0314, 0x0316)], [0x31, 0xea]);
+  assert.equal(memory[0xd464], 0);
+  assert.ok(!calls.some(([op]) => op === "run" || op === "reset"));
+});
+
+for (const scenario of ["other IRQ", "busy keyboard", "no READY prompt"]) {
+  test(`SIDWAVE falls back to run_prg for ${scenario}`, async () => {
+    const { facade, memory, calls } = hardware();
+    readyBasic(memory);
+    if (scenario === "other IRQ") memory.set([0x00, 0xc0], 0x0314);
+    else if (scenario === "busy keyboard") memory[0xc6] = 1;
+    else memory[0x0400 + 4 * 40] = 0x20;
+    const doc = parseSidwave(score([{ id: "main", address: "$D400" }]));
+    await clientFor(facade).playSidwave(doc, compileSidwaveToPrg(doc));
+    assert.deepEqual(calls, [["run"]]);
+  });
+}
+

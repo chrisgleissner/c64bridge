@@ -22,10 +22,17 @@ export const SIDWAVE_EXAMPLES = [
 
 export type SidwaveExampleName = typeof SIDWAVE_EXAMPLES[number]["name"];
 
-export function sidwaveExamplePath(name: SidwaveExampleName): string {
+export const SIDWAVE_SCORE_RESOURCES = [
+  ...SIDWAVE_EXAMPLES,
+  { name: "fuer_elise", title: "Für Elise", style: "Legacy three-voice arrangement of Beethoven’s Bagatelle" },
+] as const;
+
+type SidwaveScoreName = typeof SIDWAVE_SCORE_RESOURCES[number]["name"];
+
+export function sidwaveExamplePath(name: SidwaveScoreName): string {
   return `data/sound/examples/${name}.yaml`;
 }
 
-export function readSidwaveExample(name: SidwaveExampleName): string {
+export function readSidwaveExample(name: SidwaveScoreName): string {
   return readFileSync(join(fileURLToPath(new URL("../", import.meta.url)), sidwaveExamplePath(name)), "utf8");
 }

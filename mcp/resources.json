@@ -210,6 +210,171 @@
       }
     },
     {
+      "name": "Original SIDWAVE Compositions",
+      "uri": "c64://sound/examples",
+      "description": "Choose a playable SIDWAVE example by style or SID technique.",
+      "mimeType": "text/markdown",
+      "_meta": {
+        "domain": "audio",
+        "priority": "reference",
+        "order": 2
+      }
+    },
+    {
+      "name": "Neon Run",
+      "uri": "c64://sound/examples/chiptune_drive",
+      "description": "Chip arpeggios, gliding pulse lead and drum break",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 3
+      }
+    },
+    {
+      "name": "Blue Current",
+      "uri": "c64://sound/examples/ambient_filter",
+      "description": "Slow pads, filtered bass and ring modulated bells",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 4
+      }
+    },
+    {
+      "name": "Copper Steps",
+      "uri": "c64://sound/examples/funk_bass",
+      "description": "Syncopated filter bass, chord chops and sync accents",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 5
+      }
+    },
+    {
+      "name": "Pressure Glass",
+      "uri": "c64://sound/examples/acid_line",
+      "description": "Acid bass, resonance accents and slides over a four-on-the-floor kick",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 6
+      }
+    },
+    {
+      "name": "A Window in Rain",
+      "uri": "c64://sound/examples/arp_ballad",
+      "description": "Minor ballad with chord arpeggios and a connected PWM lead",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 7
+      }
+    },
+    {
+      "name": "Switchyard",
+      "uri": "c64://sound/examples/drum_and_bass",
+      "description": "Breakbeats and a pair of detuned Reese bass oscillators",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 8
+      }
+    },
+    {
+      "name": "Paper Circuit",
+      "uri": "c64://sound/examples/digi_groove",
+      "description": "CIA2 volume digis with syncopated synth bass and arpeggios",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 9
+      }
+    },
+    {
+      "name": "Iron Weather",
+      "uri": "c64://sound/examples/metal_sync",
+      "description": "Hard sync, ring modulation, double kick and power chords",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 10
+      }
+    },
+    {
+      "name": "Parallax Letters",
+      "uri": "c64://sound/examples/stereo_echo",
+      "description": "Two SIDs with stereo echo, ping-pong arpeggios and unison pads",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 11
+      }
+    },
+    {
+      "name": "Gilt Footsteps",
+      "uri": "c64://sound/examples/chamber_waltz",
+      "description": "Three independent voices in 3/4 with no percussion",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 12
+      }
+    },
+    {
+      "name": "The Gate Opens",
+      "uri": "c64://sound/examples/title_fanfare",
+      "description": "Short filtered brass fanfare with timpani and a held cadence",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 13
+      }
+    },
+    {
+      "name": "An Atlas of Wind",
+      "uri": "c64://sound/examples/ultisid_orchestra",
+      "description": "Eight SIDs with divided strings, twin echo leads, arps and a drum kit",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 14
+      }
+    },
+    {
+      "name": "Twenty-Seven Lanterns",
+      "uri": "c64://sound/examples/wall_of_sid",
+      "description": "Nine SIDs and a gradual build to a 27-voice finale",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 15
+      }
+    },
+    {
+      "name": "Für Elise",
+      "uri": "c64://sound/examples/fuer_elise",
+      "description": "Legacy three-voice arrangement of Beethoven’s Bagatelle",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 16
+      }
+    },
+    {
       "name": "SID File Structure Reference",
       "uri": "c64://sound/sid/file-format",
       "description": "Breakdown of the SID file format layout and metadata",
@@ -217,7 +382,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "order": 2
+        "order": 17
       }
     },
     {
@@ -228,7 +393,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "order": 3
+        "order": 18
       }
     },
     {

@@ -323,6 +323,7 @@ export interface Arrangement {
   voices: Array<{ notes: ArrangedNote[]; events: StreamEvent[] }>;
   chips?: ChipArrangement[];
   turbo?: boolean;
+  softVolume?: boolean;
   tuning?: number[];
   samples?: SidwaveSamples;
   filter: { base: number; sweep: number; stepFixed: number; resonance: number; mode: number; used: boolean };
@@ -415,6 +416,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
       };
     }),
     turbo: doc.cpu === "turbo",
+    softVolume: doc.version === "1.2",
   };
 }
 
@@ -1069,7 +1071,7 @@ function estimatePlayerCycles(arr: Arrangement): number {
   const hasSweep = arr.chips?.some((chip) => chip.filter.stepFixed);
   const bursts = new Map<number, number>();
   const add = (frame: number, cycles: number) => bursts.set(frame, (bursts.get(frame) ?? 0) + cycles);
-  let regular = 140 + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
+  let regular = 140 + (arr.softVolume ? 35 + 105 * (arr.chips?.length ?? 1) : 0) + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
   for (const chip of arr.chips ?? [{ filter: arr.filter, hasFilterTable: hasFilter }]) {
     regular += arr.chips ? 155 : 0; // base table lookup, 3-channel dispatch and unfiltered volume
     if (chip.filter.used || chip.hasFilterTable || !arr.chips) {
@@ -1374,10 +1376,10 @@ function stockPlayerBudget(system: SystemMode, speed: number): number {
   return Math.floor((CYCLES_PER_FRAME[system] - 1_100) / speed) - 500;
 }
 
-function addTurboInit(code: string, speed: number, turboOnly: number): string {
+function addTurboInit(code: string, speed: number, turboOnly: number, measured = false): string {
   // hardware.md, Turbo Control: one register write survives the post-start
   // 1 MHz hold. Count CIA IRQs for the video standard measured in do_install.
-  const hold = (system: SystemMode) => Math.ceil(4.25 * sidwaveFrameRate(system) * speed);
+  const hold = (system: SystemMode) => (measured ? Math.floor : Math.ceil)(4.25 * sidwaveFrameRate(system) * speed);
   return code.replace("det_pal:\n  lda cia_lo,x", `det_pal:
   lda #0
   sta turbo_wait
@@ -1415,6 +1417,199 @@ turbo_wait: .res 2
 turbo_hold_lo: .byte <${hold("PAL")}, <${hold("NTSC")}
 turbo_hold_hi: .byte >${hold("PAL")}, >${hold("NTSC")}
 turbo_required: .byte ${turboOnly & 1}, ${turboOnly >> 1}`);
+}
+
+/** 1.2 owns the actual level per chip. g_vol remains the musical target. */
+function addSoftVolume(code: string, count: number, speed: number, loop: boolean): string {
+  code = code.replace("  lda chip_volume,x\n  ldy #$18\n  sta (sid_io),y\n", "")
+    .replace("  sta chip_g_vol,x\n  lda #0\n", `  sta chip_g_vol,x
+  lda #0
+  sta soft_level,x
+  sta soft_mode,x
+  sta soft_phase
+${loop ? "" : "  sta soft_end_state\n"}`)
+    .replace(/(  ldy #\$18\n  sta \(sid_io\),y)/g, "  jsr soft_mix\n$1")
+    .replace("  lda ptr\n  pha", "  jsr soft_clock\n  lda ptr\n  pha");
+  const shared = `
+soft_clock:
+  lda soft_phase
+  beq soft_pulse
+  dec soft_phase
+  lda #0
+  sta soft_step
+  rts
+soft_pulse:
+  lda #${speed - 1}
+  sta soft_phase
+  lda #1
+  sta soft_step
+  rts
+soft_mix:
+  stx soft_saved_x
+  ldx chip_index
+  pha
+  and #15
+  cmp soft_level,x
+  beq soft_mix_out
+  lda soft_step
+  beq soft_mix_out
+  bcc soft_mix_down
+  inc soft_level,x
+  bne soft_mix_out
+soft_mix_down:
+  dec soft_level,x
+soft_mix_out:
+  pla
+  and #$F0
+  sta soft_mode,x
+  ora soft_level,x
+  ldx soft_saved_x
+  rts
+soft_level: .res ${count}
+soft_mode: .res ${count}
+soft_phase: .res 1
+soft_step: .res 1
+soft_saved_x: .res 1
+`;
+  if (loop) return code + shared;
+  code = code.replace("  bne play_once_running\n  rts", "  bne play_once_running\n  jmp soft_end")
+    .replace("  beq finish_song\n  jmp play_tick", "  bne play_once_tick\n  jmp soft_end\nplay_once_tick:\n  jmp play_tick");
+  return code + shared + `
+soft_end:
+  lda soft_end_state
+  cmp #2
+  bne soft_end_banked
+  rts
+soft_end_banked:
+  lda $01
+  pha
+  lda #$36
+  sta $01
+  lda sid_io
+  pha
+  lda sid_io+1
+  pha
+  lda soft_end_state
+  bne soft_fade
+soft_release:
+  lda #1
+  sta soft_end_state
+  lda #0
+  sta soft_phase
+  ldx #0
+soft_release_chip:
+  stx chip_index
+  jsr chip_base
+  lda chip_first_slot,x
+  tax
+  ldy #4
+  lda v_ctrl,x
+  and #$FE
+  sta (sid_io),y
+  inx
+  ldy #11
+  lda v_ctrl,x
+  and #$FE
+  sta (sid_io),y
+  inx
+  ldy #18
+  lda v_ctrl,x
+  and #$FE
+  sta (sid_io),y
+  ldx chip_index
+  inx
+  cpx #${count}
+  bne soft_release_chip
+soft_fade:
+  jsr soft_clock
+  lda soft_step
+  beq soft_end_return
+  lda #0
+  sta soft_audible
+  ldx #0
+soft_fade_chip:
+  lda soft_level,x
+  beq soft_fade_next
+  jsr chip_base
+  dec soft_level,x
+  lda soft_level,x
+  ora soft_audible
+  sta soft_audible
+  lda soft_level,x
+  ora soft_mode,x
+  ldy #$18
+  sta (sid_io),y
+soft_fade_next:
+  inx
+  cpx #${count}
+  bne soft_fade_chip
+  lda soft_audible
+  bne soft_end_return
+  lda #2
+  sta soft_end_state
+soft_end_return:
+  pla
+  sta sid_io+1
+  pla
+  sta sid_io
+  pla
+  sta $01
+  lda soft_end_state
+  cmp #2
+  bne soft_end_done
+  jmp finish_song
+soft_end_done:
+  rts
+soft_end_state: .res 1
+soft_audible: .res 1
+`;
+}
+
+/** Count stock instructions across a raster line. The stock loop needs 11
+ * cycles per iteration, including the taken branch. Ten reads (including
+ * the terminating read) are conservatively above 1.5 MHz on PAL and NTSC. */
+function measureTurboStartup(code: string): string {
+  return code.replace("  beq turbo_play\n  lda turbo_wait", `  beq turbo_play
+  jsr turbo_probe
+  bcs turbo_measured
+  lda turbo_wait`)
+    .replace("  dec turbo_wait\n  jmp $EA31\nturbo_play:", `  dec turbo_wait
+  lda turbo_wait
+  ora turbo_wait+1
+  beq turbo_play
+  jmp $EA31
+turbo_measured:
+  lda #0
+  sta turbo_wait
+  sta turbo_wait+1
+turbo_play:`) + `
+turbo_probe:
+  lda $D012
+  ldx #2
+  ldy #0
+turbo_sync_line:
+  cmp $D012
+  bne turbo_new_line
+  dey
+  bne turbo_sync_line
+  dex
+  bne turbo_sync_line
+  clc
+  rts
+turbo_new_line:
+  lda $D012
+  ldx #0
+turbo_count_line:
+  inx
+  beq turbo_count_overflow
+  cmp $D012
+  beq turbo_count_line
+  cpx #10
+  rts
+turbo_count_overflow:
+  sec
+  rts
+`;
 }
 
 /** The old 1.0/1.1 template stays byte stable. Specialize the 1.2 player. */
@@ -1659,7 +1854,11 @@ init_core:`);
   if (arr.chips) {
     playerCode = omitUnusedVoiceEffects(playerCode, insts, hasPortamento);
     playerCode = multiplexSids(playerCode, arr.chips, Boolean(hasFilterTable), stateBytes);
-    if (arr.turbo) playerCode = addTurboInit(playerCode, arr.speed, turboOnly);
+    if (arr.softVolume) playerCode = addSoftVolume(playerCode, arr.chips.length, arr.speed, loop);
+    if (arr.turbo) {
+      playerCode = addTurboInit(playerCode, arr.speed, turboOnly, arr.softVolume);
+      if (arr.softVolume) playerCode = measureTurboStartup(playerCode);
+    }
     if (arr.tuning) playerCode = addTunedLookup(playerCode, arr.tuning);
     if (arr.samples) playerCode = addDigiPlayer(playerCode, arr.samples, arr.chips, [CLOCK_HZ.PAL, CLOCK_HZ.NTSC]);
   }

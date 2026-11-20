@@ -264,8 +264,10 @@ Set either field on a named instrument or on a groove note object. Entry values 
 ## Generated pieces
 
 `c64_sound` with `op: generate` plays a seeded eight-bar piece once and returns
-the SIDWAVE source. Like `play_preset`, it loads and runs the song as a PRG
-with its own player, so it replaces the program in memory. The styles are `chiptune` (130 BPM, speed 2), `ambient`
+a short summary and the resource URI for a bundled example in the chosen style.
+Set `includeScore: true` to receive the generated SIDWAVE source and lead timeline.
+Like `play_preset`, it loads the song as a PRG with its own player,
+which replaces the program in memory. The styles are `chiptune` (130 BPM, speed 2), `ambient`
 (80 BPM) and `funk` (105 BPM). Use `seed` to reproduce the harmony and melody.
 
 `root` sets the tonic and lead register. An explicit `pattern` repeats semitone
@@ -400,11 +402,32 @@ The compiler warns if the sum of peak sawtooth sustain scaled by each SID's volu
 
 The compiler reports `worstCaseCyclesPerCall` and refuses a 1.2 score above the 1 MHz budget for its selected video standard unless it declares `cpu: turbo`. The error gives the minimum CPU speed. Higher values of `speed` leave fewer cycles per player call. Song code and data must fit below `$D000`.
 
-For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and delays playback past the startup hold, which can keep the CPU at 1 MHz for up to 4.2 seconds. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
+For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and counts loop iterations across a raster line. Playback begins when it measures more than about 1.5 MHz or reaches the 4.25-second cap. A reset can trigger the full startup hold, while a reset-free launch can begin on the first check. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
+
+The SIDWAVE 1.2 player clears each SID at init, then raises its master volume
+from zero by one step per video frame (about 20 ms on PAL or 17 ms on NTSC),
+even with a multispeed score. At the end of a play-once score it releases
+the voice gates and lowers the master volume at the same rate before stopping.
+The volume changes preserve each SID's filter mode bits. Active digi samples
+temporarily write their raw four-bit values to the volume register on their SID.
 
 ### Playback setup
 
-The `c64_sound` operations `compile_play`, `pipeline`, `play_preset`, and `generate` accept `configure: true`. On supported Ultimate firmware, the server snapshots the SID addressing, sockets, mixer, and UltiSID stores in memory. It applies the song's map for playback and restores the settings it changed when playback is stopped, replaced, the machine is reset, or the active backend switches. A dry run leaves the device alone.
+On Ultimate backends, `compile_play`, `pipeline`, `play_preset`, and `generate`
+start a SIDWAVE PRG without a reset when BASIC is idle at `READY.` or the
+SIDWAVE player owns the IRQ and the keyboard queue is idle. The server detaches
+the previous player, clears the SID registers, DMA-writes the PRG body, and
+queues a BASIC `SYS` command. Other machine states use the normal PRG runner.
+
+The capture harness at `scripts/sidwave-hil.mjs` uses the same launcher.
+It starts recording before launching the score so the capture includes startup.
+
+These operations accept `configure: true`. On supported Ultimate firmware,
+the server snapshots the SID addressing, sockets, mixer, and UltiSID stores in
+memory. It clears the old SID windows before changing the map and clears the
+new windows afterward. It restores the changed settings when playback stops,
+is replaced, the machine resets, or the active backend switches. A dry run
+leaves the device alone.
 
 The three `ultisid8` layouts disable mirroring and split both UltiSIDs with `1/4 (A7,A8)`. The bases are `$D400` and `$D420`. The layouts map and enable the required sockets at `$D440` and `$D460`. For explicit maps, the server can configure subsets of those windows and maps using up to four unsplit decoders. Other maps require manual setup. [Owner configurations](../ultimate/multisid.md#owner-configurations-and-settings)
 
@@ -471,7 +494,10 @@ Time signatures other than 3/4 and 4/4, per-note velocity, multiple subtunes, sa
 
 ## Playable examples
 
-Open [the composition index](c64://sound/examples) and use the names with `c64_sound` `play_preset`. Each YAML has a technique and form guide in its header.
+Open the composition index and use the names with `c64_sound` `play_preset`.
+The result includes the resource URI and a short summary. Set `includeScore: true`
+to include the YAML in the result. Each original YAML has a technique and form
+guide in its header. [Composition index](c64://sound/examples)
 
 - Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). These three scores keep their pinned SIDWAVE 1.1 output.
 - Use [acid bass](c64://sound/examples/acid_line) for filter accents, [the ballad](c64://sound/examples/arp_ballad) for chord arps and PWM, [drum and bass](c64://sound/examples/drum_and_bass) for multispeed breakbeats, and [the digi groove](c64://sound/examples/digi_groove) for CIA2 samples.

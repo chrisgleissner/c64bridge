@@ -17,7 +17,8 @@ import { assemblyToPrgDetailed, prgEntryAddress } from "./tools/translation/asse
 import { stripHexByteSeparators } from "./tools/hex.js";
 import { SIDWAVE_PLAY_ADDRESS, type CompileResult } from "./sidwaveCompiler.js";
 import type { ParsedSidwave } from "./sidwave.js";
-import { prepareSidwaveSetup, sidwaveNeedsMap, type SidwaveSetup } from "./sidwavePlaybackConfig.js";
+import { BASIC_IRQ, basicReady, dmaStartSidwave, irqVector, isSidwaveIrq, keyboardIdle } from "./sidwaveUltimateStart.js";
+import { clearUltimateSidWindows, readUltimateSidWindows, prepareSidwaveSetup, sidwaveNeedsMap, type SidwaveSetup } from "./sidwavePlaybackConfig.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import { assertNotBareHex, parseNumericLiteral } from "./numericArg.js";
@@ -601,7 +602,11 @@ export class C64Client {
         throw new Error("The backend changed before SIDWAVE playback could start");
       }
       return await this.withSidwaveQueue(facade, async () => {
+        const ultimatePrg = facade.type !== "vice" && !options.sid;
+        const oldSession = this.sidwaveSessions.get(facade);
+        const start = ultimatePrg ? await this.sidwaveStartKind(facade, oldSession) : "reset";
         await this.releaseManagedSidwave(facade);
+        if (start === "legacy") await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
         if (doc.cpu === "turbo" && compiled.requiresTurbo && facade.type === "vice") {
           throw new Error("This SIDWAVE score needs Ultimate turbo. VICE runs the player at stock CPU speed.");
         }
@@ -612,12 +617,22 @@ export class C64Client {
         const session: SidwaveSession = {
           compiled, setup, bases: doc.sids.map((sid) => sid.address), attachment: !!options.sid, stopped: true,
         };
-        const managed = setup || sidwaveNeedsMap(doc) || doc.cpu || doc.samples;
+        const managed = ultimatePrg || setup || sidwaveNeedsMap(doc) || doc.cpu || doc.samples;
         if (managed) this.sidwaveSessions.set(facade, session);
         try {
           await setup?.apply();
           session.stopped = false;
-          const result = options.sid ? await facade.sidplayAttachment(options.sid) : await facade.runPrg(compiled.prg);
+          const result = options.sid ? await facade.sidplayAttachment(options.sid)
+            : start === "reset" ? await facade.runPrg(compiled.prg)
+            : await this.withKeyboardLock(facade, async () => {
+                if (!await keyboardIdle(facade)) return facade.runPrg(compiled.prg);
+                if (!setup?.clearsUltimateSidWindows) {
+                  const mapped = await readUltimateSidWindows(facade);
+                  await clearUltimateSidWindows(facade, [...mapped, ...(oldSession?.bases ?? []), ...session.bases]);
+                }
+                await dmaStartSidwave(facade, compiled.prg, compiled.entryAddress);
+                return { success: true, details: { launch: "dma_sys" } };
+              });
           if (!result.success) await this.releaseManagedSidwave(facade);
           return result;
         } catch (error) {
@@ -632,6 +647,25 @@ export class C64Client {
     } finally {
       this.pendingSidwave--;
     }
+  }
+
+  private async sidwaveStartKind(facade: C64Facade, session?: SidwaveSession): Promise<"reset" | "ready" | "owned" | "legacy"> {
+    if (this.pauseStates.get(facade)?.explicit) return "reset";
+    try {
+      const handler = await irqVector(facade);
+      if (handler === BASIC_IRQ) return await basicReady(facade) ? "ready" : "reset";
+      if (!await keyboardIdle(facade)) return "reset";
+      if (session && !session.stopped && !session.attachment && handler === session.compiled.irqAddress) return "owned";
+      // An unmanaged digi player could still own CIA2. Only recognize the legacy
+      // IRQ stub when no custom NMI vector needs to be detached.
+      if (await isSidwaveIrq(facade, handler)) {
+        const nmi = await facade.readMemory(0x0318, 2);
+        if (nmi[0] === 0x47 && nmi[1] === 0xfe) return "legacy";
+      }
+    } catch {
+      // A missing or unreadable editor state cannot establish a safe DMA launch.
+    }
+    return "reset";
   }
 
   private async withViceMonitor<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {

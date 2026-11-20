@@ -8,7 +8,7 @@ const logger = { debug() {}, info() {}, warn() {}, error() {} };
 async function generate(args) {
   const client = { runPrg: async () => ({ success: true }) };
   const platform = { id: "vice", features: [], limitedFeatures: [] };
-  const result = await toolRegistry.invoke("c64_sound", { op: "generate", ...args }, { client, logger, platform });
+  const result = await toolRegistry.invoke("c64_sound", { op: "generate", includeScore: true, ...args }, { client, logger, platform });
   assert.equal(result.isError, undefined, JSON.stringify(result.content));
   const score = parseSidwave(result.metadata.sidwave);
   return { ...result.metadata, score, arrangement: arrangeSidwave(score) };

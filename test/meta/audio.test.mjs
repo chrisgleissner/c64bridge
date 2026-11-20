@@ -467,7 +467,7 @@ describe("meta/audio", () => {
       ctx.client.getAvailableBackends = mock(() => ["c64u"]);
       ctx.client.switchBackend = mock(async () => {});
       const args = key === "chiptune_drive" ? {} : { preset: key };
-      const result = await metaModule.invoke("music_play_preset", { ...args, verify: false }, ctx);
+      const result = await metaModule.invoke("music_play_preset", { ...args, verify: false, includeScore: true }, ctx);
       assert.equal(result.isError, undefined);
       assert.equal(result.metadata.preset, key);
       const source = result.structuredContent.data.sidwave;
@@ -505,7 +505,9 @@ test("every composition resource is playable by its preset name and wall_of_sid 
     const result = await metaModule.invoke("music_play_preset", args, ctx);
     assert.equal(result.isError, undefined, name);
     assert.equal(result.metadata.preset, name);
-    assert.equal(result.structuredContent.data.sidwave, readSidwaveExample(name));
+    assert.equal(result.structuredContent.data.resourceUri, `c64://sound/examples/${name}`);
+    assert.equal(result.structuredContent.data.sidwave, undefined);
+    assert.match(readSidwaveExample(name), /^# /);
     assert.equal(stages.at(-1)[0], title);
     assert.ok(stages.at(-1)[1] > 100);
   }

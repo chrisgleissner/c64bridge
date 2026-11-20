@@ -1,4 +1,4 @@
-import { SIDWAVE_EXAMPLES, SIDWAVE_EXAMPLES_URI } from "../sidwaveExamples.js";
+import { SIDWAVE_SCORE_RESOURCES, SIDWAVE_EXAMPLES_URI } from "../sidwaveExamples.js";
 
 export const RESOURCE_URIS = {
   guide: {
@@ -105,7 +105,7 @@ export const CANONICAL_KNOWLEDGE_RESOURCE_URIS: readonly string[] = Object.freez
   RESOURCE_URIS.sound.sid.spec,
   RESOURCE_URIS.sound.sidwave.spec,
   RESOURCE_URIS.sound.examples,
-  ...SIDWAVE_EXAMPLES.map(({ name }) => `${SIDWAVE_EXAMPLES_URI}/${name}`),
+  ...SIDWAVE_SCORE_RESOURCES.map(({ name }) => `${SIDWAVE_EXAMPLES_URI}/${name}`),
   RESOURCE_URIS.sound.sid.fileFormat,
   RESOURCE_URIS.sound.sid.bestPractices,
   RESOURCE_URIS.graphics.vic.spec,

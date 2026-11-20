@@ -198,12 +198,12 @@ test("HARD03-042 every published knowledge tool and operation resolves", async (
   }
 });
 
-test("the composition index links each original score and the registry serves full YAML", async () => {
-  const { SIDWAVE_EXAMPLES, readSidwaveExample } = await import("../src/sidwaveExamples.js");
+test("the composition index links every preset and the registry serves full YAML", async () => {
+  const { SIDWAVE_SCORE_RESOURCES, readSidwaveExample } = await import("../src/sidwaveExamples.js");
   const index = readKnowledgeResource(RESOURCE_URIS.sound.examples, projectRoot);
   assert.ok(index);
   assert.equal(index.mimeType, "text/markdown");
-  for (const { name } of SIDWAVE_EXAMPLES) {
+  for (const { name } of SIDWAVE_SCORE_RESOURCES) {
     const uri = `${index.uri}/${name}`;
     assert.ok(index.text.includes(uri));
     const result = readKnowledgeResource(uri, projectRoot);

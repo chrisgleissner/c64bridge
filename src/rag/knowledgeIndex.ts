@@ -1,4 +1,4 @@
-import { SIDWAVE_EXAMPLES, sidwaveExamplePath } from "../sidwaveExamples.js";
+import { SIDWAVE_EXAMPLES, SIDWAVE_SCORE_RESOURCES, sidwaveExamplePath } from "../sidwaveExamples.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -448,7 +448,7 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         tools: ["c64_sound"],
         relatedResources: [RESOURCE_URIS.sound.sidwave.spec],
       },
-      ...SIDWAVE_EXAMPLES.map(({ name, title, style }): BundleResourceDefinition => ({
+      ...SIDWAVE_SCORE_RESOURCES.map(({ name, title, style }): BundleResourceDefinition => ({
         uri: `${RESOURCE_URIS.sound.examples}/${name}`,
         name: title,
         description: style,
@@ -809,6 +809,8 @@ const BASE_RESOURCES: readonly KnowledgeResourceDefinition[] = KNOWLEDGE_BUNDLES
             "",
             ...SIDWAVE_EXAMPLES.map(({ name, title, style }) =>
               `- [${name}](${RESOURCE_URIS.sound.examples}/${name}) — **${title}**. ${style}.`),
+            "",
+            `Legacy arrangement: [fuer_elise](${RESOURCE_URIS.sound.examples}/fuer_elise).`,
             "",
             'Ultimate: use `configure: true` for stereo routing and turbo. `wall_of_sid` requires it and a fitted SID in socket 1.',
           ].join("\n"),
