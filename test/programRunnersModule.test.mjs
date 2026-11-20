@@ -535,7 +535,7 @@ test("upload_run_basic verify true annotates metadata", async () => {
           // Reads 1 and 2 are the screen before the run and the immediate
           // post-run check in executeUploadRunBasic; the poll loop's first
           // read then observes the firmware's own RUN echo.
-          return screenReads <= 2 ? "READY.\n" : "RUN\n";
+          return screenReads <= 2 ? "READY.\n" : "RUN\nHI\n\nREADY.\n";
         },
       },
       logger: createLogger(),
@@ -629,7 +629,7 @@ test("upload_run_basic verify tolerates repeated screen read failures", async ()
           if (readCalls <= 3) {
             throw new Error("screen transport offline");
           }
-          return "RUN\n";
+          return "RUN\nHI\n\nREADY.\n";
         },
       },
       logger: createLogger(),

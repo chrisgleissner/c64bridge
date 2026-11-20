@@ -471,6 +471,8 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
     };
 
     let screenOutput = outcome.screen;
+    // No BASIC error, but no READY. prompt either: the program was still running when the poll ended (D3).
+    let runningAfterMs = outcome.status === "ok" && outcome.finished === false ? outcome.observedMs ?? 0 : undefined;
     let autoFixInfo:
       | {
           readonly changes: readonly BasicAutoFixChange[];
@@ -566,15 +568,22 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       replacedLines = retryTokenized.replacedLines;
       entryAddress = prg.readUInt16LE(0);
       screenOutput = retryOutcome.screen;
+      runningAfterMs = retryOutcome.finished === false ? retryOutcome.observedMs ?? 0 : undefined;
       autoFixInfo = { changes: fixAttempt.changes, originalErrors: errors };
     }
 
     const changedLines = autoFixInfo
       ? autoFixInfo.changes.map((change) => `line ${change.line}: "${change.before}" -> "${change.after}"`).join("; ")
       : "";
+    const stillRunning = runningAfterMs !== undefined;
+    const runningNote = `no BASIC error appeared, but no READY. prompt was observed within ${runningAfterMs} ms, so the program was still running when the check ended`;
     const message = autoFixInfo
-      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run was verified without a BASIC error.`
-      : "BASIC program uploaded and executed successfully (verified).";
+      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). `
+        + (stillRunning ? `In the second run ${runningNote}.` : "The second run was verified without a BASIC error.")
+      : stillRunning
+        ? `BASIC program uploaded and started; ${runningNote}.`
+        : "BASIC program uploaded and executed successfully (verified).";
+    const runningFields = stillRunning ? { running: true, observedMs: runningAfterMs } : {};
     const addresses = prgAddresses(prg);
 
     const autoFixFields = autoFixInfo
@@ -600,7 +609,8 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...autoFixFields,
       ...replacedFields,
-      verified: true,
+      ...runningFields,
+      verified: !stillRunning,
     };
 
     const data = {
@@ -613,7 +623,8 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...autoFixFields,
       ...replacedFields,
-      verified: true,
+      ...runningFields,
+      verified: !stillRunning,
     };
 
     const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.${replacedNote}`, metadata);

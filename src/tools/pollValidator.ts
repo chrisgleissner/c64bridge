@@ -34,6 +34,14 @@ export interface BasicPollResult {
   text?: string;
   /** The last screen read: the error screen, or the screen when the poll ended. */
   screen?: string;
+  /**
+   * Set when status is ok. true: BASIC was observed back at the READY. prompt
+   * waiting for input. false: no BASIC error appeared, but no READY. prompt was
+   * observed within the window either, so the program was still running.
+   */
+  finished?: boolean;
+  /** Set when finished is false: how long the poll watched the program. */
+  observedMs?: number;
 }
 
 /**
@@ -221,8 +229,9 @@ async function waitingForInput(client: C64Client): Promise<boolean | undefined> 
  * there is evidence, the screen ends at the READY. prompt and BASIC is waiting
  * for input (cursor enable $CC = $00; without memory access, the same
  * READY. screen on two consecutive polls), the program has finished without an
- * error and the poll returns at once. A program that is still running (no prompt)
- * is watched for errors for the full window.
+ * error and the poll returns at once with finished: true. A program that is
+ * still running (no prompt) is watched for errors for the full window and is
+ * then reported with finished: false.
  */
 async function pollBasicOutcome(
   client: C64Client,
@@ -288,7 +297,7 @@ async function pollBasicOutcome(
           : direct;
         if (settled) {
           logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime, direct });
-          return { status: "ok", type: "BASIC", screen };
+          return { status: "ok", type: "BASIC", screen, finished: true };
         }
         previousReadyScreen = normaliseScreen(screen);
       } else {
@@ -308,10 +317,12 @@ async function pollBasicOutcome(
       ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
     };
   }
-  logger.debug("BASIC polling completed without errors", { pollCount, elapsed: Date.now() - startTime });
+  logger.debug("BASIC polling ended without an error and without a READY. prompt", { pollCount, elapsed: Date.now() - startTime });
   return {
     status: "ok",
     type: "BASIC",
+    finished: false,
+    observedMs: Date.now() - startTime,
     ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
   };
 }
