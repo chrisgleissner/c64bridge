@@ -1,5 +1,6 @@
+import { DEFAULT_MUSIC_SEED, generateSidwave, MUSIC_STYLES, type MusicStyle } from "../audio/generateSidwave.js";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
-import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, type CompileResult } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { noAudioMeasurement, recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
@@ -31,18 +32,29 @@ const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 const DEFAULT_SILENCE_VERIFY_DURATION_SECONDS = 1.5;
 const DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD = 0.02;
 const DEFAULT_SILENCE_VERIFY_WAIT_MS = 150;
-const generatedPlaybacks = new Set<AbortController>();
+type AudioClient = ToolExecutionContext["client"];
+type PinnedFacade = Awaited<ReturnType<AudioClient["pinFacade"]>>;
+const generatedPlaybacks = new WeakMap<AudioClient, { facade?: PinnedFacade; started: Promise<unknown> }>();
 
-let lastGeneratedPlayback: Promise<void> = Promise.resolve();
+/** Detach a generated score before another tool takes over the machine or SID. */
+export async function cancelGeneratedSidPlayback(client: AudioClient): Promise<void> {
+  const playback = generatedPlaybacks.get(client);
+  if (!playback) return;
+  await playback.started.catch(() => {});
+  if (generatedPlaybacks.get(client) !== playback) return;
+  await client.stopSidwavePlayback?.(playback.facade);
+  if (generatedPlaybacks.get(client) === playback) generatedPlaybacks.delete(client);
+}
 
-/**
- * Stops a running `music_generate` sequence. Every operation that starts a program, plays a file, resets
- * the machine or takes over the SID calls this, otherwise the background notes keep writing into the
- * new program's SID registers.
- */
-export function cancelGeneratedSidPlayback(): void {
-  for (const controller of generatedPlaybacks) controller.abort();
-  generatedPlaybacks.clear();
+async function playCompiledPrg(compiled: CompileResult, client: AudioClient, facade?: PinnedFacade) {
+  const result = await client.runPrg(compiled.prg, facade);
+  if (!result.success) {
+    throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
+      details: normaliseFailure(result.details),
+    });
+  }
+  clearViceSymbols();
+  return result;
 }
 
 function toRecord(details: unknown): Record<string, unknown> | undefined {
@@ -221,46 +233,20 @@ const modplayFileArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+export const MUSIC_GENERATE_DESCRIPTION = "Compose and play an eight-bar SIDWAVE song as a PRG, which replaces the program in memory. root: key and register; pattern: lead offsets; steps: lead notes; tempoMs: classic spacing; waveform: lead sound; preset: phrasing; system: PAL/NTSC.";
+
 const musicGenerateArgsSchema = objectSchema({
-  description: "Generate a simple arpeggio pattern and schedule playback on voice 1.",
+  description: "Compose and play a seeded SIDWAVE piece.",
   properties: {
-    root: stringSchema({
-      description: "Root note for the arpeggio such as C4 or A#3.",
-      pattern: NOTE_PATTERN,
-      default: "C4",
-    }),
-    pattern: stringSchema({
-      description: "Comma-separated semitone offsets (e.g. '0,4,7').",
-      minLength: 1,
-      default: "0,4,7",
-    }),
-    steps: numberSchema({
-      description: "Number of notes to schedule.",
-      integer: true,
-      minimum: 1,
-      maximum: 128,
-      default: 16,
-    }),
-    tempoMs: numberSchema({
-      description: "Delay in milliseconds between notes.",
-      integer: true,
-      minimum: 20,
-      maximum: 2000,
-      default: 120,
-    }),
-    waveform: stringSchema({
-      description: "Waveform for playback.",
-      enum: ["pulse", "saw", "tri", "noise"],
-      default: "tri",
-    }),
-    preset: optionalSchema(stringSchema({
-      description: "Optional musical preset to influence timing/expression.",
-      enum: ["classic", "expression"],
-    }), "classic"),
-    system: optionalSchema(stringSchema({
-      description: "PAL or NTSC for the note frequencies. Default: read from the machine ($02A6).",
-      enum: ["PAL", "NTSC"],
-    })),
+    root: stringSchema({ description: "Tonic and lead register.", pattern: NOTE_PATTERN, default: "C4" }),
+    pattern: optionalSchema(stringSchema({ description: "Repeating lead semitone offsets from root.", minLength: 1 })),
+    steps: optionalSchema(numberSchema({ description: "Lead notes to play.", integer: true, minimum: 1, maximum: 128 })),
+    tempoMs: optionalSchema(numberSchema({ description: "Classic lead spacing in ms.", integer: true, minimum: 20, maximum: 2000 })),
+    waveform: optionalSchema(stringSchema({ description: "Lead waveform override.", enum: ["pulse", "saw", "tri", "noise"] })),
+    preset: stringSchema({ description: "Classic or varied lead phrasing.", enum: ["classic", "expression"], default: "classic" }),
+    system: optionalSchema(stringSchema({ description: "PAL/NTSC timing. Defaults to the machine.", enum: ["PAL", "NTSC"] })),
+    style: stringSchema({ description: "Arrangement style.", enum: Object.keys(MUSIC_STYLES), default: "chiptune" }),
+    seed: numberSchema({ description: "Reproducible composition seed.", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
   },
   additionalProperties: false,
 });
@@ -355,27 +341,6 @@ function parseIntervals(pattern: string): number[] {
   return intervals;
 }
 
-function transposeNote(note: string, semitones: number): string {
-  const match = NOTE_PATTERN.exec((note ?? "").trim());
-  if (!match) {
-    return note;
-  }
-
-  const [, letterRaw, accidentalRaw, octaveRaw] = match;
-  const letter = (letterRaw ?? "C").toUpperCase();
-  const accidental = accidentalRaw ?? "";
-  const octave = Number(octaveRaw ?? "0");
-  const base: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-  let midi = (octave + 1) * 12 + (base[letter] ?? 0);
-  if (accidental === "#") midi += 1;
-  if (accidental === "b") midi -= 1;
-  midi += semitones;
-  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const wrapped = ((midi % 12) + 12) % 12;
-  const newOctave = Math.floor(midi / 12) - 1;
-  return `${names[wrapped]!}${newOctave}`;
-}
-
 /** Highest frequency the SID's 16-bit frequency register can produce (about 3848 Hz PAL, 3995 Hz NTSC). */
 /**
  * The SID frequency tables differ for PAL and NTSC. When the caller gives no system, read the KERNAL
@@ -385,10 +350,11 @@ function transposeNote(note: string, semitones: number): string {
 export async function resolveSidSystem(
   ctx: ToolExecutionContext,
   given: "PAL" | "NTSC" | undefined,
+  facade?: PinnedFacade,
 ): Promise<{ system: "PAL" | "NTSC"; source: string }> {
   if (given) return { system: given, source: "given" };
   try {
-    const flag = (await ctx.client.readMemoryRaw(0x02a6, 1))[0];
+    const flag = (await ctx.client.readMemoryRaw(0x02a6, 1, facade))[0];
     if (flag === 0) return { system: "NTSC", source: "read from the machine ($02A6 = 0)" };
     if (flag === 1) return { system: "PAL", source: "read from the machine ($02A6 = 1)" };
   } catch {
@@ -640,7 +606,7 @@ export const audioModule = defineToolModule({
           const parsed = sidResetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting SID", { mode: parsed.hard ? "hard" : "soft" });
 
-          cancelGeneratedSidPlayback(); // Reset is the documented way to stop a generated arpeggio.
+          await cancelGeneratedSidPlayback(ctx.client);
           const result = await ctx.client.sidReset(parsed.hard);
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while resetting SID", {
@@ -680,7 +646,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidNoteOnArgsSchema.parse(args ?? {});
-          cancelGeneratedSidPlayback(); // A running generated sequence would overwrite this voice.
+          await cancelGeneratedSidPlayback(ctx.client);
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice ?? 1))) as 1 | 2 | 3;
           const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined);
           if (parsed.note) {
@@ -759,7 +725,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidNoteOffArgsSchema.parse(args ?? {});
-          cancelGeneratedSidPlayback();
+          await cancelGeneratedSidPlayback(ctx.client);
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice))) as 1 | 2 | 3;
           ctx.logger.info("Stopping SID voice", { voice });
 
@@ -805,7 +771,7 @@ export const audioModule = defineToolModule({
 
           ctx.logger.info("Silencing all SID voices", { verify });
 
-          cancelGeneratedSidPlayback(); // Otherwise its remaining notes would resume writing right after this silences the chip.
+          await cancelGeneratedSidPlayback(ctx.client);
           const result = await ctx.client.sidSilenceAll();
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while silencing SID", {
@@ -917,7 +883,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidplayFileArgsSchema.parse(args ?? {});
-          cancelGeneratedSidPlayback();
+          await cancelGeneratedSidPlayback(ctx.client);
           ctx.logger.info("Playing SID file", { path: parsed.path, songnr: parsed.songnr ?? null });
 
           const result = await ctx.client.sidplayFile(parsed.path, parsed.songnr);
@@ -960,7 +926,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = modplayFileArgsSchema.parse(args ?? {});
-          cancelGeneratedSidPlayback();
+          await cancelGeneratedSidPlayback(ctx.client);
           ctx.logger.info("Playing MOD file", { path: parsed.path });
 
           const result = await ctx.client.modplayFile(parsed.path);
@@ -987,113 +953,52 @@ export const audioModule = defineToolModule({
     },
     {
       name: "music_generate",
-      description: "Generate a lightweight arpeggio and schedule playback on SID voice 1.",
-      summary: "Builds a note timeline from semitone offsets and triggers SID playback asynchronously.",
-      lifecycle: "fire-and-forget",
+      description: MUSIC_GENERATE_DESCRIPTION,
+      summary: "Plays a seeded three-voice composition as a PRG.",
       inputSchema: musicGenerateArgsSchema.jsonSchema,
-      relatedResources: ["c64://sound/sid/spec"],
+      relatedResources: ["c64://sound/sidwave/spec"],
       relatedPrompts: ["sid-music"],
       tags: ["sid", "music", "generator", "pal-ntsc"],
-      prerequisites: ["sid_volume"],
       examples: [
-        { name: "C major", description: "C4 arpeggio (triangle)", arguments: { root: "C4", pattern: "0,4,7", steps: 8, tempoMs: 120, waveform: "tri" } },
-        { name: "Expressive C major", description: "C4 arpeggio with phrasing", arguments: { root: "C4", pattern: "0,4,7", steps: 8, preset: "expression" } },
-      ],
-      workflowHints: [
-        "Offer as a quick inspiration loop when the user wants to hear something immediately; explain how to tweak pattern or tempo.",
+        { name: "Chiptune", description: "An eight-bar piece", arguments: {} },
+        { name: "Ambient in D", description: "A seeded ambient arrangement", arguments: { root: "D4", style: "ambient", seed: 9 } },
       ],
       async execute(args, ctx) {
         try {
           const parsed = musicGenerateArgsSchema.parse(args ?? {});
-          const intervals = parseIntervals(parsed.pattern);
-          const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined);
-          const timeline: Array<{ t: number; note: string; durationMs: number }> = [];
-          let timestamp = 0;
-          const expressiveDurations = [250, 180, 180, 400];
-          for (let i = 0; i < parsed.steps; i += 1) {
-            const iv = intervals[i % intervals.length]!;
-            const note = transposeNote(parsed.root, iv);
-            const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-            // Playback runs in the background, so a note the SID cannot play must be rejected here.
-            assertPlayableFrequency(noteHz(note), note, system, "$.root");
-            timeline.push({ t: timestamp, note, durationMs });
-            timestamp += durationMs;
+          const intervals = parsed.pattern === undefined ? undefined : parseIntervals(parsed.pattern);
+          const facade = await ctx.client.pinFacade?.();
+          const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined, facade);
+          const style = parsed.style as MusicStyle;
+          const preset = parsed.preset as "classic" | "expression";
+          const { score, key, progression, tempo, bars, speed, leadTimeline } = generateSidwave({
+            ...parsed, intervals, system, style, preset,
+            waveform: parsed.waveform as "pulse" | "saw" | "tri" | "noise" | undefined,
+          });
+          for (const { note } of leadTimeline) assertPlayableFrequency(noteHz(note), note, system, "$.root");
+          const sidwave = JSON.stringify(score);
+          const compiled = compileSidwaveToPrg(parseSidwave(sidwave), { loop: false });
+          await cancelGeneratedSidPlayback(ctx.client);
+          const started = playCompiledPrg(compiled, ctx.client, facade);
+          const playback = { facade, started };
+          generatedPlaybacks.set(ctx.client, playback);
+          try {
+            await started;
+          } catch (error) {
+            if (generatedPlaybacks.get(ctx.client) === playback) generatedPlaybacks.delete(ctx.client);
+            throw error;
           }
 
-          ctx.logger.info("Scheduling SID arpeggio", {
-            root: parsed.root,
-            intervals,
-            steps: parsed.steps,
-            tempoMs: parsed.tempoMs,
-            waveform: parsed.waveform,
-          });
-
-          cancelGeneratedSidPlayback(); // Replace any prior generated arpeggio rather than letting two run at once.
-          const controller = new AbortController();
-          generatedPlaybacks.add(controller);
-          const pinnedFacadePromise = ctx.client.pinFacade ? ctx.client.pinFacade() : Promise.resolve(undefined); // Pin once so a later select_backend can't retarget notes mid-arpeggio (HARD01-030).
-          // A replaced sequence sends its final gate-off on voice 1; waiting for it
-          // keeps that gate-off from cutting off this sequence's first note.
-          const previousPlayback = lastGeneratedPlayback;
-          lastGeneratedPlayback = (async () => {
-            try {
-              await previousPlayback;
-              const pinnedFacade = await pinnedFacadePromise;
-              await ctx.client.sidSetVolume(8, pinnedFacade);
-              // Steps are scheduled against the start time, so REST latency does not accumulate as tempo drift.
-              const startedAt = Date.now();
-              let stepStart = 0;
-              const sleepUntil = (offsetMs: number) => sleep(Math.max(0, startedAt + offsetMs - Date.now()), controller.signal);
-              for (let i = 0; i < parsed.steps; i += 1) {
-                if (controller.signal.aborted) break;
-                const iv = intervals[i % intervals.length]!;
-                const note = transposeNote(parsed.root, iv);
-                await ctx.client.sidNoteOn({
-                  voice: 1,
-                  note,
-                  waveform: (parsed.waveform ?? "tri") as "pulse" | "saw" | "tri" | "noise",
-                  system,
-                  pulseWidth: 0x0800,
-                  attack: 1,
-                  decay: 7,
-                  sustain: 15,
-                  release: 0,
-                }, pinnedFacade);
-                const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
-                // Hold GATE for most of the note, then clear it for a short gap so the next note retriggers ADSR.
-                const gateGapMs = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
-                // Cancellation ends the sleep at once, so the final gate-off below follows promptly.
-                await sleepUntil(stepStart + durationMs - gateGapMs);
-                if (controller.signal.aborted) break;
-                await ctx.client.sidNoteOff(1, pinnedFacade);
-                await sleepUntil(stepStart + durationMs);
-                stepStart += durationMs;
-              }
-              await ctx.client.sidNoteOff(1, pinnedFacade);
-            } catch (playbackError) {
-              const message = playbackError instanceof Error ? playbackError.message : String(playbackError);
-              ctx.logger.warn("music_generate playback failed", { error: message });
-            } finally {
-              generatedPlaybacks.delete(controller);
-            }
-          })();
-
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root} (${system} pitch table, ${systemSource}). Playback is running and will be replaced by the next generated sequence.`, {
+          return textResult(`Playing ${bars} ${bars === 1 ? "bar" : "bars"} of ${style} in ${key} at ${tempo} BPM (${progression.join("–")}, seed ${parsed.seed}).`, {
             success: true,
-            root: parsed.root,
-            intervals,
-            steps: parsed.steps,
-            tempoMs: parsed.tempoMs,
-            waveform: parsed.waveform ?? "tri",
-            preset: parsed.preset ?? "classic",
-            system,
-            systemSource,
-            timeline,
+            key, progression, tempo, style, seed: parsed.seed, bars, speed, sidwave,
+            root: parsed.root, intervals, steps: parsed.steps ?? (leadTimeline.length || undefined),
+            tempoMs: parsed.tempoMs, waveform: parsed.waveform ?? "pulse", preset, system, systemSource,
+            durationSeconds: compiled.totalFrames / compiled.framesPerSecond,
+            ...(leadTimeline.length ? { timeline: leadTimeline } : {}),
+            prgSize: compiled.prg.length,
           });
         } catch (error) {
-          if (error instanceof ToolError) {
-            return toolErrorResult(error);
-          }
           return unknownErrorResult(error);
         }
       },
@@ -1155,7 +1060,7 @@ export const audioModule = defineToolModule({
           let runDetails: Record<string, unknown> | null = null;
 
           if (!parsed.dryRun) {
-            cancelGeneratedSidPlayback();
+            await cancelGeneratedSidPlayback(ctx.client);
             if (outputFormat === "sid") {
               const result = await ctx.client.sidplayAttachment(sidFile!.sid);
               if (result.success) clearViceSymbols(); // labels belong to one program
@@ -1167,13 +1072,7 @@ export const audioModule = defineToolModule({
               ranOnC64 = true;
               runDetails = toRecord(result.details) ?? null;
             } else {
-              const result = await ctx.client.runPrg(compiled.prg);
-              if (result.success) clearViceSymbols(); // labels belong to one program
-              if (!result.success) {
-                throw new ToolExecutionError("C64 backend reported failure while running compiled PRG", {
-                  details: normaliseFailure(result.details),
-                });
-              }
+              const result = await playCompiledPrg(compiled, ctx.client);
               ranOnC64 = true;
               runDetails = toRecord(result.details) ?? null;
             }

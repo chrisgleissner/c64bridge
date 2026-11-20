@@ -1,0 +1,43 @@
+sidwave: 1.0
+title: All 1.0 effects
+tempo: 120
+mode: NTSC
+global_fx:
+  reverb_sim: { depth: 0.5, delay_frames: 4 }
+  filter_env: { cutoff_base: 600, sweep: 900, speed: 4, resonance: 12, type: bandpass, voices: [1, 3] }
+voices:
+  - id: 1
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [1, 4, 9, 2]
+    patterns:
+      L:
+        length: 0.5
+        motif: "C4 Eb4 G4 ~ Bb4 - Cm7 F4"
+        transpositions: [0, 3, -2]
+        fx:
+          vibrato: { depth: 0.4, rate: 6, delay: 8 }
+          pwm_sweep: { depth: 0.2, speed: 2 }
+  - id: 2
+    waveform: saw
+    patterns:
+      A:
+        type: arpeggio
+        notes: [C3, E3, G3, B3]
+        frame_rate: 2
+        length: 2
+        fx:
+          filter_mod: { sweep: 600, beats: 4 }
+  - id: 3
+    waveform: tri
+    adsr: [0, 6, 0, 4]
+    patterns:
+      B:
+        length: 0.25
+        groove: [C2, "-", C2, G1, "~", C2, ".", A#1]
+        fx:
+          slide: { depth: -3, speed: 6 }
+timeline:
+  - { section: Intro, bars: 2, layers: { v1: L, v2: "-", v3: B } }
+  - { section: Full, bars: 4, layers: { v1: "L^", v2: A, v3: B } }
+  - { section: Out, bars: 2, layers: { v1: "L+5-", v2: "A-", v3: "B-" } }

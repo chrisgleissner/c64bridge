@@ -98,7 +98,10 @@ const INVALID_CASES = [
   ["motif without notes", withChange((d) => { d.voices[0].patterns.A = { motif: "dreamy pad" }; }), /contains no notes/],
   ["fractional bars", withChange((d) => { d.timeline[0].bars = 1.5; }), /bars: expected a whole number/],
   ["silent pulse width", withChange((d) => { d.voices[0].pulse_width = 4095; }), /pulse width of 0% or 100% is silent/],
-  ["pattern without notes", withChange((d) => { d.voices[0].patterns.A = { length: 4 }; }), /needs 'groove', 'motif' or 'type: arpeggio'/],
+  ["fractional portamento", withChange((d) => { d.voices[0].patterns.A.groove = [{ note: "C4", portamento: 2.5 }]; }), /groove\[0\]\.portamento: expected a whole number/],
+  ["invalid instrument legato", withChange((d) => { d.instruments = { lead: { legato: "yes" } }; }), /instruments\.lead\.legato: expected a boolean/],
+  ["drums mixed with groove", withChange((d) => { d.voices[0].patterns.A.drums = { kit: { k: "lib:kick" }, steps: "k." }; }), /either groove or drums/],
+  ["pattern without notes", withChange((d) => { d.voices[0].patterns.A = { length: 4 }; }), /needs 'groove', 'drums', 'motif' or 'type: arpeggio'/],
 ];
 
 for (const [name, input, pattern] of INVALID_CASES) {

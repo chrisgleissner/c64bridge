@@ -1,69 +1,50 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { audioModule, cancelGeneratedSidPlayback } from "../src/tools/audio.js";
+import { audioModule } from "../src/tools/audio.js";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} };
 const SONG = "sidwave: 1.0\ntempo: 120\nvoices:\n  - id: 1\n    patterns: { A: { groove: [C4, E4] } }\ntimeline:\n  - { bars: 1, layers: { v1: A } }\n";
 
-function makeClient(extra = {}) {
-  const state = { noteOns: 0 };
+function makeClient() {
+  const events = [];
+  const facade = { type: "vice" };
   return {
-    state,
+    events,
     client: {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async () => { state.noteOns += 1; return { success: true }; },
-      sidNoteOff: async () => ({ success: true }),
-      runPrg: async () => ({ success: true }),
-      sidplayFile: async () => ({ success: true }),
-      modplayFile: async () => ({ success: true }),
-      sidplayAttachment: async () => ({ success: true }),
-      ...extra,
+      pinFacade: async () => facade,
+      runPrg: async () => { events.push("run"); return { success: true }; },
+      stopSidwavePlayback: async (pinned) => { assert.equal(pinned, facade); events.push("stop"); },
+      sidNoteOn: async () => { events.push("on"); return { success: true }; },
+      sidNoteOff: async () => { events.push("off"); return { success: true }; },
+      sidplayFile: async () => { events.push("sid"); return { success: true }; },
+      modplayFile: async () => { events.push("mod"); return { success: true }; },
     },
   };
 }
 
-async function startGenerate(ctx) {
-  await audioModule.invoke("music_generate", { steps: 128, tempoMs: 20 }, ctx);
-  const deadline = Date.now() + 2000;
-  while (ctx.state.noteOns === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 2));
-}
-
-for (const [name, tool, args] of [
-  ["music_compile_and_play", "music_compile_and_play", { sidwave: SONG }],
-  ["sidplay_file", "sidplay_file", { path: "/a.sid" }],
-  ["modplay_file", "modplay_file", { path: "/a.mod" }],
-  ["sid_note_on", "sid_note_on", { voice: 2, note: "C4" }],
-  ["sid_note_off", "sid_note_off", { voice: 2 }],
+for (const [tool, args, event] of [
+  ["music_generate", {}, "run"],
+  ["music_compile_and_play", { sidwave: SONG }, "run"],
+  ["sidplay_file", { path: "/a.sid" }, "sid"],
+  ["modplay_file", { path: "/a.mod" }, "mod"],
+  ["sid_note_on", { voice: 2, note: "C4" }, "on"],
+  ["sid_note_off", { voice: 2 }, "off"],
 ]) {
-  test(`${name} stops a running music_generate sequence (SOUND-6)`, async () => {
-    const { client, state } = makeClient();
-    const ctx = { client, logger, state };
-    try {
-      await startGenerate(ctx);
-      assert.ok(state.noteOns > 0);
-      await audioModule.invoke(tool, args, { client, logger });
-      await new Promise((r) => setTimeout(r, 30)); // lets an in-flight step finish
-      const settled = state.noteOns;
-      await new Promise((r) => setTimeout(r, 120));
-      // sid_note_on itself issues one note; the generated sequence must add none
-      assert.equal(state.noteOns, settled);
-    } finally {
-      cancelGeneratedSidPlayback();
-    }
+  test(`${tool} takes over after stopping the generated SIDWAVE PRG`, async () => {
+    const { client, events } = makeClient();
+    const ctx = { client, logger };
+    assert.equal((await audioModule.invoke("music_generate", {}, ctx)).isError, undefined);
+    assert.equal((await audioModule.invoke(tool, args, ctx)).isError, undefined);
+    assert.deepEqual(events, ["run", "stop", event]);
   });
 }
 
-test("a dry-run compile does not stop a running music_generate sequence (SOUND-6)", async () => {
-  const { client, state } = makeClient();
-  try {
-    await startGenerate({ client, logger, state });
-    await audioModule.invoke("music_compile_and_play", { sidwave: SONG, dryRun: true }, { client, logger });
-    const before = state.noteOns;
-    await new Promise((r) => setTimeout(r, 120));
-    assert.ok(state.noteOns > before);
-  } finally {
-    cancelGeneratedSidPlayback();
-  }
+test("a dry-run compile leaves the installed SIDWAVE PRG playing", async () => {
+  const { client, events } = makeClient();
+  const ctx = { client, logger };
+  assert.equal((await audioModule.invoke("music_generate", {}, ctx)).isError, undefined);
+  assert.equal((await audioModule.invoke("music_compile_and_play", { sidwave: SONG, dryRun: true }, ctx)).isError, undefined);
+  assert.deepEqual(events, ["run"]);
 });
 
 test("sid_note_on states the $02A6 polarity as 1 = PAL, 0 = NTSC (MEDIA-4)", async () => {

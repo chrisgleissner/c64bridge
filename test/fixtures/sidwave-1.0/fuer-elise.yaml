@@ -1,0 +1,31 @@
+
+song:
+  title: "Für Elise"
+  mode: PAL
+  tempo: 76
+voices:
+  - id: 1
+    name: "Lead"
+    waveform: triangle
+    adsr: [1, 4, 9, 4]
+    patterns:
+      theme:
+        groove: ["E5", "D#5", "E5", "D#5", "E5", "B4", "D5", "C5", "A4", "-", "A3", "C4", "E4", "-", "A4", "B4", "-", "E4", "G#4", "B4", "C5", "-", "E5", "D#5", "E5", "D#5", "E5", "B4", "D5", "C5", "A4", "-"]
+  - id: 2
+    name: "Harmony"
+    waveform: triangle
+    adsr: [2, 5, 8, 5]
+    patterns:
+      accomp:
+        groove: ["-", "-", "-", "-", "-", "-", "-", "-", "A2", "E3", "A3", "E3", "A2", "E3", "A3", "E3", "E2", "B2", "E3", "B2", "E2", "B2", "E3", "B2", "-", "-", "-", "-", "-", "-", "-", "-"]
+  - id: 3
+    name: "Bass"
+    waveform: triangle
+    adsr: [1, 3, 10, 5]
+    patterns:
+      bass:
+        groove: ["-", "-", "-", "-", "-", "-", "-", "-", "A1", "-", "-", "-", "A1", "-", "-", "-", "E2", "-", "-", "-", "E2", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+timeline:
+  - section: "Theme"
+    bars: 8
+    layers: { v1: theme, v2: accomp, v3: bass }

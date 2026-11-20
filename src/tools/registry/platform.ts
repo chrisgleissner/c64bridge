@@ -67,7 +67,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
       : ctx.platform?.id;
     const alreadyActive = active === backend;
     if (!alreadyActive) {
-      cancelGeneratedSidPlayback(); // A backend switch is the documented cue to stop it rather than let it keep playing on the old backend.
+      await cancelGeneratedSidPlayback(ctx.client);
       ctx.client.switchBackend(backend);
       clearViceSymbols(); // labels belong to one program on one backend
     }

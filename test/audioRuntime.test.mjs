@@ -1,9 +1,47 @@
-import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
+import test, { describe } from "#test/runner";
+import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { audioModule } from "../src/tools/audio.js";
 import { analyzePcmForTest, recordAndAnalyzeAudio } from "../src/audio/record_and_analyze_audio.js";
 import { C64Client } from "../src/c64Client.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
+
+// Keep the native microphone out of these tests on both runtimes.
+const mockKey = Symbol.for("c64bridge.test.audioRuntimeMocks");
+const factories = new Map();
+let revision = 0;
+const bunMock = globalThis.Bun ? (await import("bun:test")).mock : undefined;
+if (!bunMock) globalThis[mockKey] = factories;
+const hooks = bunMock ? undefined : (await import("node:module")).registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (!factories.has(specifier)) return nextResolve(specifier, context);
+    const source = `
+      const value = globalThis[Symbol.for(${JSON.stringify(Symbol.keyFor(mockKey))})].get(${JSON.stringify(specifier)})();
+      export default value.default;
+      export const AudioIO = value.AudioIO;
+      export const SampleFormat16Bit = value.SampleFormat16Bit;
+      // Revision ${revision}
+    `;
+    return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
+  },
+});
+
+function mockModule(specifier, factory) {
+  if (bunMock) bunMock.module(specifier, factory);
+  else {
+    factories.set(specifier, factory);
+    revision += 1;
+  }
+}
+
+test.afterEach(() => {
+  bunMock?.restore();
+  factories.clear();
+});
+test.after(() => {
+  hooks?.deregister();
+  delete globalThis[mockKey];
+});
 
 function createLogger() {
   return {
@@ -60,16 +98,16 @@ function installAudioRuntimeMocks({
     };
   }
 
-  mock.module("naudiodon", () => ({
+  mockModule("naudiodon", () => ({
     AudioIO: FakeAudioIO,
     SampleFormat16Bit: 16,
   }));
-  mock.module("pitchfinder", () => ({
+  mockModule("pitchfinder", () => ({
     default: {
       YIN: () => () => fixedFreq,
     },
   }));
-  mock.module("meyda", () => ({
+  mockModule("meyda", () => ({
     default: {
       extract: () => ({ rms }),
     },
@@ -78,21 +116,14 @@ function installAudioRuntimeMocks({
   return { instances };
 }
 
-afterEach(() => {
-  mock.restore();
-});
-
-afterAll(() => {
-  mock.restore();
-});
-
 describe("audio runtime integration", () => {
   test("recordAndAnalyzeAudio validates duration input before capture", async () => {
-    await expect(recordAndAnalyzeAudio({ durationSeconds: "invalid" })).rejects.toThrow("durationSeconds must be a number");
+    await assert.rejects(recordAndAnalyzeAudio({ durationSeconds: "invalid" }), /durationSeconds must be a number/);
   });
 
   test("recordAndAnalyzeAudio surfaces missing audio backend dependencies", async () => {
-    await expect(recordAndAnalyzeAudio({ durationSeconds: 0.5 })).rejects.toThrow("Audio backend not available");
+    mockModule("naudiodon", () => { throw new Error("missing"); });
+    await assert.rejects(recordAndAnalyzeAudio({ durationSeconds: 0.5 }), /Audio backend not available/);
   });
 
   test("recordAndAnalyzeAudio surfaces missing pitch detection dependencies", async () => {
@@ -112,15 +143,15 @@ describe("audio runtime integration", () => {
       quit() {}
     }
 
-    mock.module("naudiodon", () => ({
+    mockModule("naudiodon", () => ({
       AudioIO: FakeAudioIO,
       SampleFormat16Bit: 16,
     }));
-    mock.module("pitchfinder", () => {
+    mockModule("pitchfinder", () => {
       throw new Error("missing");
     });
 
-    await expect(recordAndAnalyzeAudio({ durationSeconds: 0.5 })).rejects.toThrow("Missing dependency: pitchfinder");
+    await assert.rejects(recordAndAnalyzeAudio({ durationSeconds: 0.5 }), /Missing dependency: pitchfinder/);
   });
 
   test("grouped VICE and U2 analysis reaches the real client microphone recorder and analyzes PCM", async () => {
@@ -135,15 +166,15 @@ describe("audio runtime integration", () => {
         const result = await toolRegistry.invoke("c64_sound", { op, durationSeconds: 0.5, ...(op === "analyze" ? { request: "check the music" } : {}) }, {
           client, rag: {}, logger: createLogger(), platform: { id: platform, features: [], limitedFeatures: [] },
         });
-        expect(result.isError).toBeUndefined();
+        assert.equal(result.isError, undefined);
         const analysis = op === "record_analyze" ? JSON.parse(result.content[0].text).analysis : result.metadata.analysis.analysis;
-        expect(analysis.source).toBe("microphone");
-        expect(analysis.voices[0].detected_notes.some((note) => note.note === "A4")).toBe(true);
-        expect(analysis.global_metrics.average_rms).toBeGreaterThan(0.1);
+        assert.equal(analysis.source, "microphone");
+        assert.equal(analysis.voices[0].detected_notes.some((note) => note.note === "A4"), true);
+        assert.ok(analysis.global_metrics.average_rms > 0.1);
       }
     }
-    expect(instances).toHaveLength(4);
-    expect(instances.every((input) => input.quitCalled)).toBe(true);
+    assert.equal(instances.length, 4);
+    assert.equal(instances.every((input) => input.quitCalled), true);
   });
 
   test("recordAndAnalyzeAudio captures PCM and analyzes note content", async () => {
@@ -164,10 +195,10 @@ describe("audio runtime integration", () => {
       },
     });
 
-    expect(result.analysis.durationSeconds).toBeGreaterThan(0.05);
-    expect(result.analysis.voices[0]?.detected_notes.some((entry) => entry.note === "A4")).toBe(true);
-    expect(result.analysis.global_metrics.average_rms).toBeGreaterThan(0);
-    expect(result.analysis.global_metrics.max_rms).toBeGreaterThan(0);
+    assert.ok(result.analysis.durationSeconds > 0.05);
+    assert.equal(result.analysis.voices[0]?.detected_notes.some((entry) => entry.note === "A4"), true);
+    assert.ok(result.analysis.global_metrics.average_rms > 0);
+    assert.ok(result.analysis.global_metrics.max_rms > 0);
   });
 
   test("recordAndAnalyzeAudio falls back to stop() when quit() is unavailable", async () => {
@@ -175,9 +206,9 @@ describe("audio runtime integration", () => {
 
     const result = await recordAndAnalyzeAudio({ durationSeconds: 0.5 });
 
-    expect(result.analysis.voices[0]?.detected_notes.length).toBeGreaterThan(0);
-    expect(instances[0]?.stopCalled).toBe(true);
-    expect(instances[0]?.quitCalled).toBeUndefined();
+    assert.ok(result.analysis.voices[0]?.detected_notes.length > 0);
+    assert.equal(instances[0]?.stopCalled, true);
+    assert.equal(instances[0]?.quitCalled, undefined);
   });
 
   test("recordAndAnalyzeAudio falls back to manual RMS and tolerates invalid expected SIDWAVE", async () => {
@@ -207,11 +238,11 @@ describe("audio runtime integration", () => {
       }
     }
 
-    mock.module("naudiodon", () => ({
+    mockModule("naudiodon", () => ({
       AudioIO: FakeAudioIO,
       SampleFormat16Bit: 16,
     }));
-    mock.module("pitchfinder", () => ({
+    mockModule("pitchfinder", () => ({
       default: {
         YIN: () => () => 440,
       },
@@ -222,9 +253,9 @@ describe("audio runtime integration", () => {
       expectedSidwave: "{not valid yaml",
     });
 
-    expect(result.analysis.global_metrics.average_rms).toBeGreaterThan(0);
-    expect(result.analysis.voices[0]?.detected_notes.some((entry) => entry.note === "A4")).toBe(true);
-    expect(instances[0]?.quitCalled).toBe(true);
+    assert.ok(result.analysis.global_metrics.average_rms > 0);
+    assert.equal(result.analysis.voices[0]?.detected_notes.some((entry) => entry.note === "A4"), true);
+    assert.equal(instances[0]?.quitCalled, true);
   });
 
   test("recordAndAnalyzeAudio marks quiet captures as uncertain notes", async () => {
@@ -245,23 +276,23 @@ describe("audio runtime integration", () => {
       },
     });
 
-    expect(result.analysis.voices[0]?.detected_notes.every((entry) => entry.note === null)).toBe(true);
-    expect(result.analysis.voices[0]?.detected_notes.every((entry) => entry.uncertain === true)).toBe(true);
+    assert.equal(result.analysis.voices[0]?.detected_notes.every((entry) => entry.note === null), true);
+    assert.equal(result.analysis.voices[0]?.detected_notes.every((entry) => entry.uncertain === true), true);
   });
 
   test("recordAndAnalyzeAudio surfaces input startup failures", async () => {
     const { instances } = installAudioRuntimeMocks({ startThrows: true });
 
-    await expect(recordAndAnalyzeAudio({ durationSeconds: 0.5 })).rejects.toThrow("synthetic start failure");
-    expect(instances[0]?.quitCalls).toBe(1);
+    await assert.rejects(recordAndAnalyzeAudio({ durationSeconds: 0.5 }), /synthetic start failure/);
+    assert.equal(instances[0]?.quitCalls, 1);
   });
 
   test("microphone cancellation during startup closes the input exactly once", async () => {
     const controller = new AbortController();
     const { instances } = installAudioRuntimeMocks({ onStart: () => controller.abort() });
 
-    await expect(recordAndAnalyzeAudio({ durationSeconds: 10, signal: controller.signal })).rejects.toThrow("cancelled");
-    expect(instances[0]?.quitCalls).toBe(1);
+    await assert.rejects(recordAndAnalyzeAudio({ durationSeconds: 10, signal: controller.signal }), /cancelled/);
+    assert.equal(instances[0]?.quitCalls, 1);
   });
 
   test("microphone cancellation stops active recording before its duration elapses", async () => {
@@ -273,8 +304,8 @@ describe("audio runtime integration", () => {
     recording.catch(() => {});
     await inputStarted;
     controller.abort();
-    await expect(recording).rejects.toThrow("cancelled");
-    expect(instances[0]?.quitCalls).toBe(1);
+    await assert.rejects(recording, /cancelled/);
+    assert.equal(instances[0]?.quitCalls, 1);
   });
 
   test("audioModule analyze_audio and record_and_analyze_audio succeed with the mocked runtime", async () => {
@@ -286,9 +317,9 @@ describe("audio runtime integration", () => {
       { durationSeconds: 0.5, expectedSidwave: { voices: [{ patterns: { main: { notes: ["A4"] } } }] } },
       ctx,
     );
-    expect(recorded.isError).toBeUndefined();
-    expect(recorded.metadata?.success).toBe(true);
-    expect(recorded.metadata?.voices?.length).toBe(1);
+    assert.equal(recorded.isError, undefined);
+    assert.equal(recorded.metadata?.success, true);
+    assert.equal(recorded.metadata?.voices?.length, 1);
 
     const analyzed = await audioModule.invoke(
       "analyze_audio",
@@ -296,20 +327,20 @@ describe("audio runtime integration", () => {
       ctx,
     );
 
-    expect(analyzed.isError).toBeUndefined();
-    expect(analyzed.metadata?.analyzed).toBe(true);
-    expect(String(analyzed.content?.[0]?.text ?? "")).toContain("Mix:");
-    expect(String(analyzed.content?.[0]?.text ?? "")).toContain("sounds accurate");
+    assert.equal(analyzed.isError, undefined);
+    assert.equal(analyzed.metadata?.analyzed, true);
+    assert.ok(String(analyzed.content?.[0]?.text ?? "").includes("Mix:"));
+    assert.ok(String(analyzed.content?.[0]?.text ?? "").includes("sounds accurate"));
   });
 
   test("analyzePcmForTest falls back when RMS extraction throws and splits changing pitches into segments", async () => {
     let callIndex = 0;
-    mock.module("pitchfinder", () => ({
+    mockModule("pitchfinder", () => ({
       default: {
         YIN: () => () => [440, 440, 493.88, 493.88, 493.88][callIndex++] ?? 493.88,
       },
     }));
-    mock.module("meyda", () => ({
+    mockModule("meyda", () => ({
       default: {
         extract: () => {
           throw new Error("meyda missing");
@@ -333,19 +364,19 @@ describe("audio runtime integration", () => {
     });
 
     const detected = result.analysis.voices[0]?.detected_notes ?? [];
-    expect(detected.length).toBeGreaterThan(1);
-    expect(detected.some((entry) => entry.note === "A4")).toBe(true);
-    expect(detected.some((entry) => entry.note === "B4")).toBe(true);
-    expect(result.analysis.global_metrics.average_rms).toBeGreaterThan(0);
+    assert.ok(detected.length > 1);
+    assert.equal(detected.some((entry) => entry.note === "A4"), true);
+    assert.equal(detected.some((entry) => entry.note === "B4"), true);
+    assert.ok(result.analysis.global_metrics.average_rms > 0);
   });
 
   test("analyzePcmForTest handles empty captures without detected notes", async () => {
-    mock.module("pitchfinder", () => ({
+    mockModule("pitchfinder", () => ({
       default: {
         YIN: () => () => null,
       },
     }));
-    mock.module("meyda", () => ({
+    mockModule("meyda", () => ({
       default: {
         extract: () => ({ rms: 0 }),
       },
@@ -353,9 +384,9 @@ describe("audio runtime integration", () => {
 
     const result = await analyzePcmForTest(new Float32Array(0), 44100);
 
-    expect(result.analysis.voices[0]?.detected_notes).toEqual([]);
-    expect(result.analysis.global_metrics.average_pitch_deviation).toBeNull();
-    expect(result.analysis.global_metrics.detected_bpm).toBeNull();
-    expect(result.analysis.global_metrics.average_rms).toBeNull();
+    assert.deepEqual(result.analysis.voices[0]?.detected_notes, []);
+    assert.equal(result.analysis.global_metrics.average_pitch_deviation, null);
+    assert.equal(result.analysis.global_metrics.detected_bpm, null);
+    assert.equal(result.analysis.global_metrics.average_rms, null);
   });
 });

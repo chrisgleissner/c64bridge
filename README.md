@@ -970,12 +970,12 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 | `analyze` | Analyze SID playback when verification is requested. | — | `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture raw stereo PCM samples from the Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
-| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"`, `system` | ✅ | ✅ | ✅ |
+| `generate` | Compose and play an eight-bar SIDWAVE song as a PRG, which replaces the program in memory. root: key and register; pattern: lead offsets; steps: lead notes; tempoMs: classic spacing; waveform: lead sound; preset: phrasing; system: PAL/NTSC. | — | `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile a SIDWAVE score, play and analyze it. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ | ✅ |  |
-| `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `preset="fuer_elise"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
+| `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | ✅ | ✅ |  |
 | `record_analyze` | Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `reset` | Soft or hard reset of the SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
