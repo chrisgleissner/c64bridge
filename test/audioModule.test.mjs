@@ -748,7 +748,7 @@ test("music_generate returns a style resource and omits the score by default", a
   const ctx = { client: { runPrg: async () => ({ success: true }) }, logger: createLogger() };
   const result = await audioModule.invoke("music_generate", { style: "ambient", steps: 16 }, ctx);
   assert.equal(result.isError, undefined);
-  assert.equal(result.metadata.resourceUri, "c64://sound/examples/ambient_filter");
+  assert.equal(result.metadata.styleExampleUri, "c64://sound/examples/ambient_filter");
   assert.equal(result.metadata.sidwave, undefined);
   assert.equal(result.metadata.timeline, undefined);
 });

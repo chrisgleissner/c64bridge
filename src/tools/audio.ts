@@ -1014,7 +1014,7 @@ export const audioModule = defineToolModule({
           return textResult(`Playing ${bars} ${bars === 1 ? "bar" : "bars"} of ${style} in ${key} at ${tempo} BPM (${progression.join("–")}, seed ${parsed.seed}).`, {
             success: true,
             key, progression, tempo, style, seed: parsed.seed, bars, speed,
-            resourceUri: `${SIDWAVE_EXAMPLES_URI}/${{ ambient: "ambient_filter", chiptune: "chiptune_drive", funk: "funk_bass" }[style]}`,
+            styleExampleUri: `${SIDWAVE_EXAMPLES_URI}/${{ ambient: "ambient_filter", chiptune: "chiptune_drive", funk: "funk_bass" }[style]}`,
             ...(parsed.includeScore ? { sidwave } : {}),
             root: parsed.root, intervals, steps: parsed.steps ?? (leadTimeline.length || undefined),
             tempoMs: parsed.tempoMs, waveform: parsed.waveform ?? "pulse", preset, system, systemSource,
