@@ -106,9 +106,9 @@
 | `$EDEF` | 60911 | **UNTLK** | Send UNTALK | — | — | — | — |
 | `$EDFE` | 60926 | **UNLSN** | Send UNLISTEN | — | — | — | — |
 | `$EE13` | 60947 | **ACPTR** | Serial read byte | — | TALK path active | A=byte | — |
-| `$EE85` | 61061 | SCLK low | Serial clock low | — | — | — | CIA2 `$DD00`.4 |
-| `$EE8E` | 61070 | SCLK high | Serial clock high | — | — | — | CIA2 `$DD00`.4 |
-| `$EE97` | 61079 | SDATA low | Serial data low | — | — | — | CIA2 `$DD00`.5 |
+| `$EE85` | 61061 | SCLK high | Serial clock out high (released) | — | — | — | CIA2 `$DD00`.4 |
+| `$EE8E` | 61070 | SCLK low | Serial clock out low | — | — | — | CIA2 `$DD00`.4 |
+| `$EE97` | 61079 | SDATA high | Serial data out high (released) | — | — | — | CIA2 `$DD00`.5 |
 | `$EEA9` | 61097 | Read SDATA/SCLK | Read serial input bits | — | — | C=data, N=clock | CIA2 `$DD00`.7/.6 |
 | `$EEB3` | 61107 | Delay 1ms | Busy wait ~1 ms | — | — | — | Timing helper |
 | `$EEBB` | 61115 | RS232 send bit | NMI bit‑send routine | — | NMI context | — | — |
