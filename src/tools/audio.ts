@@ -233,7 +233,7 @@ const modplayFileArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
-export const MUSIC_GENERATE_DESCRIPTION = "Compose and play eight SIDWAVE bars by default as a PRG, which replaces the program in memory. Root sets key/register, pattern gives lead offsets, steps sets lead count, tempoMs sets classic spacing, waveform sets lead sound, preset sets phrasing, and system sets PAL/NTSC timing.";
+export const MUSIC_GENERATE_DESCRIPTION = "Compose and play an eight-bar SIDWAVE song as a PRG, which replaces the program in memory. root: key and register; pattern: lead offsets; steps: lead notes; tempoMs: classic spacing; waveform: lead sound; preset: phrasing; system: PAL/NTSC.";
 
 const musicGenerateArgsSchema = objectSchema({
   description: "Compose and play a seeded SIDWAVE piece.",
