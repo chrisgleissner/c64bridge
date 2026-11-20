@@ -715,8 +715,9 @@ export const audioModule = defineToolModule({
 
           const detailRecord = toRecord(result.details) ?? {};
           const systemNote = `Using ${system} timing (${systemSource}).`;
+          const volumeSet = detailRecord.volumeSet === 15 ? " Master volume was set to 15 because it was muted." : "";
 
-          return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}. ${systemNote}`, {
+          return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}.${volumeSet} ${systemNote}`, {
             success: true,
             voice,
             note: parsed.note ?? null,
