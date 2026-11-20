@@ -268,3 +268,21 @@ test("SIDWAVE 1.2 resolves a named chip and channel and rejects overlapping plac
   assert.throws(() => parseSidwave({ ...score, sids: [...score.sids, { id: "other", address: "$D7E0" }] }), /SID address is duplicated/);
   assert.throws(() => parseSidwave({ ...score, voices: [{ sid: "unknown", channel: 1 }] }), /references an unknown SID/);
 });
+
+test("SIDWAVE 1.2 validates sample timing, encoding and CIA2 rate", () => {
+  const doc = { ...VALID, sidwave: 1.2 };
+  const entry = { sid: "sid1", at: [0], hex: "8a7" };
+  const withSamples = (rate, voices) => ({ ...doc, samples: { rate, voices } });
+  assert.throws(() => parseSidwave(withSamples(8001, [entry])), /rate.*maximum 8000/);
+  assert.throws(() => parseSidwave(withSamples(4000, [entry, entry])), /SID already has a sample scheduled/);
+  assert.throws(() => parseSidwave(withSamples(4000, [{ ...entry, hex: undefined, base64: "a!" }])), /expected base64/);
+  assert.throws(() => parseSidwave(withSamples(4000, [{ ...entry, kit: "kick" }])), /exactly one of hex, base64 or kit/);
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(withSamples(4000, [{ ...entry, at: [200] }]))), /outside the song/);
+});
+
+test("SIDWAVE 1.2 rejects out-of-range bends and invalid hard restarts", () => {
+  const doc = { ...structuredClone(VALID), sidwave: 1.2 };
+  doc.voices[0].patterns.A.groove = [{ note: "A7", bend: { to: 4, frames: 2 } }];
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(doc)), /outside the playable note range/);
+  assert.throws(() => parseSidwave({ ...doc, instruments: { bad: { hard_restart: { frames: 0, test: true } } } }), /zero frames disables/);
+});

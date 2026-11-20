@@ -58,7 +58,7 @@ def("PHA", [[0x48, "imp"]]); def("PLA", [[0x68, "imp"]]); def("PHP", [[0x08, "im
 const RMW_OPS = new Set(["ASL", "LSR", "ROL", "ROR", "INC", "DEC"]);
 /** Base NMOS 6502 cycle count. Indexed reads and taken branches add page crossing penalties separately. */
 function cycleCost(name, mode) {
-  if (name === "JSR" || name === "RTS") return 6;
+  if (name === "JSR" || name === "RTS" || name === "RTI") return 6;
   if (name === "JMP") return mode === "ind" ? 5 : 3;
   if (name === "PHA" || name === "PHP") return 3;
   if (name === "PLA" || name === "PLP") return 4;
@@ -137,7 +137,9 @@ class Cpu {
       case "TSX": this.x = this.nz(this.sp); break; case "TXS": this.sp = this.x; break;
       case "PHA": this.push(this.a); break; case "PLA": this.a = this.nz(this.pop()); break;
       case "PHP": this.push(0x30 | (this.n << 7) | (this.v << 6) | (this.d << 3) | (this.i << 2) | (this.z << 1) | this.c); break;
-      case "PLP": { const p = this.pop(); [this.n, this.v, this.d, this.i, this.z, this.c] = [p >> 7, (p >> 6) & 1, (p >> 3) & 1, (p >> 2) & 1, (p >> 1) & 1, p & 1]; break; }
+      case "RTI": case "PLP": { const p = this.pop(); [this.n, this.v, this.d, this.i, this.z, this.c] = [p >> 7, (p >> 6) & 1, (p >> 3) & 1, (p >> 2) & 1, (p >> 1) & 1, p & 1];
+        if (name === "RTI") { const lo = this.pop(); this.pc = lo | (this.pop() << 8); }
+        break; }
       case "CLC": this.c = 0; break; case "SEC": this.c = 1; break; case "CLI": this.i = 0; break; case "SEI": this.i = 1; break;
       case "CLD": this.d = 0; break; case "SED": this.d = 1; break; case "CLV": this.v = 0; break; case "NOP": break;
       case "BPL": this.br(!this.n); break; case "BMI": this.br(this.n); break; case "BVC": this.br(!this.v); break; case "BVS": this.br(this.v); break;
@@ -147,6 +149,21 @@ class Cpu {
       case "RTS": { const lo = this.pop(); this.pc = (((this.pop() << 8) | lo) + 1) & 0xffff; break; }
       default: throw new Error(`${name} at $${at.toString(16)} is not expected in the player`);
     }
+  }
+  nmi() {
+    const { pc, sp } = this;
+    this.push(pc >> 8);
+    this.push(pc & 255);
+    this.push(0x20 | (this.n << 7) | (this.v << 6) | (this.d << 3) | (this.i << 2) | (this.z << 1) | this.c);
+    this.i = 1;
+    this.pc = this.m[0xfffa] | (this.m[0xfffb] << 8);
+    const start = this.cycles;
+    this.cycles += 7;
+    for (let step = 0; step < 1000; step++) {
+      this.step();
+      if (this.pc === pc && this.sp === sp) return this.cycles - start;
+    }
+    throw new Error("NMI did not return");
   }
   /** Calls a subroutine and returns the number of CPU cycles it took. */
   call(addr, a = 0, limit = 100_000) {
@@ -1567,4 +1584,191 @@ test("SIDWAVE 1.2 keeps existing note effects when they are used", () => {
   const observed = runPsid(compileSidwaveToSid(mapped, compiled.prg).sid, compiled.totalFrames * 2);
   assert.deepEqual(observed.states, expected.states);
   assert.ok(observed.maxPlayCycles <= compiled.worstCaseCyclesPerCall);
+});
+
+const scoreVoice = (id, groove, fields = {}, length = 1) => ({ id, ...fields, patterns: { A: { groove, length } } });
+const regFreq = (mem, base) => mem[base] | (mem[base + 1] << 8);
+const freqAt = (note, cents = 0, mode = "PAL") => hzToSidFrequency(midiToHz(noteNameToMidi(note) + cents / 100), mode);
+const playMultiScore = (score, calls) => {
+  const { compiled, cpu, mem } = loadMultiPlayer(parseSidwave(score));
+  cpu.call(compiled.initAddress);
+  const snapshots = [];
+  for (let i = 0; i < calls; i++) {
+    assert.ok(cpu.call(compiled.playAddress) <= compiled.worstCaseCyclesPerCall);
+    snapshots.push(mem.slice(0xd400, 0xd800));
+  }
+  return snapshots;
+};
+
+test("SIDWAVE 1.2 echo and unison copy notes across SIDs with independent timing, level and pitch", () => {
+  const source = scoreVoice(1, ["C4", "G4"], { waveform: "triangle", adsr: [1, 2, 12, 3] });
+  const score = multiScore(sidMap(3), [source]);
+  score.voices.push({ id: 4, echo: { voice: 1, delay: 6, volume: 0.25, detune: -13 } }, { id: 7, unison: { voice: 1, detune: 16 } });
+  const states = playMultiScore(score, 36);
+  assert.equal(states[0][4], 0x11);
+  assert.equal(states[0][0x24], 0);
+  assert.equal(states[0][0x104], 0x11);
+  assert.equal(states[0][0x106], 0xc3);
+  assert.equal(regFreq(states[0], 0x100), freqAt("C4", 16));
+  assert.equal(states[5][0x24], 0);
+  assert.equal(states[6][0x24], 0x11);
+  assert.equal(states[6][0x26], 0x33);
+  assert.equal(regFreq(states[6], 0x20), freqAt("C4", -13));
+  assert.equal(regFreq(states[25], 0), freqAt("G4"));
+  assert.equal(regFreq(states[25], 0x100), freqAt("G4", 16));
+  assert.equal(regFreq(states[31], 0x20), freqAt("G4", -13));
+  assert.throws(() => compileSidwaveToPrg(parseSidwave({
+    ...score, voices: [source, { id: 4, echo: { voice: 7, delay: 2, volume: 0.5 } }, { id: 7, unison: { voice: 4 } }],
+  })), /copies form a cycle/);
+});
+
+test("SIDWAVE 1.2 chord forms run a wavetable arpeggio on one oscillator", () => {
+  const score = multiScore(sidMap(1), [scoreVoice(1, [
+    "Cm7@arp", { chord: "Cm7", arp: "0,3,7,10", speed: 2 },
+  ])]);
+  const states = playMultiScore(score, 35);
+  const notes = ["C3", "Eb3", "G3", "Bb3"];
+  assert.deepEqual(states.slice(0, 8).map((m) => regFreq(m, 0)), [...notes, ...notes].map((n) => freqAt(n)));
+  assert.deepEqual(states.slice(25, 33).map((m) => regFreq(m, 0)), notes.flatMap((n) => [freqAt(n), freqAt(n)]));
+  assert.ok(states.every((m) => !m[11] && !m[18]));
+});
+
+test("SIDWAVE 1.2 bends reach absolute and relative targets, and slide_from works on the first note", () => {
+  const score = multiScore(sidMap(1), [scoreVoice(1, [
+    { note: "C4", slide_from: "A3", portamento: 4 },
+    { note: "D4", bend: { to: "G4", frames: 3 } },
+    { note: "G4", bend: { to: -5, frames: 5 } },
+  ])]);
+  const states = playMultiScore(score, 57);
+  for (const [onset, from, to, frames] of [[0, "A3", "C4", 4], [25, "D4", "G4", 3], [50, "G4", "D4", 5]]) {
+    assert.equal(regFreq(states[onset], 0), freqAt(from));
+    assert.equal(regFreq(states[onset + frames], 0), freqAt(to));
+    for (let tick = 1; tick < frames; tick++) {
+      const ideal = freqAt(from) + (freqAt(to) - freqAt(from)) * tick / frames;
+      assert.ok(Math.abs(regFreq(states[onset + tick], 0) - ideal) <= 1);
+    }
+  }
+});
+
+test("SIDWAVE 1.2 releases early, loads restart ADSR and holds TEST until retrigger", () => {
+  const score = multiScore(sidMap(1), [scoreVoice(1, [
+    { note: "C4", gate_off: 6 }, "E4", "G4@off", "A4@off",
+  ], { instrument: "reset" })], { instruments: {
+    reset: { waveform: "pulse", adsr: [3, 4, 9, 7], wavetable: [{ wave: "pulse" }],
+      hard_restart: { frames: 3, adsr: [1, 3, 2, 4], test: true } },
+    off: { waveform: "triangle", hard_restart: { frames: 0 } },
+  } });
+  const states = playMultiScore(score, 78);
+  assert.equal(states[18][4], 0x41);
+  assert.equal(states[19][4], 0x40);
+  assert.deepEqual(states.slice(22, 25).map((m) => [...m.slice(4, 7)]), Array.from({ length: 3 }, () => [0x48, 0x13, 0x24]));
+  assert.deepEqual([...states[25].slice(4, 7)], [0x41, 0x34, 0x97]);
+  assert.deepEqual([...states[49].slice(4, 7)], [0x40, 0x34, 0x97], "disabled restart still releases the gate");
+  assert.equal(states[50][4], 0x11);
+});
+
+const sampleHarness = (score, options) => {
+  const result = loadMultiPlayer(parseSidwave(score), options);
+  const { mem, cpu, compiled } = result;
+  // C64 KERNAL $FE43 is SEI / JMP ($0318). Use it in this CPU model.
+  mem.set([0x78, 0x6c, 0x18, 0x03], 0xfe43);
+  mem.set([0x43, 0xfe], 0xfffa);
+  mem.set([0x00, 0xfe], 0x0318);
+  mem[0xfe00] = 0x40; // previous NMI handler
+  const read = cpu.hooks.read;
+  let pending = 0;
+  cpu.hooks.read = (address) => {
+    if (address !== 0xdd0d) return read(address);
+    const value = pending;
+    pending = 0;
+    return value;
+  };
+  cpu.call(compiled.entryAddress);
+  const irq = mem[0x0314] | (mem[0x0315] << 8);
+  return { ...result, irq, tick: () => { pending = 0x81; return cpu.nmi(); } };
+};
+
+test("CIA2 digi NMI uses the timer clock independently and preserves each SID's filter mode", () => {
+  const sids = sidMap(2);
+  sids[1].filter = { filter_env: { cutoff_base: 700, type: "bandpass" } };
+  const score = multiScore(sids, [scoreVoice(4, ["C4"])], { samples: {
+    rate: 2345,
+    voices: [{ sid: "chip2", at: [0], hex: "018fa" }, { sid: "chip1", at: [1], base64: "wuU=" }],
+  } });
+  const { cpu, mem, compiled, writes, irq, tick } = sampleHarness(score, { loop: false });
+  assert.ok((mem[0x0318] | (mem[0x0319] << 8)) >= 0x0801);
+  assert.notEqual(mem[0x0319], 0xfe);
+  assert.equal(mem[0xdd04] | (mem[0xdd05] << 8), Math.round(985_248 / 2345) - 1);
+  assert.equal(mem[0xdd0e], 0);
+  cpu.nmi(); // a non-CIA2 NMI follows the saved KERNAL vector
+  cpu.call(irq);
+  assert.deepEqual(writes.filter(([a]) => a === 0xdd0d), [[0xdd0d, 1], [0xdd0d, 0x81]]);
+  assert.equal(mem[0xdd0e], 0x11);
+  cpu.call(irq);
+  cpu.a = 17; cpu.x = 38; cpu.y = 59; cpu.c = 1;
+  mem[1] = 0x37;
+  writes.length = 0;
+  for (let sample = 0; sample < 7; sample++) tick();
+  assert.deepEqual(writes.filter(([a]) => a === 0xd438).map(([, v]) => v), [0x20, 0x21, 0x28, 0x2f, 0x2a, 0x2e]);
+  assert.deepEqual(writes.filter(([a]) => a === 0xd418).map(([, v]) => v), [12, 2, 14, 5, 15]);
+  assert.deepEqual([cpu.a, cpu.x, cpu.y, cpu.c, mem[1]], [17, 38, 59, 1, 0x37]);
+  assert.equal(mem[0xdd0e], 0, "the timer stops after the last active sample");
+  for (let i = 2; i <= compiled.totalFrames; i++) cpu.call(irq);
+  assert.deepEqual([...mem.slice(0x0318, 0x031a)], [0, 0xfe], "one-shot playback restores the previous NMI vector");
+  assert.equal(mem[0xdd0e], 0);
+  assert.throws(() => compileSidwaveToSid(parseSidwave(score), compiled.prg), /CIA2 NMI digi samples require standalone PRG/);
+});
+
+test("CIA2 plays original kick, snare and clap sample data, including page crossings at 8 kHz", () => {
+  const score = multiScore(sidMap(1), [], { samples: {
+    rate: 8000,
+    voices: ["kick", "snare", "clap"].map((kit, i) => ({ sid: "chip1", at: [1 + 15 * i], kit })),
+  } });
+  const { cpu, mem, compiled, writes, irq, tick } = sampleHarness(score);
+  const timerPeriod = (mem[0xdd04] | (mem[0xdd05] << 8)) + 1;
+  assert.equal(timerPeriod, 123);
+  const recorded = [[], [], []];
+  let peak = 0;
+  // PAL spends 19,656 phi2 cycles between player calls, separately from the
+  // CIA2 timer. Advance the NMI clock at its own cadence between calls.
+  for (let frame = 0; frame < 46; frame++) {
+    cpu.call(irq);
+    writes.length = 0;
+    const count = Math.floor((frame + 1) * 19_656 / timerPeriod) - Math.floor(frame * 19_656 / timerPeriod);
+    for (let sample = 0; sample < count && (mem[0xdd0e] & 1); sample++) {
+      peak = Math.max(peak, tick());
+    }
+    if (frame > 0) recorded[Math.floor((frame - 1) / 15)].push(...writes.filter(([a]) => a === 0xd418).map(([, v]) => v));
+  }
+  const { voices } = parseSidwave(score).samples;
+  for (const [i, { data }] of voices.entries()) {
+    assert.deepEqual(recorded[i], [...data, 15], "writes each nibble, then restores the SID volume");
+    assert.ok(new Set(recorded[i]).size > 4);
+  }
+  assert.equal(new Set(recorded.map((levels) => levels.slice(0, 32).join(","))).size, 3);
+  assert.ok(peak < timerPeriod, `CIA2 NMI took ${peak} cycles in a ${timerPeriod}-cycle period`);
+  console.info(`SIDWAVE 8 kHz single-SID digi: ${peak} peak NMI cycles in a ${timerPeriod}-cycle timer period`);
+  assert.ok(compiled.warnings.some((w) => /CPU cycles.*master volume/.test(w)));
+});
+
+test("the eight new library instruments write original waveform, pitch, gate and pulse sequences", () => {
+  const recipes = [
+    ["tom", [0x81, 0x11, 0x11], ["D5", "C5", "F4"]],
+    ["clap", [0x81, 0x80, 0x81], ["E6", "C4", "G6"]],
+    ["open_hat", [0x81, 0x81, 0x81], ["A7", "F7", "F7"]],
+    ["crash", [0x81, 0x81, 0x81], ["G7", "G7", "G7"]],
+    ["octave_bass", [0x21, 0x21, 0x21], ["C5", "C5", "C4"]],
+    ["wide_pwm_pad", [0x41, 0x41, 0x41], ["C4", "C4", "C4"]],
+    ["pluck_arp", [0x41, 0x41, 0x41], ["C4", "G4", "C5"]],
+    ["noise_lead_attack", [0x81, 0x21, 0x21], ["G6", "C4", "C4"]],
+  ];
+  for (const [recipe, controls, notes] of recipes) {
+    const score = multiScore(sidMap(1), [scoreVoice(1, ["C4"], { instrument: `lib:${recipe}` }, 4)]);
+    const states = playMultiScore(score, 20);
+    assert.deepEqual(states.slice(0, 3).map((m) => m[4]), controls, recipe);
+    assert.deepEqual(states.slice(0, 3).map((m) => regFreq(m, 0)), notes.map((n) => freqAt(n)), recipe);
+    if (recipe === "wide_pwm_pad") assert.deepEqual(states.slice(0, 3).map((m) => (m[3] << 8) | m[2]), [737, 761, 785]);
+    if (recipe === "open_hat") assert.equal(states[12][4], 0x80);
+    if (recipe === "crash") assert.equal(regFreq(states[15], 0), freqAt("D6"));
+  }
 });

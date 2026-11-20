@@ -100,6 +100,7 @@ timeline:
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
 | `global_fx` | `reverb_sim` and `filter_env`, described below. |
+| `samples` | Optional CIA2 volume samples and their trigger calls (1.2 PRG). |
 | `sids` | Optional SID map or layout. Defaults to one SID at `$D400`. |
 | `cpu` | Optional `turbo` for standalone PRG playback on Ultimate hardware. |
 | `voices` | One to 30 voices, up to three per configured SID. Undeclared channels stay silent. |
@@ -400,9 +401,60 @@ The compiler reports `worstCaseCyclesPerCall` and refuses a 1.2 score above the 
 
 For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and delays playback past the startup hold, which can keep the CPU at 1 MHz for up to 4.2 seconds. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
 
+## Advanced techniques (1.2)
+
+### Echo and unison
+
+Declare a destination voice with `echo: { voice: 1, delay: 6, volume: 0.4, detune: -7 }` or `unison: { voice: 1, detune: 8 }`. The destination takes its notes and instruments from the named source voice. Put the source in the timeline. The copy follows that source automatically.
+
+- Echo shifts note onsets and releases by `delay` player calls and scales sustain by `volume` (0–1). The initial attack still uses the source attack and decay. Echoes that run beyond the end of the song are clipped. Place the echo on another SID and pan it separately on the mixer to spread it in stereo.
+- Unison starts on the same call on another SID. Detune is in cents (±100), defaults to +5 for unison and 0 for echo, and also applies to arpeggios, wavetable pitch changes and glides. Doubling an oscillator at the same pitch does not produce a predictable increase in level. [Ultimate multi-SID measurements](../ultimate/multisid.md)
+
+### Chord arpeggios and pitch bends
+
+A groove entry `Cm7@arp` becomes a looping wavetable on one oscillator. It starts from the chord root in octave 3, then cycles through the chord tones once per player call. Use `{ chord: Cm7, arp: "0,3,7,10", speed: 2 }` to set the semitone offsets and calls per tone. The expanded loop takes the place of an instrument's wavetable for that entry. Layer transposition also shifts these notes.
+
+Use `{ note: C4, bend: { to: G4, frames: 6 } }` to start at C4 and reach G4 in six calls, or use `to: -3` for a target three semitones below C4. `{ note: C4, slide_from: A3, portamento: 4 }` starts below C4 and rises over four calls, including on the first note of a song. Without `portamento` a scoop uses the instrument or pattern slide speed if set, otherwise four calls. Pitch moves linearly in SID frequency units. Use a wavetable without pitch changes for bends and scoops.
+
+### Gate timing and oscillator reset
+
+An instrument can set `hard_restart: { frames: 3, adsr: [0, 0, 0, 1], test: true }`. Before the next attack, the player clears GATE for the requested calls, loads the restart ADSR, and optionally holds the oscillator TEST bit. The next attack writes the note's ADSR and clears the restart TEST bit. The default is a two-call restart with zero ADSR. `frames: 0` keeps the regular ADSR and releases GATE before the next attack. `gate_off: 4` on a groove note releases it four calls before its written end, or earlier if the next attack needs a restart. Adjacent legato notes keep the gate on. [SID control register](sid-spec.md)
+
+### CIA2 volume digis
+
+Use standalone PRG output. Each sample entry names one SID and a list of zero-based player calls when it starts. All sample entries share the timer rate of 16–8,000 Hz. A later trigger on the same SID replaces the current sample. Separate SIDs can play simultaneous samples. A digi-only score can declare `voices: []` and empty timeline layers.
+
+```yaml
+samples:
+  rate: 4000
+  voices:
+    - { sid: sid1, at: [0, 50], kit: kick }
+    - { sid: sid1, at: [25, 75], kit: snare }
+    - { sid: sid1, at: [88], hex: "8aef c987" }
+```
+
+The built-in kit synthesizes original `kick`, `snare` and `clap` hits. For inline data each hex digit is one unsigned 4-bit sample. `base64` packs two samples per decoded byte, high nibble first. The player expands them to one byte per sample in C64 memory and counts them against the `$D000` limit.
+
+CIA2 timer A drives the NMI. It replaces the low nibble of `$D418` (or the equivalent register on the chosen SID), preserving filter mode in the upper nibble. It restores the current master volume on the next timer tick after the sample ends. The timer pauses when all sample SIDs are idle. All oscillators on that SID share that changing volume. A dedicated SID avoids modulating the volume of pitched voices. For Ultimate hardware set **Digis Level** in **UltiSID Configuration** to a suitable non-Off value (default Medium). [Ultimate multi-SID settings](../ultimate/multisid.md)
+
+One active sample SID typically uses about 90 CPU cycles per timer tick including interrupt entry and exit, or about 720,000 cycles per second at 8 kHz. More sample SIDs increase the cost. The compiler budgets those interrupts alongside the score IRQ and reports when turbo is needed. Turn off any program that uses CIA2 timer A (including KERNAL RS-232) before starting the PRG. The timer and RAM NMI vector belong to the player during playback. [CIA2 timer and interrupt registers](../io/cia-spec.md)
+
+### Additional library instruments
+
+| Instrument | Technique |
+|---|---|
+| `lib:tom` | Noise transient followed by descending triangle pitches |
+| `lib:clap` | Staggered noise bursts with alternating gate |
+| `lib:open_hat` | Stepped high noise with an open tail |
+| `lib:crash` | Longer falling noise decay |
+| `lib:octave_bass` | Sawtooth alternating between the note and its octave |
+| `lib:wide_pwm_pad` | Slow attack and a wide looping pulse sweep |
+| `lib:pluck_arp` | Short pulse and triangle arpeggio |
+| `lib:noise_lead_attack` | One call of noise before a pitched sawtooth lead |
+
 ### Not supported
 
-Time signatures other than 4/4, per-note velocity, multiple subtunes, external sample playback, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than 4/4, per-note velocity, multiple subtunes, sample data loaded from external files, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 

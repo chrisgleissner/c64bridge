@@ -5,6 +5,10 @@
   "description": "See sidwave.md for the meaning of every field. The compiler also checks note ranges after transposition and minimum note durations.",
   "type": "object",
   "required": ["sidwave", "title", "tempo", "mode", "voices", "timeline"],
+  "allOf": [{
+    "if": { "not": { "required": ["samples"] } },
+    "then": { "properties": { "voices": { "minItems": 1 } } }
+  }],
   "properties": {
     "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, "1.0", "1", "1.1", "1.2"] },
     "title": { "type": "string" },
@@ -13,6 +17,7 @@
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
     "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
     "cpu": { "type": "string", "enum": ["turbo"] },
+    "samples": { "$ref": "#/$defs/samples" },
     "sids": {
       "description": "Defaults to one SID at $D400. List order determines numeric voice placement.",
       "oneOf": [
@@ -45,18 +50,20 @@
     },
     "voices": {
       "type": "array",
-      "minItems": 1,
       "maxItems": 30,
       "items": {
         "type": "object",
         "anyOf": [{ "required": ["id"] }, { "required": ["sid", "channel"] }],
         "dependentRequired": { "sid": ["channel"], "channel": ["sid"] },
+        "not": { "required": ["echo", "unison"] },
         "properties": {
           "id": { "type": "integer", "minimum": 1, "maximum": 30 },
           "sid": { "$ref": "#/$defs/sidId" },
           "channel": { "type": "integer", "minimum": 1, "maximum": 3 },
           "name": { "type": "string" },
           "instrument": { "$ref": "#/$defs/instrumentRef" },
+          "echo": { "$ref": "#/$defs/echo" },
+          "unison": { "$ref": "#/$defs/unison" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },
           "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095, "description": "Fraction (0 < x <= 1) or 12-bit value." },
           "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
@@ -93,7 +100,7 @@
                   "type": "object",
                   "oneOf": [{ "required": ["groove"] }, { "required": ["drums"] }],
                   "properties": {
-                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]@[^@]+$" }, { "enum": ["-", ".", "~", "_", "r", "rest", null] }, { "$ref": "#/$defs/grooveEntry" }] }, "minItems": 1 },
+                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]@[^@]+$" }, { "enum": ["-", ".", "~", "_", "r", "rest", null] }, { "$ref": "#/$defs/grooveEntry" }, { "$ref": "#/$defs/chordArp" }, { "type": "string", "pattern": "^[A-G][#b]?[A-Za-z0-9+]*@arp$" }] }, "minItems": 1 },
                     "drums": { "$ref": "#/$defs/drums" },
                     "length": { "$ref": "#/$defs/length" },
                     "transpositions": { "$ref": "#/$defs/transpositions" },
@@ -131,6 +138,87 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "detune": { "type": "number", "minimum": -100, "maximum": 100, "description": "Cents relative to the source voice." },
+    "echo": {
+      "type": "object",
+      "required": ["voice", "delay", "volume"],
+      "properties": {
+        "voice": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "delay": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "volume": { "type": "number", "minimum": 0, "maximum": 1 },
+        "detune": { "$ref": "#/$defs/detune" }
+      },
+      "additionalProperties": false
+    },
+    "unison": {
+      "type": "object",
+      "required": ["voice"],
+      "properties": {
+        "voice": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "detune": { "$ref": "#/$defs/detune", "default": 5 }
+      },
+      "additionalProperties": false
+    },
+    "chordArp": {
+      "type": "object",
+      "required": ["chord"],
+      "properties": {
+        "chord": { "type": "string", "pattern": "^[A-G][#b]?[A-Za-z0-9+]*$" },
+        "arp": { "type": "string", "description": "Comma-separated semitone offsets, e.g. 0,3,7,10." },
+        "speed": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1 },
+        "inst": { "$ref": "#/$defs/instrumentRef" },
+        "len": { "$ref": "#/$defs/length" }
+      },
+      "additionalProperties": false
+    },
+    "bend": {
+      "type": "object",
+      "required": ["to", "frames"],
+      "properties": {
+        "to": { "anyOf": [
+          { "$ref": "#/$defs/note" },
+          { "type": "integer", "minimum": -48, "maximum": 48 },
+          { "type": "string", "pattern": "^[+-]?[0-9]+$" }
+        ] },
+        "frames": { "type": "integer", "minimum": 1, "maximum": 255 }
+      },
+      "additionalProperties": false
+    },
+    "hardRestart": {
+      "type": "object",
+      "required": ["frames"],
+      "properties": {
+        "frames": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
+        "test": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false
+    },
+    "samples": {
+      "type": "object",
+      "required": ["rate", "voices"],
+      "properties": {
+        "rate": { "type": "integer", "minimum": 16, "maximum": 8000 },
+        "voices": {
+          "type": "array", "minItems": 1, "maxItems": 255,
+          "items": {
+            "type": "object",
+            "required": ["sid", "at"],
+            "oneOf": [{ "required": ["hex"] }, { "required": ["base64"] }, { "required": ["kit"] }],
+            "properties": {
+              "sid": { "$ref": "#/$defs/sidId" },
+              "at": { "type": "array", "minItems": 1, "maxItems": 20000, "uniqueItems": true,
+                "items": { "type": "integer", "minimum": 0, "maximum": 16777215 } },
+              "hex": { "type": "string", "minLength": 1 },
+              "base64": { "type": "string", "minLength": 1 },
+              "kit": { "enum": ["kick", "snare", "clap"] }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "sidId": { "type": ["string", "integer"], "minLength": 1 },
     "sid": {
       "type": "object",
@@ -191,6 +279,7 @@
         "loop": { "type": "integer", "minimum": 0, "description": "Zero-based loop index for tables declared as lists; omitted holds the final value." },
         "portamento": { "$ref": "#/$defs/portamento" },
         "legato": { "$ref": "#/$defs/legato" },
+        "hard_restart": { "$ref": "#/$defs/hardRestart" },
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
         "filtertable": { "$ref": "#/$defs/filtertable" },
         "wavetable": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": {
@@ -277,7 +366,9 @@
         "len": { "$ref": "#/$defs/length" },
         "legato": { "$ref": "#/$defs/legato" },
         "portamento": { "$ref": "#/$defs/portamento" },
-        "slide_from": { "$ref": "#/$defs/note" }
+        "slide_from": { "$ref": "#/$defs/note" },
+        "bend": { "$ref": "#/$defs/bend" },
+        "gate_off": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames to release the gate before the end of this note." }
       },
       "additionalProperties": false
     },
