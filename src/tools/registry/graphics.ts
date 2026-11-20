@@ -209,7 +209,8 @@ const graphicsOperations: GroupedOperationConfig[] = [
           });
         }
 
-        const capture = await ctx.client.captureFrames({ count: parsed.count });
+        // VICE's default inner-area crop hides border effects; retain its full display canvas.
+        const capture = await ctx.client.captureFrames({ count: parsed.count, includeBorder: true });
         const includePixels = parsed.includePixels === true;
         const encoding = parsed.encoding ?? "base64";
         if (includePixels) {
