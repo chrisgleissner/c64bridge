@@ -155,7 +155,7 @@ Line numbers are those of the branch tips fetched on 2026-11-20.
 
 No pair changes value, so no code change and no test were needed.
 
-Prose in the same file (outside the name-to-address pairs; not edited, reported to the lead):
+Prose in the same file (outside the name-to-address pairs; fixed later, see "Follow-up corrections"):
 
 | Fact | branch:file:line | Verdict | Source |
 |---|---|---|---|
@@ -185,3 +185,16 @@ Prose in the same file (outside the name-to-address pairs; not edited, reported 
 | PAL frequency values on NTSC sound about 65 cents sharp | G2:src/tools/audio.ts:256 | CONFIRMED | 1200 x log2(1022727 / 985248) = 64.6 cents; clocks as in sid-spec.md (Mapping $D400 equation) |
 
 ERROR verdicts on other branches: none.
+
+### Follow-up corrections (coordinator request, 2026-11-20)
+
+| Fact | file:line | Verdict | Corrected wording | Source |
+|---|---|---|---|---|
+| $D011 bit 7 "screen on/off" | src/knowledge.ts:403 | CONFIRMED-ERROR, fixed (9a450414) | Bit 7 RST8 = raster bit 8 on read and write; bit 4 DEN, bit 3 RSEL | Bauer register table; Mapping $D011 |
+| $D011 row: bit 7 screen on/off on write, bit 4 unused, bit 3 missing | src/knowledge.ts:423 | CONFIRMED-ERROR, fixed (9a450414) | bit7 RST8, bit6 ECM, bit5 BMM, bit4 DEN, bit3 RSEL, bits 0-2 YSCROLL | as above |
+| "Disable screen ($D011 bit7=0)" to suppress bad lines | src/knowledge.ts:433 | CONFIRMED-ERROR, fixed (9a450414) | Clear $D011 bit 4 (DEN) | Mapping $D011 "4 Blank the entire screen" |
+| Art example printing `/\_/\` and `^` | data/context/bootstrap.md:89-94 | CONFIRMED-ERROR, replaced (1f3bc115) | Example without `\` and `^`; CHR$(92) shown as the pound sign | C64IPRI "0x5C POUND SIGN", "0x5E UPWARDS ARROW"; control_codes_c64 "0D RETURN" |
+| Line number field range 0-65535 | data/basic/basic-spec.md:36 | CONFIRMED-ERROR, fixed (4312a60a) | 0-63999 | ROM $A97D "maximum line number 63999" |
+
+Test: `test/knowledge.test.mjs` "VIC-II spec gives the $D011 bit layout" passes on bun and node, and fails
+on both with the previous `src/knowledge.ts` restored.
