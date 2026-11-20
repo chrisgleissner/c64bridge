@@ -699,7 +699,7 @@ Both clients use the same `mcpServers` shape (checked against the official [MCP 
 - **Cursor**: `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for all projects.
 - Replace `192.168.1.99` with the IP address of your Ultimate (the default host name `c64u` only works when it resolves on your network). For VICE use `"C64_MODE": "vice"` instead.
 - The server writes its log to stderr and then waits for the client on stdin. Started by hand in a terminal it appears to hang; that is expected, stop it with Ctrl-C.
-- Setting `C64U_HOST` with `claude mcp add` uses its `--env` option (syntax unverified here; the shared configuration files above work with every client).
+- Claude Code sets the same variable with `-e` (`--env`), placed before the `--` that starts the server command: `claude mcp add c64bridge -e C64U_HOST=192.168.1.99 -- npx -y c64bridge@latest`.
 
 ## Example Workflow
 

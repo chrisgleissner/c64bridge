@@ -402,3 +402,13 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | 39 | $D031 bit 7 set = badline stalls suppressed | CONFIRMED | hardware.md, written |
 | 40 | GET /v1/info fields | CONFIRMED | hardware.md (already stated) |
 | 41-44 | C64 Ultimate only | SKIPPED | C64 Ultimate statements left as they are |
+
+## Part F: precision rewrite (package O: printer, SID, CIA, README)
+
+| Claim | File | Verdict | Source |
+| --- | --- | --- | --- |
+| A write to the timer high byte while the timer is stopped also loads the latch into the counter; while it runs only the latch changes | data/io/cia-spec.md | CONFIRMED | MOS 6526 datasheet (6502.org recreated copy), Interval Timers: "The timer latch is loaded into the timer on any timer underflow, on a force load or following a write to the high byte of the prescaler while the timer is stopped. If the timer is running, a write to the high byte will load the timer latch, but not reload the counter." |
+| `claude mcp add` sets environment variables with `-e`/`--env KEY=value` before `--` | README.md | CONFIRMED | `claude mcp add --help`, Claude Code 2.1.329 |
+| Beyond 480 bit image columns: MPS-801 prints the line once more than 480 dots are used; the Ultimate emulation discards dots past pixel 1920 and does not wrap | data/printer/printer-commodore-bitmap.md | CONFIRMED | MPS-801 manual section 6; 1541ultimate@700c7f2fa:software/io/printer/mps_printer.cc:945, mps_printer_cbm.cc:133, mps_printer.h:50 |
+| SIDWAVE hard restart: gate off and AD=SR=0 two frames before each note; release 0 empties the envelope in 6 ms; rate 0 avoids the ADSR delay bug (rate counter wrap at 32768) | data/sound/sidwave.md | CONFIRMED | src/sidwaveCompiler.ts c_hr and SIDWAVE_HARD_RESTART_FRAMES; Mapping the Commodore 64 $D406; reSID envelope.h/envelope.cc (VICE 3.10 src/resid), ENV3-sampled on a MOS SID |
+| Duration in seconds of the FOR-loop note timings | data/sound/sid-programming-best-practices.md | NOT VERIFIED (no primary source; U64 measurement requested as O-1) | inline markers moved to a "Not verified" section |

@@ -26,6 +26,6 @@
 
 - Pre-add **128** to each data byte (bit7=1) before sending.
 - For vertical tiling, reprint the same columns with one CR between rows (in bit image mode a line advances 7 dots).
-- Keep a row within 480 columns (what happens beyond that is unverified).
+- Keep a row within 480 columns. An MPS-801 prints the line as soon as more than 480 dots are used (MPS-801 manual, section 6 Automatic Printing). The Ultimate printer emulation does not wrap a bit image row: each column advances the head 4 pixels, dots past pixel 1920 are discarded, and no line feed is inserted, so a row longer than 480 columns is cut off at the right edge (1541ultimate@700c7f2fa:software/io/printer/mps_printer.cc:945, mps_printer_cbm.cc:133, mps_printer.h:50).
 
 **Cross‑ref:** Basic text controls in `printer-commodore.md`; overview in `printer-spec.md`.

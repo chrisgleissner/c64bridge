@@ -23,7 +23,7 @@
 | `$DC02` | 56322 | **DDRA** | Port A direction (0=in, 1=out). Default `$FF`. |
 | `$DC03` | 56323 | **DDRB** | Port B direction (0=in, 1=out). Default `$00`. |
 | `$DC04` | 56324 | **TALO** | Timer A **low**. **R:** counter; **W:** latch low. |
-| `$DC05` | 56325 | **TAHI** | Timer A **high**. **R:** counter; **W:** latch high (if stopped, also loads; unverified). |
+| `$DC05` | 56325 | **TAHI** | Timer A **high**. **R:** counter; **W:** latch high; while the timer is stopped (CRA b0=0) the write also loads the latch into the counter, while it runs only the latch changes. |
 | `$DC06` | 56326 | **TBLO** | Timer B **low**. **R/W** as above. |
 | `$DC07` | 56327 | **TBHI** | Timer B **high**. **R/W** as above. |
 | `$DC08` | 56328 | **TOD10TH** | TOD tenths BCD (0–9). **CRB7=0:** writes set **time**; **=1:** set **alarm**. |
@@ -62,7 +62,7 @@
 
 ## Timers (A/B) — Operation
 
-- **16‑bit down‑counters** with separate **latches** (write low→high). The latch is loaded into the counter by **CRA/CRB b4** (force load) and on every underflow; a high‑byte write while the timer is stopped also loads it (unverified).  
+- **16‑bit down‑counters** with separate **latches** (write low→high). The latch is loaded into the counter by **CRA/CRB b4** (force load) and on every underflow; a high‑byte write while the timer is stopped also loads it; while the timer runs, a high‑byte write changes only the latch (MOS 6526 datasheet, Interval Timers).  
 - **Clock sources:** Φ2 (system cycles) or **CNT** pulses; **Timer B** can count **Timer A underflows**, gated by CNT if mode `11`.  
 - **Underflow:** Sets ICR bit (and asserts IRQ/NMI). Optional **PB6/PB7** **pulse** (b2=0) or **toggle** (b2=1). **b3=1** one‑shot; else auto‑reload.  
 - **Readback:** Reads return current counter; device internally manages proper two‑byte read behavior.  
