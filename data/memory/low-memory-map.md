@@ -63,7 +63,7 @@ A=Accumulator, X,Y=index, C=Carry; “—” = not applicable. Pointers are litt
 | `$0061–$0066` | 97–102 | **FAC1** | FP accumulator #1 | — | — | FAC1 | Exp @ $61; mant $62–$65; sign $66. |
 | `$0067–$0068` | 103–104 | SGNFLG/BITS | Series count/overflow | — | — | — | FP helper. |
 | `$0069–$006E` | 105–110 | **FAC2** | FP accumulator #2 | — | — | FAC2 | Exp/mant/sign. |
-| `$006F–$0072` | 111–114 | ARISGN/FACOV | Sign compare/rounding | — | — | — | — |
+| `$006F–$0070` | 111–112 | ARISGN/FACOV | Sign compare/rounding | — | — | — | — |
 | `$0071–$0072` | 113–114 | FBUFPT | Series eval ptr | — | — | — | Multi‑use scratch. |
 | `$0073–$008A` | 115–138 | **CHRGET** | Get/peek next BASIC char | — | TXTPTR | A=char; flags | Copied from ROM @ $E3A2 for speed. Entry **CHRGOT**=$0079. |
 | `$008B–$008F` | 139–143 | RNDX | RND seed (5‑byte FP) | — | — | — | Init from ROM seed. |
