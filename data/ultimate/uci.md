@@ -109,7 +109,7 @@ Instances 1 and 2 are independent (own current directory, own open file): use 2 
 - OPEN_TCP and OPEN_UDP resolve host names themselves. Interfaces are numbered from 0; query each with GET_IPADDR and use one whose IP is not `0.0.0.0`.
 - READ_SOCKET answers at once; with nothing waiting the status is `02,NO DATA: <errno>`. Poll once per frame or less often. The source (since 2026-08-27) accepts up to 1472 bytes per read and returns them in several reply blocks; a longer request gives `82`; a UDP datagram longer than the request gives `04,DATAGRAM TRUNCATED: <n>` (`network_target.h:41`, `network_target.cc:540-556`). Request at most 512 bytes so that older firmware answers in one block.
 - After `01,CONNECTION CLOSED BY HOST` the handle is already released.
-- OPEN_TCP blocks until the connection is made or fails; open sockets before the game loop, behind a status screen. Never connect to the device's own address.
+- OPEN_TCP blocks until the connection is made or fails; open sockets before the game loop, behind a status screen. Never connect to the device's own address. Timing of the call, measured with the jiffy clock (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20): `03 07 50 00 "192.0.2.1"` (TEST-NET-1, no host answers) returned `11,ERROR ON CONNECT: 113` after 18.02 to 18.35 s (3 runs: 1081, 1089 and 1101 jiffies, 1 jiffy = 1/60 s). `03 07 50 00 "h6-nohost.invalid"` returned `84,UNRESOLVED HOST` in 0 or 1 jiffy (17 ms or less).
 - 16 sockets (`NET_MAX_SOCKETS`), all closed at a C64 reset. The public firmware has no inbound listener: multiplayer needs a relay server or UDP.
 - Wire: `03 07 <portlo> <porthi> <host>`; `03 10 <h> 00 02` reads 512.
 
@@ -248,5 +248,4 @@ Y after `@rd` is the byte count (0 = none or 256). For `$30` (more blocks) repea
 
 | Claim | What would settle it |
 |---|---|
-| OPEN_TCP to an unreachable address blocks for about 31 s; an unresolvable name fails in about 30 ms | U64 request U-1 in the hardware request file |
 | On firmware 3.15 a READ_SOCKET of 800-1023 bytes takes the device off the network (reason for the 512-byte rule) | U64 request U-2 |
