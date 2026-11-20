@@ -21,6 +21,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+import { lookupNamedPetscii, petsciiControlName } from "../petscii.js";
 
 function isMissingNativeInputEndpoint(error: unknown): boolean {
   return typeof error === "object"
@@ -36,61 +37,17 @@ function nativeInputUnavailableResult(operation: string) {
   ));
 }
 
-// ---------------------------------------------------------------------------
-// PETSCII token expansion table
-// Maps {TOKEN} placeholders to PETSCII/control-byte values that are queued via
-// KERNAL keyboard-buffer injection on both C64U and VICE.
-// ---------------------------------------------------------------------------
-const PETSCII_TOKENS: Readonly<Record<string, number>> = {
-  RETURN: 13,
-  CR: 13,
-  CLR: 147,
-  HOME: 19,
-  DEL: 20,
-  INS: 148,
-  INSERT: 148,
-  STOP: 3,
-  RUN: 131,
-  SHIFT_RETURN: 141,
-  F1: 133,
-  F2: 137,
-  F3: 134,
-  F4: 138,
-  F5: 135,
-  F6: 139,
-  F7: 136,
-  F8: 140,
-  UP: 145,
-  DOWN: 17,
-  LEFT: 157,
-  RIGHT: 29,
-  BLACK: 144,
-  WHITE: 5,
-  RED: 28,
-  CYAN: 159,
-  PURPLE: 156,
-  GREEN: 30,
-  BLUE: 31,
-  YELLOW: 158,
-  ORANGE: 129,
-  BROWN: 149,
-  LIGHT_RED: 150,
-  DARK_GREY: 151,
-  MEDIUM_GREY: 152,
-  LIGHT_GREEN: 153,
-  LIGHT_BLUE: 154,
-  LIGHT_GREY: 155,
-  REVERSE_ON: 18,
-  REVERSE_OFF: 146,
-  // FLASH ON/OFF, ESC and TAB are C128 codes: on a C64, 148 is INST (inserts a
-  // space) and 9 re-enables SHIFT+C= case switching, so they are not offered.
-  LOWERCASE: 14,
-  UPPERCASE: 142,
-  CURSOR_UP: 145,
-  CURSOR_DOWN: 17,
-  CURSOR_LEFT: 157,
-  CURSOR_RIGHT: 29,
-};
+// {TOKEN} names and codes come from the shared control-code table in ../petscii.ts (also used
+// for BASIC text), so both tools accept the same names. Bytes are queued through KERNAL
+// keyboard-buffer injection on both C64U and VICE.
+function validTokenNames(): string[] {
+  const names: string[] = [];
+  for (let code = 0; code < 256; code += 1) {
+    const name = petsciiControlName(code);
+    if (name !== undefined) names.push(`{${name.replace(/ /g, "_").toUpperCase()}}`);
+  }
+  return names;
+}
 
 // ASCII a-z are shifted graphics characters in PETSCII, so typed "print" would
 // reach BASIC as graphics and give ?SYNTAX ERROR. Literal letters are therefore
@@ -121,7 +78,7 @@ function expandPetsciiTokens(text: string): string {
       );
     }
     const upper = token.trim().toUpperCase();
-    const code = PETSCII_TOKENS[upper];
+    const code = lookupNamedPetscii(upper);
     if (code !== undefined) {
       return String.fromCharCode(code);
     }
@@ -136,7 +93,7 @@ function expandPetsciiTokens(text: string): string {
       return String.fromCharCode(num);
     }
     throw new ToolValidationError(
-      `Unknown token {${token}} at position ${offset + 1} of the text. Valid tokens: ${Object.keys(PETSCII_TOKENS).map((name) => `{${name}}`).join(", ")}, or a numeric code such as {$1D} or {29} (0-255).`,
+      `Unknown token {${token}} at position ${offset + 1} of the text. Valid tokens: ${validTokenNames().join(", ")}, or a numeric code such as {$1D} or {29} (0-255).`,
       { path: "$.text" },
     );
   });
@@ -385,7 +342,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const count = parsed.count ?? 1;
       const durationMs = parsed.durationMs ?? 0;
       // Resolve key to a character: try token first, then single char
-      const tokenCode = PETSCII_TOKENS[parsed.key.toUpperCase()];
+      const tokenCode = lookupNamedPetscii(parsed.key);
       const keyByte = tokenCode !== undefined
         ? tokenCode
         : parsed.key.length === 1

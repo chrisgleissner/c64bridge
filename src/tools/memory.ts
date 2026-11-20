@@ -648,6 +648,7 @@ async function executeDisassemble(rawArgs: unknown, ctx: ToolExecutionContext): 
         address: `$${line.address.toString(16).toUpperCase().padStart(4, "0")}`,
         bytes: line.bytes.map((value) => value.toString(16).toUpperCase().padStart(2, "0")),
         ...(line.label ? { label: line.label } : {}),
+        ...(line.operandLabel ? { operandLabel: line.operandLabel } : {}),
         mnemonic: line.mnemonic,
         operand: line.operand,
         undocumented: line.undocumented,
