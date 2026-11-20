@@ -119,6 +119,6 @@ for col in 0..7:
 - **Printers:** `data/printer/printer-spec.md` (this repo).  
 - **KERNAL API (official lookup):** pagetable.com C64 KERNAL reference.
 - **IEC protocol (electrical & byte‑level):** Derogee “IEC dissected”; pagetable Standard Serial overview; Wikipedia Commodore bus.
-- **Keyboard matrix & scan masks:** C64 OS deep‑dive. citeturn0search0
+- **Keyboard matrix & scan masks:** C64 OS deep‑dive.
 - **Datasette lines:** C64‑Wiki Cassette Port; Luigi Di Fraia on FLAG edge; 6510 port overview.
 - **User Port/RS‑232:** C64‑Wiki Serial Port; pagetable UP9600.

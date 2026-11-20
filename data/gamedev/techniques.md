@@ -60,7 +60,7 @@ irq_top: pha
 - Lines above 255: set `$D011` bit 7 for that entry (the 9th raster bit). Always rewrite `$D011` with bit 7 matching the next line.
 - Chain rules: entries sorted by line; handler worst-case time shorter than the gap to the next entry; if the next line has already passed when you program `$D012`, run the next handler directly instead of waiting a whole frame; acknowledge `$D019` first; save `$01` if the main loop changes it. NMI must have a vector (RESTORE key).
 - Decimal flag is not cleared on interrupt on the NMOS 6510: use `cld` in any handler that touches arithmetic.
-- Latency: IRQ entry takes 7 cycles plus the instruction in progress (0-7 more); bad lines add up to 40 stall cycles (architecture).
+- Latency: the IRQ entry sequence takes 7 cycles and starts after the instruction in progress completes; a taken branch without page crossing can delay it by one more instruction. Bad lines stall the CPU for 40-43 cycles (architecture).
 - Stable raster (cycle-exact bars, border opening): double IRQ. IRQ 1 on line N installs IRQ 2 for line N+1, saves SP (`tsx`), runs `cli` and a NOP sled; IRQ 2 hits during a NOP (jitter 0-1 cycles), restores SP (`txs`), waits out the line and compares `$D012` twice to remove the last cycle. Tune with a border-colour change and `capture_frame`. Sketch only (unverified).
 - MODERN: raster-exact code tuned for 1 MHz cycle counts is not cycle-exact in real time under turbo; keep cycle-critical effects at 1 MHz or measure on hardware. Prefer effects that need only line accuracy (scroll split, charset switch, colour changes).
 - Sprites reused below another sprite, status-bar splits, `$D018`/`$D016` switches all hang on this chain.
@@ -176,8 +176,8 @@ Joystick port 2: `$DC00`, port 1: `$DC01`; bits 0-4 = up, down, left, right, fir
 - Paddles and the 1351 mouse (SID `$D419/$D41A`) are unverified here; keep them optional.
 
 ## 6. Music and sound effects
-- PSID files (GoatTracker, SID-Wizard, other trackers export them) carry load, init and play addresses (`c64://sound/sid/file-format`). Place the player at its load address (often `$1000`); call `init` with the song number in A once; call `play` once per frame from the raster IRQ at a fixed line. If play address is 0 the tune installs its own interrupt: do not call it.
-- Reserve the player's zero page and RAM range in the memory map first. A player at `$A000-$BFFF` needs `$01<=$36`.
+- PSID files (GoatTracker, SID-Wizard, other trackers export them) carry load, init and play addresses (`c64://sound/sid/file-format`). Place the player at its load address (often `$1000`); call `init` once with the song number minus one in A (`$00` = song 1); call `play` once per frame from the raster IRQ at a fixed line. If play address is 0 the tune installs its own interrupt: do not call it.
+- Reserve the player's zero page and RAM range in the memory map first. A player at `$A000-$BFFF` needs LORAM=0: `$01` = `$36`/`$35`/`$34`.
 - Speed: a tune written for 50 Hz runs 20% fast at 60 Hz. On NTSC skip one call in six:
 ```
         dec tick

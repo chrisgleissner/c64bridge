@@ -26,7 +26,7 @@
 | `$E20E` | 57870 | Check comma | Require comma; advance text ptr | — | — | — | Error on missing comma |
 | `$E219` | 57881 | Param setup O/C | Set filename/LFN/dev/sec for O/C | — | Before OPEN/CLOSE | — | — |
 | `$E264` | 57956 | COS | COS(FAC1) via SIN | — | FAC1 | FAC1 | Adds PI/2 then SIN |
-| `$E268` | 57960 | SIN | SIN(FAC1) | — | FAC1 | FAC1 | — |
+| `$E26B` | 57963 | SIN | SIN(FAC1) | — | FAC1 | FAC1 | — |
 | `$E2B4` | 58036 | TAN | TAN(FAC1)=SIN/COS | — | FAC1 | FAC1 | — |
 | `$E2E0` | 58080 | PI2 | Const PI/2 (5‑byte) | — | — | — | Constant |
 | `$E2E5` | 58085 | TWOPI | Const 2*PI (5‑byte) | — | — | — | Constant |
@@ -51,7 +51,7 @@
 | `$E4EC` | 58604 | PAL baud tbl | PAL RS‑232 prescalers | — | — | — | Matches NTSC at `$FEC2` |
 | `$E500` | 58624 | **IOBASE** | Return I/O base | — | — | X=lo,Y=hi | Default `$DC00` |
 | `$E505` | 58629 | **SCREEN** | Return screen cols/rows | — | — | X=40,Y=25 | For compat layouts |
-| `$E50A` | 58634 | **PLOT** | Read/Set cursor | C=1 read; C=0 set; Y=row,X=col | — | Read→X/Y | Uses PNTR/TBLX |
+| `$E50A` | 58634 | **PLOT** | Read/Set cursor | C=1 read; C=0 set from X=row, Y=column | — | Read: X=row, Y=column | Uses PNTR/TBLX |
 | `$E518` | 58648 | CINT (part) | Init screen/keyboard (orig) | — | — | — | Falls through |
 | `$E544` | 58692 | Screen links | Init line link table; clear screen | — | — | — | — |
 | `$E566` | 58726 | Home | Home cursor | — | — | — | Sets PNTR/TBLX=0 |
@@ -71,7 +71,7 @@
 | `$E8A1` | 59553 | BOF prev | If at start of line, move up | — | — | — | — |
 | `$E8B3` | 59571 | EOF next | If at end of line, move down | — | — | — | — |
 | `$E8CB` | 59595 | Color chk | Detect color control | A=code | — | — | — |
-| `$E8D1` | 59601 | Color tbl | PETSCII→color control map | — | — | — | 16 entries listed |
+| `$E8DA` | 59610 | Color tbl | PETSCII→color control map | — | — | — | 16 entries listed |
 | `$E8EA` | 59626 | Scroll | Scroll screen | — | CTRL pauses | — | — |
 | `$E965` | 59749 | Insert line | Insert blank physical line | — | — | — | — |
 | `$E9C8` | 59848 | Move line | Move screen line (and color) | — | — | — | — |
@@ -106,9 +106,9 @@
 | `$EDEF` | 60911 | **UNTLK** | Send UNTALK | — | — | — | — |
 | `$EDFE` | 60926 | **UNLSN** | Send UNLISTEN | — | — | — | — |
 | `$EE13` | 60947 | **ACPTR** | Serial read byte | — | TALK path active | A=byte | — |
-| `$EE85` | 61061 | SCLK low | Serial clock low | — | — | — | CIA2 `$DD00`.4 |
-| `$EE8E` | 61070 | SCLK high | Serial clock high | — | — | — | CIA2 `$DD00`.4 |
-| `$EE97` | 61079 | SDATA low | Serial data low | — | — | — | CIA2 `$DD00`.5 |
+| `$EE85` | 61061 | SCLK high | Serial clock out high (released) | — | — | — | CIA2 `$DD00`.4 |
+| `$EE8E` | 61070 | SCLK low | Serial clock out low | — | — | — | CIA2 `$DD00`.4 |
+| `$EE97` | 61079 | SDATA high | Serial data out high (released) | — | — | — | CIA2 `$DD00`.5 |
 | `$EEA9` | 61097 | Read SDATA/SCLK | Read serial input bits | — | — | C=data, N=clock | CIA2 `$DD00`.7/.6 |
 | `$EEB3` | 61107 | Delay 1ms | Busy wait ~1 ms | — | — | — | Timing helper |
 | `$EEBB` | 61115 | RS232 send bit | NMI bit‑send routine | — | NMI context | — | — |
@@ -183,7 +183,7 @@
 | `$FDF9` | 65017 | **SETNAM** | Set filename pointer/len | A=len, X=lo, Y=hi | — | — | For OPEN/LOAD/SAVE |
 | `$FE00` | 65024 | **SETLFS** | Set LFN/dev/SA | A=lfn, X=dev, Y=sa or `$FF` | — | — | For OPEN/LOAD/SAVE |
 | `$FE07` | 65031 | **READST** | Read I/O status word | — | — | A=status | RS‑232 clears own |
-| `$FE18` | 65048 | **SETMSG** | Control/error messages | A bits6–7 | — | — | — |
+| `$FE18` | 65048 | **SETMSG** | Control/error messages | A bit7=control, bit6=KERNAL errors | — | — | — |
 | `$FF81` | 65409 | **CINT** | Init screen/keyboard | — | — | — | Jump table |
 | `$FF84` | 65412 | **IOINIT** | Initialize I/O | — | — | — | Jump table |
 | `$FF87` | 65415 | **RAMTAS** | RAM test/setup | — | — | — | Jump table |
@@ -225,4 +225,4 @@
 | `$FFF3` | 65523 | **IOBASE** | I/O base | — | — | X,Y | Jump table |
 | `$FFFA` | 65530 | NMI vec | NMI vector | — | HW | — | RAM at `$0318/9` |
 | `$FFFC` | 65532 | RESET vec | RESET vector | — | HW | — | Points to `$FCE2` |
-| `$FFFE` | 65534 | IRQ/BRK vec | IRQ/BRK vector | — | HW | — | RAM at `$0314/5` |
+| `$FFFE` | 65534 | IRQ/BRK vec | IRQ/BRK vector | — | HW | — | IRQ via RAM `$0314/5`, BRK via `$0316/7` |

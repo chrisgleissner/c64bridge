@@ -27,8 +27,8 @@
 
 | Function | Address | Description |
 |-----------|----------|-------------|
-| Cutoff LO | $D415 | Lower 8 bits of filter cutoff |
-| Cutoff HI | $D416 | Upper 3 bits of cutoff |
+| Cutoff LO | $D415 | Bits 0-2 = low 3 bits of filter cutoff |
+| Cutoff HI | $D416 | High 8 bits of filter cutoff |
 | Res/Routing | $D417 | 7..4 = resonance (0–15); 3..0 = route Ext,V3,V2,V1 into filter |
 | Mode/Volume | $D418 | 0..3 = master vol (0–15); 4..6 = LP/BP/HP; 7 = CH3 off |
 | Read-backs | $D419–$D41C | POTX, POTY, OSC3, ENV3 |
@@ -38,7 +38,7 @@
 ## Note → SID Frequency
 
 ```
-FREQ = round( note_hz * 2^24 / φ2 ) >> 8   ; 16-bit register value
+FREQ = round( note_hz * 2^24 / φ2 )   ; 16-bit register value
 ```
 
 - φ₂ = system clock  
@@ -50,7 +50,7 @@ FREQ = round( note_hz * 2^24 / φ2 ) >> 8   ; 16-bit register value
 **Example (PAL):**
 
 ```
-FREQ16 = round( (note_hz * 16777216) / 985248 ) >> 8
+FREQ16 = round( (note_hz * 16777216) / 985248 )
 ```
 
 ---
@@ -106,7 +106,7 @@ PAL:  x = f * (18 * 2^24) / 17734475
 NTSC: x = f * (14 * 2^24) / 14318182
 ```
 
-Equivalent to `FREQ = f * 2^24 / φ2`, then take the upper 16 bits.
+Equivalent to `FREQ = f * 2^24 / φ2`; the result is the 16-bit register value.
 
 ---
 
@@ -114,14 +114,14 @@ Equivalent to `FREQ = f * 2^24 / φ2`, then take the upper 16 bits.
 
 | Note | Freq (Hz) | FREQ PAL (hex) | FREQ NTSC (hex) |
 |------|------------|----------------|-----------------|
-| C4 (Do) | 261.63 | 0x113E (4414) | 0x1069 (4201) |
-| D4 (Re) | 293.66 | 0x1325 (4901) | 0x123C (4668) |
-| E4 (Mi) | 329.63 | 0x154E (5454) | 0x1459 (5209) |
-| F4 (Fa) | 349.23 | 0x1667 (5735) | 0x156E (5486) |
-| G4 (Sol)| 392.00 | 0x18EE (6382) | 0x1753 (5971) |
-| A4 (La) | 440.00 | 0x1B9B (7067) | 0x19B5 (6581) |
-| B4 (Ti) | 493.88 | 0x1F04 (7940) | 0x1BFD (7165) |
-| C5 (Do) | 523.25 | 0x2102 (8450) | 0x1E08 (7688) |
+| C4 (Do) | 261.63 | 0x1167 (4455) | 0x10C4 (4292) |
+| D4 (Re) | 293.66 | 0x1389 (5001) | 0x12D1 (4817) |
+| E4 (Mi) | 329.63 | 0x15ED (5613) | 0x151F (5407) |
+| F4 (Fa) | 349.23 | 0x173B (5947) | 0x1661 (5729) |
+| G4 (Sol)| 392.00 | 0x1A13 (6675) | 0x191F (6431) |
+| A4 (La) | 440.00 | 0x1D45 (7493) | 0x1C32 (7218) |
+| B4 (Ti) | 493.88 | 0x20DA (8410) | 0x1FA6 (8102) |
+| C5 (Do) | 523.25 | 0x22CE (8910) | 0x2188 (8584) |
 
 *Multiply FREQ by 2ⁿ to move up n octaves.*
 

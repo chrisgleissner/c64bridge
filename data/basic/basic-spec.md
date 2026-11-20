@@ -33,12 +33,12 @@ Each BASIC program in memory (and on disk/tape) is a contiguous block:
 |--------|------|-------------|
 | Load address | 2 bytes | `$0801` little-endian |
 | Next line pointer | 2 bytes | Absolute address of next line |
-| Line number | 2 bytes | 0–65535 |
+| Line number | 2 bytes | 0–63999 (the ROM rejects larger values) |
 | Tokenised PETSCII text | variable | Zero-terminated statement list |
 | Terminator | 2 bytes | Final `$0000` sentinel |
 
 Pointers increase monotonically. The final record’s pointer references the terminator.  
-Tokenisation replaces keywords by single-byte codes (`$80–$CB`), ignoring quoted strings and `REM` comments. Empty lines are stored as a single `$20` (space).
+Tokenisation replaces keywords by single-byte codes (`$80–$CB`, including the operator tokens `$AA–$AE` for `+ - * / ↑` and `$B1–$B3` for `> = <`; π is `$FF`), ignoring quoted strings and `REM` comments. Empty lines are stored as a single `$20` (space).
 
 ---
 
@@ -51,7 +51,7 @@ The first two bytes encode the name and type; the remaining bytes store the data
 
 | Type | Suffix | Range | Storage | Notes |
 |------|---------|--------|----------|-------|
-| **Real (Float)** | none | ±2.9×10⁻³⁸ … ±1.7×10³⁸ | 1-byte exponent + 4-byte mantissa | Default numeric type, ≈9.6-digit precision. |
+| **Real (Float)** | none | ±2.94×10⁻³⁹ … ±1.70×10³⁸ | 1-byte exponent + 4-byte mantissa | Default numeric type, ≈9.6-digit precision. |
 | **Integer** | `%` | −32768 … 32767 | 2 bytes (hi-lo) | High bit set on both name bytes; slower than float due to conversion. |
 | **String** | `$` | 0–255 chars | 1-byte length + 2-byte pointer | High bit set on second name byte; pointer references PETSCII data. |
 | **Boolean** | — | `0` (FALSE), `−1` or any non-zero (TRUE) | Numeric representation | Implemented via integers. |
@@ -137,7 +137,7 @@ New strings are created whenever:
 - substring (`LEFT$`, `MID$`, `RIGHT$`),
 - or runtime expression evaluation occurs.
 
-No garbage collection exists. `CLR` or `NEW` frees all strings.
+Garbage collection exists (`$B526`): it runs when string space is exhausted and on every `FRE()` call, and can pause the program noticeably. `CLR` or `NEW` frees all strings.
 
 **Efficiency notes**
 
@@ -345,11 +345,11 @@ Constants: `π`, `TI`, `TI$`.
 
 | Name | Meaning | Typical Range |
 |------|----------|----------------|
-| `PI` | 3.14159265 | Constant |
+| `PI` | 3.14159265 | Constant (π character, token `$FF`) |
 | `ST` | Device status byte | Bit6=EOF, Bit7=No device |
 | `TI` | System tick counter | 1/60s resolution |
 | `TI$` | Time string | "hhmmss" |
-| `FRE(0)` | Free memory in bytes | 0–38911 |
+| `FRE(0)` | Free memory in bytes, as a signed 16-bit value (negative above 32767; add 65536) | 0–38911 |
 | `TRUE` | −1 ($FFFF) | Boolean |
 | `FALSE` | 0 | Boolean |
 
@@ -357,7 +357,7 @@ Constants: `π`, `TI`, `TI$`.
 
 ## 9. Validation Rules
 
-- Line numbers: 0–65535.  
+- Line numbers: 0–63999.  
 - Each program ends with `$0000` sentinel.  
 - Parentheses depth ≤10.  
 - Array redefinition prohibited.  
@@ -399,7 +399,7 @@ C64 BASIC V2 is fully interpreted and float-based. Optimise by reducing parsing,
 
 ### 10.5 Strings
 
-- Heap grows downward, no garbage collection.
+- Heap grows downward; garbage collection runs when it is exhausted and on `FRE()`.
 - Avoid `A$=A$+B$` in loops; prefer `PRINT A$;B$`.
 - Reuse string vars; overwrite via `MID$` instead of reallocating.
 - Use `CLR` to reclaim heap; `LEFT$/RIGHT$/MID$` create new descriptors—use sparingly.

@@ -89,7 +89,7 @@ Use this quick map to select the narrowest reference before coding or patching m
 | FSBLK | $00BE / 190 | Tape block count. |
 | MYCH | $00BF / 191 | Serial word buffer. |
 | CAS1 | $00C0 / 192 | Tape motor switch. |
-| STAL/EAL | $00C1-$00C2 / 193-194 | Load start/end. |
+| STAL | $00C1-$00C2 / 193-194 | Load/save start address. EAL, the load end address, is $00AE-$00AF / 174-175. |
 | MEMUSS | $00C3-$00C4 / 195-196 | Tape type 3/general pointer. |
 | LSTX | $00C5 / 197 | Last key matrix value. |
 | Keyboard/editor | $00C6-$00F2 / 198-242 | Buffer, cursor, quote, insert, link table. |

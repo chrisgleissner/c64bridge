@@ -87,7 +87,8 @@ Game speed then depends on frames, not on CPU speed. Turbo only raises how much 
 | 2 | `%01` | `$8000-$BFFF` | char ROM seen at `$9000-$9FFF` |
 | 3 | `%00` | `$C000-$FFFF` | best for large games: code `$0800-$BFFF` stays contiguous |
 - Keep other `$DD00` bits unchanged (read-modify-write). `$DD02` bits 0-1 must stay outputs. Inside the bank: `$D018` high nibble = screen (x `$400`), bits 1-3 = charset (x `$800`). Sprite pointers at `screen+$3F8`, value x 64 = offset in the bank.
-- `$01`: `$37` BASIC+KERNAL+I/O (default), `$36` BASIC off, `$35` only I/O (typical game state: RAM `$A000-$BFFF`, `$E000-$FFFF`), `$34` all RAM (I/O hidden; toggle to `$35` for hardware access; IRQ handler must set `$35` itself), `$31`/`$33` expose char ROM for copying.
+- `$01`: `$37` BASIC+KERNAL+I/O (default), `$36` BASIC off, `$35` only I/O (typical game state: RAM `$A000-$BFFF`, `$E000-$FFFF`), `$34` all RAM (I/O hidden; toggle to `$35` for hardware access; IRQ handler must set `$35` itself), `$31`, `$32` and `$33` expose char ROM at `$D000` for copying.
+- `$01` low three bits (`$A000` / `$D000` / `$E000`, cartridge lines inactive): `%000` RAM/RAM/RAM; `%001` RAM/CHAR/RAM; `%010` RAM/CHAR/KERNAL; `%011` BASIC/CHAR/KERNAL; `%100` RAM/RAM/RAM; `%101` RAM/IO/RAM; `%110` RAM/IO/KERNAL; `%111` BASIC/IO/KERNAL.
 - With KERNAL off the vectors at `$FFFA/$FFFE` are RAM: set NMI (point to an `rti`, or a handler) and IRQ yourself; the `$0314` vector is no longer used. Keep CIA IRQs off (`$DC0D=$7F`, `$DD0D=$7F`, then read both).
 - RAM under I/O (`$D000-$DFFF`) is visible to the VIC in bank 3 (sprite shapes, second charset): write it once at boot with `$01=$34`. Colour RAM `$D800` is separate, 4-bit, CPU-visible only with I/O on.
 
@@ -102,7 +103,7 @@ Game speed then depends on frames, not on CPU speed. Turbo only raises how much 
 | `$0801` | BASIC stub `SYS` to start; code from `$0810` |
 | `$0900-$8FFF` | code, tables, page-aligned hot data (about 32 KB) |
 | `$9000-$9FFF` | level data window / decompression buffer |
-| `$A000-$BFFF` | music + player, or more code/data (needs `$01<=$36`) |
+| `$A000-$BFFF` | music + player, or more code/data (needs LORAM=0: `$01` = `$36`/`$35`/`$34`) |
 | `$C000-$C3FF` / `$C400-$C7FF` | screen 0 (pointers `$C3F8`) / screen 1 |
 | `$C800-$CFFF` | game charset |
 | `$D000-$DFFF` | RAM under I/O: sprite shapes (up to 64) and/or second charset |

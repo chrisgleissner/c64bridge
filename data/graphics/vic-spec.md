@@ -80,13 +80,13 @@ The file `data/graphics/character-set.csv` contains the screen codes, PETSCII co
 
 - Each glyph = **8 rows × 1 byte/row**, **MSB = leftmost pixel**. Bit **1 = foreground** (per-cell color at **$D800–$DBE7**), **0 = background**.
 - **Reverse-video:** characters **128–255** are reverse images of **0–127** in ROM sets.
-- **Multicolor char mode:** pixels are **bit-pairs** (4 wide pixels/row). Colors: `00`=background ($D021), `01`=$D022, `10`=$D023, `11`=per-character color ($D800–$DBE7, colors 0–7). Enable multicolor via **$D011 bit 4** and color interpretation via **$D016 bit 4**; hires/multicolor can mix per cell (color RAM bit 3).
+- **Multicolor char mode:** pixels are **bit-pairs** (4 wide pixels/row). Colors: `00`=background ($D021), `01`=$D022, `10`=$D023, `11`=per-character color ($D800–$DBE7, colors 0–7). Enable multicolor via **$D016 bit 4** (MCM; $D011 bit 4 is DEN, display enable); hires/multicolor can mix per cell (color RAM bit 3).
 
 ### Custom character sets in RAM
 
 - **Alignment:** base address must be **2 KB-aligned** and within the **same 16 KB VIC bank** as screen RAM.
 - **ROM-shadowed gaps:** VIC cannot see RAM charsets at **$1000, $1800, $9000, $9800** (ROM overlays).
-- **Accessing ROM by CPU:** set **CHAREN** (I/O port at **$01**, bit 2 = 0) to map ROM at **$D000–$DFFF** for copying to RAM.
+- **Accessing ROM by CPU:** clear **CHAREN** (I/O port at **$01**, bit 2 = 0) while LORAM or HIRAM stays set, to map the character ROM at **$D000–$DFFF** for copying to RAM. Disable interrupts (`SEI`) while I/O is switched out.
 
 ## Bus Arbitration
 
@@ -126,7 +126,7 @@ The file `data/graphics/character-set.csv` contains the screen codes, PETSCII co
 | 24 | $d018 | VM13..VM10 CB13..CB11 _ | Video matrix and character/bitmap base pointers. |
 | 25 | $d019 | IRQ ILP IMMC IMBC IRST | Interrupt latch (write 1 to clear, bit 7 mirrors IRQ). |
 | 26 | $d01a | ---- ELP EMMC EMBC ERST | Interrupt enable mask. |
-| 27 | $d01b | M7DP..M0DP | Sprite priority (0 behind foreground, 1 in front). |
+| 27 | $d01b | M7DP..M0DP | Sprite priority (0 in front of foreground, 1 behind). |
 | 28 | $d01c | M7MC..M0MC | Sprite multicolour enable. |
 | 29 | $d01d | M7XE..M0XE | Sprite X expansion. |
 | 30 | $d01e | M7M..M0M | Sprite-sprite collision flags (read clears). |
@@ -228,7 +228,7 @@ Graphics mode is selected by the following bits in $d011 and $d016:
 - Sprite fetches: after pointer (`p`) cycle, three `s` cycles read data bytes into a 24-bit shift register; `MC` increments each `s`.
 - Display: shift register outputs bits once X matches register; multicolour groups two bits; X expansion halves shift rate; toggling `MxYE` repeats lines for Y expansion.
 - Reuse: change Y mid-frame after DMA completes to display same sprite later; horizontal reuse impossible after 24 pixels (shift register empty).
-- Priority: sprites ordered 0 highest to 7 lowest; `MxDP=0` places sprite behind foreground graphics, `1` in front; overall order background < foreground < sprite (subject to `MxDP`) < border.
+- Priority: sprites ordered 0 highest to 7 lowest; `MxDP=0` places sprite in front of foreground graphics, `1` behind; overall order background < foreground < sprite (subject to `MxDP`) < border.
 - Collisions: $d01e (sprite-sprite) and $d01f (sprite-graphics) latch bits until read; only first collision while register clear raises IRQ if enabled.
 
 ## Border Logic

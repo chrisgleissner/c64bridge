@@ -38,41 +38,41 @@ For full details see `../memory/memory-map.md`. Use `../memory/low-memory-map.md
 
 - $0000–$00FF: Zero page
 - $0100–$01FF: Stack
-- $0200–$02FF: Workspace, vectors ($0314/$0315 IRQ, $0318/$0319 BRK)
+- $0200–$03FF: Workspace, vectors ($0314/$0315 IRQ, $0316/$0317 BRK, $0318/$0319 NMI)
 - $0400–$07E7: Screen RAM (text 40×25)
 - $0801–: BASIC program area (defaults)
-- $A000–$BFFF: BASIC ROM (banked; RAM when LORAM/HIRAM cleared)
+- $A000–$BFFF: BASIC ROM (banked; RAM when LORAM=0 or HIRAM=0)
 - $C000–$CFFF: RAM (common for ASM)
 - $D000–$DFFF: I/O area (VIC-II $D000–$D02E; SID $D400–$D418; Color RAM $D800–$DBE7; CIA1/2 $DC00/$DD00)
 - $E000–$FFFF: KERNAL ROM (banked)
 
 Bank control (6510 at $0001):
 
-- Bits: 0 LORAM, 1 HIRAM, 2 CHAREN. Typical full RAM: %0000_0011 → clear for RAM, set for ROM.
+- Bits: 0 LORAM, 1 HIRAM, 2 CHAREN. All RAM: low three bits %x00 (`$34` or `$30`). Default `$37` = BASIC, I/O, KERNAL.
 
 ## Video (VIC-II)
 
 The VIC-II chip handles graphics and sprites. Fore more information see `data/graphics/vic-spec.md`.
 
 - Sprites: X ($D000..$D00E even), Y ($D001..$D00F odd), X MSBs $D010.
-- Control: $D011 (bit 7: 25th row; bit 6: RST8; bit 5: bitmap on; bits 0–2: vertical scroll).
+- Control: $D011 (bit 7: RST8, raster bit 8; bit 6: ECM; bit 5: BMM bitmap on; bit 4: DEN display enable; bit 3: RSEL, 1 = 25 rows; bits 0–2: YSCROLL).
 - Raster line: $D012 (LSB), $D011 bit 7 forms MSB; raster IRQ: mask $D01A, status $D019, vector $0314/$0315.
-- Control 2/Multicolour: $D016 (bit 4: 38/40 cols; bit 5: multicolour; bits 0–2: horizontal scroll).
-- Memory pointers: $D018 (bits 1–3: screen base; bits 4–7: charset/bitmap base).
+- Control 2/Multicolour: $D016 (bit 4: MCM multicolour; bit 3: CSEL, 1 = 40 columns; bits 0–2: horizontal scroll).
+- Memory pointers: $D018 (bits 4–7: screen base × 1K; bits 1–3: character/bitmap base × 2K).
 - Sprite enable: $D015; expand X: $D01D; expand Y: $D017; priority: $D01B; multicolour: $D01C.
-- Colors: Border $D020; background 0–3 $D021–$D023; sprite multicolour $D025–$D026; sprite colours $D027–$D02E.
-- Collisions: sprite-sprite $D01E (read/clear by write); sprite-background $D01F.
+- Colors: Border $D020; background 0–3 $D021–$D024; sprite multicolour $D025–$D026; sprite colours $D027–$D02E.
+- Collisions: sprite-sprite $D01E; sprite-background $D01F (both cleared by reading).
 
 Video modes:
 
-- Text: $D011 bit 5=0; $D016 bit 5=0 (hi-res); charset and screen from $D018.
-- Bitmap: $D011 bit 5=1; hi-res (single colour per 8×8) or multicolour ($D016 bit 5=1).
-- Multicolour text/bitmap: wide pixels using $D022–$D024 and colour RAM.
+- Text: $D011 bit 5=0; $D016 bit 4=0 (hi-res); charset and screen from $D018.
+- Bitmap: $D011 bit 5=1; hi-res (single colour per 8×8) or multicolour ($D016 bit 4=1).
+- Multicolour text: wide pixels using $D021–$D023 and colour RAM. Multicolour bitmap: $D021, both screen RAM nybbles and colour RAM. $D024 is used only in extended colour mode (ECM).
 
 Bitmap setup (typical):
 
-- Screen map at $0400 ($D018 bits 1–3 = 1), bitmap at $2000 ($D018 bits 4–7 = 8).
-- Enable bitmap: set $D011 bit 5; optional multicolour: set $D016 bit 5.
+- Screen map at $0400 ($D018 bits 4–7 = 1), bitmap at $2000 ($D018 bit 3 = 1): `$D018 = $18`.
+- Enable bitmap: set $D011 bit 5; optional multicolour: set $D016 bit 4.
 
 ### PETSCII, Screen & Colors
 
@@ -81,17 +81,17 @@ Bitmap setup (typical):
 
 ### PETSCII String Pitfalls
 
-- PETSCII is not ASCII: characters such as the backslash map to control codes (e.g. `$1C` toggles reverse video in the default upper/graphics set). Switch to the lower/upper character set first (`CHR$(14)` or `POKE 53272,14`) or pick alternative glyphs if you need a literal `\` on screen.
+- PETSCII is not ASCII: some byte values are control codes (e.g. `$1C` sets the text colour to red, `$12` turns reverse video on). PETSCII `$5C` is the pound sign in both character sets; there is no backslash glyph. Switch to the lower/upper character set with `CHR$(14)` or `POKE 53272,23`.
 - Commodore BASIC does not interpret `\n` as a newline. When emitting multi-line art, either print each line separately or inject carriage returns explicitly with `CHR$(13)`.
 
 Example:
 
 ```basic
-10 PRINT CHR$(147);CHR$(14);" /\\_/\\"
-20 PRINT " ( o.o )"
-30 PRINT "  > ^ <"
-40 PRINT CHR$(142)
+10 PRINT CHR$(147);" ( O.O )";CHR$(13);"  > - <"
+20 PRINT CHR$(92):REM $5C PRINTS THE POUND SIGN, NOT A BACKSLASH
 ```
+
+Line 10 prints two lines through `CHR$(13)` (RETURN). Avoid `\` and `^` in PETSCII art: `$5C` shows the pound sign and `$5E` an up arrow.
 
 ## Raster IRQ Setup
 
@@ -105,8 +105,8 @@ Use this to trigger code at a specific raster line, e.g. for split-screen effect
 
 ## Image & Sprites
 
-- Bitmap (hi-res): set `$D011` bit 5=1, `$D016` bit 5=0; point `$D018` to screen/bitmap; write bits into bitmap memory.
-- Multicolour bitmap: also set `$D016` bit 5=1; use `$D022–$D024` and colour RAM per cell.
+- Bitmap (hi-res): set `$D011` bit 5=1, `$D016` bit 4=0; point `$D018` to screen/bitmap; write bits into bitmap memory.
+- Multicolour bitmap: also set `$D016` bit 4=1; colours come from `$D021`, both screen RAM nybbles and colour RAM per cell.
 - Sprites: define 63-byte patterns; set sprite pointers at $07F8–$07FF; position with `$D000–$D00F`, enable with `$D015`.
 
 ## Audio (SID)
@@ -153,7 +153,7 @@ Basic is used for simple programs and quick prototyping. It is very slow compare
 
 Assembly is used for maximum performance and control. For more information see `data/assembly/assembly-spec.md`.
 
-- Addressing modes: `#imm, zp, zp,X, zp,Y, abs, abs,X, abs,Y, (zp), (zp,X), (zp),Y, rel`.
+- Addressing modes: `#imm, zp, zp,X, zp,Y, abs, abs,X, abs,Y, (abs) (JMP only), (zp,X), (zp),Y, rel`. There is no `(zp)` mode on the 6510.
 - Key opcodes (full set):
   - Load/Store: `LDA LDX LDY` / `STA STX STY`.
   - ALU: `ADC SBC AND ORA EOR ASL LSR ROL ROR`.
