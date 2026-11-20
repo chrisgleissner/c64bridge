@@ -5,6 +5,11 @@ import { arrangeSidwave } from "../sidwaveCompiler.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = any;
 
+/** Shortest interval between pitch changes that counts as a beat (400 BPM). */
+const MIN_BEAT_INTERVAL_SEC = 0.15;
+const MIN_TEMPO_BPM = 30;
+const MAX_TEMPO_BPM = 300;
+
 export interface RecordAndAnalyzeParams {
   durationSeconds: number;
   expectedSidwave?: unknown;
@@ -326,10 +331,17 @@ async function analyzePcm(
       lastStart = seg.t0;
     }
   }
+  // Arpeggios, wavetables and vibrato change the pitch every few frames (20-100 ms). Those changes
+  // are not beats, so intervals shorter than MIN_BEAT_INTERVAL_SEC are left out, and a result
+  // outside the range of musical tempos is reported as not determined instead of as a number.
   const ioi: number[] = [];
-  for (let i = 1; i < onsetsSec.length; i += 1) ioi.push(onsetsSec[i]! - onsetsSec[i - 1]!);
-  const medianIoi = ioi.length ? median(ioi) : null;
-  const detected_bpm = medianIoi ? (60 / medianIoi) : null;
+  for (let i = 1; i < onsetsSec.length; i += 1) {
+    const interval = onsetsSec[i]! - onsetsSec[i - 1]!;
+    if (interval >= MIN_BEAT_INTERVAL_SEC) ioi.push(interval);
+  }
+  const medianIoi = ioi.length >= 2 ? median(ioi) : null;
+  const bpmEstimate = medianIoi ? (60 / medianIoi) : null;
+  const detected_bpm = bpmEstimate !== null && bpmEstimate >= MIN_TEMPO_BPM && bpmEstimate <= MAX_TEMPO_BPM ? bpmEstimate : null;
 
   const avgDev = average(
     detected_notes
