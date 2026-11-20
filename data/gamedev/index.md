@@ -10,14 +10,14 @@ State the chosen target in your first reply.
 
 | | MODERN (C64U, Ultimate 64, Elite II) | AUTHENTIC (stock C64, VICE) |
 |---|---|---|
-| CPU | turbo via `$D031` if enabled by config; probe, never assume | 1 MHz, count cycles |
-| RAM | 64 KB + REU up to 16 MB (must be enabled in config) | 64 KB (+ optional REU only if asked) |
+| CPU | turbo through `$D031` only when `Turbo Control` is `U64 Turbo Registers` or `TurboEnable Bit`; probe, never assume (techniques section 10) | 1 MHz, count cycles |
+| RAM | 64 KB + REU of 128 KB to 16 MB when `RAM Expansion Unit` = `Enabled` | 64 KB (+ REU only if asked) |
 | Loading | PRG, D64, CRT, UCI file load, REU preload | PRG/D64/CRT, KERNAL or fastloader |
-| SID | C64U: 8 SIDs (UltiSIDs), 10 with real chips in both sockets, placed by config (`c64://ultimate/multisid`); default is one audible set at `$D400` | one SID at `$D400` |
+| SID | one SID at `$D400` until a `.cfg` places more (`c64://ultimate/multisid`) | one SID at `$D400` |
 | Extras | UCI, runtime palette, Upic (software hi-colour) | none |
 | Forbidden | assuming any feature without detection and fallback message | `$D030/$D031`, UCI, REU, SIDs above `$D400`, turbo-timed loops |
 | Test | VICE (logic, REU only) then hardware | VICE `x64sc`, then hardware at 1 MHz |
-A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17,783 cycles per PAL frame (`c64://gamedev/architecture` section 3) and about 15,000 on NTSC, one SID, no REU (levels from disk or RAM, `c64://gamedev/architecture` template A or D), 1 MHz timing, test in VICE.
+A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17,783 cycles per PAL frame (`c64://gamedev/architecture` section 3) and 15,219 on NTSC (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20), one SID, no REU (levels from disk or RAM, `c64://gamedev/architecture` template A or D), 1 MHz timing, test in VICE.
 
 ## Reading plan (in order; stop when you have enough)
 | Game type | Read |
@@ -27,7 +27,7 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 | Puzzle / board / card | architecture (state machine), techniques (input, RNG), `c64://graphics/sprite-charset/best-practices` |
 | RPG / adventure, lots of data | architecture (REU and loader sections), toolchain (crunching, REU image), `c64://ultimate/reu`, `c64://ultimate/uci` |
 | Hi-colour Upic game | `c64://ultimate/upic`, `c64://ultimate/hardware`, `c64://ultimate/reu`, architecture, toolchain; no hardware sprites |
-| Music/sound-heavy | techniques (section 6), `c64://sound/sid/spec`, `c64://sound/sid/file-format`; MODERN adds `c64://ultimate/multisid` (8 SIDs / 24 voices, 10 / 30 with two socket chips) |
+| Music/sound-heavy | techniques (section 6), `c64://sound/sid/spec`, `c64://sound/sid/file-format`; MODERN adds `c64://ultimate/multisid` |
 
 ## Task finder
 | Task | Where |
@@ -48,11 +48,11 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 ## Resource table (KB, bytes/1000)
 | URI | Content | KB |
 |---|---|---|
-| `c64://gamedev/index` | this page | 7.1 |
-| `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, VIC bank, safe zero page, memory-map templates | 13.8 |
-| `c64://gamedev/techniques` | raster IRQ and timing, open borders, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks, bitmap modes, multiply/divide | 25.6 |
-| `c64://gamedev/toolchain` | assemblers, C compiler runtimes (zero page, calling convention, linker, startup), build, crunchers, test loop, `.cfg` and REU image | 13.2 |
-| `c64://gamedev/references` | projects and games to learn from, licences | 10.4 |
+| `c64://gamedev/index` | this page | 7.2 |
+| `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, VIC bank, safe zero page, memory-map templates | 13.4 |
+| `c64://gamedev/techniques` | raster IRQ and timing, open borders, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks, bitmap modes, multiply/divide | 27.0 |
+| `c64://gamedev/toolchain` | assemblers, C compiler runtimes (zero page, calling convention, linker, startup), build, crunchers, test loop, `.cfg` and REU image | 17.9 |
+| `c64://gamedev/references` | projects and games to learn from, licences | 10.1 |
 | `c64://ultimate/hardware` | turbo, SIDs, video, detection, LEDs, config | 12.9 |
 | `c64://ultimate/multisid` | 8-10 SIDs: limit, address map, split, mixer, LOAD_CONFIG, detection | 10.9 |
 | `c64://ultimate/reu` | REU registers, recipes, loading paths, streaming | 13.4 |
@@ -70,7 +70,7 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 
 ## Dev loop with c64bridge
 1. Choose backend: `c64_select_backend` (`vice` for fast logic/debug, `c64u` for turbo, UCI, Upic, real timing, REU preload).
-2. Small code: `c64_program` `upload_run_asm` (built-in assembler, basic directives only: `* =`, `.byte`, `.word`, `.text`, `.fill`, `.align`). Larger projects: build a PRG with an external assembler (see toolchain), then `c64_program` `run_prg` (path must be host-local on VICE, device-visible on Ultimate devices) or `run_crt`.
+2. Small code: `c64_program` `upload_run_asm` (built-in assembler: ca65, 64tass, ACME and Kick Assembler spellings of data, fill, align, `.if`, `.include`, `.incbin`, macro and repeat directives; no segments; `data/assembly/assembly-spec.md`). Larger projects: build a PRG with an external assembler (see toolchain), then `c64_program` `run_prg` (`location: "host"` uploads a PRG from the host; `location: "device"` runs one on device storage; VICE takes host paths) or `run_crt`.
 3. Verify: `c64_memory` `read_screen`, `wait_for_text`, `read`; `c64_graphics` `capture_frame` (`format: "png"`) for screenshots; `c64_input` `joystick`/`key` to drive the game.
 4. Debug (VICE only): `c64_debug` `create_checkpoint` (breakpoint), `wait_for_state`, `get_registers`, `step`. Read `c64://vice/binary-monitor-spec` first.
 5. Hardware-only checks: turbo, UCI, Upic, SID layout, REU timing (VICE REU DMA timing differs from the Ultimate), real raster stability. Do not accept VICE timing for modern targets.

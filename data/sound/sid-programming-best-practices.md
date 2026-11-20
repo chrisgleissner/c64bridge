@@ -45,7 +45,7 @@ This document captures the successful approach for creating pleasant, musical SI
 
 ### 4. Timing is Everything
 
-- **Note Duration**: a `FOR I=1 TO 3000:NEXT I` loop (3000 iterations, not CPU cycles; the duration in seconds is unverified)
+- **Note Duration**: a `FOR I=1 TO 3000:NEXT I` loop (3000 BASIC loop iterations, not CPU cycles). At 1 MHz one iteration takes 1.36 to 1.37 ms, and the loop time is linear in the count within the 1/60 s jiffy resolution (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20): 245 to 247 jiffies for 3000 iterations, 41 to 42 for 500, 22 to 23 for 250 (T1/T2 = 6.0, T1/T3 = 11.2). `NEXT` without the variable name takes 22 % less time than `NEXT I` (191 to 192 jiffies for 3000 iterations, 1.07 ms per iteration).
 - **Pause Duration**: a 500-iteration loop between notes for clear separation
 - **GATE Control**: Keep GATE on during entire note, then turn off cleanly
 
@@ -171,7 +171,7 @@ REM ... continued with varied timing for musical expression
 
 ### Timing Patterns for Different Musical Effects
 
-Values are FOR-loop iteration counts; durations in seconds are unverified.
+Values are FOR-loop iteration counts. One iteration of `FOR I=1 TO n:NEXT I` takes 1.36 to 1.37 ms at 1 MHz (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20).
 
 - **Emphasis/Importance**: 250-400+ iterations
 - **Normal melody notes**: 180-200 iterations  

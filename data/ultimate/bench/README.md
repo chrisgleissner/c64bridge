@@ -53,10 +53,9 @@ TurboEnable-bit mode), `SPEED_TABLE` (1 = Ultimate 64 table up to 48 MHz, 2 = C6
 
 Speed index to MHz (from `software/u64/u64_config.cc`): Ultimate 64 (Elite): 1 2 3 4 5 6 8 10 12 14 16 20 24 32 40 48.
 C64U / Ultimate 64 Elite II: 1 2 3 4 6 8 10 12 14 16 20 24 32 40 48 64. Turbo Control values in the firmware: Off,
-Manual, "U64 Turbo Registers" (named per device), "TurboEnable Bit". The device's own allowed values must be read
-first (`c64_config get`), the names above are from firmware source only. In the firmware `$D031` bit 7 corresponds
-to the "Badline Timing" bit of the speed preference register; its polarity as seen from software is not documented,
-so measure idx 0 with screen on for `BADBIT = $00` and `$80` and compare.
+Manual, "U64 Turbo Registers", "TurboEnable Bit" (`software/u64/u64_config.cc:328,390`; the same four values were read
+from the Ultimate 64 Elite 3.15a and used on the C64 Ultimate 1.2.1). `$D031` bit 7 = 1 suppresses badline and sprite
+stalls, 0 keeps stock timing (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20; c64://ultimate/hardware).
 
 ## Result block (one `c64_memory` read: address `$C000`, length 3840, `format` hex)
 
@@ -142,8 +141,8 @@ Never call `c64_config` ops `save_flash`, `load_flash` or `reset_defaults`, and 
    `$D011`, `$D015` and the border itself.
 
 Interpretation checks: the frame-length records must read 19656 or 19657 (PAL) or 17095 or 17096 (NTSC). At 1 MHz with the
-screen blanked every load must give multiple 1.0000. With the screen on at 1 MHz and `$D031` bit 7 clear, about 25 badlines
-x 43 cycles are lost (about 1,080 per PAL frame). A point with an interference flag, a spread above 0.5 percent or status
+screen blanked every load must give multiple 1.0000. With the screen on at 1 MHz and `$D031` bit 7 clear, 25 badlines
+x 43.2 cycles are lost (1,081 per PAL frame, measured). A point with an interference flag, a spread above 0.5 percent or status
 `$FF` is rerun once and reported, not dropped.
 
 Speed-mode notes: in `Manual` and `TurboEnable Bit` mode set `USE_D031 = 0` and `NOMINAL_M` to the configured speed. The
