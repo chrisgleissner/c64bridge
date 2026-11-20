@@ -53,7 +53,8 @@ for (const tool of ["reset_c64", "reboot_c64"]) {
     const res = await machineControlModule.invoke(tool, { waitForReady: true, readyTimeoutMs: 5000 }, { client: machine.client, logger: createLogger() });
     assert.equal(res.metadata.ready, true);
     assert.ok(res.metadata.readyElapsedMs >= 200, `readyElapsedMs ${res.metadata.readyElapsedMs}`);
-    assert.ok(res.metadata.readyElapsedMs < 1000, `readyElapsedMs ${res.metadata.readyElapsedMs}`);
+    // The old 3 s grace reported 3204-3207 ms; 2500 ms leaves room for a loaded CI runner (1246 ms seen) and still fails it.
+    assert.ok(res.metadata.readyElapsedMs < 2500, `readyElapsedMs ${res.metadata.readyElapsedMs}`);
     assert.equal(machine.writes.length, 1);
     assert.equal(machine.writes[0][0], 0x0400);
   });
