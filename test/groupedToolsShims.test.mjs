@@ -2408,6 +2408,10 @@ test("c64_vice resource_set writes allowed resources", async () => {
   try {
     const calls = [];
     const stubClient = {
+      async viceResourceGet() {
+        // VICE-12: resource_set reads the resource type first and converts the value to it.
+        return { type: "int", value: 0 };
+      },
       async viceResourceSet(name, value) {
         calls.push({ name, value });
       },
