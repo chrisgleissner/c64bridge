@@ -50,20 +50,14 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 
 ## Tokenization Issues
 
-**Problem:** BASIC tokenizes keywords, which affects string matching and `DATA` statements.
+**Problem:** BASIC tokenizes keywords in program lines, which affects string matching.
 
-**Impact on DATA:**
+**DATA is not affected:** the tokenizer leaves the rest of a `DATA` statement untokenized, so keywords in `DATA` read back as text.
 
 ```basic
 10 DATA PRINT,GOTO,END
 20 READ A$,B$,C$
-30 PRINT A$  :REM DISPLAYS "P" + token bytes, not "PRINT"
-```
-
-**Solution:** Quote `DATA` strings that might contain keywords.
-
-```basic
-10 DATA "PRINT","GOTO","END"
+30 PRINT A$  :REM DISPLAYS "PRINT"
 ```
 
 ## Variable Names
@@ -229,7 +223,7 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 - **Always close quotes** and watch line lengths (80 chars).
 - **Use unique variable prefixes** (first 2 chars matter).
 - **Dimension arrays explicitly** and remember 0-indexing.
-- **Quote DATA strings** to avoid tokenization issues.
+- **DATA contents are not tokenized**; keywords in DATA read back as text.
 - **Check device numbers** before OPEN.
 - **Balance GOSUB/RETURN** to avoid stack overflow.
 - **Validate INPUT** to handle user errors gracefully.
