@@ -129,3 +129,59 @@ documents, character-set.csv, context/chat.md, context/fast-paths.md.
 
 Unresolved: GOSUB nesting depth (basic-pitfalls:159 "~50"; ROM arithmetic suggests about 35, not run);
 "empty lines stored as $20" (basic-spec:41).
+
+## Part C - C64 facts in code (HANDOVER list)
+
+Checked 2026-11-20 against mist64/c64ref `7cae8b9` and the Bauer VIC-II article (both re-fetched,
+not from memory). Branch code was read with `git show origin/h6/<X>:<path>`; nothing on another
+branch was edited. `h6/F` (`src/petscii.ts`) is owned by another agent and not checked here.
+Line numbers are those of the branch tips fetched on 2026-11-20.
+
+### Base tree `src/knowledge.ts` name-to-address pairs (h6/K)
+
+| Fact | branch:file:line | Verdict | Source |
+|---|---|---|---|
+| `zero_page` $0000-$00FF, `stack` $0100-$01FF | K:src/knowledge.ts:21-22 | CONFIRMED | Mapping "$0100-$01FF Microprocessor Stack Area" |
+| `basic_input_buffer` $0200-$02FF | K:src/knowledge.ts:23 | CONFIRMED (range is page 2; BUF itself is $0200-$0258, the rest is KERNAL workspace, as the description says) | Mapping "$0200-$0258 BUF" |
+| `screen_ram` $0400-$07E7, symbols `screen`/`screen_ram` $0400 | K:src/knowledge.ts:24,37-38 | CONFIRMED | STA $0288 HIBASE "Default: $04, $0400"; 1000 cells end at $07E7 |
+| `basic_program` $0801-$9FFF, symbols `basic`/`basic_start` $0801 | K:src/knowledge.ts:25,39-40 | CONFIRMED | Mapping TXTTAB "beginning at 2049 ($0801)"; MEMSIZ "(40959, $9FFF)" |
+| `vic_ii_registers` $D000-$D3FF, symbol `vic` $D000 | K:src/knowledge.ts:26,43 | CONFIRMED | Mapping "$D040-$D3FF VIC-II Register Images"; Bauer "repeated every 64 bytes" |
+| `sid_registers` $D400-$D7FF, symbol `sid` $D400 | K:src/knowledge.ts:27,44 | CONFIRMED | Mapping "$D420-$D7FF SID Register Images" |
+| `color_ram` $D800-$DBFF, symbols `color`/`color_ram` $D800 | K:src/knowledge.ts:28,41-42 | CONFIRMED | Mapping "$D800-$DBFF Color RAM" |
+| `cia1_registers` $DC00-$DCFF, symbol `cia1` | K:src/knowledge.ts:29,45 | CONFIRMED | Mapping "$DC10-$DCFF CIA #1 Register Images" |
+| `cia2_registers` $DD00-$DDFF, symbol `cia2` | K:src/knowledge.ts:30,46 | CONFIRMED | Mapping "$DD10-$DDFF CIA #2 Register Images" |
+| `io_area` $D000-$DFFF | K:src/knowledge.ts:31 | CONFIRMED | STA $0001 "%1xx: I/O area visible at $D000-$DFFF" |
+| `kernal_rom` $E000-$FFFF, symbol `kernal` $E000 | K:src/knowledge.ts:32,47 | CONFIRMED | STA $0001 "KERNAL ROM visible at $E000-$FFFF" |
+
+No pair changes value, so no code change and no test were needed.
+
+Prose in the same file (outside the name-to-address pairs; not edited, reported to the lead):
+
+| Fact | branch:file:line | Verdict | Source |
+|---|---|---|---|
+| "$D011 bit 7=screen on/off" | K:src/knowledge.ts:403 | ERROR: bit 7 is RST8 (raster bit 8); the display enable is bit 4 (DEN) | Bauer register table; Mapping $D011 |
+| "$D011 ... writing: bit7 Screen on/off ... bit4 (unused)"; bit 3 not listed | K:src/knowledge.ts:423 | ERROR: bit 7 RST8 on read and write (raster compare), bit 4 DEN, bit 3 RSEL | Bauer register table; Mapping $D011 |
+| "Disable screen ($D011 bit7=0) ... to suppress badlines" | K:src/knowledge.ts:433 | ERROR: clear bit 4 (DEN) | Mapping $D011 "4 Blank the entire screen"; Bauer 3.5 |
+| USR vector $0311/$0312 | K:src/knowledge.ts:295 | CONFIRMED | Mapping "$0311-$0312 USRADD" |
+| $02A6 PAL=$01, NTSC=$00 | K:src/knowledge.ts:162 | CONFIRMED | as G2 below |
+
+### Other branches (not edited)
+
+| Fact | branch:file:line | Verdict | Source |
+|---|---|---|---|
+| Multicolour pixels are twice as wide (pixel width ratio 2) | G1:src/vicBitmap.ts:163 | CONFIRMED | Bauer 3.7.3: "each pixel being twice as wide" |
+| Bottom-right cell at screen $07E7 (2023) and colour RAM $DBE7 (56295) | G1:src/petsciiArt.ts:413-415 | CONFIRMED | $0400 + 999 = $07E7; Mapping "$D800-$DBFF Color RAM"; $D800 + 999 = $DBE7 |
+| Cursor (text) colour at 646 ($0286) | G1:src/petsciiArt.ts:396,415 | CONFIRMED | Mapping "$0286 COLOR Current Foreground Color for Text" |
+| $D016 bits 6-7, $D018 bit 0, $D020/$D021 bits 4-7 read as 1 (masked `& 0x3f`, `& 0xfe`, `& 0x0f`) | G1:src/tools/registry/graphics.ts:129-130,173-176 | CONFIRMED | Bauer register table and note "bits marked with '-' are not connected and yield '1' on reading" |
+| $D011 bit 7 reads as bit 8 of the raster line (masked `& 0x7f`) | G1:src/tools/registry/graphics.ts:129,172 | CONFIRMED | Bauer "$d011 RST8"; Mapping $D011 "7 High bit (Bit 8) of raster compare register" |
+| Screen base = (3 - ($DD00 & 3)) x $4000 + ($D018 >> 4) x $400 | E:src/device.ts:132 (base-tree code, used by E background.ts:412-427) | CONFIRMED | Mapping $DD00 "0-1 Select the 16K VIC-II chip memory bank (11=bank 0, 00=bank 3)"; $D018 "4-7 Video matrix base address" |
+| Character block = (($D018 >> 1) & 7) x $800 inside the bank | E:src/tools/meta/graphics.ts:413,420-424 | CONFIRMED | Mapping $D018 "1-3 Text character dot-data base address", "If they equal 2, the data area starts 2*1K" (nybble value x 1K = bits 1-3 x 2K) |
+| Character ROM image in banks 0 and 2 at bank offset $1000-$1FFF | E:src/tools/meta/graphics.ts:422-423 | CONFIRMED | Mapping $D000 Character ROM: "see an image of the Character ROM at 4096-8191 ($1000-$1FFF) and at 36864-40959 ($9000-$9FFF). It is not available in the other two blocks." |
+| Sprite pointer = (address within the 16 KB bank) / 64 | E:src/tools/meta/graphics.ts:82,295-297 | CONFIRMED | Mapping $D000 sprites: "The number in the pointer times 64 equals the address of the first byte of the data block within the VIC-II addressing range" |
+| Charset candidates $0800, $2000, $2800, $3000, $3800 in bank 0 are 2 KB aligned and avoid the ROM image | E:src/tools/meta/graphics.ts:378-381 | CONFIRMED | as the two rows above |
+| KERNAL names CINT $FF81, IOINIT $FF84, RAMTAS $FF87, RESTOR $FF8A, SCNKEY $FF9F, READST $FFB7, SETLFS $FFBA, SETNAM $FFBD, OPEN $FFC0, CLOSE $FFC3, CHKIN $FFC6, CHKOUT $FFC9, CLRCHN $FFCC, CHRIN $FFCF, CHROUT $FFD2, LOAD $FFD5, SAVE $FFD8, SETTIM $FFDB, RDTIM $FFDE, STOP $FFE1, GETIN $FFE4, CLALL $FFE7, UDTIM $FFEA, PLOT $FFF0 | C:src/knowledge.ts:50-73 | CONFIRMED (all 24) | kernal_prg.txt headings ("$FF81 CINT" ... "$FFF0 PLOT"); c64disasm_en.txt jump table $FF81-$FFF0 |
+| Comment cites "Programmer's Reference Guide, chapter 5" | C:src/knowledge.ts:48-49 | UNVERIFIABLE (chapter number not in the c64ref text files; the routine list is) | - |
+| $02A6 is 1 for PAL, 0 for NTSC | G2:src/tools/audio.ts:686,694 | CONFIRMED (the replaced base text "1=NTSC, 0=PAL" was the error) | Mapping $02A6 "a 0 indicating an NTSC system in use, and one signifying a PAL system"; STA "$00: NTSC", "$01: PAL"; ROM $FF66-$FF68 |
+| PAL frequency values on NTSC sound about 65 cents sharp | G2:src/tools/audio.ts:256 | CONFIRMED | 1200 x log2(1022727 / 985248) = 64.6 cents; clocks as in sid-spec.md (Mapping $D400 equation) |
+
+ERROR verdicts on other branches: none.
