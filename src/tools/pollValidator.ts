@@ -186,6 +186,14 @@ function normaliseScreen(screen: string): string {
   return screen.split("\n").map((line) => line.trimEnd()).join("\n").trim();
 }
 
+function asmScreenOutput(screen: string): string {
+  // Loading and typing SYS can change the screen before any ASM instruction runs.
+  const launchLine = /^(?:READY\.|RUN|SYS\s*\d+|LOAD\s*".*|SEARCHING FOR .+|LOADING)$/i;
+  return screen.split("\n").map((line) => line.trim())
+    .filter((line) => line && !launchLine.test(line) && !extractBasicError(line))
+    .join("\n");
+}
+
 /** True when the last non-blank screen line is the READY. prompt, i.e. BASIC is waiting for input. */
 function endsAtReadyPrompt(screen: string): boolean {
   const lines = screen.split("\n").map((line) => line.trim()).filter((line) => line !== "");
@@ -396,6 +404,7 @@ async function pollAsmOutcome(
   logger: ToolLogger,
   config: PollConfig,
   program?: ExpectedProgramBytes,
+  baselineScreen?: string,
 ): Promise<AsmPollResult> {
   let loadCheck: AsmPollResult["loadCheck"] = "skipped";
   if (program) {
@@ -414,6 +423,12 @@ async function pollAsmOutcome(
   const startTime = Date.now();
   let pollCount = 0;
   let runDetected = false;
+  const baseline = baselineScreen === undefined ? undefined : asmScreenOutput(baselineScreen);
+  const hasNewOutput = (screen: string) => {
+    if (baseline === undefined) return false;
+    const output = asmScreenOutput(screen);
+    return output !== "" && output !== baseline;
+  };
   
   logger.debug("Starting ASM outcome polling with hardware monitoring", {
     maxMs: config.maxMs,
@@ -426,6 +441,11 @@ async function pollAsmOutcome(
     try {
       const screen = await client.readScreen();
       const upperScreen = screen.toUpperCase();
+
+      if (hasNewOutput(screen)) {
+        logger.debug("ASM screen differs from pre-run baseline", { elapsed: Date.now() - startTime });
+        return { status: "ok", type: "ASM", loadCheck };
+      }
       
       if (returnedToBasicAfterSys(screen)) {
         // The typed SYS line is followed by READY., so the routine ran and returned with RTS.
@@ -468,6 +488,10 @@ async function pollAsmOutcome(
     let screenText: string | undefined;
     try {
       screenText = detailed ? (await detailedClient.readScreenDetailed!()).text : await client.readScreen();
+      if (hasNewOutput(screenText)) {
+        logger.debug("ASM screen differs from pre-run baseline", { pollCount, elapsed: Date.now() - startTime });
+        return { status: "ok", type: "ASM", loadCheck };
+      }
       // A routine that works for a while before RTS shows READY. only after the first screen read.
       if (returnedToBasicAfterSys(screenText)) {
         logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
@@ -557,5 +581,5 @@ export async function pollForProgramOutcome(
     return pollBasicOutcome(client, logger, pollConfig, baselineScreen, program);
   }
   
-  return pollAsmOutcome(client, logger, pollConfig, program);
+  return pollAsmOutcome(client, logger, pollConfig, program, baselineScreen);
 }

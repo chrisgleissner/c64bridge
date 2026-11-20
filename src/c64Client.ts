@@ -1216,6 +1216,7 @@ export class C64Client {
     const value = ((filterMode ?? 0) << 4) | clamped;
     const result = await this.writeMemory("$D418", this.bytesToHex(Uint8Array.of(value)), pinnedFacade);
     if (!result.success) return result;
+    this.sidVolume.set(pinnedFacade ?? await this.facadePromise, clamped);
     const details = (result.details && typeof result.details === "object" ? result.details : {}) as Record<string, unknown>;
     return {
       ...result,
@@ -1241,6 +1242,7 @@ export class C64Client {
           { address: 0xd400, bytes: Buffer.alloc(span, 0xff) },
           { address: 0xd400, bytes: Buffer.alloc(span, 0x00) },
         ]);
+        this.sidVolume.set(facade, 0);
         return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
       }
       // Gate and waveform off on all three voices, then volume 0, in one batch.
@@ -1250,6 +1252,7 @@ export class C64Client {
         { address: 0xd412, bytes: Uint8Array.of(0x00) },
         { address: 0xd418, bytes: Uint8Array.of(0x00) },
       ]);
+      this.sidVolume.set(facade, 0);
       return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1332,9 +1335,15 @@ export class C64Client {
     const bytes = Buffer.from([freqLo, freqHi, pwLo, pwHi, ctrl, ad, sr]);
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
+      let volumeSet: number | undefined;
+      if ((this.sidVolume.get(facade) ?? 0) === 0) {
+        const volumeResult = await this.sidSetVolume(15, facade);
+        if (!volumeResult.success) return volumeResult;
+        volumeSet = 15;
+      }
       await facade.writeMemory(base, bytes);
       this.sidControlFor(facade)[voice - 1] = ctrl;
-      return { success: true };
+      return { success: true, ...(volumeSet === undefined ? {} : { details: { volumeSet } }) };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
@@ -1364,6 +1373,8 @@ export class C64Client {
 
   /** Control register values ($D404, $D40B, $D412) last written by sidNoteOn/sidNoteOff, per backend. */
   private readonly sidControl = new WeakMap<C64Facade, Array<number | undefined>>();
+  /** $D418 is write-only; track values written through this client instead of trusting open-bus reads. */
+  private readonly sidVolume = new WeakMap<C64Facade, number>();
 
   private sidControlFor(facade: C64Facade): Array<number | undefined> {
     let control = this.sidControl.get(facade);

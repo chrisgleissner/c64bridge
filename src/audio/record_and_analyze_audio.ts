@@ -43,6 +43,18 @@ export interface AnalysisResult {
   };
 }
 
+export function noAudioMeasurement(backend: string, error?: unknown) {
+  const detail = error instanceof Error ? error.message : String(error ?? "");
+  const microphoneUnavailable = !detail || detail.startsWith("Audio backend not available");
+  const reason = microphoneUnavailable
+    ? "the host microphone is unavailable because naudiodon (PortAudio) is not installed."
+    : `host microphone capture did not provide a measurement: ${detail}`;
+  const message = backend === "vice" || backend === "u2"
+    ? `No measurement: the ${backend} backend has no audio stream (only c64u streams audio), and ${reason}`
+    : `No measurement: ${detail || reason}`;
+  return { measured: false, message } as const;
+}
+
 export function normalizeAudioDuration(durationSeconds: number): number {
   const duration = Number(durationSeconds);
   if (!Number.isFinite(duration)) {

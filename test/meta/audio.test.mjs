@@ -238,7 +238,7 @@ describe("meta/audio", () => {
     assert.equal(ctx.client.runPrg.calls.length, 0);
   });
 
-  test("music_compile_play_analyze requires RMS metrics from the main analysis capture", async () => {
+  test("music_compile_play_analyze reports when the main capture yields no RMS measurement", async () => {
     const responses = [
       createAnalysis({ averageRms: 0.002, maxRms: 0.003 }),
       createAnalysis({ averageRms: null, maxRms: null }),
@@ -261,14 +261,13 @@ describe("meta/audio", () => {
       ctx,
     );
 
-    assert.equal(result.isError, true);
-    assert.equal(result.metadata.error?.kind, "execution");
-    assert.deepEqual(result.metadata.error?.details?.globalMetrics, {
-      average_pitch_deviation: null,
-      detected_bpm: null,
-      average_rms: null,
-      max_rms: null,
-    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.metadata.success, true);
+    assert.equal(result.metadata.analyzed, false);
+    assert.equal(result.structuredContent.data.analysis, null);
+    assert.equal(result.structuredContent.data.analysisMetrics, undefined);
+    assert.equal(result.structuredContent.data.verification.measured, false);
+    assert.match(result.structuredContent.data.verification.message, /no measurement.*RMS metrics/i);
   });
 
   test("music_compile_play_analyze falls back to the playback response when details are missing", async () => {
