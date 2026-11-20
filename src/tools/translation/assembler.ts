@@ -326,6 +326,8 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   const parser = new Parser(resolver);
   const statements = parser.parse(normalized, rootFile);
 
+  const labelWarnings = checkBareLabels(parser.bareLabels, statements);
+
   const assembler = new Assembler(statements, loadAddress, options?.resolveIncbin);
   assembler.runPass(0);
   assembler.resolveDeferredAssignments();
@@ -337,7 +339,54 @@ export function assemblyToPrgDetailed(source: string, options?: AssembleOptions)
   const entryAddress = stubTarget !== loadAddressOfPrg
     ? stubTarget
     : assembler.getFirstInstructionAddress() ?? loadAddressOfPrg;
-  return { prg, symbols: assembler.getSymbols(), entryAddress, warnings: assembler.getWarnings() };
+  return { prg, symbols: assembler.getSymbols(), entryAddress, warnings: [...labelWarnings, ...assembler.getWarnings()] };
+}
+
+/** Every symbol name an expression of the program refers to. */
+function referencedSymbols(statements: readonly ParsedLine[]): Set<string> {
+  const names = new Set<string>();
+  const visit = (expr: Expression): void => {
+    if (expr.type === "symbol") names.add(expr.name);
+    else if (expr.type === "unary") visit(expr.operand);
+    else if (expr.type === "binary") {
+      visit(expr.left);
+      visit(expr.right);
+    }
+  };
+  for (const { statement } of statements) {
+    if (!statement) continue;
+    if (statement.kind === "assignment") visit(statement.expr);
+    else if (statement.kind === "instruction") {
+      if ("expr" in statement.operand) visit(statement.operand.expr);
+    } else {
+      for (const arg of statement.args) if (arg.kind === "expr") visit(arg.expr);
+    }
+  }
+  return names;
+}
+
+/**
+ * A name in column 0 without a colon is a label, as in ACME and 64tass, but a misspelt mnemonic
+ * looks the same ("rts2"). A name that nothing refers to is an error when it stands alone, so no
+ * instruction is lost silently, and a warning when a statement follows it.
+ */
+function checkBareLabels(bareLabels: Parser["bareLabels"], statements: readonly ParsedLine[]): string[] {
+  if (bareLabels.length === 0) return [];
+  const used = referencedSymbols(statements);
+  const warnings: string[] = [];
+  for (const { name, location, alone } of bareLabels) {
+    if (used.has(name)) continue;
+    if (alone) {
+      throw new AssemblyError(
+        `Unknown instruction "${name}": a name alone in column 0 that nothing refers to is not taken as a label; write "${name}:" if it is one`,
+        location,
+      );
+    }
+    warnings.push(
+      `${location.file}:${location.line}: "${name}" in column 0 is taken as a label without a colon and nothing refers to it; if it is a misspelt instruction, that instruction is missing (write "${name}:" to silence this)`,
+    );
+  }
+  return warnings;
 }
 
 function normalizeSource(input: string): string {
@@ -540,6 +589,8 @@ class Parser {
   private readonly constants = new Map<string, number>();
   private expandedLines = 0;
   private expansionCounter = 0;
+  /** Names taken as labels because they stand in column 0 without a colon. */
+  readonly bareLabels: Array<{ name: string; location: SourceLocation; alone: boolean }> = [];
 
   constructor(
     private readonly includeResolver?: (requestedPath: string, fromFile: string) => string | { contents: string; fileName?: string },
@@ -633,6 +684,7 @@ class Parser {
                 location,
               );
             }
+            this.bareLabels.push({ name: head.value, location, alone: next === undefined });
             labels.push(stream.consumeSymbol());
           }
         }

@@ -56,6 +56,20 @@ test("labels without a colon in column 0 (TRANSLATE-5)", () => {
   fails("ldaa #1\n", /Unknown instruction "ldaa"/);
 });
 
+test("a misspelt mnemonic alone in column 0 is an error, not a silent label (review point 1)", () => {
+  fails("lda #1\nrts2", (error) => error instanceof AssemblyError && /:3: Unknown instruction "rts2"/.test(error.message) && /"rts2:"/.test(error.message));
+  fails("nop\nclc2\n nop", /Unknown instruction "clc2"/);
+  // Referenced, it is a label; with a colon it is always one.
+  assert.deepEqual(asm("loop\n dex\n bne loop"), [0xca, 0xd0, 0xfd]);
+  assert.deepEqual(asm("unused:\n rts"), [0x60]);
+  assert.deepEqual(assemblyToPrgDetailed("* = $c000\nunused:\n rts\n").warnings, []);
+  // Before a statement it stays a label, with a warning naming the line.
+  const result = assemblyToPrgDetailed("* = $c000\nrst2 nop\nmsg .byte 7\n lda msg\n");
+  assert.deepEqual([...result.prg].slice(2), [0xea, 7, 0xad, 0x01, 0xc0]);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /\(input\):2: "rst2" in column 0 is taken as a label/);
+});
+
 test("unsupported directives say so before the operand is parsed and list what is supported", () => {
   for (const source of ['.segment "CODE"', ".proc foo", '.incbin2 "x"', "!to \"a.prg\",cbm", ".define x(a) a", "!zone x"]) {
     fails(source, /unsupported directive \S+; supported: .*\.byte.*!scr.*\.macro.*\.repeat/s);
