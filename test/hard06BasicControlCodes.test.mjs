@@ -108,7 +108,7 @@ test("every control-code name of the keyboard tool and of skill and data example
   // src/tools/input.ts uses the shared table (wave 2) and must not keep a copy of its own.
   const input = readFileSync(new URL("../src/tools/input.ts", import.meta.url), "utf8");
   assert.match(input, /import \{[^}]*lookupNamedPetscii[^}]*\} from "\.\.\/petscii\.js"/, "input.ts imports the shared table");
-  assert.doesNotMatch(input, /const PETSCII_TOKENS\b/, "input.ts has no table of its own");
+  assert.ok(!/const PETSCII_TOKENS\b/.test(input), "input.ts has no table of its own");
   // Brace codes inside quoted strings of BASIC lines in .github/skills and data/.
   const files = [];
   const walk = (dir) => {
