@@ -51,7 +51,7 @@ The first two bytes encode the name and type; the remaining bytes store the data
 
 | Type | Suffix | Range | Storage | Notes |
 |------|---------|--------|----------|-------|
-| **Real (Float)** | none | ±2.9×10⁻³⁸ … ±1.7×10³⁸ | 1-byte exponent + 4-byte mantissa | Default numeric type, ≈9.6-digit precision. |
+| **Real (Float)** | none | ±2.94×10⁻³⁹ … ±1.70×10³⁸ | 1-byte exponent + 4-byte mantissa | Default numeric type, ≈9.6-digit precision. |
 | **Integer** | `%` | −32768 … 32767 | 2 bytes (hi-lo) | High bit set on both name bytes; slower than float due to conversion. |
 | **String** | `$` | 0–255 chars | 1-byte length + 2-byte pointer | High bit set on second name byte; pointer references PETSCII data. |
 | **Boolean** | — | `0` (FALSE), `−1` or any non-zero (TRUE) | Numeric representation | Implemented via integers. |
