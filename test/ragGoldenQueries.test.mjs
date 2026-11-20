@@ -1,5 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { LocalMiniHashEmbedding } from "../src/rag/embeddings.ts";
 import { loadIndexes } from "../src/rag/indexer.ts";
 import { LocalRagRetriever } from "../src/rag/retriever.ts";
@@ -54,7 +56,11 @@ const GOLDEN = [
 ];
 
 const model = new LocalMiniHashEmbedding(384);
-const retriever = new LocalRagRetriever(model, await loadIndexes());
+const retriever = new LocalRagRetriever(model, await loadIndexes({
+  // scripts/run-tests sets RAG_EMBEDDINGS_DIR to an empty fixture directory, so the shipped
+  // indexes are named explicitly instead of resolved from the environment.
+  embeddingsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data"),
+}));
 
 test("RAGGOLD-001 golden queries return the expected document in the top 3", async () => {
   const failures = [];
