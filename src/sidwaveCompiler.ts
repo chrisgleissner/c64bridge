@@ -177,6 +177,10 @@ export function maxSidwaveMidi(system: SystemMode): number {
 
 function waveformToCtrl(w: string): number {
   const wf = (w || "pulse").toLowerCase();
+  if (wf.includes("tri") && wf.includes("saw") && wf.includes("pulse")) return 0x70;
+  if (wf.includes("tri") && wf.includes("pulse")) return 0x50;
+  if (wf.includes("saw") && wf.includes("pulse")) return 0x60;
+  if (wf.includes("tri") && wf.includes("saw")) return 0x30;
   if (wf.startsWith("tri")) return 0x10;
   if (wf.startsWith("saw")) return 0x20;
   if (wf.startsWith("noise")) return 0x80;
@@ -209,6 +213,8 @@ export interface Instrument {
   /** round(65536 / speed): the player's per-frame slide step is magnitude x slideRecip / 256 (16.8 fixed point). */
   slideRecip: number;
   filter: number;
+  ring?: boolean;
+  sync?: boolean;
 }
 
 export interface ArrangedNote {
@@ -380,7 +386,11 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
               );
             }
           }
-          const inst = buildInstrument(voice, fxRaw, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps);
+          const instrumentName = entry.instrument ?? voice.instrument;
+          const namedInstrument = instrumentName ? (instrumentName.startsWith("lib:") ? SIDWAVE_INSTRUMENT_LIBRARY[instrumentName.slice(4)] : doc.instruments[instrumentName]) : undefined;
+          if (instrumentName && !namedInstrument) throw new SidwaveValidationError(`${patPath}.instrument`, `instrument ${JSON.stringify(instrumentName)} is not defined`);
+          const instVoice = namedInstrument ? { ...voice, waveform: (namedInstrument.waveform ?? namedInstrument.wave ?? voice.waveform) as any, pulse_width: namedInstrument.pulse_width ?? voice.pulse_width, adsr: namedInstrument.adsr ?? voice.adsr } : voice;
+          const inst = buildInstrument(instVoice, { ...fxRaw, ...(namedInstrument ?? {}) }, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps);
           if (out.length >= MAX_NOTES_PER_VOICE) {
             throw new SidwaveValidationError(patPath, `voice ${id} has more than ${MAX_NOTES_PER_VOICE} notes; every note takes at least 3 bytes, so the song would end past the $D000 limit (about 50 KB); use longer note lengths or fewer bars`);
           }
@@ -453,8 +463,8 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
 type PatternEntry =
   | { kind: "rest" }
   | { kind: "tie" }
-  | { kind: "note"; notes: number[]; arp: false; arpSpeed: 0 }
-  | { kind: "note"; notes: number[]; arp: true; arpSpeed: number };
+  | { kind: "note"; notes: number[]; arp: false; arpSpeed: 0; instrument?: string }
+  | { kind: "note"; notes: number[]; arp: true; arpSpeed: number; instrument?: string };
 
 function patternEntries(pattern: SidwavePattern, path: string): PatternEntry[] {
   const p = pattern as any;
@@ -465,10 +475,12 @@ function patternEntries(pattern: SidwavePattern, path: string): PatternEntry[] {
   }
   if (Array.isArray(p.groove)) {
     return (p.groove as unknown[]).map((raw) => {
+      if (typeof raw === "object" && raw) return { kind: "note", notes: [noteNameToMidi((raw as any).note)!], arp: false, arpSpeed: 0, instrument: (raw as any).inst };
       const tok = String(raw).trim();
       if (isRestToken(tok)) return { kind: "rest" };
       if (isTieToken(tok)) return { kind: "tie" };
-      return { kind: "note", notes: [noteNameToMidi(tok)!], arp: false, arpSpeed: 0 };
+      const [note, instrument] = tok.split("@");
+      return { kind: "note", notes: [noteNameToMidi(note)!], arp: false, arpSpeed: 0, instrument };
     });
   }
   const entries: MotifEntry[] = parseMotif(String(p.motif), p.root === undefined ? "C3" : String(p.root), `${path}.motif`);
@@ -497,7 +509,7 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
   return {
     ad: ((adsr[0] & 0xf) << 4) | (adsr[1] & 0xf),
     sr: ((adsr[2] & 0xf) << 4) | (adsr[3] & 0xf),
-    wave,
+    wave: wave | (fx.ring ? 0x04 : 0) | (fx.sync ? 0x02 : 0),
     pw,
     pwStep,
     pwMin,
@@ -515,6 +527,15 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
     filter,
   };
 }
+
+/** Small documented SID instrument recipes; waveform bits follow the SID control-register map. */
+export const SIDWAVE_INSTRUMENT_LIBRARY: Record<string, Record<string, any>> = {
+  kick: { waveform: "noise", adsr: [0, 0, 12, 4] }, snare: { waveform: "noise", adsr: [0, 2, 8, 5] }, hat: { waveform: "noise", adsr: [0, 0, 4, 2] },
+  bass_pluck: { waveform: "triangle", adsr: [0, 8, 0, 4] }, filter_bass: { waveform: "saw", adsr: [0, 7, 9, 3] },
+  lead_pwm: { waveform: "pulse", pulse_width: 0.3, adsr: [1, 4, 10, 3] }, chip_arp_major: { waveform: "pulse", adsr: [0, 3, 8, 2] },
+  chip_arp_minor: { waveform: "pulse", adsr: [0, 3, 8, 2] }, bell_ring: { waveform: "tri", adsr: [0, 4, 7, 5], ring: true },
+  sync_lead: { waveform: "saw", adsr: [0, 4, 9, 3], sync: true }, pad_slow: { waveform: "tri", adsr: [5, 4, 11, 7] },
+};
 
 /** Represents 0 < k < 1 as mant / 2^(8 + shift) with the largest shift that keeps mant <= 255 (at least 7 bits of precision). */
 function mantissaShift(k: number): [number, number] {

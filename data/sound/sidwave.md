@@ -13,7 +13,7 @@ LLM → SIDWAVE (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VIC
 
 - **Format name:** SIDWAVE
 - **File suffix:** `.sidwave.yaml` (or `.sid.yaml` for brevity)
-- **Version field:** `sidwave: 1.0`
+- **Version field:** `sidwave: 1.0` or `sidwave: 1.1`
 - **Schema file:** `sidwave.schema.json`
 - **Serialization:** YAML 1.2 or JSON
 
@@ -92,7 +92,9 @@ timeline:
 
 | Field | Meaning |
 | --- | --- |
-| `sidwave` | Format version, `1.0`. |
+| `sidwave` | Format version, `1.0` (legacy) or `1.1`. |
+| `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
+| `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
@@ -161,6 +163,32 @@ Fading lowers the voice's sustain level linearly to 0 across the section. When e
 
 Without `filter_env`, a `filter_mod` uses a low-pass filter with cutoff 1024 and resonance 8 as its base. The SID has a single filter, so all routed voices share it; when several patterns with `filter_mod` start at once, the most recent start sets the ramp.
 
+## SIDWAVE 1.1 authoring techniques
+
+Use a wavetable to change a drum from a short noise transient into a pitched pulse/triangle tail, then reuse that voice for bass. Use one voice for a fast chord arpeggio, allow hard restart enough time before each new note, and route a bass through filter sweeps. Pulse leads benefit from PWM and delayed vibrato. Echo a phrase later on an otherwise free voice, use octave jumps to vary repetitions, and reserve one voice for ring modulation or hard sync. The SID has one shared filter; the most recent instrument with a filter table owns its settings. Voice 1 is modulated/synced by voice 3, voice 2 by voice 1, and voice 3 by voice 2. Combined waveforms can be quieter and are model-dependent between 6581 and 8580.
+
+Built-in recipes: `lib:kick` (noise kick), `lib:snare` (decaying noise snare), `lib:hat` (short noise tick), `lib:bass_pluck` (plucked triangle), `lib:filter_bass` (saw bass), `lib:lead_pwm` (pulse lead), `lib:chip_arp_major` and `lib:chip_arp_minor` (pulse arpeggios), `lib:bell_ring` (ring-modulated triangle), `lib:sync_lead` (sync saw), and `lib:pad_slow` (slow triangle pad).
+
+```yaml
+sidwave: 1.1
+tempo: 132
+speed: 2
+instruments:
+  bass: { waveform: saw, adsr: [0, 7, 9, 3], ring: true }
+voices:
+  - id: 1
+    instrument: bass
+    patterns: { line: { groove: [C2, G1, C2, G1] } }
+  - id: 2
+    instrument: lib:chip_arp_major
+    patterns: { chord: { type: arpeggio, notes: [C4, E4, G4], frame_rate: 2 } }
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns: { lead: { groove: [C5@lib:bell_ring, { note: G4, inst: lib:lead_pwm, len: 0.5, legato: true }] } }
+timeline:
+  - { section: A, bars: 2, tempo: 132, swing: 0.12, layers: { v1: line, v2: chord, v3: lead } }
+```
+
 ---
 
 ## Player
@@ -182,7 +210,7 @@ The compiler arranges the timeline into per-voice note events and encodes them a
 
 ### Not supported
 
-Time signatures other than 4/4, per-note velocity, portamento between consecutive notes (the `slide` effect is a slide into each note), multiple subtunes, multispeed (more than one player call per frame), and combined waveforms.
+Time signatures other than 4/4, per-note velocity, multiple subtunes, external sample playback, multiple SID chips, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
@@ -203,6 +231,6 @@ Time signatures other than 4/4, per-note velocity, portamento between consecutiv
 ## LLM Prompt Template
 
 > Compose a 3–5 minute atmospheric, modern electronic SID composition using the **SIDWAVE** format.
-> Use three voices with expressive modulation (PWM, filter sweeps, arpeggios, evolving pads).
-> Output valid YAML conforming to `sidwave.schema.json`; quote silent layers as `"-"`.
+> Use SIDWAVE 1.1 instruments, drum transients, a one-voice chord arpeggio, filter sweeps, PWM, delayed vibrato, octave variation, and delayed phrase echoes where a voice is free.
+> Output valid YAML conforming to `sidwave.schema.json`; quote silent layers as `"-"`. Keep the score original and leave room below $D000.
 > Avoid direct note repetition; reuse and transpose patterns.

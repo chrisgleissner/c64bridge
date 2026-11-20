@@ -6,11 +6,13 @@
   "type": "object",
   "required": ["sidwave", "title", "tempo", "mode", "voices", "timeline"],
   "properties": {
-    "sidwave": { "type": ["number", "string"], "enum": [1, "1.0", "1"] },
+    "sidwave": { "type": ["number", "string"], "enum": [1, "1.0", "1", "1.1"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
+    "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
+    "instruments": { "type": "object", "additionalProperties": { "type": "object" } },
     "length_bars": { "type": "integer", "minimum": 1, "description": "Truncates or repeats the timeline to this many 4/4 bars." },
     "global_fx": {
       "type": "object",
@@ -50,6 +52,7 @@
         "properties": {
           "id": { "type": "integer", "minimum": 1, "maximum": 3 },
           "name": { "type": "string" },
+          "instrument": { "type": "string" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },
           "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095, "description": "Fraction (0 < x <= 1) or 12-bit value." },
           "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
@@ -108,6 +111,8 @@
         "required": ["bars", "layers"],
         "properties": {
           "section": { "type": "string" },
+          "tempo": { "type": "number", "minimum": 30, "maximum": 220 },
+          "swing": { "type": "number", "minimum": 0, "maximum": 0.5 },
           "bars": { "type": "integer", "minimum": 1 },
           "layers": {
             "type": "object",

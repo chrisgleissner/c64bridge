@@ -19,7 +19,7 @@ const DEFAULT_PRESET_ANALYSIS_DURATION_SECONDS = 4;
 const DEFAULT_PRESET_WAIT_MS = 400;
 
 type PresetBackend = "vice" | "c64u" | "u2";
-type MusicPresetName = "fuer_elise";
+type MusicPresetName = "chiptune_drive" | "ambient_filter" | "funk_bass" | "fuer_elise";
 
 interface MusicPresetDefinition {
   readonly key: MusicPresetName;
@@ -83,7 +83,14 @@ timeline:
     layers: { v1: theme, v2: accomp, v3: bass }
 `;
 
+const CHiptuneDrive = `sidwave: 1.1\ntitle: Neon Run\ntempo: 132\nspeed: 2\ninstruments:\n  bass: { waveform: saw, adsr: [0, 7, 9, 3], ring: true }\nvoices:\n  - id: 1\n    instrument: bass\n    patterns: { bass: { groove: [C2, G1, C2, G1] } }\n  - id: 2\n    instrument: lib:chip_arp_major\n    patterns: { arp: { type: arpeggio, notes: [C4, E4, G4], frame_rate: 2 } }\n  - id: 3\n    instrument: lib:lead_pwm\n    patterns: { lead: { groove: [C5, G4, E5, G4], fx: { vibrato: { depth: 0.4, rate: 5, delay: 8 } } } }\ntimeline:\n  - { section: A, bars: 4, layers: { v1: bass, v2: arp, v3: lead } }\n`;
+const AMBIENT_FILTER = `sidwave: 1.1\ntitle: Blue Current\ntempo: 72\ninstruments:\n  pad: { waveform: tri, adsr: [5, 4, 11, 7] }\nvoices:\n  - id: 1\n    instrument: lib:pad_slow\n    patterns: { pad: { groove: [C3, G2, A2, F2] } }\n  - id: 2\n    instrument: lib:bell_ring\n    patterns: { bell: { groove: [G4, E4, C4, A3] } }\ntimeline:\n  - { section: Drift, bars: 8, layers: { v1: pad, v2: bell } }\n`;
+const FUNK_BASS = `sidwave: 1.1\ntitle: Copper Steps\ntempo: 124\ninstruments:\n  bass: { waveform: saw, adsr: [0, 5, 8, 2], sync: true }\nvoices:\n  - id: 1\n    instrument: bass\n    patterns: { bass: { groove: [C2, C2, G1, Bb1, C2, E2, G1, C2] } }\n  - id: 2\n    instrument: lib:chip_arp_minor\n    patterns: { chord: { type: arpeggio, notes: [C4, Eb4, G4], frame_rate: 3 } }\n  - id: 3\n    instrument: lib:hat\n    patterns: { ticks: { groove: [C5, "-", C5, C5] } }\ntimeline:\n  - { section: Groove, bars: 4, layers: { v1: bass, v2: chord, v3: ticks } }\n`;
+
 const MUSIC_PRESETS: Record<MusicPresetName, MusicPresetDefinition> = {
+  chiptune_drive: { key: "chiptune_drive", title: "Neon Run", description: "An original fast pulse arpeggio and bass composition.", sidwave: CHiptuneDrive },
+  ambient_filter: { key: "ambient_filter", title: "Blue Current", description: "An original slow pad and bell composition.", sidwave: AMBIENT_FILTER },
+  funk_bass: { key: "funk_bass", title: "Copper Steps", description: "An original sync bass, arpeggio and percussion groove.", sidwave: FUNK_BASS },
   fuer_elise: {
     key: "fuer_elise",
     title: "Für Elise",
@@ -115,10 +122,10 @@ const musicPlayPresetArgsSchema = objectSchema({
   description: "Play a built-in SID preset with optional backend switching and audio verification.",
   properties: {
     preset: optionalSchema(stringSchema({
-      description: "Named SID preset to compile and play. Canonical public preset: fuer_elise.",
+      description: "Named SID preset to compile and play. Defaults to chiptune_drive.",
       minLength: 1,
-      default: "fuer_elise",
-    }), "fuer_elise"),
+      default: "chiptune_drive",
+    }), "chiptune_drive"),
     platforms: optionalSchema(arraySchema(stringSchema({
       description: "Backends to target in sequence.",
       enum: ["vice", "c64u", "u2"],
@@ -234,7 +241,7 @@ function uniquePresetBackends(backends: readonly PresetBackend[]): PresetBackend
 }
 
 function resolveMusicPreset(preset?: string): ResolvedMusicPreset {
-  const requestedKey = preset?.trim().toLowerCase() || "fuer_elise";
+  const requestedKey = preset?.trim().toLowerCase() || "chiptune_drive";
   const normalizedKey = requestedKey === LEGACY_PRESET_ALIAS ? "fuer_elise" : requestedKey;
   const definition = MUSIC_PRESETS[normalizedKey as MusicPresetName];
   if (!definition) {

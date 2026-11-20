@@ -933,3 +933,21 @@ test("SIDWAVE reverb echo drops echo notes shorter than 3 frames", () => {
   assert.equal(echo.ctrl[97] & 1, 1, "the E4 echo sounds until frame 98");
   for (let f = 98; f < 100; f += 1) assert.equal(echo.ctrl[f] & 1, 0, `no 2-frame echo of F4 at frame ${f}`);
 });
+
+test("SIDWAVE 1.1 named instruments select combined waveforms and ring modulation", () => {
+  const source = `sidwave: 1.1
+tempo: 120
+instruments:
+  bell: { waveform: tri+pulse, adsr: [0, 4, 8, 3], ring: true }
+voices:
+  - id: 1
+    instrument: bell
+    patterns: { A: { groove: [C4, D4] } }
+timeline:
+  - { bars: 1, layers: { v1: A } }
+`;
+  const run = runPsid(compile(source).sid, 5);
+  const v = voice(run.states, 0);
+  assert.equal(v.ctrl[0] & 0x54, 0x54, "triangle+pulse wave bits and ring bit are set with gate");
+  assert.equal(v.ctrl[1] & 0x54, 0x54, "the named instrument remains selected on subsequent notes");
+});

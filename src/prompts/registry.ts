@@ -295,7 +295,7 @@ export function createPromptRegistry(): PromptRegistry {
       },
       skillPath: ".github/skills/sid-music/SKILL.md",
       routingNotes: [
-        "This prompt is for the built-in preset playback path, using `fuer_elise` as the canonical preset.",
+        "This prompt is for the built-in preset playback path, using `chiptune_drive` by default; `fuer_elise` remains available by explicit request.",
       ],
     },
     {
