@@ -974,3 +974,33 @@ timeline:
   assert.equal(v.ctrl[0] & 0x54, 0x54, "triangle+pulse wave bits and ring bit are set with gate");
   assert.equal(v.ctrl[1] & 0x54, 0x54, "the named instrument remains selected on subsequent notes");
 });
+
+test("SIDWAVE wavetable changes waveform and fixed or relative pitch per frame", () => {
+  const source = doc({ extra: `instruments:\n  kick:\n    wavetable:\n      - { wave: noise, note: C6 }\n      - { wave: pulse, note: C3 }\n      - { wave: pulse, note: A2 }\n      - { wave: pulse, note: F2 }\n      - { wave: tri, test: true, ring: true, frames: 1 }\n`, voices: `  - id: 1\n    instrument: kick\n    patterns:\n      K: { groove: [C4] }`, timeline: `  - { bars: 1, layers: { v1: K } }` });
+  const { states } = runPsid(compile(source).sid, 8);
+  const v = voice(states, 0);
+  assert.equal(v.ctrl[0], 0x81);
+  assert.equal(v.freq[0], sidFreq("C6"));
+  assert.equal(v.ctrl[1], 0x41);
+  assert.equal(v.freq[1], sidFreq("C3"));
+  assert.equal(v.freq[2], sidFreq("A2"));
+  assert.equal(v.freq[3], sidFreq("F2"));
+  assert.equal(v.ctrl[4], 0x1d, "triangle + gate + ring + test");
+});
+
+test("SIDWAVE wavetable relative note steps loop", () => {
+  const source = doc({ extra: `instruments:\n  arp:\n    loop: 0\n    wavetable:\n      - { note: '+0' }\n      - { note: '+12' }\n`, voices: `  - id: 1\n    instrument: arp\n    patterns:\n      A: { groove: [C4] }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
+  const { states } = runPsid(compile(source).sid, 8);
+  const v = voice(states, 0);
+  assert.deepEqual(v.freq.slice(0, 6), [sidFreq("C4"), sidFreq("C5"), sidFreq("C4"), sidFreq("C5"), sidFreq("C4"), sidFreq("C5")]);
+});
+
+test("SIDWAVE three wavetable voices stay within the per-call cycle budget", () => {
+  const source = doc({ extra: `instruments:\n  tab:\n    wavetable:\n      - { wave: pulse, note: '+0', frames: 2 }\n      - { wave: tri, note: '+12', frames: 2 }\n`, voices: `  - id: 1\n    instrument: tab\n    patterns:\n      A: { groove: [C4] }\n  - id: 2\n    instrument: tab\n    patterns:\n      B: { groove: [E4] }\n  - id: 3\n    instrument: tab\n    patterns:\n      C: { groove: [G4] }`, timeline: `  - { bars: 1, layers: { v1: A, v2: B, v3: C } }` });
+  const { compiled, sid } = compile(source);
+  const { maxPlayCycles } = runPsid(sid, 8);
+  assert.ok(maxPlayCycles < 4000, `three wavetable voices use ${maxPlayCycles} cycles per call`);
+  assert.equal(voice(runPsid(sid, 4).states, 0).freq[2], sidFreq("C5"));
+  // The standalone PRG includes the fixed player, tables and song streams.
+  assert.ok(compiled.prg.length > 0);
+});

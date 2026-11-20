@@ -215,6 +215,8 @@ export interface Instrument {
   filter: number;
   ring?: boolean;
   sync?: boolean;
+  wavetable?: Array<Record<string, any>>;
+  waveloop?: number;
 }
 
 export interface ArrangedNote {
@@ -527,6 +529,8 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
     slideSpeed,
     slideRecip,
     filter,
+    wavetable: Array.isArray(fx.wavetable) ? fx.wavetable.map((s: any) => ({ ...s })) : undefined,
+    waveloop: fx.loop,
   };
 }
 
@@ -640,6 +644,7 @@ export function encodeVoiceStream(events: StreamEvent[], total: number): number[
 function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   const L: string[] = [];
   const insts = arr.instruments;
+  const hasWavetable = insts.some((i) => i.wavetable?.length);
   const clockIndex = arr.system === "NTSC" ? 1 : 0;
   // The PRG's CIA timer reproduces the song's video frame rate on whichever clock the machine has.
   const ciaLatch = (clock: number) => Math.round(clock / (arr.fps * arr.speed)) - 1;
@@ -659,7 +664,14 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   L.push(`  jmp init`);
   L.push(`play_vec:`);
   L.push(`  jmp play`);
-  L.push(PLAYER_CODE.replace("  jsr play\n  jmp $EA31", `${Array.from({ length: arr.speed }, () => "  jsr play").join("\n")}\n  jmp $EA31`));
+  let playerCode = PLAYER_CODE;
+  if (!hasWavetable) {
+    playerCode = playerCode.replace(/  lda i_wtlen,y\n  beq vn_table_done\n  lda #0\n  sta v_wtpos,x\n  lda i_wtst,y\n  tay\n  lda wt_frames,y\n  sta v_wtleft,x\nvn_table_done:\n/, "");
+    playerCode = playerCode.replace(/  sta tmp\n  ldy v_inst,x\n  lda i_wtlen,y\n  beq vr_plain_note\n[\s\S]*?vr_plain_note:\n/, "");
+    playerCode = playerCode.replace("vr_note:\n  lda tmp\n  tay", "vr_note:\n  tay");
+    playerCode = playerCode.replace(/  lda i_wtlen,y\n  beq va_return\n[\s\S]*?va_return:\n/, "");
+  }
+  L.push(playerCode.replace("  jsr play\n  jmp $EA31", `${Array.from({ length: arr.speed }, () => "  jsr play").join("\n")}\n  jmp $EA31`));
   // Constants
   L.push(`doc_clock: .byte ${clockIndex}`);
   L.push(`cia_lo: .byte <${ciaLatch(CLOCK_HZ.PAL)}, <${ciaLatch(CLOCK_HZ.NTSC)}`);
@@ -715,6 +727,30 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   col("i_slreclo", insts.map((i) => i.slideRecip & 0xff));
   col("i_slrechi", insts.map((i) => i.slideRecip >> 8));
   col("i_filt", insts.map((i) => i.filter));
+  const wt: Array<{ ctrl: number; note: number; mode: number; frames: number }> = [];
+  const wtStart = insts.map((inst) => {
+    if (!inst.wavetable?.length) return 0;
+    const start = wt.length;
+    for (const s of inst.wavetable) {
+      const wave = waveformToCtrl(String(s.wave ?? "pulse"));
+      const ctrl = wave | (s.gate === false ? 0 : 1) | (s.ring ? 4 : 0) | (s.sync ? 2 : 0) | (s.test ? 8 : 0);
+      const n = s.note === undefined ? 0 : String(s.note);
+      const mode = !n ? 0 : /^[+-]/.test(n) ? 1 : 2;
+      const note = mode === 0 ? 0 : mode === 1 ? (Number(n) & 255) : (noteNameToMidi(n)! - 12);
+      wt.push({ ctrl, note, mode, frames: Number(s.frames ?? 1) });
+    }
+    return start;
+  });
+  if (wt.length > 255) throw new SidwaveValidationError("$.instruments", "wavetable data exceeds 255 steps");
+  if (hasWavetable) {
+    col("i_wtst", wtStart);
+    col("i_wtlen", insts.map((i) => i.wavetable?.length ?? 0));
+    col("i_wtlp", insts.map((i) => i.wavetable?.length ? (i.waveloop ?? i.wavetable.length - 1) : 0));
+    col("wt_ctrl", wt.length ? wt.map((s) => s.ctrl) : [0]);
+    col("wt_note", wt.length ? wt.map((s) => s.note) : [0]);
+    col("wt_mode", wt.length ? wt.map((s) => s.mode) : [0]);
+    col("wt_frames", wt.length ? wt.map((s) => s.frames) : [1]);
+  }
   col("arptab", arpTable.length ? arpTable.map((v) => v & 0xff) : [0]);
 
   // Quarter-square table for the 8x8 multiply: sq(x) = floor(x * x / 4), x = 0..511.
@@ -733,7 +769,7 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   L.push(`ftlo: .res 96`);
   L.push(`fthi: .res 96`);
   L.push(`vars:`);
-  for (const name of VOICE_VARS) L.push(`v_${name}: .res 3`);
+  for (const name of VOICE_VARS) if (hasWavetable || !["wtpos", "wtleft", "wtnote"].includes(name)) L.push(`v_${name}: .res 3`);
   for (const name of GLOBAL_VARS) L.push(`${name}: .res 1`);
   L.push(`vars_end:`);
 
@@ -743,7 +779,7 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
 }
 
 const VOICE_VARS = [
-  "ptrlo", "ptrhi", "wait", "note", "inst", "ctrl", "ad", "sr", "pwlo", "pwhi", "pwdir", "arppos", "arpcnt",
+  "ptrlo", "ptrhi", "wait", "note", "inst", "ctrl", "ad", "sr", "pwlo", "pwhi", "pwdir", "arppos", "arpcnt", "wtpos", "wtleft", "wtnote",
   "vibph", "vibdel", "vuplo", "vuphi", "vdnlo", "vdnhi", "sofflo", "soffmd", "soffhi", "sstlo", "sstmd", "ssthi", "sdir", "scnt",
 ];
 const GLOBAL_VARS = [
@@ -1012,6 +1048,15 @@ note_on:
   lda i_wave,y
   ora #1
   sta v_ctrl,x
+  lda i_wtlen,y
+  beq vn_table_done
+  lda #0
+  sta v_wtpos,x
+  lda i_wtst,y
+  tay
+  lda wt_frames,y
+  sta v_wtleft,x
+vn_table_done:
   lda i_pwlo,y
   sta v_pwlo,x
   lda i_pwhi,y
@@ -1140,6 +1185,35 @@ v_regs:
 vr_noarp:
   lda v_note,x
 vr_note:
+  sta tmp
+  ldy v_inst,x
+  lda i_wtlen,y
+  beq vr_plain_note
+  lda i_wtst,y
+  clc
+  adc v_wtpos,x
+  tay
+  lda wt_ctrl,y
+  sta v_ctrl,x
+  lda wt_mode,y
+  beq vr_plain_note
+  cmp #1
+  bne vr_abs_table_note
+  lda v_note,x
+  clc
+  adc wt_note,y
+  jmp vr_table_note
+vr_abs_table_note:
+  lda wt_note,y
+vr_table_note:
+  tay
+  lda ftlo,y
+  sta f_lo
+  lda fthi,y
+  sta f_hi
+  jmp vr_write
+vr_plain_note:
+  lda tmp
   tay
   lda ftlo,y
   sta f_lo
@@ -1356,6 +1430,28 @@ va_pw_min:
   lda #0
   sta v_pwdir,x
 va_done:
+  lda i_wtlen,y
+  beq va_return
+  dec v_wtleft,x
+  bne va_return
+  lda v_wtpos,x
+  clc
+  adc #1
+  cmp i_wtlen,y
+  bcc va_wt_next
+  lda i_wtlp,y
+  sta v_wtpos,x
+  jmp va_wt_load
+va_wt_next:
+  sta v_wtpos,x
+va_wt_load:
+  lda i_wtst,y
+  clc
+  adc v_wtpos,x
+  tay
+  lda wt_frames,y
+  sta v_wtleft,x
+va_return:
   rts
 
 ;  ---- p2:p1 = round(p2:p1:p0 / 2^(8 + A)) (A = 0..15) ----

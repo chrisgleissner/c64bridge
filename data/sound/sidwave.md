@@ -94,6 +94,25 @@ timeline:
 | --- | --- |
 | `sidwave` | Format version, `1.0` (legacy) or `1.1`. |
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
+
+### Instrument wavetables
+
+An instrument may define `wavetable` as ordered control and pitch steps. Each step runs for `frames` player calls (default 1); the last step holds unless the instrument sets `loop` to a zero-based step index. Omitted `wave` retains the instrument waveform. `gate` defaults to on. `ring`, `sync`, and `test` set the SID control register bits for that step. A step `note` of `+N` or `-N` offsets the played note by semitones; a note name such as `C5` fixes the pitch regardless of the played note. Pitch effects such as vibrato, slide, and arpeggio are bypassed while a step has a note override. Hard restart still occurs before each new note.
+
+```yaml
+instruments:
+  kick:
+    wavetable:
+      - { wave: noise, note: C6 }
+      - { wave: pulse, note: C3 }
+      - { wave: pulse, note: A2 }
+      - { wave: pulse, note: F2 }
+  octave:
+    loop: 0
+    wavetable:
+      - { note: '+0' }
+      - { note: '+12' }
+```
 | `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |

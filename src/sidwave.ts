@@ -210,13 +210,28 @@ function normalizeInstruments(raw: unknown, path: string): Record<string, Record
   if (raw === undefined) return {};
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping of instrument names to instruments");
   const result: Record<string, Record<string, any>> = {};
-  const fields = new Set(["waveform", "wave", "adsr", "pulse_width", "hard_restart", "wavetable", "pulsetable", "filtertable", "vibrato", "slide", "portamento", "ring", "sync"]);
+  const fields = new Set(["waveform", "wave", "adsr", "pulse_width", "hard_restart", "wavetable", "loop", "pulsetable", "filtertable", "vibrato", "slide", "portamento", "ring", "sync"]);
   for (const [name, value] of Object.entries(raw)) {
     if (!isPlainObject(value)) throw new SidwaveValidationError(`${path}.${name}`, "expected an instrument mapping");
     checkKeys(value, fields, `${path}.${name}`);
     const inst = { ...(value as Record<string, any>) };
     if (inst.adsr !== undefined && (!Array.isArray(inst.adsr) || inst.adsr.length !== 4)) throw new SidwaveValidationError(`${path}.${name}.adsr`, "expected [attack, decay, sustain, release]");
     if (inst.wavetable !== undefined && !Array.isArray(inst.wavetable)) throw new SidwaveValidationError(`${path}.${name}.wavetable`, "expected a list of steps");
+    if (inst.wavetable !== undefined) {
+      if (!inst.wavetable.length) throw new SidwaveValidationError(`${path}.${name}.wavetable`, "expected at least one step");
+      const waves = new Set(["tri", "saw", "pulse", "noise", "tri+pulse", "saw+pulse", "tri+saw", "tri+saw+pulse"]);
+      inst.wavetable = inst.wavetable.map((step: any, i: number) => {
+        const sp = `${path}.${name}.wavetable[${i}]`;
+        if (!isPlainObject(step)) throw new SidwaveValidationError(sp, "expected a step mapping");
+        checkKeys(step, new Set(["wave", "test", "gate", "ring", "sync", "note", "frames"]), sp);
+        if (step.wave !== undefined && !waves.has(String(step.wave))) throw new SidwaveValidationError(`${sp}.wave`, "unknown wavetable waveform");
+        for (const flag of ["test", "gate", "ring", "sync"]) if (step[flag] !== undefined && typeof step[flag] !== "boolean") throw new SidwaveValidationError(`${sp}.${flag}`, "expected a boolean");
+        if (step.frames !== undefined) requireNumber(step.frames, `${sp}.frames`, { min: 1, max: 255, integer: true });
+        if (step.note !== undefined && !( /^[+-]\d+$/.test(String(step.note)) || /^[A-Ga-g][#b]?[0-7]$/.test(String(step.note)))) throw new SidwaveValidationError(`${sp}.note`, "expected relative semitones such as +12 or an absolute note such as C5");
+        return { ...step, frames: step.frames ?? 1, gate: step.gate ?? true };
+      });
+      if (inst.loop !== undefined) requireNumber(inst.loop, `${path}.${name}.loop`, { min: 0, max: inst.wavetable.length - 1, integer: true });
+    }
     if (inst.pulsetable !== undefined && !Array.isArray(inst.pulsetable)) throw new SidwaveValidationError(`${path}.${name}.pulsetable`, "expected a list of steps");
     if (inst.filtertable !== undefined && !Array.isArray(inst.filtertable)) throw new SidwaveValidationError(`${path}.${name}.filtertable`, "expected a list of steps");
     result[name] = inst;
