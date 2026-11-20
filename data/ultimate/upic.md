@@ -26,7 +26,7 @@ Marks: "(unverified)" = inferred or untested. Credit: Upic by Aleksi Eeben (http
 - The buffer is ordinary C64 RAM (default `$1000-$CFFF`). Common layout: first 8 columns relocated to `$E000` (under KERNAL, needs `$01 = $35`), the rest at `$1800 + (c-8)*256`, generated renderer page-aligned at `$E800` up. Code gets only about 6-7 KB resident; large programs need REU overlays.
 - A bare 49,152-byte bitmap or v1.3 `.upic` file (256-byte header "Upic1.3" + `$AE`, size fields, text, 48-byte palette at `$D0`, bitmap at `$100`) holds pictures; older converters write a separate `.pal`.
 - There is no framebuffer register, blitter or double buffer. Pixels are written by CPU stores, REU DMA or UCI DMA loads into the columns. A second 48 KB buffer does not fit in RAM.
-- Palette: pixel values are VIC colour indices 0-15 written to `$D020`; their RGB comes from the Ultimate palette (UCI `04 51-54`). A palette change recolours the whole display at once with no pixel redraw.
+- Palette: pixel values are VIC colour indices 0-15 written to `$D020`; their RGB comes from the Ultimate palette (UCI `04 51-54`; `04 53` set and `04 54` reset of the palette verified on Ultimate 64 Elite, firmware 3.15a, 2026-11-20; the Upic program itself was not run on it). A palette change recolours the whole display at once with no pixel redraw.
 
 ## Renderer and CPU budget
 

@@ -362,3 +362,43 @@ KERNAL registers: c64ref ROM disassembly.
 | Ultimate emulation "supports both PETSCII and ESC/P", "Ignores DLL" | spec, prompts | IMPRECISE, fixed | emulation chosen in the settings (Commodore MPS default, Epson FX-80, IBM GP, IBM PP); Commodore mode ignores `ESC =`, Epson mode has `ESC &` | `ultimate_printer.rst` "Printer emulation" setting; Ultimate CBM `case 0x3D` "parse but ignore", Epson `case 0x26` |
 | 256-byte buffer, Flush Printer/Eject Page | spec | ADDED | - | `ultimate_printer.rst` "Flushing the printer spool" |
 | `$033C-$03FB` free for print buffers | spec | CONFIRMED | - | A8b (Mapping TBUFFR) |
+
+
+## Part E: U64 measurements (HF2, 2026-11-20)
+
+All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 126); evidence in `~/.c64bridge/h6/hw/results.md`. A U64 result does not confirm C64 Ultimate-only statements; those are unchanged.
+
+| Row | Claim | Verdict | Where recorded |
+|---|---|---|---|
+| 1 | readmem/writemem of $D012 and $D020 | CONFIRMED | hardware.md |
+| 2 | readmem $A000/$E000 returns ROM (CPU view) | CONFIRMED | not in data/ |
+| 3 | readmem length limits 1-65536, past $FFFF 400 | CONFIRMED | hardware.md (REST paragraph) |
+| 4 | range search skips $D000-$DFFF; explicit read unguarded | CONFIRMED | code, not data/ |
+| 5 | DMA read of $DD0D clears the CIA ICR | CONFIRMED | hardware.md (REST paragraph) |
+| 6 | writemem: PUT max 128 bytes; POST 65537 bytes at $0000 truncated silently to 64 KB | CONFIRMED (truncation noted) | hardware.md, written |
+| 7 | $D800 reads colour RAM; extract charset guard | CONFIRMED | code, not data/ |
+| 8-10 | run_prg/mount/run_crt via host upload; error text | CONFIRMED | code, not data/ |
+| 11 | Firmware does not decode %3A before routing (404); escapes inside parameter segments decoded; `..` not normalised | CONTRADICTED | hardware.md and doc/hardening-behavior.md corrected; client rejection described as defence |
+| 12 | files:info wildcard: first match only, `**` = `*`, 404 texts | CONFIRMED | hardware.md, written |
+| 13 | sidecar .cfg applied by run_prg and load_prg, not run_crt or host upload | CONFIRMED | hardware.md (already stated) |
+| 14 | LOAD_CONFIG status 89/88, log text, RAM value changes | PARTIALLY VERIFIED | uci.md: status and log observed; hardware effect and flash persistence not observed |
+| 15-16 | error texts, no 3xx | CONFIRMED | code, not data/ |
+| 17-18 | network password | SKIPPED | unchanged |
+| 19 | REST joystick tap hold | CONTRADICTED (0.5-18.5 ms, not two frames) | src/tools/input.ts comment corrected |
+| 20-22 | key/keyboard/write_text injection | CONFIRMED | code, not data/ |
+| 23 | reset/reboot waitForReady grace | CONTRADICTED (3 s grace still paid) | code finding, not data/ |
+| 24 | upload_run_basic finish detection, liveness wording | CONTRADICTED | code finding, not data/ |
+| 25-27 | stream: 384x272, 4 bpp, 68 packets, 50 fps, encoding 0; 2-byte 00 00 start datagram; audio max 65536 pairs | CONFIRMED (+ start datagram) | hardware.md, written |
+| 28 | palette=1 packet layout | CONFIRMED | hardware.md (already stated) |
+| 29 | $02A6 PAL/NTSC pitch table detection | PARTIALLY VERIFIED (PAL detection only; tempo and NTSC not tested) | no data/ claim changed |
+| 30 | sampler ~6.2 MHz/(rate+1); 21.95 kHz at 283 | CONFIRMED | hardware.md, '(unverified)' replaced |
+| 31 | $D07A/$D07B act only in U64 Turbo Registers and TurboEnable Bit modes; $D07A reads $FF | CONFIRMED | hardware.md, '(unverified)' replaced |
+| 32 | KERNAL IEC LOAD at 16 and 48 MHz | PARTIALLY VERIFIED (fastloader not tested) | hardware.md item 4 |
+| 33 | $DF0C-$DF0F absent on U64 Elite core 1.50 (read $FF, writes not kept) | CONTRADICTED (as an open question) | hardware.md, reu.md; C64 Ultimate not covered |
+| 34 | Ultimate Ident Service item; unicast reply | CONFIRMED | hardware.md, item name settled |
+| 35 | UCI OPEN/CHKIN/CLOSE layouts | CONFIRMED (13/14/15) | uci.md; CHKOUT not tried |
+| 36 | UCI palette 04 53 / 04 54 | PARTIALLY VERIFIED (Upic program not run) | upic.md |
+| 37-38 | Turbo Control values, System Mode values | CONFIRMED | already in data/ |
+| 39 | $D031 bit 7 set = badline stalls suppressed | CONFIRMED | hardware.md, written |
+| 40 | GET /v1/info fields | CONFIRMED | hardware.md (already stated) |
+| 41-44 | C64 Ultimate only | SKIPPED | C64 Ultimate statements left as they are |
