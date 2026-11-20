@@ -40,8 +40,8 @@ import type { OpcodeAddressingMode } from "./opcodeInventory.js";
  *    Directives"): .text/.ascii fold a-z to the PETSCII letters $41-$5A, turn "\n" into RETURN
  *    ($0D) and accept {name}/{$xx} control codes, so .text "a" is $41 while 'a' is $61. 64tass
  *    emits ASCII and Kick Assembler screen codes for .text, so lowercase letters in .text add a
- *    warning. Also .org/org, .db/db, .dw/dw (a 16-bit word; in Kick Assembler .dw is a 32-bit
- *    .dword), .ds/ds/res, .equ, byte, word, include.
+ *    warning. Also .org/org, .db/db, dw (a 16-bit word; .dw is an error because
+ *    Kick Assembler uses it for a 32-bit .dword), .ds/ds/res, .equ, byte, word, include.
  *  - Strings take the escapes \0 \t \n \r \xNN \\ \" \' (the set of ACME 0.97).
  *  - Unsupported spellings fail with SUPPORTED_DIRECTIVES; .scr, .screen, .petscii and .endr are
  *    not documented by these assemblers and fail with the spelling to use instead.
@@ -279,7 +279,6 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   ".WO": "word",
   "WORD": "word",
   "DW": "word",
-  ".DW": "word",
   "!WORD": "word",
   "!WO": "word",
   "!16": "word",
@@ -323,11 +322,13 @@ const REMOVED_DIRECTIVES: Record<string, string> = {
   ".SCREEN": "use !scr (ACME screen codes)",
   ".PETSCII": "use !pet (ACME PETSCII) or .text",
   ".ENDR": "use .endrept (64tass) or .endrep (ca65)",
+  // Kick Assembler: .dw is .dword (4 bytes); other assemblers use it for 2 bytes.
+  ".DW": "ambiguous: Kick Assembler's .dw is a 4-byte .dword, which is not supported; use .word for 2 bytes",
 };
 
 /** Shown with "unsupported directive": every spelling the assembler accepts, grouped by meaning. */
 const SUPPORTED_DIRECTIVES =
-  ".org/org/* = ; .byte/.byt/.by/.db/!byte/!by/!8/!08 ; .word/.wo/.dw/!word/!wo/!16 ; .text/.ascii ; !text/!tx/!txt/!raw ; !pet ; !scr ; " +
+  ".org/org/* = ; .byte/.byt/.by/.db/!byte/!by/!8/!08 ; .word/.wo/!word/!wo/!16 ; .text/.ascii ; !text/!tx/!txt/!raw ; !pet ; !scr ; " +
   ".fill/!fill/!fi ; .align ; !align ; .res/.ds ; .equ/name = value ; .include/!source/!src ; .incbin/.binary ; !binary/!bin ; " +
   ".if/.else/.endif/.fi ; .macro/.mac name params ... .endmacro/.endmac/.endm ; name .macro params ... .endm ; " +
   ".repeat n ... .endrep/.endrepeat ; .rept n ... .endrept";

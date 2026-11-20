@@ -35,6 +35,7 @@ test("spellings no supported assembler documents fail with the one to use (revie
   fails('.petscii "A"', /unsupported directive \.petscii \(use !pet/);
   fails(".rept 2\n nop\n.endr", /no matching \.endrepeat|unsupported directive \.endr/);
   fails(".pc = $1000", /unsupported directive \.pc .*\* = address/);
+  fails(".dw $1234", /unsupported directive \.dw \(ambiguous: .*4-byte \.dword.*use \.word for 2 bytes/);
   fails(".repeat 3, I\n.byte I\n.endrep", /counter name .* is not supported/);
   fails(" ldx #3\n- dex\n bne -", /Anonymous labels/);
   fails(" bne +\n nop\n+ rts", /Anonymous labels/);
