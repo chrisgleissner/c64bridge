@@ -114,32 +114,38 @@ SAVE"HELLO.PRG",8
 #### Print Directory
 
 ```asm
-    lda #<dir
-    ldx #>dir
-    ldy #len
+    lda #len    ; SETNAM: A = name length
+    ldx #<dir   ;         X = name address low
+    ldy #>dir   ;         Y = name address high
     jsr $ffbd   ; SETNAM
     lda #1      ; logical
     ldx #8      ; device
-    ldy #0      ; secondary
+    ldy #0      ; secondary 0: load to the address in X/Y
     jsr $ffba   ; SETLFS
+    lda #0      ; 0 = load, 1 = verify
+    ldx #<buffer
+    ldy #>buffer
     jsr $ffd5   ; LOAD (LOAD"$",8)
+    rts
 dir: .text "$"
 len = *-dir
+buffer = $c000
 ```
 
 #### Load File
 
 ```asm
-    lda #<name
-    ldx #>name
-    ldy #len
+    lda #len    ; SETNAM: A = length, X/Y = name address
+    ldx #<name
+    ldy #>name
     jsr $ffbd
     lda #0      ; LFN=0
     ldx #8      ; device
-    ldy #1      ; SA=1
+    ldy #1      ; SA=1: load to the address in the file header
     jsr $ffba
     lda #0
     jsr $ffd5   ; LOAD (A=0=load)
+    rts
 name: .text "HELLO.PRG"
 len = *-name
 ```
@@ -147,18 +153,27 @@ len = *-name
 #### Save File
 
 ```asm
-    lda #<name
-    ldx #>name
-    ldy #len
+    lda #len    ; SETNAM: A = length, X/Y = name address
+    ldx #<name
+    ldy #>name
     jsr $ffbd
     lda #0
     ldx #8
     ldy #1
     jsr $ffba
-    lda #0
+    lda #<start ; SAVE: start address in a zero-page pointer
+    sta $fb
+    lda #>start
+    sta $fc
+    lda #$fb    ; A = zero-page offset of that pointer
+    ldx #<end   ; X/Y = end address
+    ldy #>end
     jsr $ffd8   ; SAVE
+    rts
 name: .text "HELLO.PRG"
 len = *-name
+start = $c000
+end = $c100
 ```
 
 ---
