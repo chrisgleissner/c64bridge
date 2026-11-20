@@ -598,7 +598,7 @@
               "integer",
               "null"
             ],
-            "description": "Number of stereo sample pairs to capture.",
+            "description": "Stereo sample pairs to capture; at most 65536 (about 1.37 s).",
             "minimum": 1,
             "maximum": 65536,
             "default": 256
