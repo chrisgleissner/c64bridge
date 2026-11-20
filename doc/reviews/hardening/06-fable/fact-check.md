@@ -394,7 +394,7 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | 30 | sampler ~6.2 MHz/(rate+1); 21.95 kHz at 283 | CONFIRMED | hardware.md, '(unverified)' replaced |
 | 31 | $D07A/$D07B act only in U64 Turbo Registers and TurboEnable Bit modes; $D07A reads $FF | CONFIRMED | hardware.md, '(unverified)' replaced |
 | 32 | KERNAL IEC LOAD at 16 and 48 MHz | PARTIALLY VERIFIED (fastloader not tested) | hardware.md item 4 |
-| 33 | $DF0C-$DF0F absent on U64 Elite core 1.50 (read $FF, writes not kept) | CONTRADICTED (as an open question) | hardware.md, reu.md; C64 Ultimate not covered |
+| 33 | $DF0C-$DF0F absent on U64 Elite core 1.50 (read $FF, writes not kept) | CONTRADICTED (as an open question) | hardware.md, reu.md. C64 Ultimate settled from FPGA source, see the REU row in the U section |
 | 34 | Ultimate Ident Service item; unicast reply | CONFIRMED | hardware.md, item name settled |
 | 35 | UCI OPEN/CHKIN/CLOSE layouts | CONFIRMED (13/14/15) | uci.md; CHKOUT not tried |
 | 36 | UCI palette 04 53 / 04 54 | PARTIALLY VERIFIED (Upic program not run) | upic.md |
@@ -628,3 +628,5 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | U-4 (reu.md): core 1.50 contains the 2026-08-28 `g_no_dma_delay` change | reu | CONFIRMED; written into the turbo bullet; Not verified row removed | measured U64 core 1.50, `U64 Turbo Registers`, 48 MHz: `$C001` differed from `$C000` in 0 of 3000 runs; Session 3, U-4 |
 | U-5 (upic.md): Upic renderer on U64 at 48 MHz, 288 of 384 pixels | upic | PARTIAL: picture shown, CONFIRMED; 288 of 384 INCONCLUSIVE, moved to Not verified with the reason | four PNG frames, full 384 x 256 area; no fixed dropped pixel per group of four; colour changes on all four x mod 4 phases; Session 3, U-5 |
 | U-6 (multisid.md): access to an undecoded SID address stalls the 6510 | multisid | NOT RUN (hangs the U64, needs a power cycle; run last and only with owner agreement); claim stays in Not verified | none |
+| REU extended registers `$DF0C-$DF0F` on every Ultimate product, including the C64 Ultimate | reu, hardware | CONFIRMED absent; C64U row removed from Not verified | public: `reu.vhd:253-266,469-471` (option `g_extended`), `slot_server_v4.vhd:33`, U2/U2+/U2+L top levels set it off; U64, U64 Elite II and C64 Ultimate: the non-public FPGA source of these images (checked 2026-11-20) builds the REU with the option off; measured U64 core 1.50: read `$FF`, write to `$DF0D` not kept |
+| REU read and write decode in `$DF00-$DF1F` | reu | ADDED | `reu.vhd:208-266` (writes change `$DF01-$DF0A` only), `reu.vhd:429-487` (reads drive `$DF00-$DF17` while idle; `$DF09` bits 4-0 and `$DF0A` bits 5-0 read 1) |

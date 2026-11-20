@@ -108,7 +108,7 @@ Recipe, address map, mixer and detection: c64://ultimate/multisid.
 
 | Range | Device |
 |---|---|
-| `$DF00-$DF0A` | REU (c64://ultimate/reu). Reads of `$DF0B` and `$DF10-$DF17` return `$FF` (`fpga/cart_slot/vhdl_source/reu.vhd:429-483`). `$DF0C-$DF0F` exist only in FPGA builds with the extended REU: measured U64 core 1.50 reads `$FF` there; every public U2-family top level sets `g_extended_reu => false`. |
+| `$DF00-$DF0A` | REU (c64://ultimate/reu). Reads of `$DF0B-$DF17` return `$FF` (`fpga/cart_slot/vhdl_source/reu.vhd:429-487`). No Ultimate product has the extended REU registers `$DF0C-$DF0F`: every public top level and the U64, U64 Elite II and C64 Ultimate images build the REU without them; measured on U64 core 1.50, reads return `$FF` and writes are ignored. |
 | `$DF1B-$DF1F` | UCI (`$DF1C-$DF1F`; `$DF1B` = IEC device number); at `$DE1B-$DE1F` under an EasyFlash `.crt`; c64://ultimate/uci |
 | `$DF20-$DFFF` | Ultimate Audio sampler, when `Map Ultimate Audio $DF20-DFFF` = `Enabled` (default `Disabled`) |
 | `$DE00`, `$DF00` or `$DF80` | ACIA 6551 (SwiftLink), item `ACIA (6551) Mapping`: `Off`, `DE00/IRQ`, `DE00/NMI`, `DF00/IRQ`, `DF00/NMI`, `DF80/IRQ`, `DF80/NMI` (default `Off`, `software/io/acia/modem.cc:46,69`) |
@@ -230,6 +230,5 @@ With c64bridge: `c64_config` `get`/`set` `Turbo Control` (never `save_flash`), `
 | Claim | What would settle it |
 |---|---|
 | A C64 Ultimate firmware other than 1.2.1 offers a `Turbo Control` label other than `U64 Turbo Registers` | `GET /v1/configs/U64%20Specific%20Settings/Turbo%20Control` on each C64U firmware |
-| C64U: `$DF0C-$DF0F` extended REU registers present or absent | `readmem DF0C length 4` on a C64U with REU enabled |
 | Elite II `Programmatic` LED byte layout in `$D200-$D2FF` | camera test as in the C64U section on an Elite II |
 | An Ultimate restart ends the keyboard LED hazard | C64U: reproduce the hazard, restart the Ultimate, change `Fixed Color` |
