@@ -62,7 +62,7 @@ irq_top: pha
 - The NMOS 6510 does not clear the decimal flag on an interrupt: start a handler that does `ADC`/`SBC` with `cld`.
 - Latency: the IRQ sequence takes 7 cycles and starts after the instruction in progress; when the IRQ arrives during a taken branch that does not cross a page, the CPU first runs one more instruction (`nesdev-irq.html` "Interrupts during branches"). Bad lines stall the CPU for 40-43 cycles (Bauer 3.5).
 - Raster timing (Bauer VIC-II article 3.5, 3.6.3, 3.12): a line has 63 cycles (6569 PAL), 65 (6567R8 NTSC) or 64 (6567R56A). The raster compare is tested in cycle 1 of each line (cycle 2 for line 0) and fires at most once per line. A bad line stops the CPU for 40-43 cycles; each sprite with DMA on takes 2 cycles, and BA goes low 3 cycles before the first VIC access. The handler start therefore varies by the remaining cycles of the interrupted instruction (the longest documented instruction takes 7 cycles, c64ref `cpu_6502.txt`), plus bad-line and sprite stalls. Put cycle-critical IRQ lines where no bad line or sprite DMA falls.
-- Stable raster (cycle-exact colour bars, side border): see "Not verified" at the end.
+- Stable raster by double IRQ (cycle-exact colour bars, side border): IRQ 1 on line N installs IRQ 2 for line N+1, saves SP (`tsx`), runs `cli` and a NOP sled; IRQ 2 arrives during a 2-cycle NOP (0 or 1 cycle jitter), restores SP (`txs`), runs a delay loop of 8 iterations (WAIT = 8), then reads `$D012` twice (`lda $d012 / cmp $d012 / beq +`) so the branch time absorbs the last cycle. With the screen off (`$D011` = `$0B`), the black-to-white edge stayed at the same x on all 8 lines in all 8 frames (spread 0 pixels). The single-IRQ control program spread 16 pixels (2 cycles) over the same lines and frames. (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20).
 - Open top/bottom border (line accuracy is enough; Bauer 3.14.1). The VIC turns the vertical border on at line 251 with RSEL=1 and at line 247 with RSEL=0; switching to RSEL=0 in lines 248-250 skips both. Two IRQ entries:
 ```
         lda #$13          ; IRQ at line 249: $D011 = RST8 0, DEN, RSEL 0, YSCROLL 3
@@ -243,9 +243,9 @@ is_pal: lda #1
 
 ## 10. MODERN start-up checks (Ultimate only)
 Run on the text screen before any raster trick; on failure print a message naming the setting to change and fall back (1 MHz path or refuse). Never decide from the product name. Register details: `c64://ultimate/hardware`.
-1. Turbo registers: `lda $d031 / cmp #$ff / beq no_turbo`. `$D031` reads `$00`-`$0F` (plus bit 7) when `Turbo Control` is `U64 Turbo Registers` or `TurboEnable Bit` (measured); `$FF` also comes from a stock C64 or VICE, where `$D031` is an unused VIC-II address (Bauer 3.2). Then `lda #$0f / sta $d031` selects speed index 15: 48 MHz on Ultimate 64 / Elite (MK1), 64 MHz on Elite II (`u64/u64_config.cc:324-325`); `$8f` also suppresses bad line and sprite stalls (measured).
+1. Turbo registers: `lda $d031 / cmp #$ff / beq no_turbo`. After a reset and before any write, `$D031` reads `$00` when `Turbo Control` is `U64 Turbo Registers` or `TurboEnable Bit`, also with Badline Timing Disabled; `$D030` reads `$FF` in `U64 Turbo Registers` and `$FE` in `TurboEnable Bit`; `$D031` reads `$FF` in `Off` and `Manual` (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20). `$FF` also comes from a stock C64 or VICE, where `$D031` is an unused VIC-II address (Bauer 3.2). Then `lda #$0f / sta $d031` selects speed index 15: 48 MHz on Ultimate 64 / Elite (MK1), 64 MHz on Elite II (`u64/u64_config.cc:324-325`); `$8f` also suppresses bad line and sprite stalls (measured).
 2. After the reset that `run_prg` performs, a `$D031` write took effect only 2.55 s (Ultimate 64 Elite 3.15a) and 2.57 s (C64 Ultimate 1.2.1) after program start (`data/ultimate/bench/results/summary.md`). Rewrite `$D031` and run the probe every 0.2 s, at most 15 times (3 s), until two probes in a row agree on a fast result; if it never gets fast, run at 1 MHz.
-3. Speed probe: counts passes of a 14-cycle loop through one line without bad lines, interrupts off. It returned 4 at 1 MHz in VICE 3.10; more than 4 means a faster CPU. It does not give MHz: time a longer loop against CIA2 (`c64://ultimate/hardware`, "Measuring speed").
+3. Speed probe: counts passes of a 14-cycle loop through one line without bad lines, interrupts off. It returned 4 at 1 MHz in VICE 3.10. On Ultimate 64 Elite it returned 4 in 20 of 20 runs at 1 MHz, 8 or 9 at 2 MHz, 17 or 18 at 4 MHz and 196 or 197 at 48 MHz (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20), so the probe never reaches its `$FF` saturation value at 48 MHz. More than 4 means a faster CPU. It does not give MHz: time a longer loop against CIA2 (`c64://ultimate/hardware`, "Measuring speed").
 ```
 speed:  lda #$fa
 -       cmp $d012           ; line $FA: below the last badline ($F7)
@@ -368,7 +368,3 @@ _d16n   dex
         bne _d16
         rts
 ```
-
-## Not verified
-- Stable raster by double IRQ: IRQ 1 on line N installs IRQ 2 for line N+1, saves SP (`tsx`), runs `cli` and a NOP sled; IRQ 2 arrives during a 2-cycle NOP (0 or 1 cycle jitter), restores SP (`txs`), waits to the end of the line and reads `$D012` twice (`lda $d012 / cmp $d012 / beq +`) so the branch time absorbs the last cycle. No primary source was available (Codebase64 unreachable on 2026-11-20). Settled by hardware request G-3 (`~/.c64bridge/h6/precise-hw-requests-G.md`).
-- Speed probe result on hardware at 1 MHz and at 2 MHz and above: hardware request G-4.
