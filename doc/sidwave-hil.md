@@ -36,3 +36,32 @@ Method (`src/audio/sidwaveFidelity.ts`)
 - Filters, SID model differences and mixer levels change levels, not pitch; only presence is tested, not level or timbre.
 - The stream is UDP. Missing packets are replaced with silence of the same length, so the timeline stays aligned, but heavy loss lowers the rates.
 - Unit tests (`test/sidwaveFidelity.test.mjs`) use synthetic PCM only. The method has not been run against a device in this change.
+
+## Quality gate (`scripts/sidwave-review.mjs`, `src/audio/sidwaveQuality.ts`)
+
+`node scripts/sidwave-review.mjs --wav <reference.wav|capture.wav> [--song <file|preset:style>] [--offset-ms N] [--out report.json]` runs offline checks and prints PASS, WARN, FAIL or SKIP per check and a verdict (exit 1 on FAIL). With `--song`, the schedule gives scheduled onsets, bars and sections; the song start in the WAV is found by aligning with a sidplayfp rendering unless `--offset-ms` is given. Checks marked "score" are SKIP without `--song`. Thresholds are `DEFAULT_QUALITY_THRESHOLDS`.
+
+| Check | Measure | WARN | FAIL |
+|---|---|---|---|
+| clipping | samples at or above 0.99 full scale, longest run | run >= 3 | run >= 8 or more than 1e-4 of samples |
+| glitches (score) | 3 kHz high-pass, 1 ms peaks above 12x the local median (+-100 ms) and 0.02; excludes +-15 ms around every note start and gate-off, the length of drum notes plus 40 ms, ring/sync/wavetable notes plus 300 ms, and the first 60 ms; spikes less than 80 ms apart are one event | 1 event | 6 events |
+| dropouts (score) | RMS below -66 dBFS for more than 30 ms while a note is scheduled | 1 | 3 |
+| tonal balance | octave band levels 40 Hz to 10 kHz (reported), bass 40-250 Hz against 1-4 kHz, median spectral centroid | bass more than 12 dB below, or centroid above 2.5 kHz | 20 dB, or 3.5 kHz |
+| fullness | fraction of 100 ms frames with 3 octave bands within 15 dB of the loudest; with score, fraction of bars with bass above -60 dBFS | below 0.5 / 0.8 | below 0.25 / 0.5 |
+| dynamics | integrated RMS, crest factor, loudness range (10th to 95th percentile of 400 ms RMS, gated at -60 dB); with score, RMS per section (4-bar blocks when there is one named section) | RMS outside -30..-8 dBFS, or section range below 3 dB (loudness range below 3 dB without score) | - |
+| repetition (score) | per bar chroma sequence similarity with earlier bars | more than 75 % of bars above 0.95 | more than 90 % |
+| stereo | mono sum energy against the average channel energy; side/mid width per section | loss above 3 dB | above 6 dB |
+| pitch stability (score) | notes of 0.3 s or more, 100 Hz or more, without vibrato, slide, portamento, arpeggio or wavetable: Goertzel peak in 150 ms windows (2 cent resolution, windows with a peak within 100 cents only, first and last window of a note dropped), worst deviation from the global tuning offset, 95th percentile over notes | above 15 cents | above 30 cents |
+
+Calibration on the sidplayfp renders and live U64 captures of the three presets (seed 65, C3):
+
+| song | source | verdict | bass vs mid (dB) | centroid (Hz) | full | RMS (dBFS) | crest | loudness range | repeat | pitch p95 (cents) | glitch events |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| chiptune | render | WARN | +8.7 | 482 | 1.00 | -23.8 | 11.4 | 1.9 | 14 % | n/a | 0 |
+| chiptune | capture | WARN | +7.2 | 501 | 0.99 | -14.6 | 11.8 | 2.0 | 0 % | n/a | 0 |
+| funk | render | WARN | +8.5 | 481 | 1.00 | -24.2 | 10.6 | 1.7 | 29 % | n/a | 0 |
+| funk | capture | WARN | -1.8 | 827 | 1.00 | -17.2 | 13.9 | 2.7 | 29 % | n/a | 0 |
+| ambient | render | FAIL | +10.2 | 390 | 0.94 | -24.8 | 13.1 | 4.8 | 29 % | 30 | 41 |
+| ambient | capture | WARN | +9.5 | 528 | 0.97 | -17.5 | 13.5 | 12.6 | 29 % | 14 | 0 |
+
+All six are WARN or FAIL only because of the dynamics check (no section differs by 3 dB: the generated arrangements are flat). No clipping, no dropouts, bass present in every bar, not tinny (centroid under 830 Hz). The sidplayfp ambient render has periodic 12 Hz HF ticks at the start and near 12 s that the U64 capture does not have, and a pad that drifts by 30 cents. The chiptune and funk presets have no unmodulated note of 0.3 s or more, so pitch stability is SKIP. Without the exclusion of ring/sync/wavetable notes, the ambient bell and the drum noise gave 30 to 260 false glitch events per song.

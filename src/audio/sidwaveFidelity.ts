@@ -18,12 +18,18 @@ export interface ScheduledNote {
   hz: number;
   /** Extra fundamentals accepted for arpeggios (the note counts as present when any of them is). */
   alternates: number[];
+  /** The pitch moves on purpose during the note (vibrato, slide, portamento, arpeggio, wavetable). */
+  modulated?: boolean;
+  /** Ring modulation, hard sync or a wavetable: the note is meant to have strong high partials and transients. */
+  bright?: boolean;
 }
 
 export interface PercussionOnset {
   voice: number;
   sid: number;
   start: number;
+  /** Time until the gate closes (s). */
+  duration?: number;
 }
 
 export interface ExpectedSchedule {
@@ -57,17 +63,18 @@ export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = 
       const n = voice.notes[i]!;
       const inst = arr.instruments[n.inst]!;
       const start = n.start / arr.fps;
-      if ((inst.wave & 0xf0) === 0x80) {
-        percussion.push({ voice: v, sid, start });
-        continue;
-      }
       const next = voice.notes[i + 1];
       const nextStart = next?.start ?? voice.notes[0]!.start + arr.totalFrames;
       const hr = Math.max(n.start + 1, nextStart - SIDWAVE_HARD_RESTART_FRAMES);
       const continues = next?.legato && next.start === n.end;
       const gateOff = continues ? n.end : Math.min(n.end, hr);
+      if ((inst.wave & 0xf0) === 0x80) {
+        percussion.push({ voice: v, sid, start, duration: (gateOff - n.start) / arr.fps });
+        continue;
+      }
       const alternates = inst.arp.length > 0 ? inst.arp.map((o) => midiToHz(n.midi + o)) : [];
-      notes.push({ voice: v, sid, pan, start, duration: (gateOff - n.start) / arr.fps, hz: midiToHz(n.midi), alternates });
+      const modulated = alternates.length > 0 || !!n.portamento || inst.vibRate !== 0 || inst.slideSemis !== 0 || !!inst.wavetable?.length;
+      notes.push({ voice: v, sid, pan, start, duration: (gateOff - n.start) / arr.fps, hz: midiToHz(n.midi), alternates, modulated, bright: !!inst.ring || !!inst.sync || !!inst.wavetable?.length });
     }
   });
   notes.sort((a, b) => a.start - b.start);

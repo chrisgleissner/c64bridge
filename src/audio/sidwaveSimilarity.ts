@@ -316,3 +316,9 @@ export function compareToReference(reference: Stereo, capture: Stereo, options: 
     frames: count,
   };
 }
+
+/** Chroma vectors of 300 ms frames starting at each time (null where the frame is outside the signal). */
+export function chromaSequence(sig: Stereo, startTimes: number[]): Array<Float64Array | null> {
+  const mono = mixMono(sig);
+  return features(sig, mono, startTimes).map((f) => f?.chroma ?? null);
+}
