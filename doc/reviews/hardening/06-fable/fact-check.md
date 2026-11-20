@@ -413,7 +413,7 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | SIDWAVE hard restart: gate off and AD=SR=0 two frames before each note; release 0 empties the envelope in 6 ms; rate 0 avoids the ADSR delay bug (rate counter wrap at 32768) | data/sound/sidwave.md | CONFIRMED | src/sidwaveCompiler.ts c_hr and SIDWAVE_HARD_RESTART_FRAMES; Mapping the Commodore 64 $D406; reSID envelope.h/envelope.cc (VICE 3.10 src/resid), ENV3-sampled on a MOS SID |
 | Duration in seconds of the FOR-loop note timings | data/sound/sid-programming-best-practices.md | NOT VERIFIED (no primary source; U64 measurement requested as O-1) | inline markers moved to a "Not verified" section |
 
-## Part F: precision rewrite
+## Part F: precision rewrite (package G: data/gamedev)
 
 Gamedev documents (`data/gamedev/*.md`), 2026-11-20. Firmware citations are `1541ultimate@700c7f2fa:software/<path>:<line>`
 (GideonZ/1541ultimate master, 2026-11-13) unless a row names `fpga/`. "Measured" = measured on Ultimate 64 Elite,
@@ -525,7 +525,7 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | Resource sizes | UPDATED | file sizes after this rewrite |
 | Built-in assembler "basic directives only"; `run_prg` path "host-local on VICE, device-visible on Ultimate" | CORRECTED (also toolchain section 1) | `src/tools/translation/assembler.ts:16-46,330-334` (macros, `.if`, `.include`, `.incbin`, repeat); `run_prg` `location: "host"` measured row 8 |
 
-## Part F: precision rewrite
+## Part F: precision rewrite (package U: data/ultimate)
 
 ### F-U: data/ultimate (hardware, uci, reu, upic, multisid, bench)
 
