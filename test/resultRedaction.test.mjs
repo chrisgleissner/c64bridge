@@ -43,7 +43,8 @@ test("HARD03-007 an unchanged result keeps its text byte for byte and a message 
     const pretty = { content: [{ type: "text", text: "{\n  \"a\": 1\n}" }], structuredContent: { type: "json", data: { a: 1 } } };
     assert.equal(toCallToolResult(pretty).content[0].text, "{\n  \"a\": 1\n}");
     const message = toCallToolResult(textResult("password is 1234.", { ok: true }));
-    assert.equal(message.content[0].text, "password is ***.");
+    // D2: the data beyond the message follows it as compact JSON.
+    assert.equal(message.content[0].text, "password is ***.\n{\"ok\":true}");
     assert.equal(message.structuredContent.data.message, "password is ***.");
   });
 });

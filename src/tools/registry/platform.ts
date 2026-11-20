@@ -1,8 +1,6 @@
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { describePlatformCapabilities, type PlatformId } from "../../platform.js";
 import { cancelGeneratedSidPlayback } from "../audio.js";
-import { debugModuleGroup as debugModule } from "../debug.js";
-import { viceModuleGroup as viceModule } from "../vice.js";
 import { jsonResult } from "../responses.js";
 import {
   createOperationDispatcher,
@@ -11,21 +9,7 @@ import {
   type OperationHandlerMap,
   type OperationMap,
   operationSchema,
-  type ToolDescriptor,
-  type ToolModule,
 } from "../types.js";
-import { configModuleGroup as configModule } from "./config.js";
-import { diskModuleGroup as diskModule } from "./disk.js";
-import { driveModuleGroup as driveModule } from "./drive.js";
-import { extractModule } from "./extract.js";
-import { graphicsModuleGroup as graphicsModule } from "./graphics.js";
-import { memoryModuleGroup as memoryModule } from "./memory.js";
-import { printerModuleGroup as printerModule } from "./printer.js";
-import { programModule } from "./program.js";
-import { ragModuleGroup as ragModule } from "./rag.js";
-import { soundModuleGroup as soundModule } from "./sound.js";
-import { streamModule } from "./stream.js";
-import { systemModuleGroup as systemModule } from "./system.js";
 
 interface PlatformOperations extends OperationMap {
   readonly select: {
@@ -33,32 +17,11 @@ interface PlatformOperations extends OperationMap {
   };
 }
 
-const registryModules: readonly ToolModule[] = [
-  programModule,
-  memoryModule,
-  soundModule,
-  systemModule,
-  graphicsModule,
-  ragModule,
-  diskModule,
-  driveModule,
-  printerModule,
-  configModule,
-  extractModule,
-  streamModule,
-  debugModule,
-  viceModule,
-];
-
-function listRegisteredDescriptors(): readonly ToolDescriptor[] {
-  return [
-    ...registryModules.flatMap((module) => module.describeTools()),
-    ...platformModuleGroup.describeTools(),
-  ];
-}
-
-function describeTargetPlatform(target: PlatformId) {
-  const capabilities = describePlatformCapabilities(listRegisteredDescriptors());
+async function describeTargetPlatform(target: PlatformId) {
+  // Every registered tool, including c64_input and c64_batch; imported lazily because the
+  // registry index imports this module.
+  const { toolRegistry } = await import("./index.js");
+  const capabilities = describePlatformCapabilities(toolRegistry.list());
   const info = capabilities.platforms[target];
   return {
     availableTools: info.tools,
@@ -97,16 +60,25 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
       };
     }
 
-    cancelGeneratedSidPlayback(); // A backend switch is the documented cue to stop it rather than let it keep playing on the old backend.
-    ctx.client.switchBackend(backend);
-    clearViceSymbols(); // labels belong to one program on one backend
+    // Selecting the active backend again is not a switch: labels, SID playback and the
+    // capture session stay (clients often select before every backend-specific step).
+    const active = typeof ctx.client.getActiveBackendType === "function"
+      ? await ctx.client.getActiveBackendType()
+      : ctx.platform?.id;
+    const alreadyActive = active === backend;
+    if (!alreadyActive) {
+      cancelGeneratedSidPlayback(); // A backend switch is the documented cue to stop it rather than let it keep playing on the old backend.
+      ctx.client.switchBackend(backend);
+      clearViceSymbols(); // labels belong to one program on one backend
+    }
     ctx.setPlatform(backend);
 
-    const { availableTools, unavailableTools, unavailableOperations } = describeTargetPlatform(backend);
+    const { availableTools, unavailableTools, unavailableOperations } = await describeTargetPlatform(backend);
     const switchBackTarget = availableBackends.find((candidate) => candidate !== backend);
     const data = {
       success: true,
       activeBackend: backend,
+      ...(alreadyActive ? { alreadyActive: true } : {}),
       configuredBackends: availableBackends,
       availableTools,
       unavailableTools,
@@ -138,7 +110,8 @@ export const platformModuleGroup = defineToolModule({
         description: "Runtime backend selection operations.",
         variants: [selectBackendSchema],
       }),
-      operationEffects: { select: "write" },
+      // Selecting a backend changes the server's routing, not machine state, so read-only mode allows it.
+      operationEffects: { select: "read" },
       tags: ["platform", "backend", "switch"],
       execute: createOperationDispatcher<PlatformOperations>(
         "c64_select_backend",

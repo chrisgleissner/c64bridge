@@ -119,10 +119,17 @@ export interface ToolAnnotationsHint {
   readonly openWorldHint: boolean;
 }
 
+/**
+ * MCP tool annotations (D10). In MCP, destructiveHint false means the tool performs only additive
+ * updates. A write here overwrites RAM, registers, configuration or a host file, which is not
+ * additive, so every tool with a write or destructive operation is marked destructive; the
+ * project's narrower "destructive" effect stays in the operation effects and the access modes.
+ */
 export function annotationsForEffects(effects: readonly ToolEffect[]): ToolAnnotationsHint {
+  const readOnly = effects.length > 0 && effects.every((effect) => effect === "read");
   return {
-    readOnlyHint: effects.length > 0 && effects.every((effect) => effect === "read"),
-    destructiveHint: effects.includes("destructive"),
+    readOnlyHint: readOnly,
+    destructiveHint: !readOnly,
     idempotentHint: false,
     openWorldHint: false,
   };

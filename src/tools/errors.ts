@@ -169,6 +169,12 @@ function describeLimits(details: unknown): string | undefined {
       parts.push(`${key}: ${value}`);
     }
   }
+  if (typeof record.pattern === "string") {
+    parts.push(`expected format: /${record.pattern}/`);
+  }
+  if (typeof record.example === "string") {
+    parts.push(`example: ${JSON.stringify(record.example)}`);
+  }
   if (parts.length > 0 && record.received !== undefined && typeof record.received !== "object") {
     parts.push(`received: ${JSON.stringify(record.received)}`);
   }

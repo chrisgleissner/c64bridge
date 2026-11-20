@@ -34,6 +34,11 @@ export function registerSecret(value: string | undefined | null): void {
   }
 }
 
+/** True when at least one secret is registered; without one, results need no redaction pass. */
+export function hasRegisteredSecrets(): boolean {
+  return secrets.size > 0;
+}
+
 /** Test hook: forget all registered secrets. */
 export function clearRegisteredSecrets(): void {
   secrets.clear();
@@ -79,26 +84,37 @@ export function redactResultText(text: string): string {
   return result;
 }
 
-/** Keys that carry hex, base64 or raw byte payloads; their string values are never altered. */
-const PAYLOAD_KEY = /hex|base64|pixel|bytes|dump|checksum|crc|hash/i;
+/** Keys that carry hex, base64 or raw byte payloads; their string values (also nested ones) are never altered. */
+const PAYLOAD_KEY = /hex|base64|pixel|bytes|dump|checksum|crc|hash|samples/i;
+
+export interface RedactResultOptions {
+  /**
+   * Error results: replace secrets inside every non-payload string (substring redaction), so an
+   * error message never shows the secret, while payload fields stay intact.
+   */
+  readonly substring?: boolean;
+}
 
 /**
- * Returns a copy of a successful tool result value in which only string leaves are redacted with
- * `redactResultText`. Numbers, booleans, structure and payload fields stay as they are, so the
- * result remains valid and equal to what the tool returned apart from the hidden secret.
+ * Returns a copy of a result value in which only string leaves are redacted with
+ * `redactResultText` (or `redactText` with `substring`). Numbers, booleans, structure and payload
+ * fields stay as they are, so the result remains valid and equal to what the tool returned apart
+ * from the hidden secret. A payload key protects everything below it (for example `pixels.data`).
  */
-export function redactResultValue(value: unknown, key?: string): unknown {
+export function redactResultValue(value: unknown, key?: string, options: RedactResultOptions = {}, inPayload = false): unknown {
+  const payload = inPayload || (key !== undefined && PAYLOAD_KEY.test(key));
   if (typeof value === "string") {
-    return key !== undefined && PAYLOAD_KEY.test(key) ? value : redactResultText(value);
+    if (payload) return value;
+    return options.substring ? redactText(value) : redactResultText(value);
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => redactResultValue(entry, key));
+    return value.map((entry) => redactResultValue(entry, key, options, payload));
   }
   if (value !== null && typeof value === "object" && isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([name, entry]) => [
-        isSensitiveKey(name) ? name : redactResultText(name),
-        isSensitiveKey(name) ? REDACTED : redactResultValue(entry, name),
+        isSensitiveKey(name) ? name : (options.substring ? redactText(name) : redactResultText(name)),
+        isSensitiveKey(name) ? REDACTED : redactResultValue(entry, name, options, payload),
       ]),
     );
   }

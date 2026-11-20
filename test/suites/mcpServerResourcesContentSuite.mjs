@@ -12,6 +12,7 @@ import {
   CANONICAL_KNOWLEDGE_RESOURCE_URIS,
   PLATFORM_RESOURCE_URI,
 } from "../../src/rag/resourceUris.js";
+import { listSkillResources, rewriteSkillPaths } from "../../src/mcp/skills.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,7 +31,12 @@ export function registerMcpServerResourcesContentTests(withSharedMcpClient) {
 
       // 2) Build expected set from hardcoded list + platform resource
       const knowledge = listKnowledgeResources();
-      const expectedUris = new Set([...CANONICAL_KNOWLEDGE_RESOURCE_URIS, PLATFORM_RESOURCE_URI]);
+      // D7: skills are served as c64://skills/<name> next to the knowledge resources.
+      const expectedUris = new Set([
+        ...CANONICAL_KNOWLEDGE_RESOURCE_URIS,
+        ...listSkillResources().map((skill) => skill.uri),
+        PLATFORM_RESOURCE_URI,
+      ]);
 
       // Ensure both sets match exactly
       const missingOnServer = [...expectedUris].filter((u) => !serverUris.has(u));
@@ -83,7 +89,8 @@ export function registerMcpServerResourcesContentTests(withSharedMcpClient) {
           fs.existsSync(fullPath),
           `expected file for ${uri} to exist at ${fullPath}`,
         );
-        const fileText = fs.readFileSync(fullPath, "utf8");
+        // D7: repository skill paths are served as their c64://skills URIs.
+        const fileText = rewriteSkillPaths(fs.readFileSync(fullPath, "utf8"));
         assert.equal(
           content.text,
           fileText,

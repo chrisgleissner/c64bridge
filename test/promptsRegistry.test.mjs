@@ -31,7 +31,7 @@ test("promptRegistry.resolve resolves a basic prompt", () => {
   assert.ok(Array.isArray(result.resources), "should have resources");
   assert.ok(Array.isArray(result.tools), "should have tools");
   assert.equal(result.resources.some((resource) => resource.uri === RESOURCE_URIS.guide.fastPaths), true);
-  assert.equal(result.messages.some((message) => message.content.includes(".github/skills/basic-program/SKILL.md")), true);
+  assert.equal(result.messages.some((message) => message.content.includes("c64://skills/basic-program")), true);
   assert.equal(result.messages.some((message) => message.content.includes(RESOURCE_URIS.vice.binaryMonitorSpec)), true);
 });
 
@@ -52,7 +52,7 @@ test("promptRegistry.resolve exposes the preset music demo prompt", () => {
   assert.equal(result.tools.length, 1);
   assert.equal(result.tools[0]?.name, "c64_sound");
   assert.equal(result.resources.some((resource) => resource.uri === RESOURCE_URIS.guide.fastPaths), true);
-  assert.equal(result.messages.some((message) => message.content.includes(".github/skills/sid-music/SKILL.md")), true);
+  assert.equal(result.messages.some((message) => message.content.includes("c64://skills/sid-music")), true);
 });
 
 test("promptRegistry.resolve throws for unknown prompt", () => {

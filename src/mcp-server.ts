@@ -7,10 +7,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
@@ -29,6 +29,8 @@ import { PLATFORM_RESOURCE_URI } from "./rag/resourceUris.js";
 import { createLazyRagRetriever, initRag } from "./rag/init.js";
 import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
+import { listSkillResources, readSkillResource, rewriteSkillPaths } from "./mcp/skills.js";
+import { createProgressReporter, type ProgressToken } from "./mcp/progress.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
@@ -119,6 +121,22 @@ export function checkHttpRequestAccess(
 
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 2_000;
 
+/** Returned from initialize: the minimum a client needs before its first call (D7). */
+export const SERVER_INSTRUCTIONS = [
+  "c64bridge controls a Commodore 64: C64 Ultimate / Ultimate 64 and U2-family hardware over REST, or the VICE emulator.",
+  "Every grouped tool (c64_program, c64_memory, c64_system, c64_config, ...) needs an `op` argument; never call one with {}.",
+  "Read c64://platform/status first: active backend, configured backends, access mode (C64BRIDGE_ACCESS) and which tools and ops each backend supports.",
+  "Switch backends with c64_select_backend {op:\"select\", backend:\"c64u\"|\"u2\"|\"vice\"}; it is allowed in read-only mode.",
+  "Step-by-step workflows are skill resources c64://skills/<name> (hello-world, basic-program, assembly-program, game-development, ...); prompts name the one to use.",
+  "For any game request read c64://gamedev/index first; it chooses the target and lists what to read.",
+  "Knowledge resources: resources/list; targeted snippets: c64_rag {op:\"basic\"|\"asm\"|\"docs\", q}.",
+  "Addresses are $HHHH hex or decimal numbers; bare hex such as 0400 is rejected as ambiguous.",
+  "Host file paths must lie in the working directory, ~/.c64bridge or the temp directory (C64BRIDGE_ALLOWED_DIRS adds roots).",
+  "Ultimate hardware reads run_prg/load_prg paths from its own storage; pass location: \"host\" to upload a PRG built on this machine.",
+  "Labels from upload_run_asm or a symbolsFile can be used as addresses until the next program start, reset or backend switch.",
+  "Long calls report progress when the request carries a progress token; a cancelled call stops at the next step.",
+].join("\n");
+
 /**
  * Installs the single shutdown path. The first trigger stops background
  * tasks, releases any capture session and stops managed VICE processes, then
@@ -161,6 +179,9 @@ function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
   if (mode === "stdio") {
     process.stdin.once("end", () => void shutdown("stdin end", 0));
     process.stdin.once("close", () => void shutdown("stdin close", 0));
+    // The client closed its end of stdout (EPIPE): without a listener the write error is an
+    // uncaught exception that ends the process before cleanup.
+    process.stdout.on("error", () => void shutdown("stdout closed", 0));
   }
 }
 
@@ -232,7 +253,7 @@ async function main() {
   const toolLogger = loggerFor("tool");
   const resourceLogger = loggerFor("resource");
   const promptLogger = loggerFor("prompt");
-  const promptRegistry = createPromptRegistry();
+  // Built on the first prompts request; a session that never lists prompts does not pay for it.
   const getPromptRegistry = createPromptRegistryGetter();
   const implementationInfo = getMcpServerImplementationInfo();
 
@@ -249,6 +270,7 @@ async function main() {
         tools: {},
         prompts: {},
       },
+      instructions: SERVER_INSTRUCTIONS,
     }
   );
 
@@ -266,9 +288,15 @@ async function main() {
       }));
 
       const platformResource = createPlatformResourceDescriptor();
+      const skillResources = listSkillResources().map((skill) => ({
+        uri: skill.uri,
+        name: skill.name,
+        description: skill.description,
+        mimeType: skill.mimeType,
+      }));
 
       const response = {
-        resources: [...knowledgeResources, platformResource],
+        resources: [...knowledgeResources, ...skillResources, platformResource],
       };
 
       const latency = Date.now() - startedAt;
@@ -298,12 +326,17 @@ async function main() {
     }
   });
 
+  // No resource templates; answering keeps clients that ask from logging a method-not-found error.
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
+
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    // c64_rag returns links with a #fragment (a section); the resource is the document.
+    const uri = request.params.uri.split("#")[0]!;
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_read_resource_start", { uri: request.params.uri });
     try {
       let response;
-      if (request.params.uri === PLATFORM_RESOURCE_URI) {
+      if (uri === PLATFORM_RESOURCE_URI) {
         response = {
           contents: [
             {
@@ -314,12 +347,15 @@ async function main() {
           ],
         };
       } else {
-        const result = readKnowledgeResource(request.params.uri, PROJECT_ROOT);
+        const skill = readSkillResource(uri);
+        const result = skill ?? readKnowledgeResource(uri, PROJECT_ROOT);
         if (!result) {
           throw new McpError(-32002, `Unknown resource: ${request.params.uri}`);
         }
+        // Knowledge text names skills by repository path; clients read them as c64://skills/<name>.
+        const text = (result as { text?: unknown }).text;
         response = {
-          contents: [result],
+          contents: [typeof text === "string" ? { ...result, text: rewriteSkillPaths(text) } : result],
         };
       }
 
@@ -399,7 +435,7 @@ async function main() {
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_list_prompts_start");
     try {
-      const entries = promptRegistry.list();
+      const entries = getPromptRegistry().list();
       const response = {
         prompts: entries.map((entry) => ({
           name: entry.descriptor.name,
@@ -468,6 +504,11 @@ async function main() {
       });
     }
 
+    const progressToken = (request.params as { _meta?: { progressToken?: ProgressToken } })._meta?.progressToken;
+    const progress = progressToken !== undefined && extra?.sendNotification
+      ? createProgressReporter(progressToken, (notification) => extra.sendNotification(notification))
+      : undefined;
+
     try {
       const result = await toolRegistry.invoke(name, args, {
         client,
@@ -476,11 +517,12 @@ async function main() {
         platform: getPlatformStatus(),
         setPlatform,
         signal: extra?.signal,
-      });
+        ...(progress ? { reportProgress: progress.report } : {}),
+      }).finally(() => progress?.stop());
 
       const response = toCallToolResult(result);
       const latency = Date.now() - startedAt;
-      const bytes = payloadByteLength(response);
+      const bytes = contentByteLength(response.content);
       const status = result.isError ? "error" : "ok";
 
       toolLogger.info(`call tool name=${name} status=${status} bytes=${bytes} latencyMs=${latency}`);
@@ -503,7 +545,7 @@ async function main() {
       const latency = Date.now() - startedAt;
       const fallback = unknownErrorResult(error);
       const response = toCallToolResult(fallback);
-      const bytes = payloadByteLength(response);
+      const bytes = contentByteLength(response.content);
 
       toolLogger.error(`call tool name=${name} status=failed bytes=${bytes} latencyMs=${latency} error=${formatErrorMessage(error)}`);
 
@@ -542,21 +584,21 @@ async function main() {
     }
 
     try {
-      const resolved = promptRegistry.resolve(name, args);
+      const resolved = getPromptRegistry().resolve(name, args);
 
       const response = {
         description: resolved.description,
         messages: resolved.messages.map(toPromptMessage),
         _meta: {
           arguments: resolved.arguments,
+          // Names only: the descriptors are in tools/list, and repeating them cost about 80 KB per prompt.
           resources: resolved.resources.map((resource) => ({
             uri: resource.uri,
             name: resource.name,
             description: resource.description,
             mimeType: resource.mimeType,
-            metadata: resource.metadata,
           })),
-          tools: resolved.tools,
+          tools: resolved.tools.map((tool) => tool.name),
         },
       };
 
@@ -604,6 +646,8 @@ async function main() {
 
   const cli = parseCliOptions(process.argv.slice(2));
   if (cli.mode === "http") {
+    // Imported only in HTTP mode: stdio startup does not pay for the HTTP transport.
+    const { StreamableHTTPServerTransport } = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
     const port = cli.port ?? 3000;
     const httpToken = process.env.C64BRIDGE_HTTP_TOKEN || undefined;
     if (httpToken) {
@@ -620,6 +664,14 @@ async function main() {
       if (request.url?.split("?")[0] !== "/mcp") {
         response.statusCode = 404;
         response.end("Not found");
+        return;
+      }
+      // Stateless mode has no server-to-client stream and no session to delete. A GET would
+      // otherwise open an event stream that never ends and keeps a Server alive per request.
+      if (request.method !== "POST") {
+        response.statusCode = 405;
+        response.setHeader("Allow", "POST");
+        response.end("Method not allowed: this stateless MCP endpoint accepts POST only");
         return;
       }
       // Stateless mode: one Server and one transport per request.
@@ -653,11 +705,16 @@ async function main() {
     console.error("c64bridge MCP server running on stdio");
   }
 
-  await logConnectivity(client, baseUrl, config.networkPassword);
+  await logConnectivity(client, baseUrl, config.networkPassword, { vicePrewarm: config.vicePrewarm });
   
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
   });
+}
+
+/** Bytes of the content blocks, for the log line; serialising a large result once more only to count it is wasted time. */
+function contentByteLength(content: ReturnType<typeof toCallToolResult>["content"]): number {
+  return content.reduce((sum, block) => sum + Buffer.byteLength(block.type === "text" ? block.text : block.data), 0);
 }
 
 function createPlatformResourceDescriptor() {
@@ -756,10 +813,21 @@ export function connectivityProbeUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/v1/info`;
 }
 
-export async function logConnectivity(client: C64Client, baseUrl: string, networkPassword?: string): Promise<void> {
+export async function logConnectivity(
+  client: C64Client,
+  baseUrl: string,
+  networkPassword?: string,
+  options: { vicePrewarm?: boolean } = {},
+): Promise<void> {
   const backendType = await client.getBackendType();
   if (backendType === "vice") {
     writeDiagnosticEvent("connectivity_probe_skipped", { baseUrl, reason: "vice_backend" });
+    // A VICE memory read starts a managed emulator. VICE starts lazily on first use unless
+    // prewarm is configured, so without prewarm the startup probe must not touch it.
+    if (options.vicePrewarm !== true) {
+      console.error("Active backend is VICE; it starts on first use (set VICE_PREWARM=1 to start it at startup)");
+      return;
+    }
     console.error("Skipping direct REST connectivity probe because active backend is VICE");
     try {
       const memoryAddress = "$0000";

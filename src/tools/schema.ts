@@ -38,11 +38,46 @@ function schemaHasDefault(schema: Schema<unknown>): boolean {
   return hasOwn.call(schema.jsonSchema, "default");
 }
 
+/** Valid example values for the string patterns the tools use, quoted in format errors. */
+const PATTERN_EXAMPLES = new Map<string, string>([
+  ["^[\\s_0-9A-Fa-f$]+$", "$A9 00 8D 20 D0"],
+  ["^[\\s0-9A-Fa-f$]+$", "$A9 00"],
+  ["^[0-9A-Fa-f]{1,2}$", "1F"],
+  ["^[A-Za-z0-9_][A-Za-z0-9_. -]*$", "screen_poll"],
+  ["^([A-Ga-g])([#b]?)(-?\\d+)$", "C#4"],
+]);
+
+/** The property name closest to a misspelt one: same letters ignoring case, or at most two edits. */
+function nearestName(received: string, names: readonly string[]): string | undefined {
+  const lower = received.toLowerCase();
+  let best: { name: string; distance: number } | undefined;
+  for (const name of names) {
+    const distance = name.toLowerCase() === lower ? 0 : editDistance(lower, name.toLowerCase());
+    if (distance <= 2 && (!best || distance < best.distance)) best = { name, distance };
+  }
+  return best?.name;
+}
+
+function editDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return 3;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    previous = current;
+  }
+  return previous[b.length]!;
+}
+
 export interface StringSchemaOptions {
   readonly description?: string;
   readonly minLength?: number;
   readonly maxLength?: number;
   readonly pattern?: RegExp;
+  /** A valid value, quoted in the error when the pattern does not match (not published in the schema). */
+  readonly example?: string;
   readonly enum?: readonly string[];
   readonly default?: string;
 }
@@ -87,10 +122,20 @@ export function stringSchema(options: StringSchemaOptions = {}): Schema<string> 
     }
 
     if (options.pattern && !options.pattern.test(stringValue)) {
-      throw new ToolValidationError("String does not match required pattern", {
-        path,
-        details: { pattern: options.pattern.source },
-      });
+      const example = options.example ?? PATTERN_EXAMPLES.get(options.pattern.source);
+      throw new ToolValidationError(
+        options.description
+          ? `String does not match the required pattern; expected ${options.description}`
+          : "String does not match the required pattern",
+        {
+          path,
+          details: {
+            pattern: options.pattern.source,
+            ...(example !== undefined ? { example } : {}),
+            received: stringValue.length > 60 ? `${stringValue.slice(0, 60)}...` : stringValue,
+          },
+        },
+      );
     }
 
     if (options.enum && !options.enum.includes(stringValue)) {
@@ -305,6 +350,19 @@ export function objectSchema<T extends Record<string, unknown>>(
     const result: Record<string, unknown> = {};
     const input = value as Record<string, unknown>;
 
+    if (!additionalProperties) {
+      for (const key of Object.keys(input)) {
+        if (!hasOwn.call(options.properties, key)) {
+          const allowed = Object.keys(options.properties);
+          const suggestion = nearestName(key, allowed);
+          throw new ToolValidationError(
+            suggestion ? `Unexpected property "${key}"; did you mean "${suggestion}"?` : `Unexpected property "${key}"`,
+            { path: `${path}.${key}`, details: { allowed, received: key } },
+          );
+        }
+      }
+    }
+
     for (const key of required) {
       if (!hasOwn.call(input, key as string)) {
         throw new ToolValidationError("Missing required property", {
@@ -331,15 +389,9 @@ export function objectSchema<T extends Record<string, unknown>>(
       }
     }
 
-    if (!additionalProperties) {
-      for (const key of Object.keys(input)) {
-        if (!hasOwn.call(options.properties, key)) {
-          throw new ToolValidationError("Unexpected property", {
-            path: `${path}.${key}`,
-          });
-        }
-      }
-    } else {
+    // Unknown properties of a closed object were rejected before the required check, so a
+    // misspelt name is reported with its suggestion rather than as a missing property.
+    if (additionalProperties) {
       for (const key of Object.keys(input)) {
         if (!hasOwn.call(options.properties, key)) {
           result[key] = input[key];
