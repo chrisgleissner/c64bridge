@@ -487,7 +487,7 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | Freezer writes $D41F/$D43F/$D51F on return | multisid | CONFIRMED | software/io/c64/c64.cc:1119-1121 (restore_io); c64.h:175-177 |
 | Sidecar .cfg file types "PRG, CRT or disk" | multisid | CORRECTED: PRG, CRT, TAP, D64, G64 | software/filetypes/filetype_{prg,crt,tap,d64,g64}.cc |
 | LOAD_CONFIG "effectuates at once" | multisid | QUALIFIED: only when all lines valid (89 applies none) | control_target.cc:559-609 |
-| Mixer values and defaults (31 volume steps, pan 11 values, defaults) | multisid | CONFIRMED | u64_config.cc:295-300,434-455 |
+| Mixer values and defaults (31 volume steps, pan 11 values, defaults) | multisid | CONFIRMED | u64_config.cc:295-300,440-460 |
 | UltiSID filter, resonance, waveform, digi values and defaults | multisid | CONFIRMED | u64_config.cc:273,286-288,429-436 |
 | Range split and DualSID split values | multisid | CONFIRMED | u64_config.cc:268-269 |
 | "about" level and click figures | multisid | REWRITTEN as measured values | earlier C64U measurements |
