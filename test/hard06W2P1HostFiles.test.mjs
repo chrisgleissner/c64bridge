@@ -127,3 +127,31 @@ test("upload_run_basic names line numbers whose text was replaced by a later lin
   const clean = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\n' }, { client, logger, platform: platform("c64u") });
   assert.equal(clean.structuredContent.data.replacedLines, undefined);
 });
+
+for (const tool of ["run_prg", "load_prg"]) {
+  test(`${tool} stops a running music_generate sequence`, async () => {
+    const { audioModule, cancelGeneratedSidPlayback } = await import("../src/tools/audio.js");
+    const state = { noteOns: 0 };
+    const client = {
+      sidSetVolume: async () => ({ success: true }),
+      sidNoteOn: async () => { state.noteOns += 1; return { success: true }; },
+      sidNoteOff: async () => ({ success: true }),
+      runPrgFile: async () => ({ success: true }),
+      loadPrgFile: async () => ({ success: true }),
+    };
+    try {
+      await audioModule.invoke("music_generate", { steps: 128, tempoMs: 20 }, { client, logger });
+      const deadline = Date.now() + 2000;
+      while (state.noteOns === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 2));
+      assert.ok(state.noteOns > 0);
+      const result = await programRunnersModule.invoke(tool, { path: "//USB0/a.prg" }, { client, logger, platform: platform("c64u") });
+      assert.equal(result.isError, undefined, JSON.stringify(result.content));
+      await new Promise((r) => setTimeout(r, 30));
+      const settled = state.noteOns;
+      await new Promise((r) => setTimeout(r, 120));
+      assert.equal(state.noteOns, settled);
+    } finally {
+      cancelGeneratedSidPlayback();
+    }
+  });
+}

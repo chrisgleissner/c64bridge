@@ -21,6 +21,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { checkAsmProgramLoaded, pollForProgramOutcome, type AsmPollResult, type BasicPollResult } from "./pollValidator.js";
+import { cancelGeneratedSidPlayback } from "./audio.js";
 import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
@@ -951,6 +952,7 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
     const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
+    cancelGeneratedSidPlayback(); // the generated SID sequence would keep writing into the new program's SID registers
     const result = source.bytes ? await ctx.client.loadPrg(source.bytes) : await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError(`C64 backend reported failure while loading PRG${hostLocationHint(parsed, source, ctx)}`, {
@@ -1003,6 +1005,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
+    cancelGeneratedSidPlayback(); // the generated SID sequence would keep writing into the new program's SID registers
     const result = source.bytes ? await ctx.client.runPrg(source.bytes) : await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError(`C64 backend reported failure while running PRG${hostLocationHint(parsed, source, ctx)}`, {
