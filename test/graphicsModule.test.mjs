@@ -137,7 +137,7 @@ test("render_petscii_art generates art and uploads program", async () => {
   assert.ok(typeof payload.program === "string" && payload.program.length > 0);
   assert.equal(payload.success, true);
   assert.equal(payload.ranOnC64, true);
-  assert.equal(typeof payload.bitmapHex, "string");
+  assert.equal(payload.bitmapHex, undefined, "the bitmap hex repeated rowHex and is no longer sent");
   assert.ok(Array.isArray(payload.rowHex));
 });
 
@@ -315,7 +315,6 @@ test("render_petscii_art includes preview fields and executes PRG", async () => 
   // Verify preview fields are present
   assert.ok(Array.isArray(payload.petsciiCodes), "petsciiCodes should be an array");
   assert.ok(payload.petsciiCodes.length > 0, "petsciiCodes should contain codes");
-  assert.ok(typeof payload.bitmapHex === "string", "bitmapHex should be a string");
   assert.ok(Array.isArray(payload.rowHex), "rowHex should be an array");
   assert.ok(typeof payload.width === "number", "width should be a number");
   assert.ok(typeof payload.height === "number", "height should be a number");

@@ -223,7 +223,7 @@ export const keyArgsSchema = objectSchema({
   properties: {
     op: literalSchema("key"),
     key: stringSchema({
-      description: "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.).",
+      description: "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.). STOP and RUN only type codes 3 and 131 into the keyboard buffer and may not break a running program; use op keyboard with run_stop on C64U.",
       minLength: 1,
       maxLength: 32,
     }),
@@ -395,13 +395,20 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
             })();
       let fed = feedFields({ delivered: 0 });
       let presses = 0;
-      for (let i = 0; i < count; i++) {
-        fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte)));
-        presses += 1;
-        // Stop at the first feed that did not drain: later presses would queue behind a stopped feed.
-        if (fed.status !== "drained") break;
-        if (durationMs > 0) {
-          await new Promise<void>((res) => setTimeout(res, durationMs));
+      if (durationMs === 0 && count > 1) {
+        // No pause between presses: one injection of count bytes, not count round trips.
+        const raw = await ctx.client.injectKeyboardQueue(new Uint8Array(count).fill(keyByte));
+        fed = feedFields(raw);
+        presses = fed.status === "drained" ? count : Math.min(count, raw.delivered ?? 0);
+      } else {
+        for (let i = 0; i < count; i++) {
+          fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte)));
+          presses += 1;
+          // Stop at the first feed that did not drain: later presses would queue behind a stopped feed.
+          if (fed.status !== "drained") break;
+          if (durationMs > 0) {
+            await new Promise<void>((res) => setTimeout(res, durationMs));
+          }
         }
       }
       ctx.logger.info("Pressed key", { key: parsed.key, count, durationMs, status: fed.status });

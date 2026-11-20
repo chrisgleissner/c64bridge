@@ -219,3 +219,13 @@ test("I7 print_text reports launch rather than completion when its observation w
   assert.equal(result.metadata.success, true);
   assert.equal(/completed/.test(result.content[0].text), false);
 });
+
+testC64uOnly("MEDIA-18: bitmap results say the program was started, not that it printed", async () => {
+  const ctx = {
+    client: { async printBitmapOnCommodoreAndRun() { return { success: true }; } },
+    logger: createLogger(),
+  };
+  const result = await printerModule.invoke("print_bitmap_commodore", { columns: [1] }, ctx);
+  assert.ok(!/printed successfully/.test(result.content[0].text));
+  assert.match(result.content[0].text, /not checked/);
+});

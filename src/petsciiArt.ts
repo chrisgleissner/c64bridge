@@ -313,6 +313,24 @@ function distanceBetween(block: Uint8Array, glyph: ChargenGlyph): number {
   return score;
 }
 
+/** PETSCII stream for one row of glyphs, with each run of reverse-video glyphs wrapped in RVS ON/OFF. */
+function glyphStream(rowGlyphs: readonly ChargenGlyph[]): number[] {
+  const stream: number[] = [];
+  let reverse = false;
+  for (const glyph of rowGlyphs) {
+    const glyphReverse = (glyph.screenCode & 0x80) !== 0;
+    if (glyphReverse !== reverse) {
+      stream.push(glyphReverse ? RVS_ON : RVS_OFF);
+      reverse = glyphReverse;
+    }
+    stream.push(glyph.petsciiCode);
+  }
+  if (reverse) {
+    stream.push(RVS_OFF);
+  }
+  return stream;
+}
+
 /**
  * Match each 8x8 block to a glyph. `glyphs` has one entry per cell; `codes` is the
  * PETSCII stream that prints them, with each run of reverse-video glyphs (screen
@@ -349,20 +367,7 @@ export function bitmapToPetsciiCodes(bitmap: Bitmap): {
 
   const rowCodes: number[][] = [];
   for (let row = 0; row < rows; row += 1) {
-    const stream: number[] = [];
-    let reverse = false;
-    for (const glyph of matchedGlyphs.slice(row * columns, (row + 1) * columns)) {
-      const glyphReverse = (glyph.screenCode & 0x80) !== 0;
-      if (glyphReverse !== reverse) {
-        stream.push(glyphReverse ? RVS_ON : RVS_OFF);
-        reverse = glyphReverse;
-      }
-      stream.push(glyph.petsciiCode);
-    }
-    if (reverse) {
-      stream.push(RVS_OFF);
-    }
-    rowCodes.push(stream);
+    rowCodes.push(glyphStream(matchedGlyphs.slice(row * columns, (row + 1) * columns)));
   }
 
   return { codes: rowCodes.flat(), rowCodes, glyphs: matchedGlyphs, columns, rows };
@@ -375,6 +380,8 @@ function buildBasicProgram(params: {
   borderColor?: number;
   backgroundColor?: number;
   foregroundColor?: number;
+  /** Screen code of the bottom-right cell of a full 40x25 screen, poked instead of printed (see below). */
+  lastCellScreenCode?: number;
 }): string {
   const lines: string[] = [];
   let lineNumber = 10;
@@ -402,6 +409,18 @@ function buildBasicProgram(params: {
   lines.push(params.columns >= SCREEN_COLUMNS ? `${lineNumber} NEXTY` : `${lineNumber} PRINT:NEXTY`);
   lineNumber += 10;
 
+  if (params.lastCellScreenCode !== undefined) {
+    // Printing the character in the bottom-right cell would scroll the screen up one line, so that
+    // cell is written to screen RAM ($07E7 = 2023) and colour RAM ($DBE7 = 56295) directly.
+    lines.push(`${lineNumber} POKE2023,${params.lastCellScreenCode}:POKE56295,PEEK(646)`);
+    lineNumber += 10;
+  }
+  // Wait for a key so the READY. prompt does not scroll the art's top line away.
+  lines.push(`${lineNumber} GETA$:IFA$=""THEN${lineNumber}`);
+  lineNumber += 10;
+  lines.push(`${lineNumber} END`);
+  lineNumber += 10;
+
   const data = params.rowCodes.flatMap((row) => [...row, ROW_END]);
   const chunkSize = 16;
   for (let i = 0; i < data.length; i += chunkSize) {
@@ -411,7 +430,6 @@ function buildBasicProgram(params: {
     lineNumber += 10;
   }
 
-  lines.push(`${lineNumber} END`);
   return lines.join("\n");
 }
 
@@ -426,7 +444,10 @@ export function createPetsciiArt(options: CreatePetsciiArtOptions): PetsciiArtRe
   if (options.bitmap) {
     bitmap = options.bitmap;
   } else {
-    const detectedShape = detectShape(options.prompt);
+    // Text the caller gave (or quoted in the prompt) wins over keyword shapes: "I LOVE C64" is text, not a heart.
+    const hasExplicitText = Boolean(options.text && options.text.trim().length > 0)
+      || /"[^"]+"|`[^`]+`/.test(options.prompt ?? "");
+    const detectedShape = hasExplicitText ? undefined : detectShape(options.prompt);
     if (detectedShape) {
       bitmap = detectedShape.bitmap;
       usedShape = detectedShape.name;
@@ -442,8 +463,13 @@ export function createPetsciiArt(options: CreatePetsciiArtOptions): PetsciiArtRe
   const converted = bitmapToPetsciiCodes(bitmap);
   const codes = converted.codes;
 
+  const fullScreen = converted.columns === SCREEN_COLUMNS && converted.rows === 25;
+  const rowCodes = fullScreen
+    ? [...converted.rowCodes.slice(0, -1), glyphStream(converted.glyphs.slice(-SCREEN_COLUMNS, -1))]
+    : converted.rowCodes;
   const program = buildBasicProgram({
-    rowCodes: converted.rowCodes,
+    ...(fullScreen ? { lastCellScreenCode: converted.glyphs[converted.glyphs.length - 1]!.screenCode } : {}),
+    rowCodes,
     columns: converted.columns,
     rows: converted.rows,
     borderColor: options.borderColor,

@@ -183,7 +183,9 @@ function loadGlyphs(): void {
     const basicRaw = [row.basic_repr, row.char, row.keyboard, row.control_code]
       .map((value) => value?.trim())
       .find((value) => value && value.length > 0);
-    const basic = basicRaw && basicRaw.length > 0 ? basicRaw : undefined;
+    // The space row has an empty `char` cell and the word "space" as control_code, so no one-character
+    // key was indexed for " " and every space was drawn as "?". Its unicode cell (U+0020) is exact.
+    const basic = row.unicode?.trim().toUpperCase() === "U+0020" ? " " : basicRaw && basicRaw.length > 0 ? basicRaw : undefined;
     const glyph: ChargenGlyph = {
       petsciiCode,
       screenCode,
