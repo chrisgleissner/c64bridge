@@ -48,11 +48,11 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 ## Resource table (KB, bytes/1000)
 | URI | Content | KB |
 |---|---|---|
-| `c64://gamedev/index` | this page | 6.7 |
-| `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, memory-map templates | 12.4 |
-| `c64://gamedev/techniques` | raster IRQ, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks | 18.9 |
+| `c64://gamedev/index` | this page | 7.1 |
+| `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, VIC bank, safe zero page, memory-map templates | 13.8 |
+| `c64://gamedev/techniques` | raster IRQ and timing, open borders, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks, bitmap modes, multiply/divide | 25.6 |
 | `c64://gamedev/toolchain` | assemblers, C compiler runtimes (zero page, calling convention, linker, startup), build, crunchers, test loop, `.cfg` and REU image | 13.2 |
-| `c64://gamedev/references` | projects and games to learn from, licences | 10.0 |
+| `c64://gamedev/references` | projects and games to learn from, licences | 10.4 |
 | `c64://ultimate/hardware` | turbo, SIDs, video, detection, LEDs, config | 12.9 |
 | `c64://ultimate/multisid` | 8-10 SIDs: limit, address map, split, mixer, LOAD_CONFIG, detection | 10.9 |
 | `c64://ultimate/reu` | REU registers, recipes, loading paths, streaming | 13.4 |

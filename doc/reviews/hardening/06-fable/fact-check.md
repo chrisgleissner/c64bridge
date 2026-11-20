@@ -124,8 +124,8 @@ Ultimate measurements), gamedev/techniques (except Ultimate parts).
 Partly verified: vice-binary-monitor-spec (RESET values 0x08-0x0b, CPU_HISTORY layout), gamedev/toolchain
 (BASIC stub bytes correct), gamedev/index, SKILL.md files (few C64 facts).
 
-Not checked: gamedev/references (URLs, licences, ratings), Ultimate measurement tables, sidwave.md, printer
-documents, character-set.csv, context/chat.md, context/fast-paths.md.
+Not checked: Ultimate measurement tables, character-set.csv, context/chat.md, context/fast-paths.md.
+gamedev/references, sidwave.md (C64 facts) and the printer documents: Part D (D6-D8).
 
 Unresolved: GOSUB nesting depth (basic-pitfalls:159 "~50"; ROM arithmetic suggests about 35, not run);
 "empty lines stored as $20" (basic-spec:41).
