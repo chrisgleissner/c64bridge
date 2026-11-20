@@ -10,9 +10,9 @@ import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
-import { ViceClient, type ViceCheckpoint } from "./vice/viceClient.js";
+import { ViceClient, viceRequestTimeoutMs, type ViceCheckpoint, type ViceRegisterMetadata, type ViceMemspace } from "./vice/viceClient.js";
 import { resourceNameProblem } from "./vice/resourcePolicy.js";
-import { resetAndWaitForBasic } from "./vice/readiness.js";
+import { resetAndWaitForBasic, waitForBootedPrompt } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
 import { assertSafeConfigName, assertSafeDevicePath } from "./devicePathSafety.js";
@@ -31,6 +31,9 @@ export function delegateViceSignalHandling(): void {
 }
 
 export type DeviceType = "c64u" | "u2" | "vice";
+
+/** Disk image types the Ultimate firmware mounts (OpenAPI `/v1/drives/{drive}:mount` `type`). */
+export type DiskImageType = "d64" | "g64" | "d71" | "g71" | "d81";
 
 /**
  * The long-lived VICE monitor connection and what keeps it open. `cpu` is the logical CPU
@@ -73,10 +76,30 @@ export class ViceSessionLostError extends Error {
   }
 }
 
+// Register metadata (ids and names) does not change during one monitor connection, so it is read once per
+// connection and memory space instead of before every register read (HARD06 PROGMEM-13).
+const registerMetadataByClient = new WeakMap<object, Map<number, Promise<ViceRegisterMetadata[]>>>();
+
+export function cachedRegisterMetadata(client: ViceClient, memspace: ViceMemspace = 0): Promise<ViceRegisterMetadata[]> {
+  let perClient = registerMetadataByClient.get(client);
+  if (!perClient) {
+    perClient = new Map();
+    registerMetadataByClient.set(client, perClient);
+  }
+  let pending = perClient.get(memspace);
+  if (!pending) {
+    pending = client.registersAvailable(memspace);
+    perClient.set(memspace, pending);
+    const cached = pending;
+    pending.catch(() => { if (perClient!.get(memspace) === cached) perClient!.delete(memspace); });
+  }
+  return pending;
+}
+
 /** The program counter of a CPU that is stopped in the monitor, or undefined when it cannot be read. */
 async function readProgramCounter(client: ViceClient): Promise<number | undefined> {
   try {
-    const meta = await client.registersAvailable();
+    const meta = await cachedRegisterMetadata(client);
     const id = meta.find((m) => m.name === "PC")?.id;
     if (id === undefined) return undefined;
     return (await client.registersGet()).find((r) => r.id === id)?.value;
@@ -145,6 +168,8 @@ export interface C64Facade {
   loadPrgFile(path: string): Promise<RunResult>;
   runPrgFile(path: string): Promise<RunResult>;
   runCrtFile(path: string): Promise<RunResult>;
+  /** Uploads cartridge image bytes (.crt) and starts them. Optional: only the Ultimate backends have it. */
+  runCrt?(crt: Uint8Array | Buffer): Promise<RunResult>;
   sidplayFile(path: string, songnr?: number): Promise<RunResult>;
   sidplayAttachment(sid: Uint8Array | Buffer, options?: { songnr?: number; songlengths?: Uint8Array | Buffer }): Promise<RunResult>;
   // Memory/register access
@@ -161,7 +186,7 @@ export interface C64Facade {
    * memory. `status` is "drained" once consumed, "queued" when the CPU is stopped so the text
    * waits until it runs, and "timeout" when the KERNAL still had `pending` bytes at the deadline.
    */
-  feedKeyboard?(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult>;
+  feedKeyboard?(bytes: Uint8Array, options?: { drainTimeoutMs?: number; signal?: AbortSignal }): Promise<KeyboardFeedResult>;
   writeMemoryBlocks?(blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void>;
   // System control
   reset(): Promise<RunResult>;
@@ -181,6 +206,8 @@ export interface C64Facade {
   // Drives & files
   drivesList(): Promise<unknown>;
   driveMount(drive: string, imagePath: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult>;
+  /** Uploads disk image bytes and mounts them. Optional: only the Ultimate backends have it. */
+  driveMountImage?(drive: string, image: Uint8Array | Buffer, options: { type: DiskImageType; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult>;
   driveRemove(drive: string): Promise<RunResult>;
   driveReset(drive: string): Promise<RunResult>;
   driveOn(drive: string): Promise<RunResult>;
@@ -329,6 +356,8 @@ function driveImage(info: Record<string, unknown>): string | null {
   return typeof info.image === "string" && info.image ? info.image : null;
 }
 
+const DISK_IMAGE_TYPES: ReadonlySet<string> = new Set<DiskImageType>(["d64", "g64", "d71", "g71", "d81"]);
+
 function uploadFile(bytes: Uint8Array, name: string): File {
   return new File([Uint8Array.from(bytes)], name, { type: "application/octet-stream" });
 }
@@ -348,6 +377,7 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
       headers: buildC64uHeaders(networkPassword),
       validateStatus: () => true,
       proxy: false,
+      maxRedirects: 0, // a redirect would send X-Password to another host
     });
     return true;
   } catch {
@@ -381,6 +411,9 @@ function assertAllowedViceResource(name: string): void {
   const problem = resourceNameProblem(name);
   if (problem) throw new Error(`VICE resource '${name}' is not allowed: ${problem.message}`);
 }
+
+/** The wait for the keyboard buffer to drain ends when $00C6 has not changed for this long. */
+const KEYBOARD_STALL_MS = 2_000;
 
 /** VICE's keyboard buffer queue (kbdbuf.c) holds at most this many bytes. */
 const VICE_KEYBOARD_QUEUE_LIMIT = 16_384;
@@ -455,6 +488,17 @@ class C64uBackend implements C64Facade {
     const res = await this.api.v1.runnersRunCrtUpdate(":run_crt", { file: pathStr });
     return this.actionResult(res.data);
   }
+  /**
+   * POST /v1/runners:run_crt with the cartridge as a file part named upload.crt. The firmware keeps
+   * the part's file name for its temporary file (attachment_writer.h), so the extension is kept.
+   */
+  async runCrt(crt: Uint8Array | Buffer): Promise<RunResult> {
+    if (crt.length === 0) throw new Error("Cartridge image is empty");
+    const form = new FormData();
+    form.append("file", uploadFile(crt, "upload.crt"));
+    const res = await this.api.v1.runnersRunCrtCreate(":run_crt", form as unknown as File);
+    return this.actionResult(res.data);
+  }
   async sidplayFile(pathStr: string, songnr?: number): Promise<RunResult> {
     const res = await this.api.v1.runnersSidplayUpdate(":sidplay", { file: pathStr, songnr });
     return this.actionResult(res.data);
@@ -496,6 +540,14 @@ class C64uBackend implements C64Facade {
     return bytes;
   }
   async writeMemory(address: number, bytes: Uint8Array): Promise<void> {
+    // Firmware 3.15a writes a POST body that runs past $FFFF only up to $FFFF and still answers 200
+    // (65537 bytes at $0000 wrote $0000-$FFFF), so the range is checked here, before anything is sent.
+    if (!Number.isInteger(address) || address < 0 || address > 0xffff) {
+      throw new Error("Address must be within 0x0000-0xFFFF");
+    }
+    if (bytes.length === 0 || address + bytes.length > 0x10000) {
+      throw new Error(`A write of ${bytes.length} byte(s) at $${address.toString(16).toUpperCase().padStart(4, "0")} does not fit within $0000-$FFFF.`);
+    }
     const addrStr = address.toString(16).toUpperCase().padStart(4, "0");
     if (bytes.length <= 128) {
       await this.api.v1.machineWritememUpdate(":writemem", { address: addrStr, data: Buffer.from(bytes).toString("hex").toUpperCase() });
@@ -604,6 +656,19 @@ class C64uBackend implements C64Facade {
     }));
   }
   async driveMount(d: string, img: string, options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> { const res = await this.api.v1.drivesMountUpdate(await this.resolveDriveId(d), ":mount", { image: img, type: options?.type, mode: options?.mode }); return this.actionResult(res.data); }
+  /**
+   * POST /v1/drives/{drive}:mount with the image as a file part named upload.<type>. The firmware
+   * takes the type from the `type` query, else from the uploaded file's extension (route_drives.cc).
+   */
+  async driveMountImage(d: string, image: Uint8Array | Buffer, options: { type: DiskImageType; mode?: "readwrite" | "readonly" | "unlinked" }): Promise<RunResult> {
+    if (!DISK_IMAGE_TYPES.has(options.type)) throw new Error(`Unknown disk image type '${options.type}': use ${[...DISK_IMAGE_TYPES].join(", ")}`);
+    if (image.length === 0) throw new Error("Disk image is empty");
+    const drive = await this.resolveDriveId(d);
+    const form = new FormData();
+    form.append("file", uploadFile(image, `upload.${options.type}`));
+    const res = await this.api.v1.drivesMountCreate(drive, ":mount", form as unknown as File, { type: options.type, ...(options.mode ? { mode: options.mode } : {}) });
+    return this.actionResult(res.data);
+  }
   async driveRemove(d: string): Promise<RunResult> { const res = await this.api.v1.drivesRemoveUpdate(await this.resolveDriveId(d), ":remove"); return this.actionResult(res.data); }
   async driveReset(d: string): Promise<RunResult> { const res = await this.api.v1.drivesResetUpdate(await this.resolveDriveId(d), ":reset"); return this.actionResult(res.data); }
   async driveOn(d: string): Promise<RunResult> { const res = await this.api.v1.drivesOnUpdate(await this.resolveDriveId(d), ":on"); return this.actionResult(res.data); }
@@ -628,6 +693,13 @@ class C64uBackend implements C64Facade {
   async filesCreateD81(p: string, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateD81Update(encodeDevicePath(p), ":create_d81", { diskname: options?.diskname }); return this.actionResult(res.data); }
   async filesCreateDnp(p: string, tracks: number, options?: { diskname?: string }): Promise<RunResult> { const res = await this.api.v1.filesCreateDnpUpdate(encodeDevicePath(p), ":create_dnp", { tracks, diskname: options?.diskname }); return this.actionResult(res.data); }
   async modplayFile(pathStr: string): Promise<RunResult> { const res = await (this.api as any).v1.runnersModplayUpdate(":modplay", { file: pathStr }); return this.actionResult(res.data); }
+}
+
+/** Start of BASIC program text on the C64 (TXTTAB after a reset). */
+const BASIC_START = 0x0801;
+
+function formatViceAddress(address: number): string {
+  return `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
 /** Measured on x64sc: the KERNAL boot takes about 0.5 s in warp mode and 2.5 s at normal speed. */
@@ -655,6 +727,12 @@ export class ViceBackend implements C64Facade {
     ViceBackend.supervisors.clear();
   }
   private readonly debugEnabled = process.env.VICE_DEVICE_TEST_DEBUG === "1";
+  /** An explicitly configured VICE binary that does not exist; thrown when a launch is needed (never a silent other emulator). */
+  private binaryProblem: Error | null = null;
+  /** Set when an emulator that was in use had gone and a new one is started; reported once by the next operation (decision D3). */
+  private restartNotice: string | null = null;
+  /** An emulator this server did not start answered a probe; cleared when a connection to it fails. */
+  private externalVerified = false;
   private startupPromise: Promise<void> | null = null;
   private monitorQueue: Promise<void> = Promise.resolve();
   private lastProcessStart = 0;
@@ -675,12 +753,20 @@ export class ViceBackend implements C64Facade {
     const configBinary = config.exe !== undefined
       ? configuredString(config.exe) ?? (typeof config.exe === "string" ? config.exe : String(config.exe))
       : undefined;
-    const resolvedLaunch = resolveViceLaunch({
+    const launchOptions = {
       envBinary,
       configBinary,
       envDirectory: configuredString(process.env.VICE_DIRECTORY),
       configDirectory: configuredString(config.directory),
-    });
+    };
+    let resolvedLaunch: { binary: string; directory?: string };
+    try {
+      resolvedLaunch = resolveViceLaunch(launchOptions);
+    } catch (error) {
+      // An emulator that is already running needs no binary, so the problem is raised only when a launch is needed.
+      this.binaryProblem = error instanceof Error ? error : new Error(String(error));
+      resolvedLaunch = resolveViceLaunch({ ...launchOptions, envBinary: undefined, configBinary: undefined });
+    }
     this.exe = resolvedLaunch.binary;
 
     const envHost = normaliseViceHost(process.env.VICE_HOST);
@@ -707,7 +793,7 @@ export class ViceBackend implements C64Facade {
     try {
       if (this.debugEnabled) console.error("[vice-backend] probing existing VICE", this.host, this.port);
       await client.connect(this.port, this.host);
-      await client.info();
+      await client.info({ timeoutMs: Math.min(3_000, viceRequestTimeoutMs(0x85)) }); // a probe: an emulator that does not answer in 3 s is not usable
       try { await client.exitMonitor(); } catch {}
       if (this.debugEnabled) console.error("[vice-backend] existing VICE is reachable");
       return true;
@@ -757,16 +843,15 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  private async waitForUsableMachine(timeoutMs = 20_000): Promise<void> {
+  /** A freshly started emulator boots by itself: wait for its BASIC prompt instead of resetting it (a reset costs a second boot). */
+  private async waitForBootedMachine(timeoutMs = 20_000): Promise<void> {
     const client = new ViceClient();
     try {
       await client.connect(this.port, this.host);
-      const readiness = await this.resetToBasicPrompt(client, timeoutMs);
+      const readiness = await waitForBootedPrompt(client, { timeoutMs });
       try { await client.exitMonitor(); } catch {}
       if (!readiness.pointersOk || !readiness.promptOk) {
-        throw new Error(
-          `VICE machine at ${this.host}:${this.port} did not reach the BASIC prompt within ${timeoutMs}ms`,
-        );
+        throw new Error(`VICE machine at ${this.host}:${this.port} did not reach the BASIC prompt within ${timeoutMs}ms`);
       }
     } finally {
       client.close();
@@ -782,8 +867,11 @@ export class ViceBackend implements C64Facade {
       if (running) return;
       try { await existing.stop(); } catch {}
       ViceBackend.supervisors.delete(key);
+      this.noteRestart("The VICE process had exited.");
     }
+    if (this.externalVerified) return;
     if (await this.tryPingExisting()) {
+      this.externalVerified = true; // D1: a probe that succeeded is not repeated before every operation
       return;
     }
     if (this.debugEnabled) {
@@ -796,6 +884,7 @@ export class ViceBackend implements C64Facade {
         extraArgs: this.extraArgs,
       });
     }
+    if (this.binaryProblem) throw this.binaryProblem;
     const handle = await startViceProcess(buildManagedViceProcessOptions({
       binary: this.exe,
       directory: this.directory,
@@ -813,11 +902,10 @@ export class ViceBackend implements C64Facade {
     handle.process.once("exit", () => {
       ViceBackend.supervisors.delete(key);
     });
-    // Allow VICE to fully initialize its display before connecting to the monitor.
-    // Early monitor connection can interfere with the boot sequence.
-    await delay(1000);
+    // startViceProcess has already talked to the monitor, so there is nothing left to protect with a fixed sleep:
+    // observe readiness instead (decision D1).
     await this.waitForResponsiveMonitor(20_000);
-    await this.waitForUsableMachine(20_000);
+    await this.waitForBootedMachine(20_000);
   }
 
   private async ensureProcess(): Promise<void> {
@@ -962,11 +1050,45 @@ export class ViceBackend implements C64Facade {
     }
   }
 
+  private noteRestart(reason: string): void {
+    this.restartNotice = `${reason} VICE was started again: the machine was reset, and RAM, loaded programs, attached disk images, checkpoints and a pause are gone. The call was not run; repeat it.`;
+  }
+
+  /** Throws the restart notice once. A ping keeps it for the next real operation. */
+  private reportRestart(client: ViceClient, report: boolean): void {
+    if (!report || !this.restartNotice) return;
+    const notice = this.restartNotice;
+    this.restartNotice = null;
+    client.close();
+    throw new ViceSessionLostError(notice);
+  }
+
+  /**
+   * Connects a client. When the emulator that an earlier probe found has gone away, the probe is repeated
+   * (which starts a managed emulator when allowed) and the connection is tried once more. With `allowLaunch`
+   * false (poweroff) a failed connection is only reported: nothing is started.
+   */
+  private async connectClient(client: ViceClient, report = true, allowLaunch = true): Promise<ViceClient> {
+    let connected = client;
+    try {
+      await client.connect(this.port, this.host);
+    } catch (error) {
+      if (!this.externalVerified || this.mockMode) throw error;
+      this.externalVerified = false;
+      if (!allowLaunch) throw error;
+      this.noteRestart("The VICE emulator that was in use is gone.");
+      await this.ensureProcess();
+      connected = new ViceClient();
+      await connected.connect(this.port, this.host);
+    }
+    this.reportRestart(connected, report);
+    return connected;
+  }
+
   /** Connects the long-lived session client. The CPU keeps running until the first command. Call only inside `exclusive`. */
   private async openSession(): Promise<ViceSession> {
     if (!this.mockMode) await this.ensureProcess();
-    const client = new ViceClient();
-    await client.connect(this.port, this.host);
+    const client = await this.connectClient(new ViceClient());
     if (this.manageProcess && this.lastProcessStart > 0) {
       const settleDelay = 500 - (Date.now() - this.lastProcessStart);
       if (settleDelay > 0) await delay(settleDelay);
@@ -1051,7 +1173,7 @@ export class ViceBackend implements C64Facade {
 
   private async withClient<T>(
     fn: (client: ViceClient) => Promise<T>,
-    options?: { resumeOnClose?: boolean; keepLostNotice?: boolean },
+    options?: { resumeOnClose?: boolean; keepLostNotice?: boolean; noLaunch?: boolean },
   ): Promise<T> {
     return this.exclusive(async () => {
       const session = this.liveSession();
@@ -1117,11 +1239,11 @@ export class ViceBackend implements C64Facade {
     }
   }
 
-  private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean }): Promise<T> {
-    if (!this.mockMode) await this.ensureProcess();
-    const client = new ViceClient();
+  private async withNewClient<T>(fn: (client: ViceClient) => Promise<T>, options?: { resumeOnClose?: boolean; noLaunch?: boolean; keepLostNotice?: boolean }): Promise<T> {
+    if (!this.mockMode && options?.noLaunch !== true) await this.ensureProcess();
     if (this.debugEnabled) console.error("[vice-backend] connecting to VICE monitor", { host: this.host, port: this.port });
-    await client.connect(this.port, this.host);
+    const launch = options?.noLaunch !== true;
+    const client = await this.connectClient(new ViceClient(), launch && options?.keepLostNotice !== true, launch);
     if (this.manageProcess && this.lastProcessStart > 0) {
       const sinceStart = Date.now() - this.lastProcessStart;
       const settleDelay = 500 - sinceStart;
@@ -1158,6 +1280,9 @@ export class ViceBackend implements C64Facade {
         if (this.debugEnabled) {
           console.error(`[vice-backend] ping failed (attempt ${attempt}/${attempts})`, error);
         }
+        // A monitor that accepted the connection but did not answer, or whose port something else holds, will not
+        // answer a repeat either: retrying it eight times took about 85 s.
+        if (error instanceof Error && /timed out|already in use/i.test(error.message)) break;
         if (attempt < attempts) {
           await delay(Math.min(1_000, 200 * attempt));
         }
@@ -1181,6 +1306,9 @@ export class ViceBackend implements C64Facade {
     if (buffer.length < 2) throw new Error("PRG data too short");
     const loadAddress = buffer.readUInt16LE(0);
     const body = buffer.subarray(2);
+    if (loadAddress + body.length > 0x10000) {
+      throw new Error(`PRG loads at ${formatViceAddress(loadAddress)} and is ${body.length} bytes long, which runs past $FFFF.`);
+    }
     await this.withClient(async (client) => {
       const readiness = await this.resetToBasicPrompt(client, 10_000);
       if (readiness.stopped) {
@@ -1194,30 +1322,65 @@ export class ViceBackend implements C64Facade {
     });
   }
 
-  private async injectPrg(buffer: Buffer): Promise<void> {
-    await this.loadPrgAndFinish(buffer, async (client, loadAddress, programEnd) => {
-      const ptrs = Buffer.alloc(8);
-      ptrs.writeUInt16LE(loadAddress, 0);
-      ptrs.writeUInt16LE(programEnd, 2);
-      ptrs.writeUInt16LE(programEnd, 4);
-      ptrs.writeUInt16LE(programEnd, 6);
-      await client.memSet(0x002B, ptrs);
-      await client.keyboardFeed("RUN\r");
+  /**
+   * BASIC's program pointers: $2B/$2C TXTTAB start of BASIC text ($0801), $2D/$2E VARTAB start of variables,
+   * $2F/$30 ARYTAB start of arrays, $31/$32 STREND end of arrays + 1 (Mapping the Commodore 64, zero page).
+   * After a LOAD in direct mode the BASIC ROM stores the end address + 1 in VARTAB ($E1A7) and CLR copies
+   * VARTAB into ARYTAB and STREND ($A66B-$A675); these bytes leave the pointers as that LOAD does.
+   */
+  private static basicPointerBytes(programEnd: number): Buffer {
+    const ptrs = Buffer.alloc(6);
+    ptrs.writeUInt16LE(programEnd, 0);
+    ptrs.writeUInt16LE(programEnd, 2);
+    ptrs.writeUInt16LE(programEnd, 4);
+    return ptrs;
+  }
+
+  private async injectPrg(buffer: Buffer): Promise<RunResult> {
+    let started = "RUN";
+    let loadAddress = 0;
+    await this.loadPrgAndFinish(buffer, async (client, address, programEnd) => {
+      loadAddress = address;
+      if (address === BASIC_START) {
+        const txttab = Buffer.alloc(2);
+        txttab.writeUInt16LE(BASIC_START, 0);
+        await client.memSet(0x002b, Buffer.concat([txttab, ViceBackend.basicPointerBytes(programEnd)]));
+        await client.keyboardFeed("RUN\r");
+      } else {
+        // Not a BASIC program: BASIC's pointers stay as they are and the code is entered with SYS.
+        started = `SYS ${address}`;
+        await client.keyboardFeed(`SYS${address}\r`);
+      }
     });
+    return { success: true, details: { loadAddress: formatViceAddress(loadAddress), started, reset: true } };
   }
 
   async runPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
     const buffer = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
-    await this.injectPrg(buffer);
-    return { success: true };
+    return await this.injectPrg(buffer);
   }
 
   /** Load PRG bytes without starting them — the caller decides how to enter
-   * the code (e.g. a subsequent typed `SYS <entry>` for machine code). */
+   * the code (e.g. a subsequent typed `SYS <entry>` for machine code). The machine is reset first. */
   async loadPrg(prg: Uint8Array | Buffer): Promise<RunResult> {
     const buffer = Buffer.isBuffer(prg) ? prg : Buffer.from(prg);
-    await this.loadPrgAndFinish(buffer, async () => {});
-    return { success: true };
+    let loadAddress = 0;
+    let programEnd = 0;
+    await this.loadPrgAndFinish(buffer, async (client, address, end) => {
+      loadAddress = address;
+      programEnd = end;
+      // A program at the BASIC start must be listable and runnable: VARTAB, ARYTAB and STREND move behind it.
+      if (address === BASIC_START && end > address) await client.memSet(0x002d, ViceBackend.basicPointerBytes(end));
+    });
+    return {
+      success: true,
+      details: {
+        reset: true,
+        loadAddress: formatViceAddress(loadAddress),
+        endAddress: formatViceAddress(programEnd),
+        basicPointersSet: loadAddress === BASIC_START,
+      },
+    };
   }
 
   async loadPrgFile(prgPath: string): Promise<RunResult> {
@@ -1227,8 +1390,7 @@ export class ViceBackend implements C64Facade {
 
   async runPrgFile(prgPath: string): Promise<RunResult> {
     const data = await readHostFile(prgPath);
-    await this.injectPrg(data);
-    return { success: true };
+    return await this.injectPrg(data);
   }
   async runCrtFile(_path: string): Promise<RunResult> { throw unsupported("runCrtFile"); }
   async sidplayFile(_p: string): Promise<RunResult> { throw unsupported("sidplayFile"); }
@@ -1256,7 +1418,7 @@ export class ViceBackend implements C64Facade {
    * refills the buffer on a timer). With the CPU stopped by a pause or debugger stop nothing can
    * be consumed, so the bytes stay queued and the CPU stays stopped.
    */
-  async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult> {
+  async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number; signal?: AbortSignal }): Promise<KeyboardFeedResult> {
     // The monitor halts the CPU while all feed chunks are sent, even for a
     // running machine. No new bytes can drain until the whole feed completes.
     const queuedBytes = bytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
@@ -1291,15 +1453,22 @@ export class ViceBackend implements C64Facade {
       let gap = 30;
       let emptyReads = 0;
       let pending = delivered;
+      let lastPending = -1;
+      let lastChange = Date.now();
       for (;;) {
+        options?.signal?.throwIfAborted();
         await client.exitMonitor();
         await delay(gap);
+        options?.signal?.throwIfAborted();
         // A checkpoint hit stopped the CPU while it ran: never resume it again.
         if (!client.cpuRunning || hit()) return await stoppedResult(pending);
         pending = (await client.memGet(0x00c6, 0x00c6))[0] ?? 0;
         if (hit()) return await stoppedResult(pending);
         emptyReads = pending === 0 ? emptyReads + 1 : 0;
         if (emptyReads >= 2) return { delivered, status: "drained", pending: 0 };
+        if (pending !== lastPending) { lastPending = pending; lastChange = Date.now(); }
+        // A program that does not read the keyboard leaves $00C6 as it is: waiting longer only holds the monitor.
+        if (Date.now() - lastChange >= KEYBOARD_STALL_MS) return { delivered, status: "timeout", pending };
         if (Date.now() - start >= timeoutMs) return { delivered, status: "timeout", pending };
         gap = Math.min(150, Math.ceil(gap * 1.5));
       }
@@ -1355,7 +1524,7 @@ export class ViceBackend implements C64Facade {
     // production always uses the 20s default.
     const resetReadinessTimeoutMs = Number(process.env.C64BRIDGE_VICE_RESET_TIMEOUT_MS) || 20_000;
     let stoppedAt: number | undefined;
-    const warning = await this.endSessionBeforeRestart((client) => client.reset());
+    const warning = await this.endSessionBeforeRestart((client) => client.reset(), { keepCheckpoints: true });
     await this.withClient(async (client) => {
       readiness = await this.resetToBasicPrompt(client, resetReadinessTimeoutMs);
       if (readiness.stopped) {
@@ -1475,13 +1644,34 @@ export class ViceBackend implements C64Facade {
    * before the CPU runs again, so no instruction of the old program runs between the end of the
    * pause and the reset. Returns the notice of a session that had been lost, if any.
    */
-  private async endSessionBeforeRestart(whileStopped?: (client: ViceClient) => Promise<void>): Promise<string | null> {
+  private async endSessionBeforeRestart(
+    whileStopped?: (client: ViceClient) => Promise<void>,
+    options?: { keepCheckpoints?: boolean },
+  ): Promise<string | null> {
     return await this.exclusive(async () => {
       const s = this.liveSession();
       const warning = this.takeLostNotice();
       if (!s) return warning;
       const hadExplicitPause = s.explicitPause;
       s.busy = true;
+      if (options?.keepCheckpoints && s.stopping.size > 0) {
+        // A machine reset keeps the monitor's checkpoints (as VICE does), and the connection must stay open
+        // while one stops the CPU. Only the pause and the debugger stop end.
+        try {
+          if (whileStopped && s.cpu === "stopped") {
+            try { await whileStopped(s.client); } catch { /* the reset is repeated on the next operation */ }
+          }
+          try { if (!s.client.cpuRunning) await s.client.exitMonitor(); } catch { /* the next operation reports a dead connection */ }
+          s.explicitPause = false;
+          s.debugStop = false;
+          s.cpu = "running";
+          s.queuedKeyBytes = 0;
+        } finally {
+          s.busy = false;
+        }
+        if (hadExplicitPause) this.pauseClearedListener?.();
+        return warning;
+      }
       try {
         for (const id of s.stopping) {
           try { await s.client.checkpointDelete(id); } catch { /* already gone */ }
@@ -1559,7 +1749,9 @@ export class ViceBackend implements C64Facade {
         } catch {
           // Ignore transport errors during quit; the emulator will terminate regardless.
         }
-      }, { resumeOnClose: false });
+      }, { resumeOnClose: false, noLaunch: true });
+      this.externalVerified = false;
+      this.restartNotice = null; // the emulator is off on purpose: the next start is not an unnoticed restart
       if (managedHandle) {
         try {
           await managedHandle.stop();
@@ -1568,6 +1760,15 @@ export class ViceBackend implements C64Facade {
       }
       return { success: true };
     } catch (error) {
+      // Nothing listens: VICE is already off. Starting one only to quit it would take seconds and open a window.
+      if ((error as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED") {
+        this.restartNotice = null;
+        if (managedHandle) {
+          try { await managedHandle.stop(); } catch {}
+          ViceBackend.supervisors.delete(key);
+        }
+        return { success: true, details: { running: false, note: "VICE was not running." } };
+      }
       const details = error instanceof Error
         ? { message: error.message }
         : error;
@@ -1894,7 +2095,7 @@ async function waitForAutoloadFinished(
   // A checkpoint hit leaves the CPU stopped: end the wait without resuming it, and report where it stopped.
   const stoppedOutcome = async (): Promise<{ loaded: boolean; stopped: true; pc?: number }> => {
     try {
-      const [metadata, values] = await Promise.all([client.registersAvailable(0), client.registersGet(0)]);
+      const [metadata, values] = await Promise.all([cachedRegisterMetadata(client, 0), client.registersGet(0)]);
       const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
       const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
       return pc === undefined ? { loaded: false, stopped: true } : { loaded: false, stopped: true, pc };
@@ -1907,9 +2108,11 @@ async function waitForAutoloadFinished(
     await client.exitMonitor();
     await delay(250);
     if (stopped?.()) return await stoppedOutcome();
-    const marker = await client.memGet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER_ADDRESS + AUTOLOAD_MARKER.length - 1);
-    if (Buffer.from(marker).equals(AUTOLOAD_MARKER)) continue; // not reset yet
-    const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));
+    // One read serves every check below: $002B-$07E7 holds the BASIC pointers, $00C6, the marker at $02A7 and the screen.
+    const state = await client.memGet(0x002b, 0x07e7);
+    const at = (address: number, length: number) => state.subarray(address - 0x002b, address - 0x002b + length);
+    if (Buffer.from(at(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER.length)).equals(AUTOLOAD_MARKER)) continue; // not reset yet
+    const screen = screenCodesToAscii(at(0x0400, 1000));
     const load = screen.lastIndexOf('LOAD"');
     if (load >= 0) {
       const after = screen.slice(load);
@@ -1921,8 +2124,8 @@ async function waitForAutoloadFinished(
     }
     // TXTTAB = $0801 shows BASIC has initialised (right after the power cycle RAM
     // holds VICE's init pattern); VARTAB off $0803 then shows the LOAD has ended.
-    const pointers = await client.memGet(0x002b, 0x002e);
-    const keyboardQueue = await client.memGet(0x00c6, 0x00c6);
+    const pointers = at(0x002b, 4);
+    const keyboardQueue = at(0x00c6, 1);
     const txttab = (pointers[0] ?? 0) | ((pointers[1] ?? 0) << 8);
     const vartab = (pointers[2] ?? 0) | ((pointers[3] ?? 0) << 8);
     // BASIC's cold start sets TXTTAB before VARTAB, so require the same end
@@ -1984,6 +2187,8 @@ function resolveViceBinary(
     if (resolvedExplicit) {
       return resolvedExplicit;
     }
+    const source = options.envBinary !== undefined ? "VICE_BINARY" : "the vice.exe configuration";
+    throw new Error(`The VICE binary '${explicit}' from ${source} was not found. Fix the path or remove it to use x64sc from PATH.`);
   }
 
   for (const candidate of ["/usr/local/bin/x64sc", "/usr/local/bin/x64"]) {

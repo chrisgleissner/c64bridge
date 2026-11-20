@@ -28,7 +28,7 @@
         "boolean",
         "null"
       ],
-      "description": "Include raw pixel payload bytes in the response. Off by default because a frame is about 100 KB; the response is rejected above 2 MiB, so lower count when it is on.",
+      "description": "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected, so lower count).",
       "default": false
     },
     "format": {
@@ -36,7 +36,7 @@
         "string",
         "null"
       ],
-      "description": "Set to png to receive each frame as an MCP image block (C64 palette). At most 4 frames per call. Limits depend on op.",
+      "description": "png returns each frame as an MCP image block (max 4 frames per call). Limits depend on op.",
       "enum": [
         "png",
         "hires",
@@ -201,6 +201,15 @@
       "description": "Enable multicolour mode for the sprite.",
       "default": false
     },
+    "dataAddress": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Where to write the 64-byte block (multiple of 64, inside the current VIC bank); default is chosen clear of screen, charset and bitmap.",
+      "minimum": 0,
+      "maximum": 65472
+    },
     "imagePath": {
       "type": "string",
       "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
@@ -233,6 +242,6 @@
   "required": [
     "op"
   ],
-  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Required inputs: none. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64. Required inputs: none. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap [write]: Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical. Required inputs: none.",
+  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image file to VIC-II bitmap memory, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
   "additionalProperties": false
 }

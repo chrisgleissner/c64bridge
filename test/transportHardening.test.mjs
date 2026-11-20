@@ -3,6 +3,7 @@ import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import os from "node:os";
 import test from "#test/runner";
 import assert from "#test/assert";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
@@ -228,8 +229,11 @@ function deviceCalls(mock, suffix) {
   return mock.state.requestOrder.filter((entry) => entry === `PUT /v1/machine:${suffix}`).length;
 }
 
-async function writeCall(ctx, address, byte) {
-  return metaModule.invoke("verify_and_write_memory", { address, bytes: `$${byte}` }, ctx);
+let dumpCounter = 0;
+// A tool call that pauses the machine, reads and resumes (the verified write tool was removed, HARD06 META-10).
+async function writeCall(ctx, address) {
+  const outputPath = path.join(os.tmpdir(), `c64bridge-pause-${process.pid}-${dumpCounter += 1}.hex`);
+  return metaModule.invoke("memory_dump_to_file", { address, length: 1, outputPath }, ctx);
 }
 
 test("R-07 overlapping tool calls send one device pause and one device resume", async (t) => {
@@ -239,7 +243,7 @@ test("R-07 overlapping tool calls send one device pause and one device resume", 
   const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
   mock.state.responseDelayMs = 10;
   mock.state.requestOrder.length = 0;
-  const results = await Promise.all([writeCall(ctx, "$0400", "AA"), writeCall(ctx, "$0410", "BB"), writeCall(ctx, "$0420", "CC")]);
+  const results = await Promise.all([writeCall(ctx, "$0400"), writeCall(ctx, "$0410"), writeCall(ctx, "$0420")]);
   for (const result of results) assert.equal(result.metadata?.success, true, JSON.stringify(result.content));
   assert.equal(deviceCalls(mock, "pause"), 1);
   assert.equal(deviceCalls(mock, "resume"), 1);
@@ -255,7 +259,7 @@ test("R-07 an explicit pause survives a tool call that pauses and resumes", asyn
   const paused = await machineControlModule.invoke("pause", {}, ctx);
   assert.equal(paused.isError, undefined);
   mock.state.requestOrder.length = 0;
-  const written = await writeCall(ctx, "$0400", "AA");
+  const written = await writeCall(ctx, "$0400");
   assert.equal(written.metadata?.success, true);
   assert.equal(deviceCalls(mock, "resume"), 0);
   assert.equal(mock.state.paused, true);
@@ -274,7 +278,7 @@ test("R-07 a reset ends an explicit pause, so the next tool call pauses the devi
   assert.equal((await machineControlModule.invoke("pause", {}, ctx)).isError, undefined);
   assert.equal((await machineControlModule.invoke("reset_c64", {}, ctx)).isError, undefined);
   mock.state.requestOrder.length = 0;
-  const written = await writeCall(ctx, "$0400", "AA");
+  const written = await writeCall(ctx, "$0400");
   assert.equal(written.metadata?.success, true, JSON.stringify(written.content));
   assert.equal(deviceCalls(mock, "pause"), 1);
   assert.equal(deviceCalls(mock, "resume"), 1);
@@ -313,7 +317,7 @@ test("R-07 the resume goes to the facade pinned at the start even if the backend
     async writeMemory() { return { success: true }; },
   };
   const ctx = { platform: { id: "c64u" }, client, logger: quietLogger() };
-  const result = await writeCall(ctx, "$0400", "AA");
+  const result = await writeCall(ctx, "$0400");
   assert.equal(result.metadata?.success, true, JSON.stringify(result.content));
   assert.deepEqual(calls, ["a:pause", "a:resume"]);
 });
@@ -327,7 +331,7 @@ test("R-07 a failed resume is reported as a warning in the result", async (t) =>
   const ctx = { platform: { id: "c64u" }, client, logger };
   mock.state.forcedErrors = ["resume refused"];
   mock.state.forcedErrorsUrlMatch = "machine:resume";
-  const result = await writeCall(ctx, "$0400", "AA");
+  const result = await writeCall(ctx, "$0400");
   assert.equal(result.metadata?.success, true, JSON.stringify(result.content));
   const payload = JSON.stringify(result.structuredContent ?? result.content);
   assert.match(payload, /could not be resumed/);
@@ -445,7 +449,7 @@ function requestsAfter(mock, first, second) {
     assert.equal(mock.state.paused, false);
     // The explicit flag is cleared: the next owned pause is sent to the device.
     mock.state.requestOrder.length = 0;
-    assert.equal((await writeCall(ctx, "$0400", "AA")).metadata?.success, true);
+    assert.equal((await writeCall(ctx, "$0400")).metadata?.success, true);
     assert.equal(deviceCalls(mock, "pause"), 1);
   });
 }

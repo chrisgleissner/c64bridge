@@ -30,10 +30,6 @@ function hexToBytes(input: string): Uint8Array {
   return Uint8Array.from(Buffer.from(cleaned, "hex"));
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return `$${Buffer.from(bytes).toString("hex").toUpperCase()}`;
-}
-
 function parseAddressNumeric(value: string): number {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
@@ -51,19 +47,6 @@ function formatAddressHex(address: number): string {
   return address.toString(16).toUpperCase().padStart(4, "0");
 }
 
-const verifyAndWriteMemoryArgsSchema = objectSchema({
-  description: "Pause → read → optional verify → write → read-back → resume.",
-  properties: {
-    address: stringSchema({ description: "Start address ($HHHH or decimal)", minLength: 1 }),
-    bytes: stringSchema({ description: "Hex string of bytes to write, e.g. $AABBCC", minLength: 2, pattern: /^[\s_0-9A-Fa-f$]+$/ }),
-    expected: optionalSchema(stringSchema({ description: "Expected pre-write bytes (hex)", minLength: 2, pattern: /^[\s_0-9A-Fa-f$]+$/ })),
-    mask: optionalSchema(stringSchema({ description: "Verification mask bytes (hex)", minLength: 2, pattern: /^[\s_0-9A-Fa-f$]+$/ })),
-    abortOnMismatch: optionalSchema(booleanSchema({ description: "Abort write when verification fails", default: true }), true),
-  },
-  required: ["address", "bytes"],
-  additionalProperties: false,
-});
-
 const memoryDumpToFileArgsSchema = objectSchema({
   description: "Dump a memory range to a file in hex or binary, with optional pause/resume.",
   properties: {
@@ -71,7 +54,7 @@ const memoryDumpToFileArgsSchema = objectSchema({
     length: numberSchema({ description: "Number of bytes to dump", integer: true, minimum: 1, maximum: 65536 }),
     outputPath: stringSchema({ description: "Destination file path", minLength: 1 }),
     format: optionalSchema(stringSchema({ description: "Output format: hex|binary", enum: ["hex", "binary"], default: "hex" as any }), "hex" as any),
-    chunkSize: optionalSchema(numberSchema({ description: "Chunk size for reads", integer: true, minimum: 1, maximum: 4096, default: 512 }), 512),
+    chunkSize: optionalSchema(numberSchema({ description: "Bytes per read (default: whole range)", integer: true, minimum: 1, maximum: 65536 })),
     pauseDuringRead: optionalSchema(booleanSchema({ description: "Pause/resume around dump", default: true }), true),
     retries: optionalSchema(numberSchema({ description: "Retries per chunk on failure", integer: true, minimum: 0, maximum: 10, default: 1 }), 1),
   },
@@ -80,114 +63,6 @@ const memoryDumpToFileArgsSchema = objectSchema({
 });
 
 export const tools: ToolDefinition[] = [
-  {
-    name: "verify_and_write_memory",
-    description: "Pause → read → verify (optional) → write → read-back → resume. Aborts on mismatch unless override.",
-    summary: "Safe memory write with pre/post verification and diff report.",
-    inputSchema: verifyAndWriteMemoryArgsSchema.jsonSchema,
-    tags: ["memory", "write", "verify"],
-    examples: [
-      { name: "Write bytes", description: "Verify then write two bytes", arguments: { address: "$0400", expected: "$0000", bytes: "$AA55" } },
-    ],
-    async execute(args, ctx) {
-      try {
-        const parsed = verifyAndWriteMemoryArgsSchema.parse(args ?? {});
-        const writeBytes = hexToBytes(parsed.bytes);
-        const expectedBytes = parsed.expected ? hexToBytes(parsed.expected) : new Uint8Array();
-        const maskBytes = parsed.mask ? hexToBytes(parsed.mask) : undefined;
-        const verifyLen = expectedBytes.length;
-        const readLen = Math.max(writeBytes.length, verifyLen);
-
-        const canPause = supportsMachinePause(ctx as any);
-        let paused = false;
-        const owned = await acquireOwnedPause(ctx.client, canPause);
-        const pinned = owned.facade;
-        if (canPause) {
-          if (!owned.result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while pausing", { details: normalizeErrorDetails(owned.result.details) });
-          }
-          paused = true;
-        }
-
-        let preReadHex: string | undefined;
-        try {
-          const pre = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, readLen)), pinned);
-          if (!pre.success) {
-            throw new ToolExecutionError("C64 backend reported failure while reading memory", { details: normalizeErrorDetails(pre.details) });
-          }
-          preReadHex = (pre.data as string) ?? "$";
-          const preBytes = hexToBytes(preReadHex);
-
-          if (verifyLen > 0) {
-            const errors: Array<{ offset: number; expected: string; actual: string; mask?: string }> = [];
-            for (let i = 0; i < verifyLen; i += 1) {
-              const actual = preBytes[i] ?? 0x00;
-              const expected = expectedBytes[i] ?? 0x00;
-              const mask = maskBytes ? (maskBytes[i] ?? 0xFF) : 0xFF;
-              if ((actual & mask) !== (expected & mask)) {
-                errors.push({ offset: i, expected: `$${expected.toString(16).toUpperCase().padStart(2, "0")}`, actual: `$${actual.toString(16).toUpperCase().padStart(2, "0")}`, mask: maskBytes ? `$${(mask).toString(16).toUpperCase().padStart(2, "0")}` : undefined });
-              }
-            }
-            if (errors.length > 0 && (parsed.abortOnMismatch ?? true)) {
-              throw new ToolExecutionError("Verification failed before write", { details: { mismatches: errors, address: parsed.address } });
-            }
-          }
-
-          const write = await (ctx.client as any).writeMemory(parsed.address, bytesToHex(writeBytes), pinned);
-          if (!write.success) {
-            throw new ToolExecutionError("C64 backend reported failure while writing memory", { details: normalizeErrorDetails(write.details) });
-          }
-
-          const post = await (ctx.client as any).readMemory(parsed.address, String(Math.max(1, writeBytes.length)), pinned);
-          if (!post.success) {
-            throw new ToolExecutionError("C64 backend reported failure while reading back memory", { details: normalizeErrorDetails(post.details) });
-          }
-          const postBytes = hexToBytes((post.data as string) ?? "$");
-
-          const diffs: Array<{ offset: number; before: string; after: string; expected?: string }> = [];
-          const preBytesAgain = hexToBytes(preReadHex ?? "$");
-          for (let i = 0; i < writeBytes.length; i += 1) {
-            const before = preBytesAgain[i] ?? 0x00;
-            const after = postBytes[i] ?? 0x00;
-            const exp = writeBytes[i] ?? 0x00;
-            const postMask = maskBytes ? (maskBytes[i] ?? 0xFF) : 0xFF;
-            if ((after & postMask) !== (exp & postMask)) {
-              diffs.push({ offset: i, before: `$${before.toString(16).toUpperCase().padStart(2, "0")}`, after: `$${after.toString(16).toUpperCase().padStart(2, "0")}`, expected: `$${exp.toString(16).toUpperCase().padStart(2, "0")}` });
-            }
-          }
-          if (diffs.length > 0) {
-            throw new ToolExecutionError("Post-write verification failed", { details: { address: parsed.address, diffs } });
-          }
-
-          let warnings: string[] | undefined;
-          if (paused) {
-            paused = false; // released here, so the finally block must not release again
-            const released = await owned.release();
-            if (!released.success) {
-              warnings = [resumeWarning(released.details)];
-              ctx.logger.warn("C64 resume reported failure after verified write", { details: released.details });
-            }
-          }
-          return jsonResult({
-            address: parsed.address,
-            wrote: bytesToHex(writeBytes),
-            preRead: preReadHex,
-            postRead: (post.data as string) ?? "",
-            paused,
-            ...(warnings ? { warnings } : {}),
-          }, { success: true });
-        } finally {
-          if (paused) {
-            const released = await owned.release();
-            if (!released.success) ctx.logger.warn("C64 resume reported failure after verified write", { details: released.details });
-          }
-        }
-      } catch (error) {
-        if (error instanceof ToolError) return toolErrorResult(error);
-        return unknownErrorResult(error);
-      }
-    },
-  },
   {
     name: "memory_dump_to_file",
     description: "Chunked memory dump with retries; optional pause/resume; writes hex or binary and a manifest.",
@@ -206,7 +81,7 @@ export const tools: ToolDefinition[] = [
             { path: "$.length" },
           );
         }
-        const chunk = Math.min(Math.max(1, parsed.chunkSize ?? 512), 4096);
+        const chunk = Math.min(Math.max(1, parsed.chunkSize ?? length), 65536);
         const pause = parsed.pauseDuringRead !== false;
         const outputPath = resolveHostPath(String(parsed.outputPath), { purpose: "write" });
         const outDir = dirname(outputPath);

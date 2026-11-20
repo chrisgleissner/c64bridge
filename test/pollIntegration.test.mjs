@@ -125,7 +125,8 @@ test("ASM program with no screen changes is reported as loaded but unconfirmed, 
     assert.equal(plain.isError, undefined, JSON.stringify(plain.content));
     assert.equal(plain.structuredContent.data.execution, "unconfirmed");
     assert.equal(plain.metadata.execution, "unconfirmed");
-    assert.match(plain.content[0].text, /no screen change was observed/i);
+    // HARD06 PROGMEM-5 (decision D1): verify:false does not poll, so it reports that execution was not observed.
+    assert.match(plain.content[0].text, /not observed/i);
     assert.ok(!/crash/i.test(plain.content[0].text));
 
     const verified = await programRunnersModule.invoke("upload_run_asm", { program, verify: true }, withProgramLoaded(ctx, program));

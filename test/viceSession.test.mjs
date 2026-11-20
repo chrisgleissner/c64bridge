@@ -227,13 +227,14 @@ test("a connection closed by VICE while paused is reported by resume as a warnin
   });
 });
 
-test("reset deletes stopping checkpoints before the session closes", async () => {
+test("reset keeps stopping checkpoints and the connection that holds them (VICE-1)", async () => {
   await withClient(async (client, server) => {
     await client.viceCheckpointCreate({ start: 0xc013 });
     assert.equal(server.stoppingCheckpoints, 1);
     await client.reset();
-    assert.equal(server.unsafeCloses, 0, "the connection was closed only after the checkpoint was deleted");
-    assert.ok(server.commands.some(([cmd]) => cmd === 0x13), "a checkpoint delete was sent");
+    assert.equal(server.unsafeCloses, 0, "the connection was not closed with a stopping checkpoint set");
+    assert.equal(server.stoppingCheckpoints, 1, "the checkpoint survived the reset, as it does in VICE");
+    assert.ok(!server.commands.some(([cmd]) => cmd === 0x13), "no checkpoint delete was sent");
   }, { wedgeOnUnsafeClose: true });
 });
 
@@ -490,8 +491,7 @@ test("reset after a pause is sent on the held connection before the CPU is let g
     assert.ok(firstReset >= 0, "a reset was sent");
     assert.equal(sent[firstReset][1], held, "the first reset went out on the connection that held the pause");
     assert.ok(firstReset < firstExit, "the reset was sent before the CPU was let go (exit)");
-    const firstDelete = sent.findIndex(([cmd]) => cmd === 0x13);
-    assert.ok(firstDelete >= 0 && firstDelete < firstReset, "the stopping checkpoint was deleted before the reset");
+    assert.ok(!sent.some(([cmd]) => cmd === 0x13), "the stopping checkpoint was kept (VICE-1)");
     assert.equal(server.unsafeCloses, 0);
   }, { wedgeOnUnsafeClose: true });
 });

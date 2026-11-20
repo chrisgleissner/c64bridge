@@ -252,7 +252,8 @@ test("info returns diagnostics payload", async () => {
   assert.equal(result.content[0].type, "text");
   assert.deepEqual(JSON.parse(result.content[0].text), { emulator: "vice", port: 6502 });
   assert.deepEqual(result.structuredContent?.data, { emulator: "vice", port: 6502 });
-  assert.deepEqual(result.metadata.details, { emulator: "vice", port: 6502 });
+  assert.equal(result.metadata.details, undefined, "MEDIA-10: payload is not repeated in metadata");
+  assert.equal(result.metadata.raw, undefined);
 });
 
 testC64uOnly("debugreg_read returns uppercase value", async () => {
@@ -374,7 +375,7 @@ test("version wraps primitive payloads into objects", async () => {
   const result = await developerModule.invoke("version", {}, ctx);
 
   assert.deepEqual(result.structuredContent?.data, { value: "1.2.4" });
-  assert.deepEqual(result.metadata.details, { value: "1.2.4" });
+  assert.equal(result.metadata.details, undefined);
 });
 
 test("config_set with firmware failure", async () => {

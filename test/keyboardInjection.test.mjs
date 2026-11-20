@@ -106,8 +106,8 @@ test("HARD01-009 injectKeyboardQueue reports a drain timeout without overwriting
   }), /did not drain/);
   const elapsed = Date.now() - start;
   assert.ok(elapsed >= 50, `expected drain wait to elapse, got ${elapsed}ms`);
-  // The first chunk was queued, but no later chunk can overwrite it.
-  assert.ok(facade.writes.find((w) => w.address === 0x0277));
+  // The queue already held a byte, so nothing may overwrite it (HARD06 CLIENT-2).
+  assert.equal(facade.writes.find((w) => w.address === 0x0277), undefined);
 });
 
 test("HARD01-004 a transient machine:input probe failure does not permanently cache 'unknown'", async () => {

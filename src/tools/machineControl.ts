@@ -1,3 +1,4 @@
+import { cancelGeneratedSidPlayback } from "./audio.js";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { cancelledResult, defineToolModule } from "./types.js";
 import { booleanSchema, numberSchema, objectSchema, optionalSchema } from "./schema.js";
@@ -49,7 +50,7 @@ function createWaitSchema(description: string) {
     description,
     properties: {
       waitForReady: optionalSchema(booleanSchema({
-        description: "Wait until the BASIC READY. prompt is visible before returning. A timeout is reported as ready=false, not as an error.",
+        description: "Wait for the BASIC READY. prompt before returning; a timeout gives ready=false, not an error.",
         default: false,
       }), false),
       readyTimeoutMs: optionalSchema(numberSchema({
@@ -65,9 +66,13 @@ function createWaitSchema(description: string) {
 }
 
 const READY_SETTLE_MS = 300;
-/** After this long, a screen identical to the one before the reset counts as the new boot screen. */
+/** After this long, a screen identical to the one before the reset counts as the new boot screen (fallback without a marker). */
 const READY_UNCHANGED_GRACE_MS = 3_000;
 const SNAPSHOT_TIMEOUT_MS = 2_000;
+/** Poll interval while a screen marker is in place: the marker makes every read conclusive, so no settle time is needed. */
+const MARKED_POLL_INTERVAL_MS = 100;
+/** Screen RAM after a reset: the KERNAL sets the screen page $0288 to $04. */
+const DEFAULT_SCREEN_BASE = 0x0400;
 
 /** Resolves to undefined when the operation does not settle within `ms`; the late result is ignored. */
 async function withinMs<T>(operation: Promise<T>, ms: number): Promise<T | undefined> {
@@ -80,38 +85,110 @@ async function withinMs<T>(operation: Promise<T>, ms: number): Promise<T | undef
   }
 }
 
-/** Screen text before the reset, used to tell a stale READY. from the new one. Best effort: undefined when unreadable. */
-async function screenBeforeReset(ctx: ToolExecutionContext, parsed: { waitForReady?: boolean }): Promise<string | undefined> {
-  if (parsed.waitForReady !== true) return undefined;
+/**
+ * A byte written into the top-left screen cell ($0400) before the reset. The
+ * KERNAL reset runs CINT ($FCFB JSR $FF5B), which clears the screen from line
+ * 24 up to line 0 and each line from column 39 down to column 0 ($E55E-$E564,
+ * $E9FF-$EA0F; source: mist64/c64ref ROM disassembly). $0400 is therefore the
+ * last cell cleared: once it no longer holds the marker, the old screen is
+ * gone and a READY. on screen is the new prompt.
+ */
+interface ResetMarker {
+  readonly address: number;
+  readonly value: number;
+  readonly original: number;
+}
+
+/** What is known about the screen before the reset, used to tell a stale READY. from the new one. */
+interface ResetObservation {
+  /** Screen text before the reset; read only when no marker could be placed. */
+  readonly before?: string;
+  readonly marker?: ResetMarker;
+}
+
+type MarkerClient = Pick<ToolExecutionContext["client"], "readScreenDetailed" | "readMemoryRaw" | "writeMemoryRaw">;
+
+/**
+ * Places the marker when the screen is at $0400 and memory can be read and written. Returns undefined
+ * otherwise (a relocated screen is not cleared at its old address by a reset), and the caller falls back
+ * to comparing screen text.
+ */
+async function placeResetMarker(ctx: ToolExecutionContext): Promise<ResetMarker | undefined> {
+  const client = ctx.client as Partial<MarkerClient>;
+  if (typeof client.readScreenDetailed !== "function" || typeof client.readMemoryRaw !== "function" || typeof client.writeMemoryRaw !== "function") {
+    return undefined;
+  }
   try {
-    return await withinMs(ctx.client.readScreen(), SNAPSHOT_TIMEOUT_MS);
+    const screen = await withinMs(client.readScreenDetailed.call(ctx.client), SNAPSHOT_TIMEOUT_MS);
+    if (!screen || screen.baseAddress !== DEFAULT_SCREEN_BASE) return undefined;
+    const current = (await withinMs(client.readMemoryRaw.call(ctx.client, DEFAULT_SCREEN_BASE, 1), SNAPSHOT_TIMEOUT_MS))?.[0];
+    if (current === undefined) return undefined;
+    const value = current === 0x2a ? 0x2b : 0x2a; // screen codes for "*" and "+"; never the $20 the clear writes
+    await withinMs(client.writeMemoryRaw.call(ctx.client, DEFAULT_SCREEN_BASE, Uint8Array.of(value)), SNAPSHOT_TIMEOUT_MS);
+    const readBack = (await withinMs(client.readMemoryRaw.call(ctx.client, DEFAULT_SCREEN_BASE, 1), SNAPSHOT_TIMEOUT_MS))?.[0];
+    return readBack === value ? { address: DEFAULT_SCREEN_BASE, value, original: current } : undefined;
   } catch {
     return undefined;
   }
 }
 
+/** Puts the original byte back when the reset was not carried out. Best effort. */
+async function removeResetMarker(ctx: ToolExecutionContext, observation: ResetObservation): Promise<void> {
+  const marker = observation.marker;
+  if (!marker) return;
+  try {
+    const current = (await withinMs(ctx.client.readMemoryRaw(marker.address, 1), SNAPSHOT_TIMEOUT_MS))?.[0];
+    if (current === marker.value) await withinMs(ctx.client.writeMemoryRaw(marker.address, Uint8Array.of(marker.original)), SNAPSHOT_TIMEOUT_MS);
+  } catch {
+    // The marker stays visible; nothing else depends on it.
+  }
+}
+
+/** Marks the screen (or, failing that, reads its text) before the reset. Nothing is done without waitForReady. */
+async function screenBeforeReset(ctx: ToolExecutionContext, parsed: { waitForReady?: boolean }): Promise<ResetObservation> {
+  if (parsed.waitForReady !== true) return {};
+  const marker = await placeResetMarker(ctx);
+  if (marker) return { marker };
+  try {
+    return { before: await withinMs(ctx.client.readScreen(), SNAPSHOT_TIMEOUT_MS) };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Polls the screen until READY. appears or the timeout elapses. Never throws.
- * A screen identical to the one read before the reset is ignored for the first
- * few seconds, so the READY. still visible from before the reset is not taken
- * for the new one. Each read is bounded by the remaining time.
+ * With a marker, a screen is only accepted once the marker cell has been
+ * cleared by the reset, so no fixed wait is needed. Without one, a screen
+ * identical to the one read before the reset is ignored for the first few
+ * seconds, so the READY. still visible from before the reset is not taken for
+ * the new one. Each read is bounded by the remaining time.
  */
 async function waitForReadyPrompt(
   ctx: ToolExecutionContext,
   timeoutMs: number,
-  before: string | undefined,
+  observation: ResetObservation,
 ): Promise<{ ready: boolean; readyElapsedMs: number; lastError?: string; cancelled?: true }> {
   const start = Date.now();
-  await new Promise((resolve) => setTimeout(resolve, Math.min(READY_SETTLE_MS, timeoutMs)));
+  const { before, marker } = observation;
+  if (!marker) await new Promise((resolve) => setTimeout(resolve, Math.min(READY_SETTLE_MS, timeoutMs)));
   let lastError: string | undefined;
+  // A boot clears the screen, so once any read differs from the screen before the reset, a READY.
+  // that matches the old screen again is the new prompt and needs no grace period.
+  let changedSinceReset = false;
   const tolerantClient = {
     async readScreen(): Promise<string> {
-      const remaining = timeoutMs - (Date.now() - start);
+      const remaining = () => timeoutMs - (Date.now() - start);
       try {
-        const screen = await withinMs(ctx.client.readScreen(), remaining);
+        if (marker) {
+          const cell = (await withinMs(ctx.client.readMemoryRaw(marker.address, 1), remaining()))?.[0];
+          if (cell === undefined || cell === marker.value) return ""; // the old screen has not been cleared yet
+        }
+        const screen = await withinMs(ctx.client.readScreen(), remaining());
         if (screen === undefined) return "";
         lastError = undefined;
-        if (before !== undefined && screen === before && Date.now() - start < READY_UNCHANGED_GRACE_MS) return "";
+        if (before !== undefined && screen !== before) changedSinceReset = true;
+        if (before !== undefined && !changedSinceReset && screen === before && Date.now() - start < READY_UNCHANGED_GRACE_MS) return "";
         return screen;
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
@@ -120,7 +197,8 @@ async function waitForReadyPrompt(
     },
   };
   const remaining = Math.max(1, timeoutMs - (Date.now() - start));
-  const outcome = await waitForScreenText(tolerantClient, { pattern: "READY.", timeoutMs: remaining, intervalMs: 250, signal: ctx.signal });
+  const intervalMs = marker ? MARKED_POLL_INTERVAL_MS : 250;
+  const outcome = await waitForScreenText(tolerantClient, { pattern: "READY.", timeoutMs: remaining, intervalMs, signal: ctx.signal });
   if (!outcome.matched && outcome.cancelled) {
     return { ready: false, readyElapsedMs: Date.now() - start, cancelled: true };
   }
@@ -130,14 +208,18 @@ async function waitForReadyPrompt(
 async function withReadyResult(
   ctx: ToolExecutionContext,
   parsed: { waitForReady?: boolean; readyTimeoutMs?: number },
-  before: string | undefined,
+  observation: ResetObservation,
   baseMessage: string,
   details: Record<string, unknown>,
 ) {
   if (parsed.waitForReady !== true) {
     return textResult(baseMessage, { success: true, details });
   }
-  const { ready, readyElapsedMs, lastError, cancelled } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000, before);
+  if (details.promptOk === true) {
+    // The backend itself waited for the READY. prompt (VICE does on reset and reboot).
+    return textResult(`${baseMessage} READY. prompt confirmed by the backend.`, { success: true, details, ready: true, readyElapsedMs: 0 });
+  }
+  const { ready, readyElapsedMs, lastError, cancelled } = await waitForReadyPrompt(ctx, parsed.readyTimeoutMs ?? 15_000, observation);
   if (cancelled) {
     // The command itself was already sent; only the wait for READY. was abandoned.
     return cancelledResult(`${baseMessage} The wait for the READY. prompt was cancelled by the client after ${readyElapsedMs} ms; the command had already been sent and the machine may still be starting.`);
@@ -190,10 +272,12 @@ export const machineControlModule = defineToolModule({
           const parsed = resetArgsSchema.parse(args ?? {});
           ctx.logger.info("Resetting C64");
 
-          const before = await screenBeforeReset(ctx, parsed);
+          const observation = await screenBeforeReset(ctx, parsed);
+          cancelGeneratedSidPlayback(); // The reset clears the SID; a running generated sequence would keep writing to it.
           const result = await ctx.client.reset();
           if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
+            await removeResetMarker(ctx, observation);
             throw new ToolExecutionError("C64 backend reported failure while resetting", {
               details: normaliseFailure(result.details),
             });
@@ -203,9 +287,10 @@ export const machineControlModule = defineToolModule({
 
           if (typeof details.warning === "string") {
             // The CPU may still be stopped, so a READY. wait would only time out.
+            await removeResetMarker(ctx, observation);
             return textResult(`C64 reset command issued. Warning: ${details.warning}`, { success: true, details, warning: details.warning });
           }
-          return await withReadyResult(ctx, parsed, before, "C64 reset command issued successfully.", details);
+          return await withReadyResult(ctx, parsed, observation, "C64 reset command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -233,10 +318,12 @@ export const machineControlModule = defineToolModule({
           const parsed = rebootArgsSchema.parse(args ?? {});
           ctx.logger.info("Rebooting C64");
 
-          const before = await screenBeforeReset(ctx, parsed);
+          const observation = await screenBeforeReset(ctx, parsed);
+          cancelGeneratedSidPlayback();
           const result = await ctx.client.reboot();
           if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
+            await removeResetMarker(ctx, observation);
             throw new ToolExecutionError("C64 backend reported failure while rebooting", {
               details: normaliseFailure(result.details),
             });
@@ -244,7 +331,7 @@ export const machineControlModule = defineToolModule({
 
           const details = toRecord(result.details) ?? {};
 
-          return await withReadyResult(ctx, parsed, before, "C64 reboot command issued successfully.", details);
+          return await withReadyResult(ctx, parsed, observation, "C64 reboot command issued successfully.", details);
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);
@@ -402,16 +489,18 @@ export const machineControlModule = defineToolModule({
           if (ctx.signal?.aborted) {
             return cancelledResult("power_cycle was cancelled by the client before it started; no menu input was sent and the machine was not touched.");
           }
-          const before = await screenBeforeReset(ctx, parsed);
+          const observation = await screenBeforeReset(ctx, parsed);
+          cancelGeneratedSidPlayback();
           const result = await ctx.client.powerCycle();
           if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
+            await removeResetMarker(ctx, observation);
             throw new ToolExecutionError("Power cycle did not complete", {
               details: normaliseFailure(result.details),
             });
           }
           const details = toRecord(result.details) ?? {};
-          return await withReadyResult(ctx, parsed, before, "Power-cycle request completed.", details);
+          return await withReadyResult(ctx, parsed, observation, "Power-cycle request completed.", details);
         } catch (error) {
           if (error instanceof ToolError) return toolErrorResult(error);
           return unknownErrorResult(error);

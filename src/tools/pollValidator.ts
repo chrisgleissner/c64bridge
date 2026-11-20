@@ -30,6 +30,18 @@ export interface BasicPollResult {
   type: "BASIC";
   message?: string;
   line?: number;
+  /** The screen row that shows the error, for example `?SYNTAX  ERROR IN 10`. */
+  text?: string;
+  /** The last screen read: the error screen, or the screen when the poll ended. */
+  screen?: string;
+  /**
+   * Set when status is ok. true: BASIC was observed back at the READY. prompt
+   * waiting for input. false: no BASIC error appeared, but no READY. prompt was
+   * observed within the window either, so the program was still running.
+   */
+  finished?: boolean;
+  /** Set when finished is false: how long the poll watched the program. */
+  observedMs?: number;
 }
 
 /**
@@ -138,7 +150,7 @@ function concatBuffers(...buffers: Uint8Array[]): Uint8Array {
  * Extract BASIC error information from screen text.
  * Looks for patterns like "?SYNTAX ERROR" or "SYNTAX ERROR IN 120".
  */
-function extractBasicError(screen: string): { message?: string; line?: number } | null {
+function extractBasicError(screen: string): { message?: string; line?: number; text?: string } | null {
   const errorMatch = /(?:^|\n)\s*\?([A-Z'\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match. The apostrophe covers UNDEF'D STATEMENT, REDIM'D ARRAY and CAN'T CONTINUE.
   
   if (errorMatch) {
@@ -146,9 +158,11 @@ function extractBasicError(screen: string): { message?: string; line?: number } 
     const lineStr = errorMatch[2];
     const line = lineStr ? parseInt(lineStr, 10) : undefined;
     
+    const matchedRow = screen.slice(errorMatch.index).replace(/^\n/, "").split("\n")[0]?.trim();
     return {
       message: errorType,
       line: Number.isFinite(line) ? line : undefined,
+      ...(matchedRow ? { text: matchedRow } : {}),
     };
   }
   
@@ -179,15 +193,28 @@ function endsAtReadyPrompt(screen: string): boolean {
 }
 
 /**
- * Reads the high byte of CURLIN ($3A), which is $FF while BASIC is in direct
- * mode and holds the current line number's high byte while a program runs.
+ * True when the KERNAL screen editor is waiting for a key with an empty
+ * keyboard buffer, which is where BASIC sits at the READY. prompt.
+ *
+ * The wait loop at $E5CD copies the keyboard buffer count $C6 into the cursor
+ * enable flag $CC on every pass ($E5CD LDA $C6, $E5CF STA $CC), so $CC is $00
+ * only while that loop runs with no key queued. The only other write is CINT
+ * at $E542, which stores $0C. Once RUN arrives through the keyboard buffer,
+ * $CC keeps a non-zero value while the program runs and returns to $00 when
+ * BASIC waits for the next direct line (source: mist64/c64ref ROM disassembly).
+ *
+ * CURLIN high byte $3A is not used: BASIC sets it to $FF only after a direct
+ * line has been entered ($A490 LDX #$FF, $A492 STX $3A). END ($A831) and the
+ * warm start keep the last line's high byte, measured as $3A = $00 after a
+ * finished program on an Ultimate 64 Elite (firmware 3.15a, 2026-11-20).
+ *
  * Returns undefined when memory cannot be read, so the caller can fall back to
  * screen evidence.
  */
-async function inDirectMode(client: C64Client): Promise<boolean | undefined> {
+async function waitingForInput(client: C64Client): Promise<boolean | undefined> {
   try {
-    const bytes = await client.readMemoryRaw(0x3a, 1);
-    return bytes[0] === undefined ? undefined : bytes[0] === 0xff;
+    const bytes = await client.readMemoryRaw(0xcc, 1);
+    return bytes[0] === undefined ? undefined : bytes[0] === 0x00;
   } catch {
     return undefined;
   }
@@ -199,11 +226,12 @@ async function inDirectMode(client: C64Client): Promise<boolean | undefined> {
  * Evidence that the program ran: the screen shows RUN or an error, differs
  * from the screen captured before the run (a program that clears the screen
  * removes the RUN echo), or is blank. A BASIC error returns immediately. Once
- * there is evidence, the screen ends at the READY. prompt and BASIC is back in
- * direct mode (CURLIN high byte $FF; without memory access, the same READY.
- * screen on two consecutive polls), the program has finished without an error
- * and the poll returns at once. A program that is
- * still running (no prompt) is watched for errors for the full window.
+ * there is evidence, the screen ends at the READY. prompt and BASIC is waiting
+ * for input (cursor enable $CC = $00; without memory access, the same
+ * READY. screen on two consecutive polls), the program has finished without an
+ * error and the poll returns at once with finished: true. A program that is
+ * still running (no prompt) is watched for errors for the full window and is
+ * then reported with finished: false.
  */
 async function pollBasicOutcome(
   client: C64Client,
@@ -225,6 +253,7 @@ async function pollBasicOutcome(
   let pollCount = 0;
   let runDetected = false;
   let previousReadyScreen: string | undefined;
+  let lastScreen: string | undefined;
   const baseline = baselineScreen === undefined ? undefined : normaliseScreen(baselineScreen);
 
   logger.debug("Starting BASIC outcome polling", { maxMs: config.maxMs, intervalMs: config.intervalMs });
@@ -234,6 +263,7 @@ async function pollBasicOutcome(
 
     try {
       const screen = await client.readScreen();
+      lastScreen = screen;
       const upperScreen = screen.toUpperCase();
 
       const errorInfo = extractBasicError(screen);
@@ -244,6 +274,8 @@ async function pollBasicOutcome(
           type: "BASIC",
           message: errorInfo.message,
           line: errorInfo.line,
+          ...(errorInfo.text ? { text: errorInfo.text } : {}),
+          screen,
         };
       }
 
@@ -259,13 +291,13 @@ async function pollBasicOutcome(
 
       if (runDetected && endsAtReadyPrompt(screen)) {
         // A program can print READY. itself and keep running, so the prompt alone is not proof that it finished.
-        const direct = await inDirectMode(client);
+        const direct = await waitingForInput(client);
         const settled = direct === undefined
           ? previousReadyScreen !== undefined && previousReadyScreen === normaliseScreen(screen)
           : direct;
         if (settled) {
           logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime, direct });
-          return { status: "ok", type: "BASIC" };
+          return { status: "ok", type: "BASIC", screen, finished: true };
         }
         previousReadyScreen = normaliseScreen(screen);
       } else {
@@ -282,12 +314,16 @@ async function pollBasicOutcome(
       status: "error",
       type: "BASIC",
       message: loadMismatch ?? "No execution activity detected: the firmware reported success, but the program does not appear to have run.",
+      ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
     };
   }
-  logger.debug("BASIC polling completed without errors", { pollCount, elapsed: Date.now() - startTime });
+  logger.debug("BASIC polling ended without an error and without a READY. prompt", { pollCount, elapsed: Date.now() - startTime });
   return {
     status: "ok",
     type: "BASIC",
+    finished: false,
+    observedMs: Date.now() - startTime,
+    ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
   };
 }
 
@@ -341,6 +377,18 @@ async function checkProgramLoaded(
     return { loadCheck: "matched", load: { address: windowStart, expected: toHex(expected), found: toHex(found.subarray(0, length)) } };
   }
   return { loadCheck: "matched" };
+}
+
+/**
+ * The load evidence alone, without waiting for signs of execution: used when the caller did not ask
+ * for verification. One memory read.
+ */
+export async function checkAsmProgramLoaded(
+  client: C64Client,
+  logger: ToolLogger,
+  program: ExpectedProgramBytes,
+): Promise<Pick<AsmPollResult, "loadCheck" | "load">> {
+  return checkProgramLoaded(client, logger, program);
 }
 
 async function pollAsmOutcome(
@@ -407,15 +455,21 @@ async function pollAsmOutcome(
   }
   let previousSignature: number | null = null; // Only stable RAM: reading I/O can ack CIA interrupts on Ultimate, and raster/timer values aren't evidence of liveness.
   let alive = false;
+  // With readScreenDetailed one read per poll covers both checks and follows the screen the VIC-II
+  // shows (a program may move it away from $0400). Without it, screen RAM at $0400 is read directly.
+  const detailedClient = client as C64Client & { readScreenDetailed?: () => Promise<{ text: string }> };
+  const detailed = typeof detailedClient.readScreenDetailed === "function";
   
   const pollDeadline = Date.now() + config.maxMs;
   
   while (Date.now() < pollDeadline && !alive) {
     pollCount++;
     
+    let screenText: string | undefined;
     try {
+      screenText = detailed ? (await detailedClient.readScreenDetailed!()).text : await client.readScreen();
       // A routine that works for a while before RTS shows READY. only after the first screen read.
-      if (returnedToBasicAfterSys(await client.readScreen())) {
+      if (returnedToBasicAfterSys(screenText)) {
         logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
         return { status: "ok", type: "ASM", loadCheck };
       }
@@ -424,7 +478,8 @@ async function pollAsmOutcome(
     }
 
     try {
-      const screenRam = await client.readMemoryRaw(0x0400, 0x03e8);
+      if (detailed && screenText === undefined) throw new Error("screen read failed");
+      const screenRam = detailed ? new TextEncoder().encode(screenText) : await client.readMemoryRaw(0x0400, 0x03e8);
       const signature = computeCrc32(screenRam);
       
       // Check for any activity

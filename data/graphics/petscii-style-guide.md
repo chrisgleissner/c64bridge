@@ -70,9 +70,9 @@ Conversion: Screen code ≠ PETSCII code. Use charset reference (c64://graphics/
 | PETSCII | Char | Name | Use |
 |---------|------|------|-----|
 | 32 | (space) | Space | Empty cell |
-| 160 | █ | Full block | Solid fill (reverse space) |
-| 65-90 | A-Z | Uppercase | Text |
-| 193-218 | a-z | Lowercase | Text (shifted mode) |
+| 160 | (shifted space) | Shifted space | Prints as a blank; for a full block print `CHR$(18)+" "` (reverse space) or poke screen code 160 |
+| 65-90 | A-Z / a-z | Letters | Uppercase in the upper case/graphics set; lowercase in the lower/upper case set |
+| 193-218 | graphics / A-Z | Shifted letters | Graphics in the upper case/graphics set; uppercase in the lower/upper case set |
 | 48-57 | 0-9 | Digits | Numbers |
 | 115 | ♥ | Heart | Decoration, life |
 | 122 | ♦ | Diamond | Suit, decoration |
@@ -87,7 +87,7 @@ Conversion: Screen code ≠ PETSCII code. Use charset reference (c64://graphics/
 | 106 | ╰ | Arc bottom-left | Rounded corners |
 | 107 | ╯ | Arc bottom-right | Rounded corners |
 | 123 | ┼ | Cross | Grid intersection |
-| 66-82 | Various | Block fractions | Dithering, gradients |
+| 161-191 | Various | Block graphics (block elements and line pieces) | Dithering, gradients |
 
 ## Tool Integration
 

@@ -49,7 +49,7 @@ const extractOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "fs_stats",
       ensureDescriptor(metaDescriptorIndex, "filesystem_stats_by_extension").inputSchema,
-      { description: "Walk the filesystem and aggregate counts/bytes by extension." },
+      { description: "Per-extension size statistics for one directory (no recursion); the firmware returns at most one file per extension." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "filesystem_stats_by_extension", rawArgs, ctx),
   },

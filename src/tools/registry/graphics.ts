@@ -45,11 +45,11 @@ const captureFrameArgsSchema = objectSchema({
       default: 1,
     }), 1),
     includePixels: optionalSchema(booleanSchema({
-      description: "Include raw pixel payload bytes in the response. Off by default because a frame is about 100 KB; the response is rejected above 2 MiB, so lower count when it is on.",
+      description: "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected, so lower count).",
       default: false,
     }), false),
     format: optionalSchema(stringSchema({
-      description: "Set to png to receive each frame as an MCP image block (C64 palette). At most 4 frames per call.",
+      description: "png returns each frame as an MCP image block (max 4 frames per call).",
       enum: ["png"],
     })),
     encoding: optionalSchema(stringSchema({
@@ -126,6 +126,9 @@ export async function frameToPngContent(frame: {
 // ---------------------------------------------------------------------------
 // get_display_state helpers — VIC-II register decoding
 // ---------------------------------------------------------------------------
+// Read-back caveats (VIC-II, Bauer "The MOS 6567/6569 video controller (VIC-II)", register list): $D011 bit 7 reads
+// as bit 8 of the live raster line, $D016 bits 6-7 and $D018 bit 0 are unused and read 1, $D020/$D021 bits 4-7 read 1.
+// They are masked so `registers` shows the configuration, not noise.
 function parseVicState(d011: number, d016: number, d018: number, dd00: number, d020: number, d021: number) {
   const bank = (~dd00) & 0x03; // CIA2 Port A bits 0-1 select VIC bank (inverted)
   const bankBase = bank * 0x4000;
@@ -133,7 +136,6 @@ function parseVicState(d011: number, d016: number, d018: number, dd00: number, d
   const extendedColor = (d011 & 0x40) !== 0;
   const multicolor = (d016 & 0x10) !== 0;
   const screenVisible = (d011 & 0x10) !== 0;
-  const raster8 = (d011 & 0x80) !== 0;
   const vertScroll = d011 & 0x07;
   const horizScroll = d016 & 0x07;
   const columns40 = (d016 & 0x08) !== 0;
@@ -164,22 +166,21 @@ function parseVicState(d011: number, d016: number, d018: number, dd00: number, d
     columns40,
     vertScroll,
     horizScroll,
-    raster8,
     borderColor: d020 & 0x0f,
     backgroundColor: d021 & 0x0f,
     registers: {
-      d011: `$${d011.toString(16).toUpperCase().padStart(2, "0")}`,
-      d016: `$${d016.toString(16).toUpperCase().padStart(2, "0")}`,
-      d018: `$${d018.toString(16).toUpperCase().padStart(2, "0")}`,
-      d020: `$${d020.toString(16).toUpperCase().padStart(2, "0")}`,
-      d021: `$${d021.toString(16).toUpperCase().padStart(2, "0")}`,
+      d011: `$${(d011 & 0x7f).toString(16).toUpperCase().padStart(2, "0")}`,
+      d016: `$${(d016 & 0x3f).toString(16).toUpperCase().padStart(2, "0")}`,
+      d018: `$${(d018 & 0xfe).toString(16).toUpperCase().padStart(2, "0")}`,
+      d020: `$${(d020 & 0x0f).toString(16).toUpperCase().padStart(2, "0")}`,
+      d021: `$${(d021 & 0x0f).toString(16).toUpperCase().padStart(2, "0")}`,
       dd00: `$${dd00.toString(16).toUpperCase().padStart(2, "0")}`,
     },
   };
 }
 
 const getDisplayStateArgsSchema = objectSchema({
-  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. The same shared-memory path is used on C64U/U64, U2-family hardware, and VICE, so the response shape is identical.",
+  description: "Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
   properties: {
     op: literalSchema("get_display_state"),
   },
@@ -281,7 +282,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_petscii_art",
       ensureDescriptor(graphicsDescriptorIndex, "render_petscii_art").inputSchema,
-      { description: "Create PETSCII art from prompts, text, or explicit bitmap data, and optionally display it on the C64." },
+      { description: "Create PETSCII art from a prompt, text or bitmap data, optionally displaying it." },
     ),
     handler: groupedGraphicsHandlers.render_petscii_art,
   },
@@ -299,7 +300,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_sprite",
       ensureDescriptor(graphicsDescriptorIndex, "render_sprite").inputSchema,
-      { description: "Display supplied 63-byte sprite data at the requested position and colour by writing memory and patching VIC-II registers directly." },
+      { description: "Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers." },
     ),
     handler: groupedGraphicsHandlers.render_sprite,
   },
@@ -308,7 +309,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_bitmap",
       ensureDescriptor(graphicsDescriptorIndex, "render_bitmap").inputSchema,
-      { description: "Import an image file, convert it to VIC-II bitmap memory, write it into RAM, and display it." },
+      { description: "Convert an image file to VIC-II bitmap memory, write it to RAM and display it." },
     ),
     handler: groupedGraphicsHandlers.render_bitmap,
   },

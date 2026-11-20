@@ -38,11 +38,11 @@ const metaDescriptorIndex = buildDescriptorIndex(metaModule);
 const MAX_SAMPLE_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
 const captureSamplesArgsSchema = objectSchema({
-  description: "Capture raw stereo PCM samples from the C64 Ultimate audio UDP stream.",
+  description: "Capture raw stereo PCM samples from the Ultimate audio UDP stream.",
   properties: {
     op: literalSchema("capture_samples"),
     count: optionalSchema(numberSchema({
-      description: "Number of stereo sample pairs to capture.",
+      description: "Stereo sample pairs to capture; at most 65536 (about 1.37 s).",
       integer: true,
       minimum: 1,
       maximum: 65536,
@@ -131,7 +131,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "reset",
       ensureDescriptor(audioDescriptorIndex, "sid_reset").inputSchema,
-      { description: "Soft or hard reset of SID registers to clear glitches." },
+      { description: "Soft or hard reset of the SID registers." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sid_reset", rawArgs, ctx),
   },
@@ -203,7 +203,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "play_preset",
       ensureDescriptor(metaDescriptorIndex, "music_play_preset").inputSchema,
-      { description: "Compile and play a built-in SID preset such as Für Elise by Beethoven." },
+      { description: "Compile and play a built-in SID preset." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "music_play_preset", rawArgs, ctx),
   },
@@ -212,7 +212,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "pipeline",
       ensureDescriptor(metaDescriptorIndex, "music_compile_play_analyze").inputSchema,
-      { description: "Compile a SIDWAVE score, play it, and analyze the recording." },
+      { description: "Compile a SIDWAVE score, play and analyze it." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "music_compile_play_analyze", rawArgs, ctx),
   },
@@ -221,7 +221,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "analyze",
       ensureDescriptor(audioDescriptorIndex, "analyze_audio").inputSchema,
-      { description: "Automatically analyze SID playback when verification is requested." },
+      { description: "Analyze SID playback when verification is requested." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "analyze_audio", rawArgs, ctx),
   },
@@ -230,7 +230,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "record_analyze",
       ensureDescriptor(audioDescriptorIndex, "record_and_analyze_audio").inputSchema,
-      { description: "Record audio for a fixed duration and return SID analysis metrics. Uses the Ultimate audio stream on c64u and the host microphone on other backends." },
+      { description: "Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "record_and_analyze_audio", rawArgs, ctx),
   },

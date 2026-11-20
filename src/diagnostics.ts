@@ -80,8 +80,20 @@ export interface DiagnosticSessionSummary {
 }
 
 interface DiagnosticsState {
-  readonly info: DiagnosticsSessionInfo;
+  info: DiagnosticsSessionInfo;
+  /** Bytes appended to the current file by this process. */
+  bytes: number;
+  /** Part number of the current file (1 = the session's first file). */
+  part: number;
+  /** Component name the session was created with, used for the names of later parts. */
+  readonly baseComponent: string;
 }
+
+/** A session file is rotated above this size; at most MAX_PARTS_PER_SESSION parts are kept per session. */
+const DEFAULT_MAX_FILE_BYTES = 16 * 1024 * 1024;
+const MAX_PARTS_PER_SESSION = 4;
+/** performance_report reads at most this many bytes from the end of a file. */
+export const MAX_DIAGNOSTICS_READ_BYTES = 16 * 1024 * 1024;
 
 let state: DiagnosticsState | null = null;
 let handlersInstalled = false;
@@ -122,7 +134,12 @@ export function writeDiagnosticEvent(event: string, details?: unknown): void {
   };
 
   try {
-    fs.appendFileSync(current.info.filePath, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
+    const line = `${JSON.stringify(record)}\n`;
+    fs.appendFileSync(current.info.filePath, line, { encoding: "utf8", mode: 0o600 });
+    current.bytes += Buffer.byteLength(line);
+    if (current.bytes > resolveMaxFileBytes()) {
+      rotateSessionFile(current);
+    }
   } catch (error) {
     safeStderrWrite(
       `[diagnostics] failed to append event ${event}: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -229,12 +246,12 @@ export function resolveDiagnosticSessionFile(scope: "current" | "latest" = "curr
   return latest ?? null;
 }
 
-export function readDiagnosticRecords(filePath: string): readonly DiagnosticRecord[] {
+export function readDiagnosticRecords(filePath: string, maxBytes = MAX_DIAGNOSTICS_READ_BYTES): readonly DiagnosticRecord[] {
   if (!fs.existsSync(filePath)) {
     return [];
   }
 
-  const text = fs.readFileSync(filePath, "utf8").trim();
+  const text = readFileTail(filePath, maxBytes).trim();
   if (!text) {
     return [];
   }
@@ -248,6 +265,24 @@ export function readDiagnosticRecords(filePath: string): readonly DiagnosticReco
       return [];
     }
   });
+}
+
+/** The last `maxBytes` of a file, starting at a line boundary when it had to cut. */
+function readFileTail(filePath: string, maxBytes: number): string {
+  const size = fs.statSync(filePath).size;
+  if (size <= maxBytes) {
+    return fs.readFileSync(filePath, "utf8");
+  }
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const read = fs.readSync(fd, buffer, 0, maxBytes, size - maxBytes);
+    const text = buffer.subarray(0, read).toString("utf8");
+    const firstBreak = text.indexOf("\n");
+    return firstBreak >= 0 ? text.slice(firstBreak + 1) : "";
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 export function summarizeDiagnosticsSession(
@@ -374,8 +409,44 @@ function ensureState(component: string): DiagnosticsState {
   }
 
   const info = createSessionInfo(component);
-  state = { info };
+  state = { info, bytes: 0, part: 1, baseComponent: info.component };
   return state;
+}
+
+function resolveMaxFileBytes(): number {
+  const raw = process.env.C64BRIDGE_DIAGNOSTICS_MAX_FILE_BYTES?.trim();
+  if (raw && /^\d+$/.test(raw) && Number(raw) > 0) return Number(raw);
+  return DEFAULT_MAX_FILE_BYTES;
+}
+
+function partFilePath(current: DiagnosticsState, part: number): string {
+  const component = part === 1 ? current.baseComponent : `${current.baseComponent}-part${part}`;
+  return path.join(current.info.directory, `${current.info.sessionId}-${component}.ndjson`);
+}
+
+/**
+ * Continues the session in a new file once the current one passed the size limit, and removes the
+ * session's parts older than the last MAX_PARTS_PER_SESSION, so a long session cannot fill the disk.
+ */
+function rotateSessionFile(current: DiagnosticsState): void {
+  const previous = current.info.filePath;
+  current.part += 1;
+  current.bytes = 0;
+  current.info = { ...current.info, filePath: partFilePath(current, current.part) };
+  const expired = current.part - MAX_PARTS_PER_SESSION;
+  if (expired >= 1) {
+    try { fs.unlinkSync(partFilePath(current, expired)); } catch { /* already gone */ }
+  }
+  const line = `${JSON.stringify({
+    ts: new Date().toISOString(),
+    pid: process.pid,
+    sessionId: current.info.sessionId,
+    component: current.info.component,
+    event: "diagnostics_rotated",
+    details: { previousFile: previous, part: current.part },
+  })}\n`;
+  fs.appendFileSync(current.info.filePath, line, { encoding: "utf8", mode: 0o600 });
+  current.bytes += Buffer.byteLength(line);
 }
 
 function createSessionInfo(component: string): DiagnosticsSessionInfo {

@@ -50,20 +50,14 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 
 ## Tokenization Issues
 
-**Problem:** BASIC tokenizes keywords, which affects string matching and `DATA` statements.
+**Problem:** BASIC tokenizes keywords in program lines, which affects string matching.
 
-**Impact on DATA:**
+**DATA is not affected:** the tokenizer leaves the rest of a `DATA` statement untokenized, so keywords in `DATA` read back as text.
 
 ```basic
 10 DATA PRINT,GOTO,END
 20 READ A$,B$,C$
-30 PRINT A$  :REM DISPLAYS "P" + token bytes, not "PRINT"
-```
-
-**Solution:** Quote `DATA` strings that might contain keywords.
-
-```basic
-10 DATA "PRINT","GOTO","END"
+30 PRINT A$  :REM DISPLAYS "PRINT"
 ```
 
 ## Variable Names
@@ -144,7 +138,7 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 
 ## Memory Conflicts
 
-**Problem:** BASIC program area grows downward from `$0801`. String/array space grows upward from `$9FFF` (or lower if adjusted). They can collide.
+**Problem:** The BASIC program, then variables and then arrays grow upward from `$0801`. Strings grow downward from the top of BASIC memory (MEMSIZ; the highest BASIC RAM byte is `$9FFF` by default). They can collide.
 
 **Symptoms:** `OUT OF MEMORY` errors or system crashes.
 
@@ -209,19 +203,21 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 20 PRINT "A"  :REM DISPLAYS 'A'
 
 30 REM POKE TO SCREEN USES SCREEN CODES
-40 POKE 1024,1  :REM DISPLAYS 'A' (SCREEN CODE 1)
+40 POKE 1024,1  :REM SCREEN CODE 1 = 'A'
+50 POKE 55296,14  :REM SET ITS COLOUR: AFTER A CLEAR, COLOUR RAM HOLDS THE BACKGROUND COLOUR
 ```
 
 ## RESTORE Statement
 
-**Problem:** `RESTORE` without line number resets `READ` pointer to the first `DATA` statement. If you need to re-read from a specific line, use `RESTORE linenum`.
+**Problem:** In BASIC V2, `RESTORE` takes no line number. It always resets the `READ` pointer to the start of the program, so the next `READ` uses the first `DATA` statement. To reach later data, `READ` and discard the values before it.
 
 ```basic
 10 DATA 1,2,3
 20 DATA 4,5,6
 30 READ A:READ B:READ C
-40 RESTORE 20  :REM RESET TO LINE 20
-50 READ D:READ E:READ F
+40 RESTORE  :REM BACK TO THE FIRST DATA ITEM
+50 FOR I=1 TO 3:READ X:NEXT I  :REM SKIP LINE 10
+60 READ D:READ E:READ F  :REM 4,5,6
 ```
 
 ## Summary
@@ -229,7 +225,7 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 - **Always close quotes** and watch line lengths (80 chars).
 - **Use unique variable prefixes** (first 2 chars matter).
 - **Dimension arrays explicitly** and remember 0-indexing.
-- **Quote DATA strings** to avoid tokenization issues.
+- **DATA contents are not tokenized**; keywords in DATA read back as text.
 - **Check device numbers** before OPEN.
 - **Balance GOSUB/RETURN** to avoid stack overflow.
 - **Validate INPUT** to handle user errors gracefully.

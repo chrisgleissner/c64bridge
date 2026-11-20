@@ -101,14 +101,49 @@ function assertImageDimensions(width: number, height: number): void {
   }
 }
 
+/**
+ * Width and height declared in the file header, read before any decoder allocates the pixel
+ * buffer. Formats: PNG (IHDR), GIF (logical screen descriptor), BMP (BITMAPINFOHEADER), JPEG (first SOF marker).
+ */
+export function peekImageDimensions(buffer: Buffer): { width: number; height: number } | undefined {
+  if (buffer.length >= 24 && PNG_SIGNATURE.every((byte, index) => buffer[index] === byte)) {
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (buffer.length >= 10 && buffer.toString("latin1", 0, 3) === "GIF") {
+    return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+  }
+  if (buffer.length >= 26 && buffer[0] === 0x42 && buffer[1] === 0x4d) {
+    const headerSize = buffer.readUInt32LE(14);
+    if (headerSize === 12) return { width: buffer.readUInt16LE(18), height: buffer.readUInt16LE(20) };
+    return { width: Math.abs(buffer.readInt32LE(18)), height: Math.abs(buffer.readInt32LE(22)) };
+  }
+  if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 4 <= buffer.length) {
+      if (buffer[offset] !== 0xff) { offset += 1; continue; }
+      const marker = buffer[offset + 1]!;
+      if (marker === 0xff) { offset += 1; continue; }
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { offset += 2; continue; }
+      const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isSof) {
+        if (offset + 9 > buffer.length) return undefined;
+        return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
+      }
+      offset += 2 + buffer.readUInt16BE(offset + 2);
+    }
+  }
+  return undefined;
+}
+
 export async function importImageAsVicBitmap(options: BitmapImportOptions): Promise<PreparedVicBitmap> {
   // The path is confined and read as a regular file; Jimp.read would fetch http(s) values and read any path.
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(options.imagePath)) {
     throw new ToolValidationError("imagePath must be a local file path; URLs are not fetched.");
   }
   const buffer = await readHostFile(options.imagePath);
-  if (buffer.length >= 24 && PNG_SIGNATURE.every((byte, index) => buffer[index] === byte)) {
-    assertImageDimensions(buffer.readUInt32BE(16), buffer.readUInt32BE(20));
+  const header = peekImageDimensions(buffer);
+  if (header) {
+    assertImageDimensions(header.width, header.height);
   }
   const { Jimp } = await import("jimp");
   const image = await Jimp.fromBuffer(buffer);
@@ -124,6 +159,8 @@ export async function importImageAsVicBitmap(options: BitmapImportOptions): Prom
     height: logicalHeight,
     preserveAspect: options.preserveAspect !== false,
     backgroundColor,
+    // A multicolour pixel is two hires pixels wide, so the 160x200 canvas shows as 320x200.
+    pixelWidthRatio: options.mode === "multicolor" ? 2 : 1,
   });
 
   const prepared = convertRgbaToVicBitmap(rgba, {
@@ -244,7 +281,7 @@ export function buildVicBitmapRegisters(
 
 async function renderImageToLogicalCanvas(
   image: JimpBitmapLike,
-  options: { readonly width: number; readonly height: number; readonly preserveAspect: boolean; readonly backgroundColor: number },
+  options: { readonly width: number; readonly height: number; readonly preserveAspect: boolean; readonly backgroundColor: number; readonly pixelWidthRatio?: number },
 ): Promise<RgbaImageData> {
   const background = paletteColorToJimp(normaliseColorIndex(options.backgroundColor));
   if (!options.preserveAspect) {
@@ -256,8 +293,9 @@ async function renderImageToLogicalCanvas(
     };
   }
 
-  const scale = Math.min(options.width / image.bitmap.width, options.height / image.bitmap.height);
-  const renderWidth = Math.max(1, Math.round(image.bitmap.width * scale));
+  const ratio = options.pixelWidthRatio ?? 1;
+  const scale = Math.min((options.width * ratio) / image.bitmap.width, options.height / image.bitmap.height);
+  const renderWidth = Math.min(options.width, Math.max(1, Math.round((image.bitmap.width * scale) / ratio)));
   const renderHeight = Math.max(1, Math.round(image.bitmap.height * scale));
   const resized = image.clone().resize({ w: renderWidth, h: renderHeight });
   const { Jimp } = await import("jimp");
@@ -480,7 +518,8 @@ function squaredDistance(
 
 function paletteColorToJimp(index: number): number {
   const [red, green, blue] = VIC_PALETTE[index] ?? VIC_PALETTE[0];
-  return (red << 24) | (green << 16) | (blue << 8) | 0xFF;
+  // Multiply: `red << 24` is negative for red >= 0x80 and Jimp rejects negative colours.
+  return (red * 0x1000000) + (green << 16) + (blue << 8) + 0xFF;
 }
 
 function normaliseColorIndex(value: number): number {

@@ -7,6 +7,7 @@ import {
 } from "./schema.js";
 import { textResult } from "./responses.js";
 import { assertSafeDevicePath } from "../devicePathSafety.js";
+import { readHostFile, DISK_IMAGE_MAX_READ_BYTES } from "../hostPaths.js";
 import {
   ToolError,
   ToolExecutionError,
@@ -78,6 +79,15 @@ const diskImagePathSchema = stringSchema({
   minLength: 1,
 });
 
+type DiskImageType = "d64" | "g64" | "d71" | "g71" | "d81";
+
+/** The firmware takes the type of an uploaded image from its extension; the same rule is applied here to report a clear error first. */
+export function diskImageTypeFromPath(file: string): DiskImageType {
+  const extension = file.slice(file.lastIndexOf(".") + 1).toLowerCase();
+  if (extension === "d64" || extension === "g64" || extension === "d71" || extension === "g71" || extension === "d81") return extension;
+  throw new ToolValidationError(`Cannot tell the disk image type of ${file} from its extension; use .d64, .g64, .d71, .g71 or .d81, or pass type.`, { path: "$.type" });
+}
+
 const driveMountArgsSchema = objectSchema({
   description: "Parameters for mounting a disk image onto a specific Ultimate drive slot.",
   properties: {
@@ -90,6 +100,10 @@ const driveMountArgsSchema = objectSchema({
     mode: optionalSchema(stringSchema({
       description: "Attachment mode controlling how the firmware treats the mounted image (C64U/U64 and U2 only).",
       enum: ["readwrite", "readonly", "unlinked"],
+    })),
+    location: optionalSchema(stringSchema({
+      description: "device (default): Ultimate path. host: upload the image file from the host (type from its extension unless type is set).",
+      enum: ["device", "host"],
     })),
   },
   required: ["drive", "image"],
@@ -272,10 +286,21 @@ export const storageModule = defineToolModule({
             mode: parsed.mode ?? null,
           });
 
-          const result = await ctx.client.driveMount(parsed.drive, parsed.image, {
-            type: parsed.type as any,
-            mode: parsed.mode as any,
-          });
+          // On VICE every image path is a host path already, so only Ultimate needs the upload.
+          const upload = parsed.location === "host" && ctx.platform.id !== "vice";
+          let uploadedBytes: number | undefined;
+          let result;
+          if (upload) {
+            const type = (parsed.type as DiskImageType | undefined) ?? diskImageTypeFromPath(parsed.image);
+            const bytes = await readHostFile(parsed.image, { maxBytes: DISK_IMAGE_MAX_READ_BYTES });
+            uploadedBytes = bytes.length;
+            result = await ctx.client.driveMountImage(parsed.drive, bytes, { type, mode: parsed.mode as any });
+          } else {
+            result = await ctx.client.driveMount(parsed.drive, parsed.image, {
+              type: parsed.type as any,
+              mode: parsed.mode as any,
+            });
+          }
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while mounting disk image", {
               details: normaliseFailure(result.details),
@@ -288,8 +313,9 @@ export const storageModule = defineToolModule({
 
           // Backend notes (for example VICE's autoload resetting the machine) belong in the visible text.
           const note = typeof details.note === "string" ? ` ${details.note}` : "";
-          return textResult(`Mounted ${parsed.image} on ${parsed.drive}.${note}`, {
+          return textResult(`Mounted ${parsed.image}${uploadedBytes === undefined ? "" : ` (${uploadedBytes} bytes uploaded from the host)`} on ${parsed.drive}.${note}`, {
             success: true,
+            ...(uploadedBytes === undefined ? {} : { location: "host", uploadedBytes }),
             drive: parsed.drive,
             image: parsed.image,
             type: finalType,

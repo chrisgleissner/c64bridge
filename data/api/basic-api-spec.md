@@ -141,14 +141,13 @@ allows the relocation of program text, redefining top-of-memory, or injecting cu
 | `$BDDD` | 48605 | — | **FOUT** | Float → ASCII string | — | FAC1 | A,Y→string | Used by PRINT/STR$ |
 | `$BF71` | 49009 | 186 ($BA) | **SQR** | Square root | — | FAC1 | FAC1 | |
 | `$BF7B` | 49019 | 174 ($AE) | **^** | Exponentiation | — | FAC2^FAC1 | FAC1 | |
-| `$BFB4` | 49076 | 168 ($A8) | **NOT / >** | Logical NOT (also helper for >) | — | FAC1 | FAC1 | NOT X = -(X+1) |
+| `$BFB4` | 49076 | — | **unary -** | Negation | — | FAC1 | FAC1 | Operator table entry for unary minus |
 | `$BFED` | 49133 | 189 ($BD) | **EXP** | e^X | — | FAC1 | FAC1 | Jumps into KERNAL continuation |
 | `$B86A` | 47210 | 170 ($AA) | **+** | Addition | — | FAC1,FAC2 | FAC1 | |
 | `$B853` | 47187 | 171 ($AB) | **-** | Subtraction | — | FAC1,FAC2 | FAC1 | |
 | `$BA2B` | 47659 | 172 ($AC) | **\*** | Multiplication | — | FAC1,FAC2 | FAC1 | |
 | `$BB12` | 47890 | 173 ($AD) | **/** | Division | — | FAC2/FAC1 | FAC1 | |
-| `$AFE6` | 45030 | 176 ($B0) | **AND** | Logical AND | — | ints | FAC1 | duplicate entry for clarity |
-| `$AFE9` | 45033 | 175 ($AF) | **OR** | Logical OR | — | ints | FAC1 | duplicate entry for clarity |
-| `$AED4` | 44756 | 178 ($B2) | **=** | Equal comparison | — | — | FAC1=0/−1 | Uses REL |
-| `$BFB4` | 49076 | 177 ($B1) | **>** | Greater than comparison | — | — | FAC1=0/−1 | Uses REL/NEGOP |
-| `$B016` | 45078 | 179 ($B3) | **<** | Less than comparison | — | — | FAC1=0/−1 | Uses REL |
+| `$AFE9` | 45033 | 175 ($AF) | **AND** | Logical AND | — | ints | FAC1 | duplicate entry for clarity |
+| `$AFE6` | 45030 | 176 ($B0) | **OR** | Logical OR | — | ints | FAC1 | duplicate entry for clarity |
+| `$AED4` | 44756 | 168 ($A8) | **NOT** | Logical NOT | — | FAC1 | FAC1 | NOT X = -(X+1) |
+| `$B016` | 45078 | 177-179 ($B1-$B3) | **> = <** | Relational comparison (one routine for all three) | — | — | FAC1=0/−1 | |

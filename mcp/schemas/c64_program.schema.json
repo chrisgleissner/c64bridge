@@ -17,7 +17,7 @@
     },
     "path": {
       "type": "string",
-      "description": "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.",
+      "description": "Path to the PRG file: Ultimate path such as //USB0/demo.prg on c64u/u2 (or a host path with location host); host path on VICE.",
       "minLength": 1
     },
     "location": {
@@ -25,7 +25,7 @@
         "string",
         "null"
       ],
-      "description": "auto (default): Ultimate device path on c64u/u2, host path on VICE. host: read the file from the host and upload it (Ultimate). device: Ultimate path only.",
+      "description": "auto (default): Ultimate device path on c64u/u2, host path on VICE. host: read the file from the host and upload it (Ultimate). device: Ultimate path only. Limits depend on op.",
       "enum": [
         "auto",
         "host",
@@ -37,7 +37,7 @@
         "string",
         "null"
       ],
-      "description": "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
+      "description": "Label file (VICE .vs, 64tass, ACME or KickAssembler); labels annotate disassembly and are accepted where c64_memory and c64_debug take an address.",
       "minLength": 1
     },
     "program": {
@@ -50,18 +50,19 @@
         "boolean",
         "null"
       ],
-      "description": "Run post-execution polling to ensure the BASIC program executed without errors. Limits depend on op."
+      "description": "Poll the screen until the program ends, shows a BASIC error (reported with its line) or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) ends. Without verify nothing is observed. Limits depend on op."
     },
     "autoFix": {
       "type": [
         "boolean",
         "null"
       ],
-      "description": "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      "description": "With verify:true, on a BASIC error append a missing closing quote or parenthesis to the failing line and run again (default true; rewritten lines are reported). Set false for programs with side effects.",
       "default": true
     },
     "programs": {
       "type": "array",
+      "description": "Programs to run in order (at most 64).",
       "items": {
         "type": "object",
         "description": "Program to run with assertions",
@@ -125,7 +126,9 @@
           "path"
         ],
         "additionalProperties": false
-      }
+      },
+      "minItems": 1,
+      "maxItems": 64
     },
     "continueOnError": {
       "type": [
@@ -243,7 +246,7 @@
         "boolean",
         "null"
       ],
-      "description": "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips screenshots by default; explicitly requesting one on U2 fails before execution.",
+      "description": "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips it by default; requesting it on U2 fails before execution.",
       "default": true
     },
     "restoreActiveBackend": {
@@ -278,6 +281,6 @@
   "required": [
     "op"
   ],
-  "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg [write]: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_prg [write]: Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_crt [c64u, u2] [write]: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic [write]: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify, autoFix.\n- upload_run_asm [write]: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory, and debug registers into an artifact bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Show a platform-customized greeting on one or more configured backends, capture screenshots, and verify the results. Required inputs: none. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
+  "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg [write]: Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host). Required inputs: path. Optional inputs: location, symbolsFile.\n- run_prg [write]: Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_crt [c64u, u2] [write]: Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2). Required inputs: path. Optional inputs: location.\n- upload_run_basic [write]: Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line. Required inputs: program. Optional inputs: verify, autoFix.\n- upload_run_asm [write]: Assemble 6502/6510 source (ACME, ca65 and 64tass directive spellings; .include/.incbin read host files), upload and run it. Required inputs: program. Optional inputs: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory and debug registers into a bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Show a platform-specific greeting on configured backends, capture screenshots and verify. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
   "additionalProperties": false
 }

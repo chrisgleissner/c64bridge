@@ -12,7 +12,7 @@ The KERNAL relies on the [low memory region](./memory/low-memory-map.md) for all
 |:------|:---------|:------------------------|
 | `$0000–$0001` | 6510 I/O registers controlling memory banking and cassette motor | D6510, R6510 |
 | `$0090` | I/O **status byte** updated by KERNAL routines | STATUS |
-| `$009B–$00A2` | System clock and **TIME** variables for RDTIM/SETTIM | TI, TI$ |
+| `$00A0–$00A2` | Jiffy clock (**TIME**) for RDTIM/SETTIM | TI, TI$ |
 | `$00B8–$00BC` | File/device association (LFN, SA, FA) | LA, SA, FA, FNADR |
 | `$00C6` | Keyboard buffer count | NDX |
 | `$00F3–$00F6` | Vectors to color RAM and keyboard decode tables | USER, KEYTAB |
@@ -21,7 +21,7 @@ The KERNAL relies on the [low memory region](./memory/low-memory-map.md) for all
 | `$03FC–$03FF` | Unused bytes (safe for temporary data) | — |
 
 The KERNAL modifies `$0001` to switch ROM/RAM banks, writes device status to `$0090`,  
-and maintains IRQ/NMI linkage through `$0314–$0318`. Avoid overwriting these unless intercepting system vectors.
+and maintains IRQ/NMI linkage through `$0314–$0319`. Avoid overwriting these unless intercepting system vectors.
 
 ## Callable Routines
 
@@ -32,7 +32,7 @@ and maintains IRQ/NMI linkage through `$0314–$0318`. Avoid overwriting these u
 | `$FF87` | 65415 | **RAMTAS** | RAM test; set MEMBOT/MEMTOP; zp/pages clear | — | Power‑up | MEMBOT=`$0281/2`, MEMTOP=`$0283/4` | Sets screen base via `$0288` |
 | `$FF8A` | 65418 | **RESTOR** | Restore default RAM vectors | — | — | Vectors at `$0314–$0333` reset | Uses ROM table at `$FD30` |
 | `$FF8D` | 65421 | **VECTOR** | Read/Write RAM vector table | C=1 read; C=0 write; X/Y=table addr | SEI recommended | Vectors copied to/from (X,Y) | Affects IRQ/NMI; use SEI/CLI |
-| `$FF90` | 65424 | **SETMSG** | Enable/disable control & error messages | A: bit6=control, bit7=errors | — | — | Does not suppress cassette prompts |
+| `$FF90` | 65424 | **SETMSG** | Enable/disable control & error messages | A: bit7=control messages, bit6=KERNAL error messages | — | — | Does not suppress cassette prompts |
 | `$FF93` | 65427 | **SECOND** | Send secondary addr after LISTEN (serial) | A=sec addr | Device is LISTENing | — | For serial LISTEN path |
 | `$FF96` | 65430 | **TKSA** | Send secondary addr after TALK (serial) | A=sec addr | Device is TALKing | — | For serial TALK path |
 | `$FF99` | 65433 | **MEMTOP** | Get/Set top of BASIC RAM pointer | C=1 get; C=0 set; (get→X/Y; set: X/Y=in) | — | On get: X=lo,Y=hi | Pointer at `$0283/4` |
@@ -64,5 +64,5 @@ and maintains IRQ/NMI linkage through `$0314–$0318`. Avoid overwriting these u
 | `$FFE7` | 65511 | **CLALL** | Close all files | — | — | — | Resets open-file index; restores I/O |
 | `$FFEA` | 65514 | **UDTIM** | Jiffy clock tick; STOP key scan | — | IRQ calls every 1/60 s | `$00A0–$00A2`++ | Part of standard IRQ |
 | `$FFED` | 65517 | **SCREEN** | Return screen size | — | — | X=cols(40), Y=rows(25) | For cross‑platform compatibility |
-| `$FFF0` | 65520 | **PLOT** | Read/Set cursor | C=1 read; C=0 set; Y=row, X=col | — | On read: X=col, Y=row | Uses PNTR `$00D3`/TBLX `$00D6` |
+| `$FFF0` | 65520 | **PLOT** | Read/Set cursor | C=1 read; C=0 set from X=row, Y=column | — | On read: X=row, Y=column | Uses PNTR `$00D3`/TBLX `$00D6` |
 | `$FFF3` | 65523 | **IOBASE** | Return I/O base address | — | — | X=lo, Y=hi | Present value `$DC00` (CIA1) |

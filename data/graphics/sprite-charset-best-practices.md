@@ -10,7 +10,7 @@ Sprites are hardware-accelerated movable graphics objects. Each sprite is 24×21
 
 1. **Design**: Create 24×21 pixel bitmap (monochrome or multicolour)
 2. **Encode**: Convert to 63-byte sprite data format
-3. **Upload**: Place sprite data in memory ($0340-$07FF recommended for safety)
+3. **Upload**: Place sprite data in memory ($0340-$03FF, sprite blocks 13-15, when tape is unused; $0400-$07FF is screen RAM)
 4. **Configure**: Set sprite pointer, position, colour, and enable flags
 5. **Verify**: Read screen or sprite registers to confirm appearance
 
@@ -36,7 +36,7 @@ Sprites are enabled via VIC-II registers:
 Use these memory ranges to avoid conflicts:
 
 - `$0340-$03FF` - Cassette buffer (192 bytes, safe when not using tape)
-- `$C000-$CFFF` - RAM under BASIC ROM (4KB, requires bank switching)
+- `$C000-$CFFF` - 4KB free RAM, not under any ROM (no bank switching needed); the VIC sees it only in bank 3
 - `$2000-$3FFF` - Screen/bitmap alternatives (8KB when not displaying there)
 
 ### Sprite Colour Selection
@@ -91,18 +91,20 @@ Example: 'A' character
 
 Custom charsets must be aligned to 2KB boundaries:
 
-- `$2000` (8192) - VIC bank 0, offset $0000
-- `$2800` (10240) - VIC bank 0, offset $0800
-- `$3000` (12288) - VIC bank 0, offset $1000
-- `$3800` (14336) - VIC bank 0, offset $1800
+- `$2000` (8192) - VIC bank 0, offset $2000
+- `$2800` (10240) - VIC bank 0, offset $2800
+- `$3000` (12288) - VIC bank 0, offset $3000
+- `$3800` (14336) - VIC bank 0, offset $3800
+
+In bank 0 the offset equals the address.
 
 ### Switching Charsets
 
 Configure VIC-II register `$D018`:
 
 - Bits 1-3 control charset pointer
-- Formula: (charset_address / 2048) << 1
-- Example: For charset at $2000, POKE 53272, (53272 AND 240) OR ((8192/2048) << 1)
+- Formula: (charset offset in the VIC bank / 2048) * 2
+- Example: For charset at $2000, `POKE 53272,(PEEK(53272)AND240)OR8` (BASIC V2 has no `<<` operator)
 
 ### Partial Charset Updates
 
@@ -183,22 +185,20 @@ Combine text and graphics:
 **Sprite DMA cycles**:
 
 - Each active sprite costs 2 cycles per raster line for data fetch
-- Sprite X-coordinate at DMA fetch point determines if CPU is blocked
-- 8 sprites active: CPU loses 16 cycles per line
+- The sprite X coordinate has no effect on DMA; the fetch cycles are fixed per sprite
+- 8 sprites active: CPU loses 16 DMA cycles per line, plus up to 3 cycles while BA is low before the first fetch
 - Sprite display starts at cycle 11-12 of raster line
 
 **Border timing and precision**:
 
-- Upper border: Open at raster $30 by writing $D011 bit 3=0 at cycle 56
-- Lower border: Open at raster $F7 by writing $D011 bit 3=1 at cycle 56  
+- Upper/lower border: set RSEL ($D011 bit 3=1) earlier in the frame, clear RSEL while the raster is in lines 248-250, then set RSEL again after line 251
 - Side borders: $D016 bit 3 controls, must write at precise X-coordinate
 - **NOP instruction** ($EA): Used for cycle-exact timing delays in border opening routines
-- Typical pattern: `NOP; NOP; STA $D011` to hit exact cycle 56
 
 **CPU availability**:
 
 - Normal line: ~63 cycles available
-- Bad line + 8 sprites: ~20 cycles available
+- Bad line + 8 sprites (PAL): at most 7 cycles (63 - 40 - 16), 6 of them during the BA lead, usable for writes only
 - Critical code: Use raster lines outside $30-$F7 range or disable screen ($D011 bit 4=0)
 
 ### Charset Performance
@@ -216,7 +216,7 @@ Custom charsets have minimal performance impact:
 1. Check sprite enable bit in `$D015`
 2. Verify sprite pointer at `$07F8-$07FF`
 3. Confirm sprite data is in correct memory location
-4. Check X/Y coordinates are on screen (0-320, 0-200)
+4. Check X/Y coordinates are inside the visible window (X 24-343, Y 50-249 with 40 columns and 25 rows)
 5. Verify sprite colour is different from background
 
 ### Charset Not Displaying

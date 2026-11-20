@@ -39,6 +39,7 @@ type DiskMountArgs = {
   image: string;
   type?: string;
   attachmentMode?: string;
+  location?: string;
   driveMode?: string;
   verify: boolean;
   powerOnIfNeeded: boolean;
@@ -84,6 +85,10 @@ const diskMountArgsSchema = objectSchema<DiskMountArgs>({
     attachmentMode: optionalSchema(stringSchema({
       description: "Attachment mode controlling how the firmware treats the mounted image.",
       enum: ["readwrite", "readonly", "unlinked"],
+    })),
+    location: optionalSchema(stringSchema({
+      description: "device (default): Ultimate path. host: upload the image from the host (needs verify false; type from the extension).",
+      enum: ["device", "host"],
     })),
     driveMode: optionalSchema(stringSchema({
       description: "Drive emulation mode to switch to during verification.",
@@ -214,7 +219,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "list_drives",
       ensureDescriptor(storageDescriptorIndex, "drives_list").inputSchema,
-      { description: "List Ultimate drive slots and their mounted images." },
+      { description: "List drive slots and mounted images." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(storageModule, "drives_list", rawArgs, ctx),
   },
@@ -223,16 +228,19 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "mount",
       diskMountArgsSchema.jsonSchema as JsonSchema,
-      { description: "Mount a disk image with optional verification and retries." },
+      { description: "Mount a disk image with optional verification/retries." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
-      const { verify, type, attachmentMode, driveMode, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs, ...parsed } = diskMountArgsSchema.parse(rest);
+      const { verify, type, attachmentMode, location, driveMode, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs, ...parsed } = diskMountArgsSchema.parse(rest);
       const typedType = type as DiskTypeOverride | undefined;
       const typedAttachment = attachmentMode as DiskAttachmentMode | undefined;
       const typedDriveMode = driveMode as DriveMode | undefined;
 
       if (verify) {
+        if (location === "host") {
+          throw new ToolValidationError("location host is not applied by the verified mount workflow; set verify to false to upload a host image", { path: "$.location" });
+        }
         if (typedType || typedAttachment) {
           throw new ToolValidationError("type and attachmentMode are not applied by the verified mount workflow; set verify to false to use them", {
             path: typedType ? "$.type" : "$.attachmentMode",
@@ -260,6 +268,9 @@ const diskOperations: GroupedOperationConfig[] = [
       if (typedAttachment) {
         payload.mode = typedAttachment;
       }
+      if (location) {
+        payload.location = location;
+      }
 
       return storageModule.invoke("drive_mount", payload, ctx);
     },
@@ -269,7 +280,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "unmount",
       ensureDescriptor(storageDescriptorIndex, "drive_remove").inputSchema,
-      { description: "Remove the mounted image from an Ultimate drive slot." },
+      { description: "Unmount the image from a drive slot." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(storageModule, "drive_remove", rawArgs, ctx),
   },
@@ -278,7 +289,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "file_info",
       ensureDescriptor(storageDescriptorIndex, "file_info").inputSchema,
-      { description: "Inspect metadata for a file on the Ultimate filesystem." },
+      { description: "Inspect a file on the Ultimate filesystem." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(storageModule, "file_info", rawArgs, ctx),
   },
@@ -347,7 +358,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "find_paths",
       ensureDescriptor(metaDescriptorIndex, "find_paths_by_name").inputSchema,
-      { description: "Search Ultimate storage for paths whose names contain a substring, without running anything." },
+      { description: "Search Ultimate storage for paths containing a name substring, without running anything." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "find_paths_by_name", rawArgs, ctx),
   },

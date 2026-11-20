@@ -13,7 +13,7 @@ A=Accumulator, X,Y=index, C=Carry; “—” = not applicable. Pointers are litt
 
 | Address | Decimal | Name | Function | Args | Input | Output | Notes |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| `$0000` | 0 | **D6510** | 6510 on‑chip I/O **Data Direction** | bitmask | — | — | Bits0–5 valid; default `$EF`. Configure port at $0001. |
+| `$0000` | 0 | **D6510** | 6510 on‑chip I/O **Data Direction** | bitmask | — | — | Bits0–5 valid; default `$2F` (set by the KERNAL at reset; Mapping gives `$EF`, which differs only in the unused bits 6–7). Configure port at $0001. |
 | `$0001` | 1 | **R6510** | 6510 on‑chip **I/O Port** (banking + cassette) | bitmask | — | — | Bit0=LORAM,1=HIRAM,2=CHAREN; 3=data out; 4=switch sense; 5=motor. |
 | `$0002` | 2 | — | Unused | — | — | — | Free (zero page). |
 | `$0003–$0004` | 3–4 | **ADRAY1** | Vector: FP→signed **int** | — | FAC1 | A,Y or $64/65 | Points to `$B1AA`. |
@@ -63,7 +63,7 @@ A=Accumulator, X,Y=index, C=Carry; “—” = not applicable. Pointers are litt
 | `$0061–$0066` | 97–102 | **FAC1** | FP accumulator #1 | — | — | FAC1 | Exp @ $61; mant $62–$65; sign $66. |
 | `$0067–$0068` | 103–104 | SGNFLG/BITS | Series count/overflow | — | — | — | FP helper. |
 | `$0069–$006E` | 105–110 | **FAC2** | FP accumulator #2 | — | — | FAC2 | Exp/mant/sign. |
-| `$006F–$0072` | 111–114 | ARISGN/FACOV | Sign compare/rounding | — | — | — | — |
+| `$006F–$0070` | 111–112 | ARISGN/FACOV | Sign compare/rounding | — | — | — | — |
 | `$0071–$0072` | 113–114 | FBUFPT | Series eval ptr | — | — | — | Multi‑use scratch. |
 | `$0073–$008A` | 115–138 | **CHRGET** | Get/peek next BASIC char | — | TXTPTR | A=char; flags | Copied from ROM @ $E3A2 for speed. Entry **CHRGOT**=$0079. |
 | `$008B–$008F` | 139–143 | RNDX | RND seed (5‑byte FP) | — | — | — | Init from ROM seed. |

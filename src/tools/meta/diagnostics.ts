@@ -29,38 +29,30 @@ export const tools: ToolDefinition[] = [
       try {
         noArgsSchema.parse(args ?? {});
         const started = Date.now();
-        const steps: Array<{ name: string; started: number; ended?: number; ok?: boolean; error?: unknown }> = [
-          { name: "version", started: Date.now() },
-          { name: "info", started: 0 },
-          { name: "readmem", started: 0 },
-        ];
-
-        let version: unknown = null;
-        try {
-          steps[0]!.started = Date.now();
-          version = await (ctx.client as any).version();
-          steps[0]!.ok = true; steps[0]!.ended = Date.now();
-        } catch (e) { steps[0]!.ok = false; steps[0]!.ended = Date.now(); steps[0]!.error = e; }
-
-        let info: unknown = null;
-        try {
-          steps[1]!.started = Date.now();
-          info = await (ctx.client as any).info();
-          steps[1]!.ok = true; steps[1]!.ended = Date.now();
-        } catch (e) { steps[1]!.ok = false; steps[1]!.ended = Date.now(); steps[1]!.error = e; }
-
-        let readmem: unknown = null;
-        try {
-          steps[2]!.started = Date.now();
-          readmem = await (ctx.client as any).readMemory("$0000", "1");
-          steps[2]!.ok = (readmem as any)?.success !== false; steps[2]!.ended = Date.now();
-        } catch (e) { steps[2]!.ok = false; steps[2]!.ended = Date.now(); steps[2]!.error = e; }
+        // The three probes are independent: send them together and time each one.
+        const probe = async (name: string, call: () => Promise<unknown>, accept: (value: unknown) => boolean = () => true) => {
+          const begin = Date.now();
+          try {
+            const value = await call();
+            return { name, started: begin, ended: Date.now(), ok: accept(value), value, error: undefined as unknown };
+          } catch (error) {
+            return { name, started: begin, ended: Date.now(), ok: false, value: null as unknown, error };
+          }
+        };
+        const client = ctx.client as any;
+        const steps = await Promise.all([
+          probe("version", () => client.version()),
+          probe("info", () => client.info()),
+          probe("readmem", () => client.readMemory("$0000", "1"), (value) => (value as any)?.success !== false),
+        ]);
+        const version = steps[0].ok ? steps[0].value : null;
+        const info = steps[1].ok ? steps[1].value : null;
 
         const ended = Date.now();
         const report = {
           isHealthy: steps.every((s) => s.ok),
           totalLatencyMs: ended - started,
-          steps: steps.map((s) => ({ name: s.name, latencyMs: (s.ended ?? Date.now()) - s.started, ok: s.ok, error: s.ok ? undefined : (s.error instanceof Error ? s.error.message : String(s.error)) })),
+          steps: steps.map((s) => ({ name: s.name, latencyMs: s.ended - s.started, ok: s.ok, error: s.ok ? undefined : (s.error instanceof Error ? s.error.message : s.error === undefined ? "the probe reported failure" : String(s.error)) })),
           version,
           info,
         };

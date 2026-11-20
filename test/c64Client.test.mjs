@@ -541,14 +541,17 @@ test("C64Client against mock server", async (t) => {
     // Expect bit7 set => 128,129,130,255 in DATA
     assert.ok(src.includes("DATA 128,129,130,255"));
     assert.ok(src.includes("OPEN1,4,7"));
-    assert.ok(src.includes("PRINT#1,CHR$(8);A$"));
+    // HARD06 CLIENT-4: the row is printed from 255-byte strings after CHR$(8).
+    assert.ok(src.includes("PRINT#1,CHR$(8);"));
+    assert.ok(src.includes("PRINT#1,A$(K);"));
   });
 
   await t.test("Epson bitmap builder encodes length in n,m", () => {
     const src = buildEpsonBitmapBasicProgram({ columns: Array.from({ length: 16 }).map((_, i) => i), mode: "K", repeats: 3, timesPerLine: 2 });
-    // n=16, m=0
-    assert.ok(src.includes("CHR$(27)+CHR$(75)+CHR$(16)+CHR$(0)"), src);
-    assert.ok(src.includes("PRINT#1,A$;A$;CHR$(10);CHR$(13)"));
+    // HARD06 CLIENT-4: n is the length of each string of at most 255 bytes (16 here), m=0.
+    assert.ok(src.includes("PRINT#1,CHR$(27);CHR$(75);CHR$(LEN(A$(K)));CHR$(0);A$(K);"), src);
+    assert.ok(src.includes("FOR T=1 TO 2"));
+    assert.ok(src.includes("PRINT#1,CHR$(10);CHR$(13)"));
   });
 
   await t.test("Commodore DLL builder computes m,n and prints p1..p11", () => {
@@ -693,7 +696,8 @@ test("C64Client against mock server", async (t) => {
     const noteOff = await client.sidNoteOff(1);
     assert.equal(noteOff.success, true);
     assert.equal(mock.state.lastWrite.address, 0xd404);
-    assert.equal(mock.state.lastWrite.bytes[0], 0x00);
+    // HARD06 MEDIA-5: only the gate bit is cleared; the pulse waveform (bit 6) stays for the release.
+    assert.equal(mock.state.lastWrite.bytes[0], 0x40);
 
     const silence = await client.sidSilenceAll();
     assert.equal(silence.success, true);

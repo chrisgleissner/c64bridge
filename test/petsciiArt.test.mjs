@@ -124,3 +124,28 @@ test("createPetsciiArt clears quote mode after every printed character", () => {
   const art = createPetsciiArt({ text: "HI" });
   assert.ok(/READC:IFC>=0THENPRINT CHR\$\(C\);:POKE212,0:GOTO\d+/.test(art.program), art.program);
 });
+
+test("WORKFLOW-2: the space glyph is indexed, so text with spaces draws no question marks", () => {
+  const space = findGlyphByBasicChar(" ");
+  assert.ok(space, "space glyph");
+  assert.equal(space.screenCode, 0x20);
+  const art = createPetsciiArt({ text: "A B" });
+  assert.ok(!art.petsciiCodes.includes(0x3f), "no '?' glyph for the space");
+});
+
+test("MEDIA-12: explicit text and quoted prompt text win over keyword shapes", () => {
+  assert.equal(createPetsciiArt({ text: "HELLO", prompt: "star wars fan club" }).usedShape, undefined);
+  assert.equal(createPetsciiArt({ prompt: 'Show "I LOVE C64"' }).sourceText, "I LOVE C64");
+  assert.equal(createPetsciiArt({ prompt: "a big heart" }).usedShape, "heart");
+});
+
+test("MEDIA-13: the program waits for a key and does not print the bottom-right cell of a full screen", () => {
+  const width = 320;
+  const height = 200;
+  const pixels = new Uint8Array(width * height).map((_, i) => (i % 3 === 0 ? 1 : 0));
+  const art = createPetsciiArt({ bitmap: { width, height, pixels } });
+  assert.match(art.program, /POKE2023,\d+:POKE56295,PEEK\(646\)/);
+  assert.match(art.program, /GETA\$:IFA\$=""THEN/);
+  const small = createPetsciiArt({ text: "HI" });
+  assert.ok(!/POKE2023/.test(small.program));
+});

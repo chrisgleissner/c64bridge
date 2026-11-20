@@ -64,3 +64,14 @@ test("resolveAddressSymbol ignores Object.prototype member names", () => {
   assert.equal(resolveAddressSymbol("toString"), undefined);
   assert.equal(resolveAddressSymbol("__proto__"), undefined);
 });
+
+test("VIC-II spec gives the $D011 bit layout from the register table", () => {
+  const spec = getVicIISpec();
+  // Bauer, VIC-II article, register 17: RST8 ECM BMM DEN RSEL YSCROLL.
+  assert.ok(spec.includes("bit7 RST8"), "CTRL1 row names bit 7 RST8");
+  assert.ok(spec.includes("bit4 DEN"), "CTRL1 row names bit 4 DEN");
+  assert.ok(spec.includes("bit3 RSEL"), "CTRL1 row names bit 3 RSEL");
+  assert.ok(spec.includes("$D011 bit4 DEN=0"), "badline advice clears DEN");
+  assert.ok(!/bit ?7[^.\n]*screen on\/off/i.test(spec), "bit 7 is never described as screen on/off");
+  assert.ok(!spec.includes("bit4 (unused)"), "bit 4 is not unused");
+});

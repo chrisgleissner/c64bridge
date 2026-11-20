@@ -348,3 +348,18 @@ test("HARD03-011 c64_batch fails the command that pushes the image count over 4"
   assert.match(results[1].error, /at most 4/);
   assert.equal(result.content.filter((entry) => entry.type === "image").length, 4);
 });
+
+test("MEDIA-16: get_display_state masks live and unused register bits and has no raster8 field", async () => {
+  const ctx = makeCtx({
+    platformId: "c64u",
+    // Read-back as the VIC-II returns it: D011 bit 7 = live raster bit 8, D016 bits 6-7, D018 bit 0 and D020/D021 high nibbles read 1.
+    clientOverrides: buildVicState({ d011: 0x9B, d016: 0xC8, d018: 0x15, d020: 0xFE, d021: 0xF6 }),
+  });
+  const result = await toolRegistry.invoke("c64_graphics", { op: "get_display_state" }, ctx);
+  const data = result.structuredContent?.data;
+  assert.equal("raster8" in data, false);
+  assert.deepEqual(
+    [data.registers.d011, data.registers.d016, data.registers.d018, data.registers.d020, data.registers.d021],
+    ["$1B", "$08", "$14", "$0E", "$06"],
+  );
+});

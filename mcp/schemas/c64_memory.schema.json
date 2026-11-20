@@ -20,12 +20,12 @@
     },
     "address": {
       "type": "string",
-      "description": "Start address expressed as $HHHH, decimal, or a documented symbol name.",
+      "description": "Start address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n.",
       "minLength": 1
     },
     "length": {
       "type": "integer",
-      "description": "Number of bytes to read starting from the resolved address. Limits depend on op.",
+      "description": "Bytes to read (default 256, cut at $FFFF when not given). Limits depend on op.",
       "minimum": 1,
       "maximum": 16384
     },
@@ -34,22 +34,29 @@
         "string",
         "null"
       ],
-      "description": "Output layout. hex (default) returns one hex string; dump adds a 16-bytes-per-line listing with addresses and a printable PETSCII column.",
+      "description": "hex (default): one hex string; dump: 16 bytes per line with addresses and PETSCII.",
       "enum": [
         "hex",
         "dump"
       ],
       "default": "hex"
     },
+    "bank": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "VICE bank name."
+    },
     "bytes": {
       "type": "string",
-      "description": "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
+      "description": "Hex bytes to write, like $AABBCC or AA BB CC.",
       "minLength": 2,
       "pattern": "^[\\s_0-9A-Fa-f$]+$"
     },
     "verify": {
       "type": "boolean",
-      "description": "When true, verify the write by reading before and after the change; Ultimate hardware also pauses during verification.",
+      "description": "Verify by reading before and after (Ultimate pauses meanwhile).",
       "default": false
     },
     "expected": {
@@ -77,7 +84,7 @@
     },
     "pattern": {
       "type": "string",
-      "description": "Substring or regex to find (at most 200 characters; on runtimes without evaluation timeout, backreferences and nested quantifiers are rejected) Limits depend on op.",
+      "description": "Substring or regex to find (^ and $ match at row boundaries; max 200 characters; backreferences and nested quantifiers may be rejected) Limits depend on op.",
       "minLength": 1
     },
     "isRegex": {
@@ -120,28 +127,36 @@
         "integer",
         "null"
       ],
-      "description": "Stop after this many instructions. When given, it replaces length: 3 x instructionCount bytes are read (fewer near $FFFF).",
+      "description": "Stop after this many instructions; replaces length (reads 3 x instructionCount bytes, fewer near $FFFF).",
       "minimum": 1,
       "maximum": 512
     },
     "source": {
       "type": "string",
-      "description": "Source start address ($HHHH, decimal, or symbol).",
+      "description": "Source start address, in the same forms as address.",
       "minLength": 1
     },
     "dest": {
       "type": "string",
-      "description": "Destination start address.",
+      "description": "Destination start address, in the same forms as source.",
       "minLength": 1
+    },
+    "includeIo": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Ultimate: also read $D000-$DFFF; reading I/O can clear CIA interrupts. No effect on VICE.",
+      "default": false
     },
     "startAddress": {
       "type": "string",
-      "description": "Start of search range ($HHHH, decimal, or symbol).",
+      "description": "Start of the search range, in the same forms as address.",
       "minLength": 1
     },
     "endAddress": {
       "type": "string",
-      "description": "End of search range (inclusive).",
+      "description": "End of the search range (inclusive), in the same forms as startAddress.",
       "minLength": 1
     },
     "maxResults": {
@@ -156,12 +171,12 @@
     },
     "address1": {
       "type": "string",
-      "description": "First region start address.",
+      "description": "First region start address, in the same forms as address.",
       "minLength": 1
     },
     "address2": {
       "type": "string",
-      "description": "Second region start address.",
+      "description": "Second region start address, in the same forms as address1.",
       "minLength": 1
     },
     "maxDiffs": {
@@ -191,6 +206,6 @@
   "required": [
     "op"
   ],
-  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII. Required inputs: none.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: none.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg.",
+  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format, bank.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
   "additionalProperties": false
 }

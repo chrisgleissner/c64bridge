@@ -20,9 +20,15 @@ function hex4(v: number): string {
   return v.toString(16).toUpperCase().padStart(4, "0");
 }
 
-function labelOrHex4(addr: number, symbols: ReadonlyMap<number, string> | undefined): string {
+/** The operand is always assemblable text; a symbol for the target address is reported separately. */
+interface FormattedOperand {
+  readonly text: string;
+  readonly targetLabel?: string;
+}
+
+function target(addr: number, suffix: string, symbols: ReadonlyMap<number, string> | undefined): FormattedOperand {
   const label = symbols?.get(addr);
-  return label ? `${label} ($${hex4(addr)})` : `$${hex4(addr)}`;
+  return label ? { text: `$${hex4(addr)}${suffix}`, targetLabel: label } : { text: `$${hex4(addr)}${suffix}` };
 }
 
 function formatOperand(
@@ -31,56 +37,56 @@ function formatOperand(
   offset: number,
   instrAddr: number,
   symbols: ReadonlyMap<number, string> | undefined,
-): string {
+): FormattedOperand {
   switch (mode) {
     case Mode.Imp:
-      return "";
+      return { text: "" };
     case Mode.Acc:
-      return "A";
+      return { text: "A" };
     case Mode.Imm:
-      return `#$${hex2(bytes[offset + 1] ?? 0)}`;
+      return { text: `#$${hex2(bytes[offset + 1] ?? 0)}` };
     case Mode.Zp:
-      return `$${hex2(bytes[offset + 1] ?? 0)}`;
+      return { text: `$${hex2(bytes[offset + 1] ?? 0)}` };
     case Mode.ZpX:
-      return `$${hex2(bytes[offset + 1] ?? 0)},X`;
+      return { text: `$${hex2(bytes[offset + 1] ?? 0)},X` };
     case Mode.ZpY:
-      return `$${hex2(bytes[offset + 1] ?? 0)},Y`;
+      return { text: `$${hex2(bytes[offset + 1] ?? 0)},Y` };
     case Mode.ZpS:
-      return `$${hex2(bytes[offset + 1] ?? 0)},S`;
+      return { text: `$${hex2(bytes[offset + 1] ?? 0)},S` };
     case Mode.Rel: {
       const rel = bytes[offset + 1] ?? 0;
       const signed = rel >= 0x80 ? rel - 0x100 : rel;
-      const target = (instrAddr + 2 + signed) & 0xffff;
-      return labelOrHex4(target, symbols);
+      const targetAddress = (instrAddr + 2 + signed) & 0xffff;
+      return target(targetAddress, "", symbols);
     }
     case Mode.Abs: {
       const lo = bytes[offset + 1] ?? 0;
       const hi = bytes[offset + 2] ?? 0;
       const addr = lo | (hi << 8);
-      return labelOrHex4(addr, symbols);
+      return target(addr, "", symbols);
     }
     case Mode.AbsX: {
       const lo = bytes[offset + 1] ?? 0;
       const hi = bytes[offset + 2] ?? 0;
       const addr = lo | (hi << 8);
-      return `${labelOrHex4(addr, symbols)},X`;
+      return target(addr, ",X", symbols);
     }
     case Mode.AbsY: {
       const lo = bytes[offset + 1] ?? 0;
       const hi = bytes[offset + 2] ?? 0;
       const addr = lo | (hi << 8);
-      return `${labelOrHex4(addr, symbols)},Y`;
+      return target(addr, ",Y", symbols);
     }
     case Mode.Ind: {
       const lo = bytes[offset + 1] ?? 0;
       const hi = bytes[offset + 2] ?? 0;
       const addr = lo | (hi << 8);
-      return `($${hex4(addr)})`;
+      return { text: `($${hex4(addr)})` };
     }
     case Mode.IndX:
-      return `($${hex2(bytes[offset + 1] ?? 0)},X)`;
+      return { text: `($${hex2(bytes[offset + 1] ?? 0)},X)` };
     case Mode.IndY:
-      return `($${hex2(bytes[offset + 1] ?? 0)}),Y`;
+      return { text: `($${hex2(bytes[offset + 1] ?? 0)}),Y` };
   }
 }
 
@@ -90,6 +96,8 @@ export interface DisassemblyLine {
   readonly label: string | undefined;
   readonly mnemonic: string;
   readonly operand: string;
+  /** Symbol for the address the operand refers to (branch target or absolute address), if one is known. */
+  readonly operandLabel?: string;
   readonly undocumented: boolean;
 }
 
@@ -175,7 +183,8 @@ export function disassemble(
       bytes: instrBytes,
       label,
       mnemonic: op.mnemonic,
-      operand,
+      operand: operand.text,
+      ...(operand.targetLabel ? { operandLabel: operand.targetLabel } : {}),
       undocumented: op.illegal,
     });
 
@@ -187,7 +196,7 @@ export function disassemble(
 
 /**
  * Render disassembly lines as a human-readable string.
- * Format: [label:\n] $ADDR  XX XX XX  MNEM operand   ; *undocumented*
+ * Format: [label:\n] $ADDR  XX XX XX  MNEM operand  ; target label; *undocumented*
  */
 export function formatDisassembly(lines: DisassemblyLine[]): string {
   const parts: string[] = [];
@@ -201,7 +210,7 @@ export function formatDisassembly(lines: DisassemblyLine[]): string {
     const instrStr = line.operand
       ? `${mnemonic} ${line.operand}`
       : mnemonic;
-    parts.push(`  ${addrStr}  ${byteStr}  ${instrStr}`);
+    parts.push(`  ${addrStr}  ${byteStr}  ${line.operandLabel ? `${instrStr}  ; ${line.operandLabel}` : instrStr}`);
   }
   return parts.join("\n");
 }

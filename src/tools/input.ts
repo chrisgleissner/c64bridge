@@ -21,6 +21,7 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
+import { lookupNamedPetscii, petsciiControlName } from "../petscii.js";
 
 function isMissingNativeInputEndpoint(error: unknown): boolean {
   return typeof error === "object"
@@ -36,61 +37,17 @@ function nativeInputUnavailableResult(operation: string) {
   ));
 }
 
-// ---------------------------------------------------------------------------
-// PETSCII token expansion table
-// Maps {TOKEN} placeholders to PETSCII/control-byte values that are queued via
-// KERNAL keyboard-buffer injection on both C64U and VICE.
-// ---------------------------------------------------------------------------
-const PETSCII_TOKENS: Readonly<Record<string, number>> = {
-  RETURN: 13,
-  CR: 13,
-  CLR: 147,
-  HOME: 19,
-  DEL: 20,
-  INS: 148,
-  INSERT: 148,
-  STOP: 3,
-  RUN: 131,
-  SHIFT_RETURN: 141,
-  F1: 133,
-  F2: 137,
-  F3: 134,
-  F4: 138,
-  F5: 135,
-  F6: 139,
-  F7: 136,
-  F8: 140,
-  UP: 145,
-  DOWN: 17,
-  LEFT: 157,
-  RIGHT: 29,
-  BLACK: 144,
-  WHITE: 5,
-  RED: 28,
-  CYAN: 159,
-  PURPLE: 156,
-  GREEN: 30,
-  BLUE: 31,
-  YELLOW: 158,
-  ORANGE: 129,
-  BROWN: 149,
-  LIGHT_RED: 150,
-  DARK_GREY: 151,
-  MEDIUM_GREY: 152,
-  LIGHT_GREEN: 153,
-  LIGHT_BLUE: 154,
-  LIGHT_GREY: 155,
-  REVERSE_ON: 18,
-  REVERSE_OFF: 146,
-  // FLASH ON/OFF, ESC and TAB are C128 codes: on a C64, 148 is INST (inserts a
-  // space) and 9 re-enables SHIFT+C= case switching, so they are not offered.
-  LOWERCASE: 14,
-  UPPERCASE: 142,
-  CURSOR_UP: 145,
-  CURSOR_DOWN: 17,
-  CURSOR_LEFT: 157,
-  CURSOR_RIGHT: 29,
-};
+// {TOKEN} names and codes come from the shared control-code table in ../petscii.ts (also used
+// for BASIC text), so both tools accept the same names. Bytes are queued through KERNAL
+// keyboard-buffer injection on both C64U and VICE.
+function validTokenNames(): string[] {
+  const names: string[] = [];
+  for (let code = 0; code < 256; code += 1) {
+    const name = petsciiControlName(code);
+    if (name !== undefined) names.push(`{${name.replace(/ /g, "_").toUpperCase()}}`);
+  }
+  return names;
+}
 
 // ASCII a-z are shifted graphics characters in PETSCII, so typed "print" would
 // reach BASIC as graphics and give ?SYNTAX ERROR. Literal letters are therefore
@@ -121,7 +78,7 @@ function expandPetsciiTokens(text: string): string {
       );
     }
     const upper = token.trim().toUpperCase();
-    const code = PETSCII_TOKENS[upper];
+    const code = lookupNamedPetscii(upper);
     if (code !== undefined) {
       return String.fromCharCode(code);
     }
@@ -136,7 +93,7 @@ function expandPetsciiTokens(text: string): string {
       return String.fromCharCode(num);
     }
     throw new ToolValidationError(
-      `Unknown token {${token}} at position ${offset + 1} of the text. Valid tokens: ${Object.keys(PETSCII_TOKENS).map((name) => `{${name}}`).join(", ")}, or a numeric code such as {$1D} or {29} (0-255).`,
+      `Unknown token {${token}} at position ${offset + 1} of the text. Valid tokens: ${validTokenNames().join(", ")}, or a numeric code such as {$1D} or {29} (0-255).`,
       { path: "$.text" },
     );
   });
@@ -219,16 +176,16 @@ export const writeTextArgsSchema = objectSchema({
 });
 
 export const keyArgsSchema = objectSchema({
-  description: "Press a single key one or more times, optionally with a delay between presses.",
+  description: "Press one key one or more times, optionally with a delay.",
   properties: {
     op: literalSchema("key"),
     key: stringSchema({
-      description: "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.).",
+      description: "Key to press: a printable character or PETSCII token name (RETURN, F1…F8, UP). STOP only types code 3 and may not break a running program; use op keyboard with run_stop on C64U.",
       minLength: 1,
       maxLength: 32,
     }),
     durationMs: optionalSchema(numberSchema({
-      description: "Delay in ms after each queued key press before the next press (default 0 = no delay).",
+      description: "Delay in ms between presses (default 0).",
       integer: true,
       minimum: 0,
       maximum: 5000,
@@ -247,7 +204,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which also pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
@@ -283,7 +240,7 @@ export const joystickArgsSchema = objectSchema({
 });
 
 export const keyboardArgsSchema = objectSchema({
-  description: "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  description: "Send physical C64 keyboard matrix events through machine:input (needs firmware support; U64 3.15+).",
   properties: {
     op: literalSchema("keyboard"),
     inputs: arraySchema(stringSchema({ description: "Physical keyboard input.", enum: KEYBOARD_INPUTS }), {
@@ -298,14 +255,14 @@ export const keyboardArgsSchema = objectSchema({
 });
 
 const releaseAllArgsSchema = objectSchema({
-  description: "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  description: "Release every key and joystick control injected through machine:input.",
   properties: { op: literalSchema("release_all") },
   required: ["op"],
   additionalProperties: false,
 });
 
 const inputStateArgsSchema = objectSchema({
-  description: "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  description: "Read the keys and joystick controls held through machine:input.",
   properties: { op: literalSchema("state") },
   required: ["op"],
   additionalProperties: false,
@@ -358,13 +315,18 @@ function textToPetsciiBytes(text: string): Uint8Array {
   return Uint8Array.from(bytes);
 }
 
+/** The request abort signal, so a cancelled call stops waiting for the keyboard queue to drain. */
+function signalOption(ctx: { readonly signal?: AbortSignal }): { signal: AbortSignal } | undefined {
+  return ctx.signal ? { signal: ctx.signal } : undefined;
+}
+
 const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
   write_text: async (args, ctx) => {
     try {
       const parsed = writeTextArgsSchema.parse(args);
       const expanded = expandPetsciiTokens(parsed.text);
       const petsciiBytes = textToPetsciiBytes(expanded);
-      const fed = feedFields(await ctx.client.injectKeyboardQueue(petsciiBytes));
+      const fed = feedFields(await ctx.client.injectKeyboardQueue(petsciiBytes, signalOption(ctx)));
       if (parsed.delayMs && parsed.delayMs > 0) {
         await new Promise<void>((res) => setTimeout(res, parsed.delayMs));
       }
@@ -385,7 +347,7 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
       const count = parsed.count ?? 1;
       const durationMs = parsed.durationMs ?? 0;
       // Resolve key to a character: try token first, then single char
-      const tokenCode = PETSCII_TOKENS[parsed.key.toUpperCase()];
+      const tokenCode = lookupNamedPetscii(parsed.key);
       const keyByte = tokenCode !== undefined
         ? tokenCode
         : parsed.key.length === 1
@@ -395,13 +357,20 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
             })();
       let fed = feedFields({ delivered: 0 });
       let presses = 0;
-      for (let i = 0; i < count; i++) {
-        fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte)));
-        presses += 1;
-        // Stop at the first feed that did not drain: later presses would queue behind a stopped feed.
-        if (fed.status !== "drained") break;
-        if (durationMs > 0) {
-          await new Promise<void>((res) => setTimeout(res, durationMs));
+      if (durationMs === 0 && count > 1) {
+        // No pause between presses: one injection of count bytes, not count round trips.
+        const raw = await ctx.client.injectKeyboardQueue(new Uint8Array(count).fill(keyByte), signalOption(ctx));
+        fed = feedFields(raw);
+        presses = fed.status === "drained" ? count : Math.min(count, raw.delivered ?? 0);
+      } else {
+        for (let i = 0; i < count; i++) {
+          fed = feedFields(await ctx.client.injectKeyboardQueue(Uint8Array.of(keyByte), signalOption(ctx)));
+          presses += 1;
+          // Stop at the first feed that did not drain: later presses would queue behind a stopped feed.
+          if (fed.status !== "drained") break;
+          if (durationMs > 0) {
+            await new Promise<void>((res) => setTimeout(res, durationMs));
+          }
         }
       }
       ctx.logger.info("Pressed key", { key: parsed.key, count, durationMs, status: fed.status });
@@ -436,7 +405,9 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
           });
           let state;
           if (parsed.action === "tap") {
-            // The firmware holds a tap for a fixed two frames, so hold the press for durationMs here.
+            // The firmware holds a REST joystick tap for a single tick of its own, measured at 0.5-18.5 ms (under one PAL frame)
+            // on an Ultimate 64 Elite, firmware 3.15a, 2026-11-20. That is too short for a game to poll reliably,
+            // so hold the press for durationMs here.
             let failed = false;
             try {
               // A failed response can follow an applied press, so cleanup also

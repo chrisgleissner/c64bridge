@@ -76,6 +76,8 @@ export interface ViceDisplaySnapshot {
 
 interface PendingRequest {
   cmd: number;
+  /** The command byte that was sent (the expected response type can differ, for example 0x12 answers 0x11). */
+  sent?: number;
   resolve: (frame: Buffer) => void;
   reject: (err: unknown) => void;
   onFrame?: (type: number, frame: Buffer) => void;
@@ -91,8 +93,36 @@ interface SendOptions {
 /** How long a TCP connect to the monitor may take before it is abandoned. */
 export const VICE_CONNECT_TIMEOUT_MS = 5_000;
 
+/** Error codes of the binary monitor (data/vice/vice-binary-monitor-spec.md, "Generic Errors"). */
+const BM_ERROR_TEXT: Readonly<Record<number, string>> = {
+  0x01: "object does not exist",
+  0x02: "invalid memspace",
+  0x80: "incorrect command length",
+  0x81: "invalid parameter value",
+  0x82: "unsupported API version",
+  0x83: "unknown command type",
+  0x8f: "general failure after basic validation",
+};
+
+const BM_COMMAND_NAME: Readonly<Record<number, string>> = {
+  0x01: "memory get", 0x02: "memory set", 0x11: "checkpoint get", 0x12: "checkpoint set", 0x13: "checkpoint delete",
+  0x14: "checkpoint list", 0x15: "checkpoint toggle", 0x22: "condition set", 0x31: "registers get", 0x32: "registers set",
+  0x41: "dump", 0x42: "undump", 0x51: "resource get", 0x52: "resource set", 0x71: "advance instructions", 0x72: "keyboard feed",
+  0x73: "execute until return", 0x81: "ping", 0x82: "banks available", 0x83: "registers available", 0x84: "display get",
+  0x85: "vice info", 0x86: "cpu history", 0x91: "palette get", 0xa2: "joyport set", 0xaa: "exit", 0xb2: "userport set",
+  0xbb: "quit", 0xcc: "reset", 0xdd: "autostart",
+};
+
+/** "BM error 0x81 (invalid parameter value) in memory get 0x01", for the client of the tool that never saw the frame. */
+export function describeMonitorError(code: number, command?: number): string {
+  const text = BM_ERROR_TEXT[code];
+  const name = command === undefined ? undefined : BM_COMMAND_NAME[command];
+  const where = command === undefined ? "" : ` in ${name ? `${name} ` : "command "}0x${command.toString(16).padStart(2, "0")}`;
+  return `BM error 0x${code.toString(16)}${text ? ` (${text})` : ""}${where}`;
+}
+
 /** Per-request timeout. C64BRIDGE_VICE_REQUEST_TIMEOUT_MS overrides it, for tests of the timeout path. */
-function viceRequestTimeoutMs(cmd: number): number {
+export function viceRequestTimeoutMs(cmd: number): number {
   const override = Number(process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS);
   if (Number.isFinite(override) && override > 0) return override;
   return cmd === 0x84 ? 30_000 : 10_000;
@@ -189,6 +219,7 @@ export class ViceClient {
       if (this.closing) {
         return;
       }
+      this.executionWatch?.wake?.(); // a step that was acknowledged must not wait out its time limit when VICE is gone
       const handler = this.onCloseHandler;
       if (handler) {
         try { handler(hadError ? new Error("VICE monitor connection closed due to error") : undefined); } catch {}
@@ -320,7 +351,7 @@ export class ViceClient {
 
       if (err !== 0x00) {
         if (pending.timer) clearTimeout(pending.timer);
-        pending.reject(new Error(`BM error 0x${err.toString(16)}`));
+        pending.reject(new Error(describeMonitorError(err, pending.sent)));
         this.pending.delete(reqId);
         continue;
       }
@@ -372,6 +403,7 @@ export class ViceClient {
     const promise = new Promise<Buffer>((resolve, reject) => {
       const pending: PendingRequest = {
         cmd: expectedCmd,
+        sent: cmd,
         resolve,
         reject,
         onFrame: options?.onFrame,
@@ -390,7 +422,66 @@ export class ViceClient {
     return promise;
   }
 
-  async info(): Promise<void> { await this.send(0x85); }
+  async info(options?: { readonly timeoutMs?: number }): Promise<void> { await this.send(0x85, undefined, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }); }
+  /** VICE version (BM 0x85): the main version bytes as "3.10.0.0" and the SVN revision. */
+  async versionInfo(): Promise<{ readonly version: string; readonly svnRevision: number }> {
+    const frame = await this.send(0x85);
+    const body = frame.subarray(12);
+    const mainLength = body[0] ?? 0;
+    const main = body.subarray(1, 1 + mainLength);
+    const svnLength = body[1 + mainLength] ?? 0;
+    const svn = body.subarray(2 + mainLength, 2 + mainLength + svnLength);
+    return { version: [...main].join("."), svnRevision: svn.length >= 4 ? svn.readUInt32LE(0) : 0 };
+  }
+
+  /** Machine specific bank ids and names (BM 0x82); the ids must not be hard-coded. */
+  async banksAvailable(): Promise<Array<{ readonly id: number; readonly name: string }>> {
+    const frame = await this.send(0x82);
+    const body = frame.subarray(12);
+    if (body.length < 2) return [];
+    const count = body.readUInt16LE(0);
+    const banks: Array<{ id: number; name: string }> = [];
+    let offset = 2;
+    for (let i = 0; i < count && offset < body.length; i += 1) {
+      const itemLength = (body[offset] ?? 0) + 1;
+      if (itemLength < 4 || offset + itemLength > body.length) break;
+      const id = body.readUInt16LE(offset + 1);
+      const nameLength = body[offset + 3] ?? 0;
+      banks.push({ id, name: body.toString("utf8", offset + 4, Math.min(offset + 4 + nameLength, offset + itemLength)) });
+      offset += itemLength;
+    }
+    return banks;
+  }
+
+  /** Reads memory of a given bank id (from banksAvailable), for example the RAM under ROM or I/O. */
+  async memGetBank(start: number, end: number, bankId: number, memspace: ViceMemspace = 0): Promise<Buffer> {
+    const body = Buffer.alloc(8);
+    body[0] = 0; // no side effects
+    body.writeUInt16LE(start & 0xffff, 1);
+    body.writeUInt16LE(end & 0xffff, 3);
+    body[5] = memspace;
+    body.writeUInt16LE(bankId & 0xffff, 6);
+    const frame = await this.send(0x01, body);
+    const declared = frame.readUInt16LE(12);
+    const len = Math.min(frame.length - 14, declared === 0 ? 0x10000 : declared);
+    return frame.subarray(14, 14 + len);
+  }
+
+  /** Saves the emulator state to a snapshot file on the VICE host (BM 0x41). */
+  async dumpSnapshot(filename: string, options?: { readonly saveRoms?: boolean; readonly saveDisks?: boolean }): Promise<void> {
+    const name = Buffer.from(filename, "utf8");
+    if (name.length === 0 || name.length > 255) throw new Error("Snapshot file names must be 1-255 bytes");
+    await this.send(0x41, Buffer.concat([Buffer.from([options?.saveRoms ? 1 : 0, options?.saveDisks ? 1 : 0, name.length]), name]));
+  }
+
+  /** Restores a snapshot file (BM 0x42); returns the program counter after the restore. */
+  async undumpSnapshot(filename: string): Promise<number> {
+    const name = Buffer.from(filename, "utf8");
+    if (name.length === 0 || name.length > 255) throw new Error("Snapshot file names must be 1-255 bytes");
+    const frame = await this.send(0x42, Buffer.concat([Buffer.from([name.length]), name]));
+    return frame.length >= 14 ? frame.readUInt16LE(12) : 0;
+  }
+
   async resetSoft(): Promise<void> { await this.send(0xCC, Buffer.from([0x00])); }
   async resetHard(): Promise<void> { await this.send(0xCC, Buffer.from([0x01])); }
   async reset(type: 0 | 1 = 0): Promise<void> { await this.send(0xCC, Buffer.from([type])); }
@@ -660,6 +751,9 @@ export class ViceClient {
 
     let body: Buffer;
     if (typeof value === "number") {
+      if (!Number.isInteger(value) || value < -0x80000000 || value > 0x7fffffff) {
+        throw new Error(`Resource '${trimmed}': ${value} is not a 32-bit integer`);
+      }
       const header = Buffer.from([1, nameBytes.length & 0xff]);
       const intPayload = Buffer.alloc(4);
       intPayload.writeInt32LE(value | 0, 0);

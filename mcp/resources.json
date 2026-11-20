@@ -419,6 +419,84 @@
       }
     },
     {
+      "name": "Skill: assembly-program",
+      "uri": "c64://skills/assembly-program",
+      "description": "Execute 6502/6510 assembly workflows through c64bridge.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: basic-program",
+      "uri": "c64://skills/basic-program",
+      "description": "Execute bespoke Commodore BASIC v2 programs through c64bridge.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: cross-platform-demo",
+      "uri": "c64://skills/cross-platform-demo",
+      "description": "Run the shortest visible demo path across VICE and C64U.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: drive-manager",
+      "uri": "c64://skills/drive-manager",
+      "description": "Manage disk images and drive state through c64bridge.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: game-development",
+      "uri": "c64://skills/game-development",
+      "description": "Develop a Commodore 64 game with c64bridge, targeting a modern C64U/Ultimate device (default) or a stock C64.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: graphics-demo",
+      "uri": "c64://skills/graphics-demo",
+      "description": "Execute PETSCII, sprite, bitmap, and frame-capture graphics workflows.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: hello-world",
+      "uri": "c64://skills/hello-world",
+      "description": "Run the fastest greeting or smoke-test path across VICE and C64U.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: memory-debug",
+      "uri": "c64://skills/memory-debug",
+      "description": "Inspect, patch, and validate C64 memory safely.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: printer-job",
+      "uri": "c64://skills/printer-job",
+      "description": "Execute Commodore and Epson printing workflows through c64bridge.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: sid-music",
+      "uri": "c64://skills/sid-music",
+      "description": "Execute built-in and custom SID playback workflows through c64bridge.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: software-launch",
+      "uri": "c64://skills/software-launch",
+      "description": "Load and run existing C64 software through c64bridge.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: stream-control",
+      "uri": "c64://skills/stream-control",
+      "description": "Start and stop live C64 audio or video streams.",
+      "mimeType": "text/markdown"
+    },
+    {
+      "name": "Skill: system-control",
+      "uri": "c64://skills/system-control",
+      "description": "Control machine lifecycle, background tasks, and configuration state.",
+      "mimeType": "text/markdown"
+    },
+    {
       "name": "Active Platform Status",
       "uri": "c64://platform/status",
       "description": "Reports the active MCP platform and tool compatibility snapshot.",

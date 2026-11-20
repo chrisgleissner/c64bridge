@@ -25,6 +25,8 @@ test("rip_charset_from_ram scans never read $D000-$DFFF for common or full range
     assert.equal(result.isError, undefined, JSON.stringify(result.content));
     assert.ok(reads.length > 0, scanRange);
     for (const { start, length } of reads) {
+      // HARD06 META-13: the two single-byte register reads ($D018, $DD00) that locate the active charset are allowed.
+      if (length === 1 && (start === 0xD018 || start === 0xDD00)) continue;
       assert.ok(start + length - 1 < 0xD000 || start > 0xDFFF, `${scanRange}: read $${start.toString(16)} length ${length}`);
     }
   }

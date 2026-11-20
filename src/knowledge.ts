@@ -45,6 +45,32 @@ const SYMBOLS: Record<string, number> = Object.freeze({
   cia1: 0xdc00,
   cia2: 0xdd00,
   kernal: 0xe000,
+  // KERNAL jump table entries (Commodore 64 Programmer's Reference Guide, chapter 5, "User
+  // callable KERNAL routines"). Names resolve case-insensitively; a loaded program label wins.
+  cint: 0xff81,
+  ioinit: 0xff84,
+  ramtas: 0xff87,
+  restor: 0xff8a,
+  scnkey: 0xff9f,
+  readst: 0xffb7,
+  setlfs: 0xffba,
+  setnam: 0xffbd,
+  open: 0xffc0,
+  close: 0xffc3,
+  chkin: 0xffc6,
+  chkout: 0xffc9,
+  clrchn: 0xffcc,
+  chrin: 0xffcf,
+  chrout: 0xffd2,
+  load: 0xffd5,
+  save: 0xffd8,
+  settim: 0xffdb,
+  rdtim: 0xffde,
+  stop: 0xffe1,
+  getin: 0xffe4,
+  clall: 0xffe7,
+  udtim: 0xffea,
+  plot: 0xfff0,
 });
 
 export function formatAddress(address: number): string {
@@ -400,7 +426,7 @@ These modes demand stable raster IRQs, avoiding writes during critical cycles (e
 - Limit: max 8 sprites on any raster line (hardware). Exceed width with multiplexing via raster IRQ repositioning.
 
 ## Raster and Timing Essentials
-- Raster register: $D012 (low 8 bits), high bit in $D011 bit 7 is NOT the high raster bit; note: $D011 bit 7=screen on/off; high raster bit is bit 7 of $D011? On C64: bit 7 of $D011 is actually the 9th raster bit when read via $D011; the same register contains vertical scroll (lower 3 bits), ECM and BMM bits.
+- Raster register: $D012 holds the low 8 bits; $D011 bit 7 (RST8) is raster bit 8, on read (current line) and on write (IRQ compare line). The same register holds ECM (bit 6), BMM (bit 5), DEN display enable (bit 4), RSEL 25/24 rows (bit 3) and the vertical scroll (bits 0-2).
 - Badlines: Occur when (screen enabled) AND (rasterY between first and last text row) AND ((rasterY & 7) == (Y-scroll bits in $D011)). On a badline the VIC fetches 40 character pointers, stealing about 40 cycles, leaving ~23 CPU cycles on PAL. There are 25 potential badlines for the 25 text rows per frame (when screen on).
 - Sprite DMA: Each visible sprite steals ~3 cycles per raster line while fetching its graphics. Fetch windows are fixed per sprite index; budget carefully on heavy lines. These steals are in addition to badline character fetches.
 - Per-line CPU cycles (approximate):
@@ -420,7 +446,7 @@ Notes: Exact cycle numbers vary slightly (PAL vs NTSC and chip revisions). Alway
 - Frame/refresh rates: PAL ~50.12 Hz; NTSC ~59.83 Hz. Colour subcarrier and pixel clocks differ, affecting exact cycle lengths.
 
 ## Useful Registers (subset)
-$D011: CTRL1 (bit7=High raster bit when reading; writing: bit7 Screen on/off), bit6 ECM, bit5 BMM, bit4 (unused), bits 0–2=Y scroll.
+$D011: CTRL1 (bit7 RST8 = raster bit 8 on read and write), bit6 ECM, bit5 BMM, bit4 DEN (display enable), bit3 RSEL (1 = 25 rows), bits 0–2=Y scroll.
 $D016: CTRL2 (bit4 MCM, bits 0–2 X scroll).
 $D015: Sprite enable, $D01C: Sprite multicolour, $D01D: Sprite X expand, $D017: Sprite Y expand.
 $D020/$D021: Border/background, $D022–$D024: shared multicolours, $D025/$D026: sprite shared colours.
@@ -430,7 +456,7 @@ $07F8–$07FF: Sprite data pointers (address/64).
 - Do not write to $D011/$D016 during badlines unless you deliberately trigger FLI behaviour.
 - Align IRQs to known cycle counts; use a stable raster entry sequence (acknowledge $D019, delay with a tuned instruction sequence, then effect writes).
 - Budget for sprite DMA on lines with many sprites; schedule heavy updates on non-badlines.
-- Disable screen ($D011 bit7=0) temporarily to suppress badlines when maximum CPU time is needed.
+- Disable the display ($D011 bit4 DEN=0) temporarily to suppress badlines when maximum CPU time is needed.
 
 ## References
 - Zimmers.net: VIC-II register and memory maps

@@ -24,7 +24,6 @@ const DATA_DOC_EXCLUDE_DIRS = new Set(["context", "basic/examples", "assembly/ex
 const DOC_EXCLUDE_DIRS = new Set(["plans", "reviews"]);
 const CONTEXT_DIR = path.join(ASSET_ROOT, "data/context");
 const BOOTSTRAP_PATH = path.join(CONTEXT_DIR, "bootstrap.md");
-const AGENTS_PATH = path.join(ASSET_ROOT, "AGENTS.md");
 const PROMPTS_DIR = path.join(ASSET_ROOT, ".github/prompts");
 const CHAT_PATH = path.join(CONTEXT_DIR, "chat.md");
 // RAG_DOC_FILES env var can add extra specific files, comma-separated
@@ -34,11 +33,24 @@ const ENV_DOC_FILES = (process.env.RAG_DOC_FILES ?? "")
   .filter(Boolean)
   .map((entry) => path.resolve(entry));
 
+// Documents written for maintainers and agents of this repository, not C64 reference material
+// (KNOWLEDGE-3): they outranked the curated documents for words like "NMI" or "compile".
+const DEVELOPER_ONLY_FILES = new Set([
+  ".github/prompts/steer.prompt.md",
+  ".github/prompts/pr-converge.prompt.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "doc/developer.md",
+  "doc/troubleshooting-mcp.md",
+  "doc/agent-state-spec.md",
+  "doc/hardening-behavior.md",
+]);
+
 function isDeveloperOnlyFile(file: string): boolean {
   const relative = path.relative(ASSET_ROOT, path.resolve(file)).split(path.sep).join("/");
-  return relative === ".github/prompts/steer.prompt.md" ||
-    relative === ".github/prompts/pr-converge.prompt.md" ||
-    relative.startsWith(".github/skills/pr-converge/");
+  return DEVELOPER_ONLY_FILES.has(relative) ||
+    relative.startsWith(".github/skills/pr-converge/") ||
+    relative.startsWith("doc/audit/");
 }
 
 function shouldExcludeDocFile(file: string): boolean {
@@ -639,7 +651,7 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
   }
   // Include context files as single-chunk documents if present
   const promptFiles = readPromptFiles();
-  const contextFiles = [BOOTSTRAP_PATH, AGENTS_PATH, CHAT_PATH, ...promptFiles];
+  const contextFiles = [BOOTSTRAP_PATH, CHAT_PATH, ...promptFiles];
   const contextSet = new Set(contextFiles.map((file) => path.resolve(file)));
   for (const cf of contextFiles) {
     if (fsSync.existsSync(cf)) fileSources.push({ file: cf, root: process.cwd() });

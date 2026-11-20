@@ -35,21 +35,24 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 | Frame loop that plays the same at 1 MHz and turbo; cycle budget per frame | architecture sections 1 and 3 |
 | Detect and enable turbo; speed probe | techniques section 10, `c64://ultimate/hardware` |
 | Detect REU and its size; load a level from REU to `$4000` | `c64://ultimate/reu` (Recipes, Size detection) |
-| Raster IRQ chain, stable raster | techniques section 1 |
+| Raster IRQ chain, raster timing, stable raster, open top/bottom and side borders | techniques section 1 |
 | Sprite multiplexer, collision, scrolling, input | techniques sections 2, 4, 3, 5 |
 | Music and SFX, several SIDs, NTSC speed | techniques section 6, `c64://ultimate/multisid` |
-| Memory map and VIC bank | architecture sections 4 and 5 |
+| Memory map, VIC bank, safe zero page | architecture sections 4 and 5 |
+| Bitmap, multicolour text and bitmap setup, pixel address | techniques section 11 |
+| 8/16-bit multiply and divide routines | techniques section 12 |
 | Build, `.cfg`, REU image, crunch | toolchain |
+| C compilers: zero page, calling convention, linker config, startup (cc65, Oscar64, llvm-mos) | toolchain section 1 |
 | Real code to study, licences | references |
 
 ## Resource table (KB, bytes/1000)
 | URI | Content | KB |
 |---|---|---|
-| `c64://gamedev/index` | this page | 6.6 |
-| `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, memory-map templates | 12.4 |
-| `c64://gamedev/techniques` | raster IRQ, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks | 18.9 |
-| `c64://gamedev/toolchain` | assemblers, build, crunchers, test loop, `.cfg` and REU image | 7.5 |
-| `c64://gamedev/references` | projects and games to learn from, licences | 10.0 |
+| `c64://gamedev/index` | this page | 7.1 |
+| `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, VIC bank, safe zero page, memory-map templates | 13.8 |
+| `c64://gamedev/techniques` | raster IRQ and timing, open borders, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks, bitmap modes, multiply/divide | 25.6 |
+| `c64://gamedev/toolchain` | assemblers, C compiler runtimes (zero page, calling convention, linker, startup), build, crunchers, test loop, `.cfg` and REU image | 13.2 |
+| `c64://gamedev/references` | projects and games to learn from, licences | 10.4 |
 | `c64://ultimate/hardware` | turbo, SIDs, video, detection, LEDs, config | 12.9 |
 | `c64://ultimate/multisid` | 8-10 SIDs: limit, address map, split, mixer, LOAD_CONFIG, detection | 10.9 |
 | `c64://ultimate/reu` | REU registers, recipes, loading paths, streaming | 13.4 |

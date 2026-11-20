@@ -22,6 +22,9 @@ import {
 } from "./errors.js";
 
 import { getPlatformStatus } from "../platform.js";
+import { resolveHostPath } from "../hostPaths.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 
@@ -32,6 +35,11 @@ const generatedPlaybacks = new Set<AbortController>();
 
 let lastGeneratedPlayback: Promise<void> = Promise.resolve();
 
+/**
+ * Stops a running `music_generate` sequence. Every operation that starts a program, plays a file, resets
+ * the machine or takes over the SID calls this, otherwise the background notes keep writing into the
+ * new program's SID registers.
+ */
 export function cancelGeneratedSidPlayback(): void {
   for (const controller of generatedPlaybacks) controller.abort();
   generatedPlaybacks.clear();
@@ -68,10 +76,16 @@ const sidVolumeArgsSchema = objectSchema({
   description: "Set the SID master volume (0-15).",
   properties: {
     volume: numberSchema({
-      description: "Desired SID master volume. Values outside 0-15 are clamped.",
+      description: "SID master volume 0-15. Writes all of $D418, clearing filter mode bits.",
       minimum: 0,
       maximum: 15,
     }),
+    filterMode: optionalSchema(numberSchema({
+      description: "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+      integer: true,
+      minimum: 0,
+      maximum: 15,
+    })),
   },
   required: ["volume"],
   additionalProperties: false,
@@ -106,11 +120,10 @@ const sidNoteOnArgsSchema = objectSchema({
       description: "Explicit frequency in Hz. Used when note is omitted.",
       minimum: 1,
     })),
-    system: stringSchema({
-      description: "Video system for frequency calculation.",
+    system: optionalSchema(stringSchema({
+      description: "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
       enum: ["PAL", "NTSC"],
-      default: "PAL",
-    }),
+    })),
     waveform: stringSchema({
       description: "SID waveform to enable.",
       enum: ["pulse", "saw", "tri", "noise"],
@@ -244,6 +257,10 @@ const musicGenerateArgsSchema = objectSchema({
       description: "Optional musical preset to influence timing/expression.",
       enum: ["classic", "expression"],
     }), "classic"),
+    system: optionalSchema(stringSchema({
+      description: "PAL or NTSC for the note frequencies. Default: read from the machine ($02A6).",
+      enum: ["PAL", "NTSC"],
+    })),
   },
   additionalProperties: false,
 });
@@ -279,14 +296,18 @@ const musicCompileArgsSchema = objectSchema({
       enum: ["yaml", "json"],
     })),
     output: optionalSchema(stringSchema({
-      description: "Playback target format. PRG works on all backends; SID playback requires C64U/U64 or U2 (SID export with dryRun works everywhere).",
+      description: "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere).",
       enum: ["prg", "sid"],
       default: "prg",
     }), "prg"),
     dryRun: optionalSchema(booleanSchema({
-      description: "When true, skip playback and only return compilation metadata.",
+      description: "Skip playback and return only compilation metadata (use outputPath to export).",
       default: false,
     }), false),
+    outputPath: optionalSchema(stringSchema({
+      description: "Host file for the compiled PRG or SID, inside the allowed directories. Works with dryRun.",
+      minLength: 1,
+    })),
   },
   additionalProperties: false,
 });
@@ -308,10 +329,10 @@ const recordAndAnalyzeArgsSchema = objectSchema({
 const analyzeAudioArgsSchema = objectSchema({
   description: "Analyze recent SID playback when a verification-style request is detected.",
   properties: {
-    request: stringSchema({
-      description: "Natural language user request describing the verification goal.",
+    request: optionalSchema(stringSchema({
+      description: "Verification goal wording; \"does it sound right\" requests add a verdict.",
       minLength: 1,
-    }),
+    }), "analyze the SID output"),
     durationSeconds: optionalSchema(numberSchema({
       description: "Override capture duration in seconds.",
       minimum: 0.5,
@@ -319,7 +340,6 @@ const analyzeAudioArgsSchema = objectSchema({
     })),
     expectedSidwave: optionalSchema(sidwaveSourceSchema),
   },
-  required: ["request"],
   additionalProperties: false,
 });
 
@@ -357,6 +377,26 @@ function transposeNote(note: string, semitones: number): string {
 }
 
 /** Highest frequency the SID's 16-bit frequency register can produce (about 3848 Hz PAL, 3995 Hz NTSC). */
+/**
+ * The SID frequency tables differ for PAL and NTSC. When the caller gives no system, read the KERNAL
+ * PAL/NTSC flag at $02A6 (1 = PAL, 0 = NTSC; Mapping the Commodore 64) from the active machine, which
+ * works the same on Ultimate hardware and VICE, and say where the value came from.
+ */
+export async function resolveSidSystem(
+  ctx: ToolExecutionContext,
+  given: "PAL" | "NTSC" | undefined,
+): Promise<{ system: "PAL" | "NTSC"; source: string }> {
+  if (given) return { system: given, source: "given" };
+  try {
+    const flag = (await ctx.client.readMemoryRaw(0x02a6, 1))[0];
+    if (flag === 0) return { system: "NTSC", source: "read from the machine ($02A6 = 0)" };
+    if (flag === 1) return { system: "PAL", source: "read from the machine ($02A6 = 1)" };
+  } catch {
+    // Fall through to the default below.
+  }
+  return { system: "PAL", source: "default PAL; $02A6 could not be read" };
+}
+
 function maxSidFrequencyHz(system: "PAL" | "NTSC"): number {
   return (0xffff * (system === "PAL" ? 985_248 : 1_022_727)) / 16_777_216;
 }
@@ -388,14 +428,6 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener("abort", done, { once: true });
   });
-}
-
-function shouldAutoAnalyze(request: string): boolean {
-  const lowered = request.toLowerCase();
-  const actionMatch = /(check|verify|test|analyze|listen|hear)/.test(lowered);
-  const subjectMatch = /(sid|audio|music|sound|song|play)/.test(lowered);
-  const qualitativeMatch = /(does.*sound|how.*sound|sound.*right|sound.*good|sound.*correct)/.test(lowered);
-  return (actionMatch && subjectMatch) || qualitativeMatch;
 }
 
 type AudioAnalyzer = (options: {
@@ -465,23 +497,24 @@ function generateAudioFeedback(analysisResult: unknown, userRequest: string): st
     const voices = Array.isArray(analysis.voices) ? analysis.voices : [];
     const globalMetrics = (analysis.global_metrics ?? {}) as Record<string, unknown>;
 
-    let feedback = `Audio analysis detected ${voices.length} voice(s) over ${Math.round((analysis.durationSeconds ?? 0) * 10) / 10}s:\n\n`;
+    let feedback = `Audio analysis of the mixed SID output over ${Math.round((analysis.durationSeconds ?? 0) * 10) / 10}s (voices are not separated):\n\n`;
 
     voices.forEach((voice: any, index: number) => {
       const notes = Array.isArray(voice?.detected_notes) ? voice.detected_notes : [];
       const validNotes = notes.filter((n: any) => n?.note && n?.frequency);
       const voiceId = voice?.id ?? index + 1;
+      const label = voiceId === 0 ? "Mix" : `Voice ${voiceId}`;
 
       if (validNotes.length > 0) {
         const preview = validNotes.slice(0, 5).map((n: any) => `${n.note}(${Math.round(n.frequency)}Hz)`);
         const extra = validNotes.length > preview.length ? "..." : "";
-        feedback += `Voice ${voiceId}: ${validNotes.length} note(s) - ${preview.join(", ")}${extra}`;
+        feedback += `${label}: ${validNotes.length} note(s) - ${preview.join(", ")}${extra}`;
         if (typeof voice?.average_deviation === "number") {
           feedback += ` [avg deviation: ${Math.round(voice.average_deviation * 10) / 10} cents]`;
         }
         feedback += "\n";
       } else {
-        feedback += `Voice ${voiceId}: No clear notes detected\n`;
+        feedback += `${label}: No clear notes detected\n`;
       }
     });
 
@@ -554,7 +587,7 @@ export const audioModule = defineToolModule({
             applied: appliedVolume,
           });
 
-          const result = await ctx.client.sidSetVolume(parsed.volume);
+          const result = await ctx.client.sidSetVolume(parsed.volume, undefined, parsed.filterMode === undefined ? undefined : { filterMode: parsed.filterMode });
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while setting SID volume", {
               details: normaliseFailure(result.details),
@@ -564,7 +597,8 @@ export const audioModule = defineToolModule({
           const detailRecord = toRecord(result.details) ?? {};
           const address = normaliseAddress(detailRecord.address, "$D418");
 
-          return textResult(`SID master volume set to ${appliedVolume}.`, {
+          const notice = typeof detailRecord.notice === "string" ? ` ${detailRecord.notice}` : "";
+          return textResult(`SID master volume set to ${appliedVolume}.${notice}`, {
             success: true,
             requestedVolume: parsed.volume,
             appliedVolume,
@@ -638,8 +672,9 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidNoteOnArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback(); // A running generated sequence would overwrite this voice.
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice ?? 1))) as 1 | 2 | 3;
-          const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
+          const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined);
           if (parsed.note) {
             assertPlayableFrequency(noteHz(parsed.note), parsed.note, system, "$.note");
           } else if (parsed.frequencyHz !== undefined) {
@@ -656,7 +691,7 @@ export const audioModule = defineToolModule({
             voice,
             note: parsed.note ?? undefined,
             frequencyHz: parsed.frequencyHz ?? undefined,
-            system: (parsed.system ?? "PAL") as "PAL" | "NTSC",
+            system,
             waveform: (parsed.waveform ?? "pulse") as "pulse" | "saw" | "tri" | "noise",
             pulseWidth: parsed.pulseWidth,
             attack: parsed.attack,
@@ -671,17 +706,16 @@ export const audioModule = defineToolModule({
           }
 
           const detailRecord = toRecord(result.details) ?? {};
-          const systemNote = parsed.system
-            ? `Using ${parsed.system} timing.`
-            : "Using default PAL timing. For NTSC, pass system: 'NTSC'. Check $02A6 memory location to verify system.";
+          const systemNote = `Using ${system} timing (${systemSource}).`;
 
           return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}. ${systemNote}`, {
             success: true,
             voice,
             note: parsed.note ?? null,
             frequencyHz: parsed.frequencyHz ?? null,
-            system: parsed.system ?? "PAL",
-            systemReminder: "$02A6 contains PAL/NTSC flag (1=NTSC, 0=PAL)",
+            system,
+            systemSource,
+            systemReminder: "$02A6 holds the KERNAL PAL/NTSC flag: 1 = PAL, 0 = NTSC",
             waveform: parsed.waveform ?? "pulse",
             pulseWidth: parsed.pulseWidth,
             envelope: {
@@ -703,7 +737,7 @@ export const audioModule = defineToolModule({
     {
       name: "sid_note_off",
       description: "Release a SID voice by clearing its GATE bit.",
-      summary: "Writes zero to the selected voice control register to stop playback.",
+      summary: "Clears the GATE bit of the voice control register, keeping the waveform last sent by note_on so the release phase is heard.",
       inputSchema: sidNoteOffArgsSchema.jsonSchema,
       tags: ["sid", "control", "music"],
       prerequisites: ["sid_note_on"],
@@ -716,6 +750,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidNoteOffArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback();
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice))) as 1 | 2 | 3;
           ctx.logger.info("Stopping SID voice", { voice });
 
@@ -865,6 +900,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = sidplayFileArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback();
           ctx.logger.info("Playing SID file", { path: parsed.path, songnr: parsed.songnr ?? null });
 
           const result = await ctx.client.sidplayFile(parsed.path, parsed.songnr);
@@ -907,6 +943,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = modplayFileArgsSchema.parse(args ?? {});
+          cancelGeneratedSidPlayback();
           ctx.logger.info("Playing MOD file", { path: parsed.path });
 
           const result = await ctx.client.modplayFile(parsed.path);
@@ -952,6 +989,7 @@ export const audioModule = defineToolModule({
         try {
           const parsed = musicGenerateArgsSchema.parse(args ?? {});
           const intervals = parseIntervals(parsed.pattern);
+          const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined);
           const timeline: Array<{ t: number; note: string; durationMs: number }> = [];
           let timestamp = 0;
           const expressiveDurations = [250, 180, 180, 400];
@@ -960,7 +998,7 @@ export const audioModule = defineToolModule({
             const note = transposeNote(parsed.root, iv);
             const durationMs = parsed.preset === "expression" ? expressiveDurations[i % expressiveDurations.length]! : parsed.tempoMs;
             // Playback runs in the background, so a note the SID cannot play must be rejected here.
-            assertPlayableFrequency(noteHz(note), note, "PAL", "$.root");
+            assertPlayableFrequency(noteHz(note), note, system, "$.root");
             timeline.push({ t: timestamp, note, durationMs });
             timestamp += durationMs;
           }
@@ -985,6 +1023,10 @@ export const audioModule = defineToolModule({
               await previousPlayback;
               const pinnedFacade = await pinnedFacadePromise;
               await ctx.client.sidSetVolume(8, pinnedFacade);
+              // Steps are scheduled against the start time, so REST latency does not accumulate as tempo drift.
+              const startedAt = Date.now();
+              let stepStart = 0;
+              const sleepUntil = (offsetMs: number) => sleep(Math.max(0, startedAt + offsetMs - Date.now()), controller.signal);
               for (let i = 0; i < parsed.steps; i += 1) {
                 if (controller.signal.aborted) break;
                 const iv = intervals[i % intervals.length]!;
@@ -993,6 +1035,7 @@ export const audioModule = defineToolModule({
                   voice: 1,
                   note,
                   waveform: (parsed.waveform ?? "tri") as "pulse" | "saw" | "tri" | "noise",
+                  system,
                   pulseWidth: 0x0800,
                   attack: 1,
                   decay: 7,
@@ -1003,10 +1046,11 @@ export const audioModule = defineToolModule({
                 // Hold GATE for most of the note, then clear it for a short gap so the next note retriggers ADSR.
                 const gateGapMs = Math.max(1, Math.min(20, Math.floor(durationMs / 8)));
                 // Cancellation ends the sleep at once, so the final gate-off below follows promptly.
-                await sleep(Math.max(0, durationMs - gateGapMs), controller.signal);
+                await sleepUntil(stepStart + durationMs - gateGapMs);
                 if (controller.signal.aborted) break;
                 await ctx.client.sidNoteOff(1, pinnedFacade);
-                await sleep(gateGapMs, controller.signal);
+                await sleepUntil(stepStart + durationMs);
+                stepStart += durationMs;
               }
               await ctx.client.sidNoteOff(1, pinnedFacade);
             } catch (playbackError) {
@@ -1017,7 +1061,7 @@ export const audioModule = defineToolModule({
             }
           })();
 
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root}. Playback is running and will be replaced by the next generated sequence.`, {
+          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root} (${system} pitch table, ${systemSource}). Playback is running and will be replaced by the next generated sequence.`, {
             success: true,
             root: parsed.root,
             intervals,
@@ -1025,6 +1069,8 @@ export const audioModule = defineToolModule({
             tempoMs: parsed.tempoMs,
             waveform: parsed.waveform ?? "tri",
             preset: parsed.preset ?? "classic",
+            system,
+            systemSource,
             timeline,
           });
         } catch (error) {
@@ -1080,14 +1126,21 @@ export const audioModule = defineToolModule({
 
           const document = parseSidwave(source);
           const compiled = compileSidwaveToPrg(document);
+          const sidFile = outputFormat === "sid" ? compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress }) : undefined;
+          let outputFile: string | undefined;
+          if (parsed.outputPath) {
+            outputFile = resolveHostPath(parsed.outputPath, { purpose: "write" });
+            await mkdir(dirname(outputFile), { recursive: true });
+            await writeFile(outputFile, sidFile ? sidFile.sid : compiled.prg);
+          }
 
           let ranOnC64 = false;
           let runDetails: Record<string, unknown> | null = null;
 
           if (!parsed.dryRun) {
+            cancelGeneratedSidPlayback();
             if (outputFormat === "sid") {
-              const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
-              const result = await ctx.client.sidplayAttachment(sid.sid);
+              const result = await ctx.client.sidplayAttachment(sidFile!.sid);
               if (result.success) clearViceSymbols(); // labels belong to one program
               if (!result.success) {
                 throw new ToolExecutionError("C64 backend reported failure while playing compiled SID", {
@@ -1109,7 +1162,9 @@ export const audioModule = defineToolModule({
             }
           }
 
-          const message = `Compiled '${document.song.title}' to ${outputFormat.toUpperCase()}${parsed.dryRun ? " (dry run)" : ""}.`;
+          const durationSeconds = Math.round((compiled.totalFrames / compiled.framesPerSecond) * 10) / 10;
+          const entry = `$${compiled.entryAddress.toString(16).toUpperCase().padStart(4, "0")}`;
+          const message = `Compiled '${document.song.title}' to ${outputFormat.toUpperCase()}${parsed.dryRun ? " (dry run)" : ""}: ${compiled.prg.length} bytes, ${durationSeconds} s per loop (${compiled.totalFrames} frames at ${Math.round(compiled.framesPerSecond * 100) / 100} Hz), PRG entry ${entry} (SYS ${compiled.entryAddress})${outputFile ? `, written to ${outputFile}` : ""}.`;
           const voiceSummaries = document.voices.map((voice) => ({
             id: voice.id,
             name: voice.name,
@@ -1126,6 +1181,11 @@ export const audioModule = defineToolModule({
             dryRun: parsed.dryRun,
             format: outputFormat,
             prgSize: compiled.prg.length,
+            ...(sidFile ? { sidSize: sidFile.sid.length } : {}),
+            ...(outputFile ? { outputPath: outputFile } : {}),
+            totalFrames: compiled.totalFrames,
+            framesPerSecond: compiled.framesPerSecond,
+            durationSeconds,
             entryAddress: compiled.entryAddress,
             basicFreeBytes: compiled.basicFreeBytes,
             warnings: compiled.warnings,
@@ -1190,8 +1250,8 @@ export const audioModule = defineToolModule({
     },
     {
       name: "analyze_audio",
-      description: "Automatically analyze SID playback when the user requests verification feedback.",
-      summary: "Detects verification intent in natural language, records a short clip, and returns musical feedback.",
+      description: "Record a short clip (default 3 s) of the SID output and return the detected notes, pitch deviation, tempo and level.",
+      summary: "Records a short clip and returns musical feedback; requests such as 'does it sound right' add a verdict.",
       inputSchema: analyzeAudioArgsSchema.jsonSchema,
       relatedResources: ["c64://sound/sid/spec", "c64://sound/sid/file-format"],
       relatedPrompts: ["sid-music"],
@@ -1208,16 +1268,7 @@ export const audioModule = defineToolModule({
         try {
           const parsed = analyzeAudioArgsSchema.parse(args ?? {});
           if (ctx.signal?.aborted) return cancelledResult();
-          if (!shouldAutoAnalyze(parsed.request)) {
-            return textResult(
-              "No audio verification keywords detected. Use phrases like 'check the music' or 'verify the SID playback'.",
-              {
-                analyzed: false,
-                request: parsed.request,
-              },
-            );
-          }
-
+          const request = parsed.request ?? "analyze the SID output";
           const duration = parsed.durationSeconds ?? 3;
           ctx.logger.info("Auto-analyzing SID audio", { durationSeconds: duration });
 
@@ -1227,10 +1278,10 @@ export const audioModule = defineToolModule({
             expectedSidwave: normaliseSidwaveInput(parsed.expectedSidwave),
           });
 
-          const feedback = generateAudioFeedback(analysis, parsed.request);
+          const feedback = generateAudioFeedback(analysis, request);
           return textResult(feedback, {
             analyzed: true,
-            request: parsed.request,
+            request,
             durationSeconds: analysis.analysis?.durationSeconds ?? duration,
             analysis,
           });

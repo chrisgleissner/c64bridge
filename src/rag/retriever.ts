@@ -13,8 +13,18 @@ import {
 import { EmbeddingModel, cosineSimilarity } from "./embeddings.js";
 import { listKnowledgeResources } from "./knowledgeIndex.js";
 
-const BASIC_SIGNAL_RE = /(^\s*\d{1,5}\s)|\b(PRINT|POKE|GOTO|GOSUB|RESTORE|READ|DATA|INPUT|CHR\$|TI\$|TAB\()/im;
-const ASM_SIGNAL_RE = /(^\s*(?:[A-Z_][\w]*:)?\s*(?:\.?[A-Z]{2,4})\b)|\$[0-9A-F]{2,4}/im;
+// Language signals (KNOWLEDGE-5). They are a ranking hint, not a filter: a numbered line or an
+// upper-case BASIC keyword followed by an operand, and a line that starts with a 6502 mnemonic and
+// an operand or comment. Case-sensitive for BASIC, so ordinary prose ("Read the manual") is not code.
+export const BASIC_SIGNAL_RE = /(^\s*\d{1,5}\s+[A-Z])|\b(?:PRINT|POKE|GOTO|GOSUB|INPUT|CHR\$|TI\$|PEEK)[ (#$"0-9]|\bTAB\(/m;
+// Mnemonics that are not English words may be followed by any operand; "and", "bit", "dec", "inc"
+// and "sec" count only with an immediate, hex, binary or indirect operand.
+const MNEMONIC_PLAIN =
+  "adc|asl|bcc|bcs|beq|bmi|bne|bpl|brk|bvc|bvs|clc|cld|cli|clv|cmp|cpx|cpy|dex|dey|eor|inx|iny|jmp|jsr|lda|ldx|ldy|lsr|nop|ora|pha|php|pla|plp|rol|ror|rti|rts|sbc|sed|sei|sta|stx|sty|tax|tay|tsx|txa|txs|tya";
+export const ASM_SIGNAL_RE = new RegExp(
+  `^[ \\t]*(?:[A-Za-z_]\\w*:[ \\t]*)?(?:(?:${MNEMONIC_PLAIN})(?:[ \\t]+[#($%<>*\\w-]|[ \\t]*(?:;|$))|(?:and|bit|dec|inc|sec)[ \\t]+[#$%(])`,
+  "im",
+);
 const PROVENANCE_COMMENT_RE = /^\s*<!--\s*Source:\s*(.*?)\s*-->\s*/i;
 
 // Build a mapping from file paths to resource URIs
@@ -32,6 +42,19 @@ function buildPathToUriMap(): Map<string, string> {
 }
 
 const PATH_TO_URI_MAP = buildPathToUriMap();
+
+const vectorCache = new WeakMap<EmbeddingRecord, Float32Array>();
+function vectorOf(record: EmbeddingRecord): Float32Array {
+  let vector = vectorCache.get(record);
+  if (!vector) {
+    vector = new Float32Array(record.vector);
+    vectorCache.set(record, vector);
+  }
+  return vector;
+}
+const LANGUAGE_SIGNAL_BONUS = 0.1;
+const ASM_SOURCE_EXT_RE = /\.(?:asm|s|a65|inc)$/i;
+const BASIC_SOURCE_EXT_RE = /\.bas$/i;
 
 export class LocalRagRetriever implements IRagRetriever {
   private readonly model: EmbeddingModel;
@@ -68,23 +91,11 @@ export class LocalRagRetriever implements IRagRetriever {
       uri?: string;
     }> = [];
 
+    const normalized = filterLanguage;
     const consider = (index?: EmbeddingIndexFile) => {
       if (!index) return;
       for (const rec of index.records) {
-        const matchesBasic = BASIC_SIGNAL_RE.test(rec.text);
-        const matchesAsm = ASM_SIGNAL_RE.test(rec.text);
-        if (normalized === "basic" && !matchesBasic) {
-          continue;
-        }
-        if (normalized === "asm" && !matchesAsm) {
-          continue;
-        }
-        let score = cosineSimilarity(qv, new Float32Array(rec.vector));
-        if (normalized === "basic" && matchesBasic) {
-          score += 0.05;
-        } else if (normalized === "asm" && matchesAsm) {
-          score += 0.05;
-        }
+        const score = cosineSimilarity(qv, vectorOf(rec));
         const { snippet, origin: provenanceOrigin } = extractSnippetAndOrigin(rec.text);
         const origin = rec.origin ?? provenanceOrigin;
         candidates.push({
@@ -97,7 +108,6 @@ export class LocalRagRetriever implements IRagRetriever {
       }
     };
 
-    const normalized = filterLanguage;
     const seen = new Set<EmbeddingIndexFile>();
     const push = (index?: EmbeddingIndexFile) => {
       if (!index || seen.has(index)) return;
@@ -105,16 +115,28 @@ export class LocalRagRetriever implements IRagRetriever {
       consider(index);
     };
 
-    if (!normalized || normalized === "basic") push(this.basic);
-    if (!normalized || normalized === "asm") push(this.asm);
-    if (!normalized || normalized === "mixed") push(this.mixed);
-    if (normalized === "basic" && (!this.basic || this.basic.records.length === 0)) push(this.mixed);
-    if (normalized === "asm" && (!this.asm || this.asm.records.length === 0)) push(this.mixed);
-    if (!normalized || normalized === "hardware") push(this.hardware);
-    if (!normalized || normalized === "other") push(this.other);
+    // Every scope searches every index: the index a document chunk lands in comes from a content
+    // heuristic and says nothing about the topic (assembly-spec chunks sit in four indexes), so a
+    // scope that read one or two indexes missed the curated documents (KNOWLEDGE-1). The scope
+    // instead drops example sources of the other language and ranks its own language first.
+    if (normalized === "mixed" || normalized === "hardware" || normalized === "other") {
+      push(this[normalized]);
+    } else {
+      push(this.basic); push(this.asm); push(this.mixed); push(this.hardware); push(this.other);
+    }
+    if (normalized === "basic" || normalized === "asm") {
+      const foreign = normalized === "basic" ? ASM_SOURCE_EXT_RE : BASIC_SOURCE_EXT_RE;
+      for (let i = candidates.length - 1; i >= 0; i--) {
+        if (foreign.test(candidates[i].record.sourcePath ?? "")) candidates.splice(i, 1);
+      }
+    }
 
-    if (!normalized) {
-      applyLexicalBoost(query, candidates);
+    applyLexicalBoost(query, candidates);
+    if (normalized === "basic" || normalized === "asm") {
+      const signal = normalized === "basic" ? BASIC_SIGNAL_RE : ASM_SIGNAL_RE;
+      for (const candidate of candidates) {
+        if (signal.test(candidate.record.text)) candidate.score += LANGUAGE_SIGNAL_BONUS;
+      }
     }
 
     candidates.sort((a, b) => b.score - a.score);
@@ -138,39 +160,114 @@ export class LocalRagRetriever implements IRagRetriever {
 
 const LEXICAL_WEIGHT = 1.0;
 const COSINE_WEIGHT_WITH_LEXICAL = 0.25;
+const BM25_K1 = 1.2;
+const BM25_B = 0.75;
+const HEADING_WEIGHT = 0.3;
+
+const STOP_WORDS = new Set([
+  "the", "an", "to", "at", "of", "with", "and", "for", "in", "on", "how", "do", "does", "is", "are",
+  "from", "up", "my", "me", "can", "what", "use", "using", "set", "get", "per", "it", "into", "by",
+]);
+
+// Domain terms that documents spell differently from how developers ask (matched after stemming).
+const ALIASES: Record<string, string[]> = {
+  irq: ["interrupt"],
+  interrupt: ["irq"],
+  badline: ["bad line"],
+  mux: ["multiplex"],
+  joystick: ["joy"],
+  rom: ["kernal", "basic"],
+};
+
+/** Lower-cases, drops a leading "$" and strips one plural, "-ing", "-er" or "-ed" suffix. */
+export function stemToken(token: string): string {
+  let t = token.toLowerCase().replace(/^\$/, "");
+  if (t.length > 5 && t.endsWith("ing")) t = t.slice(0, -3);
+  else if (t.length > 5 && t.endsWith("ers")) t = t.slice(0, -3);
+  else if (t.length > 4 && t.endsWith("er")) t = t.slice(0, -2);
+  else if (t.length > 4 && t.endsWith("ed")) t = t.slice(0, -2);
+  else if (t.length > 3 && t.endsWith("s") && !t.endsWith("ss")) t = t.slice(0, -1);
+  return t;
+}
+
+function tokenize(text: string): string[] {
+  return (text.toLowerCase().match(/\$?[a-z0-9_]+/g) ?? []).map(stemToken);
+}
+
+interface TermStats { tf: Map<string, number>; length: number }
+const statsCache = new WeakMap<object, { body: TermStats; origin: TermStats }>();
+
+function termStats(tokens: string[]): TermStats {
+  const tf = new Map<string, number>();
+  for (const token of tokens) tf.set(token, (tf.get(token) ?? 0) + 1);
+  return { tf, length: tokens.length };
+}
 
 /**
- * Unfiltered (docs) searches rank long documentation chunks, where hashed bag-of-words
- * cosine similarity is dominated by hash collisions. Rank mainly by a term-overlap score (weighted 4:1 over cosine): query
- * terms weighted by rarity across the candidates, with extra weight for terms that
- * appear in the chunk's origin (file and heading).
+ * Unfiltered and scoped searches rank documentation chunks, where hashed bag-of-words cosine
+ * similarity is dominated by hash collisions. The score is mainly a BM25 term score over the
+ * candidates (stemmed terms, rarity weights from the candidate set, saturation and chunk-length
+ * normalisation so long tables do not win on repeated words) plus a heading term (the share of
+ * query terms found in the chunk's origin, file and heading, weighted HEADING_WEIGHT), blended with
+ * the cosine score at a 4:1 ratio.
  */
 function applyLexicalBoost(
   query: string,
   candidates: Array<{ score: number; record: EmbeddingRecord; snippet: string; origin?: string }>,
 ): void {
-  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9$_]+/g) ?? []).filter((t) => t.length >= 2))].slice(0, 32);
-  if (terms.length === 0 || candidates.length === 0) return;
+  const rawTerms = (query.toLowerCase().match(/\$?[a-z0-9_]+/g) ?? [])
+    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+  const groups: string[][] = [];
+  const seenGroups = new Set<string>();
+  for (const raw of rawTerms.slice(0, 32)) {
+    const stem = stemToken(raw);
+    if (seenGroups.has(stem)) continue;
+    seenGroups.add(stem);
+    const alternatives = [stem, ...(ALIASES[raw] ?? ALIASES[stem] ?? []).flatMap(tokenize)];
+    groups.push([...new Set(alternatives)]);
+  }
+  if (groups.length === 0 || candidates.length === 0) return;
 
-  const haystacks = candidates.map((c) => c.snippet.toLowerCase());
-  const origins = candidates.map((c) => (c.origin ?? "").toLowerCase());
-  const df = terms.map((term) => haystacks.filter((h, i) => h.includes(term) || origins[i].includes(term)).length);
-  const weights = df.map((count) => (count === 0 ? 0 : Math.log(1 + candidates.length / count)));
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-  if (totalWeight === 0) return;
+  const stats = candidates.map((candidate) => {
+    let cached = statsCache.get(candidate.record);
+    if (!cached) {
+      cached = { body: termStats(tokenize(candidate.snippet)), origin: termStats(tokenize(candidate.origin ?? "")) };
+      statsCache.set(candidate.record, cached);
+    }
+    return cached;
+  });
+  const frequency = (entry: { body: TermStats; origin: TermStats }, group: string[]): number => {
+    let f = 0;
+    for (const term of group) f += (entry.body.tf.get(term) ?? 0) + (entry.origin.tf.get(term) ?? 0);
+    return f;
+  };
+  const inHeading = (entry: { body: TermStats; origin: TermStats }, group: string[]): boolean =>
+    group.some((term) => entry.origin.tf.has(term));
+  const n = candidates.length;
+  const averageLength = stats.reduce((sum, entry) => sum + entry.body.length, 0) / n || 1;
+  const idf = groups.map((group) => {
+    const df = stats.filter((entry) => frequency(entry, group) > 0).length;
+    return df === 0 ? 0 : Math.log(1 + n / df);
+  });
+  const maxScore = idf.reduce((sum, w) => sum + w * (BM25_K1 + 1), 0);
+  const maxHeading = idf.reduce((sum, w) => sum + w, 0);
+  if (maxScore === 0) return;
 
   candidates.forEach((candidate, i) => {
-    let matched = 0;
-    terms.forEach((term, t) => {
-      if (weights[t] === 0) return;
-      let occurrences = 0;
-      for (let at = haystacks[i].indexOf(term); at >= 0 && occurrences < 2; at = haystacks[i].indexOf(term, at + term.length)) {
-        occurrences++;
-      }
-      const inOrigin = origins[i].includes(term) ? 1 : 0;
-      matched += weights[t] * Math.min(1, occurrences / 2 + 0.5 * inOrigin);
+    const entry = stats[i];
+    const norm = 1 - BM25_B + BM25_B * (entry.body.length / averageLength);
+    let bm25 = 0;
+    groups.forEach((group, t) => {
+      if (idf[t] === 0) return;
+      const f = frequency(entry, group);
+      if (f > 0) bm25 += idf[t] * ((f * (BM25_K1 + 1)) / (f + BM25_K1 * norm));
     });
-    candidate.score = COSINE_WEIGHT_WITH_LEXICAL * candidate.score + LEXICAL_WEIGHT * (matched / totalWeight);
+    let heading = 0;
+    groups.forEach((group, t) => {
+      if (inHeading(entry, group)) heading += idf[t];
+    });
+    const lexical = (1 - HEADING_WEIGHT) * (bm25 / maxScore) + HEADING_WEIGHT * (heading / maxHeading);
+    candidate.score = COSINE_WEIGHT_WITH_LEXICAL * candidate.score + LEXICAL_WEIGHT * lexical;
   });
 }
 

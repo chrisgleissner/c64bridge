@@ -20,14 +20,14 @@ Offsets are from the start of the file. All multi-byte fields are big-endian.
 
 - +00 — magic (4 bytes): ASCII `PSID` or `RSID`
   - `PSID`: C64-compatible files (player-friendly subset); `RSID`: more strict C64 requirements (no BASIC SYS stubs, tighter hardware expectations)
-- +04 — version (uint16): 1..4
+- +04 — version (uint16): 1..4 (version 5 is also defined by the current HVSC specification)
   - Higher versions extend the header with more fields (see below)
 - +06 — dataOffset (uint16): byte offset where the code/data block begins
   - Typically static per version; points to the start of the machine code region
 - +08 — loadAddress (uint16): target RAM address for the data block
   - If 0, the first two bytes of the data block contain the load address
 - +0A — initAddress (uint16): address to call once at start
-  - Accumulator selects the sub-song number when calling init
+  - Accumulator holds the sub-song number minus one when calling init ($00 = song 1)
   - If 0, use `loadAddress` as the init routine address
 - +0C — playAddress (uint16): address to call repeatedly to advance playback
   - Usually invoked by the IRQ handler at 50/60 Hz
@@ -38,7 +38,7 @@ Offsets are from the start of the file. All multi-byte fields are big-endian.
   - Bit = 0: use vertical blank (VIC raster; PAL/NTSC rate)
   - Bit = 1: use CIA1 timer-driven playback (~60 Hz)
 
-For version 1, the header ends here and the data begins at `+76` (decimal) unless `dataOffset` states otherwise.
+For version 1, the header ends here and the data begins at offset `$0076` (118); for version 2 and later it begins at `$007C` (124). All `+` offsets in this document are hexadecimal.
 
 ## Extended header (versions 2–4)
 
@@ -54,7 +54,7 @@ These versions append more detail for environment and chip configuration.
   - Remaining bits reserved (set to 0)
 - +78 — startPage (uint8): high byte of a free memory page for a music driver; `0` means free outside data block, `0xFF` means none
 - +79 — pageLength (uint8): number of contiguous pages available starting at `startPage`
-- +7A — secondSIDAddress (uint8): `0x2x` → second SID at `$D2x0`, etc. (v3+)
+- +7A — secondSIDAddress (uint8): byte `$xy` → second SID at `$Dxy0` (e.g. `$42` = `$D420`); valid values are even, `$42`-`$FE`, excluding `$80`-`$DF` (v3+)
 - +7B — thirdSIDAddress (uint8): third SID address like above (v4)
 - +7C — data start (beginning of machine code and data)
 
@@ -79,9 +79,9 @@ SID files do not embed duration. HVSC ships a `Songlengths.md5` database mapping
 
 1) Read header (verify `PSID`/`RSID`).
 2) Resolve `dataOffset` and `loadAddress`; if `loadAddress=0`, fetch it from first two data bytes.
-3) Load data to RAM and call `initAddress` (or `loadAddress` if `initAddress=0`), passing the desired sub-song in `A`.
+3) Load data to RAM and call `initAddress` (or `loadAddress` if `initAddress=0`), passing the desired sub-song number minus one in `A`.
 4) Repeatedly call `playAddress` (or let the player’s ISR drive it) at the cadence implied by `speed`.
-5) Select sub-songs via re-invoking `init` with accumulator set to song number.
+5) Select sub-songs via re-invoking `init` with the accumulator set to song number minus one.
 
 ## Related API and tools
 

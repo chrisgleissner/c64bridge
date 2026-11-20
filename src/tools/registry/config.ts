@@ -4,8 +4,11 @@ import {
   discriminatedUnionSchema,
   OPERATION_DISCRIMINATOR,
   type JsonSchema,
+  type ToolExecutionContext,
 } from "../types.js";
-import { configWriteEffect } from "../access.js";
+import { assertAccess, configWriteEffect, getAccessMode, isEffectAllowed } from "../access.js";
+import { readHostFile } from "../../hostPaths.js";
+import { captureConfigSnapshot } from "../meta/configInventory.js";
 import { developerModule } from "../developer.js";
 import { metaModule } from "../meta/index.js";
 import {
@@ -80,6 +83,36 @@ const configDiffArgsSchema = objectSchema<ConfigDiffArgs>({
   additionalProperties: false,
 });
 
+/**
+ * A restore that changes a network category (or a wildcard category the firmware could match to
+ * one) can cut the bridge off from the device, exactly like `set` on that category, so it needs
+ * the destructive effect. The snapshot file decides this, so the check runs here, before the
+ * restore, and compares the snapshot's network categories with the device. Full access skips it.
+ */
+async function assertRestoreNetworkAccess(path: string, ctx: ToolExecutionContext): Promise<void> {
+  if (isEffectAllowed(getAccessMode(), "destructive")) return;
+  let categories: Record<string, unknown>;
+  try {
+    const snapshot = JSON.parse((await readHostFile(path)).toString("utf8"));
+    categories = snapshot && typeof snapshot.categories === "object" && snapshot.categories !== null && !Array.isArray(snapshot.categories)
+      ? snapshot.categories as Record<string, unknown>
+      : {};
+  } catch {
+    // The restore itself reports a missing or invalid file.
+    return;
+  }
+  const network = Object.keys(categories).filter((name) => configWriteEffect("set", { category: name }) === "destructive");
+  if (network.length === 0) return;
+  let changed = network.filter((name) => /[*?]/.test(name));
+  if (changed.length === 0) {
+    const current = (await captureConfigSnapshot(ctx.client as never, { categories: network })).categories;
+    changed = network.filter((name) => JSON.stringify(categories[name]) !== JSON.stringify(current[name]));
+  }
+  if (changed.length > 0) {
+    assertAccess("c64_config", "restore", "destructive");
+  }
+}
+
 const configOperations: GroupedOperationConfig[] = [
   {
     op: "list",
@@ -113,7 +146,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "batch_update",
       ensureDescriptor(developerDescriptorIndex, "config_batch_update").inputSchema,
-      { description: "Apply multiple configuration updates in a single request. Pass `updates` as {category: {item: value}}; categories as top-level keys are still accepted at runtime." },
+      { description: "Apply several configuration updates at once. Pass `updates` as {category: {item: value}}." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_batch_update", rawArgs, ctx),
   },
@@ -122,7 +155,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "load_flash",
       ensureDescriptor(developerDescriptorIndex, "config_load_from_flash").inputSchema,
-      { description: "Load configuration from flash storage." },
+      { description: "Load configuration from flash." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_load_from_flash", rawArgs, ctx),
   },
@@ -131,7 +164,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "save_flash",
       ensureDescriptor(developerDescriptorIndex, "config_save_to_flash").inputSchema,
-      { description: "Persist the current configuration to flash storage." },
+      { description: "Persist the configuration to flash." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_save_to_flash", rawArgs, ctx),
   },
@@ -140,7 +173,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "reset_defaults",
       ensureDescriptor(developerDescriptorIndex, "config_reset_to_default").inputSchema,
-      { description: "Reset firmware configuration to factory defaults." },
+      { description: "Reset configuration to factory defaults." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(developerModule, "config_reset_to_default", rawArgs, ctx),
   },
@@ -185,7 +218,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "snapshot",
       configSnapshotArgsSchema.jsonSchema as JsonSchema,
-      { description: "Snapshot configuration to disk for later restore or diff." },
+      { description: "Snapshot configuration to disk." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -201,11 +234,12 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "restore",
       configRestoreArgsSchema.jsonSchema as JsonSchema,
-      { description: "Restore configuration from a snapshot file. Writes only the items that differ from the device; if the device refuses a category (for example 403 when the network password is missing or wrong), the other categories are still restored and the result is an error naming the failed categories." },
+      { description: "Restore configuration from a snapshot file. Writes only items that differ from the device; if the device refuses a category (e.g. 403 for a wrong network password), the others are still restored and the error names the failed categories." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
       const parsed = configRestoreArgsSchema.parse(rest);
+      await assertRestoreNetworkAccess(parsed.path, ctx);
       if (parsed.applyToFlash === undefined) {
         return metaModule.invoke("config_snapshot_and_restore", {
           action: "restore",
@@ -224,7 +258,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "diff",
       configDiffArgsSchema.jsonSchema as JsonSchema,
-      { description: "Compare the current configuration with a snapshot." },
+      { description: "Compare configuration with a snapshot." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -240,7 +274,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "shuffle",
       ensureDescriptor(metaDescriptorIndex, "program_shuffle").inputSchema,
-      { description: "Discover PRG/CRT files and run each with optional screen capture." },
+      { description: "Discover PRG/CRT files and run each, optionally capturing the screen." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "program_shuffle", rawArgs, ctx),
   },

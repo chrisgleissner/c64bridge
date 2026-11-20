@@ -99,7 +99,7 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
       });
       assert.equal(listed.get("c64_system").annotations.destructiveHint, true);
       assert.equal(listed.get("c64_system").annotations.readOnlyHint, false);
-      assert.equal(listed.get("c64_memory").annotations.destructiveHint, false);
+      assert.equal(listed.get("c64_memory").annotations.destructiveHint, true);
       assert.match(listed.get("c64_system").inputSchema.description, /\n- poweroff \[c64u, vice\] \[destructive\]: /);
       for (const descriptor of toolRegistry.list()) {
         assert.deepEqual(listed.get(descriptor.name).annotations, descriptor.annotations, descriptor.name);

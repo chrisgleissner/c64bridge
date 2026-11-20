@@ -6,8 +6,8 @@ Licensed under the GNU General Public License v2.0 or later.
 See <https://www.gnu.org/licenses/> for details.
 */
 
-import { petsciiToAscii } from "../../petscii.js";
-import { basicTokenText } from "./basicTokenizer.js";
+import { petsciiControlName } from "../../petscii.js";
+import { basicTokenText, tokenizeLineContent } from "./basicTokenizer.js";
 import { ToolExecutionError } from "../errors.js";
 
 export interface BasicListingLine {
@@ -22,29 +22,83 @@ function hex16(value: number): string {
   return `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
-function plainChar(byte: number): string {
-  if (byte === 0x20 || byte === 0xa0) return " ";
-  const ch = petsciiToAscii(Uint8Array.of(byte));
-  return ch.length === 1 && ch > " " && ch <= "~" ? ch : `{$${byte.toString(16).toUpperCase().padStart(2, "0")}}`;
+function hexCode(byte: number): string {
+  return `{$${byte.toString(16).toUpperCase().padStart(2, "0")}}`;
 }
 
-/** Expands tokens outside quotes like LIST; quoted text is never detokenised. */
+const REM_TOKEN = 0x8f;
+const DATA_TOKEN = 0x83;
+/** Characters that are tokens on their own outside strings, REM and DATA: + - * / ^ > = < and ? (PRINT). */
+const SINGLE_CHARACTER_TOKENS = new Set([0x2b, 0x2d, 0x2a, 0x2f, 0x5e, 0x3e, 0x3d, 0x3c, 0x3f]);
+
+/** Text of a byte that the tokeniser does not read back as itself: its {name} or {$xx}. */
+function codeFor(byte: number): string {
+  const name = petsciiControlName(byte);
+  return name !== undefined ? `{${name}}` : hexCode(byte);
+}
+
+/**
+ * Lists one tokenised line so that tokenising the text again (basicToPrg) gives the same bytes.
+ * The tokeniser folds a-z to $41-$5A, turns "?" into PRINT outside strings, REM and DATA, reads
+ * {name}/{$xx} codes, keeps REM and DATA text untokenised and drops spaces at both ends of a line.
+ * So:
+ *  - outside REM and DATA, token bytes $80-$CB are their keywords and $FF is the pi sign;
+ *  - after REM and in DATA (up to the next ":" outside quotes), every byte is text, as the ROM
+ *    tokeniser stores it, so a byte that looks like a token is written as a code;
+ *  - only $20-$5F are written as themselves; outside strings, REM and DATA the characters that
+ *    are tokens on their own (+ - * / ^ > = < ?) are codes too;
+ *  - a space at the start or end of the line is written as {$20}.
+ * A line that still does not tokenise back to its bytes (letters that spell a keyword but are
+ * stored as plain text, which only a hand-made image contains) is listed again with every
+ * character outside strings, REM and DATA as a code.
+ * Unlike the C64's LIST, a shifted character after REM is not shown as a keyword.
+ */
 export function detokenizeLine(bytes: Uint8Array): string {
-  let out = "";
-  let inString = false;
+  const text = listLine(bytes, false);
+  const again = tokenizeLineContent(text);
+  return again !== undefined && again.length === bytes.length && again.every((byte, index) => byte === bytes[index])
+    ? text
+    : listLine(bytes, true);
+}
+
+function listLine(bytes: Uint8Array, escapeCode: boolean): string {
+  const parts: string[] = [];
+  let mode: "code" | "string" | "rem" | "data" | "dataString" = "code";
   for (const byte of bytes) {
-    if (byte === 0x22) {
-      inString = !inString;
-      out += '"';
-      continue;
+    const literal = byte >= 0x20 && byte <= 0x5f;
+    switch (mode) {
+      case "code":
+        if (byte === 0x22) {
+          mode = "string";
+          parts.push('"');
+        } else if (byte >= 0x80 && byte <= 0xcb) {
+          parts.push(basicTokenText(byte) ?? codeFor(byte));
+          if (byte === REM_TOKEN) mode = "rem";
+          else if (byte === DATA_TOKEN) mode = "data";
+        } else if (byte === 0xff) {
+          parts.push("\u03c0");
+        } else {
+          parts.push(literal && !escapeCode && !SINGLE_CHARACTER_TOKENS.has(byte) ? String.fromCharCode(byte) : codeFor(byte));
+        }
+        break;
+      case "string":
+      case "dataString":
+        if (byte === 0x22) mode = mode === "string" ? "code" : "data";
+        parts.push(literal ? String.fromCharCode(byte) : codeFor(byte));
+        break;
+      case "data":
+        if (byte === 0x22) mode = "dataString";
+        else if (byte === 0x3a) mode = "code";
+        parts.push(literal ? String.fromCharCode(byte) : codeFor(byte));
+        break;
+      case "rem":
+        parts.push(literal ? String.fromCharCode(byte) : codeFor(byte));
+        break;
     }
-    if (!inString && byte >= 0x80) {
-      out += basicTokenText(byte) ?? plainChar(byte);
-      continue;
-    }
-    out += plainChar(byte);
   }
-  return out;
+  if (bytes[0] === 0x20) parts[0] = "{$20}";
+  if (bytes.length > 0 && bytes[bytes.length - 1] === 0x20) parts[parts.length - 1] = "{$20}";
+  return parts.join("");
 }
 
 /**

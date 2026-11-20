@@ -3,9 +3,20 @@
 // Usage: `npx c64bridge` or after local install `c64bridge`
 
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import nodeModule from 'node:module';
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
+
+// Cache compiled module code between starts (about 100 ms of the startup of the server).
+// Not available before Node 22.1; a failure only costs the speed-up.
+if (typeof nodeModule.enableCompileCache === 'function') {
+	try {
+		nodeModule.enableCompileCache();
+	} catch {
+		// ignore
+	}
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 

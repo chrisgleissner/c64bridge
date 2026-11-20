@@ -155,10 +155,13 @@ export const batchModuleGroup = defineToolModule({
               continue;
             }
 
+            ctx.reportProgress?.(i, parsed.commands.length, `command ${i + 1} of ${parsed.commands.length}: ${toolName}`);
             const cmdStart = Date.now();
             try {
               const toolResult = await toolRegistry.invoke(toolName, args, {
                 ...ctx,
+                // The batch reports progress per command; a command's own steps would mix totals.
+                reportProgress: undefined,
                 platform: typeof ctx.client.getActiveBackendType === "function"
                   ? { ...(ctx.platform ?? getPlatformStatus()), id: await ctx.client.getActiveBackendType() }
                   : ctx.platform ?? getPlatformStatus(),
@@ -202,6 +205,7 @@ export const batchModuleGroup = defineToolModule({
             }
           }
 
+          ctx.reportProgress?.(parsed.commands.length, parsed.commands.length, "batch finished");
           const totalElapsedMs = Date.now() - batchStart;
           const summary = {
             total: parsed.commands.length,

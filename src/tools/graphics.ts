@@ -34,6 +34,7 @@ interface SpriteArgs extends Record<string, unknown> {
   y: number;
   color: number;
   multicolour: boolean;
+  dataAddress?: number;
 }
 
 interface PetsciiImageArgs extends Record<string, unknown> {
@@ -217,6 +218,12 @@ const spriteArgsSchema = objectSchema<SpriteArgs>({
       description: "Enable multicolour mode for the sprite.",
       default: false,
     }),
+    dataAddress: optionalSchema(numberSchema({
+      description: "Where to write the 64-byte block (multiple of 64, inside the current VIC bank); default is chosen clear of screen, charset and bitmap.",
+      integer: true,
+      minimum: 0,
+      maximum: 0xFFC0,
+    })),
   },
   required: ["sprite"],
   additionalProperties: false,
@@ -423,6 +430,7 @@ async function executeGenerateSprite(rawArgs: unknown, ctx: ToolExecutionContext
       y: parsed.y,
       color: parsed.color,
       multicolour: parsed.multicolour,
+      ...(parsed.dataAddress !== undefined ? { dataAddress: parsed.dataAddress } : {}),
     });
 
     if (!result.success) {
@@ -468,7 +476,7 @@ async function executeRenderPetscii(rawArgs: unknown, ctx: ToolExecutionContext)
       });
     }
 
-    return textResult("PETSCII screen rendered successfully.", {
+    return textResult("PETSCII screen rendered. The program stays running, waiting for a key; keys typed next end it instead of reaching READY.", {
       success: true,
       textLength: parsed.text.length,
       borderColor: parsed.borderColor ?? null,
@@ -599,7 +607,6 @@ async function executeCreatePetscii(rawArgs: unknown, ctx: ToolExecutionContext)
       ranOnC64,
       runDetails: runResult?.details ?? null,
       program: art.program,
-      bitmapHex: art.bitmapHex,
       rowHex: art.rowHex,
       width: art.bitmap.width,
       height: art.bitmap.height,
@@ -729,7 +736,7 @@ export const graphicsModule = defineToolModule({
     },
     {
       name: "render_petscii_art",
-      description: "Create PETSCII art from prompts, text, or bitmap input, and optionally display it on the C64. Returns metadata including PETSCII codes and glyphs. See c64://basic/spec, c64://graphics/vic/spec, and c64://graphics/character-set.",
+      description: "Create PETSCII art from prompts, text, or bitmap input, and optionally display it on the C64. Returns program, rowHex and PETSCII codes; the program waits for a key after drawing. Without a bitmap only three shapes exist (heart, smiley, star); other prompts render their text. See c64://basic/spec, c64://graphics/vic/spec, and c64://graphics/character-set.",
       summary: "Synthesises PETSCII art, generates a BASIC program with preview metadata (petsciiCodes, glyphs, dimensions), and uploads it unless dry-run is requested.",
       inputSchema: petsciiImageArgsSchema.jsonSchema,
       relatedResources: ["c64://basic/spec", "c64://graphics/vic/spec", "c64://graphics/character-set"],

@@ -70,7 +70,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "list_basic",
       listBasicArgsSchema.jsonSchema,
-      { description: "List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. Works on C64U/U64, U2-family hardware, and VICE." },
+      { description: "List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises." },
     ),
     handler: groupedMemoryHandlers.list_basic,
   },
@@ -79,7 +79,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "disassemble",
       disassembleArgsSchema.jsonSchema,
-      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes with canonical names. Symbol annotations from `.vs` files are applied when available. Works on C64U/U64, U2-family hardware, and VICE." },
+      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing." },
     ),
     handler: groupedMemoryHandlers.disassemble,
   },

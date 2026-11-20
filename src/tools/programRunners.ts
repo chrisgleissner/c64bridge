@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import path from "node:path";
 import { readHostFile, resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
-import { basicToPrg } from "./translation/basicTokenizer.js";
+import { basicToPrgDetailed } from "./translation/basicTokenizer.js";
 import {
   defineToolModule,
   OPERATION_DISCRIMINATOR,
@@ -19,7 +20,8 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
-import { pollForProgramOutcome } from "./pollValidator.js";
+import { checkAsmProgramLoaded, pollForProgramOutcome, type AsmPollResult, type BasicPollResult } from "./pollValidator.js";
+import { cancelGeneratedSidPlayback } from "./audio.js";
 import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
@@ -44,8 +46,8 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
 
 const BASIC_MAX_LINE = 63999;
 
-const prgPathDescription = "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.";
-const crtPathDescription = "Path to the CRT image on Ultimate-visible storage. CRT mounting is only supported on c64u.";
+const prgPathDescription = "Path to the PRG file: Ultimate path such as //USB0/demo.prg on c64u/u2 (or a host path with location host); host path on VICE.";
+const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE), or a host path with location host.";
 
 type OperationlessArgs<T extends Record<string, unknown>> = Omit<T, typeof OPERATION_DISCRIMINATOR>;
 
@@ -308,11 +310,11 @@ const uploadBasicArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Run post-execution polling to ensure the BASIC program executed without errors.",
+      description: "Poll the screen until the program ends, shows a BASIC error (reported with its line) or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) ends. Without verify nothing is observed.",
       default: false,
     }),
     autoFix: optionalSchema(booleanSchema({
-      description: "When a BASIC error is detected on screen, append a missing closing quote or parentheses to the failing line and run the program again (default true). The rewritten lines are reported with before and after text. Set false for programs with side effects, which must not run twice.",
+      description: "With verify:true, on a BASIC error append a missing closing quote or parenthesis to the failing line and run again (default true; rewritten lines are reported). Set false for programs with side effects.",
       default: true,
     })),
   },
@@ -328,7 +330,7 @@ const uploadAsmArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Treat missing evidence of execution as an error. The bytes read back at the load address must always match the assembled program (a mismatch is an error either way). With verify:true, a program that loaded but changed nothing on screen is an error; with verify:false it returns success with execution:\"unconfirmed\" (SID players, border effects and JMP * loops change no screen RAM).",
+      description: "Poll the screen for evidence of execution (up to C64BRIDGE_POLL_MAX_MS, default 2 s); a program that changes nothing on screen and does not return to BASIC is an error. Without verify nothing is polled and execution is reported as \"unconfirmed\". The bytes at the load address must match the assembled program either way.",
       default: false,
     }),
   },
@@ -348,7 +350,7 @@ const prgFileArgsSchema = objectSchema({
       enum: ["auto", "host", "device"],
     })),
     symbolsFile: optionalSchema(stringSchema({
-      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
+      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler); labels annotate disassembly and are accepted where c64_memory and c64_debug take an address.",
       minLength: 1,
     })),
   },
@@ -357,12 +359,16 @@ const prgFileArgsSchema = objectSchema({
 });
 
 const crtFileArgsSchema = objectSchema({
-  description: "Arguments for running a CRT image stored on Ultimate-visible storage.",
+  description: "Arguments for running a CRT image from Ultimate-visible storage or from the host.",
   properties: {
     path: stringSchema({
       description: crtPathDescription,
       minLength: 1,
     }),
+    location: optionalSchema(stringSchema({
+      description: "device (default): Ultimate path. host: read the file from the host and upload it.",
+      enum: ["device", "host"],
+    })),
   },
   required: ["path"],
   additionalProperties: false,
@@ -381,7 +387,9 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     // Compute PRG locally to expose structured metadata
     let activeProgram = originalProgram;
-    let prg = basicToPrg(activeProgram);
+    const tokenized = basicToPrgDetailed(activeProgram);
+    let prg = tokenized.prg;
+    let replacedLines = tokenized.replacedLines;
     let entryAddress = prg.readUInt16LE(0);
 
     const runBasic = async (source: string) => {
@@ -390,214 +398,236 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       return started;
     };
 
-    // The screen before the run lets verification tell a program that cleared the screen from one that never ran.
-    let screenBeforeRun: string | undefined;
-    if (shouldVerify) {
+    const readScreenSafely = async (what: string): Promise<string | undefined> => {
       try {
-        screenBeforeRun = await ctx.client.readScreen();
-      } catch (beforeError) {
-        ctx.logger.warn("Unable to read screen before BASIC execution", toRecord(beforeError));
+        return await ctx.client.readScreen();
+      } catch (screenError) {
+        ctx.logger.warn(`Unable to read screen ${what}`, toRecord(screenError));
+        return undefined;
       }
+    };
+
+    // Polls the outcome of one run. The screen before the run lets the poll tell a program that
+    // cleared the screen from one that never ran.
+    const pollRun = (programPrg: Buffer, before: string | undefined) =>
+      pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, { address: programPrg.readUInt16LE(0), bytes: programPrg.subarray(2) }, before) as Promise<BasicPollResult>;
+
+    const verifyError = (error: unknown) => {
+      ctx.logger.warn("BASIC verification failed", toRecord(error));
+      return toolErrorResult(new ToolExecutionError("Failed to verify BASIC program execution", { details: toRecord(error) ?? undefined }));
+    };
+
+    if (!shouldVerify) {
+      // RUN was only just typed, so the screen would still show the state before the run: it is not read.
+      const result = await runBasic(activeProgram);
+      if (!result.success) {
+        throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
+          details: extractFailureDetails(result.details),
+        });
+      }
+      const addresses = prgAddresses(prg);
+      const unverifiedReplacedNote = replacedLines.length > 0
+        ? ` Line number(s) ${replacedLines.join(", ")} appear more than once in the source; the later text replaced the earlier text, as when typing a line again.`
+        : "";
+      const message = `BASIC program uploaded and started (RUN typed); it occupies ${addresses.load}-${addresses.end}. Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).${unverifiedReplacedNote}`;
+      const fields = { entryAddress, addresses, prgSize: prg.length, ...(replacedLines.length > 0 ? { replacedLines } : {}) };
+      const base = textResult(message, { success: true, ...fields, details: result.details ?? null });
+      return { ...base, structuredContent: { type: "json", data: { kind: "upload_run_basic" as const, format: "prg" as const, ...fields, resources: ["c64://basic/spec", "c64://guide/bootstrap"] } } };
     }
 
-    let result = await runBasic(activeProgram);
+    const screenBeforeRun = await readScreenSafely("before BASIC execution");
+    const result = await runBasic(activeProgram);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running BASIC program", {
         details: extractFailureDetails(result.details),
       });
     }
 
-    let screenOutput: string | undefined;
+    let outcome: BasicPollResult;
     try {
-      screenOutput = await ctx.client.readScreen();
-    } catch (screenError) {
-      ctx.logger.warn("Unable to read screen after BASIC execution", toRecord(screenError));
+      outcome = await pollRun(prg, screenBeforeRun);
+    } catch (pollError) {
+      return verifyError(pollError);
     }
 
+    const lineErrorOf = (o: BasicPollResult): BasicRuntimeError[] =>
+      o.status === "error" && o.line !== undefined
+        ? [{ line: o.line, ...(o.message ? { type: o.message } : {}), raw: o.text ?? `?${o.message ?? ""} ERROR IN ${o.line}` }]
+        : [];
+    const verificationFailed = (o: BasicPollResult) => {
+      ctx.logger.warn("BASIC verification detected error", {
+        ...(o.message ? { message: o.message } : {}),
+        ...(o.line !== undefined ? { line: o.line } : {}),
+      });
+      return toolErrorResult(
+        new ToolExecutionError("BASIC program verification failed", {
+          details: {
+            ...(o.message ? { message: o.message } : {}),
+            ...(o.line !== undefined ? { line: o.line } : {}),
+            ...(o.screen ? { screen: o.screen } : {}),
+          },
+        }),
+      );
+    };
+
+    let screenOutput = outcome.screen;
+    // No BASIC error, but no READY. prompt either: the program was still running when the poll ended (D3).
+    let runningAfterMs = outcome.status === "ok" && outcome.finished === false ? outcome.observedMs ?? 0 : undefined;
     let autoFixInfo:
       | {
           readonly changes: readonly BasicAutoFixChange[];
           readonly originalErrors: readonly BasicRuntimeError[];
         }
       | undefined;
-    let verified: boolean | undefined;
 
-    if (screenOutput) {
-      const errors = parseBasicRuntimeErrors(screenOutput);
-      if (errors.length > 0) {
-        ctx.logger.warn("Detected BASIC runtime errors", {
-          errors: errors.map((error) => ({ line: error.line, type: error.type })),
-        });
+    if (outcome.status === "error") {
+      const errors = lineErrorOf(outcome);
+      if (errors.length === 0) return verificationFailed(outcome);
+      ctx.logger.warn("Detected BASIC runtime errors", { errors: errors.map((error) => ({ line: error.line, type: error.type })) });
 
-        const normalizedErrors = normalizeRuntimeErrors(errors);
-        const fixAttempt = parsed.autoFix === false ? undefined : attemptAutoFixBasicProgram(activeProgram, errors);
-        if (!fixAttempt) {
-          const data = {
-            kind: "basic_runtime_error" as const,
-            programSource: originalProgram,
-            errors: normalizedErrors,
-            ...(screenOutput ? { screen: screenOutput } : {}),
-            autoFix: {
-              attempted: false,
-              ...(parsed.autoFix === false ? { disabled: true } : {}),
-            },
-          };
-          return structuredExecutionError(
-            parsed.autoFix === false
-              ? "Detected BASIC runtime errors after execution. Auto-fix is disabled (autoFix:false), so the program was not rewritten or run again."
-              : "Detected BASIC runtime errors after execution.",
-            data,
-          );
-        }
-
-        ctx.logger.info("Attempting BASIC auto-fix", {
-          changes: fixAttempt.changes.map((change) => ({
-            line: change.line,
-            notes: change.notes,
-          })),
-        });
-
-        const retryResult = await ctx.client.uploadAndRunBasic(fixAttempt.program);
-        if (retryResult.success) clearViceSymbols();
-        if (!retryResult.success) {
-          const data = {
-            kind: "basic_runtime_error" as const,
-            programSource: originalProgram,
-            errors: normalizedErrors,
-            ...(screenOutput ? { screen: screenOutput } : {}),
-            autoFix: {
-              attempted: true,
-              changes: fixAttempt.changes,
-              programSource: fixAttempt.program,
-              failure: {
-                reason: "firmware_failure",
-                details: extractFailureDetails(retryResult.details),
-              },
-            },
-          };
-          return structuredExecutionError(
-            "Auto-fix failed due to firmware error while re-running BASIC program.",
-            data,
-          );
-        }
-
-        let retryScreen: string | undefined;
-        try {
-          retryScreen = await ctx.client.readScreen();
-        } catch (retryScreenError) {
-          ctx.logger.warn("Unable to read screen after BASIC auto-fix execution", toRecord(retryScreenError));
-        }
-
-        const remainingErrors = retryScreen ? parseBasicRuntimeErrors(retryScreen) : [];
-        if (remainingErrors.length > 0) {
-          const data = {
-            kind: "basic_runtime_error" as const,
-            programSource: originalProgram,
-            errors: normalizedErrors,
-            ...(screenOutput ? { screen: screenOutput } : {}),
-            autoFix: {
-              attempted: true,
-              changes: fixAttempt.changes,
-              programSource: fixAttempt.program,
-              resultingErrors: normalizeRuntimeErrors(remainingErrors),
-              ...(retryScreen ? { screen: retryScreen } : {}),
-            },
-          };
-          return structuredExecutionError(
-            "BASIC program still reports errors after auto-fix attempt.",
-            data,
-          );
-        }
-
-        activeProgram = fixAttempt.program;
-        prg = basicToPrg(activeProgram);
-        entryAddress = prg.readUInt16LE(0);
-        result = retryResult;
-        screenOutput = retryScreen;
-        autoFixInfo = {
-          changes: fixAttempt.changes,
-          originalErrors: errors,
+      const normalizedErrors = normalizeRuntimeErrors(errors);
+      const errorFields = { message: outcome.message, line: outcome.line };
+      const fixAttempt = parsed.autoFix === false ? undefined : attemptAutoFixBasicProgram(activeProgram, errors);
+      if (!fixAttempt) {
+        const data = {
+          kind: "basic_runtime_error" as const,
+          ...errorFields,
+          programSource: originalProgram,
+          errors: normalizedErrors,
+          ...(screenOutput ? { screen: screenOutput } : {}),
+          autoFix: {
+            attempted: false,
+            ...(parsed.autoFix === false ? { disabled: true } : {}),
+          },
         };
-      }
-    }
-
-    if (shouldVerify) {
-      try {
-        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, { address: prg.readUInt16LE(0), bytes: prg.subarray(2) }, screenBeforeRun);
-        if (outcome.status === "error") {
-          ctx.logger.warn("BASIC verification detected error", {
-            ...(outcome.message ? { message: outcome.message } : {}),
-            ...(outcome.line !== undefined ? { line: outcome.line } : {}),
-          });
-          return toolErrorResult(
-            new ToolExecutionError("BASIC program verification failed", {
-              details: {
-                ...(outcome.message ? { message: outcome.message } : {}),
-                ...(outcome.line !== undefined ? { line: outcome.line } : {}),
-              },
-            }),
-          );
-        }
-        verified = true;
-      } catch (verifyError) {
-        ctx.logger.warn("BASIC verification failed", toRecord(verifyError));
-        return toolErrorResult(
-          new ToolExecutionError("Failed to verify BASIC program execution", {
-            details: toRecord(verifyError) ?? undefined,
-          }),
+        const where = `${errors[0]!.raw}`;
+        return structuredExecutionError(
+          parsed.autoFix === false
+            ? `Detected BASIC runtime errors after execution (${where}). Auto-fix is disabled (autoFix:false), so the program was not rewritten or run again.`
+            : `Detected BASIC runtime errors after execution (${where}).`,
+          data,
         );
       }
+
+      ctx.logger.info("Attempting BASIC auto-fix", {
+        changes: fixAttempt.changes.map((change) => ({ line: change.line, notes: change.notes })),
+      });
+
+      const retryBefore = await readScreenSafely("before the BASIC auto-fix run");
+      const retryResult = await runBasic(fixAttempt.program);
+      if (!retryResult.success) {
+        const data = {
+          kind: "basic_runtime_error" as const,
+          ...errorFields,
+          programSource: originalProgram,
+          errors: normalizedErrors,
+          ...(screenOutput ? { screen: screenOutput } : {}),
+          autoFix: {
+            attempted: true,
+            changes: fixAttempt.changes,
+            programSource: fixAttempt.program,
+            failure: {
+              reason: "firmware_failure",
+              details: extractFailureDetails(retryResult.details),
+            },
+          },
+        };
+        return structuredExecutionError("Auto-fix failed due to firmware error while re-running BASIC program.", data);
+      }
+
+      const retryTokenized = basicToPrgDetailed(fixAttempt.program);
+      const retryPrg = retryTokenized.prg;
+      let retryOutcome: BasicPollResult;
+      try {
+        retryOutcome = await pollRun(retryPrg, retryBefore);
+      } catch (pollError) {
+        return verifyError(pollError);
+      }
+      const remainingErrors = lineErrorOf(retryOutcome);
+      if (remainingErrors.length > 0) {
+        const data = {
+          kind: "basic_runtime_error" as const,
+          ...errorFields,
+          programSource: originalProgram,
+          errors: normalizedErrors,
+          ...(screenOutput ? { screen: screenOutput } : {}),
+          autoFix: {
+            attempted: true,
+            changes: fixAttempt.changes,
+            programSource: fixAttempt.program,
+            resultingErrors: normalizeRuntimeErrors(remainingErrors),
+            ...(retryOutcome.screen ? { screen: retryOutcome.screen } : {}),
+          },
+        };
+        return structuredExecutionError(`BASIC program still reports errors after auto-fix attempt (${remainingErrors[0]!.raw}).`, data);
+      }
+      if (retryOutcome.status === "error") return verificationFailed(retryOutcome);
+
+      activeProgram = fixAttempt.program;
+      prg = retryPrg;
+      replacedLines = retryTokenized.replacedLines;
+      entryAddress = prg.readUInt16LE(0);
+      screenOutput = retryOutcome.screen;
+      runningAfterMs = retryOutcome.finished === false ? retryOutcome.observedMs ?? 0 : undefined;
+      autoFixInfo = { changes: fixAttempt.changes, originalErrors: errors };
     }
 
     const changedLines = autoFixInfo
       ? autoFixInfo.changes.map((change) => `line ${change.line}: "${change.before}" -> "${change.after}"`).join("; ")
       : "";
+    const stillRunning = runningAfterMs !== undefined;
+    const runningNote = `no BASIC error appeared, but no READY. prompt was observed within ${runningAfterMs} ms, so the program was still running when the check ended`;
     const message = autoFixInfo
-      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). The second run showed no BASIC error on screen.${verified ? "" : " Execution was not verified."}`
-      : verified
-        ? "BASIC program uploaded and executed successfully (verified)."
-        : "BASIC program uploaded and started. No BASIC error was visible on the screen immediately afterwards; pass verify:true to poll for the outcome.";
+      ? `Detected BASIC errors on execution; applied auto-fix and ran the program a second time (changed lines: ${changedLines}). `
+        + (stillRunning ? `In the second run ${runningNote}.` : "The second run was verified without a BASIC error.")
+      : stillRunning
+        ? `BASIC program uploaded and started; ${runningNote}.`
+        : "BASIC program uploaded and executed successfully (verified).";
+    const runningFields = stillRunning ? { running: true, observedMs: runningAfterMs } : {};
+    const addresses = prgAddresses(prg);
 
+    const autoFixFields = autoFixInfo
+      ? {
+          autoFix: {
+            applied: true,
+            changes: autoFixInfo.changes,
+            originalErrors: autoFixInfo.originalErrors,
+            programSource: activeProgram,
+          },
+        }
+      : {};
+    const replacedFields = replacedLines.length > 0 ? { replacedLines } : {};
+    const replacedNote = replacedLines.length > 0
+      ? ` Line number(s) ${replacedLines.join(", ")} appear more than once in the source; the later text replaced the earlier text, as when typing a line again.`
+      : "";
     const metadata = {
       success: true,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       details: result.details ?? null,
       ...(screenOutput ? { screen: screenOutput } : {}),
-      ...(autoFixInfo
-        ? {
-            autoFix: {
-              applied: true,
-              changes: autoFixInfo.changes,
-              originalErrors: autoFixInfo.originalErrors,
-              programSource: activeProgram,
-            },
-          }
-        : {}),
-      ...(verified ? { verified: true } : {}),
+      ...autoFixFields,
+      ...replacedFields,
+      ...runningFields,
+      verified: !stillRunning,
     };
 
     const data = {
       kind: "upload_run_basic" as const,
       format: "prg" as const,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       resources: ["c64://basic/spec", "c64://guide/bootstrap"],
       ...(screenOutput ? { screen: screenOutput } : {}),
-      ...(autoFixInfo
-        ? {
-            autoFix: {
-              applied: true,
-              changes: autoFixInfo.changes,
-              originalErrors: autoFixInfo.originalErrors,
-              programSource: activeProgram,
-            },
-          }
-        : {}),
-      ...(verified ? { verified: true } : {}),
+      ...autoFixFields,
+      ...replacedFields,
+      ...runningFields,
+      verified: !stillRunning,
     };
 
-    const base = textResult(message, metadata);
+    const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.${replacedNote}`, metadata);
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
     if (error instanceof ToolError) {
@@ -606,6 +636,47 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
     return unknownErrorResult(error);
   }
 }
+
+/** Largest file an `.include` or `.incbin` may read (a C64 program cannot use more than 64 KiB of data). */
+const MAX_ASM_INCLUDE_BYTES = 1024 * 1024;
+
+/**
+ * Reads a file for `.include`/`.incbin` with the same confinement, hidden-path and size rules as
+ * readHostFile. The assembler calls its resolvers synchronously, so the read is synchronous too.
+ * A relative path is taken relative to the including file when that is a real file, else to the working directory.
+ */
+function readAssemblerHostFile(requested: string, fromFile: string): Buffer {
+  const base = path.isAbsolute(fromFile) ? path.dirname(fromFile) : process.cwd();
+  const real = resolveHostPath(path.resolve(base, requested), { purpose: "read", maxBytes: MAX_ASM_INCLUDE_BYTES });
+  const fd = fs.openSync(real, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) throw new ToolValidationError(`Host path is not a regular file: ${real}`, { path: real });
+    if (stat.size > MAX_ASM_INCLUDE_BYTES) {
+      throw new ToolValidationError(`Host file is too large to read: ${real} is ${stat.size} bytes, limit is ${MAX_ASM_INCLUDE_BYTES} bytes.`, { path: real });
+    }
+    const out = Buffer.allocUnsafe(stat.size);
+    let total = 0;
+    while (total < out.length) {
+      const n = fs.readSync(fd, out, total, out.length - total, null);
+      if (n === 0) break;
+      total += n;
+    }
+    return out.subarray(0, total);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Resolvers that let assembly source use `.include`/`.incbin` (`!source`/`!binary`) with files inside the allowed host directories. */
+export const assemblerHostResolvers = {
+  resolveInclude: (requested: string, fromFile: string) => {
+    const base = path.isAbsolute(fromFile) ? path.dirname(fromFile) : process.cwd();
+    const real = resolveHostPath(path.resolve(base, requested), { purpose: "read", maxBytes: MAX_ASM_INCLUDE_BYTES });
+    return { contents: readAssemblerHostFile(requested, fromFile).toString("utf8"), fileName: real };
+  },
+  resolveIncbin: (requested: string, fromFile: string) => readAssemblerHostFile(requested, fromFile),
+};
 
 async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
@@ -617,19 +688,26 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     });
 
     // Assemble locally to expose structured metadata and capture symbols
-    const asmResult = assemblyToPrgDetailed(parsed.program);
+    const asmResult = assemblyToPrgDetailed(parsed.program, assemblerHostResolvers);
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
 
+    const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
+    const programEnd = loadAddress + Math.max(0, prg.length - 2); // exclusive
     const result = await ctx.client.uploadAndRunAsm(parsed.program, asmResult);
-    if (!result.success) {
+    const keyboardFeed = toRecord(result.details)?.keyboard as { status?: string; pending?: number; stoppedAt?: number } | undefined;
+    // A checkpoint that stops the CPU inside the loaded program means SYS reached the program: it
+    // started and is held at the checkpoint. A stop anywhere else (BASIC or KERNAL while SYS was
+    // typed) means it did not start.
+    const stoppedAt = keyboardFeed?.status === "stopped" && typeof keyboardFeed.stoppedAt === "number" ? keyboardFeed.stoppedAt : undefined;
+    const stoppedInProgram = stoppedAt !== undefined && stoppedAt >= loadAddress && stoppedAt < programEnd;
+    if (!result.success && !stoppedInProgram) {
       return toolErrorResult(
         new ToolExecutionError("C64 backend reported failure while running assembly program", {
           details: extractFailureDetails(result.details),
         }),
       );
     }
-    const keyboardFeed = toRecord(result.details)?.keyboard as { status?: string; pending?: number } | undefined;
     const startQueued = keyboardFeed?.status === "queued";
     if (startQueued && shouldVerify) {
       return toolErrorResult(
@@ -652,44 +730,49 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ? { symbols: symbolList, ...(symbolsTruncated ? { symbolsTruncated: true } : {}) }
       : {};
 
-    // Read back the program bytes (load evidence), then poll for signs of execution.
+    // Read back the program bytes (load evidence). Only verify:true polls for signs of execution.
     let verified = false;
     let execution: "confirmed" | "unconfirmed" | undefined;
     let loadCheck: string | undefined;
-    const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
-    try {
-      const outcome = await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, {
-        address: loadAddress,
-        bytes: prg.subarray(2),
-      });
-      if (outcome.type === "ASM") {
-        loadCheck = outcome.loadCheck;
-        if (outcome.status === "not_loaded") {
-          ctx.logger.warn("ASM program was not loaded", { reason: outcome.reason });
-          return toolErrorResult(
-            new ToolExecutionError(
-              `Assembly program was not loaded: ${outcome.reason}. The backend reported success, but the bytes read back at the load address differ from the assembled program (a program that overwrites its own first bytes also looks like this).`,
-              { details: { reason: outcome.reason, ...(outcome.load ? { loadAddress: outcome.load.address, expected: outcome.load.expected, found: outcome.load.found } : {}) } },
-            ),
-          );
-        }
-        if (outcome.status === "unconfirmed") {
-          if (shouldVerify) {
-            ctx.logger.warn("ASM execution could not be verified", { reason: outcome.reason });
-            return toolErrorResult(
-              new ToolExecutionError(
-                "Assembly program was loaded, but no screen change was observed, so its execution could not be verified",
-                { details: { reason: outcome.reason, loadCheck: outcome.loadCheck, execution: "unconfirmed" } },
-              ),
-            );
-          }
-          execution = "unconfirmed";
-        } else {
-          execution = "confirmed";
-          if (shouldVerify) {
-            verified = true;
-          }
-        }
+    const expected = { address: loadAddress, bytes: prg.subarray(2) };
+    if (stoppedInProgram) {
+      // The CPU is held at a checkpoint inside the program: that is evidence of execution, and
+      // polling the screen of a stopped machine would only wait.
+      execution = "confirmed";
+      verified = shouldVerify;
+    } else try {
+      const outcome: { status: string; reason?: string; loadCheck?: string; load?: { address: number; expected: string; found: string } } = shouldVerify
+        ? await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, expected) as AsmPollResult
+        : await (async () => {
+            const check = await checkAsmProgramLoaded(ctx.client, ctx.logger, expected);
+            return check.load
+              ? { status: "not_loaded", reason: `memory at $${check.load.address.toString(16).toUpperCase().padStart(4, "0")} does not contain the assembled program`, ...check }
+              : { status: "not_observed", ...check };
+          })();
+      loadCheck = outcome.loadCheck;
+      if (outcome.status === "not_loaded") {
+        ctx.logger.warn("ASM program was not loaded", { reason: outcome.reason });
+        return toolErrorResult(
+          new ToolExecutionError(
+            `Assembly program was not loaded: ${outcome.reason}. The backend reported success, but the bytes read back at the load address differ from the assembled program (a program that overwrites its own first bytes also looks like this).`,
+            { details: { reason: outcome.reason, ...(outcome.load ? { loadAddress: outcome.load.address, expected: outcome.load.expected, found: outcome.load.found } : {}) } },
+          ),
+        );
+      }
+      if (outcome.status === "unconfirmed") {
+        ctx.logger.warn("ASM execution could not be verified", { reason: outcome.reason });
+        return toolErrorResult(
+          new ToolExecutionError(
+            "Assembly program was loaded, but no screen change was observed, so its execution could not be verified",
+            { details: { reason: outcome.reason, loadCheck: outcome.loadCheck, execution: "unconfirmed" } },
+          ),
+        );
+      }
+      if (outcome.status === "not_observed") {
+        execution = "unconfirmed";
+      } else {
+        execution = "confirmed";
+        verified = true;
       }
     } catch (pollError) {
       ctx.logger.debug("Polling encountered an error", toRecord(pollError));
@@ -702,33 +785,49 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       }
     }
 
+    const fmt = (value: number) => `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+    const stopLabel = stoppedInProgram ? symbolEntries.find(([, address]) => address === stoppedAt)?.[0] : undefined;
+    const addresses = prgAddresses(prg, entryAddress);
+    const where = ` Program at ${addresses.load}-${addresses.end}, entry ${addresses.entry} (SYS ${entryAddress}).`;
+    const stopFields = stoppedInProgram ? { stopped: true, stoppedAt: fmt(stoppedAt!), ...(stopLabel ? { stoppedAtLabel: stopLabel } : {}) } : {};
+    const asmWarnings = asmResult.warnings;
+    const warningFields = asmWarnings.length > 0 ? { warnings: asmWarnings } : {};
+    const warningNote = asmWarnings.length > 0 ? ` Assembler warnings: ${asmWarnings.join(" | ")}` : "";
     const data = {
       kind: "upload_run_asm" as const,
       format: "prg" as const,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       resources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
       ...(loadCheck ? { loadCheck } : {}),
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...stopFields,
       ...symbolFields,
+      ...warningFields,
     };
-    const message = startQueued
+    const message = stoppedInProgram
+      ? `Assembly program assembled, uploaded and started; a checkpoint stopped the CPU at ${fmt(stoppedAt!)}${stopLabel ? ` (${stopLabel})` : ""} inside the program. Use c64_debug to inspect, step or continue.`
+      : startQueued
       ? `Assembly program assembled, uploaded and loaded. The SYS command is queued (${keyboardFeed?.pending ?? "?"} character(s) pending) because the CPU is paused; the program starts when the machine resumes.`
       : execution === "unconfirmed"
-      ? "Assembly program assembled, uploaded and loaded. No screen change was observed, so it is not confirmed that the program is running (a SID player, a border effect or a JMP * loop looks like this)."
-      : "Assembly program assembled, uploaded, and executed successfully.";
-    const base = textResult(message, {
+      ? "Assembly program assembled, uploaded and loaded, and the SYS command was typed. Execution was not observed (verify:false does not poll); pass verify:true to poll the screen for evidence."
+      : "Assembly program assembled, uploaded, and executed successfully (verified).";
+    const base = textResult(message + where + warningNote, {
       success: true,
       entryAddress,
+      addresses,
       prgSize: prg.length,
       details: result.details ?? null,
       ...(loadCheck ? { loadCheck } : {}),
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...stopFields,
       ...symbolFields,
+      ...warningFields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
@@ -778,12 +877,42 @@ function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExec
     const warning = `symbolsFile contained no recognisable labels; accepted formats: ${SYMBOL_FILE_FORMATS}.`;
     return { loaded, note: ` Warning: ${warning}`, fields: { symbolsLoaded: 0, warnings: [warning] } as Record<string, unknown> };
   }
-  return { loaded, note: ` Loaded ${loaded} debug symbol(s).`, fields: { symbolsLoaded: loaded } as Record<string, unknown> };
+  // A bounded sample, lowest addresses first, so the next call can use a label without guessing.
+  const sample = [...newSymbols.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).slice(0, LABEL_SAMPLE_SIZE);
+  const labels: Record<string, string> = Object.fromEntries(sample.map(([name, address]) => [name, hex4(address)]));
+  const shown = sample.map(([name, address]) => `${name}=${hex4(address)}`).join(", ");
+  return {
+    loaded,
+    note: ` Loaded ${loaded} debug symbol(s)${loaded > sample.length ? `; the first ${sample.length} by address` : ""}: ${shown}.`,
+    fields: { symbolsLoaded: loaded, labels, ...(loaded > sample.length ? { labelsTruncated: true } : {}) } as Record<string, unknown>,
+  };
 }
 
 const MAX_UPLOAD_PRG_BYTES = 65538;
+const LABEL_SAMPLE_SIZE = 20;
 
-type PrgSource = { location: "host" | "device"; bytes?: Buffer; loadAddress?: number };
+function hex4(value: number): string {
+  return `$${value.toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+/** Load range of a PRG image (two-byte load address, then the body): first and last byte. */
+function prgAddresses(prg: Buffer, entry?: number): { load: string; end: string; entry?: string } {
+  const load = prg.readUInt16LE(0);
+  const end = Math.min(0xffff, load + Math.max(1, prg.length - 2) - 1);
+  return { load: hex4(load), end: hex4(end), ...(entry !== undefined ? { entry: hex4(entry) } : {}) };
+}
+
+/** VICE reads host PRG files itself; the header is read here only to report the load range. */
+async function peekHostPrg(file: string): Promise<Buffer | undefined> {
+  try {
+    const bytes = await readHostFile(file, { maxBytes: MAX_UPLOAD_PRG_BYTES + 1 });
+    return bytes.length >= 2 && bytes.length <= MAX_UPLOAD_PRG_BYTES ? bytes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+type PrgSource = { location: "host" | "device"; bytes?: Buffer; loadAddress?: number; header?: Buffer };
 
 // Decides where the PRG comes from. Host files are read and validated here, so
 // nothing reaches the device when the path or size is unacceptable.
@@ -797,7 +926,8 @@ async function resolvePrgSource(
     if (requested === "device") {
       throw new ToolValidationError("location \"device\" is not available on VICE; PRG paths are host paths there.", { path: "$.location" });
     }
-    return { location: "host" };
+    const peeked = await peekHostPrg(parsed.path);
+    return { location: "host", ...(peeked ? { header: peeked, loadAddress: peeked.readUInt16LE(0) } : {}) };
   }
   if (requested !== "host") return { location: "device" };
   const bytes = await readHostFile(parsed.path, { maxBytes: MAX_UPLOAD_PRG_BYTES + 1 });
@@ -807,7 +937,22 @@ async function resolvePrgSource(
       { path: "$.path" },
     );
   }
-  return { location: "host", bytes, loadAddress: bytes.readUInt16LE(0) };
+  return { location: "host", bytes, header: bytes, loadAddress: bytes.readUInt16LE(0) };
+}
+
+/**
+ * On Ultimate hardware a path without `location` is a device path. When the device rejects it but
+ * the path names a PRG on this host (inside the allowed roots), say how to upload it instead.
+ */
+function hostLocationHint(parsed: { path: string; location?: string }, source: PrgSource, ctx: ToolExecutionContext): string {
+  if (parsed.location !== undefined || source.location !== "device" || ctx.platform.id === "vice") return "";
+  try {
+    const resolved = resolveHostPath(parsed.path, { purpose: "read" });
+    if (!fs.statSync(resolved).isFile()) return "";
+  } catch {
+    return "";
+  }
+  return ` (${parsed.path} was used as a path on the Ultimate device, but it is a file on this host; pass location: "host" to upload it)`;
 }
 
 async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
@@ -818,14 +963,17 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
     const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
+    cancelGeneratedSidPlayback(); // the generated SID sequence would keep writing into the new program's SID registers
     const result = source.bytes ? await ctx.client.loadPrg(source.bytes) : await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 backend reported failure while loading PRG", {
+      throw new ToolExecutionError(`C64 backend reported failure while loading PRG${hostLocationHint(parsed, source, ctx)}`, {
         details: extractFailureDetails(result.details),
       });
     }
 
     const symbolReport = applySymbols(newSymbols, ctx, false);
+    const addresses = source.header ? prgAddresses(source.header) : undefined;
+    const rangeNote = addresses ? ` Load range ${addresses.load}-${addresses.end}.` : "";
 
     const data = {
       kind: "load_prg" as const,
@@ -835,15 +983,17 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       resources: ["c64://guide/bootstrap"],
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     };
-    const base = textResult(`PRG ${parsed.path} loaded into memory.${symbolReport.note}`, {
+    const base = textResult(`PRG ${parsed.path} loaded into memory.${rangeNote}${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
@@ -866,15 +1016,18 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
+    cancelGeneratedSidPlayback(); // the generated SID sequence would keep writing into the new program's SID registers
     const result = source.bytes ? await ctx.client.runPrg(source.bytes) : await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
-      throw new ToolExecutionError("C64 backend reported failure while running PRG", {
+      throw new ToolExecutionError(`C64 backend reported failure while running PRG${hostLocationHint(parsed, source, ctx)}`, {
         details: extractFailureDetails(result.details),
       });
     }
 
     const symbolReport = applySymbols(newSymbols, ctx, true);
     const symbolsLoaded = symbolReport.loaded;
+    const addresses = source.header ? prgAddresses(source.header) : undefined;
+    const rangeNote = addresses ? ` Load range ${addresses.load}-${addresses.end}.` : "";
 
     const data = {
       kind: "run_prg" as const,
@@ -884,15 +1037,17 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       resources: ["c64://guide/bootstrap"],
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     };
-    const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolReport.note}`, {
+    const base = textResult(`PRG ${parsed.path} loaded and executed.${rangeNote}${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
       location: source.location,
       ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...(addresses ? { addresses } : {}),
       ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
@@ -907,9 +1062,15 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = crtFileArgsSchema.parse(rawArgs ?? {});
-    ctx.logger.info("Running CRT file", { path: parsed.path });
+    ctx.logger.info("Running CRT file", { path: parsed.path, location: parsed.location ?? "device" });
 
-    const result = await ctx.client.runCrtFile(parsed.path);
+    const location = parsed.location === "host" ? "host" : "device";
+    // A host file is read and size-checked here, so nothing reaches the device when the path is unacceptable.
+    const hostBytes = location === "host" ? await readHostFile(parsed.path) : undefined;
+    if (hostBytes && hostBytes.length === 0) {
+      throw new ToolValidationError(`CRT file is empty: ${parsed.path}`, { path: "$.path" });
+    }
+    const result = hostBytes ? await ctx.client.runCrt(hostBytes) : await ctx.client.runCrtFile(parsed.path);
     if (result.success) clearViceSymbols(); // labels belong to one program
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running CRT", {
@@ -923,10 +1084,12 @@ async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      location,
     };
-    const base = textResult(`PRG ${parsed.path} loaded and executed.`, {
+    const base = textResult(`CRT ${parsed.path}${hostBytes ? ` (${hostBytes.length} bytes uploaded from the host)` : ""} started.`, {
       success: true,
       path: parsed.path,
+      location,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
     });
@@ -1081,37 +1244,7 @@ export const programRunnersModule = defineToolModule({
       ],
       supportedPlatforms: ["c64u", "u2"] as const,
       async execute(args, ctx) {
-        try {
-          const parsed = crtFileArgsSchema.parse(args ?? {});
-          ctx.logger.info("Running CRT file", { path: parsed.path });
-
-          const result = await ctx.client.runCrtFile(parsed.path);
-          if (result.success) clearViceSymbols(); // labels belong to one program
-          if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while running CRT", {
-              details: extractFailureDetails(result.details),
-            });
-          }
-
-          const data = {
-            kind: "run_crt" as const,
-            format: "crt" as const,
-            path: parsed.path,
-            entryAddress: null as number | null,
-            resources: ["c64://guide/bootstrap"],
-          };
-          const base = textResult(`CRT ${parsed.path} mounted and started.`, {
-            success: true,
-            path: parsed.path,
-            details: toRecord(result.details) ?? null,
-          });
-          return { ...base, structuredContent: { type: "json", data } };
-        } catch (error) {
-          if (error instanceof ToolError) {
-            return toolErrorResult(error);
-          }
-          return unknownErrorResult(error);
-        }
+        return executeRunCrt(args, ctx);
       },
     },
   ],
