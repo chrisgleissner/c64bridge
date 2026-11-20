@@ -91,13 +91,9 @@ const viceOperationHandlers: OperationHandlerMap<ViceOperationMap> = {
       ensureSafeResourceName(parsed.name, "$.name");
       ctx.logger.info("Reading VICE resource", { name: parsed.name });
 
+      // VICE answers an unknown resource with an error; an empty string is a legitimate value
+      // (for example an unset file name).
       const value = await ctx.client.viceResourceGet(parsed.name);
-
-      if (value.type === "string" && value.value.length === 0) {
-        throw new ToolExecutionError(`VICE resource ${parsed.name} is not available or returned an empty value`, {
-          details: { name: parsed.name },
-        });
-      }
 
       return jsonResult(
         {
@@ -120,11 +116,16 @@ const viceOperationHandlers: OperationHandlerMap<ViceOperationMap> = {
         valueType: typeof parsed.value,
       });
 
-      await ctx.client.viceResourceSet(parsed.name, parsed.value);
-      return textResult(`Updated VICE resource ${parsed.name}.`, {
+      // VICE stores each resource as an integer or a string, and the set command must use that
+      // type: read it first and convert the value, as c64_config does on VICE.
+      const current = await ctx.client.viceResourceGet(parsed.name);
+      const value = coerceResourceValue(parsed.value, current.type, parsed.name);
+      await ctx.client.viceResourceSet(parsed.name, value);
+      return textResult(`Updated VICE resource ${parsed.name} (${current.type}) to ${JSON.stringify(value)}.`, {
         success: true,
         name: parsed.name,
-        value: parsed.value,
+        type: current.type,
+        value,
       });
     } catch (error) {
       return handleToolError(error);
@@ -165,11 +166,7 @@ export const viceModuleGroup = defineToolModule({
           description: "Inspect the active SID emulation mode.",
           arguments: { op: "resource_get", name: "SidEngine" },
         },
-        {
-          name: "Set SID engine",
-          description: "Switch SID emulation to resid-fp (value 2).",
-          arguments: { op: "resource_set", name: "SidEngine", value: 2 },
-        },
+
       ],
       execute: viceOperationDispatcher,
     },
@@ -181,6 +178,16 @@ function handleToolError(error: unknown) {
     return toolErrorResult(error);
   }
   return unknownErrorResult(error);
+}
+
+function coerceResourceValue(value: string | number, type: string, name: string): string | number {
+  if (type !== "int") return String(value);
+  const text = typeof value === "string" ? value.trim().toLowerCase() : value;
+  const parsed = text === "true" ? 1 : text === "false" ? 0 : typeof text === "number" ? text : /^[+-]?\d+$/.test(text) ? Number(text) : Number.NaN;
+  if (!Number.isInteger(parsed) || parsed < -0x80000000 || parsed > 0x7fffffff) {
+    throw new ToolValidationError(`VICE resource ${name} is an integer resource; ${JSON.stringify(value)} is not a 32-bit integer`, { path: "$.value", details: { name, type } });
+  }
+  return parsed;
 }
 
 function ensureSafeResourceName(name: string, path: string): void {
