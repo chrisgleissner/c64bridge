@@ -270,3 +270,13 @@ Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64br
 | Divide by zero returns quotient `$FF` / `$FFFF` | ADDED | `result.txt` divide-by-zero set |
 | An earlier draft guarded a carry out of `ROL` in the dividers; the guard was removed | NOTE | the guarded and unguarded versions agree on all pairs: the partial remainder is below 128 (`$8000`) before each `ROL` because it is less than the divisor and is built from at most 7 (15) dividend bits |
 | Quarter-square identity a*b = f(a+b) - f(a-b), f(n) = floor(n*n/4) | ADDED (arithmetic) | (a+b)^2 - (a-b)^2 = 4ab; a+b and a-b have the same parity, so the floors cancel |
+
+### D5 - Safe zero-page map (data/gamedev/architecture.md section 4)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| `$02` unused; `$FB-$FE` free and never altered by BASIC | ADDED | Mapping `$0002 Unused`; `$00FB-$00FE FREKZP` "it is guaranteed that BASIC will not alter these locations"; ROM: no access to `$02` or `$FB-$FE` except indexed `$FD53 STA $0002,Y` (RAMTAS) |
+| `$F7-$FA` used only by RS-232 OPEN/CLOSE/NMI | ADDED | Mapping RIBUF/ROBUF "When device number 2 (the RS-232 channel) is opened"; ROM accesses at `$EF26`, `$EFB1`, `$F026`, `$F096` (RS-232 NMI send/receive), `$F2B5-$F2C3` (CLOSE, after `CMP #$02` device test at `$F2A7`), `$F46B-$F47B` (RS-232 OPEN) |
+| KERNAL `$E4D3-$FFFF` does not access `$02-$8F` or `$FF` except RAMTAS | ADDED | `verify/zpscan.py` over c64ref `c64disasm_en.txt`: only `$FD53 STA $0002,Y` in `$02-$8F`; no access to `$FF` |
+| `$02-$8F` BASIC workspace, `CHRGET` at `$73-$8A`; `$90-$FA` KERNAL (jiffy `$A0-$A2`, editor/keyboard `$C5-$F6`) | ADDED | Mapping entries `$0003`-`$008F`, `$0073-$008A CHRGET`, `$0090`-`$00F6`; KERNAL IRQ `$EA31-$EB48` accesses `$C0`-`$F6` (zpscan) |
+| `$00/$01` CPU port | CONFIRMED | Mapping `$0000 D6510`, `$0001 R6510` |

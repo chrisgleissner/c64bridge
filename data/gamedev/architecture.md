@@ -91,6 +91,13 @@ Game speed then depends on frames, not on CPU speed. Turbo only raises how much 
 - `$01` low three bits (`$A000` / `$D000` / `$E000`, cartridge lines inactive): `%000` RAM/RAM/RAM; `%001` RAM/CHAR/RAM; `%010` RAM/CHAR/KERNAL; `%011` BASIC/CHAR/KERNAL; `%100` RAM/RAM/RAM; `%101` RAM/IO/RAM; `%110` RAM/IO/KERNAL; `%111` BASIC/IO/KERNAL.
 - With KERNAL off the vectors at `$FFFA/$FFFE` are RAM: set NMI (point to an `rti`, or a handler) and IRQ yourself; the `$0314` vector is no longer used. Keep CIA IRQs off (`$DC0D=$7F`, `$DD0D=$7F`, then read both).
 - RAM under I/O (`$D000-$DFFF`) is visible to the VIC in bank 3 (sprite shapes, second charset): write it once at boot with `$01=$34`. Colour RAM `$D800` is separate, 4-bit, CPU-visible only with I/O on.
+- Safe zero page (Mapping the Commodore 64; the ROM disassembly was searched for every access):
+
+| Situation | Free bytes | Why |
+|---|---|---|
+| BASIC still in use (program returns to BASIC, or BASIC code runs) | `$02`, `$FB-$FE`; `$F7-$FA` if RS-232 (device 2) is never opened | Mapping: `$02` unused, `$FB-$FE` "guaranteed that BASIC will not alter"; `$F7-$FA` are the RS-232 buffer pointers, used only by its OPEN, CLOSE and NMI code |
+| Machine code only, BASIC no longer used, KERNAL on (IRQ, I/O calls) | `$02-$8F`, `$FF`, plus the bytes above | `$02-$8F` and `$FF` belong to BASIC; the KERNAL (`$E4D3-$FFFF`) never accesses them except the RAM clear at reset. `$90-$FA` stay KERNAL workspace (I/O, jiffy clock `$A0-$A2`, keyboard and screen editor `$C5-$F6`). Save and restore `$02-$8F` to return to BASIC (it also holds `CHRGET` code at `$73-$8A`) |
+| KERNAL ROM off (`$01` = `$35`/`$34`), own IRQ and NMI | `$02-$FF` | `$00/$01` are the CPU port. Save `$90-$FF` first if KERNAL routines are called again later |
 
 ## 5. Memory-map templates
 ### A. Stock 64 KB game (AUTHENTIC; also valid MODERN), VIC bank 3, KERNAL off after boot
