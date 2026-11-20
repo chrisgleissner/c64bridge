@@ -61,7 +61,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "poweroff",
       ensureDescriptor(machineDescriptorIndex, "poweroff").inputSchema,
-      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 the machine cannot be restarted by software afterwards: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled." },
+      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 software cannot restart it: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
@@ -70,7 +70,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "power_cycle",
       ensureDescriptor(machineDescriptorIndex, "power_cycle").inputSchema,
-      { description: "Return the active backend to a fresh state. C64U/U64 Tool Menu verification requires machine:menu_screen (a C64U firmware version that provides it, or U64 3.15+); U2-family reboots through REST." },
+      { description: "Return the backend to a fresh state. C64U/U64 Tool Menu verification needs machine:menu_screen (U64 3.15+ or supporting C64U firmware); U2-family reboots through REST." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "power_cycle", rawArgs, ctx),
   },
@@ -79,7 +79,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "menu",
       ensureDescriptor(machineDescriptorIndex, "menu_button").inputSchema,
-      { description: "Toggle the Ultimate menu button for navigation." },
+      { description: "Toggle the Ultimate menu button." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "menu_button", rawArgs, ctx),
   },
@@ -88,7 +88,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "read_menu_screen",
       ensureDescriptor(machineDescriptorIndex, "read_menu_screen").inputSchema,
-      { description: "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (a C64U firmware version that provides it, or U64/U2 3.15+)." },
+      { description: "Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (needs firmware support; U64/U2 3.15+)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "read_menu_screen", rawArgs, ctx),
   },
@@ -97,7 +97,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "start_task",
       ensureDescriptor(metaDescriptorIndex, "start_background_task").inputSchema,
-      { description: "Start a named background task that runs on an interval." },
+      { description: "Start a named interval task." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "start_background_task", rawArgs, ctx),
   },
@@ -106,7 +106,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "stop_task",
       ensureDescriptor(metaDescriptorIndex, "stop_background_task").inputSchema,
-      { description: "Stop a specific background task and clear its timer." },
+      { description: "Stop a background task." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "stop_background_task", rawArgs, ctx),
   },
@@ -115,14 +115,14 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "stop_all_tasks",
       ensureDescriptor(metaDescriptorIndex, "stop_all_background_tasks").inputSchema,
-      { description: "Stop every running background task and persist state." },
+      { description: "Stop all running tasks and persist state." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "stop_all_background_tasks", rawArgs, ctx),
   },
   {
     op: "delete_task",
     schema: extendSchemaWithOp("delete_task", ensureDescriptor(metaDescriptorIndex, "delete_background_task").inputSchema,
-      { description: "Delete a finished background task and its artifacts; stop running tasks first." }),
+      { description: "Delete a finished task and its artifacts; stop running tasks first." }),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "delete_background_task", rawArgs, ctx),
   },
   {
@@ -130,7 +130,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "list_tasks",
       ensureDescriptor(metaDescriptorIndex, "list_background_tasks").inputSchema,
-      { description: "List known background tasks with status metadata." },
+      { description: "List background tasks with status." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "list_background_tasks", rawArgs, ctx),
   },
@@ -139,7 +139,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "performance_report",
       ensureDescriptor(metaDescriptorIndex, "performance_report").inputSchema,
-      { description: "Summarize diagnostics spans and tool latencies from the current or latest MCP session." },
+      { description: "Summarize diagnostics spans and tool latencies of the current or latest session." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "performance_report", rawArgs, ctx),
   },

@@ -76,7 +76,7 @@ const sidVolumeArgsSchema = objectSchema({
   description: "Set the SID master volume (0-15).",
   properties: {
     volume: numberSchema({
-      description: "SID master volume 0-15 (other values are rejected). Writes all of $D418, so filter mode bits set by a running program are cleared.",
+      description: "SID master volume 0-15. Writes all of $D418, clearing filter mode bits.",
       minimum: 0,
       maximum: 15,
     }),
@@ -292,16 +292,16 @@ const musicCompileArgsSchema = objectSchema({
       enum: ["yaml", "json"],
     })),
     output: optionalSchema(stringSchema({
-      description: "Playback target format. PRG works on all backends; SID playback requires C64U/U64 or U2 (SID export with dryRun works everywhere).",
+      description: "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere).",
       enum: ["prg", "sid"],
       default: "prg",
     }), "prg"),
     dryRun: optionalSchema(booleanSchema({
-      description: "When true, skip playback and only return compilation metadata (combine with outputPath to export the file).",
+      description: "Skip playback and return only compilation metadata (use outputPath to export).",
       default: false,
     }), false),
     outputPath: optionalSchema(stringSchema({
-      description: "Host file to write the compiled PRG or SID (per output) to, inside the allowed directories. Works with dryRun on every backend.",
+      description: "Host file for the compiled PRG or SID, inside the allowed directories. Works with dryRun.",
       minLength: 1,
     })),
   },
@@ -326,7 +326,7 @@ const analyzeAudioArgsSchema = objectSchema({
   description: "Analyze recent SID playback when a verification-style request is detected.",
   properties: {
     request: optionalSchema(stringSchema({
-      description: "Optional wording of the verification goal; \"does it sound right\" style requests add a verdict to the notes.",
+      description: "Verification goal wording; \"does it sound right\" requests add a verdict.",
       minLength: 1,
     }), "analyze the SID output"),
     durationSeconds: optionalSchema(numberSchema({

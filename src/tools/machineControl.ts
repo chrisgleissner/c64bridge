@@ -49,7 +49,7 @@ function createWaitSchema(description: string) {
     description,
     properties: {
       waitForReady: optionalSchema(booleanSchema({
-        description: "Wait until the BASIC READY. prompt is visible before returning. A timeout is reported as ready=false, not as an error.",
+        description: "Wait for the BASIC READY. prompt before returning; a timeout gives ready=false, not an error.",
         default: false,
       }), false),
       readyTimeoutMs: optionalSchema(numberSchema({

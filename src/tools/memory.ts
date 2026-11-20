@@ -143,7 +143,7 @@ export const __memoryHelpersForTests = {
 };
 
 /** The address syntax accepted by parseAddressArg, for parameter descriptions. */
-export const ADDRESS_FORMS = "$HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3)";
+export const ADDRESS_FORMS = "$HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n";
 
 const readScreenArgsSchema = objectSchema<Record<string, never>>({
   description: "No arguments are required for reading the current screen contents.",
@@ -159,7 +159,7 @@ const readMemoryArgsSchema = objectSchema({
       minLength: 1,
     }),
     length: numberSchema({
-      description: "Number of bytes to read starting from the resolved address (default 256, cut at $FFFF when not given).",
+      description: "Bytes to read (default 256, cut at $FFFF when not given).",
       integer: true,
       minimum: 1,
       maximum: 4096,
@@ -188,7 +188,7 @@ const writeMemoryArgsSchema = objectSchema({
       pattern: /^[\s_0-9A-Fa-f$]+$/,
     }),
     verify: booleanSchema({
-      description: "When true, verify the write by reading before and after the change; Ultimate hardware also pauses during verification.",
+      description: "Verify the write by reading before and after; Ultimate hardware pauses meanwhile.",
       default: false,
     }),
     expected: optionalSchema(stringSchema({
@@ -609,7 +609,7 @@ const disassembleArgsSchema = objectSchema({
       default: 64,
     }),
     instructionCount: optionalSchema(numberSchema({
-      description: "Stop after this many instructions. When given, it replaces length: 3 x instructionCount bytes are read (fewer near $FFFF).",
+      description: "Stop after this many instructions; replaces length (reads 3 x instructionCount bytes, fewer near $FFFF).",
       integer: true,
       minimum: 1,
       maximum: 512,
@@ -748,7 +748,7 @@ function validateRangeWithinAddressSpace(start: number, length: number, fieldPat
 // control registers ($DC0D, $DD0D) clears pending interrupts of the running program. Range
 // operations therefore leave that area out unless includeIo is set. VICE reads without side effects.
 const includeIoSchema = optionalSchema(booleanSchema({
-  description: "Ultimate hardware: also read $D000-$DFFF. Reading there reaches the I/O chips and can clear pending CIA interrupts of the running program. Default false; VICE reads have no side effects.",
+  description: "Ultimate: also read $D000-$DFFF. Reading I/O can clear pending CIA interrupts. Default false; no side effects on VICE.",
   default: false,
 }));
 
@@ -771,7 +771,7 @@ function refuseIoRange(ctx: ToolExecutionContext, includeIo: boolean | undefined
 const copyMemoryArgsSchema = objectSchema({
   description: "Copy a region of RAM from one address to another.",
   properties: {
-    source: stringSchema({ description: `Source start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    source: stringSchema({ description: "Source start address, in the same forms as address.", minLength: 1 }),
     dest: stringSchema({ description: "Destination start address, in the same forms as source.", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to copy (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
     includeIo: includeIoSchema,
@@ -845,7 +845,7 @@ async function executeFillMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
 const searchMemoryArgsSchema = objectSchema({
   description: "Search for a byte pattern within a memory range.",
   properties: {
-    startAddress: stringSchema({ description: `Start of the search range: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    startAddress: stringSchema({ description: "Start of the search range, in the same forms as address.", minLength: 1 }),
     endAddress: stringSchema({ description: "End of the search range (inclusive), in the same forms as startAddress.", minLength: 1 }),
     pattern: stringSchema({
       description: "Hex bytes to find, e.g. 'A9 00' for LDA #$00.",
@@ -905,7 +905,7 @@ async function executeSearchMemory(rawArgs: unknown, ctx: ToolExecutionContext):
 const compareMemoryArgsSchema = objectSchema({
   description: "Compare two memory regions and report differing bytes.",
   properties: {
-    address1: stringSchema({ description: `First region start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    address1: stringSchema({ description: "First region start address, in the same forms as address.", minLength: 1 }),
     address2: stringSchema({ description: "Second region start address, in the same forms as address1.", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to compare (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
     maxDiffs: optionalSchema(numberSchema({ description: "Max differences to report (default 10).", integer: true, minimum: 1, maximum: 200, default: 10 })),
@@ -965,7 +965,7 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
 const saveMemoryArgsSchema = objectSchema({
   description: "Dump a memory region to a local file, optionally with a PRG load-address header.",
   properties: {
-    startAddress: stringSchema({ description: `Start address of the region to save: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    startAddress: stringSchema({ description: "Start address of the region to save, in the same forms as address.", minLength: 1 }),
     endAddress: stringSchema({ description: "End address (inclusive), in the same forms as startAddress.", minLength: 1 }),
     filePath: stringSchema({ description: "Absolute or relative path for the output file.", minLength: 1 }),
     asPrg: optionalSchema(booleanSchema({ description: "Prepend a 2-byte little-endian load-address header (PRG format). Default: true.", default: true })),

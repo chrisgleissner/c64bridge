@@ -219,16 +219,16 @@ export const writeTextArgsSchema = objectSchema({
 });
 
 export const keyArgsSchema = objectSchema({
-  description: "Press a single key one or more times, optionally with a delay between presses.",
+  description: "Press one key one or more times, optionally with a delay.",
   properties: {
     op: literalSchema("key"),
     key: stringSchema({
-      description: "Key to press: a printable character, or a PETSCII token name (RETURN, F1…F8, UP, etc.). STOP and RUN only type codes 3 and 131 into the keyboard buffer and may not break a running program; use op keyboard with run_stop on C64U.",
+      description: "Key to press: a printable character or PETSCII token name (RETURN, F1…F8, UP). STOP only types code 3 and may not break a running program; use op keyboard with run_stop on C64U.",
       minLength: 1,
       maxLength: 32,
     }),
     durationMs: optionalSchema(numberSchema({
-      description: "Delay in ms after each queued key press before the next press (default 0 = no delay).",
+      description: "Delay in ms between presses (default 0).",
       integer: true,
       minimum: 0,
       maximum: 5000,
@@ -247,7 +247,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches VICE's I/O simulation joyport device while pressed; that device also pulls CIA lines 5-7 low, so port 1 produces phantom keys (e.g. SHIFT+C=) and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which also pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({
@@ -283,7 +283,7 @@ export const joystickArgsSchema = objectSchema({
 });
 
 export const keyboardArgsSchema = objectSchema({
-  description: "Send physical C64 keyboard matrix events through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  description: "Send physical C64 keyboard matrix events through machine:input (needs firmware support; U64 3.15+).",
   properties: {
     op: literalSchema("keyboard"),
     inputs: arraySchema(stringSchema({ description: "Physical keyboard input.", enum: KEYBOARD_INPUTS }), {
@@ -298,14 +298,14 @@ export const keyboardArgsSchema = objectSchema({
 });
 
 const releaseAllArgsSchema = objectSchema({
-  description: "Release every key and joystick control injected through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  description: "Release every key and joystick control injected through machine:input.",
   properties: { op: literalSchema("release_all") },
   required: ["op"],
   additionalProperties: false,
 });
 
 const inputStateArgsSchema = objectSchema({
-  description: "Read the keys and joystick controls held through machine:input (a C64U firmware version that provides it, or U64 3.15+).",
+  description: "Read the keys and joystick controls held through machine:input.",
   properties: { op: literalSchema("state") },
   required: ["op"],
   additionalProperties: false,

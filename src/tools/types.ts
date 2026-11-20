@@ -198,7 +198,7 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
       opValues.push(opValue);
       const requiredSummary = requiredInputs.length > 0
         ? ` Required inputs: ${requiredInputs.join(", ")}.`
-        : " Required inputs: none.";
+        : "";
       const optionalSummary = optionalInputs.length > 0
         ? ` Optional inputs: ${optionalInputs.join(", ")}.`
         : "";

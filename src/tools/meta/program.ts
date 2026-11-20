@@ -349,7 +349,7 @@ const crossPlatformGreetingArgsSchema = objectSchema({
       default: true,
     }), true),
     captureScreenshot: optionalSchema(booleanSchema({
-      description: "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips screenshots by default; explicitly requesting one on U2 fails before execution.",
+      description: "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips it by default; requesting it on U2 fails before execution.",
       default: true,
     }), true),
     outputPath: optionalSchema(stringSchema({
