@@ -176,3 +176,19 @@ test("DEVICE-4 injectKeyboardQueue passes its AbortSignal to feedKeyboard and st
   const error = await pending;
   assert.equal(error.name, "AbortError");
 });
+
+test("PROGMEM-13 register metadata is read once per monitor connection", async () => {
+  const { cachedRegisterMetadata } = await import("../src/device.js");
+  let calls = 0;
+  const monitor = { async registersAvailable() { calls += 1; return [{ id: 3, name: "PC", size: 16 }]; } };
+  assert.equal((await cachedRegisterMetadata(monitor))[0].name, "PC");
+  await cachedRegisterMetadata(monitor);
+  await cachedRegisterMetadata(monitor);
+  assert.equal(calls, 1);
+  await cachedRegisterMetadata(monitor, 1);
+  assert.equal(calls, 2);
+  const failing = { async registersAvailable() { calls += 1; throw new Error("closed"); } };
+  await assert.rejects(cachedRegisterMetadata(failing));
+  await assert.rejects(cachedRegisterMetadata(failing));
+  assert.equal(calls, 4, "a failed read is not cached");
+});

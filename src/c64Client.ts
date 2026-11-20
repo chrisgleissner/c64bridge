@@ -28,6 +28,7 @@ import {
   type MachineInputBatch,
   type MachineInputState,
   ViceBackend,
+  cachedRegisterMetadata,
   screenLayoutFromRegisters,
 } from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
@@ -2964,7 +2965,7 @@ export class C64Client {
 
     async viceRegistersAvailable(memspace: number = 0): Promise<ViceRegisterMetadata[]> {
       const space = this.normaliseMemspace(memspace);
-      return this.withViceMonitor((client) => client.registersAvailable(space));
+      return this.withViceMonitor((client) => cachedRegisterMetadata(client, space));
     }
 
     async viceRegistersGet(memspace: number = 0): Promise<ViceRegisterValue[]> {
@@ -2983,7 +2984,11 @@ export class C64Client {
           ...(options.memspace !== undefined ? { memspace: this.normaliseMemspace(options.memspace) } : {}),
         };
       }
-      return this.withViceMonitor((client) => client.registersSet(writes, payload));
+      return this.withViceMonitor(async (client) => {
+        // Resolve register names from the per-connection cache instead of asking the emulator on every write.
+        const metadata = payload?.metadata ?? await cachedRegisterMetadata(client, payload?.memspace ?? 0);
+        return client.registersSet(writes, { ...payload, metadata });
+      });
     }
 
     async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<{ stopped: boolean; pc?: number }> {

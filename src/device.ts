@@ -10,7 +10,7 @@ import path from "node:path";
 import { Api } from "../generated/c64/index.js";
 import type { InputBatch, InputStateResponse } from "../generated/c64/index.js";
 import { createLoggingHttpClient, RequestQueue } from "./loggingHttpClient.js";
-import { ViceClient, viceRequestTimeoutMs, type ViceCheckpoint } from "./vice/viceClient.js";
+import { ViceClient, viceRequestTimeoutMs, type ViceCheckpoint, type ViceRegisterMetadata, type ViceMemspace } from "./vice/viceClient.js";
 import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { resetAndWaitForBasic, waitForBootedPrompt } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
@@ -76,10 +76,30 @@ export class ViceSessionLostError extends Error {
   }
 }
 
+// Register metadata (ids and names) does not change during one monitor connection, so it is read once per
+// connection and memory space instead of before every register read (HARD06 PROGMEM-13).
+const registerMetadataByClient = new WeakMap<object, Map<number, Promise<ViceRegisterMetadata[]>>>();
+
+export function cachedRegisterMetadata(client: ViceClient, memspace: ViceMemspace = 0): Promise<ViceRegisterMetadata[]> {
+  let perClient = registerMetadataByClient.get(client);
+  if (!perClient) {
+    perClient = new Map();
+    registerMetadataByClient.set(client, perClient);
+  }
+  let pending = perClient.get(memspace);
+  if (!pending) {
+    pending = client.registersAvailable(memspace);
+    perClient.set(memspace, pending);
+    const cached = pending;
+    pending.catch(() => { if (perClient!.get(memspace) === cached) perClient!.delete(memspace); });
+  }
+  return pending;
+}
+
 /** The program counter of a CPU that is stopped in the monitor, or undefined when it cannot be read. */
 async function readProgramCounter(client: ViceClient): Promise<number | undefined> {
   try {
-    const meta = await client.registersAvailable();
+    const meta = await cachedRegisterMetadata(client);
     const id = meta.find((m) => m.name === "PC")?.id;
     if (id === undefined) return undefined;
     return (await client.registersGet()).find((r) => r.id === id)?.value;
@@ -2067,7 +2087,7 @@ async function waitForAutoloadFinished(
   // A checkpoint hit leaves the CPU stopped: end the wait without resuming it, and report where it stopped.
   const stoppedOutcome = async (): Promise<{ loaded: boolean; stopped: true; pc?: number }> => {
     try {
-      const [metadata, values] = await Promise.all([client.registersAvailable(0), client.registersGet(0)]);
+      const [metadata, values] = await Promise.all([cachedRegisterMetadata(client, 0), client.registersGet(0)]);
       const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
       const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
       return pc === undefined ? { loaded: false, stopped: true } : { loaded: false, stopped: true, pc };
