@@ -146,7 +146,7 @@ A sample player that reads from Ultimate memory (normally the REU area). Enable 
 | `+$1F` | bit 0 = 1 clears this voice's IRQ; `$FF` clears all voices' IRQs |
 
 - Reads: even offsets return the IRQ status bits of all voices, odd offsets `$10`.
-- The registers have no reset: after power-up volume is 32, pan 8, rate 0, start 0, length 0, and they keep their values across a C64 reset. Write every register of a voice before setting the enable bit.
+- The FPGA registers have no reset input: at power-up volume is 32, pan 8, rate 0, start 0, length 0. On every C64 reset the firmware writes control 0 and volume 0 to all 8 voices (`software/io/audio/sampler.h:35-42`, called from `command_intf.cc:130`); pan, rate, addresses and lengths keep their values. Write every register of a voice before setting the enable bit.
 - The start address is an SDRAM address; the REU begins at `$1000000`, so REU offset X is start address `$1000000 + X` (`reu.vhd:19`).
 - Sample rate = 6.25 MHz / (rate + 1): `sampler2.vhd` normalises its clock to 50 MHz and serves the 8 voices in turn. Measured U64: 21,949 Hz at rate 283, 43,517 Hz at 141, 10,909 Hz at 567, all within 1.2 % below the formula.
 - Clearing the enable bit stops the voice but keeps its last sample as a constant output level (`sampler2.vhd`, state `idle` and `finished` keep `sample_out`); write volume 0 as well to silence it.

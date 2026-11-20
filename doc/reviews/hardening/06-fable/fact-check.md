@@ -423,7 +423,7 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | System Mode timing per value (63/65 cycles, 50/60 Hz, encoding, locked carrier) | hardware | ADDED (replaced "hybrid modes decouple") | software/u64/color_timings.cc:6-29 |
 | Speaker items only on MK1 build | hardware | CONFIRMED (table row) | u64_config.cc:381-384 |
 | Elite II Programmatic LED window $D200-$D2FF | hardware | CORRECTED (was "$D2xx/$D3xx (2026-05)") | software/u64/led_strip.cc:420-423 |
-| Sampler register reset values 63/7/283/REU 0 | hardware | CORRECTED: registers have no reset; power-up volume 32, pan 8, rate 0, start 0, length 0 | fpga/io/sampler/vhdl_source/sampler_regs.vhd (c_voice_control_init unused) |
+| Sampler register reset values 63/7/283/REU 0 | hardware | CORRECTED: registers have no reset; power-up volume 32, pan 8, rate 0, start 0, length 0; firmware zeroes control and volume of all voices on C64 reset | fpga/io/sampler/vhdl_source/sampler_regs.vhd (c_voice_control_init unused); software/io/audio/sampler.h:35-42 |
 | Sampler voice n at $DF20+32n, n = 0-6 | hardware | CONFIRMED | slot_server_v4.vhd:953-958; slot_to_io_bridge.vhd:61-65 |
 | Sample rate 6.25 MHz/(rate+1) | hardware | CONFIRMED (VHDL + measured U64 row 30) | sampler2.vhd |
 | 24-bit field byte order, 16-bit/interleave modes "(unverified)" | hardware | RESOLVED from VHDL (high byte first; bits 5-4, bit 6) | sampler_regs.vhd |
