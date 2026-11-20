@@ -105,7 +105,7 @@ timeline:
 
 ### Instrument wavetables
 
-An instrument may define `wavetable` as ordered control and pitch steps. Each step runs for `frames` player calls (default 1); the last step holds unless the instrument sets `loop` to a zero-based step index. Omitted `wave` retains the instrument waveform. `gate` defaults to on. `ring`, `sync`, and `test` set the SID control register bits for that step. A step `note` of `+N` or `-N` offsets the played note by semitones; a note name such as `C5` fixes the pitch regardless of the played note. Pitch effects such as vibrato, slide, and arpeggio are bypassed while a step has a note override. Hard restart still occurs before each new note.
+An instrument may define `wavetable` as ordered control and pitch steps. Each step runs for `frames` player calls (default 1); the last step holds unless the instrument sets `loop` to a zero-based step index. Omitted `wave` retains the instrument waveform. `gate` defaults to on. `ring`, `sync`, and `test` set the SID control register bits for that step. A step `note` of `+N` or `-N` offsets the played note by semitones; a note name such as `C5` fixes the pitch regardless of the played note. Pitch effects such as vibrato, slide, and arpeggio are bypassed while a step has a note override. A new attack starts the table at its first step. A legato note continues the running table.
 
 ```yaml
 instruments:
@@ -177,14 +177,19 @@ instruments:
 ```
 
 The emulator budget fixture runs two song loops with three wavetable and pulse
-table voices and one filter table. Its highest measured play call takes **3027
+table voices and one filter table. Its highest measured play call takes **3088
 6502 cycles**, including indexed reads and branches that cross pages. The player
-and its data grow from **3947 to 4549 bytes** (+602) versus the same fixture
+and its data grow from **3975 to 4577 bytes** (+602) versus the same fixture
 with wavetables alone, excluding the PRG load address and song streams.
+
+The three-voice example below peaks at **3903 cycles per player call** in the
+emulator. Its player and data use **4944 bytes**, up from **4844 bytes** with
+portamento and legato removed from the same score. Song streams are counted
+separately.
 
 The legacy shape with a `song: { title, author, tempo, mode, length_bars, global_fx }` block next to `voices` and `timeline` is also accepted.
 
-Time is 4/4: a bar has four beats. The player runs once per video frame of a real C64 (50.1245 Hz on PAL, 59.8262 Hz on NTSC). Every onset is placed on the nearest frame of its exact time (`beat × 60 / tempo × frame rate`), so long songs do not drift; individual notes may be one frame longer or shorter than the average.
+Time is 4/4: a bar has four beats. The player runs `speed` times per video frame (50.1245 Hz on PAL, 59.8262 Hz on NTSC). Each onset is rounded to the nearest player call using `beat × 60 / tempo × frame rate × speed`. Individual notes can differ by a call as a result of rounding.
 
 ## Voices
 
@@ -195,6 +200,7 @@ Time is 4/4: a bar has four beats. The player runs once per video frame of a rea
 | `waveform` | `pulse`, `sawtooth` (`saw`), `triangle` (`tri`) or `noise`. Default `pulse`. |
 | `pulse_width` | Pulse duty cycle: a fraction (0 < x ≤ 1, e.g. `0.3`) or a 12-bit value 1–4094. Default 2048 (50 %). |
 | `adsr` | `[attack, decay, sustain, release]`, each 0–15 (SID register nibbles). Default `[2, 2, 10, 3]`. |
+| `instrument` | Default named instrument or `lib:<name>` recipe. |
 | `patterns` | Named patterns used by the timeline. |
 
 ## Patterns
@@ -202,7 +208,8 @@ Time is 4/4: a bar has four beats. The player runs once per video frame of a rea
 Every pattern is a list of **entries**. Each entry lasts `length` beats (default 1; fractions allowed, e.g. `0.25` for sixteenth notes). The pattern repeats until its section ends; a note that would run past the section end is cut there.
 
 - **groove** — `groove: [C2, "-", C2, "~", G1]`: one note per entry. `-` (or `.`) is a rest, `~` ties the entry to the previous note (no retrigger). A tie holds whatever note is sounding right before it, also across a section boundary (a section that starts with `~` continues the last note of the previous section). After a rest, or at the very start of the song, a tie is a rest.
-- Per-note entries also accept `C3@bass` or `{ note: C3, inst: bass, len: 0.25, legato: true }`. `drums: { kit: { k: lib:kick, h: lib:hat }, steps: "k.h" }` expands each character into one entry of `length` beats; `.` is a rest. A legato entry keeps the gate on while changing the note.
+- **per-note options** — Write `C3@bass` to choose an instrument or `{ note: C3, inst: bass, len: 0.25, legato: true, portamento: 4 }` to set articulation and override the note duration in beats.
+- **drums** — `drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.h.s.h." }` is an alternative to `groove`. Each character occupies one entry of `length` beats. A period is a rest and each letter plays the mapped instrument at C3. The library drums use absolute pitches in their wavetables, so score transposition leaves their pitches alone.
 - **arpeggio** — `type: arpeggio`, `notes: [...]`. Without `frame_rate`, the notes are played one per entry (a broken chord). With `frame_rate: N`, all notes form one entry that sounds as a fast chord arpeggio, switching to the next chord tone every N frames (`frame_rate: 1` = one tone per frame, about 50 per second on PAL); each entry retriggers the chord.
 - **motif** — `motif: "..."` with tokens separated by spaces or commas:
   - note names (`C4`, `Eb3`, `F#2`),
@@ -243,39 +250,86 @@ Fading lowers the voice's sustain level linearly to 0 across the section. When e
 
 Without `filter_env`, a `filter_mod` uses a low-pass filter with cutoff 1024 and resonance 8 as its base. The SID has a single filter, so all routed voices share it; when several patterns with `filter_mod` start at once, the most recent start sets the ramp.
 
+## Portamento and legato
+
+Set either field on a named instrument or on a groove note object. Entry values take precedence over the instrument defaults.
+
+- `portamento: N` starts from the preceding note's pitch on the same voice, including after a rest. It reaches the new target after **N player calls**, interpolating the SID frequency linearly. The range is 0–255. Zero disables the glide. The first note of each loop starts normally. A glide replaces the instrument's ordinary slide for that note. Wavetable rows that set a pitch take precedence while those rows are active.
+- `legato: true` changes the pitch of a contiguous note while preserving the active instrument, gate, ADSR and table positions. If the entry names another instrument, that instrument's articulation settings still apply. Use a normal attack to switch the sounding instrument. After a rest or at the start of the loop, the player makes a normal attack. An explicit `false` restores hard restart when the instrument defaults to legato.
+
+## Built-in instruments
+
+Use these names as voice defaults, groove note instruments, or drum kit entries. The recipes use techniques described in [SID programming best practices](sid-programming-best-practices.md) and the [SID specification](sid-spec.md).
+
+| Name | Sound |
+| --- | --- |
+| `lib:kick` | One noise transient followed by descending pulse and triangle pitches. |
+| `lib:snare` | A longer noise burst with a falling noise pitch and a short pitched body. |
+| `lib:hat` | A bright noise tick that drops in pitch and releases quickly. |
+| `lib:bass_pluck` | An octave pulse transient over a decaying triangle bass. |
+| `lib:filter_bass` | A saw bass with a resonant low-pass filter sweep on each attack. |
+| `lib:lead_pwm` | A pulse lead with a looping pulse width sweep. |
+| `lib:chip_arp_major` | A repeating root, major third, fifth and octave on one voice. |
+| `lib:chip_arp_minor` | A repeating root, minor third, fifth and octave on one voice. |
+| `lib:bell_ring` | A ring modulated triangle with a bright octave attack. |
+| `lib:sync_lead` | A hard synced saw with a short octave transient. |
+| `lib:pad_slow` | A slow triangle envelope with a cycling low-pass filter. |
+
 ## SIDWAVE 1.1 authoring techniques
 
-Use a wavetable to change a drum from a short noise transient into a pitched pulse/triangle tail, then reuse that voice for bass. Use one voice for a fast chord arpeggio, allow hard restart enough time before each new note, and route a bass through filter sweeps. Pulse leads benefit from PWM and delayed vibrato. Echo a phrase later on an otherwise free voice, use octave jumps to vary repetitions, and reserve one voice for ring modulation or hard sync. The SID has one shared filter; the most recent instrument with a filter table owns its settings. Voice 1 is modulated/synced by voice 3, voice 2 by voice 1, and voice 3 by voice 2. Combined waveforms can be quieter and are model-dependent between 6581 and 8580.
-
-Built-in recipes: `lib:kick` (noise burst into descending pitched tail), `lib:snare` (noise burst into pitched tail), `lib:hat` (gated noise tick), `lib:bass_pluck` (octave transient over triangle), `lib:filter_bass` (saw bass with a falling filter table), `lib:lead_pwm` (pulse lead with a looping pulse-width table), `lib:chip_arp_major` (looping major triad), `lib:chip_arp_minor` (looping minor triad), `lib:bell_ring` (ring-modulated triangle), `lib:sync_lead` (sync saw), and `lib:pad_slow` (slow triangle pad with filter sweep).
+Share a voice between wavetable drums and filtered bass. Cycle chord tones quickly on a second voice and give the third voice a PWM lead with delayed vibrato and legato glides. Use hard restart for a fresh attack. Vary phrases with octave jumps or add a delayed copy to an otherwise free voice. The SID has one shared filter. The most recent active filter table controls its settings. Voice 1 takes its ring or sync source from voice 3, voice 2 from voice 1, and voice 3 from voice 2. Choose notes for that source voice when writing a ring or sync accent. Combined waveforms can be quieter and sound different on a 6581 and an 8580.
 
 ```yaml
 sidwave: 1.1
+title: Night Signals
 tempo: 132
+mode: PAL
 speed: 2
 instruments:
-  bass: { waveform: saw, adsr: [0, 7, 9, 3], ring: true }
+  ribbon:
+    waveform: pulse
+    adsr: [1, 4, 10, 3]
+    portamento: 5
+    pulsetable:
+      steps: [{ set: 0.25 }, { add: 28, frames: 15 }, { add: -28, frames: 15 }]
+      loop: 1
+    vibrato: { depth: 0.35, rate: 5, delay: 8 }
 voices:
   - id: 1
-    instrument: bass
-    patterns: { line: { groove: [C2, G1, C2, G1] } }
+    instrument: lib:filter_bass
+    patterns:
+      line: { length: 0.5, groove: [C2, C2@lib:hat, G1, C2@lib:snare, C2, Bb1, C2@lib:kick, "-"] }
+      break: { length: 0.5, drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.h.s.h." } }
   - id: 2
     instrument: lib:chip_arp_major
-    patterns: { chord: { type: arpeggio, notes: [C4, E4, G4], frame_rate: 2 } }
+    patterns:
+      chord: { groove: [C4, C4, G3, Bb3@lib:chip_arp_minor] }
   - id: 3
-    instrument: lib:lead_pwm
-    patterns: { lead: { groove: [C5@lib:bell_ring, { note: G4, inst: lib:lead_pwm, len: 0.5, legato: true }] } }
+    instrument: ribbon
+    patterns:
+      lead:
+        length: 0.5
+        groove:
+          - C5
+          - { note: G4, legato: true }
+          - E5
+          - { note: D5, legato: true, portamento: 3 }
+          - C5@lib:bell_ring
+          - "-"
+          - G4
+          - { note: C5, legato: true }
 timeline:
-  - { section: A, bars: 2, tempo: 132, swing: 0.12, layers: { v1: line, v2: chord, v3: lead } }
+  - { section: Theme, bars: 2, layers: { v1: line, v2: chord, v3: lead } }
+  - { section: Break, bars: 1, layers: { v1: break, v2: chord+12, v3: lead } }
 ```
 
 ---
 
 ## Player
 
-The compiler arranges the timeline into per-voice note events and encodes them as compact command streams (note, instrument, wait, gate-off, hard restart, sustain, volume, filter ramp, loop). A 6502 player reads these streams once per video frame and computes per-frame effects itself.
+The compiler arranges the timeline into per-voice note events and encodes them as compact command streams (note, instrument, wait, gate-off, hard restart, portamento, legato, sustain, volume, filter ramp, loop). A 6502 player reads these streams on each call and computes per-frame effects itself.
 
-- **Hard restart:** two frames before every new note the player clears the voice's gate bit and writes 0 to its attack/decay and sustain/release registers. Release 0 takes the envelope from any level to zero in 6 ms (Mapping the Commodore 64, `$D406`), well inside the 2 frames (40 ms PAL, 33 ms NTSC). Rate 0 also sets the shortest envelope rate period (9 cycles), so at the next gate-on the SID's rate counter is below the new attack period. A rate counter above the new period would count on to 32768 and wrap before the envelope moves, delaying the attack by up to 32768 cycles (33 ms at the PAL clock) (the ADSR delay bug, reSID `envelope.h`, measured by Dag Lem by sampling ENV3 on a MOS SID). A note therefore sounds with the gate on until two frames before the next note, so every note needs at least 3 frames (one sounding frame plus the hard restart). Entries shorter than 3 frames are rejected, which limits very short entries at fast tempos (for example 1/16 notes are fine at 220 BPM, 1/32 notes are not). A note that is cut to fewer than 3 frames by the end of a section is dropped.
+- **Hard restart:** two calls before a new attack the player clears the voice's gate bit and writes 0 to its attack/decay and sustain/release registers. Release 0 takes the envelope from any level to zero in 6 ms (Mapping the Commodore 64, `$D406`), well inside the 2 calls at normal speed (40 ms PAL, 33 ms NTSC). Rate 0 also sets the shortest envelope rate period (9 cycles), so at the next gate-on the SID's rate counter is below the new attack period. A rate counter above the new period would count on to 32768 and wrap before the envelope moves, delaying the attack by up to 32768 cycles (33 ms at the PAL clock) (the ADSR delay bug, reSID `envelope.h`, measured by Dag Lem by sampling ENV3 on a MOS SID). A note therefore sounds with the gate on until two calls before the next attack, so every note needs at least 3 calls (one sounding frame plus the hard restart). Entries shorter than 3 calls are rejected, which limits very short entries at fast tempos (for example 1/16 notes are fine at 220 BPM, 1/32 notes are not). A note that is cut to fewer than 3 calls by the end of a section is dropped.
 - **Gate:** a rest releases the gate at its start, so the note decays with its release rate.
 - **Instruments:** each voice/pattern/effect combination becomes an instrument with its own ADSR, waveform, pulse settings, vibrato, arpeggio table, slide and filter routing (up to 63).
 - **Memory:** the program loads at $0801 and must end below $D000 (about 50 KB). Very long, dense songs are rejected with a validation error rather than truncated. The player uses zero-page bytes $FB/$FC and restores them after every call.
@@ -283,10 +337,10 @@ The compiler arranges the timeline into per-voice note events and encodes them a
 
 ### Output formats
 
-- **PSID (`output: sid`):** PSID v2 with init at $0810, play at $0813, vertical-blank timing, and the PAL or NTSC clock flag from `mode`. The SID model is left unspecified.
-- **PRG (`output: prg`):** `10 SYS2061`. The program detects whether the machine is PAL or NTSC, programs CIA 1 timer A for the song's frame rate on that clock, installs an IRQ handler, and returns to BASIC while the music plays. Pitch and tempo are therefore correct on either machine type.
+- **PSID (`output: sid`):** PSID v2 with init at $0810, play at $0813, and the PAL or NTSC clock flag from `mode`. Speed 1 uses vertical-blank timing. Higher speeds set the first song’s CIA timing bit and write the CIA timer latch in init. The header does not encode a numeric play rate. The SID model is unspecified.
+- **PRG (`output: prg`):** `10 SYS2061`. The program detects whether the machine is PAL or NTSC, programs CIA 1 timer A for the song’s play rate on that clock, installs an IRQ handler, and returns to BASIC while the music plays. Pitch and tempo are therefore correct on either machine type.
   - Before returning, it moves the start of BASIC and the variable area behind the player (like `NEW` with a raised start of BASIC), so direct-mode commands, variables and new program lines work without touching the player. The compile result reports `basicFreeBytes`. A song whose PRG ends at or above $A000 leaves no BASIC memory: BASIC commands that need memory then fail with `?OUT OF MEMORY` while the music keeps playing, and the compile result carries a warning.
-  - Because the KERNAL's IRQ (keyboard scan, cursor blink, jiffy clock) now runs at the song's frame rate instead of 60 Hz, `TI`/`TI$` runs about 16.5 % slow for a PAL song (0.3 % for NTSC), and key repeat and cursor blink slow down accordingly while the music plays.
+  - The KERNAL IRQ (keyboard scan, cursor blink, jiffy clock) runs at the song’s play rate. At speed 1, `TI`/`TI$` runs about 16.5% slow for a PAL song and 0.3% slow for NTSC. Higher speeds also increase the KERNAL IRQ rate.
 
 ### Not supported
 
