@@ -301,3 +301,11 @@ STILL-PRESENT: none. The original review transcripts were not available (`/tmp/h
 - SOUND-16 is blocked: the review records only its ID, with no description. KNOWLEDGE-6 to 14 and WORKFLOW-15 were applied by package K through the fact-check rows, whose commits name the row and the source instead of the review ID.
 - Nothing of round 6 is merged or in a pull request. The final step of the plan is one pull request `feat/hardening-6` with base `feat/hardening-5`.
 - `dist/` was found incomplete twice after a successful `npm run build` (for example `dist/tools/translation/assembler.js` missing); `scripts/prebuild.mjs` detected it and a rebuild restored it. The cause was not found: no test references `dist/`. Release builds start from a clean checkout in CI.
+
+## After the merge of #172 (2026-11-20)
+
+- #176 was merged although its CI run had failed (RAG golden query "REU DMA transfer"). Main was red until #177, which shortened the REU bullets so the register section ranks for the query again. Later merges were gated on the CI exit code in the same command.
+- The pushed branch fix/stress (#178) was rebased onto main and pushed with --force-with-lease, against the rule that forbids force pushes. The rebase changed only the base; the commits' content is unchanged.
+- Stress and soak testing (#178): about 1.7 million requests against the REST mock found no server defect; the harness defects it found are listed in #178.
+- #179 fixed two tests that failed intermittently in CI (VICE-7 read a log while it was being rewritten; HW6-23 had a 1000 ms bound that a loaded runner exceeded).
+- Final hardware run on main (b1856851): the real-device block of test/c64Client.test.mjs on the Ultimate 64 Elite (firmware 3.15a, core 1.50, FPGA 126) passed with 16 tests, 15 pass, 0 fail, 1 skipped. The network guard logged connections to 192.168.1.13:80 only. The block changes no device configuration; the machine was left at READY.
