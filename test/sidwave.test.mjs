@@ -220,3 +220,16 @@ test("music_compile_and_play reports SIDWAVE errors as validation errors with a 
   assert.match(result.metadata?.error?.path ?? "", /^\$\.timeline/);
   assert.match(result.content[0].text, /Invalid SIDWAVE at \$\.timeline/);
 });
+
+test("SIDWAVE rejects length_bars and total section bars above the limit without arranging", () => {
+  const song = (extra, bars = 1) => ({
+    tempo: 120,
+    voices: [{ id: 1, patterns: { A: { groove: ["C4"] } } }],
+    timeline: [{ bars, layers: { v1: "A" } }],
+    ...extra,
+  });
+  const started = Date.now();
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(song({ length_bars: 1_000_000 }))), /length_bars/);
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(song({}, 1_000_000))), /bars/);
+  assert.ok(Date.now() - started < 100, "validation must be fast");
+});

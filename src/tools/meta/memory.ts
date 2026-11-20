@@ -1,5 +1,5 @@
 // Memory-related meta tools
-import type { ToolDefinition } from "../types.js";
+import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
@@ -8,6 +8,7 @@ import { dirname } from "node:path";
 import { resolveHostPath } from "../../hostPaths.js";
 import { createHash } from "node:crypto";
 import { normalizeErrorDetails } from "./util.js";
+import { parseNumericLiteral, assertNotBareHex, assertAddressRange } from "../../numericArg.js";
 import { stripHexByteSeparators } from "../hex.js";
 import { acquireOwnedPause, resumeWarning } from "../pauseGuard.js";
 
@@ -37,16 +38,12 @@ function parseAddressNumeric(value: string): number {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new ToolValidationError("Address must be a non-empty string", { path: "$.address" });
   }
-  const lower = value.trim().toLowerCase();
-  // Anchored patterns: Number.parseInt alone would read "$20ZZ" as $0020.
-  let parsed = Number.NaN;
-  if (/^\$[0-9a-f]+$/.test(lower)) parsed = Number.parseInt(lower.slice(1), 16);
-  else if (/^0x[0-9a-f]+$/.test(lower)) parsed = Number.parseInt(lower.slice(2), 16);
-  else if (/^%[01]+$/.test(lower)) parsed = Number.parseInt(lower.slice(1), 2);
-  else if (/^[0-9]+$/.test(lower)) parsed = Number.parseInt(lower, 10);
-  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0 || parsed > 0xFFFF) {
+  const parsed = parseNumericLiteral(value, "$.address");
+  if (parsed === undefined) {
+    assertNotBareHex(value, "$.address");
     throw new ToolValidationError("Invalid address value", { path: "$.address", details: { value } });
   }
+  assertAddressRange(parsed, undefined, "$.address");
   return parsed;
 }
 
@@ -76,7 +73,7 @@ const memoryDumpToFileArgsSchema = objectSchema({
     format: optionalSchema(stringSchema({ description: "Output format: hex|binary", enum: ["hex", "binary"], default: "hex" as any }), "hex" as any),
     chunkSize: optionalSchema(numberSchema({ description: "Chunk size for reads", integer: true, minimum: 1, maximum: 4096, default: 512 }), 512),
     pauseDuringRead: optionalSchema(booleanSchema({ description: "Pause/resume around dump", default: true }), true),
-    retries: optionalSchema(numberSchema({ description: "Retries per chunk on failure", integer: true, minimum: 0, default: 1 }), 1),
+    retries: optionalSchema(numberSchema({ description: "Retries per chunk on failure", integer: true, minimum: 0, maximum: 10, default: 1 }), 1),
   },
   required: ["address", "length", "outputPath"],
   additionalProperties: false,
@@ -153,7 +150,8 @@ export const tools: ToolDefinition[] = [
             const before = preBytesAgain[i] ?? 0x00;
             const after = postBytes[i] ?? 0x00;
             const exp = writeBytes[i] ?? 0x00;
-            if (after !== exp) {
+            const postMask = maskBytes ? (maskBytes[i] ?? 0xFF) : 0xFF;
+            if ((after & postMask) !== (exp & postMask)) {
               diffs.push({ offset: i, before: `$${before.toString(16).toUpperCase().padStart(2, "0")}`, after: `$${after.toString(16).toUpperCase().padStart(2, "0")}`, expected: `$${exp.toString(16).toUpperCase().padStart(2, "0")}` });
             }
           }
@@ -199,6 +197,7 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         const parsed = memoryDumpToFileArgsSchema.parse(args ?? {});
+        if (ctx.signal?.aborted) return cancelledResult("memory_dump was cancelled before reading; no file was written");
         const startAddr = parseAddressNumeric(parsed.address);
         const length = parsed.length as number;
         if (startAddr + length > 0x10000) {
@@ -225,6 +224,9 @@ export const tools: ToolDefinition[] = [
         let released = false;
         try {
           while (offset < length) {
+            if (ctx.signal?.aborted) {
+              return cancelledResult(`memory_dump was cancelled by the client after ${offset} of ${length} bytes; no file was written`);
+            }
             const remaining = length - offset;
             const take = Math.min(chunk, remaining);
             const addr = startAddr + offset;
@@ -239,6 +241,7 @@ export const tools: ToolDefinition[] = [
               attempts += 1;
               try {
                 const r = await (ctx.client as any).readMemory(`$${formatAddressHex(addr)}`, String(take), pinned);
+                if (ctx.signal?.aborted) return cancelledResult(`memory_dump was cancelled after ${offset} of ${length} bytes; no file was written`);
                 if (!r.success || typeof r.data !== "string") {
                   throw new ToolExecutionError("Firmware returned failure for chunk", { details: normalizeErrorDetails(r.details) });
                 }
@@ -249,6 +252,7 @@ export const tools: ToolDefinition[] = [
                 Buffer.from(bytes).copy(buf, offset, 0, take);
                 success = true;
               } catch (e) {
+                if (ctx.signal?.aborted) return cancelledResult(`memory_dump was cancelled after ${offset} of ${length} bytes; no file was written`);
                 lastErr = e;
                 if (attempts > (parsed.retries ?? 1)) {
                   throw e;

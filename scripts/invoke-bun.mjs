@@ -94,7 +94,29 @@ if (isMainModule(import.meta.url)) {
     },
   });
 
+  const forwarders = new Map();
+  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+    const forward = () => {
+      try {
+        child.kill(signal);
+      } catch {}
+    };
+    forwarders.set(signal, forward);
+    process.on(signal, forward);
+  }
+  const removeForwarders = () => {
+    for (const [signal, forward] of forwarders) {
+      process.removeListener(signal, forward);
+    }
+  };
+
+  child.on("error", (error) => {
+    removeForwarders();
+    console.error(`[invoke-bun] Unable to start Bun: ${error.message}`);
+    process.exitCode = 1;
+  });
   child.on("exit", (code, signal) => {
+    removeForwarders();
     if (signal) {
       process.kill(process.pid, signal);
       return;

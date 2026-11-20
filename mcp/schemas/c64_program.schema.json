@@ -130,6 +130,7 @@
       ],
       "description": "Duration to run each program before assertions",
       "minimum": 1,
+      "maximum": 600000,
       "default": 2000
     },
     "outputPath": {
@@ -168,6 +169,7 @@
         "array",
         "null"
       ],
+      "description": "Memory snapshots, at most 256 ranges and 2 MiB of requested memory in total.",
       "items": {
         "type": "object",
         "description": "Memory range to snapshot",
@@ -180,7 +182,8 @@
           "length": {
             "type": "integer",
             "description": "Length in bytes",
-            "minimum": 1
+            "minimum": 1,
+            "maximum": 65536
           }
         },
         "required": [
@@ -188,7 +191,8 @@
           "length"
         ],
         "additionalProperties": false
-      }
+      },
+      "maxItems": 256
     },
     "captureDebugReg": {
       "type": [

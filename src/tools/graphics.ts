@@ -670,7 +670,7 @@ export const graphicsModule = defineToolModule({
         {
           name: "Render sprite 0",
           description: "Show sprite at 100,100",
-          arguments: { sprite: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", index: 0, x: 100, y: 100, color: 1, multicolour: false },
+          arguments: { sprite: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", index: 0, x: 100, y: 100, color: 1, multicolour: false },
         },
       ],
       workflowHints: [

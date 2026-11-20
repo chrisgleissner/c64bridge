@@ -264,8 +264,13 @@ describe("meta/background state loading", () => {
 
   test("getTasksHomeDir falls back to the standard .c64bridge directory", async () => {
     const { getTasksHomeDir } = await loadBackgroundTools("default-home");
-
-    expect(getTasksHomeDir()).toBe(path.resolve(path.join(os.homedir(), ".c64bridge")));
+    const previousStateDir = process.env.C64BRIDGE_STATE_DIR;
+    delete process.env.C64BRIDGE_STATE_DIR;
+    try {
+      expect(getTasksHomeDir()).toBe(path.resolve(path.join(os.homedir(), ".c64bridge")));
+    } finally {
+      if (previousStateDir !== undefined) process.env.C64BRIDGE_STATE_DIR = previousStateDir;
+    }
   });
 
   test("start_background_task writes per-task state files alongside the registry file", async () => {

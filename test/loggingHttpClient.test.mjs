@@ -413,3 +413,45 @@ test("device requests bypass HTTP proxies", () => {
   const client = createLoggingHttpClient({ baseURL: "http://127.0.0.1" }, createMockLogger());
   assert.equal(client.instance.defaults.proxy, false);
 });
+
+test("HARD03-006 a wildcard item name does not leak the value of a configuration write", () => {
+  const logger = createDebugLogger();
+  const client = createLoggingHttpClient({ baseURL: "http://localhost" }, logger);
+  const secret = "hunter2-wildcard";
+
+  // "Network P?ssword" is a firmware wildcard for "Network Password" and does not match the credential pattern.
+  const requestConfig = client.instance.interceptors.request.handlers[0].fulfilled({
+    method: "put",
+    url: "/v1/configs/Network%20settings/Network%20P%3Fssword",
+    params: { value: secret },
+  });
+  client.instance.interceptors.response.handlers[0].fulfilled({
+    status: 200, data: { errors: [] }, config: requestConfig, headers: {},
+  });
+  const batchConfig = client.instance.interceptors.request.handlers[0].fulfilled({
+    method: "post",
+    url: "/v1/configs",
+    data: { "Network settings": { "Network P?ssword": secret } },
+  });
+  client.instance.interceptors.response.handlers[0].fulfilled({
+    status: 200, data: { errors: [] }, config: batchConfig, headers: {},
+  });
+
+  const everything = JSON.stringify([logger.logs.info, logger.logs.debug]);
+  assert.equal(everything.includes(secret), false);
+  assert.ok(everything.includes("Network%20P%3Fssword"), "item names stay visible");
+  assert.ok(everything.includes("Network P?ssword"), "item names stay visible in batch bodies");
+});
+
+test("HARD03-006 a value in the query string of a configuration write is not logged", () => {
+  const logger = createDebugLogger();
+  const client = createLoggingHttpClient({ baseURL: "http://localhost" }, logger);
+  const requestConfig = client.instance.interceptors.request.handlers[0].fulfilled({
+    method: "put",
+    url: "/v1/configs/Audio%20Mixer/Vol%20UltiSid%201?value=hunter3",
+  });
+  client.instance.interceptors.response.handlers[0].fulfilled({
+    status: 200, data: {}, config: requestConfig, headers: {},
+  });
+  assert.equal(JSON.stringify([logger.logs.info, logger.logs.debug]).includes("hunter3"), false);
+});

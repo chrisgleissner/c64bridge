@@ -1,7 +1,7 @@
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
 import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
-import { defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
+import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
   booleanSchema,
   numberSchema,
@@ -400,14 +400,18 @@ function shouldAutoAnalyze(request: string): boolean {
 type AudioAnalyzer = (options: {
   durationSeconds: number;
   expectedSidwave?: string | Record<string, unknown>;
+  signal?: AbortSignal;
 }) => Promise<Awaited<ReturnType<typeof recordAndAnalyzeAudio>>>;
 
 function resolveAnalyzer(ctx: ToolExecutionContext): AudioAnalyzer {
   const candidate = (ctx.client as { recordAndAnalyzeAudio?: unknown } | undefined)?.recordAndAnalyzeAudio;
   if (typeof candidate === "function") {
-    return (options) => (candidate as AudioAnalyzer).call(ctx.client, options);
+    return (options) => {
+      ctx.signal?.throwIfAborted();
+      return (candidate as AudioAnalyzer).call(ctx.client, { ...options, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+    };
   }
-  return (options) => recordAndAnalyzeAudio(options);
+  return (options) => recordAndAnalyzeAudio({ ...options, ...(ctx.signal ? { signal: ctx.signal } : {}) });
 }
 
 /**
@@ -488,8 +492,13 @@ function generateAudioFeedback(analysisResult: unknown, userRequest: string): st
     }
 
     if (/(sound.*right|sound.*good|sound.*correct)/.test(userRequest.toLowerCase())) {
-      const deviation = Math.abs((globalMetrics.average_pitch_deviation as number) ?? 0);
-      if (deviation < 20) {
+      const rawDeviation = globalMetrics.average_pitch_deviation;
+      const notesDetected = voices.some((voice: any) =>
+        Array.isArray(voice?.detected_notes) && voice.detected_notes.some((n: any) => n?.note && n?.frequency));
+      const deviation = typeof rawDeviation === "number" && Number.isFinite(rawDeviation) ? Math.abs(rawDeviation) : 0;
+      if (typeof rawDeviation !== "number" || !Number.isFinite(rawDeviation) || !notesDetected) {
+        feedback += "\n\nNo audio was detected, so there is no verdict on the music. Check that the SID is playing and the audio source is connected.";
+      } else if (deviation < 20) {
         feedback += "\n\n✓ The music sounds accurate with good pitch stability.";
       } else if (deviation < 50) {
         feedback += "\n\n⚠ The music has some pitch variation but is generally recognizable.";
@@ -1146,6 +1155,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = recordAndAnalyzeArgsSchema.parse(args ?? {});
+          if (ctx.signal?.aborted) return cancelledResult();
           ctx.logger.info("Recording audio for analysis", { durationSeconds: parsed.durationSeconds });
 
           const analyzer = resolveAnalyzer(ctx);
@@ -1161,6 +1171,7 @@ export const audioModule = defineToolModule({
             globalMetrics: result.analysis?.global_metrics ?? {},
           });
         } catch (error) {
+          if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
           if (error instanceof ToolError) {
             return toolErrorResult(error);
           }
@@ -1191,6 +1202,7 @@ export const audioModule = defineToolModule({
       async execute(args, ctx) {
         try {
           const parsed = analyzeAudioArgsSchema.parse(args ?? {});
+          if (ctx.signal?.aborted) return cancelledResult();
           if (!shouldAutoAnalyze(parsed.request)) {
             return textResult(
               "No audio verification keywords detected. Use phrases like 'check the music' or 'verify the SID playback'.",
@@ -1218,6 +1230,7 @@ export const audioModule = defineToolModule({
             analysis,
           });
         } catch (error) {
+          if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
           if (error instanceof ToolError) {
             return toolErrorResult(error);
           }

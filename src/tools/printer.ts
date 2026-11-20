@@ -1,4 +1,4 @@
-import { defineToolModule } from "./types.js";
+import { cancelledResult, defineToolModule } from "./types.js";
 import {
   arraySchema,
   booleanSchema,
@@ -16,6 +16,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { ToolError } from "./errors.js";
+import { sleepUnlessAborted } from "./meta/util.js";
 
 interface PrintTextArgs extends Record<string, unknown> {
   text: string;
@@ -354,14 +355,46 @@ export const printerModule = defineToolModule({
           });
         }
 
-        return textResult("Printer job completed successfully.", {
-          success: true,
-          target: parsed.target,
-          textLength: parsed.text.length,
-          secondaryAddress: parsed.secondaryAddress ?? null,
-          formFeed: parsed.formFeed,
-          details: toRecord(result.details) ?? null,
-        });
+        // Firmware run acknowledges launch before BASIC reaches OPEN 4. Observe a
+        // short bounded window, rather than accepting a stale READY prompt.
+        let deviceCheck: "no_error" | "unavailable" = "unavailable";
+        let sawRunning = false;
+        const deadline = Date.now() + 500;
+        try {
+          do {
+            if (ctx.signal?.aborted) return cancelledResult("Printer job started; device-error observation cancelled.");
+            const screen = await ctx.client.readScreen();
+            if (/\?DEVICE NOT PRESENT/.test(screen)) {
+              throw new ToolExecutionError("Printer job failed: the C64 reported ?DEVICE NOT PRESENT", {
+                details: { screen: screen.trimEnd() },
+              });
+            }
+            deviceCheck = "no_error";
+            const ready = /(?:^|\n)READY\./.test(screen);
+            if (ready && sawRunning) break;
+            sawRunning ||= !ready;
+            await sleepUnlessAborted(Math.min(50, Math.max(0, deadline - Date.now())), ctx.signal);
+          } while (Date.now() < deadline);
+        } catch (error) {
+          if (error instanceof ToolError) throw error;
+          deviceCheck = "unavailable";
+        }
+        if (ctx.signal?.aborted) return cancelledResult("Printer job started; device-error observation cancelled.");
+
+        return textResult(
+          deviceCheck === "no_error"
+            ? "Printer job started; no device error was observed during the bounded screen check."
+            : "Printer job started; the screen could not be read, so device errors were not checked.",
+          {
+            success: true,
+            target: parsed.target,
+            textLength: parsed.text.length,
+            secondaryAddress: parsed.secondaryAddress ?? null,
+            formFeed: parsed.formFeed,
+            deviceCheck,
+            details: toRecord(result.details) ?? null,
+          },
+        );
         } catch (error) {
           if (error instanceof ToolError) {
             return toolErrorResult(error);

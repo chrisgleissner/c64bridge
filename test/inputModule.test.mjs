@@ -16,6 +16,7 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
   const memory = new Map();
 
   const stubClient = {
+    async pinFacade() { return facade; },
     async injectKeyboardQueue(bytes, options) {
       const data = Buffer.isBuffer(bytes)
         ? bytes
@@ -58,6 +59,11 @@ function createInputContext({ platformId = "c64u", recorder } = {}) {
       }
       return { errors: [], keyboard: { inputs: ["left_shift"] }, joysticks: [{ port: 2, inputs: ["fire2"] }] };
     },
+  };
+
+  const facade = {
+    type: platformId,
+    sendInputEvents: (batch) => stubClient.sendInputEvents(batch),
   };
 
   const ctx = {
@@ -309,4 +315,159 @@ test("c64_input.key rejects C128-only key names", async () => {
     const result = await toolRegistry.invoke("c64_input", { op: "key", key }, ctx);
     assert.equal(result.isError, true, key);
   }
+});
+
+test("HARD03-032 c64_input.joystick tap on c64u holds press for durationMs and then releases", async () => {
+  const { ctx, inputBatches } = createInputContext({ platformId: "c64u" });
+  const sent = [];
+  const base = ctx.client.sendInputEvents.bind(ctx.client);
+  ctx.client.sendInputEvents = async (batch) => {
+    sent.push({ at: Date.now(), batch });
+    return base(batch);
+  };
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 2, controls: ["fire2"], action: "tap", durationMs: 150,
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(
+    sent.map((entry) => entry.batch.events[0].transition),
+    ["press", "release"],
+  );
+  assert.deepEqual(inputBatches[0], { events: [{ kind: "joystick", port: 2, inputs: ["fire2"], transition: "press" }] });
+  assert.deepEqual(inputBatches[1], { events: [{ kind: "joystick", port: 2, inputs: ["fire2"], transition: "release" }] });
+  assert.ok(sent[1].at - sent[0].at >= 140, `held for ${sent[1].at - sent[0].at} ms`);
+});
+
+test("native joystick tap releases the original backend after a backend switch", async () => {
+  const { ctx, inputBatches } = createInputContext();
+  const original = await ctx.client.pinFacade();
+  let active = original;
+  ctx.client.pinFacade = async () => active;
+  const send = original.sendInputEvents;
+  original.sendInputEvents = async (batch) => {
+    const result = await send(batch);
+    active = { type: "vice", async sendInputEvents() { throw new Error("release reached VICE"); } };
+    return result;
+  };
+
+  const result = await toolRegistry.invoke("c64_input", {
+    op: "joystick", port: 2, controls: ["fire"], action: "tap", durationMs: 10,
+  }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(inputBatches.map((batch) => batch.events[0].transition), ["press", "release"]);
+});
+
+test("native joystick taps keep overlapping input changes behind their release", async () => {
+  for (const action of ["tap", "press", "release", "release_all"]) {
+    const { ctx, inputBatches } = createInputContext();
+    let acknowledgePress;
+    let pressSent;
+    const firstPress = new Promise((resolve) => { pressSent = resolve; });
+    const acknowledgement = new Promise((resolve) => { acknowledgePress = resolve; });
+    const send = ctx.client.sendInputEvents.bind(ctx.client);
+    ctx.client.sendInputEvents = async (batch) => {
+      const result = await send(batch);
+      if (inputBatches.length === 1) {
+        pressSent();
+        await acknowledgement;
+      }
+      return result;
+    };
+    const first = toolRegistry.invoke("c64_input", {
+      op: "joystick", port: 2, controls: ["fire"], action: "tap", durationMs: 10,
+    }, ctx);
+    await firstPress;
+    const second = toolRegistry.invoke("c64_input", action === "release_all" ? { op: action } : {
+      op: "joystick", port: 2, controls: ["fire"], action, durationMs: 10,
+    }, ctx);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(inputBatches.length, 1, `${action} must wait until the tap releases`);
+    acknowledgePress();
+    const results = await Promise.all([first, second]);
+    assert.ok(results.every((result) => result.isError === undefined));
+    assert.deepEqual(inputBatches.slice(0, 2).map((batch) => batch.events[0].transition), ["press", "release"]);
+    assert.equal(inputBatches[2].events[0].kind, action === "release_all" ? "release_all" : "joystick");
+  }
+});
+
+test("native joystick tap releases after a lost press response and preserves the primary error", async () => {
+  for (const releaseFails of [false, true]) {
+    const { ctx } = createInputContext();
+    let held = false;
+    const transitions = [];
+    ctx.client.sendInputEvents = async (batch) => {
+      const transition = batch.events[0].transition;
+      transitions.push(transition);
+      if (transition === "press") {
+        held = true;
+        throw new Error("press response lost");
+      }
+      if (releaseFails) throw new Error("cleanup failed");
+      held = false;
+      return {};
+    };
+    const result = await toolRegistry.invoke("c64_input", {
+      op: "joystick", port: 2, controls: ["fire"], action: "tap", durationMs: 10,
+    }, ctx);
+    assert.equal(result.isError, true);
+    assert.deepEqual(transitions, ["press", "release"]);
+    assert.equal(held, releaseFails);
+    assert.match(result.content[0].text, /press response lost/);
+    assert.equal(/cleanup failed/.test(result.content[0].text), false);
+  }
+});
+
+test("HARD03-029 c64_input.write_text reports a feed stopped at a checkpoint as not typed", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  ctx.client.injectKeyboardQueue = async () => ({ delivered: 3, status: "stopped", pending: 5, stoppedAt: 0x0810 });
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "HELLO WORLD" }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.data?.success, false);
+  assert.equal(result.structuredContent?.data?.status, "stopped");
+  assert.equal(result.structuredContent?.data?.pending, 5);
+  assert.equal(result.structuredContent?.data?.stoppedAt, 0x0810);
+  const text = String(result.content?.[0]?.text ?? "");
+  assert.match(text, /stopped/);
+  assert.match(text, /\$0810/);
+  assert.equal(/Sent 11 character/.test(text), false, text);
+});
+
+test("HARD03-029 c64_input.write_text reports a queued feed as held, not typed", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  ctx.client.injectKeyboardQueue = async () => ({ delivered: 0, status: "queued", pending: 11 });
+  const result = await toolRegistry.invoke("c64_input", { op: "write_text", text: "HELLO WORLD" }, ctx);
+
+  assert.equal(result.structuredContent?.data?.status, "queued");
+  assert.equal(result.structuredContent?.data?.pending, 11);
+  assert.equal(result.structuredContent?.data?.stoppedAt, null);
+  assert.match(String(result.content?.[0]?.text ?? ""), /queued|held/);
+});
+
+test("HARD03-029 c64_input.key stops at a checkpoint and does not press the remaining keys", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  const calls = [];
+  ctx.client.injectKeyboardQueue = async (bytes) => {
+    calls.push(Array.from(bytes));
+    return { delivered: 1, status: "stopped", pending: 0, stoppedAt: 0x0900 };
+  };
+  const result = await toolRegistry.invoke("c64_input", { op: "key", key: "a", count: 3 }, ctx);
+
+  assert.equal(calls.length, 1);
+  assert.equal(result.structuredContent?.data?.success, false);
+  assert.equal(result.structuredContent?.data?.status, "stopped");
+  assert.equal(result.structuredContent?.data?.stoppedAt, 0x0900);
+  assert.equal(/^Pressed/.test(String(result.content?.[0]?.text ?? "")), false);
+});
+
+test("HARD03-029 c64_input.key reports success when every feed drained", async () => {
+  const { ctx } = createInputContext({ platformId: "vice" });
+  ctx.client.injectKeyboardQueue = async () => ({ delivered: 1, status: "drained", pending: 0 });
+  const result = await toolRegistry.invoke("c64_input", { op: "key", key: "a", count: 2 }, ctx);
+
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent?.data?.success, true);
+  assert.equal(result.structuredContent?.data?.status, "drained");
 });

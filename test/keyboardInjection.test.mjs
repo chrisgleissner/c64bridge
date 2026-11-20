@@ -235,3 +235,32 @@ test("powerCycle uses reboot for U2-family cartridges", async () => {
   assert.equal(result.success, true);
   assert.equal(result.details.strategy, "reboot");
 });
+
+function facadeWithFeed(fed) {
+  return {
+    type: "vice",
+    async ping() { return true; },
+    async loadPrg() { return { success: true, details: {} }; },
+    async feedKeyboard() { return fed; },
+  };
+}
+
+test("HARD03-029 uploadAndRunAsm does not report a start when the keyboard feed was stopped by a checkpoint", async () => {
+  const client = makeClient(facadeWithFeed({ delivered: 3, status: "stopped", pending: 6, stoppedAt: 0xc000 }));
+  const result = await client.uploadAndRunAsm("* = $C000\n  RTS\n");
+  assert.equal(result.success, false);
+  assert.equal(result.details.started, false);
+  assert.equal(result.details.keyboard.status, "stopped");
+  assert.equal(result.details.keyboard.stoppedAt, 0xc000);
+  assert.equal(result.details.keyboard.pending, 6);
+});
+
+test("HARD03-029 uploadAndRunAsm surfaces the queued and drained keyboard-feed status", async () => {
+  const queued = await makeClient(facadeWithFeed({ delivered: 9, status: "queued", pending: 9 })).uploadAndRunAsm("* = $C000\n  RTS\n");
+  assert.equal(queued.success, true);
+  assert.equal(queued.details.keyboard.status, "queued");
+  assert.equal(queued.details.keyboard.pending, 9);
+  const drained = await makeClient(facadeWithFeed({ delivered: 9, status: "drained", pending: 0 })).uploadAndRunAsm("* = $C000\n  RTS\n");
+  assert.equal(drained.success, true);
+  assert.equal(drained.details.keyboard.status, "drained");
+});

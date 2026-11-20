@@ -598,3 +598,50 @@ test("data-only source at the default address gets no BASIC stub", () => {
   // Data at the default address followed by code at an explicit origin has no entry point at $0801.
   assert.deepEqual([...assemblyToPrg(".byte 1\n*=$c000\n nop")].slice(0, 3), [0x01, 0x08, 1]);
 });
+
+test("HARD03-034 assembler rejects the invalid (zp),x operand and names the two valid indirect modes", () => {
+  const message = assemblyError("*=$C000\n nop\n lda ($10),x");
+  assert.match(message, /:3: /);
+  assert.match(message, /\(zp\),Y/);
+  assert.match(message, /\(zp,X\)/);
+  assert.match(assemblyError("*=$C000\n lda ($10),X"), /:2: .*\(zp\),Y/u);
+  // The two valid forms still assemble.
+  assert.deepEqual([...assemblyToPrg("*=$C000\n lda ($10),y\n lda ($10,x)").subarray(2)], [0xb1, 0x10, 0xa1, 0x10]);
+});
+
+test("HARD03-035 assembler refuses a zero-filled gap that crosses $D000-$DFFF", () => {
+  const message = assemblyError("* = $c000\n rts\n* = $e000\n .byte 1");
+  assert.match(message, /\$D000-\$DFFF/);
+  assert.match(message, /separately/);
+  // Blocks that leave the I/O area out of the gap still assemble, with the gap zero-filled.
+  const prg = assemblyToPrg("* = $c000\n rts\n* = $c800\n .byte 1");
+  assert.equal(prg.length, 2 + 0x801);
+  assert.equal(prg[2], 0x60);
+  assert.equal(prg[2 + 0x800], 0x01);
+});
+
+test("gap validation handles many adjacent reservations without blocking for seconds", () => {
+  const count = 50000;
+  const source = "*=$0200\n.byte 1\n" + ".res 1\n".repeat(count) + ".byte 2";
+  const started = performance.now();
+  const prg = assemblyToPrg(source);
+  assert.ok(performance.now() - started < 3000, "reservation checks must not scan every reservation for every byte");
+  assert.equal(prg.length, count + 4);
+  assert.equal(prg.readUInt16LE(0), 0x0200);
+  assert.equal(prg[2], 1);
+  assert.ok(prg.subarray(3, -1).every((byte) => byte === 0));
+  assert.equal(prg.at(-1), 2);
+});
+
+test("gap validation preserves overlapping reservations and source diagnostics", () => {
+  // Explicit reservations retain their existing zero-fill behaviour, including in I/O.
+  const prg = assemblyToPrg("*=$CFFF\n.byte 1\n.res $1000\n*=$D800\n.res $800\n*=$E000\n.byte 2");
+  assert.equal(prg.length, 0x1004);
+  assert.equal(prg[2], 1);
+  assert.equal(prg.at(-1), 2);
+  // A reservation ending before I/O must not conceal a subsequent unsafe gap.
+  assert.throws(
+    () => assemblyToPrg("*=$CFFE\n.byte 1\n.res 1\n*=$E000\n.byte 2", { fileName: "gap.asm" }),
+    /gap\.asm:5: .*\$D000-\$DFFF/,
+  );
+});

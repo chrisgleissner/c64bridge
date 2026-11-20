@@ -21,19 +21,26 @@ concurrency:
 
 jobs:
   release:
+    name: Validate release artifact
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/mcp-builder:latest
     defaults:
       run:
         shell: bash
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/mcp-builder:latest
     permissions:
-      contents: write
-      id-token: write
+      contents: read
       packages: read
+    # Hashes are passed separately from the artifact they bind.
     outputs:
       pkg_version: ${{ steps.state.outputs.version }}
-
+      tag: ${{ steps.state.outputs.tag }}
+      publish: ${{ steps.state.outputs.publish }}
+      skip_release_notes: ${{ steps.state.outputs.skip_release_notes }}
+      integrity: ${{ steps.artifact.outputs.integrity }}
+      sha256: ${{ steps.artifact.outputs.sha256 }}
+      manifest_sha256: ${{ steps.artifact.outputs.manifest_sha256 }}
+      notes: ${{ steps.notes.outputs.body }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -218,6 +225,8 @@ jobs:
           appendFileSync(process.env.GITHUB_OUTPUT, `filename=${pack.filename}\nintegrity=${pack.integrity}\n`);
           NODE
           sha256sum "c64bridge-${RELEASE_VERSION}.tgz" > "$RUNNER_TEMP/release-artifact.sha256"
+          echo "sha256=$(sha256sum "c64bridge-${RELEASE_VERSION}.tgz" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$(sha256sum server.json | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Validate exact packed artifact before publishing
         env:
@@ -228,19 +237,14 @@ jobs:
           mkdir -p "$PACKAGE_DIR"
           tar -xzf "$RELEASE_TARBALL" -C "$PACKAGE_DIR"
           node scripts/verify-package.mjs "$PACKAGE_DIR/package"
-          (cd "$PACKAGE_DIR/package" && npm install --omit=dev && npm audit --omit=dev)
+          (cd "$PACKAGE_DIR/package" && npm install --omit=dev --ignore-scripts && npm audit --omit=dev)
           node scripts/validate-release-artifact.mjs "$PACKAGE_DIR/package" "$RELEASE_VERSION"
-
-      - name: Preserve validated npm artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-release-${{ steps.state.outputs.version }}
-          path: ${{ steps.artifact.outputs.filename }}
-          if-no-files-found: error
 
       - name: Install mcp-publisher
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          curl --fail --location --output mcp-publisher.tar.gz https://github.com/modelcontextprotocol/registry/releases/download/v1.8.9/mcp-publisher_linux_amd64.tar.gz
+          echo "4d527ca8f1ced0394c962dc925c2a4a4addef441cbefd62501c875e9481823a8  mcp-publisher.tar.gz" | sha256sum --check
+          tar -xzf mcp-publisher.tar.gz mcp-publisher
 
       - name: Validate MCP Registry manifest
         run: ./mcp-publisher validate server.json
@@ -293,12 +297,205 @@ jobs:
           writeFileSync(process.env.GITHUB_OUTPUT, `body<<EOF\n${output}\nEOF\n`, { flag: 'a' });
           NODE
 
+      - name: Preserve validated npm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-release-${{ steps.state.outputs.version }}
+          path: |
+            ${{ steps.artifact.outputs.filename }}
+            server.json
+            mcp-publisher.tar.gz
+          if-no-files-found: error
+
+  # Publishing jobs never check out the repository or install dependencies.
+  publish_npm:
+    name: Publish validated npm artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      id-token: write
+    needs: release
+    if: ${{ needs.release.outputs.publish == 'true' }}
+    steps:
+      - name: Set up Node.js for release publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Download validated release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-release-${{ needs.release.outputs.pkg_version }}
+
+      - name: Verify trusted-publishing environment
+        run: |
+          node --version
+          npm --version
+          npm config get registry
+          npm config delete //registry.npmjs.org/:_authToken || true
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_URL missing; OIDC not available"; exit 1; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN missing; OIDC not available"; exit 1; }
+
+      - name: Publish validated artifact to npm
+        env:
+          EXPECTED_SHA256: ${{ needs.release.outputs.sha256 }}
+          RELEASE_TARBALL: c64bridge-${{ needs.release.outputs.pkg_version }}.tgz
+        run: |
+          echo "$EXPECTED_SHA256  $RELEASE_TARBALL" | sha256sum --check
+          npm publish "./$RELEASE_TARBALL" --ignore-scripts --access public --tag latest --provenance --registry https://registry.npmjs.org
+
+  verify_published:
+    name: Verify published archive
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    needs: [release, publish_npm]
+    # Revalidation of an existing npm version intentionally skips publication.
+    if: ${{ always() && needs.release.result == 'success' && (needs.publish_npm.result == 'success' || needs.publish_npm.result == 'skipped') }}
+    steps:
+      - name: Set up Node.js for release publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Download validated release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-release-${{ needs.release.outputs.pkg_version }}
+
+      - name: Verify validated artifact checksum
+        env:
+          EXPECTED_SHA256: ${{ needs.release.outputs.sha256 }}
+          RELEASE_TARBALL: c64bridge-${{ needs.release.outputs.pkg_version }}.tgz
+        run: |
+          echo "$EXPECTED_SHA256  $RELEASE_TARBALL" | sha256sum --check
+
+      - name: Wait for npm package visibility
+        if: ${{ needs.release.outputs.publish == 'true' }}
+        env:
+          PACKAGE_VERSION: ${{ needs.release.outputs.pkg_version }}
+          EXPECTED_INTEGRITY: ${{ needs.release.outputs.integrity }}
+          RELEASE_TARBALL: ${{ format('c64bridge-{0}.tgz', needs.release.outputs.pkg_version) }}
+        run: |
+          # npm scans new versions before making them installable. Metadata can
+          # appear before the archive, and a CDN may cache an earlier 404.
+          mkdir -p "$RUNNER_TEMP/npm-release-download"
+          for attempt in $(seq 1 120); do
+            if PUBLISHED_VERSION=$(npm view "c64bridge@${PACKAGE_VERSION}" version --json 2>/dev/null | tr -d '"'); then
+              :
+            else
+              PUBLISHED_VERSION=""
+            fi
+            if [ "$PUBLISHED_VERSION" = "$PACKAGE_VERSION" ]; then
+              PUBLISHED_INTEGRITY=$(npm view "c64bridge@${PACKAGE_VERSION}" dist.integrity)
+              test "$PUBLISHED_INTEGRITY" = "$EXPECTED_INTEGRITY" || { echo "Published artifact integrity mismatch"; exit 1; }
+              if npm pack "c64bridge@${PACKAGE_VERSION}" --ignore-scripts --json \
+                --pack-destination "$RUNNER_TEMP/npm-release-download" \
+                > "$RUNNER_TEMP/npm-release-download/pack.json" \
+                2> "$RUNNER_TEMP/npm-release-download/pack.log"; then
+                node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const directory = `${process.env.RUNNER_TEMP}/npm-release-download`;
+          const [pack] = JSON.parse(readFileSync(`${directory}/pack.json`, 'utf8'));
+          assert.equal(pack.filename, `c64bridge-${process.env.PACKAGE_VERSION}.tgz`);
+          const archive = readFileSync(`${directory}/${pack.filename}`);
+          const integrity = `sha512-${createHash('sha512').update(archive).digest('base64')}`;
+          assert.equal(integrity, process.env.EXPECTED_INTEGRITY);
+          assert.deepEqual(archive, readFileSync(process.env.RELEASE_TARBALL));
+          NODE
+                echo "c64bridge@${PACKAGE_VERSION} is downloadable from npm and matches the tested archive byte for byte"
+                exit 0
+              fi
+            fi
+            echo "Waiting for c64bridge@${PACKAGE_VERSION} to be downloadable from npm (attempt ${attempt}/120)"
+            sleep 10
+          done
+
+          cat "$RUNNER_TEMP/npm-release-download/pack.log" >&2 || true
+          echo "Timed out waiting for c64bridge@${PACKAGE_VERSION} to become installable; check npm scan/approval status before retrying publication" >&2
+          exit 1
+
+  verify_npm:
+    needs: [release, verify_published]
+    if: ${{ always() && needs.release.result == 'success' && needs.verify_published.result == 'success' }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/package-check.yaml
+    with:
+      package_source: npm
+      package_version: ${{ needs.release.outputs.pkg_version }}
+
+  publish_registry:
+    name: Publish validated MCP manifest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      id-token: write
+    needs: [release, verify_npm]
+    if: ${{ always() && needs.release.outputs.publish == 'true' && needs.verify_npm.result == 'success' }}
+    steps:
+      - name: Download validated release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-release-${{ needs.release.outputs.pkg_version }}
+
+      - name: Verify publisher and manifest
+        env:
+          EXPECTED_MANIFEST_SHA256: ${{ needs.release.outputs.manifest_sha256 }}
+        run: |
+          echo "$EXPECTED_MANIFEST_SHA256  server.json" | sha256sum --check
+          echo "4d527ca8f1ced0394c962dc925c2a4a4addef441cbefd62501c875e9481823a8  mcp-publisher.tar.gz" | sha256sum --check
+          tar -xzf mcp-publisher.tar.gz mcp-publisher
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish server.json
+
+      - name: Logout from MCP Registry
+        if: ${{ always() }}
+        run: ./mcp-publisher logout || true
+
+  release_notes:
+    name: Update release notes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: write
+    needs: [release, verify_npm, publish_registry]
+    if: ${{ always() && needs.release.outputs.skip_release_notes != 'true' && needs.verify_npm.result == 'success' && (needs.publish_registry.result == 'success' || needs.publish_registry.result == 'skipped') }}
+    steps:
+      - name: Set up Node.js for release publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
       - name: Update GitHub release notes
-        if: ${{ steps.state.outputs.skip_release_notes != 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_BODY: ${{ steps.notes.outputs.body }}
-          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+          RELEASE_BODY: ${{ needs.release.outputs.notes }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
         run: |
           node <<'NODE'
           import process from 'node:process';
@@ -409,97 +606,3 @@ jobs:
             process.exit(1);
           });
           NODE
-
-      - name: Use npm with trusted publishing support
-        if: ${{ steps.state.outputs.publish == 'true' }}
-        run: |
-          npm install -g npm@^11.18.0
-          npm --version
-
-      - name: Verify trusted-publishing environment
-        if: ${{ steps.state.outputs.publish == 'true' }}
-        run: |
-          node --version
-          npm --version
-          npm config get registry
-          npm config delete //registry.npmjs.org/:_authToken || true
-          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_URL missing; OIDC not available"; exit 1; }
-          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" || { echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN missing; OIDC not available"; exit 1; }
-
-      - name: Publish validated artifact to npm
-        if: ${{ steps.state.outputs.publish == 'true' }}
-        env:
-          RELEASE_TARBALL: ${{ steps.artifact.outputs.filename }}
-        run: |
-          sha256sum --check "$RUNNER_TEMP/release-artifact.sha256"
-          npm publish "./$RELEASE_TARBALL" --ignore-scripts --access public --tag latest --provenance --registry https://registry.npmjs.org
-
-      - name: Wait for npm package visibility
-        if: ${{ steps.state.outputs.publish == 'true' }}
-        env:
-          PACKAGE_VERSION: ${{ steps.state.outputs.version }}
-          EXPECTED_INTEGRITY: ${{ steps.artifact.outputs.integrity }}
-          RELEASE_TARBALL: ${{ steps.artifact.outputs.filename }}
-        run: |
-          # npm scans new versions before making them installable. Metadata can
-          # appear before the archive, and a CDN may cache an earlier 404.
-          mkdir -p "$RUNNER_TEMP/npm-release-download"
-          for attempt in $(seq 1 120); do
-            if PUBLISHED_VERSION=$(npm view "c64bridge@${PACKAGE_VERSION}" version --json 2>/dev/null | tr -d '"'); then
-              :
-            else
-              PUBLISHED_VERSION=""
-            fi
-            if [ "$PUBLISHED_VERSION" = "$PACKAGE_VERSION" ]; then
-              PUBLISHED_INTEGRITY=$(npm view "c64bridge@${PACKAGE_VERSION}" dist.integrity)
-              test "$PUBLISHED_INTEGRITY" = "$EXPECTED_INTEGRITY" || { echo "Published artifact integrity mismatch"; exit 1; }
-              if npm pack "c64bridge@${PACKAGE_VERSION}" --ignore-scripts --json \
-                --pack-destination "$RUNNER_TEMP/npm-release-download" \
-                > "$RUNNER_TEMP/npm-release-download/pack.json" \
-                2> "$RUNNER_TEMP/npm-release-download/pack.log"; then
-                node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { readFileSync } from 'node:fs';
-          import { createHash } from 'node:crypto';
-          const directory = `${process.env.RUNNER_TEMP}/npm-release-download`;
-          const [pack] = JSON.parse(readFileSync(`${directory}/pack.json`, 'utf8'));
-          assert.equal(pack.filename, `c64bridge-${process.env.PACKAGE_VERSION}.tgz`);
-          const archive = readFileSync(`${directory}/${pack.filename}`);
-          const integrity = `sha512-${createHash('sha512').update(archive).digest('base64')}`;
-          assert.equal(integrity, process.env.EXPECTED_INTEGRITY);
-          assert.deepEqual(archive, readFileSync(process.env.RELEASE_TARBALL));
-          NODE
-                echo "c64bridge@${PACKAGE_VERSION} is downloadable from npm and matches the tested archive byte for byte"
-                exit 0
-              fi
-            fi
-            echo "Waiting for c64bridge@${PACKAGE_VERSION} to be downloadable from npm (attempt ${attempt}/120)"
-            sleep 10
-          done
-
-          cat "$RUNNER_TEMP/npm-release-download/pack.log" >&2 || true
-          echo "Timed out waiting for c64bridge@${PACKAGE_VERSION} to become installable; check npm scan/approval status before retrying publication" >&2
-          exit 1
-
-      - name: Authenticate to MCP Registry
-        if: ${{ steps.state.outputs.publish == 'true' }}
-        run: ./mcp-publisher login github-oidc
-
-      - name: Publish to MCP Registry
-        if: ${{ steps.state.outputs.publish == 'true' }}
-        run: ./mcp-publisher publish server.json
-
-      - name: Logout from MCP Registry
-        if: ${{ always() }}
-        run: ./mcp-publisher logout || true
-
-  verify_npm:
-    needs:
-      - release
-    permissions:
-      contents: read
-      packages: read
-    uses: ./.github/workflows/package-check.yaml
-    with:
-      package_source: npm
-      package_version: ${{ needs.release.outputs.pkg_version }}

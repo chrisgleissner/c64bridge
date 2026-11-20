@@ -80,6 +80,38 @@ export function taskOperationEffect(operation: unknown): ToolEffect {
   }
 }
 
+const NETWORK_CATEGORY = /network|wifi|wi-fi|ethernet|modem/i;
+
+function isNetworkCategory(category: unknown): boolean {
+  // The firmware matches category names with wildcards, so a wildcard may reach a network category.
+  return typeof category === "string" && (/[*?]/.test(category) || NETWORK_CATEGORY.test(category));
+}
+
+/**
+ * Effect override of c64_config set and batch_update: a write to a network category can cut the
+ * bridge off from the device, so it is destructive. Other writes keep their declared effect.
+ */
+export function configWriteEffect(op: string | undefined, args: unknown): ToolEffect | undefined {
+  if (op !== "set" && op !== "batch_update") {
+    return undefined;
+  }
+  const record = (typeof args === "object" && args !== null ? args : {}) as { category?: unknown; updates?: unknown };
+  if (op === "set") {
+    return isNetworkCategory(record.category) ? "destructive" : undefined;
+  }
+  // The parser accepts wrapped, legacy and mixed category maps. A literal category named
+  // "updates" contains primitive item values and must not be mistaken for the wrapper.
+  const wrapped = record.updates;
+  const hasWrapper = typeof wrapped === "object" && wrapped !== null && !Array.isArray(wrapped)
+    && Object.values(wrapped).every((items) => typeof items === "object" && items !== null && !Array.isArray(items));
+  const categories = Object.keys(record).filter((name) => name !== "op" && !(hasWrapper && name === "updates"));
+  if (categories.some(isNetworkCategory)
+    || (hasWrapper && Object.keys(wrapped).some(isNetworkCategory))) {
+    return "destructive";
+  }
+  return undefined;
+}
+
 export interface ToolAnnotationsHint {
   readonly readOnlyHint: boolean;
   readonly destructiveHint: boolean;

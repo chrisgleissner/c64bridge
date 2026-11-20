@@ -149,7 +149,7 @@ function applyLexicalBoost(
   query: string,
   candidates: Array<{ score: number; record: EmbeddingRecord; snippet: string; origin?: string }>,
 ): void {
-  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9$_]+/g) ?? []).filter((t) => t.length >= 2))];
+  const terms = [...new Set((query.toLowerCase().match(/[a-z0-9$_]+/g) ?? []).filter((t) => t.length >= 2))].slice(0, 32);
   if (terms.length === 0 || candidates.length === 0) return;
 
   const haystacks = candidates.map((c) => c.snippet.toLowerCase());

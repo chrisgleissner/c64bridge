@@ -141,3 +141,14 @@ test("rag_retrieve_basic formats reference metadata and truncated snippets", asy
   assert.equal(refs[1].sourcePath, "doc/basic/long.md");
   assert.equal(refs[2].uri, "https://example.com/basic#border");
 });
+
+for (const scope of ["basic", "asm", "docs"]) {
+  test(`HARD03-010 ${scope} rejects queries over 500 characters before retrieval`, async () => {
+    let calls = 0;
+    const ctx = { client: {}, logger: createLogger(), rag: { async retrieve() { calls++; return []; } } };
+    const result = await ragModule.invoke(`rag_retrieve_${scope}`, { q: "a".repeat(600) }, ctx);
+    assert.equal(result.isError, true);
+    assert.equal(result.metadata.error.kind, "validation");
+    assert.equal(calls, 0);
+  });
+}

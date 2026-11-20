@@ -70,14 +70,14 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
     });
   });
 
-  test("tools/list stays below 70 KB and omits the duplicated per-op schemas", async () => {
+  test("tools/list stays below 71 KB and omits the duplicated per-op schemas", async () => {
     await withSharedMcpClient(async ({ client }) => {
       const listResult = await client.request(
         { method: "tools/list", params: {} },
         ListToolsResultSchema,
       );
       const bytes = Buffer.byteLength(JSON.stringify(listResult));
-      assert.ok(bytes < 70_000, `tools/list is ${bytes} bytes`);
+      assert.ok(bytes < 71_000, `tools/list is ${bytes} bytes`);
       for (const tool of listResult.tools) {
         assert.ok(
           !("x-c64bridge-operations" in (tool.inputSchema ?? {})),

@@ -130,3 +130,40 @@ test("c64_memory ops other than read/write accept % binary and reject bare hex",
     assert.equal(bad.metadata?.error?.kind, "validation");
   }
 });
+
+const AMBIGUOUS = ["0400", "C000"];
+
+test("HARD03-024 memory_dump rejects leading-zero decimal and bare hex", async () => {
+  const { file } = tmpPath("address-parsing-024", "dump.bin");
+  for (const address of AMBIGUOUS) {
+    const reads = [];
+    const result = await metaModule.invoke("memory_dump_to_file", { address, length: 4, outputPath: file, format: "binary" }, createReadCtx(reads));
+    assert.equal(result.isError, true, `address ${address} should be rejected`);
+    assert.equal(reads.length, 0);
+  }
+});
+
+test("HARD03-024 sprite and charset extraction reject leading-zero decimal and bare hex", async () => {
+  for (const address of AMBIGUOUS) {
+    for (const [tool, extra] of [["extract_sprites_from_ram", { length: 64 }], ["rip_charset_from_ram", {}]]) {
+      const reads = [];
+      const result = await metaModule.invoke(tool, { address, ...extra }, createReadCtx(reads));
+      assert.equal(result.isError, true, `${tool} address ${address} should be rejected`);
+      assert.equal(reads.length, 0);
+    }
+  }
+});
+
+test("HARD03-024 c64_debug create_checkpoint and wait_for_state reject leading-zero decimal and bare hex", async () => {
+  for (const address of AMBIGUOUS) {
+    const calls = [];
+    const result = await debugModuleGroup.invoke("c64_debug", { op: "create_checkpoint", address }, createViceCtx(calls));
+    assert.equal(result.isError, true, `create_checkpoint ${address}`);
+    assert.equal(calls.length, 0);
+    const ctx = createViceCtx(calls);
+    ctx.client.viceRegistersAvailable = async () => [{ id: 3, name: "PC" }];
+    ctx.client.viceRegistersGet = async () => [];
+    const waited = await debugModuleGroup.invoke("c64_debug", { op: "wait_for_state", expectedPC: address, timeoutMs: 50 }, ctx);
+    assert.equal(waited.isError, true, `wait_for_state ${address}`);
+  }
+});

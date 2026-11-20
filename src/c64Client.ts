@@ -50,6 +50,7 @@ import type {
   ViceRegisterWrite,
   ViceResourceValue,
 } from "./vice/viceClient.js";
+import { forgetUserStream, rememberUserStream, userStreamTarget, withStreamLock } from "./streamTargets.js";
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
@@ -117,6 +118,8 @@ export interface SampleCaptureResult {
   readonly sampleRateHz: number;
   readonly samplePairs: number;
   readonly samples: Int16Array;
+  /** Non-fatal notes, for example that a stream started with c64_stream was restarted. */
+  readonly warnings?: readonly string[];
 }
 
 function isLoopbackHost(host: string): boolean {
@@ -672,10 +675,6 @@ export class C64Client {
       const pointerValue = (spriteAddress & 0x3FFF) >> 6;
       const bitMask = 1 << index;
 
-      const screenRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(SPACE_SCREEN_CODE);
-      screenRam[0x03F8 + index] = pointerValue & 0xFF;
-      const colorRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(DEFAULT_TEXT_FOREGROUND);
-
       const facade = await this.facadePromise;
       const currentDd00 = await this.readByteOrDefault(facade, 0xDD00, 0);
       const currentBorder = await this.readByteOrDefault(facade, 0xD020, DEFAULT_BORDER_COLOR);
@@ -693,8 +692,7 @@ export class C64Client {
       const d01c = (currentD01C & ~bitMask) | (multicolour ? bitMask : 0);
 
       await facade.writeMemory(spriteAddress, spriteSlot);
-      await facade.writeMemory(TEXT_SCREEN_ADDRESS, screenRam);
-      await facade.writeMemory(TEXT_COLOR_RAM_ADDRESS, colorRam);
+      await facade.writeMemory(pointerAddress, Uint8Array.of(pointerValue & 0xFF));
       await facade.writeMemory(0xDD00, Uint8Array.of(textRegisters.dd00));
       await facade.writeMemory(0xD011, Uint8Array.of(textRegisters.d011));
       await facade.writeMemory(0xD016, Uint8Array.of(textRegisters.d016));
@@ -831,9 +829,30 @@ export class C64Client {
       }
       const sysCommand = Buffer.from(`SYS${entryAddress}\r`, "ascii");
       const injectResult = await this.injectKeyboardQueue(sysCommand, { pinnedFacade: facade });
+      const keyboard = injectResult.status === undefined
+        ? undefined
+        : {
+            status: injectResult.status,
+            ...(injectResult.pending === undefined ? {} : { pending: injectResult.pending }),
+            ...(injectResult.stoppedAt === undefined ? {} : { stoppedAt: injectResult.stoppedAt }),
+          };
+      if (injectResult.status === "stopped") {
+        // A checkpoint hit while SYS was typed: the program is loaded but was not started.
+        return {
+          success: false,
+          details: {
+            message: `The program was loaded, but typing SYS${entryAddress} was stopped by a checkpoint${injectResult.stoppedAt === undefined ? "" : ` at $${injectResult.stoppedAt.toString(16).toUpperCase().padStart(4, "0")}`}; it was not started.`,
+            started: false,
+            load: loadResult.details,
+            entryAddress,
+            delivered: injectResult.delivered,
+            keyboard,
+          },
+        };
+      }
       return {
         success: true,
-        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered },
+        details: { load: loadResult.details, entryAddress, delivered: injectResult.delivered, ...(keyboard ? { keyboard } : {}) },
       };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1571,11 +1590,27 @@ export class C64Client {
   }
 
   async streamStart(stream: "video" | "audio" | "debug", ip: string): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await this.startStreamResolvingHost(facade, stream, ip); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try {
+      const facade = await this.facadePromise;
+      return await withStreamLock(stream, async () => {
+        if (stream === "video") await this.stopC64uVideoCaptureSession(false);
+        const result = await this.startStreamResolvingHost(facade, stream, ip);
+        if (result.success) rememberUserStream(stream, ip);
+        return result;
+      });
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async streamStop(stream: "video" | "audio" | "debug"): Promise<RunBasicResult> {
-    try { const facade = await this.facadePromise; return await facade.streamStop(stream); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+    try {
+      const facade = await this.facadePromise;
+      return await withStreamLock(stream, async () => {
+        if (stream === "video") await this.stopC64uVideoCaptureSession(false);
+        const result = await facade.streamStop(stream);
+        if (result.success) forgetUserStream(stream);
+        return result;
+      });
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async prepareVideoCapture(options?: { readonly keepAliveMs?: number }): Promise<void> {
@@ -1584,12 +1619,14 @@ export class C64Client {
     if (facade.type !== "c64u") {
       throw new Error("Reusable video capture is only available on C64 Ultimate");
     }
-    await this.ensureC64uVideoCaptureSession(facade);
-    this.scheduleC64uVideoCaptureStop(keepAliveMs);
+    await withStreamLock("video", async () => {
+      await this.ensureC64uVideoCaptureSession(facade);
+      this.scheduleC64uVideoCaptureStop(keepAliveMs);
+    });
   }
 
   async releaseVideoCapture(): Promise<void> {
-    await this.stopC64uVideoCaptureSession();
+    await withStreamLock("video", () => this.stopC64uVideoCaptureSession());
   }
 
   async captureFrames(options?: { readonly count?: number; readonly reuseSession?: boolean; readonly keepAliveMs?: number }): Promise<FrameCaptureResult> {
@@ -1610,13 +1647,14 @@ export class C64Client {
     });
   }
 
-  async captureSamples(options?: { readonly count?: number }): Promise<SampleCaptureResult> {
+  async captureSamples(options?: { readonly count?: number; readonly signal?: AbortSignal }): Promise<SampleCaptureResult> {
+    options?.signal?.throwIfAborted();
     const requestedPairs = Math.max(1, Math.min(65_536, Math.trunc(options?.count ?? 256)));
     const facade = await this.facadePromise;
     if (facade.type !== "c64u") {
       throw new Error("Audio sample capture is only available on C64 Ultimate");
     }
-    return this.captureC64uAudioSamples(facade, requestedPairs);
+    return this.captureC64uAudioSamples(facade, requestedPairs, { signal: options?.signal });
   }
 
   /**
@@ -1624,6 +1662,7 @@ export class C64Client {
    * device audio stream; other backends have no stream, so the host microphone is used.
    */
   async recordAndAnalyzeAudio(params: RecordAndAnalyzeParams): Promise<AnalysisResult> {
+    params.signal?.throwIfAborted();
     const durationSeconds = normalizeAudioDuration(params.durationSeconds);
     const facade = await this.facadePromise;
     if (facade.type !== "c64u") {
@@ -1636,6 +1675,7 @@ export class C64Client {
       timeoutMs: Math.ceil(durationSeconds * 1_500) + 2_000,
       sampleRateHz,
       acceptPartial: true,
+      signal: params.signal,
     });
     return analyzeStereoStream(capture.samples, capture.sampleRateHz, params.expectedSidwave);
   }
@@ -1744,19 +1784,58 @@ export class C64Client {
     count: number,
     options: { readonly reuseSession?: boolean; readonly keepAliveMs?: number } = {},
   ): Promise<FrameCaptureResult> {
-    if (options.reuseSession) {
-      const session = await this.ensureC64uVideoCaptureSession(facade);
-      const frames = await this.collectFramesFromC64uVideoCaptureSession(session, count, { fresh: true });
-      this.scheduleC64uVideoCaptureStop(options.keepAliveMs ?? 0);
-      return { backend: "c64u", frames };
-    }
+    return withStreamLock("video", async () => {
+      if (options.reuseSession) {
+        try {
+          const session = await this.ensureC64uVideoCaptureSession(facade);
+          const frames = await this.collectFramesFromC64uVideoCaptureSession(session, count, { fresh: true });
+          this.scheduleC64uVideoCaptureStop(options.keepAliveMs ?? 0);
+          return { backend: "c64u", frames };
+        } catch (error) {
+          // ensureSession cancelled the keepalive timer. A failed collection
+          // must close that session rather than leaving its stream alive forever.
+          try { await this.stopC64uVideoCaptureSession(); }
+          catch (cleanupError) {
+            writeDiagnosticEvent("video_capture_stop_failed", { error: this.normaliseError(cleanupError) });
+          }
+          throw error;
+        }
+      }
+      // A one-shot stream replaces the reusable socket's target. Invalidate that
+      // session first so the next reusable capture starts a live stream again.
+      await this.stopC64uVideoCaptureSession(false);
+      let result: FrameCaptureResult | undefined;
+      try {
+        result = await this.captureC64uVideoFramesOnce(facade, count);
+      } finally {
+        const notes = await this.restoreUserStream(facade, "video");
+        if (result && notes.length > 0) result = { ...result, warnings: [...(result.warnings ?? []), ...notes] };
+      }
+      return result;
+    });
+  }
 
+  /** Restarts a stream the user started with c64_stream start after a capture replaced and stopped it. */
+  private async restoreUserStream(facade: C64Facade, stream: "video" | "audio"): Promise<string[]> {
+    const target = userStreamTarget(stream);
+    if (!target) return [];
+    try {
+      await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, stream, target), `restart ${stream} stream`);
+      return [`The ${stream} stream started with c64_stream was restarted toward ${target} after the capture.`];
+    } catch (error) {
+      writeDiagnosticEvent("user_stream_restart_failed", { stream, error: this.normaliseError(error) });
+      return [`The ${stream} stream started with c64_stream could not be restarted toward ${target}: ${error instanceof Error ? error.message : String(error)}`];
+    }
+  }
+
+  private async captureC64uVideoFramesOnce(facade: C64Facade, count: number): Promise<FrameCaptureResult> {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
     const packets: ReturnType<typeof parseVideoPacket>[] = [];
     let stopError: Error | null = null;
     let captureFailed = false;
+    let streamAttempted = false;
     let stopped = false;
     // Stops the stream once. A failure is reported as a warning (success path)
     // or as a diagnostic (failure path); it never replaces the capture outcome.
@@ -1776,6 +1855,7 @@ export class C64Client {
     try {
       await this.bindCaptureSocket(socket, bindAddress);
       const target = this.socketEndpoint(socket, bindAddress);
+      streamAttempted = true;
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "video", target), "start video stream");
 
       const frames = await new Promise<readonly CapturedFrame[]>((resolve, reject) => {
@@ -1814,7 +1894,7 @@ export class C64Client {
       captureFailed = true;
       throw error;
     } finally {
-      if (captureFailed) {
+      if (captureFailed && streamAttempted) {
         // Keep the capture error; the stop failure is only a diagnostic.
         await stopOneShotVideoStream();
       }
@@ -1840,8 +1920,15 @@ export class C64Client {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
-    await this.bindCaptureSocket(socket, bindAddress);
-    const target = this.socketEndpoint(socket, bindAddress);
+    let target: string;
+    try {
+      await this.bindCaptureSocket(socket, bindAddress);
+      target = this.socketEndpoint(socket, bindAddress);
+    } catch (error) {
+      // A socket whose bind failed still holds a handle under Node; close it so it does not leak.
+      closeQuietly(socket);
+      throw error;
+    }
 
     const session: C64uVideoCaptureSession = {
       facade,
@@ -1957,16 +2044,19 @@ export class C64Client {
       clearTimeout(session.stopTimer);
       session.stopTimer = null;
     }
-    if (keepAliveMs <= 0) {
-      void this.stopC64uVideoCaptureSession().catch(() => {});
-      return;
-    }
-    session.stopTimer = setTimeout(() => {
-      void this.stopC64uVideoCaptureSession().catch(() => {});
-    }, keepAliveMs);
+    const timer = setTimeout(() => {
+      void withStreamLock("video", async () => {
+        // The timer may have expired while another capture held the lock and
+        // subsequently extended the session. Do not close its renewed stream.
+        if (this.c64uVideoCaptureSession === session && session.stopTimer === timer) {
+          await this.stopC64uVideoCaptureSession();
+        }
+      }).catch(() => {});
+    }, Math.max(0, keepAliveMs));
+    session.stopTimer = timer;
   }
 
-  private async stopC64uVideoCaptureSession(): Promise<void> {
+  private async stopC64uVideoCaptureSession(restoreUser = true): Promise<void> {
     const session = this.c64uVideoCaptureSession;
     if (!session) {
       return;
@@ -1986,6 +2076,7 @@ export class C64Client {
     } finally {
       session.socket.close();
       this.rejectC64uVideoCaptureWaiters(session, stopError ?? new Error("Video capture session closed"));
+      if (restoreUser) await this.restoreUserStream(session.facade, "video");
     }
 
     if (stopError) {
@@ -2036,8 +2127,26 @@ export class C64Client {
   private async captureC64uAudioSamples(
     facade: C64Facade,
     samplePairs: number,
-    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean },
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean; readonly signal?: AbortSignal },
   ): Promise<SampleCaptureResult> {
+    return withStreamLock("audio", async () => {
+      let result: SampleCaptureResult | undefined;
+      try {
+        result = await this.captureC64uAudioSamplesOnce(facade, samplePairs, options);
+      } finally {
+        const notes = await this.restoreUserStream(facade, "audio");
+        if (result && notes.length > 0) result = { ...result, warnings: notes };
+      }
+      return result;
+    }, options?.signal);
+  }
+
+  private async captureC64uAudioSamplesOnce(
+    facade: C64Facade,
+    samplePairs: number,
+    options?: { readonly timeoutMs?: number; readonly sampleRateHz?: number; readonly acceptPartial?: boolean; readonly signal?: AbortSignal },
+  ): Promise<SampleCaptureResult> {
+    options?.signal?.throwIfAborted();
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
@@ -2047,7 +2156,6 @@ export class C64Client {
     let captureError: Error | null = null;
     let captureSettled = false;
     let notifyCapture: () => void = () => {};
-    let socketBound = false;
     let streamAttempted = false;
     let failed = false;
 
@@ -2071,12 +2179,17 @@ export class C64Client {
       captureError = error;
       notifyCapture();
     };
+    const onAbort = () => {
+      captureError = new DOMException("Audio capture was cancelled by the client", "AbortError");
+      notifyCapture();
+    };
     socket.on("message", onMessage);
     socket.on("error", onError);
+    options?.signal?.addEventListener("abort", onAbort, { once: true });
 
     try {
       await this.bindCaptureSocket(socket, bindAddress);
-      socketBound = true;
+      options?.signal?.throwIfAborted();
       const target = this.socketEndpoint(socket, bindAddress);
       streamAttempted = true;
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "audio", target), "start audio stream");
@@ -2130,8 +2243,10 @@ export class C64Client {
     } finally {
       captureSettled = true;
       notifyCapture = () => {};
+      options?.signal?.removeEventListener("abort", onAbort);
       socket.off("message", onMessage);
-      if (socketBound) socket.close();
+      // Also after a failed bind: the socket still holds a handle under Node.
+      closeQuietly(socket);
       try {
         if (streamAttempted) await this.ensureStreamSuccess(await facade.streamStop("audio"), "stop audio stream");
       } catch (error) {
@@ -2505,7 +2620,7 @@ export class C64Client {
       readonly drainTimeoutMs?: number;
       readonly pinnedFacade?: C64Facade;
     },
-  ): Promise<{ delivered: number }> {
+  ): Promise<{ delivered: number; status?: "drained" | "queued" | "stopped"; pending?: number; stoppedAt?: number }> {
     const data = Buffer.isBuffer(bytes)
       ? bytes
       : Buffer.from(bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes));
@@ -2522,7 +2637,12 @@ export class C64Client {
       if (fed.status === "timeout") {
         throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
       }
-      return { delivered: fed.delivered };
+      return {
+        delivered: fed.delivered,
+        status: fed.status,
+        pending: fed.pending,
+        ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
+      };
     }
     const KEYD = 0x0277; // KERNAL keyboard buffer base
     const NDX = 0x00C6;  // pending byte count
@@ -2564,9 +2684,9 @@ export class C64Client {
     }
 
     /** Waits until the VICE session tracks the CPU as stopped (a checkpoint hit or step). */
-    async viceWaitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+    async viceWaitForStop(timeoutMs: number, signal?: AbortSignal): Promise<{ session: boolean; stopped: boolean }> {
       const backend = await this.requireViceBackend();
-      return backend.waitForStop(timeoutMs);
+      return backend.waitForStop(timeoutMs, signal);
     }
 
     async viceKeyboardFeed(text: string): Promise<void> {
@@ -2626,9 +2746,9 @@ export class C64Client {
       return this.withViceMonitor((client) => client.memGet(address, end));
     }
 
-    async viceNuclearReset(): Promise<void> {
+    async viceNuclearReset(): Promise<{ success: boolean; details?: unknown }> {
       const backend = await this.requireViceBackend();
-      await backend.nuclearReset();
+      return await backend.nuclearReset();
     }
 
     async viceCheckpointList(): Promise<ViceCheckpoint[]> {
@@ -2683,12 +2803,29 @@ export class C64Client {
       return this.withViceMonitor((client) => client.registersSet(writes, payload));
     }
 
-    async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
+    async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<{ stopped: boolean; pc?: number }> {
+      let stopped = true;
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { stopped = await client.stepInstructions(count, { ...options, waitForStopMs: 2_000 }); });
+      return await this.viceStepOutcome(stopped);
     }
 
-    async viceStepReturn(): Promise<void> {
-      await (await this.requireViceBackend()).debugStopOperation(async (client) => { await client.stepReturn({ waitForStopMs: 2_000 }); });
+    async viceStepReturn(): Promise<{ stopped: boolean; pc?: number }> {
+      let stopped = true;
+      await (await this.requireViceBackend()).debugStopOperation(async (client) => { stopped = await client.stepReturn({ waitForStopMs: 2_000 }); });
+      return await this.viceStepOutcome(stopped);
+    }
+
+    /** After a step: when the CPU did not stop in time, the session has stopped it; report the PC it was stopped at. */
+    private async viceStepOutcome(stopped: boolean): Promise<{ stopped: boolean; pc?: number }> {
+      if (stopped) return { stopped };
+      try {
+        const [metadata, values] = await Promise.all([this.viceRegistersAvailable(0), this.viceRegistersGet(0)]);
+        const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+        const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
+        return pc === undefined ? { stopped } : { stopped, pc };
+      } catch {
+        return { stopped };
+      }
     }
 
     async viceResourceGet(name: string): Promise<ViceResourceValue> {
@@ -3043,6 +3180,8 @@ function chunkByExpressionLength(input: string, expression: (text: string) => st
  */
 function printerTextExpression(input: string, target: "commodore" | "epson", secondaryAddress?: number): string {
   const needsChr = (char: string): number | undefined => {
+    // Literal < and : and { would be expanded to control codes (<RETURN>, :cr:, {home}) by the tokenizer.
+    if (char === "<" || char === ":" || char === "{") return char.charCodeAt(0);
     if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
     if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
     return undefined;
@@ -3175,4 +3314,9 @@ export function buildCommodoreDllBasicProgram(opts: {
   }
   lines.push(`${ln} CLOSE1`);
   return lines.join("\n");
+}
+
+/** Close a UDP socket that may already be closed. */
+function closeQuietly(socket: Socket): void {
+  try { socket.close(); } catch { /* already closed */ }
 }

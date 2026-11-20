@@ -141,7 +141,8 @@ function parseVicState(d011: number, d016: number, d018: number, dd00: number, d
   // D018 bits 4-7 = screen RAM offset (× $0400); bits 1-3 = char/bitmap pointer (× $0800)
   const screenRamOffset = ((d018 >> 4) & 0x0f) * 0x0400;
   const screenRamAddress = bankBase + screenRamOffset;
-  const charOrBitmapPointer = ((d018 >> 1) & 0x07) * 0x0800;
+  // In bitmap mode only bit 3 selects $0000 or $2000 within the bank
+  const charOrBitmapPointer = bitmapMode ? ((d018 & 0x08) ? 0x2000 : 0) : ((d018 >> 1) & 0x07) * 0x0800;
   const charOrBitmapAddress = bankBase + charOrBitmapPointer;
   let mode: string;
   if (bitmapMode && multicolor) mode = "multicolor_bitmap";
@@ -251,7 +252,10 @@ const graphicsOperations: GroupedOperationConfig[] = [
             backend: capture.backend,
             count: frames.length,
             frames,
-            ...(pngWarnings && pngWarnings.warnings.length > 0 ? { warnings: pngWarnings.warnings } : {}),
+            ...(() => {
+              const all = [...(capture.warnings ?? []), ...(pngWarnings?.warnings ?? [])];
+              return all.length > 0 ? { warnings: all } : {};
+            })(),
           },
           {
             success: true,
@@ -384,7 +388,7 @@ export const graphicsModuleGroup = defineToolModule({
         {
           name: "Display sprite",
           description: "Show sprite data at coordinates",
-          arguments: { op: "render_sprite", sprite: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
+          arguments: { op: "render_sprite", sprite: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" },
         },
         {
           name: "Import bitmap image",

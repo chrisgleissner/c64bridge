@@ -176,6 +176,7 @@
       ],
       "description": "Delay after firmware run before returning",
       "minimum": 0,
+      "maximum": 600000,
       "default": 0
     },
     "captureCandidates": {

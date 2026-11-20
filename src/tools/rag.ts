@@ -21,6 +21,7 @@ const ragRetrieveArgsSchema = objectSchema<RagRetrieveArgs>({
     q: stringSchema({
       description: "Natural-language query describing the desired BASIC or assembly guidance.",
       minLength: 3,
+      maxLength: 500,
     }),
     k: optionalSchema(
       numberSchema({

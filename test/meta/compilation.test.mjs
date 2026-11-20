@@ -1,6 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import fs from "node:fs/promises";
+import { tools as compilationTools } from "../../src/tools/meta/compilation.js";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { createLogger, tmpPath } from "./helpers.mjs";
 
@@ -145,4 +146,55 @@ test("compile_run_verify_cycle handles compile errors", async () => {
 
   assert.equal(res.isError, true);
   assert.equal(res.metadata?.error?.kind, "execution");
+});
+
+test("I2 compile cycle bounds duration and cancels without verification reads", async () => {
+  const controller = new AbortController();
+  const { dir } = tmpPath("cycle", "cancelled");
+  let launches = 0;
+  let reads = 0;
+  const ctx = {
+    signal: controller.signal,
+    logger: createLogger(),
+    client: {
+      async uploadAndRunBasic() { launches += 1; controller.abort(); return { success: true }; },
+      async readScreen() { reads += 1; return "READY."; },
+    },
+  };
+  const args = { sourceType: "basic", source: "10 END", outputPath: dir };
+  assert.equal(compilationTools[0].inputSchema.properties.durationMs.maximum, 600000);
+  const invalid = await metaModule.invoke("compile_run_verify_cycle", { ...args, durationMs: 600001 }, ctx);
+  assert.equal(invalid.metadata?.error?.kind, "validation");
+  const result = await metaModule.invoke("compile_run_verify_cycle", { ...args, durationMs: 600000 }, ctx);
+  assert.equal(result.metadata?.cancelled, true);
+  assert.equal(launches, 1);
+  assert.equal(reads, 0);
+  const manifest = JSON.parse(await fs.readFile(`${dir}/manifest.json`, "utf8"));
+  assert.equal(manifest.cancelled, true);
+  assert.equal(manifest.ran, true);
+  const preAborted = await metaModule.invoke("compile_run_verify_cycle", args, ctx);
+  assert.equal(preAborted.metadata?.cancelled, true);
+  assert.equal(launches, 1);
+});
+
+test("I2 cancellation during verification prevents further reads and successful archival", async () => {
+  const controller = new AbortController();
+  const { dir } = tmpPath("cycle", "cancel-verification");
+  let reads = 0;
+  const ctx = {
+    signal: controller.signal,
+    logger: createLogger(),
+    client: {
+      async uploadAndRunBasic() { return { success: true }; },
+      async readScreen() { reads += 1; controller.abort(); return "HELLO"; },
+    },
+  };
+  const result = await metaModule.invoke("compile_run_verify_cycle", {
+    sourceType: "basic", source: "10 END", durationMs: 1, verifyScreen: "HELLO", outputPath: dir,
+  }, ctx);
+  assert.equal(result.metadata?.cancelled, true);
+  assert.equal(reads, 1);
+  const manifest = JSON.parse(await fs.readFile(`${dir}/manifest.json`, "utf8"));
+  assert.equal(manifest.cancelled, true);
+  assert.equal(manifest.verified, false);
 });

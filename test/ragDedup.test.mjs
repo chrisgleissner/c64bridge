@@ -24,3 +24,17 @@ test("DEDUP-003 whitespace-only differences are treated as duplicates", () => {
   const out = deduplicateAndDiversify([cand("a  b\n c d e f g h", "x#1"), cand("a b c d e f g h", "y#1")], 3);
   assert.equal(out.length, 1);
 });
+
+test("HARD03-010 lexical ranking ignores distinct terms beyond the first 32", async () => {
+  const { LocalRagRetriever } = await import("../src/rag/retriever.ts");
+  const terms = Array.from({ length: 40 }, (_, i) => `token${String(i).padStart(2, "0")}`);
+  const retriever = new LocalRagRetriever({ async embed() { return new Float32Array([1]); } }, {
+    other: { records: [
+      { text: terms.slice(0, 32).join(" "), vector: [1], origin: "first.md" },
+      { text: terms.slice(32).join(" "), vector: [1], origin: "later.md" },
+    ] },
+  });
+  const bounded = await retriever.retrieve(terms.slice(0, 32).join(" "), 2);
+  const longer = await retriever.retrieve(terms.join(" "), 2);
+  assert.deepEqual(longer, bounded);
+});

@@ -699,14 +699,14 @@ test("device: createFacade with config file", async (t) => {
         assert.equal((await facade.configLoadFromFlash()).success, true);
         assert.equal((await facade.configResetToDefault()).success, true);
 
-        const fileInfo = await facade.filesInfo("/tmp/demo.prg");
+        const fileInfo = await facade.filesInfo("/games/demo.prg");
         assert.ok(fileInfo && typeof fileInfo === "object");
 
         // HARD01-010: nested device paths must keep their `/` separators as
         // real path separators on the wire, only percent-encoding the
         // reserved characters within each segment (never encoding `/` as
         // `%2F`, which the double-encode bug used to do).
-        await facade.filesInfo("/Usb0/demos/new file.d64");
+        await facade.filesInfo("/Usb0/demos/new file.d64").catch(() => {}); // 404: no such file; only the URL matters here
         assert.match(mock.state.lastRequest.url, /\/v1\/files\/\/Usb0\/demos\/new%20file\.d64:info$/);
         assert.equal(mock.state.lastRequest.url.includes("%2F"), false);
 

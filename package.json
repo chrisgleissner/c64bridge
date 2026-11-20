@@ -108,11 +108,15 @@
     "doc/c64u/**",
     "doc/u2/**",
     "doc/vice/**",
+    "doc/hardening-behavior.md",
     "doc/img/**",
     "scripts/**",
     "!scripts/compare-rest/**",
     "generated/**/*.js",
     ".github/prompts/**",
-    ".github/skills/**"
+    ".github/skills/**",
+    "!.github/prompts/steer.prompt.md",
+    "!.github/prompts/pr-converge.prompt.md",
+    "!.github/skills/pr-converge/**"
   ]
 }

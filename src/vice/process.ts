@@ -290,8 +290,24 @@ export async function startViceProcess(options: ViceProcessOptions): Promise<Vic
       });
     });
     viceEnv.DISPLAY = display;
-    await waitForXvfb(display);
-    await delay(300);
+    const xvfbFailed = new Promise<never>((_resolve, reject) => {
+      xvfb!.once("error", (err: NodeJS.ErrnoException) => {
+        reject(new Error(
+          err.code === "ENOENT"
+            ? "Cannot start Xvfb: the Xvfb binary was not found on PATH. Install Xvfb, or set DISPLAY to a running X server (or VICE_HEADLESS=1 for VICE 3.5+)."
+            : `Cannot start Xvfb: ${err.message}. Install Xvfb or set DISPLAY to a running X server.`,
+        ));
+      });
+    });
+    xvfbFailed.catch(() => {}); // observed below; avoids an unhandled rejection when the wait already ended
+    try {
+      await Promise.race([waitForXvfb(display), xvfbFailed]);
+      await Promise.race([delay(300), xvfbFailed]);
+    } catch (err) {
+      await terminateProcess(xvfb, "SIGTERM", 500);
+      await terminateProcess(xvfb, "SIGKILL", 200);
+      throw err;
+    }
   }
 
   const args = [

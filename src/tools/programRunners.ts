@@ -514,7 +514,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     if (shouldVerify) {
       try {
-        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, undefined, screenBeforeRun);
+        const outcome = await pollForProgramOutcome("BASIC", ctx.client, ctx.logger, undefined, { address: prg.readUInt16LE(0), bytes: prg.subarray(2) }, screenBeforeRun);
         if (outcome.status === "error") {
           ctx.logger.warn("BASIC verification detected error", {
             ...(outcome.message ? { message: outcome.message } : {}),
@@ -620,6 +620,16 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
         }),
       );
     }
+    const keyboardFeed = toRecord(result.details)?.keyboard as { status?: string; pending?: number } | undefined;
+    const startQueued = keyboardFeed?.status === "queued";
+    if (startQueued && shouldVerify) {
+      return toolErrorResult(
+        new ToolExecutionError(
+          "Assembly program was loaded, but the SYS command is only queued (the CPU is paused), so it has not started and its execution could not be verified",
+          { details: { keyboard: keyboardFeed, started: false } },
+        ),
+      );
+    }
     // Replace the registered symbols only once the program has started, so a
     // failed run keeps the previous table.
     if (ctx.platform.id === "vice") {
@@ -684,9 +694,12 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       resources: ["c64://assembly/6510-spec", "c64://guide/bootstrap"],
       ...(loadCheck ? { loadCheck } : {}),
       ...(execution ? { execution } : {}),
+      ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
     };
-    const message = execution === "unconfirmed"
+    const message = startQueued
+      ? `Assembly program assembled, uploaded and loaded. The SYS command is queued (${keyboardFeed?.pending ?? "?"} character(s) pending) because the CPU is paused; the program starts when the machine resumes.`
+      : execution === "unconfirmed"
       ? "Assembly program assembled, uploaded and loaded. No screen change was observed, so it is not confirmed that the program is running (a SID player, a border effect or a JMP * loop looks like this)."
       : "Assembly program assembled, uploaded, and executed successfully.";
     const base = textResult(message, {
@@ -696,6 +709,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       details: result.details ?? null,
       ...(loadCheck ? { loadCheck } : {}),
       ...(execution ? { execution } : {}),
+      ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
     });
     return { ...base, structuredContent: { type: "json", data } };

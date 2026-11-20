@@ -275,7 +275,7 @@ test("start script runs src via configured Bun executable when Bun global is una
   }
 
   const [capturedCwd, capturedEntry] = fs.readFileSync(captureFile, "utf8").trim().split("\n");
-  assert.equal(capturedCwd, fixture.dir);
+  assert.equal(capturedCwd, process.cwd());
   assert.equal(capturedEntry, path.join(fixture.dir, "src", "index.ts"));
 });
 
@@ -408,4 +408,25 @@ test("start script forwards SIGTERM to the Bun child and the child exits", async
   launcher.kill("SIGTERM");
   await exited;
   assert.ok(await waitUntil(() => !pidAlive(childPid)), "child process survived SIGTERM to the launcher");
+});
+
+
+test("Node start launcher preserves a foreign caller directory and its local configuration", async (t) => {
+  const fixture = createFixture();
+  t.after(() => fs.rmSync(fixture.dir, { recursive: true, force: true }));
+  const projectDir = path.join(fixture.dir, "package");
+  const callerDir = path.join(fixture.dir, "caller");
+  writeFile(path.join(projectDir, "src", "index.ts"), "export {};\n");
+  writeFile(path.join(projectDir, ".c64bridge.json"), '{"backend":"wrong-package"}');
+  writeFile(path.join(callerDir, ".c64bridge.json"), '{"backend":"caller"}');
+  const stub = path.join(fixture.dir, "bun.sh");
+  writeFile(stub, '#!/bin/sh\nprintf "%s\\n" "$PWD" "$1"\ncat .c64bridge.json\n', 0o755);
+  const { spawnSync } = await import("node:child_process");
+  const result = spawnSync(process.env.C64BRIDGE_TEST_NODE_BIN || "node", [sourceStartScript], {
+    cwd: callerDir,
+    env: { ...process.env, C64BRIDGE_PROJECT_ROOT: projectDir, C64BRIDGE_START_SKIP_AUTO_LAUNCH: "0", BUN_BIN: stub },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.stdout.trim().split("\n"), [callerDir, path.join(projectDir, "src", "index.ts"), '{"backend":"caller"}']);
 });

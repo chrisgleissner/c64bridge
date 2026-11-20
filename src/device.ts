@@ -51,6 +51,8 @@ interface ViceSession {
   lost: string | null;
   /** Counts debugger stops, so an operation can tell that one happened while it ran. */
   stopEvents: number;
+  /** Key bytes fed while the CPU was stopped and so still queued in VICE; cleared when the CPU leaves the stopped state. */
+  queuedKeyBytes: number;
   readonly waiters: Set<() => void>;
 }
 
@@ -376,6 +378,9 @@ function assertAllowedViceResource(name: string): void {
   const problem = resourceNameProblem(name);
   if (problem) throw new Error(`VICE resource '${name}' is not allowed: ${problem.message}`);
 }
+
+/** VICE's keyboard buffer queue (kbdbuf.c) holds at most this many bytes. */
+const VICE_KEYBOARD_QUEUE_LIMIT = 16_384;
 
 class C64uBackend implements C64Facade {
   readonly type: "c64u" | "u2";
@@ -963,6 +968,7 @@ export class ViceBackend implements C64Facade {
       busy: false,
       lost: null,
       stopEvents: 0,
+      queuedKeyBytes: 0,
       waiters: new Set<() => void>(),
     };
     client.setUnsolicitedHandler((type, frame) => this.onSessionEvent(s, type, frame));
@@ -1074,18 +1080,27 @@ export class ViceBackend implements C64Facade {
    * Waits until the tracked CPU state is stopped, for at most `timeoutMs`. With no session
    * nothing can stop the CPU by itself, so it returns at once with `session: false`.
    */
-  async waitForStop(timeoutMs: number): Promise<{ session: boolean; stopped: boolean }> {
+  async waitForStop(timeoutMs: number, signal?: AbortSignal): Promise<{ session: boolean; stopped: boolean }> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
+      signal?.throwIfAborted();
       const s = this.liveSession();
       if (!s) return { session: false, stopped: false };
       if (s.cpu === "stopped") return { session: true, stopped: true };
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { session: true, stopped: false };
-      await new Promise<void>((resolve) => {
-        const wake = () => { clearTimeout(timer); s.waiters.delete(wake); resolve(); };
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          s.waiters.delete(wake);
+          signal?.removeEventListener("abort", abort);
+        };
+        const wake = () => { cleanup(); resolve(); };
+        const abort = () => { cleanup(); reject(signal?.reason ?? new DOMException("The wait was aborted", "AbortError")); };
         const timer = setTimeout(wake, remaining);
         s.waiters.add(wake);
+        signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
       });
     }
   }
@@ -1230,11 +1245,29 @@ export class ViceBackend implements C64Facade {
    * be consumed, so the bytes stay queued and the CPU stays stopped.
    */
   async feedKeyboard(bytes: Uint8Array, options?: { drainTimeoutMs?: number }): Promise<KeyboardFeedResult> {
-    const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, bytes.length * 150));
+    // The monitor halts the CPU while all feed chunks are sent, even for a
+    // running machine. No new bytes can drain until the whole feed completes.
+    const queuedBytes = bytes.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
+    if (queuedBytes > VICE_KEYBOARD_QUEUE_LIMIT) {
+      throw new Error(`VICE keyboard feed of ${queuedBytes} byte(s) exceeds the ${VICE_KEYBOARD_QUEUE_LIMIT} byte queue limit.`);
+    }
+    const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, queuedBytes * 150));
     return await this.withClient(async (client) => {
+      // VICE drops a whole feed silently when more than 16384 bytes are pending (kbdbuf.c); while the CPU is
+      // stopped nothing is consumed, so the total queued across feeds is what counts.
+      const stoppedSession = this.isCpuStopped() ? this.liveSession() : null;
+      if (stoppedSession) {
+        if (stoppedSession.queuedKeyBytes + queuedBytes > VICE_KEYBOARD_QUEUE_LIMIT) {
+          throw new Error(`VICE keyboard queue limit: ${stoppedSession.queuedKeyBytes} byte(s) are already queued while the CPU is stopped and ${queuedBytes} more would exceed ${VICE_KEYBOARD_QUEUE_LIMIT}. Resume the CPU first.`);
+        }
+      }
       const delivered = await client.keyboardFeedBytes(bytes);
       if (delivered === 0) return { delivered, status: "drained", pending: 0 };
-      if (this.isCpuStopped()) return { delivered, status: "queued", pending: delivered };
+      if (this.isCpuStopped()) {
+        const queuedSession = this.liveSession();
+        if (queuedSession) queuedSession.queuedKeyBytes += delivered;
+        return { delivered, status: "queued", pending: queuedSession?.queuedKeyBytes ?? delivered };
+      }
       const start = Date.now();
       const session = this.session;
       const stopsBefore = session?.stopEvents ?? 0;
@@ -1397,6 +1430,7 @@ export class ViceBackend implements C64Facade {
       if (s.stopEvents === stopEvents) { // a checkpoint hit while exiting keeps the debugger stop
         s.cpu = "running";
         s.debugStop = false;
+        s.queuedKeyBytes = 0; // the running CPU consumes what was queued
       }
       if (!this.sessionNeeded(s)) this.endSession(s);
     } catch (error) {
@@ -1641,7 +1675,10 @@ export class ViceBackend implements C64Facade {
       // Autoload power-cycles the machine after this call returns; wait until
       // its LOAD has finished so callers do not write into a machine that is
       // about to be reset.
-      return waitForAutoloadFinished(client, 30_000);
+      // A checkpoint hit during the autoload ends the wait: the CPU stays stopped there.
+      const s = this.session;
+      const stopsBefore = s?.stopEvents ?? 0;
+      return waitForAutoloadFinished(client, 30_000, s ? () => s.stopEvents !== stopsBefore : undefined);
     });
     this.attachedImages.set(n, imagePath);
     return {
@@ -1650,7 +1687,10 @@ export class ViceBackend implements C64Facade {
         drive,
         image: imagePath,
         loadedFirstProgram: outcome.loaded,
-        note: outcome.loaded
+        ...(outcome.stopped ? { stopped: true, ...(outcome.pc !== undefined ? { pc: `$${outcome.pc.toString(16).toUpperCase().padStart(4, "0")}` } : {}) } : {}),
+        note: outcome.stopped
+          ? "A checkpoint stopped the CPU while VICE was loading the disk; the CPU stays stopped there and the autoload may be unfinished."
+          : outcome.loaded
           ? "VICE attaches images through autoload, which resets the machine (clearing RAM) and LOADs the first program without running it."
           : "VICE attaches images through autoload, which resets the machine (clearing RAM); the disk has no program to load.",
       },
@@ -1829,12 +1869,29 @@ const AUTOLOAD_MARKER = Buffer.from([0xc6, 0x4b, 0x1d, 0x9e]);
  * covers screen RAM, BASIC initialised (TXTTAB $0801) with its end-of-program
  * pointer (VARTAB) moved off the reset value $0803 and an empty keyboard buffer.
  */
-async function waitForAutoloadFinished(client: ViceClient, timeoutMs: number): Promise<{ loaded: boolean }> {
+async function waitForAutoloadFinished(
+  client: ViceClient,
+  timeoutMs: number,
+  stopped?: () => boolean,
+): Promise<{ loaded: boolean; stopped?: boolean; pc?: number }> {
   const deadline = Date.now() + timeoutMs;
   let loadedEnd: number | null = null;
+  // A checkpoint hit leaves the CPU stopped: end the wait without resuming it, and report where it stopped.
+  const stoppedOutcome = async (): Promise<{ loaded: boolean; stopped: true; pc?: number }> => {
+    try {
+      const [metadata, values] = await Promise.all([client.registersAvailable(0), client.registersGet(0)]);
+      const pcId = metadata.find((m) => m.name.toUpperCase() === "PC")?.id;
+      const pc = pcId === undefined ? undefined : values.find((v) => v.id === pcId)?.value;
+      return pc === undefined ? { loaded: false, stopped: true } : { loaded: false, stopped: true, pc };
+    } catch {
+      return { loaded: false, stopped: true };
+    }
+  };
   while (Date.now() < deadline) {
+    if (stopped?.()) return await stoppedOutcome();
     await client.exitMonitor();
     await delay(250);
+    if (stopped?.()) return await stoppedOutcome();
     const marker = await client.memGet(AUTOLOAD_MARKER_ADDRESS, AUTOLOAD_MARKER_ADDRESS + AUTOLOAD_MARKER.length - 1);
     if (Buffer.from(marker).equals(AUTOLOAD_MARKER)) continue; // not reset yet
     const screen = screenCodesToAscii(await client.memGet(0x0400, 0x0400 + 999));

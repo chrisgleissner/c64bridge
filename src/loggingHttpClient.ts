@@ -50,18 +50,49 @@ function redactConfigPayload(path: string, payload: unknown): unknown {
   return payload;
 }
 
-/** Query parameters of a configuration write: the value of a credential item is replaced. */
-function redactConfigParams(path: string, params: unknown): unknown {
+function isConfigWrite(method: string | undefined, path: string): boolean {
+  return configRoute(path) !== undefined && method !== undefined && method !== "GET" && method !== "HEAD";
+}
+
+/** The leaves of a configuration write body ({ category: { item: value } }) are replaced; names stay. */
+function redactConfigWriteBody(body: unknown): unknown {
+  if (typeof body === "string") {
+    try {
+      return redactConfigWriteBody(JSON.parse(body));
+    } catch {
+      return REDACTED_PLACEHOLDER;
+    }
+  }
+  if (Array.isArray(body)) return body.map((entry) => redactConfigWriteBody(entry));
+  if (body !== null && typeof body === "object") {
+    return Object.fromEntries(Object.entries(body).map(([key, entry]) => [key, redactConfigWriteBody(entry)]));
+  }
+  return body === null || body === undefined ? body : REDACTED_PLACEHOLDER;
+}
+
+/** A request body as logged: configuration write values are always replaced, other payloads follow the item rules. */
+function redactRequestBody(method: string | undefined, path: string, body: unknown): unknown {
+  return isConfigWrite(method, path) ? redactConfigWriteBody(body) : redactConfigPayload(path, body);
+}
+
+/**
+ * Query parameters of a configuration write: every value is replaced. The firmware matches item names
+ * with wildcards, so the name cannot tell whether the item holds a credential.
+ */
+function redactConfigParams(method: string | undefined, path: string, params: unknown): unknown {
   const route = configRoute(path);
-  if (!route?.item || !isSensitiveConfigItem(route.category, route.item)) return params;
+  if (!route) return params;
+  const sensitiveItem = route.item !== undefined && isSensitiveConfigItem(route.category, route.item);
+  if (!sensitiveItem && !isConfigWrite(method, path)) return params;
   if (params === null || typeof params !== "object") return params;
   return Object.fromEntries(Object.keys(params).map((key) => [key, REDACTED_PLACEHOLDER]));
 }
 
-/** The path as logged: the query string of a credential item write is dropped. */
-function redactConfigPath(path: string): string {
+/** The path as logged: the query string of a configuration write or credential item request is dropped. */
+function redactConfigPath(method: string | undefined, path: string): string {
   const route = configRoute(path);
-  if (route?.item && isSensitiveConfigItem(route.category, route.item) && path.includes("?")) {
+  const sensitiveItem = route?.item !== undefined && isSensitiveConfigItem(route.category, route.item);
+  if (route && (sensitiveItem || isConfigWrite(method, path)) && path.includes("?")) {
     return `${path.split("?")[0]}?${REDACTED_PLACEHOLDER}`;
   }
   return path;
@@ -248,7 +279,7 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
   const meta = extractMeta(response.config);
   const latency = meta ? Date.now() - meta.startedAt : 0;
   const method = meta?.method ?? (response.config.method ?? "get").toUpperCase();
-  const path = redactConfigPath(meta?.path ?? resolvePath(response.config));
+  const path = redactConfigPath(method, meta?.path ?? resolvePath(response.config));
   const bytes = payloadByteLength(response.data);
 
   logger.info(`${method} ${path} status=${response.status} bytes=${bytes} latencyMs=${latency}`);
@@ -256,8 +287,8 @@ function handleResponse(response: AxiosResponse, logger: PrefixedLogger): void {
   if (logger.isDebugEnabled()) {
     logger.debug(`request ${method} ${path}`, {
       headers: meta?.headers,
-      query: redactConfigParams(path, meta?.params),
-      body: formatPayloadForDebug(redactConfigPayload(path, meta?.body)),
+      query: redactConfigParams(method, path, meta?.params),
+      body: formatPayloadForDebug(redactRequestBody(method, path, meta?.body)),
     });
     logger.debug(`response ${method} ${path}`, {
       status: response.status,
@@ -277,7 +308,7 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
   const meta = extractMeta(config);
   const latency = meta ? Date.now() - meta.startedAt : 0;
   const method = meta?.method ?? (config.method ?? "get").toUpperCase();
-  const path = redactConfigPath(meta?.path ?? resolvePath(config));
+  const path = redactConfigPath(method, meta?.path ?? resolvePath(config));
   const response = error.response;
   const status = response?.status ?? "ERR";
   const bytes = response ? payloadByteLength(response.data) : 0;
@@ -288,8 +319,8 @@ function handleError(error: AxiosError, logger: PrefixedLogger): void {
   if (logger.isDebugEnabled()) {
     logger.debug(`request ${method} ${path}`, {
       headers: meta?.headers,
-      query: redactConfigParams(path, meta?.params),
-      body: formatPayloadForDebug(redactConfigPayload(path, meta?.body)),
+      query: redactConfigParams(method, path, meta?.params),
+      body: formatPayloadForDebug(redactRequestBody(method, path, meta?.body)),
     });
     logger.debug(`error ${method} ${path}`, {
       status,

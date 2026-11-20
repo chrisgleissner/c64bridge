@@ -34,6 +34,13 @@ const ENV_DOC_FILES = (process.env.RAG_DOC_FILES ?? "")
   .filter(Boolean)
   .map((entry) => path.resolve(entry));
 
+function isDeveloperOnlyFile(file: string): boolean {
+  const relative = path.relative(ASSET_ROOT, path.resolve(file)).split(path.sep).join("/");
+  return relative === ".github/prompts/steer.prompt.md" ||
+    relative === ".github/prompts/pr-converge.prompt.md" ||
+    relative.startsWith(".github/skills/pr-converge/");
+}
+
 function shouldExcludeDocFile(file: string): boolean {
   const absolute = path.resolve(file);
   const relativeToDoc = path.relative(DOC_ROOT, absolute);
@@ -648,7 +655,7 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
   };
 
   for (const source of fileSources) {
-    if (seen.has(source.file)) continue;
+    if (isDeveloperOnlyFile(source.file) || seen.has(source.file)) continue;
     seen.add(source.file);
     let text: string;
     try {

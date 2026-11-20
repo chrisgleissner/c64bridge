@@ -23,9 +23,9 @@ This document is the source of truth for VICE support in the public MCP surface.
 | --- | --- |
 | `c64_program` | `load_prg`, `run_prg`, `upload_run_basic`, `upload_run_asm`, `batch_run`, `bundle_run`, `cross_platform_greeting` |
 | `c64_memory` | `read`, `write`, `read_screen`, `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory` |
-| `c64_system` | `pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `start_task`, `stop_task`, `stop_all_tasks`, `list_tasks`, `performance_report` |
+| `c64_system` | `pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `start_task`, `stop_task`, `stop_all_tasks`, `delete_task`, `list_tasks`, `performance_report` |
 | `c64_graphics` | `capture_frame`, `render_petscii_art`, `render_bitmap`, `render_sprite`, `render_petscii_text`, `get_display_state` |
-| `c64_rag` | `basic`, `asm` |
+| `c64_rag` | `basic`, `asm`, `docs` |
 | `c64_disk` | `list_drives`, `mount` |
 | `c64_drive` | `reset`, `power_on`, `power_off`, `set_mode` |
 | `c64_config` | `list`, `get`, `set`, `batch_update`, `info`, `version`, `snapshot`, `restore`, `diff` |

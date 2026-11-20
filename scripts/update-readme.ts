@@ -455,7 +455,7 @@ export function renderSummarySection(): string[] {
 }
 
 export function buildDocumentation(): string {
-  const sections = [renderSummarySection(), renderToolsSection(), renderResourcesSection(), renderPromptsSection()];
+  const sections = [renderSummarySection(), ["See the [hardening behavior guide](doc/hardening-behavior.md) for host path restrictions, argument limits, task retention, cancellation and verification semantics.", ""], renderToolsSection(), renderResourcesSection(), renderPromptsSection()];
   return sections.flat().join("\n").trim();
 }
 

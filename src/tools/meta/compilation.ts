@@ -1,13 +1,13 @@
 // Compile-run-verify cycle meta tool
-import type { ToolDefinition } from "../types.js";
+import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
 import { ToolError, ToolExecutionError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { resolve as resolvePath, join as joinPath } from "node:path";
 import { resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
-import { sleep } from "./util.js";
-import { getTasksHomeDir } from "./background.js";
+import { sleepUnlessAborted } from "./util.js";
+import { createDefaultRunDirectory } from "../../runArtifacts.js";
 
 const compileRunVerifyCycleArgsSchema = objectSchema({
   description: "Compile source (BASIC/ASM/SIDWAVE), run, verify via screen/audio, and archive artifacts.",
@@ -16,7 +16,7 @@ const compileRunVerifyCycleArgsSchema = objectSchema({
     source: stringSchema({ description: "Source code to compile", minLength: 1 }),
     verifyScreen: optionalSchema(stringSchema({ description: "Expected screen text pattern (regex or substring)", minLength: 1 })),
     verifyAudio: optionalSchema(booleanSchema({ description: "Analyze audio output", default: false }), false),
-    durationMs: optionalSchema(numberSchema({ description: "Duration to run program", integer: true, minimum: 1, default: 2000 }), 2000),
+    durationMs: optionalSchema(numberSchema({ description: "Duration to run program", integer: true, minimum: 1, maximum: 600000, default: 2000 }), 2000),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for artifacts", minLength: 1 })),
   },
   required: ["sourceType", "source"],
@@ -45,6 +45,7 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         const parsed = compileRunVerifyCycleArgsSchema.parse(args ?? {});
+        if (ctx.signal?.aborted) return cancelledResult("Compile/run/verify cycle cancelled before launch.");
         const sourceType = parsed.sourceType as string;
         const source = parsed.source as string;
         const verifyScreen = parsed.verifyScreen as string | undefined;
@@ -53,7 +54,7 @@ export const tools: ToolDefinition[] = [
 
         const outputPath = parsed.outputPath
           ? resolveHostPath(String(parsed.outputPath), { purpose: "write" })
-          : resolvePath(joinPath(getTasksHomeDir(), `cycle_${Date.now()}`));
+          : await createDefaultRunDirectory("cycle");
         await fs.mkdir(outputPath, { recursive: true });
 
         const runId = `cycle_${Date.now()}`;
@@ -61,8 +62,18 @@ export const tools: ToolDefinition[] = [
         let ran = false;
         let verified = false;
         let verificationMessage: string | undefined;
+        const cancelCycle = async () => {
+          await fs.writeFile(resolveHostChildPath(outputPath, "manifest.json"), JSON.stringify({
+            runId, sourceType, compiled, ran, verified: false, cancelled: true,
+            createdAt: new Date().toISOString(),
+          }, null, 2), "utf8");
+          return cancelledResult(ran
+            ? "Program launched; compile/run/verify cycle cancelled."
+            : "Compile/run/verify cycle cancelled before launch completed.");
+        };
 
         try {
+          if (ctx.signal?.aborted) return cancelledResult("Compile/run/verify cycle cancelled before launch.");
           // Compile
           if (sourceType === "basic") {
             await (ctx.client as any).uploadAndRunBasic(source);
@@ -79,11 +90,13 @@ export const tools: ToolDefinition[] = [
             ran = true;
           }
 
-          await sleep(durationMs);
+          await sleepUnlessAborted(durationMs, ctx.signal);
+          if (ctx.signal?.aborted) return await cancelCycle();
 
           // Verify
           if (verifyScreen) {
             const screen = await (ctx.client as any).readScreen();
+            if (ctx.signal?.aborted) return await cancelCycle();
             verified = screen.includes(verifyScreen);
             verificationMessage = verified ? "Screen verification passed" : `Screen does not contain "${verifyScreen}"`;
           }
@@ -93,7 +106,9 @@ export const tools: ToolDefinition[] = [
           await fs.writeFile(sourcePath, source, "utf8");
 
           const screenPath = resolveHostChildPath(outputPath, "screen.txt");
+          if (ctx.signal?.aborted) return await cancelCycle();
           const screen = await (ctx.client as any).readScreen();
+          if (ctx.signal?.aborted) return await cancelCycle();
           await fs.writeFile(screenPath, screen, "utf8");
 
           const manifestPath = resolveHostChildPath(outputPath, "manifest.json");
@@ -112,8 +127,10 @@ export const tools: ToolDefinition[] = [
           };
           await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 
+          if (ctx.signal?.aborted) return await cancelCycle();
           return jsonResult({ runId, outputPath, compiled, ran, verified, verificationMessage }, { success: verified || !verifyScreen });
         } catch (e) {
+          if (ctx.signal?.aborted) return await cancelCycle();
           const error = e instanceof Error ? e.message : String(e);
           const manifestPath = resolveHostChildPath(outputPath, "manifest.json");
           const manifest = {

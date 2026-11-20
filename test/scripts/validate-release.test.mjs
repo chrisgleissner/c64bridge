@@ -98,14 +98,16 @@ test('release workflow publishes only the unchanged artifact tested from its exa
   assert.ok(checkout.with.ref.includes('github.ref'));
   assert.ok(!steps.some((step) => /release:prepare|git push origin HEAD:main/.test(step.run ?? '')));
   const index = (name) => steps.findIndex((step) => step.name === name);
-  const publish = steps[index('Publish validated artifact to npm')];
+  const publish = workflow.jobs.publish_npm.steps.find(s => s.name === 'Publish validated artifact to npm');
+  assert.equal(workflow.jobs.publish_npm.needs, 'release');
   assert.match(publish.run, /sha256sum --check/);
   assert.match(publish.run, /npm publish "\.\/\$RELEASE_TARBALL" --ignore-scripts/);
   assert.match(publish.run, /--registry https:\/\/registry\.npmjs\.org/);
   assert.ok(index('Verify prepared release tag') < index('Build project'));
-  assert.ok(index('Validate exact packed artifact before publishing') < index('Publish validated artifact to npm'));
-  assert.ok(index('Validate MCP Registry manifest') < index('Publish validated artifact to npm'));
-  const visibility = steps[index('Wait for npm package visibility')].run;
+  assert.ok(index('Validate exact packed artifact before publishing') < index('Preserve validated npm artifact'));
+  assert.ok(index('Validate MCP Registry manifest') < index('Preserve validated npm artifact'));
+  assert.deepEqual(workflow.jobs.verify_published.needs, ['release', 'publish_npm']);
+  const visibility = workflow.jobs.verify_published.steps.find(s => s.name === 'Wait for npm package visibility').run;
   assert.match(visibility, /PUBLISHED_INTEGRITY.*EXPECTED_INTEGRITY/);
   assert.match(visibility, /seq 1 120/);
   assert.match(visibility, /npm pack.*PACKAGE_VERSION/);
@@ -122,7 +124,7 @@ test('release workflow publishes only the unchanged artifact tested from its exa
 
 test('actual release polling waits through metadata and archive 404s and rejects corrupt archives or timeouts', () => {
   const release = YAML.parse(fs.readFileSync('.github/workflows/release.yaml', 'utf8'));
-  const visibility = release.jobs.release.steps.find((step) => step.name === 'Wait for npm package visibility').run;
+  const visibility = release.jobs.verify_published.steps.find((step) => step.name === 'Wait for npm package visibility').run;
   const check = YAML.parse(fs.readFileSync('.github/workflows/package-check.yaml', 'utf8'));
   const pack = check.jobs.verify.steps.find((step) => step.name === 'Pack package').run;
   for (const [script, mode, success] of [[visibility, 'transient', true], [visibility, 'corrupt', false], [visibility, 'missing', false], [pack, 'transient', true], [pack, 'missing', false]]) {
@@ -167,5 +169,58 @@ if (args[0] === 'view') {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  }
+});
+
+
+test('release credentials are unavailable to repository and dependency execution', () => {
+  const { jobs } = YAML.parse(fs.readFileSync('.github/workflows/release.yaml', 'utf8'));
+  assert.equal(jobs.release.permissions['id-token'], undefined);
+  assert.equal(jobs.release.permissions.contents, 'read');
+  assert.match(jobs.release.steps.find(s => s.name === 'Validate exact packed artifact before publishing').run, /npm install --omit=dev --ignore-scripts/);
+  const privileged = Object.values(jobs).filter(job => job.permissions?.['id-token'] === 'write');
+  assert.equal(privileged.length, 2);
+  for (const job of privileged) {
+    assert.equal(job.container, undefined);
+    assert.ok(!job.steps.some(s => s.uses?.startsWith('actions/checkout@')));
+    assert.ok(!job.steps.some(s => /npm (?:ci|install)|node scripts\//.test(s.run ?? '')));
+    assert.equal(job.permissions.contents, 'read');
+  }
+  const publisher = jobs.release.steps.find(s => s.name === 'Install mcp-publisher').run;
+  assert.match(publisher, /releases\/download\/v1\.8\.9\//);
+  assert.match(publisher, /4d527ca8f1ced0394c962dc925c2a4a4addef441cbefd62501c875e9481823a8/);
+  assert.ok(publisher.indexOf('sha256sum --check') < publisher.indexOf('tar -xzf'));
+  assert.equal(jobs.verify_published.permissions['id-token'], undefined);
+  assert.ok(jobs.publish_registry.needs.includes('verify_npm'));
+});
+
+test('publishing shells reject changed bundle bytes before invoking npm or extracting the publisher', () => {
+  const { jobs } = YAML.parse(fs.readFileSync('.github/workflows/release.yaml', 'utf8'));
+  const npmScript = jobs.publish_npm.steps.find(s => s.name === 'Publish validated artifact to npm').run;
+  const registryScript = jobs.publish_registry.steps.find(s => s.name === 'Verify publisher and manifest').run;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-publish-checks-'));
+  try {
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    for (const command of ['npm', 'tar']) {
+      fs.writeFileSync(path.join(bin, command), '#!/bin/sh\necho invoked >> "$RUNNER_TEMP/invoked"\n', { mode: 0o755 });
+    }
+    fs.writeFileSync(path.join(dir, 'artifact.tgz'), 'changed package bytes');
+    fs.writeFileSync(path.join(dir, 'server.json'), '{}');
+    fs.writeFileSync(path.join(dir, 'mcp-publisher.tar.gz'), 'untrusted publisher bytes');
+    const digest = value => createHash('sha256').update(value).digest('hex');
+    const baseEnv = { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: dir, RELEASE_TARBALL: 'artifact.tgz', EXPECTED_SHA256: digest('original package bytes'), EXPECTED_MANIFEST_SHA256: digest('{}') };
+    for (const script of [npmScript, registryScript]) {
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], { cwd: dir, env: baseEnv, encoding: 'utf8', timeout: 5000 });
+      assert.notEqual(result.status, 0, result.stdout);
+      assert.equal(fs.existsSync(path.join(dir, 'invoked')), false);
+      assert.match(result.stderr, /checksum did NOT match/);
+    }
+    // Matching package bytes may reach npm, but never run package lifecycle scripts.
+    const valid = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', npmScript], { cwd: dir, env: { ...baseEnv, EXPECTED_SHA256: digest('changed package bytes') }, encoding: 'utf8', timeout: 5000 });
+    assert.equal(valid.status, 0, valid.stderr);
+    assert.equal(fs.readFileSync(path.join(dir, 'invoked'), 'utf8'), 'invoked\n');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

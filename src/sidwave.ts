@@ -114,6 +114,8 @@ const VOICE_KEYS = new Set(["id", "name", "waveform", "pulse_width", "adsr", "pa
 const ARP_KEYS = new Set(["type", "notes", "frame_rate", "length", "transpositions", "fx"]);
 const GROOVE_KEYS = new Set(["groove", "length", "transpositions", "fx"]);
 const MOTIF_KEYS = new Set(["motif", "root", "length", "transpositions", "fx"]);
+/** Upper bound for bars per section, summed timeline bars and length_bars; keeps arranging well under a second. */
+const MAX_SIDWAVE_BARS = 4096;
 const SECTION_KEYS = new Set(["section", "bars", "layers"]);
 const PATTERN_FX_KEYS = new Set(["vibrato", "pwm_sweep", "slide", "filter_mod"]);
 const GLOBAL_FX_KEYS = new Set(["reverb_sim", "filter_env"]);
@@ -178,9 +180,12 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   const timeline = obj.timeline.map((t: unknown, i: number) => normalizeTimelineSection(t, `$.timeline[${i}]`, voices));
 
   const timelineBars = timeline.reduce((sum: number, s: SidwaveTimelineSection) => sum + s.bars, 0);
+  if (timelineBars > MAX_SIDWAVE_BARS) {
+    throw new SidwaveValidationError("$.timeline", `the sections add up to ${timelineBars} bars, above the maximum ${MAX_SIDWAVE_BARS}`);
+  }
   let length_bars = timelineBars;
   if (header.length_bars !== undefined) {
-    length_bars = requireNumber(header.length_bars, `${headerPath}.length_bars`, { min: 1, integer: true });
+    length_bars = requireNumber(header.length_bars, `${headerPath}.length_bars`, { min: 1, max: MAX_SIDWAVE_BARS, integer: true });
   }
 
   const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, global_fx };
@@ -370,7 +375,7 @@ function normalizeTimelineSection(raw: unknown, path: string, voices: SidwaveVoi
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a section mapping with bars and layers");
   const t = raw as Record<string, any>;
   checkKeys(t, SECTION_KEYS, path);
-  const bars = requireNumber(t.bars, `${path}.bars`, { min: 1, integer: true });
+  const bars = requireNumber(t.bars, `${path}.bars`, { min: 1, max: MAX_SIDWAVE_BARS, integer: true });
   const layers: Record<string, string> = {};
   if (t.layers !== undefined && !isPlainObject(t.layers)) throw new SidwaveValidationError(`${path}.layers`, "expected a mapping such as { v1: A, v2: \"-\" }");
   for (const [k, v] of Object.entries((t.layers ?? {}) as Record<string, unknown>)) {
