@@ -24,7 +24,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "load_prg",
       ensureDescriptor(programDescriptorIndex, "load_prg").inputSchema,
-      { description: "Load a PRG from Ultimate storage without executing it." },
+      { description: "Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "load_prg", rawArgs, ctx),
   },
@@ -33,7 +33,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "run_prg",
       ensureDescriptor(programDescriptorIndex, "run_prg").inputSchema,
-      { description: "Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE." },
+      { description: "Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "run_prg", rawArgs, ctx),
   },
@@ -42,7 +42,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "run_crt",
       ensureDescriptor(programDescriptorIndex, "run_crt").inputSchema,
-      { description: "Mount and run a CRT cartridge image." },
+      { description: "Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "run_crt", rawArgs, ctx),
   },
@@ -51,7 +51,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "upload_run_basic",
       ensureDescriptor(programDescriptorIndex, "upload_run_basic").inputSchema,
-      { description: "Upload Commodore BASIC v2 source and execute it immediately." },
+      { description: "Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "upload_run_basic", rawArgs, ctx),
   },
@@ -60,7 +60,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "upload_run_asm",
       ensureDescriptor(programDescriptorIndex, "upload_run_asm").inputSchema,
-      { description: "Assemble 6502/6510 source, upload the PRG, and execute it." },
+      { description: "Assemble 6502/6510 source (ACME, ca65 and 64tass directive spellings; .include/.incbin read host files), upload and run it." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "upload_run_asm", rawArgs, ctx),
   },
@@ -103,7 +103,7 @@ export const programModule = defineToolModule({
   defaultTags: ["programs", "execution"],
   workflowHints: [
     "Choose BASIC or assembly uploaders based on the language you just generated for the user.",
-    "Prefer PRG or CRT runners when the user supplies a file path instead of source text; PRG paths are host-local on VICE and Ultimate-visible on hardware.",
+    "Prefer PRG or CRT runners when the user supplies a file path instead of source text; paths are host-local on VICE and Ultimate-visible on hardware unless location is host.",
     "For a quick visible confirmation on VICE, C64U/U64, or U2-family hardware, prefer cross_platform_greeting instead of composing manual backend switches and BASIC upload steps.",
   ],
   supportedPlatforms: ["c64u", "u2", "vice"],

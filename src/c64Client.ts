@@ -28,6 +28,7 @@ import {
   type MachineInputBatch,
   type MachineInputState,
   ViceBackend,
+  cachedRegisterMetadata,
   screenLayoutFromRegisters,
 } from "./device.js";
 import { Api, HttpClient } from "../generated/c64/index.js";
@@ -981,6 +982,18 @@ export class C64Client {
     }
   }
 
+  /** Uploads a cartridge image and runs it (Ultimate only). */
+  async runCrt(crt: Uint8Array | Buffer): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      if (!facade.runCrt) throw new Error("Uploading a CRT image is not supported by the selected backend");
+      const res = await facade.runCrt(crt);
+      return { success: res.success, details: res.details };
+    } catch (error) {
+      return { success: false, details: this.normaliseError(error) };
+    }
+  }
+
   async sidplayFile(path: string, songnr?: number): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
@@ -1672,6 +1685,19 @@ export class C64Client {
     options?: { type?: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" },
   ): Promise<RunBasicResult> {
     try { const facade = await this.facadePromise; return await facade.driveMount(drive, imagePath, options); } catch (error) { return { success: false, details: this.normaliseError(error) }; }
+  }
+
+  /** Uploads a disk image and mounts it (Ultimate only). */
+  async driveMountImage(
+    drive: string,
+    image: Uint8Array | Buffer,
+    options: { type: "d64" | "g64" | "d71" | "g71" | "d81"; mode?: "readwrite" | "readonly" | "unlinked" },
+  ): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      if (!facade.driveMountImage) throw new Error("Uploading a disk image is not supported by the selected backend");
+      return await facade.driveMountImage(drive, image, options);
+    } catch (error) { return { success: false, details: this.normaliseError(error) }; }
   }
 
   async driveRemove(drive: string): Promise<RunBasicResult> {
@@ -2746,6 +2772,8 @@ export class C64Client {
       readonly drainPollMs?: number;
       readonly drainTimeoutMs?: number;
       readonly pinnedFacade?: C64Facade;
+      /** Stops waiting for the queue to drain (and aborts the VICE feed) when the request is cancelled. */
+      readonly signal?: AbortSignal;
     },
   ): Promise<{ delivered: number; status?: "drained" | "queued" | "stopped"; pending?: number; stoppedAt?: number }> {
     const data = Buffer.isBuffer(bytes)
@@ -2764,7 +2792,7 @@ export class C64Client {
         // VICE counts the bytes it queues (a NUL is dropped) and needs about 150 ms per key at least.
         const queuedBytes = data.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
         const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, queuedBytes * 150));
-        const fed = await facade.feedKeyboard(data, { drainTimeoutMs: timeoutMs });
+        const fed = await facade.feedKeyboard(data, { drainTimeoutMs: timeoutMs, ...(options?.signal ? { signal: options.signal } : {}) });
         if (fed.status === "timeout") {
           throw new KeyboardQueueDrainTimeoutError(fed.delivered, data.length, timeoutMs, fed.pending);
         }
@@ -2783,6 +2811,7 @@ export class C64Client {
       const waitForEmptyQueue = async (): Promise<number> => {
         const drainStart = Date.now();
         for (;;) {
+          options?.signal?.throwIfAborted();
           const ndx = (await facade.readMemory(NDX, 1))[0] ?? 0;
           if (ndx === 0) return 0;
           if (Date.now() - drainStart >= totalTimeoutMs) return ndx;
@@ -2936,7 +2965,7 @@ export class C64Client {
 
     async viceRegistersAvailable(memspace: number = 0): Promise<ViceRegisterMetadata[]> {
       const space = this.normaliseMemspace(memspace);
-      return this.withViceMonitor((client) => client.registersAvailable(space));
+      return this.withViceMonitor((client) => cachedRegisterMetadata(client, space));
     }
 
     async viceRegistersGet(memspace: number = 0): Promise<ViceRegisterValue[]> {
@@ -2955,7 +2984,11 @@ export class C64Client {
           ...(options.memspace !== undefined ? { memspace: this.normaliseMemspace(options.memspace) } : {}),
         };
       }
-      return this.withViceMonitor((client) => client.registersSet(writes, payload));
+      return this.withViceMonitor(async (client) => {
+        // Resolve register names from the per-connection cache instead of asking the emulator on every write.
+        const metadata = payload?.metadata ?? await cachedRegisterMetadata(client, payload?.memspace ?? 0);
+        return client.registersSet(writes, { ...payload, metadata });
+      });
     }
 
     async viceStepInstructions(count = 1, options?: { readonly stepOver?: boolean }): Promise<{ stopped: boolean; pc?: number }> {

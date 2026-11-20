@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import path from "node:path";
 import { readHostFile, resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
-import { basicToPrg } from "./translation/basicTokenizer.js";
+import { basicToPrgDetailed } from "./translation/basicTokenizer.js";
 import {
   defineToolModule,
   OPERATION_DISCRIMINATOR,
@@ -20,6 +21,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { checkAsmProgramLoaded, pollForProgramOutcome, type AsmPollResult, type BasicPollResult } from "./pollValidator.js";
+import { cancelGeneratedSidPlayback } from "./audio.js";
 import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
@@ -45,7 +47,7 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
 const BASIC_MAX_LINE = 63999;
 
 const prgPathDescription = "Path to the PRG file: Ultimate path such as //USB0/demo.prg on c64u/u2 (or a host path with location host); host path on VICE.";
-const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE).";
+const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE), or a host path with location host.";
 
 type OperationlessArgs<T extends Record<string, unknown>> = Omit<T, typeof OPERATION_DISCRIMINATOR>;
 
@@ -357,12 +359,16 @@ const prgFileArgsSchema = objectSchema({
 });
 
 const crtFileArgsSchema = objectSchema({
-  description: "Arguments for running a CRT image stored on Ultimate-visible storage.",
+  description: "Arguments for running a CRT image from Ultimate-visible storage or from the host.",
   properties: {
     path: stringSchema({
       description: crtPathDescription,
       minLength: 1,
     }),
+    location: optionalSchema(stringSchema({
+      description: "device (default): Ultimate path. host: read the file from the host and upload it.",
+      enum: ["device", "host"],
+    })),
   },
   required: ["path"],
   additionalProperties: false,
@@ -381,7 +387,9 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     // Compute PRG locally to expose structured metadata
     let activeProgram = originalProgram;
-    let prg = basicToPrg(activeProgram);
+    const tokenized = basicToPrgDetailed(activeProgram);
+    let prg = tokenized.prg;
+    let replacedLines = tokenized.replacedLines;
     let entryAddress = prg.readUInt16LE(0);
 
     const runBasic = async (source: string) => {
@@ -418,8 +426,11 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         });
       }
       const addresses = prgAddresses(prg);
-      const message = `BASIC program uploaded and started (RUN typed); it occupies ${addresses.load}-${addresses.end}. Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).`;
-      const fields = { entryAddress, addresses, prgSize: prg.length };
+      const unverifiedReplacedNote = replacedLines.length > 0
+        ? ` Line number(s) ${replacedLines.join(", ")} appear more than once in the source; the later text replaced the earlier text, as when typing a line again.`
+        : "";
+      const message = `BASIC program uploaded and started (RUN typed); it occupies ${addresses.load}-${addresses.end}. Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).${unverifiedReplacedNote}`;
+      const fields = { entryAddress, addresses, prgSize: prg.length, ...(replacedLines.length > 0 ? { replacedLines } : {}) };
       const base = textResult(message, { success: true, ...fields, details: result.details ?? null });
       return { ...base, structuredContent: { type: "json", data: { kind: "upload_run_basic" as const, format: "prg" as const, ...fields, resources: ["c64://basic/spec", "c64://guide/bootstrap"] } } };
     }
@@ -522,7 +533,8 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         return structuredExecutionError("Auto-fix failed due to firmware error while re-running BASIC program.", data);
       }
 
-      const retryPrg = basicToPrg(fixAttempt.program);
+      const retryTokenized = basicToPrgDetailed(fixAttempt.program);
+      const retryPrg = retryTokenized.prg;
       let retryOutcome: BasicPollResult;
       try {
         retryOutcome = await pollRun(retryPrg, retryBefore);
@@ -551,6 +563,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
       activeProgram = fixAttempt.program;
       prg = retryPrg;
+      replacedLines = retryTokenized.replacedLines;
       entryAddress = prg.readUInt16LE(0);
       screenOutput = retryOutcome.screen;
       autoFixInfo = { changes: fixAttempt.changes, originalErrors: errors };
@@ -574,6 +587,10 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
           },
         }
       : {};
+    const replacedFields = replacedLines.length > 0 ? { replacedLines } : {};
+    const replacedNote = replacedLines.length > 0
+      ? ` Line number(s) ${replacedLines.join(", ")} appear more than once in the source; the later text replaced the earlier text, as when typing a line again.`
+      : "";
     const metadata = {
       success: true,
       entryAddress,
@@ -582,6 +599,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       details: result.details ?? null,
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...autoFixFields,
+      ...replacedFields,
       verified: true,
     };
 
@@ -594,10 +612,11 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       resources: ["c64://basic/spec", "c64://guide/bootstrap"],
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...autoFixFields,
+      ...replacedFields,
       verified: true,
     };
 
-    const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.`, metadata);
+    const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.${replacedNote}`, metadata);
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
     if (error instanceof ToolError) {
@@ -606,6 +625,47 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
     return unknownErrorResult(error);
   }
 }
+
+/** Largest file an `.include` or `.incbin` may read (a C64 program cannot use more than 64 KiB of data). */
+const MAX_ASM_INCLUDE_BYTES = 1024 * 1024;
+
+/**
+ * Reads a file for `.include`/`.incbin` with the same confinement, hidden-path and size rules as
+ * readHostFile. The assembler calls its resolvers synchronously, so the read is synchronous too.
+ * A relative path is taken relative to the including file when that is a real file, else to the working directory.
+ */
+function readAssemblerHostFile(requested: string, fromFile: string): Buffer {
+  const base = path.isAbsolute(fromFile) ? path.dirname(fromFile) : process.cwd();
+  const real = resolveHostPath(path.resolve(base, requested), { purpose: "read", maxBytes: MAX_ASM_INCLUDE_BYTES });
+  const fd = fs.openSync(real, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  try {
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile()) throw new ToolValidationError(`Host path is not a regular file: ${real}`, { path: real });
+    if (stat.size > MAX_ASM_INCLUDE_BYTES) {
+      throw new ToolValidationError(`Host file is too large to read: ${real} is ${stat.size} bytes, limit is ${MAX_ASM_INCLUDE_BYTES} bytes.`, { path: real });
+    }
+    const out = Buffer.allocUnsafe(stat.size);
+    let total = 0;
+    while (total < out.length) {
+      const n = fs.readSync(fd, out, total, out.length - total, null);
+      if (n === 0) break;
+      total += n;
+    }
+    return out.subarray(0, total);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** Resolvers that let assembly source use `.include`/`.incbin` (`!source`/`!binary`) with files inside the allowed host directories. */
+export const assemblerHostResolvers = {
+  resolveInclude: (requested: string, fromFile: string) => {
+    const base = path.isAbsolute(fromFile) ? path.dirname(fromFile) : process.cwd();
+    const real = resolveHostPath(path.resolve(base, requested), { purpose: "read", maxBytes: MAX_ASM_INCLUDE_BYTES });
+    return { contents: readAssemblerHostFile(requested, fromFile).toString("utf8"), fileName: real };
+  },
+  resolveIncbin: (requested: string, fromFile: string) => readAssemblerHostFile(requested, fromFile),
+};
 
 async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
@@ -617,7 +677,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     });
 
     // Assemble locally to expose structured metadata and capture symbols
-    const asmResult = assemblyToPrgDetailed(parsed.program);
+    const asmResult = assemblyToPrgDetailed(parsed.program, assemblerHostResolvers);
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
 
@@ -719,6 +779,9 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const addresses = prgAddresses(prg, entryAddress);
     const where = ` Program at ${addresses.load}-${addresses.end}, entry ${addresses.entry} (SYS ${entryAddress}).`;
     const stopFields = stoppedInProgram ? { stopped: true, stoppedAt: fmt(stoppedAt!), ...(stopLabel ? { stoppedAtLabel: stopLabel } : {}) } : {};
+    const asmWarnings = asmResult.warnings;
+    const warningFields = asmWarnings.length > 0 ? { warnings: asmWarnings } : {};
+    const warningNote = asmWarnings.length > 0 ? ` Assembler warnings: ${asmWarnings.join(" | ")}` : "";
     const data = {
       kind: "upload_run_asm" as const,
       format: "prg" as const,
@@ -732,6 +795,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(shouldVerify && verified ? { verified: true } : {}),
       ...stopFields,
       ...symbolFields,
+      ...warningFields,
     };
     const message = stoppedInProgram
       ? `Assembly program assembled, uploaded and started; a checkpoint stopped the CPU at ${fmt(stoppedAt!)}${stopLabel ? ` (${stopLabel})` : ""} inside the program. Use c64_debug to inspect, step or continue.`
@@ -740,7 +804,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       : execution === "unconfirmed"
       ? "Assembly program assembled, uploaded and loaded, and the SYS command was typed. Execution was not observed (verify:false does not poll); pass verify:true to poll the screen for evidence."
       : "Assembly program assembled, uploaded, and executed successfully (verified).";
-    const base = textResult(message + where, {
+    const base = textResult(message + where + warningNote, {
       success: true,
       entryAddress,
       addresses,
@@ -752,6 +816,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(shouldVerify && verified ? { verified: true } : {}),
       ...stopFields,
       ...symbolFields,
+      ...warningFields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
@@ -887,6 +952,7 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
     const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
+    cancelGeneratedSidPlayback(); // the generated SID sequence would keep writing into the new program's SID registers
     const result = source.bytes ? await ctx.client.loadPrg(source.bytes) : await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError(`C64 backend reported failure while loading PRG${hostLocationHint(parsed, source, ctx)}`, {
@@ -939,6 +1005,7 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     const source = await resolvePrgSource(parsed, ctx);
     const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
+    cancelGeneratedSidPlayback(); // the generated SID sequence would keep writing into the new program's SID registers
     const result = source.bytes ? await ctx.client.runPrg(source.bytes) : await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError(`C64 backend reported failure while running PRG${hostLocationHint(parsed, source, ctx)}`, {
@@ -984,9 +1051,15 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
 async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = crtFileArgsSchema.parse(rawArgs ?? {});
-    ctx.logger.info("Running CRT file", { path: parsed.path });
+    ctx.logger.info("Running CRT file", { path: parsed.path, location: parsed.location ?? "device" });
 
-    const result = await ctx.client.runCrtFile(parsed.path);
+    const location = parsed.location === "host" ? "host" : "device";
+    // A host file is read and size-checked here, so nothing reaches the device when the path is unacceptable.
+    const hostBytes = location === "host" ? await readHostFile(parsed.path) : undefined;
+    if (hostBytes && hostBytes.length === 0) {
+      throw new ToolValidationError(`CRT file is empty: ${parsed.path}`, { path: "$.path" });
+    }
+    const result = hostBytes ? await ctx.client.runCrt(hostBytes) : await ctx.client.runCrtFile(parsed.path);
     if (result.success) clearViceSymbols(); // labels belong to one program
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running CRT", {
@@ -1000,10 +1073,12 @@ async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      location,
     };
-    const base = textResult(`PRG ${parsed.path} loaded and executed.`, {
+    const base = textResult(`CRT ${parsed.path}${hostBytes ? ` (${hostBytes.length} bytes uploaded from the host)` : ""} started.`, {
       success: true,
       path: parsed.path,
+      location,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
     });
@@ -1158,37 +1233,7 @@ export const programRunnersModule = defineToolModule({
       ],
       supportedPlatforms: ["c64u", "u2"] as const,
       async execute(args, ctx) {
-        try {
-          const parsed = crtFileArgsSchema.parse(args ?? {});
-          ctx.logger.info("Running CRT file", { path: parsed.path });
-
-          const result = await ctx.client.runCrtFile(parsed.path);
-          if (result.success) clearViceSymbols(); // labels belong to one program
-          if (!result.success) {
-            throw new ToolExecutionError("C64 backend reported failure while running CRT", {
-              details: extractFailureDetails(result.details),
-            });
-          }
-
-          const data = {
-            kind: "run_crt" as const,
-            format: "crt" as const,
-            path: parsed.path,
-            entryAddress: null as number | null,
-            resources: ["c64://guide/bootstrap"],
-          };
-          const base = textResult(`CRT ${parsed.path} mounted and started.`, {
-            success: true,
-            path: parsed.path,
-            details: toRecord(result.details) ?? null,
-          });
-          return { ...base, structuredContent: { type: "json", data } };
-        } catch (error) {
-          if (error instanceof ToolError) {
-            return toolErrorResult(error);
-          }
-          return unknownErrorResult(error);
-        }
+        return executeRunCrt(args, ctx);
       },
     },
   ],
