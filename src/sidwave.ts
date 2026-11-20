@@ -8,6 +8,7 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from 'node:buffer';
 import pkg from 'yaml';
+import { renderSample, SAMPLE_SOURCE_KEYS, type RenderedSample, type SampleSource } from "./sidwavePcm.js";
 const { parse: yamlParse } = pkg;
 
 export type SystemMode = "PAL" | "NTSC";
@@ -79,17 +80,47 @@ export interface SidwaveUnison {
   detune: number;
 }
 
-export interface SidwaveSampleSource {
-  sid: string | number;
-  at: number[];
-  hex?: string;
-  base64?: string;
-  kit?: "kick" | "snare" | "clap";
+interface SamplePattern {
+  steps: string;
+  map: Record<string, string>;
+  from_bar?: number;
+  to_bar?: number;
+  every?: number;
 }
 
+export interface SidwaveSampleVoice extends SampleSource {
+  sid?: string | number;
+  sample?: string;
+  at?: number[];
+  bar?: number;
+  beat?: number;
+  at_beat?: Array<number | { bar: number; beat: number }>;
+  pattern?: SamplePattern;
+  pitch?: number;
+  length_beats?: number;
+}
+
+interface SampleTrigger {
+  chip: number;
+  name: string;
+  path: string;
+  pitch: number;
+  lengthBeats?: number;
+  at?: number;
+  beat?: number;
+}
+
+export interface SidwaveSampleSchedule {
+  rate: number;
+  defs: Map<string, RenderedSample>;
+  triggers: SampleTrigger[];
+}
+
+/** Resolved player commands. A command without a name ends a loop. */
 export interface SidwaveSamples {
   rate: number;
-  voices: Array<{ chip: number; at: number[]; data: Uint8Array }>;
+  defs: Map<string, RenderedSample>;
+  commands: Array<{ chip: number; at: number[]; name?: string; pitch: number; stopChips?: number[] }>;
 }
 
 export interface SidwavePatternDrums extends SidwavePatternCommon {
@@ -150,7 +181,7 @@ export interface SidwaveDocument {
   global_fx?: Record<string, unknown>;
   speed?: number;
   cpu?: "turbo";
-  samples?: { rate: number; voices: SidwaveSampleSource[] };
+  samples?: { rate: number; defs?: Record<string, SampleSource>; voices?: SidwaveSampleVoice[]; triggers?: SidwaveSampleVoice[] };
   sids?: Array<{
     id: string | number;
     address: string;
@@ -185,7 +216,7 @@ export interface ParsedSidwave {
   speed: number;
   cpu?: "turbo";
   sids: SidMapEntry[];
-  samples?: SidwaveSamples;
+  samples?: SidwaveSampleSchedule;
   /** Zero based physical voice slot for each declared voice ID. */
   voiceSlots: Map<number, number>;
   timeline: SidwaveTimelineSection[];
@@ -262,7 +293,6 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     throw new SidwaveValidationError("$.voices", "missing voices (expected a list of 1 to 30 voices)");
   }
   const sids = normalizeSids(obj.sids);
-  const samples = normalizeSamples(obj.samples, sids, modern);
   const capacity = sids.length * 3;
   if (obj.voices.length > capacity) {
     throw new SidwaveValidationError("$.voices", `the SID${sids.length > 1 ? " map" : ""} has ${capacity} voices; ${obj.voices.length} were given`);
@@ -310,6 +340,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     length_bars = requireNumber(header.length_bars, `${headerPath}.length_bars`, { min: 1, max: MAX_SIDWAVE_BARS, integer: true });
   }
 
+  const samples = normalizeSamples(obj.samples, sids, modern, length_bars);
   const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, global_fx };
   if (author !== undefined) song.author = author;
   const speed = obj.speed === undefined ? 1 : requireNumber(obj.speed, "$.speed", { min: 1, max: 4, integer: true });
@@ -379,82 +410,121 @@ function normalizeSids(raw: unknown): SidMapEntry[] {
   });
 }
 
-function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean): SidwaveSamples | undefined {
+function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, bars: number): SidwaveSampleSchedule | undefined {
   if (raw === undefined) return;
-  if (!modern) throw new SidwaveValidationError("$.samples", "samples require sidwave: 1.2");
-  const root = requireObject(raw, "$.samples", ["rate", "voices"]);
-  const rate = requireNumber(root.rate, "$.samples.rate", { min: 16, max: 8000, integer: true });
-  if (!Array.isArray(root.voices) || root.voices.length < 1 || root.voices.length > 255) {
-    throw new SidwaveValidationError("$.samples.voices", "expected 1..255 scheduled samples");
-  }
-  const occupied = new Set<string>();
+  const path = "$.samples";
+  if (!modern) throw new SidwaveValidationError(path, "samples require sidwave: 1.2");
+  const root = requireObject(raw, path, ["rate", "defs", "voices", "triggers"]);
+  const rate = requireNumber(root.rate, path + ".rate", { min: 16, max: 8000, integer: true });
+  const defs = new Map<string, RenderedSample>();
   let totalBytes = 0;
-  const voices = root.voices.map((raw: unknown, i: number) => {
-    const path = `$.samples.voices[${i}]`;
-    const sample = requireObject(raw, path, ["sid", "at", "hex", "base64", "kit"]);
-    const chip = sids.findIndex((sid) => sid.id === String(sample.sid));
-    if ((typeof sample.sid !== "string" && !Number.isSafeInteger(sample.sid)) || chip < 0) {
-      throw new SidwaveValidationError(`${path}.sid`, "references an unknown SID");
-    }
-    if (!Array.isArray(sample.at) || !sample.at.length || sample.at.length > 20000) {
-      throw new SidwaveValidationError(`${path}.at`, "expected 1..20000 player frame offsets");
-    }
-    const at = sample.at.map((raw: unknown, j: number) => {
-      const frame = requireNumber(raw, `${path}.at[${j}]`, { min: 0, max: 0xffffff, integer: true });
-      const key = `${chip}:${frame}`;
-      if (occupied.has(key)) throw new SidwaveValidationError(`${path}.at[${j}]`, "this SID already has a sample scheduled on this frame");
-      occupied.add(key);
-      return frame;
-    });
-    if (["hex", "base64", "kit"].filter((key) => sample[key] !== undefined).length !== 1) {
-      throw new SidwaveValidationError(path, "provide exactly one of hex, base64 or kit");
-    }
-    let data: Uint8Array;
-    if (sample.hex !== undefined) {
-      const hex = typeof sample.hex === "string" ? sample.hex.replace(/\s/g, "") : "";
-      if (!/^[0-9a-f]+$/i.test(hex)) throw new SidwaveValidationError(`${path}.hex`, "expected hexadecimal sample nibbles");
-      if (hex.length > 0xc800) throw new SidwaveValidationError(path, "sample data exceeds the $D000 limit");
-      data = Uint8Array.from(hex, (n) => Number.parseInt(n, 16));
-    } else if (sample.base64 !== undefined) {
-      const encoded = sample.base64;
-      if (typeof encoded !== "string" || !encoded.length || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
-        throw new SidwaveValidationError(`${path}.base64`, "expected base64-encoded bytes with two nibbles per byte");
+  const add = (name: string, value: unknown, sourcePath: string) => {
+    try {
+      const sample = renderSample(value, rate);
+      totalBytes += sample.data.length;
+      if (totalBytes > 0xc800) {
+        throw new Error(`Sample data needs ${totalBytes} bytes and cannot fit below $D000. Use a lower rate or shorter samples`);
       }
-      if (encoded.length > 0xc800) throw new SidwaveValidationError(path, "sample data exceeds the $D000 limit");
-      const packed = Buffer.from(encoded, "base64");
-      data = new Uint8Array(packed.length * 2);
-      packed.forEach((byte, j) => { data[j * 2] = byte >>> 4; data[j * 2 + 1] = byte & 15; });
-    } else {
-      const kit = sample.kit;
-      if (kit !== "kick" && kit !== "snare" && kit !== "clap") {
-        throw new SidwaveValidationError(`${path}.kit`, "expected kick, snare or clap");
-      }
-      data = synthesizeSample(kit, rate);
+      defs.set(name, sample);
+    } catch (error) {
+      throw new SidwaveValidationError(sourcePath, error instanceof Error ? error.message : String(error));
     }
-    totalBytes += data.length;
-    if (totalBytes > 0xc800) throw new SidwaveValidationError("$.samples", "sample data exceeds the $D000 limit");
-    return { chip, at, data };
-  });
-  return { rate, voices };
-}
+  };
+  if (root.defs !== undefined) {
+    if (!isPlainObject(root.defs)) throw new SidwaveValidationError(path + ".defs", "expected a mapping");
+    const entries = Object.entries(root.defs);
+    if (entries.length > 255) throw new SidwaveValidationError(path + ".defs", "expected at most 255 definitions");
+    for (const [name, value] of entries) {
+      const sourcePath = path + ".defs." + name;
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name)) throw new SidwaveValidationError(sourcePath, "invalid sample name");
+      add(name, value, sourcePath);
+    }
+  }
 
-function synthesizeSample(kit: "kick" | "snare" | "clap", rate: number): Uint8Array {
-  let noise = 0x5e71;
-  let phase = 0;
-  const seconds = kit === "kick" ? 0.17 : kit === "snare" ? 0.14 : 0.11;
-  return Uint8Array.from({ length: Math.ceil(seconds * rate) }, (_, index) => {
-    const t = index / rate;
-    noise = (Math.imul(noise, 1664525) + 1013904223) >>> 0;
-    const random = noise / 0x80000000 - 1;
-    phase += (kit === "kick" ? 45 + 155 * Math.exp(-t * 42) : 172) / rate;
-    const osc = Math.sin(phase * 2 * Math.PI);
-    const clap = Math.exp(-t * 160) +
-      (t >= 0.012 ? Math.exp(-(t - 0.012) * 140) : 0) +
-      (t >= 0.026 ? Math.exp(-(t - 0.026) * 65) : 0);
-    const signal = kit === "kick" ? osc * Math.exp(-t * 23) :
-      kit === "snare" ? (0.76 * random + 0.24 * osc) * Math.exp(-t * 28) : random * clap;
-    return Math.round(7.5 + 7.5 * Math.max(-1, Math.min(1, signal)));
-  });
+  const triggers: SampleTrigger[] = [];
+  const occupied = new Set<string>();
+  const songBeat = (bar: unknown, beat: unknown, here: string) =>
+    4 * (requireNumber(bar, here + ".bar", { min: 1, max: bars, integer: true }) - 1) +
+    requireNumber(beat ?? 1, here + ".beat", { min: 1, max: 5 - 1e-9 }) - 1;
+  for (const list of ["voices", "triggers"] as const) {
+    if (root[list] === undefined) continue;
+    const entries = root[list];
+    if (!Array.isArray(entries) || entries.length > 255) {
+      throw new SidwaveValidationError(path + "." + list, "expected at most 255 sample entries");
+    }
+    entries.forEach((raw: unknown, i: number) => {
+      const here = `${path}.${list}[${i}]`;
+      const item = requireObject(raw, here, [...SAMPLE_SOURCE_KEYS, "sid", "sample", "at", "bar", "beat", "at_beat", "pattern", "pitch", "length_beats"]);
+      const chip = item.sid === undefined ? 0 : sids.findIndex((sid) => sid.id === String(item.sid));
+      if (chip < 0 || (item.sid !== undefined && typeof item.sid !== "string" && !Number.isSafeInteger(item.sid))) {
+        throw new SidwaveValidationError(here + ".sid", "references an unknown SID");
+      }
+      const pitch = requireNumber(item.pitch ?? 0, here + ".pitch", { min: -48, max: 48 });
+      const lengthBeats = item.length_beats === undefined ? undefined :
+        requireNumber(item.length_beats, here + ".length_beats", { min: 0.001, max: bars * 4 });
+      const inline = Object.fromEntries(SAMPLE_SOURCE_KEYS.filter((key) => item[key] !== undefined).map((key) => [key, item[key]]));
+      let sample = item.sample;
+      if (Object.keys(inline).length) {
+        if (sample !== undefined || item.pattern !== undefined) throw new SidwaveValidationError(here, "use a named sample or an inline source");
+        sample = `${list}[${i}]`;
+        add(sample as string, inline, here);
+      }
+      const schedule = (name: unknown, when: Pick<SampleTrigger, "at" | "beat">, triggerPath: string) => {
+        if (typeof name !== "string" || !defs.has(name)) {
+          throw new SidwaveValidationError(triggerPath, `sample ${JSON.stringify(name)} is not defined`);
+        }
+        if (defs.get(name)!.loop !== (lengthBeats !== undefined)) {
+          throw new SidwaveValidationError(triggerPath, "a looping sample requires length_beats and a one-shot sample cannot use it");
+        }
+        if (triggers.length >= 20_000) throw new SidwaveValidationError(path, "at most 20000 sample triggers are supported");
+        const key = when.at === undefined ? `${chip}:beat:${when.beat}` : `${chip}:call:${when.at}`;
+        if (occupied.has(key)) throw new SidwaveValidationError(triggerPath, "this SID already has a sample scheduled at this position");
+        occupied.add(key);
+        triggers.push({ chip, name, pitch, lengthBeats, path: triggerPath, ...when });
+      };
+      const kinds = [item.at, item.bar, item.at_beat, item.pattern].filter((x) => x !== undefined).length;
+      if (kinds !== 1 || (item.beat !== undefined && item.bar === undefined)) {
+        throw new SidwaveValidationError(here, "provide exactly one schedule: at, bar and beat, at_beat, or pattern");
+      }
+      if (item.pattern !== undefined) {
+        if (sample !== undefined) throw new SidwaveValidationError(here, "a pattern uses its map to select samples");
+        const pat = requireObject(item.pattern, here + ".pattern", ["steps", "map", "from_bar", "to_bar", "every"]);
+        if (typeof pat.steps !== "string" || !/^[A-Za-z0-9.]{1,256}$/.test(pat.steps) || !isPlainObject(pat.map)) {
+          throw new SidwaveValidationError(here + ".pattern", "provide up to 256 steps (letters, digits, dots) and a sample map");
+        }
+        const from = requireNumber(pat.from_bar ?? 1, here + ".pattern.from_bar", { min: 1, max: bars, integer: true });
+        const to = requireNumber(pat.to_bar ?? bars, here + ".pattern.to_bar", { min: from, max: bars, integer: true });
+        const every = requireNumber(pat.every ?? 1, here + ".pattern.every", { min: 1, max: bars, integer: true });
+        const steps = Array.from(pat.steps);
+        const map = pat.map;
+        for (let bar = from; bar <= to; bar += every) steps.forEach((step, j) => {
+          if (step !== ".") schedule(Object.prototype.hasOwnProperty.call(map, step) ? map[step] : undefined,
+            { beat: (bar - 1) * 4 + j * 4 / steps.length }, `${here}.pattern (bar ${bar}, step ${j + 1})`);
+        });
+      } else if (item.bar !== undefined) {
+        schedule(sample, { beat: songBeat(item.bar, item.beat, here) }, here);
+      } else {
+        const field = item.at === undefined ? "at_beat" : "at";
+        const positions = item[field];
+        if (!Array.isArray(positions) || !positions.length || positions.length > 20_000) {
+          throw new SidwaveValidationError(here + "." + field, "expected 1..20000 offsets");
+        }
+        positions.forEach((raw: unknown, j: number) => {
+          const positionPath = `${here}.${field}[${j}]`;
+          if (field === "at") {
+            schedule(sample, { at: requireNumber(raw, positionPath, { min: 0, max: 0xffffff, integer: true }) }, positionPath);
+          } else if (isPlainObject(raw)) {
+            const pos = requireObject(raw, positionPath, ["bar", "beat"]);
+            schedule(sample, { beat: songBeat(pos.bar, pos.beat, positionPath) }, positionPath);
+          } else {
+            schedule(sample, { beat: requireNumber(raw, positionPath, { min: 0, max: bars * 4 }) }, positionPath);
+          }
+        });
+      }
+    });
+  }
+  if (!triggers.length) throw new SidwaveValidationError(path, "expected at least one sample trigger");
+  return { rate, defs, triggers };
 }
 
 function normalizeInstruments(raw: unknown, path: string, modern: boolean): Record<string, Record<string, any>> {

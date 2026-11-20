@@ -15,6 +15,7 @@ import {
   sidwaveFrameRate,
   SIDWAVE_HARD_RESTART_FRAMES,
 } from "../src/sidwaveCompiler.js";
+import { unpackNibbles } from "../src/sidwavePcm.js";
 import { midiToHz, noteNameToMidi, parseSidwave, SidwaveValidationError } from "../src/sidwave.js";
 
 // ---------------------------------------------------------------------------
@@ -1728,24 +1729,34 @@ test("CIA2 plays original kick, snare and clap sample data, including page cross
   const timerPeriod = (mem[0xdd04] | (mem[0xdd05] << 8)) + 1;
   assert.equal(timerPeriod, 123);
   const recorded = [[], [], []];
+  const definitions = [...parseSidwave(score).samples.defs.values()];
   let peak = 0;
+  const measured = [new Set(), new Set(), new Set()];
+  let ticksSinceStart = 0;
   // PAL spends 19,656 phi2 cycles between player calls, separately from the
   // CIA2 timer. Advance the NMI clock at its own cadence between calls.
   for (let frame = 0; frame < 46; frame++) {
     cpu.call(irq);
+    if (frame % 15 === 1) ticksSinceStart = 0;
     writes.length = 0;
     const count = Math.floor((frame + 1) * 19_656 / timerPeriod) - Math.floor(frame * 19_656 / timerPeriod);
     for (let sample = 0; sample < count && (mem[0xdd0e] & 1); sample++) {
-      peak = Math.max(peak, tick());
+      const cycles = tick();
+      const sampleCount = definitions[Math.max(0, Math.floor((frame - 1) / 15))].sampleCount;
+      measured[ticksSinceStart < sampleCount ? ticksSinceStart % 2 : 2].add(cycles);
+      ticksSinceStart++;
+      peak = Math.max(peak, cycles);
     }
     if (frame > 0) recorded[Math.floor((frame - 1) / 15)].push(...writes.filter(([a]) => a === 0xd418).map(([, v]) => v));
   }
-  const { voices } = parseSidwave(score).samples;
-  for (const [i, { data }] of voices.entries()) {
-    assert.deepEqual(recorded[i], [...data, 15], "writes each nibble, then restores the SID volume");
+  const { defs } = parseSidwave(score).samples;
+  for (const [i, { data, sampleCount }] of [...defs.values()].entries()) {
+    assert.deepEqual(recorded[i], [...unpackNibbles(data, sampleCount), 15], "writes each nibble, then restores the SID volume");
     assert.ok(new Set(recorded[i]).size > 4);
   }
   assert.equal(new Set(recorded.map((levels) => levels.slice(0, 32).join(","))).size, 3);
+  assert.deepEqual([Math.min(...measured[0]), Math.min(...measured[1])], [100, 92]);
+  assert.ok(peak <= compiled.digiWorstCaseCyclesPerNmi);
   assert.ok(peak < timerPeriod, `CIA2 NMI took ${peak} cycles in a ${timerPeriod}-cycle period`);
   console.info(`SIDWAVE 8 kHz single-SID digi: ${peak} peak NMI cycles in a ${timerPeriod}-cycle timer period`);
   assert.ok(compiled.warnings.some((w) => /CPU cycles.*master volume/.test(w)));
@@ -1777,11 +1788,153 @@ test("the CIA2 digi NMI load can push a score over the stock CPU budget", () => 
   const score = multiScore(sidMap(2), [scoreVoice(1, ["C4"])]);
   const stock = compileSidwaveToPrg(parseSidwave(score));
   assert.ok(stock.worstCaseCyclesPerCall < 18_056);
-  const digis = { ...score, samples: { rate: 8000, voices: [
+  const digis = { ...score, samples: { rate: 4300, voices: [
     { sid: "chip1", at: [0], kit: "kick" }, { sid: "chip2", at: [0], kit: "snare" },
   ] } };
   assert.throws(() => compileSidwaveToPrg(parseSidwave(digis)), /including \d+ for the CIA2 digi NMI.*use cpu: turbo.*at least 2 MHz/);
   const turbo = compileSidwaveToPrg(parseSidwave({ ...digis, cpu: "turbo" }));
+  assert.ok(turbo.digiCyclesPerCall > 0);
+  assert.throws(() => compileSidwaveToPrg(parseSidwave({ ...digis, cpu: "turbo", samples: { ...digis.samples, rate: 8000 } })),
+    /Maximum rate is \d+ Hz/);
   assert.equal(turbo.requiresTurbo, true);
   assert.ok(turbo.worstCaseCyclesPerCall > 18_056);
+});
+
+test("packed odd and even samples stay within the 8 kHz NMI period including KERNAL entry", () => {
+  const score = multiScore(sidMap(1), [], { samples: { rate: 8000,
+    defs: { odd: { hex: "1ea" }, even: { b64: "0vA=" } },
+    triggers: [{ sample: "odd", at: [0] }, { sample: "even", at: [1] }],
+  } });
+  const { cpu, mem, compiled, writes, irq, tick } = sampleHarness(score);
+  const period = (mem[0xdd04] | mem[0xdd05] << 8) + 1;
+  const cycles = [];
+  const bursts = [];
+  for (const count of [4, 5]) {
+    cpu.call(irq);
+    writes.length = 0;
+    for (let i = 0; i < count; i++) cycles.push(tick());
+    bursts.push(writes.filter(([address]) => address === 0xd418).map(([, value]) => value));
+  }
+  assert.deepEqual(bursts, [[1, 14, 10, 15], [13, 2, 15, 0, 15]]);
+  assert.equal(period, 123);
+  assert.equal(cycles[0], 100);
+  assert.equal(cycles[1], 92);
+  assert.equal(cycles[2], 116, "odd final nibble takes the longest high path");
+  assert.ok(cycles.every((value) => value + 7 <= period));
+  assert.equal(compiled.digiWorstCaseCyclesPerNmi, 116);
+});
+
+test("pattern, bar/beat and at_beat triggers follow the musical grid and pitched latches reload", () => {
+  const score = multiScore(sidMap(1), [], {
+    timeline: [{ bars: 4, layers: {} }],
+    samples: { rate: 2000, defs: { hit: { hex: "fe" }, other: { hex: "21" } },
+      triggers: [
+        { pattern: { steps: "h..o", map: { h: "hit", o: "other" }, from_bar: 1, to_bar: 3, every: 2 } },
+        { sample: "hit", bar: 2, beat: 1.5, pitch: 12 },
+        { sample: "other", at_beat: [12, { bar: 4, beat: 3 }] },
+      ],
+    },
+  });
+  const { cpu, mem, irq, tick } = sampleHarness(score);
+  const latch = () => mem[0xdd04] | mem[0xdd05] << 8;
+  const original = latch();
+  const triggered = [];
+  for (let frame = 0; frame < 400; frame++) {
+    cpu.call(irq);
+    if (!(mem[0xdd0e] & 1)) continue;
+    triggered.push([frame, latch()]);
+    for (let i = 0; i < 3; i++) tick();
+  }
+  assert.deepEqual(triggered, [0, 75, 113, 200, 276, 301, 351].map((frame) =>
+    [frame, frame === 113 ? Math.round(985_248 / 4000) - 1 : original]));
+});
+
+test("a sustained loop repeats an odd packed sample and restores volume at its end", () => {
+  const score = multiScore(sidMap(1), [], { samples: { rate: 2000,
+    defs: { pulse: { hex: "15a", loop: true } },
+    voices: [{ sample: "pulse", bar: 1, beat: 1, length_beats: 0.25 }],
+  } });
+  const { cpu, mem, compiled, irq, tick, writes } = sampleHarness(score);
+  cpu.call(irq);
+  writes.length = 0;
+  let peak = 0;
+  for (let i = 0; i < 7; i++) peak = Math.max(peak, tick());
+  assert.deepEqual(writes.filter(([address]) => address === 0xd418).map(([, value]) => value), [1, 5, 10, 1, 5, 10, 1]);
+  assert.ok(peak <= compiled.digiWorstCaseCyclesPerNmi);
+  for (let frame = 1; frame < 6; frame++) {
+    cpu.call(irq);
+    assert.equal(mem[0xdd0e] & 1, 1);
+  }
+  cpu.call(irq);
+  assert.equal(mem[0xdd0e] & 1, 0);
+  assert.equal(mem[0xd418], 15);
+  assert.equal(compiled.sampleBytes, 2);
+});
+
+test("overlapping sample pitches identify both definitions sharing CIA2", () => {
+  const score = multiScore(sidMap(2), [], { samples: { rate: 2000,
+    defs: { drone: { hex: "123", loop: true }, ping: { b64: "fw==" } },
+    triggers: [
+      { sid: "chip1", sample: "drone", at: [0], length_beats: 1 },
+      { sid: "chip2", sample: "ping", at: [2], pitch: 12 },
+    ],
+  } });
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(score)), /ping .* overlaps drone .*different CIA2 latch/);
+});
+
+test("large packed sample crosses the wide counter and reads RAM under BASIC ROM", () => {
+  const hex = "37".repeat(46_000) + "a";
+  const score = multiScore(sidMap(1), [], { samples: { rate: 4000,
+    defs: { long: { hex } }, triggers: [{ sample: "long", at: [0] }],
+  } });
+  const { cpu, mem, compiled, irq, tick, writes } = sampleHarness(score);
+  assert.ok(compiled.endAddress > 0xc000);
+  const read = cpu.hooks.read;
+  let basicRamReads = 0;
+  cpu.hooks.read = (address) => {
+    if (address >= 0xa000 && address < 0xc000) {
+      assert.equal(mem[1] & 7, 6, "BASIC is banked out during the sample read");
+      basicRamReads++;
+    }
+    return read(address);
+  };
+  cpu.call(irq);
+  mem[1] = 0x37;
+  let peak = 0;
+  const samples = [];
+  for (let i = 0; i <= hex.length; i++) {
+    writes.length = 0;
+    peak = Math.max(peak, tick());
+    if (i < 2 || i >= hex.length - 3) samples.push(mem[0xd418]);
+  }
+  assert.deepEqual(samples, [3, 7, 3, 7, 10, 15]);
+  assert.ok(basicRamReads > 0);
+  assert.equal(mem[1], 0x37);
+  assert.equal(mem[0xdd0e] & 1, 0);
+  assert.ok(peak <= compiled.digiWorstCaseCyclesPerNmi);
+});
+
+test("a sample loop ending at song wrap stops before the first trigger changes pitch", () => {
+  const score = multiScore(sidMap(2), [], { samples: { rate: 1500,
+    defs: { ping: { hex: "fa" }, drone: { hex: "345", loop: true } },
+    triggers: [
+      { sid: "chip1", sample: "ping", at: [0], pitch: 12 },
+      { sid: "chip2", sample: "drone", bar: 1, beat: 4, length_beats: 1 },
+    ],
+  } });
+  const { cpu, mem, compiled, irq, tick, writes } = sampleHarness(score);
+  cpu.call(irq);
+  for (let i = 0; i < 3; i++) tick();
+  for (let i = 1; i < compiled.totalFrames; i++) cpu.call(irq);
+  tick();
+  assert.equal(mem[0xd438], 3);
+  writes.length = 0;
+  cpu.call(irq);
+  const stop = writes.findIndex(([address, value]) => address === 0xd438 && value === 14);
+  const tune = writes.findIndex(([address]) => address === 0xdd04);
+  assert.ok(stop >= 0 && tune > stop);
+  tick();
+  assert.equal(mem[0xd418], 15);
+  tick();
+  assert.equal(mem[0xd418], 10);
 });

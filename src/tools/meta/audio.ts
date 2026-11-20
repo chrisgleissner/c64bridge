@@ -710,6 +710,13 @@ export const tools: ToolDefinition[] = [
               title: document.song?.title ?? null,
               basicFreeBytes: compiled.basicFreeBytes,
               worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
+              ...(document.samples && {
+                sampleDefinitions: compiled.sampleDefinitions,
+                sampleBytes: compiled.sampleBytes,
+                bytesBelowD000: compiled.bytesBelowD000,
+                digiCyclesPerCall: compiled.digiCyclesPerCall,
+                digiWorstCaseCyclesPerNmi: compiled.digiWorstCaseCyclesPerNmi,
+              }),
               warnings: compilationWarnings,
             },
             playback: { method: playbackMethod, details: playbackDetails },
@@ -776,6 +783,13 @@ export const tools: ToolDefinition[] = [
             title: document.song?.title ?? null,
             basicFreeBytes: compiled.basicFreeBytes,
             worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
+            ...(document.samples && {
+              sampleDefinitions: compiled.sampleDefinitions,
+              sampleBytes: compiled.sampleBytes,
+              bytesBelowD000: compiled.bytesBelowD000,
+              digiCyclesPerCall: compiled.digiCyclesPerCall,
+              digiWorstCaseCyclesPerNmi: compiled.digiWorstCaseCyclesPerNmi,
+            }),
             warnings: compilationWarnings,
           },
           playback: {

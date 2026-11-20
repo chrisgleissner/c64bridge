@@ -36,7 +36,7 @@ export interface VoiceAnalysis {
 export interface AnalysisResult {
   sidwave: number;
   analysis: {
-    source: "microphone" | "ultimate-stream";
+    source: "microphone" | "ultimate-stream" | "wav";
     durationSeconds: number;
     voices: VoiceAnalysis[];
     global_metrics: {
@@ -197,7 +197,7 @@ function convertInt16ToFloat32(buf: Buffer): Float32Array {
   return out;
 }
 
-async function analyzePcm(
+export async function analyzePcm(
   signal: Float32Array,
   sampleRate: number,
   source: AnalysisResult["analysis"]["source"],
@@ -221,8 +221,11 @@ async function analyzePcm(
     Meyda = null;
   }
 
-  const windowSize = 2048;
-  const hopSize = 512;
+  // A preview can be a short hit at a much lower rate than a live capture.
+  const windowSize = source === "wav"
+    ? 2 ** Math.floor(Math.log2(Math.max(2, Math.min(2048, Math.ceil(sampleRate / 8), signal.length))))
+    : 2048;
+  const hopSize = Math.max(1, windowSize / 4);
   const yin: AnyFn = Pitchfinder.YIN({ sampleRate });
 
   const frames: Array<{ t0: number; t1: number; freq: number | null; rms: number }> = [];
@@ -230,7 +233,7 @@ async function analyzePcm(
   // A 2048-sample window cannot resolve notes below about 100 Hz (YIN needs a few periods), so a frame
   // that finds no pitch is retried once with a 4096-sample window (down to about 50 Hz). Frames that fail
   // both windows (noise, silence-like content) skip the retry for the next few frames to bound the cost.
-  const longWindow = 4096;
+  const longWindow = windowSize * 2;
   let retryCooldown = 0;
   let frameCount = 0;
   for (let i = 0; i + windowSize <= signal.length; i += hopSize) {
@@ -271,8 +274,11 @@ async function analyzePcm(
   const rmsValues = frames
     .map((f) => (Number.isFinite(f.rms) ? Math.max(0, Number(f.rms)) : 0))
     .filter((v) => Number.isFinite(v));
+  if (source === "wav" && !rmsValues.length && signal.length) {
+    rmsValues.push(Math.sqrt(signal.reduce((sum, x) => sum + x * x, 0) / signal.length));
+  }
   const averageRmsRaw = rmsValues.length ? rmsValues.reduce((acc, v) => acc + v, 0) / rmsValues.length : 0;
-  const maxRmsRaw = rmsValues.length ? Math.max(...rmsValues) : 0;
+  const maxRmsRaw = rmsValues.reduce((max, value) => Math.max(max, value), 0);
   const averageRms = rmsValues.length ? round(averageRmsRaw, 0.0001) : 0;
   const maxRms = rmsValues.length ? round(maxRmsRaw, 0.0001) : 0;
 
@@ -287,7 +293,7 @@ async function analyzePcm(
   }
 
   const expectedMidiSet = extractExpectedMidiSet(expected);
-  const analyzedVoiceSource = "mixed SID output (the voices are not separated)";
+  const analyzedVoiceSource = source === "wav" ? "host WAV" : "mixed SID output (the voices are not separated)";
 
   const detected_notes: DetectedNote[] = segments.map((seg) => {
     if (seg.freq == null) {

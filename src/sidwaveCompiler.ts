@@ -7,7 +7,8 @@ See <https://www.gnu.org/licenses/> for details.
 */
 
 import { Buffer } from "node:buffer";
-import { addDigiPlayer, digiCyclesPerCall, digiDataAsm } from "./sidwaveDigi.js";
+import type { SampleStats } from "./sidwavePcm.js";
+import { addDigiPlayer, digiCyclesPerCall, digiDataAsm, digiPeakCycles, digiPeriod, validateDigiRate } from "./sidwaveDigi.js";
 import { assemblyToPrgDetailed } from "./tools/translation/assembler.js";
 import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, SidwavePatternGroove, MotifEntry, SidwaveRegisterTable, FilterModSpec, SidwaveSamples, SidwaveGrooveNote } from "./sidwave.js";
 import {
@@ -60,6 +61,14 @@ export interface CompileResult {
   warnings: string[];
   /** Conservative NMOS 6502 cycle estimate, excluding the host IRQ and VIC stalls. */
   worstCaseCyclesPerCall: number;
+  /** CIA2 digi interrupt cycles consumed by each score player call. */
+  digiCyclesPerCall: number;
+  digiWorstCaseCyclesPerNmi: number;
+  /** Encoded digi sample bytes included in the PRG. */
+  sampleBytes: number;
+  sampleDefinitions: Record<string, SampleStats>;
+  /** Space between the compiled PRG and $D000. */
+  bytesBelowD000: number;
   requiresTurbo: boolean;
   irqAddress: number;
   digiNmiAddress?: number;
@@ -77,13 +86,16 @@ export interface CompileResult {
 export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?: boolean } = {}): CompileResult {
   const arrangement = arrangeSidwave(doc);
   const streams = arrangement.voices.map((v) => encodeVoiceStream(v.events, arrangement.totalFrames));
+  if (arrangement.samples) validateDigiRate(arrangement.samples, Object.values(CLOCK_HZ));
   const musicCycles = estimatePlayerCycles(arrangement);
   const digiCyclesAt = (system: SystemMode) => arrangement.samples
-    ? digiCyclesPerCall(arrangement.samples, sidwaveFrameRate(system) * doc.speed) : 0;
+    ? digiCyclesPerCall(arrangement.samples, arrangement.fps, CLOCK_HZ[system]) : 0;
   const digiCycles = digiCyclesAt(arrangement.system);
   const worstCaseCyclesPerCall = musicCycles + digiCycles;
-  const requiresTurbo = (system: SystemMode) =>
-    musicCycles > stockPlayerBudget(system, doc.speed) - digiCyclesAt(system);
+  const budgetAt = (system: SystemMode) => arrangement.samples
+    ? Math.floor((CYCLES_PER_FRAME[system] - 1_100) * sidwaveFrameRate(system) / arrangement.fps) - 500
+    : stockPlayerBudget(system, doc.speed);
+  const requiresTurbo = (system: SystemMode) => musicCycles + digiCyclesAt(system) > budgetAt(system);
   const turboOnly = Number(requiresTurbo("PAL")) | (Number(requiresTurbo("NTSC")) << 1);
   // Check the size before assembling the streams: the player and its tables are assembled once with
   // empty streams, which gives the exact start of the stream data. Songs larger than 64 KB would
@@ -93,14 +105,15 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
     loadAddress: SIDWAVE_LOAD_ADDRESS,
   });
   const streamStart = layout.symbols.get("stream0")!;
-  const sampleBytes = arrangement.samples?.voices.reduce((sum, voice) => sum + voice.data.length, 0) ?? 0;
+  const sampleBytes = [...(arrangement.samples?.defs.values() ?? [])].reduce((sum, sample) => sum + sample.data.length, 0);
   const projectedEnd = streamStart + streams.reduce((sum, st) => sum + st.length, 0) + sampleBytes;
   // The PRG installer also writes three bytes after the program (an empty BASIC program).
   if (projectedEnd + 3 > SIDWAVE_MEMORY_END) {
     const kb = ((projectedEnd - SIDWAVE_LOAD_ADDRESS) / 1024).toFixed(1);
     throw new SidwaveValidationError(
       "$.timeline",
-      `the compiled song needs ${kb} KB and would end at $${projectedEnd.toString(16).toUpperCase()}, past the $D000 limit (about 50 KB); shorten the timeline or use longer note lengths`,
+      `the compiled song needs ${kb} KB and would end at $${projectedEnd.toString(16).toUpperCase()}, past the $D000 limit (about 50 KB); shorten the timeline or use longer note lengths` +
+        (sampleBytes ? `. With the BASIC terminator it needs ${projectedEnd + 3 - SIDWAVE_LOAD_ADDRESS} bytes and includes ${sampleBytes} sample bytes. Use a lower sample rate or shorter samples` : ""),
     );
   }
   const warnings: string[] = [];
@@ -108,7 +121,7 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
     warnings.push(`CIA2 digi playback reserves up to ${digiCycles} CPU cycles per player call and temporarily replaces the sample SID's master volume.`);
   }
   if (arrangement.chips) {
-    const availableCycles = stockPlayerBudget(arrangement.system, doc.speed);
+    const availableCycles = budgetAt(arrangement.system);
     const required = worstCaseCyclesPerCall / availableCycles;
     if (requiresTurbo(arrangement.system) && !doc.cpu) {
       throw new SidwaveValidationError("$.cpu",
@@ -157,6 +170,11 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?
     basicFreeBytes,
     warnings,
     worstCaseCyclesPerCall,
+    digiCyclesPerCall: digiCycles,
+    digiWorstCaseCyclesPerNmi: arrangement.samples ? digiPeakCycles(arrangement.samples) : 0,
+    sampleBytes,
+    sampleDefinitions: Object.fromEntries([...(arrangement.samples?.defs ?? [])].map(([name, sample]) => [name, sample.stats])),
+    bytesBelowD000: SIDWAVE_MEMORY_END - (endAddress + 3),
     requiresTurbo: requiresTurbo(arrangement.system),
     irqAddress: assembled.symbols.get("irq")!,
     digiNmiAddress: assembled.symbols.get("digi_nmi"),
@@ -387,18 +405,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   });
   const voices = parts.flatMap((part) => part.voices);
   const tuning = arrangeDoubles(doc, voices, pool, parts[0]!);
-  const samples = doc.samples;
-  if (samples) {
-    for (const [index, sample] of samples.voices.entries()) {
-      const events = voices[sample.chip * 3]!.events;
-      for (const frame of sample.at) {
-        if (frame >= parts[0]!.totalFrames) {
-          throw new SidwaveValidationError(`$.samples.voices[${index}].at`, "sample trigger lies outside the song");
-        }
-        events.push({ frame, order: ORDER.sample, bytes: [OP.SAMPLE, index] });
-      }
-    }
-  }
+  const samples = arrangeSamples(doc, parts[0]!, voices);
   return {
     ...parts[0]!,
     voices,
@@ -416,6 +423,74 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
     }),
     turbo: doc.cpu === "turbo",
   };
+}
+
+function arrangeSamples(doc: ParsedSidwave, timing: Arrangement, voices: Arrangement["voices"]): SidwaveSamples | undefined {
+  const schedule = doc.samples;
+  if (!schedule) return;
+  const { rate, defs } = schedule;
+  const { fps, framesPerBeat, totalFrames } = timing;
+  const frameAt = (beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS);
+  const triggers = schedule.triggers.map((trigger) => ({
+    ...trigger, frame: trigger.at ?? frameAt(trigger.beat!),
+    periods: Object.values(CLOCK_HZ).map((hz) => digiPeriod(hz, rate, trigger.pitch)),
+  })).sort((a, b) => a.frame - b.frame);
+
+  const commands: SidwaveSamples["commands"] = [];
+  const commandIds = new Map<string, number>();
+  const emit = (chip: number, frame: number, pitch: number, name?: string, stopChips?: number[]) => {
+    const key = JSON.stringify([chip, pitch, name, stopChips]);
+    let index = commandIds.get(key);
+    if (index === undefined) {
+      index = commands.length;
+      if (index >= 256) throw new SidwaveValidationError("$.samples", "at most 256 distinct start and stop commands fit");
+      commandIds.set(key, index);
+      commands.push({ chip, at: [], pitch, name, stopChips });
+    }
+    commands[index]!.at.push(frame);
+    voices[chip * 3]!.events.push({ frame, order: ORDER.sample, bytes: [OP.SAMPLE, index] });
+  };
+
+  const active = new Map<number, { trigger: typeof triggers[number]; end: number; loopEnd?: number }>();
+  const advance = (frame: number) => {
+    for (const [chip, current] of active) {
+      if (current.end > frame) continue;
+      if (current.loopEnd !== undefined && current.loopEnd < totalFrames) emit(chip, current.loopEnd, 0);
+      active.delete(chip);
+    }
+  };
+  for (const trigger of triggers) {
+    const { frame, chip, pitch, name, path, periods } = trigger;
+    if (frame >= totalFrames) throw new SidwaveValidationError(path, "sample trigger lies outside the song");
+    if (periods.some((period) => period > 65536 || period < 1)) {
+      throw new SidwaveValidationError(path, "pitch and rate exceed the CIA2 timer latch range");
+    }
+    advance(frame);
+    for (const current of active.values()) {
+      const previous = current.trigger;
+      if (previous.chip === chip && previous.frame === frame) {
+        throw new SidwaveValidationError(path, `this SID already has sample ${previous.name} on this frame`);
+      }
+      if (periods.some((period, i) => period !== previous.periods[i])) {
+        throw new SidwaveValidationError(path, `sample ${name} (pitch ${pitch}) overlaps ${previous.name} (pitch ${previous.pitch}) with a different CIA2 latch`);
+      }
+    }
+    const loopEnd = trigger.lengthBeats === undefined ? undefined :
+      Math.min(totalFrames, Math.max(frame + 1, trigger.beat === undefined ? frame + frameAt(trigger.lengthBeats) : frameAt(trigger.beat + trigger.lengthBeats)));
+    // A one-shot owns the timer until the NMI following its last sample. Check both machine clocks.
+    const clocks = Object.values(CLOCK_HZ);
+    const duration = Math.max(...clocks.map((hz, i) => (defs.get(name)!.sampleCount + 1) * periods[i]! / hz));
+    active.set(chip, { trigger, end: loopEnd ?? frame + fps * duration, loopEnd });
+    emit(chip, frame, pitch, name);
+  }
+  const wrapping = [...active].filter(([, sample]) => sample.end >= totalFrames).map(([chip]) => chip);
+  advance(totalFrames);
+  if (wrapping.length) {
+    // All carried playback ends before the earliest sample track wraps.
+    // This prevents its frame-zero start from retuning another SID's old loop.
+    emit(Math.min(...triggers.map(({ chip }) => chip)), totalFrames, 0, undefined, wrapping);
+  }
+  return { rate, defs, commands };
 }
 
 function arrangeDoubles(
@@ -1110,7 +1185,8 @@ function estimatePlayerCycles(arr: Arrangement): number {
         if (args.length > (op === OP.LEGATO ? 1 : 0)) cycles += 240; // portamento command and operands
         add(frame, cycles);
       } else if (op === OP.RESTART || op === OP.SAMPLE) {
-        add(frame, 230);
+        const stopChips = op === OP.SAMPLE ? arr.samples?.commands[args[0]!]?.stopChips?.length ?? 0 : 0;
+        add(frame % arr.totalFrames, 230 + 22 * stopChips);
       } else if (op === OP.FILTERMOD) {
         add(frame, 200);
       } else if (op === OP.GATEOFF || op === OP.HARDRESTART) {
@@ -1831,7 +1907,7 @@ init_core:`);
 
   streams.forEach((s, i) => pushByteRows(L, `stream${i}`, s.map((b) => `$${hex2(b)}`)));
   if (arr.samples) L.push(includeSamples ? digiDataAsm(arr.samples) :
-    arr.samples.voices.map((_, i) => `digi_data${i}:`).join("\n"));
+    [...arr.samples.defs.keys()].map((_, i) => `digi_data${i}:`).join("\n"));
   L.push(`prg_end:`);
   return L.join("\n");
 }

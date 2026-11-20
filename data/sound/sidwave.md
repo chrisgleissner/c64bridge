@@ -100,7 +100,7 @@ timeline:
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
 | `global_fx` | `reverb_sim` and `filter_env`, described below. |
-| `samples` | Optional CIA2 volume samples and their trigger calls (1.2 PRG). |
+| `samples` | Optional CIA2 volume samples and their musical or player call triggers (1.2 PRG). |
 | `sids` | Optional SID map or layout. Defaults to one SID at `$D400`. |
 | `cpu` | Optional `turbo` for standalone PRG playback on Ultimate hardware. |
 | `voices` | One to 30 voices, up to three per configured SID. Undeclared channels stay silent. |
@@ -432,22 +432,108 @@ An instrument can set `hard_restart: { frames: 3, adsr: [0, 0, 0, 1], test: true
 
 ### CIA2 volume digis
 
-Use standalone PRG output. Each sample entry names one SID and a list of zero-based player calls when it starts. All sample entries share the timer rate of 16–8,000 Hz. A later trigger on the same SID replaces the current sample. Separate SIDs can play simultaneous samples. A digi-only score can declare `voices: []` and empty timeline layers.
+Use standalone PRG output. A digi-only score can declare `voices: []` at the
+top level and an empty set of layers in its timeline. Put named sounds in
+`samples.defs` and schedule them under `samples.voices` or `samples.triggers`.
+The default target is the first SID.
+
+Never send raw PCM through tool arguments beyond a few hundred samples. Describe
+the sound with `synth:`, or generate PCM with your own code and use `file:`.
+For tiny sounds, use `b64:` containing 4-bit volume levels, two samples per
+byte, high nibble first.
 
 ```yaml
 samples:
-  rate: 4000
+  rate: 2500
+  defs:
+    kick: { kit: kick }
+    snare: { kit: snare }
+    zap: { synth: { layers: [{ osc: triangle, freq: 750, to: 110, ms: 110 }], env: { a: 2, d: 35, s: 0.5, r: 55 } } }
+    pulse: { hex: "13579bdf", loop: true }
   voices:
-    - { sid: sid1, at: [0, 50], kit: kick }
-    - { sid: sid1, at: [25, 75], kit: snare }
-    - { sid: sid1, at: [88], hex: "8aef c987" }
+    - sid: sid1
+      pattern: { steps: "k...s.k.s...", map: { k: kick, s: snare }, from_bar: 1, to_bar: 2, every: 1 }
+    - { sample: zap, bar: 3, beat: 1.5, pitch: 12 }
+    - { sample: pulse, at_beat: [{ bar: 3, beat: 3 }], length_beats: 1 }
 ```
 
-The built-in kit synthesizes original `kick`, `snare` and `clap` hits. For inline data each hex digit is one unsigned 4-bit sample. `base64` packs two samples per decoded byte, high nibble first. The player expands them to one byte per sample in C64 memory and counts them against the `$D000` limit.
+**Sources.** Each definition takes exactly one source.
 
-CIA2 timer A drives the NMI. It replaces the low nibble of `$D418` (or the equivalent register on the chosen SID), preserving filter mode in the upper nibble. It restores the current master volume on the next timer tick after the sample ends. The timer pauses when all sample SIDs are idle. All oscillators on that SID share that changing volume. A dedicated SID avoids modulating the volume of pitched voices. For Ultimate hardware set **Digis Level** in **UltiSID Configuration** to a suitable non-Off value (default Medium). [Ultimate multi-SID settings](../ultimate/multisid.md)
+| Source | Parameters |
+| --- | --- |
+| `synth` | `layers` mixes up to 16 oscillators. Each supports `osc: sine\|triangle\|square\|saw\|noise`, `freq`, optional exponential sweep `to`, `ms`, `gain`, and square wave `duty`. Give frequencies in Hz or as notes such as `A4`. A single oscillator can put these fields directly in `synth`. |
+| `file` | A host path to mono or stereo WAV (8/16/24-bit PCM or float32), or mono raw `.u8` or little-endian `.s16` with `file_rate` in Hz. [Host path and size rules](../../doc/hardening-behavior.md) apply. |
+| `kit` | Original hits `kick`, `snare`, `clap`, `hat`, `tom`, and `zap`. |
+| `b64` or `hex` | Exact volume nibbles. `base64` is an alias for `b64`. Each decoded byte is two samples. Each hex digit is one sample, including for odd lengths. |
 
-One active sample SID typically uses about 90 CPU cycles per timer tick including interrupt entry and exit, or about 720,000 cycles per second at 8 kHz. More sample SIDs increase the cost. The compiler budgets those interrupts alongside the score IRQ and reports when turbo is needed. Turn off any program that uses CIA2 timer A (including KERNAL RS-232) before starting the PRG. The timer and RAM NMI vector belong to the player during playback. [CIA2 timer and interrupt registers](../io/cia-spec.md)
+A synth envelope `env: { a, d, s, r }` takes attack, decay, and release in
+milliseconds and sustain from 0 to 1. Use `notes: "C4:120 E4:120 G4:240 r:60"`
+for a phrase, with each duration in milliseconds. Frequency ratios between
+layers carry across the notes. `formant: a|e|i|o|u` applies three vocal
+resonances to the sound. A synth with only a formant defaults to a square wave.
+`lp` and `hp` set filter cutoffs in Hz. `drive` sets the soft clip amount.
+`crush: { bits: 6, rate: 2000 }` reduces the amplitude resolution and holds
+each sample at the requested rate. `seed` makes noise repeatable.
+
+The server mixes to mono, removes DC, and filters out frequencies that would
+alias before converting to the requested rate. For `synth`, `file`, and `kit`,
+`trim: true` skips quiet edges and peak normalization uses the full range by default.
+`gain_db: 0` keeps the input gain. Other values set the gain in dB in place of
+normalization. `dither` takes `none`, `tpdf`, or `shaped` (default).
+The final samples map to the SID's 16 volume steps.
+
+**Timing.** `at` still accepts zero-based player call indices. Legacy inline
+entries such as `{ sid: sid1, at: [0, 50], kit: kick }` also work. Bars and beats
+within a bar start at 1. Fractional beats are allowed. For `at_beat`, numbers
+are zero-based beats from the start of the song, and mappings use `{ bar, beat }`.
+Patterns divide each bar by the number of characters in `steps`. A dot is a
+rest. `from_bar` and `to_bar` are inclusive and `every` is the bar interval.
+A later trigger replaces a sample on the same SID. Concurrent SIDs use one
+CIA2 latch, so overlapping samples that need different latches are rejected.
+`pitch` changes the latch by semitones. An octave up doubles the sample rate
+and halves the duration. A definition with `loop: true` repeats its packed data
+until the trigger's `length_beats` elapses, a replacement arrives, or the song
+reaches the end of its pass.
+
+**CPU and memory.** Use a base rate from 16 to 8,000 Hz. The player enters through
+the KERNAL NMI vector at `$0318`, temporarily banks BASIC ROM out to read sample
+RAM, and keeps I/O and the KERNAL mapped. The single SID path switches between
+high and low nibble code by patching a jump target. The measured common paths
+take 100 and 92 cycles respectively, with a worst path of 116 cycles including
+the 7-cycle hardware entry and the KERNAL jump. PAL has a 123-cycle period at
+8 kHz, leaving 7 cycles on the longest path. Additional SID tracks, loops, very long samples, and positive pitch can
+lower the maximum base rate. The compiler gives that maximum
+when the timer period is too short, and budgets NMI time alongside the score IRQ.
+Turn off other users of CIA2 timer A, such as KERNAL RS-232, before starting the
+PRG. [CIA timers and interrupt registers](../io/cia-spec.md)
+
+The PRG uses `ceil(samples / 2)` bytes per definition, or 2,000 bytes per second
+at 4 kHz and 4,000 at 8 kHz. Triggers reuse that data. The compile report includes
+`sampleDefinitions` (source, rate, duration in seconds, packed bytes, peak and
+RMS of the signal just before quantization, and `snrDb` after quantization).
+For prequantized sources, peak and RMS describe the supplied levels, and
+`snrDb` is null since there is no original PCM to compare. It is also null when
+the original signal or the measured error is zero. The report also gives
+`sampleBytes`, `bytesBelowD000` after reserving the BASIC terminator,
+`digiCyclesPerCall` and `digiWorstCaseCyclesPerNmi`.
+
+**Preview.** Use `c64_sound` with `op: sample_render` and optional `definition`,
+`rate` and `outputDir`. It defaults to a kick at 4,000 Hz and writes its
+quantized output as a mono WAV under `artifacts/samples`. Pass its returned
+`outputPath` as `wavPath` to `c64_sound` with `op: analyze` to analyze the file
+without recording from a device.
+
+**SID output.** CIA2 timer A changes the low nibble of `$D418` (or the target
+SID's equivalent register) and preserves the filter mode in the high nibble.
+When the sample ends, the player restores the current master volume. The
+volume changes affect all sounding oscillators on that SID. A dedicated SID
+keeps the rest of the mix stable. The volume step audible on a 6581 can be
+much quieter on an 8580 without a DC offset. Playback uses the existing volume
+writes and leaves selection of any DC offset method to the machine setup. With
+UltiSID, use a non-Off **Digis Level** under **UltiSID Configuration** (default
+Medium). Higher settings improve sample audibility and can make ordinary
+volume changes more audible. [SID specification](sid-spec.md) and
+[Ultimate multi-SID settings](../ultimate/multisid.md)
 
 ### Additional library instruments
 
@@ -464,7 +550,7 @@ One active sample SID typically uses about 90 CPU cycles per timer tick includin
 
 ### Not supported
 
-Time signatures other than 4/4, per-note velocity, multiple subtunes, sample data loaded from external files, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than 4/4, per-note velocity, multiple subtunes and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
