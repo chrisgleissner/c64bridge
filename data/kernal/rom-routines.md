@@ -71,7 +71,7 @@
 | `$E8A1` | 59553 | BOF prev | If at start of line, move up | — | — | — | — |
 | `$E8B3` | 59571 | EOF next | If at end of line, move down | — | — | — | — |
 | `$E8CB` | 59595 | Color chk | Detect color control | A=code | — | — | — |
-| `$E8D1` | 59601 | Color tbl | PETSCII→color control map | — | — | — | 16 entries listed |
+| `$E8DA` | 59610 | Color tbl | PETSCII→color control map | — | — | — | 16 entries listed |
 | `$E8EA` | 59626 | Scroll | Scroll screen | — | CTRL pauses | — | — |
 | `$E965` | 59749 | Insert line | Insert blank physical line | — | — | — | — |
 | `$E9C8` | 59848 | Move line | Move screen line (and color) | — | — | — | — |
