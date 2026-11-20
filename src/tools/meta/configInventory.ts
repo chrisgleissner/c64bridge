@@ -125,6 +125,27 @@ export async function captureConfigSnapshot(
 }
 
 /**
+ * Number of configuration items a snapshot holds. The firmware lists category names only, so a
+ * category entry without an item stands for every item that GET /v1/configs/<category> returned,
+ * stored under the category name inside the response.
+ */
+export function countSnapshotItems(data: ConfigSnapshotData): number {
+  let count = 0;
+  for (const entry of data.inventory) {
+    if (entry.item !== undefined) {
+      count += 1;
+      continue;
+    }
+    const value = data.categories[entry.category];
+    const items = value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)[entry.category]
+      : undefined;
+    if (items && typeof items === "object" && !Array.isArray(items)) count += Object.keys(items).length;
+  }
+  return count;
+}
+
+/**
  * Drops redacted credential placeholders from a snapshot payload before it is
  * written back, so restoring a default snapshot never sets a password to `***`.
  */

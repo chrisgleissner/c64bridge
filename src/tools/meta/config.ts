@@ -7,7 +7,7 @@ import { getPlatformStatus } from "../../platform.js";
 import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
 import { readHostFile, resolveHostPath } from "../../hostPaths.js";
-import { assertSafeConfigKeys, captureConfigSnapshot, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
+import { assertSafeConfigKeys, captureConfigSnapshot, countSnapshotItems, stripRedactedSecrets, validateSnapshotCategories } from "./configInventory.js";
 import { REDACTED_PLACEHOLDER } from "../../redact.js";
 import { normalizeErrorDetails } from "./util.js";
 
@@ -154,7 +154,7 @@ export const tools: ToolDefinition[] = [
           return jsonResult({
             path,
             categoryCount: Object.keys(snapshotData.categories).length,
-            itemCount: snapshotData.inventory.length,
+            itemCount: countSnapshotItems(snapshotData),
             ...(failed.length > 0
               ? {
                   partial: true,
