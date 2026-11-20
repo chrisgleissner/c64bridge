@@ -21,13 +21,13 @@ jobs:
       image: ghcr.io/${{ github.repository_owner }}/mcp-builder:latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.1
 
@@ -57,7 +57,7 @@ jobs:
       #     VICE_TEST_TARGET: "vice"
       #   run: npm run vice:smoke
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/lcov.info
