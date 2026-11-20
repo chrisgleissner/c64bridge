@@ -376,11 +376,18 @@ test("VICE-10 client methods: version, banks, bank read, snapshot dump and undum
     assert.deepEqual(await client.versionInfo(), { version: "3.10.0.0", svnRevision: 0 });
     assert.deepEqual(await client.banksAvailable(), [{ id: 0, name: "default" }, { id: 1, name: "ram" }]);
     await client.memSet(0xa000, Buffer.from([1, 2, 3]));
+    const sent = [];
+    const send = client.send.bind(client);
+    client.send = (cmd, body, options) => { sent.push([cmd, body ? Buffer.from(body) : undefined]); return send(cmd, body, options); };
     assert.deepEqual([...await client.memGetBank(0xa000, 0xa002, 1)], [1, 2, 3]);
-    await client.dumpSnapshot("level1.vsf");
+    // The specification's memory get layout: FX | SA:u16 | EA:u16 | MS | BI:u16, with the bank id at offset 6.
+    assert.deepEqual(sent.at(-1), [0x01, Buffer.from([0x00, 0x00, 0xa0, 0x02, 0xa0, 0x00, 0x01, 0x00])]);
+    await client.registersSet([{ name: "PC", value: 0x1234 }]);
+    await client.dumpSnapshot("level1.vsf", { saveRoms: true });
+    assert.deepEqual(sent.at(-1), [0x41, Buffer.concat([Buffer.from([1, 0, 10]), Buffer.from("level1.vsf")])]);
     await client.memSet(0xa000, Buffer.from([9, 9, 9]));
     await client.registersSet([{ name: "PC", value: 0x4321 }]);
-    await client.undumpSnapshot("level1.vsf");
+    assert.equal(await client.undumpSnapshot("level1.vsf"), 0x1234, "undump returns the restored program counter");
     assert.deepEqual([...await client.memGet(0xa000, 0xa002)], [1, 2, 3]);
     await assert.rejects(() => client.undumpSnapshot("missing.vsf"), /general failure.*snapshot|general failure.*0xdd|in undump 0x42/);
     await assert.rejects(() => client.dumpSnapshot(""), /1-255 bytes/);
