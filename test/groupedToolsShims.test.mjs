@@ -1009,7 +1009,12 @@ test("VICE audio capture errors are reported as dependency errors rather than un
     };
     const result = await toolRegistry.invoke("c64_sound", { op, durationSeconds: 0.5, ...(op === "analyze" ? { request: "check the music" } : {}) }, ctx);
     assert.equal(result.isError, true);
-    assert.match(result.content[0].text, /Audio backend not available/);
+    if (op === "analyze") {
+      assert.equal(result.structuredContent.data.verification.measured, false);
+      assert.match(result.content[0].text, /vice.*no audio stream.*c64u.*host microphone.*naudiodon.*PortAudio/i);
+    } else {
+      assert.match(result.content[0].text, /Audio backend not available/);
+    }
     assert.ok(!result.content[0].text.includes("unsupported"));
   }
 });

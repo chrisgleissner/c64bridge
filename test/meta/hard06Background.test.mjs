@@ -45,7 +45,8 @@ test("HARD06 META-20 a bad read or write argument fails the start", async () => 
       assert.equal(res.metadata?.error?.kind, "validation");
     }
     const list = await metaModule.invoke("list_background_tasks", {}, ctx);
-    assert.equal(list.structuredContent.data.tasks.length, 0);
+    // The registry is shared by every test file in the same process, so only the rejected starts are checked.
+    assert.deepEqual(list.structuredContent.data.tasks.filter((task) => task.name === "bad"), []);
   });
 });
 

@@ -103,7 +103,8 @@ test("play_preset keeps the playback entry when the analyzer throws on VICE", as
   const entry = result.structuredContent.data.results[0];
   assert.equal(entry.success, true);
   assert.equal(entry.backend, "vice");
-  assert.match(entry.verification.error, /Audio backend not available/);
+  assert.equal(entry.verification.measured, false);
+  assert.match(entry.verification.message, /vice.*no audio stream.*c64u.*host microphone.*naudiodon.*PortAudio/i);
 });
 
 test("HARD06 SOUND-4 pipeline without an audio capture backend plays and says the analysis was skipped", async () => {
@@ -116,7 +117,8 @@ test("HARD06 SOUND-4 pipeline without an audio capture backend plays and says th
   assert.equal(played, 1);
   const data = result.structuredContent.data;
   assert.equal(data.analysis, null);
-  assert.match(data.warnings[0], /No audio capture backend/);
+  assert.equal(data.verification.measured, false);
+  assert.match(data.warnings[0], /vice.*no audio stream.*c64u.*host microphone.*naudiodon.*PortAudio/i);
 });
 
 test("HARD06 SOUND-15 play_preset and pipeline do not record audio unless asked", async () => {

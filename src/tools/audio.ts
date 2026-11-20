@@ -1,7 +1,7 @@
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave } from "../sidwave.js";
-import { recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
+import { noAudioMeasurement, recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
   booleanSchema,
@@ -447,6 +447,14 @@ function resolveAnalyzer(ctx: ToolExecutionContext): AudioAnalyzer {
   return (options) => recordAndAnalyzeAudio({ ...options, ...(ctx.signal ? { signal: ctx.signal } : {}) });
 }
 
+function audioMeasurementError(ctx: ToolExecutionContext, error: unknown) {
+  const verification = noAudioMeasurement(ctx.platform?.id ?? getPlatformStatus().id, error);
+  const result = toolErrorResult(new ToolExecutionError(verification.message, {
+    cause: error instanceof Error ? error : undefined,
+  }));
+  return { ...textResult(verification.message, { ...result.metadata, verification }), isError: true as const };
+}
+
 /**
  * Measure whether the SID is silent by capturing audio (the Ultimate audio
  * stream on C64U, otherwise the host microphone). The SID's control registers
@@ -707,8 +715,9 @@ export const audioModule = defineToolModule({
 
           const detailRecord = toRecord(result.details) ?? {};
           const systemNote = `Using ${system} timing (${systemSource}).`;
+          const volumeSet = detailRecord.volumeSet === 15 ? " Master volume was set to 15 because it was muted." : "";
 
-          return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}. ${systemNote}`, {
+          return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}.${volumeSet} ${systemNote}`, {
             success: true,
             voice,
             note: parsed.note ?? null,
@@ -827,17 +836,25 @@ export const audioModule = defineToolModule({
             await sleep(DEFAULT_SILENCE_VERIFY_WAIT_MS);
           }
 
-          const analysis = await analyzer({
-            durationSeconds: DEFAULT_SILENCE_VERIFY_DURATION_SECONDS,
-          });
+          let analysis: Awaited<ReturnType<AudioAnalyzer>>;
+          try {
+            analysis = await analyzer({ durationSeconds: DEFAULT_SILENCE_VERIFY_DURATION_SECONDS });
+          } catch (error) {
+            if (ctx.signal?.aborted) return cancelledResult();
+            const verification = noAudioMeasurement(ctx.platform?.id ?? getPlatformStatus().id, error);
+            return textResult(`SID voices silenced. ${verification.message}`, {
+              success: true,
+              details: detailRecord,
+              verify: true,
+              verification,
+            });
+          }
 
           const globalMetrics = (analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>;
           const { average, max } = extractRmsMetrics(globalMetrics);
 
           if (average === null && max === null) {
-            throw new ToolExecutionError("Audio analysis did not provide RMS metrics for silence verification", {
-              details: globalMetrics,
-            });
+            return audioMeasurementError(ctx, new Error("Audio analysis did not provide RMS metrics for silence verification"));
           }
 
           const averageRms = average ?? max ?? 0;
@@ -1272,11 +1289,27 @@ export const audioModule = defineToolModule({
           const duration = parsed.durationSeconds ?? 3;
           ctx.logger.info("Auto-analyzing SID audio", { durationSeconds: duration });
 
-            const analyzer = resolveAnalyzer(ctx);
-            const analysis = await analyzer({
-            durationSeconds: duration,
-            expectedSidwave: normaliseSidwaveInput(parsed.expectedSidwave),
-          });
+          const analyzer = resolveAnalyzer(ctx);
+          let analysis: Awaited<ReturnType<AudioAnalyzer>>;
+          try {
+            analysis = await analyzer({
+              durationSeconds: duration,
+              expectedSidwave: normaliseSidwaveInput(parsed.expectedSidwave),
+            });
+          } catch (error) {
+            if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
+            return audioMeasurementError(ctx, error);
+          }
+          const metrics = analysis?.analysis?.global_metrics;
+          const { average, max } = extractRmsMetrics(metrics ?? {});
+          const hasMusicalMeasurement = Number.isFinite(metrics?.average_pitch_deviation)
+            || Number.isFinite(metrics?.detected_bpm)
+            || analysis?.analysis?.voices?.some((voice) => voice.detected_notes.some((note) => Number.isFinite(note.frequency)));
+          if (average === null && max === null && !hasMusicalMeasurement) {
+            const verification = noAudioMeasurement(ctx.platform?.id ?? getPlatformStatus().id,
+              "Audio analysis found no musical content or RMS measurements.");
+            return textResult(verification.message, { analyzed: false, request, verification });
+          }
 
           const feedback = generateAudioFeedback(analysis, request);
           return textResult(feedback, {
