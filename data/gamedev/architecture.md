@@ -57,7 +57,7 @@ Game speed then depends on frames, not on CPU speed. Turbo only raises how much 
 - Older NTSC 6567R56A: 64 x 262 = 16,768 cycles (rare). Detect machine type at runtime (see techniques).
 - A bad line stops the CPU for 40-43 cycles (Bauer 3.5). Measured: 25 bad lines cost 1,081 cycles per PAL frame, eight double-height sprites (42 lines each) a further 802 (bench).
 - The 112 PAL lines outside the 200 display lines (312 - 200) have no bad lines; sprite DMA still stalls the CPU there.
-- Free CPU cycles per frame at 1 MHz with a text screen and eight double-height sprites: PAL 17,783 (bench); NTSC 15,212 (17,095 minus the PAL figures 1,081 and 802; not measured on NTSC). Budget for NTSC and let PAL idle, or scale movement by frame count.
+- Free CPU cycles per frame at 1 MHz with a text screen and eight double-height sprites: PAL 17,783 (bench); NTSC 15,219 (measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20) (the value derived earlier from 17,095 minus 1,081 and 802 was 15,212). Budget for NTSC and let PAL idle, or scale movement by frame count.
 - Measure each routine: set `$D020` to a colour on entry and restore it on exit; the height of the coloured border band is its cost in raster lines (63 cycles per PAL line, 65 per NTSC line). Capture the frame in VICE with `c64_graphics` `capture_frame`.
 
 ### MODERN budget
