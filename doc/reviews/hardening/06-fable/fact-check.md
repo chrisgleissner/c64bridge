@@ -471,3 +471,14 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | Digi sample design "(unverified)", "about 8 kHz" | reu | REWRITTEN as design pattern with CIA value 122 for 8000 Hz on PAL | c64ref (PAL phi2 985,248 Hz) |
 | GeoRAM layout "(unverified)" | reu | RESOLVED: $DE00 window, $DF80-$DFFF even = page, odd = block | fpga/cart_slot/vhdl_source/all_carts_v5.vhd:644-653 |
 | CRT types that keep the REU | reu | CORRECTED (EasyFlash 1, C128 IO 1/2, FC3 1) | software/io/c64/c64_crt.cc:468-648 |
+| Upic turbo requirement with `C64U Turbo Registers` hedge and two-label .cfg advice | upic | CORRECTED: one `Turbo Control=U64 Turbo Registers` line; LOAD_CONFIG rule referenced | software/u64/u64_config.cc:328; configio.cc; control_target.cc:559-609 |
+| Palette firmware "3.15 or later" | upic | CORRECTED to public master since 2026-09-03 | 1541ultimate git log 4d4f6a727 |
+| 1 MHz window "about 2 s" | upic | CORRECTED to 2.55 s / 2.57 s measured | bench 2026-11-13 |
+| Free-cycle percentages "roughly 17-27 %", "about 82 %", "about 30 %", "1/312 per row" | upic | REWRITTEN from the measured table (16.5-26.7 %, 83.5 %, 31 %, 3,969 cycles per row) | measured C64U |
+| Full-screen clear "(derived, unverified)" | upic | REWRITTEN as cycle count 196,608 / 245,760 | 6510 timing (c64ref) |
+| 48 KB fetch times | upic | RECOMPUTED 11.4 / 13.7 / 49.6 ms from measured rates | bench summary |
+| Palette retry "about 10 times 0.2 s apart" | upic | REMOVED (no source) | - |
+| `$D031 = $00` "suggests TurboEnable Bit" | upic | REMOVED; $FF rule kept | u64_config.cc:1696-1708 |
+| Raster IRQ "about line $17" | upic | REMOVED (not found in mandelbrot-upic) | - |
+| Exit recipe "(unverified)", odd-x shift "(unverified)" | upic | REWRITTEN as program rules (no hardware claim) | - |
+| Upic program on U64 | upic | Not verified, request U-5 | results.md row 36 |
