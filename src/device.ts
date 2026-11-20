@@ -1261,9 +1261,10 @@ export class ViceBackend implements C64Facade {
   }
 
   /**
-   * BASIC's program pointers (C64 memory map, zero page): $2B/$2C TXTTAB start of BASIC text, $2D/$2E VARTAB
-   * start of variables, $2F/$30 ARYTAB start of arrays, $31/$32 STREND end of arrays. After a load the three
-   * upper ones must point behind the program, as the BASIC LOAD command leaves them.
+   * BASIC's program pointers: $2B/$2C TXTTAB start of BASIC text ($0801), $2D/$2E VARTAB start of variables,
+   * $2F/$30 ARYTAB start of arrays, $31/$32 STREND end of arrays + 1 (Mapping the Commodore 64, zero page).
+   * After a LOAD in direct mode the BASIC ROM stores the end address + 1 in VARTAB ($E1A7) and CLR copies
+   * VARTAB into ARYTAB and STREND ($A66B-$A675); these bytes leave the pointers as that LOAD does.
    */
   private static basicPointerBytes(programEnd: number): Buffer {
     const ptrs = Buffer.alloc(6);
