@@ -80,6 +80,12 @@ const sidVolumeArgsSchema = objectSchema({
       minimum: 0,
       maximum: 15,
     }),
+    filterMode: optionalSchema(numberSchema({
+      description: "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+      integer: true,
+      minimum: 0,
+      maximum: 15,
+    })),
   },
   required: ["volume"],
   additionalProperties: false,
@@ -114,11 +120,10 @@ const sidNoteOnArgsSchema = objectSchema({
       description: "Explicit frequency in Hz. Used when note is omitted.",
       minimum: 1,
     })),
-    system: stringSchema({
-      description: "Video system for frequency calculation.",
+    system: optionalSchema(stringSchema({
+      description: "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
       enum: ["PAL", "NTSC"],
-      default: "PAL",
-    }),
+    })),
     waveform: stringSchema({
       description: "SID waveform to enable.",
       enum: ["pulse", "saw", "tri", "noise"],
@@ -253,10 +258,9 @@ const musicGenerateArgsSchema = objectSchema({
       enum: ["classic", "expression"],
     }), "classic"),
     system: optionalSchema(stringSchema({
-      description: "Video system for the note frequencies. Defaults to PAL; use NTSC on an NTSC machine or the notes sound about 65 cents sharp.",
+      description: "PAL or NTSC for the note frequencies. Default: read from the machine ($02A6).",
       enum: ["PAL", "NTSC"],
-      default: "PAL",
-    }), "PAL"),
+    })),
   },
   additionalProperties: false,
 });
@@ -373,6 +377,26 @@ function transposeNote(note: string, semitones: number): string {
 }
 
 /** Highest frequency the SID's 16-bit frequency register can produce (about 3848 Hz PAL, 3995 Hz NTSC). */
+/**
+ * The SID frequency tables differ for PAL and NTSC. When the caller gives no system, read the KERNAL
+ * PAL/NTSC flag at $02A6 (1 = PAL, 0 = NTSC; Mapping the Commodore 64) from the active machine, which
+ * works the same on Ultimate hardware and VICE, and say where the value came from.
+ */
+export async function resolveSidSystem(
+  ctx: ToolExecutionContext,
+  given: "PAL" | "NTSC" | undefined,
+): Promise<{ system: "PAL" | "NTSC"; source: string }> {
+  if (given) return { system: given, source: "given" };
+  try {
+    const flag = (await ctx.client.readMemoryRaw(0x02a6, 1))[0];
+    if (flag === 0) return { system: "NTSC", source: "read from the machine ($02A6 = 0)" };
+    if (flag === 1) return { system: "PAL", source: "read from the machine ($02A6 = 1)" };
+  } catch {
+    // Fall through to the default below.
+  }
+  return { system: "PAL", source: "default PAL; $02A6 could not be read" };
+}
+
 function maxSidFrequencyHz(system: "PAL" | "NTSC"): number {
   return (0xffff * (system === "PAL" ? 985_248 : 1_022_727)) / 16_777_216;
 }
@@ -563,7 +587,7 @@ export const audioModule = defineToolModule({
             applied: appliedVolume,
           });
 
-          const result = await ctx.client.sidSetVolume(parsed.volume);
+          const result = await ctx.client.sidSetVolume(parsed.volume, undefined, parsed.filterMode === undefined ? undefined : { filterMode: parsed.filterMode });
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while setting SID volume", {
               details: normaliseFailure(result.details),
@@ -573,7 +597,8 @@ export const audioModule = defineToolModule({
           const detailRecord = toRecord(result.details) ?? {};
           const address = normaliseAddress(detailRecord.address, "$D418");
 
-          return textResult(`SID master volume set to ${appliedVolume}.`, {
+          const notice = typeof detailRecord.notice === "string" ? ` ${detailRecord.notice}` : "";
+          return textResult(`SID master volume set to ${appliedVolume}.${notice}`, {
             success: true,
             requestedVolume: parsed.volume,
             appliedVolume,
@@ -649,7 +674,7 @@ export const audioModule = defineToolModule({
           const parsed = sidNoteOnArgsSchema.parse(args ?? {});
           cancelGeneratedSidPlayback(); // A running generated sequence would overwrite this voice.
           const voice = Math.max(1, Math.min(3, Math.floor(parsed.voice ?? 1))) as 1 | 2 | 3;
-          const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
+          const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined);
           if (parsed.note) {
             assertPlayableFrequency(noteHz(parsed.note), parsed.note, system, "$.note");
           } else if (parsed.frequencyHz !== undefined) {
@@ -666,7 +691,7 @@ export const audioModule = defineToolModule({
             voice,
             note: parsed.note ?? undefined,
             frequencyHz: parsed.frequencyHz ?? undefined,
-            system: (parsed.system ?? "PAL") as "PAL" | "NTSC",
+            system,
             waveform: (parsed.waveform ?? "pulse") as "pulse" | "saw" | "tri" | "noise",
             pulseWidth: parsed.pulseWidth,
             attack: parsed.attack,
@@ -681,16 +706,15 @@ export const audioModule = defineToolModule({
           }
 
           const detailRecord = toRecord(result.details) ?? {};
-          const systemNote = parsed.system
-            ? `Using ${parsed.system} timing.`
-            : "Using default PAL timing. For NTSC, pass system: 'NTSC'. Read $02A6 (KERNAL PAL/NTSC flag: 1 = PAL, 0 = NTSC) to check the machine.";
+          const systemNote = `Using ${system} timing (${systemSource}).`;
 
           return textResult(`Started SID voice ${voice}${parsed.note ? ` with note ${parsed.note.toUpperCase()}` : ""}. ${systemNote}`, {
             success: true,
             voice,
             note: parsed.note ?? null,
             frequencyHz: parsed.frequencyHz ?? null,
-            system: parsed.system ?? "PAL",
+            system,
+            systemSource,
             systemReminder: "$02A6 holds the KERNAL PAL/NTSC flag: 1 = PAL, 0 = NTSC",
             waveform: parsed.waveform ?? "pulse",
             pulseWidth: parsed.pulseWidth,
@@ -713,7 +737,7 @@ export const audioModule = defineToolModule({
     {
       name: "sid_note_off",
       description: "Release a SID voice by clearing its GATE bit.",
-      summary: "Writes zero to the selected voice control register to stop playback.",
+      summary: "Clears the GATE bit of the voice control register, keeping the waveform last sent by note_on so the release phase is heard.",
       inputSchema: sidNoteOffArgsSchema.jsonSchema,
       tags: ["sid", "control", "music"],
       prerequisites: ["sid_note_on"],
@@ -965,7 +989,7 @@ export const audioModule = defineToolModule({
         try {
           const parsed = musicGenerateArgsSchema.parse(args ?? {});
           const intervals = parseIntervals(parsed.pattern);
-          const system = (parsed.system ?? "PAL") as "PAL" | "NTSC";
+          const { system, source: systemSource } = await resolveSidSystem(ctx, parsed.system as "PAL" | "NTSC" | undefined);
           const timeline: Array<{ t: number; note: string; durationMs: number }> = [];
           let timestamp = 0;
           const expressiveDurations = [250, 180, 180, 400];
@@ -1037,7 +1061,7 @@ export const audioModule = defineToolModule({
             }
           })();
 
-          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root} (${system} pitch table). Playback is running and will be replaced by the next generated sequence.`, {
+          return textResult(`Scheduled ${parsed.steps} note arpeggio starting on ${parsed.root} (${system} pitch table, ${systemSource}). Playback is running and will be replaced by the next generated sequence.`, {
             success: true,
             root: parsed.root,
             intervals,
@@ -1046,6 +1070,7 @@ export const audioModule = defineToolModule({
             waveform: parsed.waveform ?? "tri",
             preset: parsed.preset ?? "classic",
             system,
+            systemSource,
             timeline,
           });
         } catch (error) {
