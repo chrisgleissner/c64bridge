@@ -55,11 +55,12 @@ function parseArgs(argv) {
   return opts;
 }
 
-const MODULES = ["sidwave", "sidwaveCompiler", "audio/sidwaveFidelity", "audio/generateSidwave", "audio/sidwaveSimilarity", "audio/sidwaveReference"];
+const MODULES = ["c64Client", "sidwave", "sidwaveCompiler", "audio/sidwaveFidelity", "audio/generateSidwave", "audio/sidwaveSimilarity", "audio/sidwaveReference"];
 
 async function loadModules() {
-  const dist = path.join(root, "dist", "src");
-  if (fs.existsSync(path.join(dist, "sidwaveCompiler.js"))) {
+  const dist = [path.join(root, "dist"), path.join(root, "dist", "src")].find((dir) =>
+    MODULES.every((name) => fs.existsSync(path.join(dir, `${name}.js`))));
+  if (dist) {
     const mods = await Promise.all(MODULES.map((m) => import(pathToFileURL(path.join(dist, `${m}.js`)).href)));
     return Object.assign({}, ...mods);
   }
@@ -209,8 +210,10 @@ if (opts.replay) {
   if (w.channels !== 2) usage("--replay needs a stereo WAV");
   pcm = Int16Array.from(w.samples, (v) => Math.round(v * 32768));
 } else {
+  const client = new m.C64Client(base, { networkPassword: headers["X-Password"] });
   pcm = await record(opts.host, base, headers, seconds, sampleRate, async () => {
-    await rest(base, headers, "POST", "/v1/runners:run_prg", compiled.prg);
+    const playback = await client.playSidwave(doc, compiled);
+    if (!playback.success) throw new Error("The Ultimate could not start the SIDWAVE PRG");
   });
   writeWav(path.join(opts.out, "capture.wav"), pcm, sampleRate);
 }
