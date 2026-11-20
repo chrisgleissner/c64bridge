@@ -254,3 +254,24 @@ export async function resetAndWaitForBasic(
   await exitMonitorIfNeeded(bm);
   return last;
 }
+
+/**
+ * Waits for the BASIC prompt of a machine that has just booted by itself, without resetting it.
+ * One read of $002B-$07E7 per attempt (the CPU runs between attempts), the same evaluation as the boot wait
+ * after a reset, minus the marker. On success the CPU is left stopped in the monitor.
+ */
+export async function waitForBootedPrompt(
+  bm: ViceClient,
+  options: { timeoutMs: number; gapMs?: number },
+): Promise<{ pointersOk: boolean; promptOk: boolean }> {
+  const start = nowNs();
+  const gap = Math.max(1, options.gapMs ?? 100);
+  let last = { pointersOk: false, promptOk: false };
+  for (;;) {
+    const result = evaluateBootState(await bm.memGet(BASIC_STATE_START, BASIC_STATE_END));
+    last = { pointersOk: result.pointersOk, promptOk: result.promptOk };
+    if (result.promptOk || msSince(start) >= options.timeoutMs) return last;
+    await exitMonitorIfNeeded(bm);
+    await new Promise((r) => setTimeout(r, gap));
+  }
+}

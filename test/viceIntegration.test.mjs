@@ -252,9 +252,9 @@ test("ViceClient validates error cases against the VICE mock server", async (t) 
     await session.close();
   });
 
-  await assert.rejects(() => session.client.checkpointGet(999), /BM error 0x83/);
-  await assert.rejects(() => session.client.checkpointToggle(999, true), /BM error 0x83/);
-  await assert.rejects(() => session.client.checkpointSetCondition(999, "X == 1"), /BM error 0x83/);
+  await assert.rejects(() => session.client.checkpointGet(999), /BM error 0x1 \(object does not exist\)/);
+  await assert.rejects(() => session.client.checkpointToggle(999, true), /BM error 0x1 \(object does not exist\)/);
+  await assert.rejects(() => session.client.checkpointSetCondition(999, "X == 1"), /BM error 0x1 \(object does not exist\)/);
   await assert.rejects(() => session.client.registersSet([], {}), /At least one register write must be provided/);
   await assert.rejects(() => session.client.registersSet([{ id: 99, value: 1 }]), /Unknown register id 99/);
   await assert.rejects(() => session.client.registersSet([{ name: "ZZ", value: 1 }]), /Unknown register name ZZ/);
