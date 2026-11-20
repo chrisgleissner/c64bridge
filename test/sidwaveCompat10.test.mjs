@@ -6,7 +6,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSidwave } from "../src/sidwave.js";
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../src/sidwaveCompiler.js";
-import { getMusicPresetSidwave } from "../src/tools/meta/audio.js";
 import { generateSidwave } from "../src/audio/generateSidwave.js";
 
 // SHA-256 of the PRG and PSID that the 1.3.0 compiler produced for these SIDWAVE 1.0 documents.
@@ -49,7 +48,9 @@ const EXPECTED_11 = {
   generated_ambient: ["70a83c1f7a6b5c2ad949eaf5296272420959c88ccace6df7b0443c6004ca924c", "833613c2f964da8fb262725cda550a5624fe48ff05706cfdf94ad3ecc7db29d5"],
   generated_funk: ["3fc08567b3bbe568e21c255295c0a392b31de7e02c6fee9d755c167ce54e8474", "966858ce079996cb9ad17640dd514fdb5a3dfd6d5767a89a6d7299714fdd21cb"],
 };
-const sources11 = Object.fromEntries(["chiptune_drive", "ambient_filter", "funk_bass"].map((name) => [name, getMusicPresetSidwave(name)]));
+// Frozen copies of the SIDWAVE 1.1 presets as shipped in 1.3.1; the live presets may be rewritten.
+const dir11 = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "sidwave-1.1");
+const sources11 = Object.fromEntries(["chiptune_drive", "ambient_filter", "funk_bass"].map((name) => [name, fs.readFileSync(path.join(dir11, `${name}.yaml`), "utf8")]));
 for (const style of ["chiptune", "ambient", "funk"]) {
   sources11[`generated_${style}`] = generateSidwave({ style, system: "PAL", seed: 65, preset: "classic", root: "C3" }).score;
 }
