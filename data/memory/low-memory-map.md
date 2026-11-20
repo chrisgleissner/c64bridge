@@ -13,7 +13,7 @@ A=Accumulator, X,Y=index, C=Carry; “—” = not applicable. Pointers are litt
 
 | Address | Decimal | Name | Function | Args | Input | Output | Notes |
 |:--|:--|:--|:--|:--|:--|:--|:--|
-| `$0000` | 0 | **D6510** | 6510 on‑chip I/O **Data Direction** | bitmask | — | — | Bits0–5 valid; default `$EF`. Configure port at $0001. |
+| `$0000` | 0 | **D6510** | 6510 on‑chip I/O **Data Direction** | bitmask | — | — | Bits0–5 valid; default `$2F` (set by the KERNAL at reset; Mapping gives `$EF`, which differs only in the unused bits 6–7). Configure port at $0001. |
 | `$0001` | 1 | **R6510** | 6510 on‑chip **I/O Port** (banking + cassette) | bitmask | — | — | Bit0=LORAM,1=HIRAM,2=CHAREN; 3=data out; 4=switch sense; 5=motor. |
 | `$0002` | 2 | — | Unused | — | — | — | Free (zero page). |
 | `$0003–$0004` | 3–4 | **ADRAY1** | Vector: FP→signed **int** | — | FAC1 | A,Y or $64/65 | Points to `$B1AA`. |
