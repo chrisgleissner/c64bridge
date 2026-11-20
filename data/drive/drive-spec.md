@@ -181,7 +181,7 @@ end = $c100
 ## 1571 — Double‑Sided Drive (DOS 3.0)
 
 **Medium:** 5¼″ double‑sided DD, 70 tracks (35 × 2).  
-**Capacity:** ~349 KB (1368 blocks). **DOS:** 3.0.  
+**Capacity:** 349 696 B (1366 blocks). **DOS:** 3.0.  
 Reads/writes 1541 disks (side A only); auto‑flips heads; supports burst mode with C128.
 
 ### Key Differences
