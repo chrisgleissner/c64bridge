@@ -459,3 +459,32 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | `$EA31` / `$EA81` exits | CONFIRMED, made precise | c64ref `c64disasm_en.txt:6147-6186` (`$EA81` skips clock, keyboard and the CIA ICR read) |
 | "VICE wraps at 512 KB"; length 0 = 64 KB | CONFIRMED, made precise | vice-3.10 `src/c64/cart/reu.c:1085-1093,1534` |
 | Host writes limited to 64 KB; preload not re-run on reset | CONFIRMED | measured (row 6); `io/c64/reu_preloader.cc:58-77` |
+
+### F3 - data/gamedev/techniques.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| KERNAL exits `$EA31`/`$EA81` | CONFIRMED, made precise | c64ref `c64disasm_en.txt:6147-6186` |
+| IRQ delayed one instruction by a taken branch without page cross | CONFIRMED | `K-src/nesdev-irq.html` "Interrupts during branches" |
+| Double-IRQ stable raster "sketch (unverified)" | MOVED to Not verified | no primary source; hardware request G-3 (test programs `~/.c64bridge/h6/hw/media/precise-g/stable.prg`, `single.prg`) |
+| Multiplexer reuse line "Y+21 ... code uses +22" | CORRECTED | Bauer 3.8.1 rules 2, 4, 7: display Y+1..Y+21, DMA off in line Y+22, new Y needs DMA off: reuse needs `Y(k) >= Y(k-8)+22` |
+| "~24 virtual sprites", "16-24 practical" | REWRITTEN | 24 in Cadaver/Corescape; cost counted: 74 / 115 cycles per sprite (c64ref cycle table) |
+| Scroll copy "about 9 cycles per byte, ~9,000" | MADE precise | `lda abs,x` 4(+1), `sta abs,x` 5; 960 bytes = 8,640 |
+| Collision "multicolour counts only %10/%11" | CORRECTED | Bauer 3.8.2: background `%01` does not collide (sprite-background only) |
+| Sprite coordinates X 24-343, Y 50-249 | CONFIRMED | Bauer 3.8.1 (display from line Y+1), 3.9 (window from line 51 with RSEL=1) |
+| Paddles/1351 "unverified" | SETTLED (paddles), 1351 REMOVED | Mapping `$D419`/`$D41A` (POTX/POTY, `$DC00` bits 7-6, fire bits 2/3); no primary 1351 source |
+| PSID init A = song-1; play `$0000` = own IRQ | CONFIRMED | `SID_file_format.txt` initAddress, playAddress |
+| "20 % fast at 60 Hz" | CORRECTED | 59.826/50.125 = 1.194; skip 1 in 6 gives 49.86 calls/s |
+| Multi-speed "CIA timer (unverified for each player)" | SETTLED | `SID_file_format.txt` "speed": bit 1 = CIA 1 timer A, default 60 Hz |
+| Several-SID design paragraph "(unverified)" | REMOVED, pointer to `c64://ultimate/multisid` | duplicated multisid; design part unsourced |
+| "SID writes under turbo at 1 MHz" bullet | REMOVED | unsourced; I/O speed in `c64://ultimate/hardware` |
+| LFSR `$1D` period 255 | CONFIRMED | exhaustive run of the recurrence |
+| Voice 3 mute | MADE precise | Mapping `$D41B`: `$D418` bit 7 disconnects voice 3 |
+| NTSC max `$D012` above 255 "`$06`" | CORRECTED | 6567R8 263 lines (`$06`), 6567R56A 262 (`$05`); Bauer 3.4 |
+| System Mode values | CORRECTED | `u64/u64_config.cc:278` six values; measured row 38 |
+| Packer comparison "(unverified comparisons)" | REWRITTEN | measure on own data; no claim kept |
+| `$D031` probe and `$0F` speed | MADE precise | measured rows 31, 39; `u64_config.cc:324-325` (index 15 = 48 / 64 MHz) |
+| Forced 1 MHz window "about 2.6 s after program start or reset" | NARROWED | bench summary: after the `run_prg` reset, 2.55 s / 2.57 s |
+| Speed probe returns 4 at 1 MHz | KEPT (VICE 3.10), hardware request G-4 | loop is 14 cycles |
+| UCI `$DF1D & $7F == $49` | CONFIRMED | `fpga/io/command_interface/vhdl_source/command_protocol.vhd:99` |
+| Quarter squares "speed unverified" | REMOVED marker | no routine given |
