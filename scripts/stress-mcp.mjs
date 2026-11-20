@@ -22,13 +22,13 @@ const configPath = path.join(temp,"config.json"), stateDir = path.join(temp,"sta
 fs.mkdirSync(stateDir);
 const stats = Object.fromEntries(scenarios.map(s=>[s,{requests:0,ok:0,errorResults:0,protocolErrors:0,expectedErrors:0,hangs:0,latencies:[],byTool:new Map(),errors:new Map()}]));
 const findings=[]; let stdoutViolations=0, crashes=0, unhandled=0, stopped=false;
-const children=new Set(); let mock;
+const children=new Set(),expectedExit=new Set(); let mock;
 
 function percentile(xs,p){ if(!xs.length)return 0; const a=[...xs].sort((x,y)=>x-y); return Math.round(a[Math.min(a.length-1,Math.ceil(p*a.length)-1)]); }
 function sample(pid){
   try { const status=fs.readFileSync(`/proc/${pid}/status`,"utf8"); const rss=Number(status.match(/^VmRSS:\s+(\d+)/m)?.[1]??0)/1024; const fd=fs.readdirSync(`/proc/${pid}/fd`).length; const files=(d)=>fs.readdirSync(d,{withFileTypes:true}).reduce((n,e)=>n+(e.isDirectory()?files(path.join(d,e.name)):1),0); return {rss,fd,files:files(stateDir)}; } catch{return null;}
 }
-function listenChild(proc){ children.add(proc);let pending="";proc.stdout.on("data",b=>{pending+=b.toString();const lines=pending.split(/\r?\n/);pending=lines.pop()??"";for(const line of lines.filter(Boolean)){try{JSON.parse(line);}catch{stdoutViolations++;findings.push(`STDOUT violation: ${line.slice(0,120)}`);}}});proc.stdout.on("end",()=>{if(pending.trim()){try{JSON.parse(pending);}catch{stdoutViolations++;findings.push(`STDOUT violation: ${pending.slice(0,120)}`);}}});proc.stderr?.on("data",b=>{if(/Unhandled|uncaught/i.test(b.toString())){unhandled++;findings.push("Unhandled/uncaught text in server stderr");}});proc.on("exit",(code,signal)=>{children.delete(proc);if(!stopped&&code!==0){crashes++;findings.push(`Server exited (${code??signal})`);}}); }
+function listenChild(proc){ children.add(proc);let pending="";proc.stdout.on("data",b=>{pending+=b.toString();const lines=pending.split(/\r?\n/);pending=lines.pop()??"";for(const line of lines.filter(Boolean)){try{JSON.parse(line);}catch{stdoutViolations++;findings.push(`STDOUT violation: ${line.slice(0,120)}`);}}});proc.stdout.on("end",()=>{if(pending.trim()){try{JSON.parse(pending);}catch{stdoutViolations++;findings.push(`STDOUT violation: ${pending.slice(0,120)}`);}}});proc.stderr?.on("data",b=>{if(/Unhandled|uncaught/i.test(b.toString())){unhandled++;findings.push("Unhandled/uncaught text in server stderr");}});proc.on("exit",(code,signal)=>{children.delete(proc);if(!stopped&&!expectedExit.has(proc)&&code!==0){crashes++;findings.push(`Server exited (${code??signal})`);}}); }
 async function startClient(faults){
   mock=await startMockC64Server(faults?{faults:{delayMs:100,delayJitterMs:100,hangupRate:.15,errorRate:.2,truncateRate:.15,stallRate:.1}}:{});
   fs.writeFileSync(configPath,JSON.stringify({c64u:{host:"127.0.0.1",port:new URL(mock.baseUrl).port}}));
@@ -42,8 +42,8 @@ async function request(s,tool,op,fn,{expected=false,timeout=30000}={}){const st=
   }catch(e){clearTimeout(timer);const elapsed=Date.now()-t;st.latencies.push(elapsed);ts.latencies.push(elapsed);const code=e?.code;recordError(st,key,e?.message??e,code);if(e.hang){st.hangs++;findings.push(`${s}: ${key} request exceeded ${timeout}ms`);}else{st.protocolErrors++;ts.protocolErrors++;if(expected)st.expectedErrors++;else findings.push(`${s}: ${key} protocol error${code?` (${code})`:""}: ${String(e?.message??e).slice(0,160)}`);}return null;}}
 async function callTool(client,name,args){return client.callTool({name,arguments:args});}
 let writeTail=Promise.resolve(),writeValue=0;
-async function concurrencyRun(s,client,n,until){const ops=[{tool:"c64_memory",op:"read",fn:()=>callTool(client,"c64_memory",{op:"read",address:"$0400",length:16})},{tool:"c64_memory",op:"read_screen",fn:()=>callTool(client,"c64_memory",{op:"read_screen"})},{tool:"c64_rag",op:"basic",fn:()=>callTool(client,"c64_rag",{op:"basic",q:"BASIC print"})},{tool:"resources/read",op:"platform/status",fn:()=>client.readResource({uri:"c64://platform/status"})},{tool:"prompts/get",op:"basic-program",fn:()=>client.getPrompt({name:"basic-program",arguments:{}})},{tool:"c64_memory",op:"write",fn:()=>{const run=writeTail.then(()=>callTool(client,"c64_memory",{op:"write",address:"$C000",bytes:(++writeValue&255).toString(16).padStart(2,"0")}));writeTail=run.catch(()=>{});return run;}}];
-  await Promise.all(Array.from({length:n},async(_,i)=>{while(Date.now()<until){const x=ops[i%ops.length];await request(s,x.tool,x.op,x.fn);}}));}
+async function concurrencyRun(s,client,n,until){const ops=[{tool:"c64_memory",op:"read",fn:()=>callTool(client,"c64_memory",{op:"read",address:"$0400",length:16})},{tool:"c64_memory",op:"read_screen",fn:()=>callTool(client,"c64_memory",{op:"read_screen"})},{tool:"c64_rag",op:"basic",fn:()=>callTool(client,"c64_rag",{op:"basic",q:"BASIC print"})},{tool:"resources/read",op:"platform/status",fn:()=>client.readResource({uri:"c64://platform/status"})},{tool:"prompts/get",op:"basic-program",fn:()=>client.getPrompt({name:"basic-program",arguments:{}})},{tool:"c64_memory",op:"write",serial:true,fn:()=>callTool(client,"c64_memory",{op:"write",address:"$C000",bytes:(++writeValue&255).toString(16).padStart(2,"0")})}];
+  await Promise.all(Array.from({length:n},async(_,i)=>{while(Date.now()<until){const x=ops[i%ops.length];if(x.serial){/* Writes to $C000 are issued one at a time so the last value is predictable. Waiting for the previous write is not part of the measured latency. */const prev=writeTail;let done;writeTail=new Promise(r=>{done=r;});await prev;try{await request(s,x.tool,x.op,x.fn);}finally{done();}}else await request(s,x.tool,x.op,x.fn);}}));}
 async function adversarial(s,client,transport){
   const until=Date.now()+duration*1000;
   const invalid=[{tool:"made_up_tool",op:"call",fn:()=>callTool(client,"made_up_tool",{} )},{tool:"c64_memory",op:"bad_operation",fn:()=>callTool(client,"c64_memory",{op:"bad_operation"})},{tool:"c64_rag",op:"docs/oversize",fn:(i)=>callTool(client,"c64_rag",{op:"docs",q:"x".repeat([1,2,4,8][i%4]*1024*1024)})},{tool:"c64_batch",op:"oversize",fn:()=>callTool(client,"c64_batch",{commands:Array.from({length:65},()=>({tool:"c64_memory",args:{op:"read",address:"$0000",length:1}}))})}];
@@ -56,10 +56,11 @@ async function adversarial(s,client,transport){
 }
 async function httpAdversarial(s){
   const probe=await import("node:net"); const server=probe.createServer();server.listen(0,"127.0.0.1");await once(server,"listening");const port=server.address().port;await new Promise(r=>server.close(r));
-  const p=await import("node:child_process");const cp=p.spawn(process.execPath,[path.join(root,"dist/index.js"),"--http",`--port=${port}`],{cwd:root,env:{...process.env,C64BRIDGE_CONFIG:configPath,C64BRIDGE_STATE_DIR:stateDir,C64BRIDGE_HTTP_TOKEN:"stress-token"},stdio:["ignore","pipe","pipe"]});listenChild(cp);
-  for(let i=0;i<100&&cp.exitCode===null;i++){try{if((await fetch(`http://127.0.0.1:${port}/mcp`,{method:"GET"})).status)break;}catch{} await new Promise(r=>setTimeout(r,50));}
+  const p=await import("node:child_process");const cp=p.spawn(process.execPath,[path.join(root,"dist/index.js"),"--http",String(port)],{cwd:root,env:{...process.env,C64BRIDGE_CONFIG:configPath,C64BRIDGE_STATE_DIR:stateDir,C64BRIDGE_HTTP_TOKEN:"stress-token"},stdio:["ignore","pipe","pipe"]});listenChild(cp);let up=false;
+  for(let i=0;i<100&&cp.exitCode===null;i++){try{if((await fetch(`http://127.0.0.1:${port}/mcp`,{method:"GET"})).status){up=true;break;}}catch{} await new Promise(r=>setTimeout(r,50));}
+  if(!up)findings.push(`HTTP server did not start listening on port ${port}`);
   for(const [headers,method] of [[{},"POST"],[{"Authorization":"Bearer wrong"},"POST"],[{"Authorization":"Bearer stress-token"},"GET"],[{"Authorization":"Bearer stress-token"},"DELETE"]])await request(s,"http","authorization",async()=>{const r=await fetch(`http://127.0.0.1:${port}/mcp`,{method,headers});return {isError:r.status<400};},{expected:true});
-  cp.kill("SIGTERM");await new Promise(r=>setTimeout(r,100));
+  expectedExit.add(cp);if(cp.exitCode===null&&cp.signalCode===null){cp.kill("SIGTERM");await once(cp,"exit");}
 }
 async function main(){
   const {client,transport}=await startClient(scenarios.includes("faults"));
