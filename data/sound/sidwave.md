@@ -94,6 +94,14 @@ timeline:
 | --- | --- |
 | `sidwave` | Format version, `1.0` (legacy) or `1.1`. |
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
+| `speed` | Player calls per frame, from 1 to 4. |
+| `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
+| `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
+| `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
+| `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
+| `global_fx` | `reverb_sim` and `filter_env`, described below. |
+| `voices` | One to three voices with ids 1–3. Voices that are not declared stay silent. |
+| `timeline` | Sections played in order. The song loops forever after the last section. |
 
 ### Instrument wavetables
 
@@ -113,14 +121,66 @@ instruments:
       - { note: '+0' }
       - { note: '+12' }
 ```
-| `speed` | Player calls per frame, from 1 to 4. |
-| `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
-| `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
-| `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
-| `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
-| `global_fx` | `reverb_sim` and `filter_env`, described below. |
-| `voices` | One to three voices with ids 1–3. Voices that are not declared stay silent. |
-| `timeline` | Sections played in order. The song loops forever after the last section. |
+
+### Instrument pulse and filter tables
+
+Both tables restart on each note start and advance once per player call, including at
+`speed` greater than 1. A table can be a list of steps or a mapping with `steps`
+and its own zero-based `loop` index. For lists, an instrument-level `loop`
+applies to each list on that instrument. Without a loop, the last value holds
+after the final step finishes, including when the last step was an `add`. The
+compiled player supports up to 255 pulse steps and 255 filter steps across its
+instrument variants.
+
+`pulsetable` supplies the voice's pulse width via `$D402 + 7v` and
+`$D403 + 7v` (`v` is 0–2). A `set` takes a fraction in `(0, 1]` or an
+integer from 1 to 4094. Values up to and including 1 are interpreted as fractions,
+scaled by 4095, rounded, and clamped to 1–4094. An `add` applies a signed
+delta from −2048 to 2047 on each of its `frames` calls (1–255), clamping the
+result to 1–4094. A `set` lasts one call by default and can also specify
+`frames`. The table takes priority over `pwm_sweep`. If the first step is an
+`add`, it starts from the note's `pulse_width` (default 2048).
+
+`filtertable` sets the cutoff to an integer in 0–2047 with `cutoff`, or
+changes it on every call with an `add` delta from −2048 to 2047, clamped to
+0–2047. Each step has `frames` in 1–255 (default 1). Optional `resonance`
+(0–15) and `type` carry forward when omitted. A note starts with cutoff 0,
+resonance 8, and `lowpass` before its first step runs. The filter types are
+`lowpass`, `bandpass`, `highpass`, `lowpass+highpass`, `bandpass+highpass`,
+and `all`. The player puts cutoff bits 0–2 in `$D415` and bits 3–10 in
+`$D416`, resonance and routing in `$D417`, and type in `$D418` while
+preserving the current master volume.
+
+The SID has one shared filter. Every playing note with a filter table routes its voice
+through it, and the most recently started of those notes controls the settings.
+If several start on the same call, the highest numbered voice wins. Each active
+table advances in the background, so the next most recent note can take over
+at its current step when the owner releases or enters hard restart. While a
+table owns the filter, global routing and the `filter_env` and `filter_mod`
+sweeps are suspended. The sweeps resume from their paused positions when
+ownership ends. Scheduled ramp changes and song-loop resets still take effect
+at their usual times.
+
+```yaml
+instruments:
+  sweep_bass:
+    waveform: pulse
+    pulsetable:
+      loop: 0
+      steps:
+        - { set: 0.35 }
+        - { add: 23, frames: 8 }
+        - { add: -23, frames: 8 }
+    filtertable:
+      - { cutoff: 1300, resonance: 10, type: lowpass }
+      - { add: -40, frames: 12 }
+```
+
+The emulator budget fixture runs two song loops with three wavetable and pulse
+table voices and one filter table. Its highest measured play call takes **3027
+6502 cycles**, including indexed reads and branches that cross pages. The player
+and its data grow from **3947 to 4549 bytes** (+602) versus the same fixture
+with wavetables alone, excluding the PRG load address and song streams.
 
 The legacy shape with a `song: { title, author, tempo, mode, length_bars, global_fx }` block next to `voices` and `timeline` is also accepted.
 

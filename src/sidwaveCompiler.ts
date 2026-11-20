@@ -8,7 +8,7 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from "node:buffer";
 import { assemblyToPrgDetailed } from "./tools/translation/assembler.js";
-import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, MotifEntry } from "./sidwave.js";
+import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, MotifEntry, SidwaveRegisterTable } from "./sidwave.js";
 import {
   SidwaveValidationError,
   isRestToken,
@@ -217,6 +217,8 @@ export interface Instrument {
   sync?: boolean;
   wavetable?: Array<Record<string, any>>;
   waveloop?: number;
+  pulsetable?: SidwaveRegisterTable;
+  filtertable?: SidwaveRegisterTable;
 }
 
 export interface ArrangedNote {
@@ -494,11 +496,13 @@ function patternEntries(pattern: SidwavePattern, path: string): PatternEntry[] {
 function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: number[], arpSpeed: number, filter: number, fps: number): Instrument {
   const adsr = voice.adsr ?? [2, 2, 10, 3];
   const wave = waveformToCtrl(voice.waveform ?? "pulse");
-  const pw = voice.pulse_width ?? 0x800;
+  const baseWidth = voice.pulse_width ?? 0x800;
+  const pw = fx.pulsetable && baseWidth > 0 && baseWidth <= 1
+    ? Math.min(4094, Math.max(1, Math.round(baseWidth * 4095))) : baseWidth;
   let pwStep = 0;
   let pwMin = pw;
   let pwMax = pw;
-  if (fx.pwm_sweep && wave === 0x40) {
+  if (!fx.pulsetable && fx.pwm_sweep && wave === 0x40) {
     const rawDepth = Number(fx.pwm_sweep.depth);
     const depth = rawDepth <= 1 ? rawDepth * 4095 : rawDepth;
     pwMin = Math.max(16, Math.round(pw - depth));
@@ -531,6 +535,8 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
     filter,
     wavetable: Array.isArray(fx.wavetable) ? fx.wavetable.map((s: any) => ({ ...s })) : undefined,
     waveloop: fx.loop,
+    pulsetable: fx.pulsetable,
+    filtertable: fx.filtertable,
   };
 }
 
@@ -645,6 +651,8 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   const L: string[] = [];
   const insts = arr.instruments;
   const hasWavetable = insts.some((i) => i.wavetable?.length);
+  const hasPulseTable = insts.some((i) => i.pulsetable?.steps.length);
+  const hasFilterTable = insts.some((i) => i.filtertable?.steps.length);
   const clockIndex = arr.system === "NTSC" ? 1 : 0;
   // The PRG's CIA timer reproduces the song's video frame rate on whichever clock the machine has.
   const ciaLatch = (clock: number) => Math.round(clock / (arr.fps * arr.speed)) - 1;
@@ -670,6 +678,33 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
     playerCode = playerCode.replace(/  sta tmp\n  ldy v_inst,x\n  lda i_wtlen,y\n  beq vr_plain_note\n[\s\S]*?vr_plain_note:\n/, "");
     playerCode = playerCode.replace("vr_note:\n  lda tmp\n  tay", "vr_note:\n  tay");
     playerCode = playerCode.replace(/  lda i_wtlen,y\n  beq va_return\n[\s\S]*?va_return:\n/, "");
+  }
+  if (hasWavetable) {
+    // Wavetable initialization uses Y for its first row. The following loads need the instrument index.
+    playerCode = playerCode.replace("  sta v_wtleft,x\nvn_table_done:", "  sta v_wtleft,x\n  ldy v_inst,x\nvn_table_done:");
+  }
+  if (hasPulseTable || hasFilterTable) {
+    playerCode = playerCode.replace("  dex\n  bpl ini_vars", "  dex\n  cpx #$FF\n  bne ini_vars");
+  }
+  const addNoteHook = (routine: string) => {
+    playerCode = playerCode.replace("note_on:\n  sta v_note,x\n", `note_on:\n  sta v_note,x\n  jsr ${routine}\n`);
+  };
+  const addReleaseHook = (routine: string) => {
+    for (const label of ["c_gateoff", "c_hr"]) {
+      playerCode = playerCode.replace(`${label}:\n`, `${label}:\n  jsr ${routine}\n`);
+    }
+  };
+  if (hasPulseTable) {
+    addNoteHook("pt_start");
+    addReleaseHook("pt_stop");
+    playerCode = playerCode.replace("vr_write:\n", "vr_write:\n  jsr pt_tick\n");
+    playerCode += PULSE_TABLE_CODE + registerTableCode("pt", "pw", 1, 4094);
+  }
+  if (hasFilterTable) {
+    addNoteHook("ft_start");
+    addReleaseHook("ft_stop");
+    playerCode = playerCode.replace("globals:\n", "globals:\n  lda g_ftactive\n  beq gl_regular\n  jmp ft_globals\ngl_regular:\n");
+    playerCode += FILTER_TABLE_CODE + registerTableCode("ft", "cut", 0, 2047);
   }
   L.push(playerCode.replace("  jsr play\n  jmp $EA31", `${Array.from({ length: arr.speed }, () => "  jsr play").join("\n")}\n  jmp $EA31`));
   // Constants
@@ -734,7 +769,7 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
     for (const s of inst.wavetable) {
       const wave = waveformToCtrl(String(s.wave ?? "pulse"));
       const ctrl = wave | (s.gate === false ? 0 : 1) | (s.ring ? 4 : 0) | (s.sync ? 2 : 0) | (s.test ? 8 : 0);
-      const n = s.note === undefined ? 0 : String(s.note);
+      const n = s.note === undefined ? "" : String(s.note);
       const mode = !n ? 0 : /^[+-]/.test(n) ? 1 : 2;
       const note = mode === 0 ? 0 : mode === 1 ? (Number(n) & 255) : (noteNameToMidi(n)! - 12);
       wt.push({ ctrl, note, mode, frames: Number(s.frames ?? 1) });
@@ -750,6 +785,31 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
     col("wt_note", wt.length ? wt.map((s) => s.note) : [0]);
     col("wt_mode", wt.length ? wt.map((s) => s.mode) : [0]);
     col("wt_frames", wt.length ? wt.map((s) => s.frames) : [1]);
+  }
+  for (const [enabled, prefix, name] of [
+    [hasPulseTable, "pt", "pulsetable"], [hasFilterTable, "ft", "filtertable"],
+  ] as const) {
+    if (!enabled) continue;
+    const steps: SidwaveRegisterTable["steps"] = [];
+    const tables = insts.map((inst) => inst[name]);
+    const starts = tables.map((table) => {
+      if (!table) return 0;
+      const start = steps.length;
+      steps.push(...table.steps);
+      return start;
+    });
+    if (steps.length > 255) throw new SidwaveValidationError("$.instruments", `${name} data exceeds 255 steps`);
+    col(`i_${prefix}st`, starts);
+    col(`i_${prefix}len`, tables.map((table) => table?.steps.length ?? 0));
+    col(`i_${prefix}lp`, tables.map((table) => table?.loop ?? 255));
+    col(`${prefix}_lo`, steps.map((step) => step.value & 255));
+    col(`${prefix}_hi`, steps.map((step) => (step.value >> 8) & 255));
+    col(`${prefix}_add`, steps.map((step) => +step.add));
+    col(`${prefix}_frames`, steps.map((step) => step.frames));
+    if (prefix === "ft") {
+      col("ft_res", steps.map((step) => step.resonance === undefined ? 255 : step.resonance << 4));
+      col("ft_type", steps.map((step) => step.type ?? 255));
+    }
   }
   col("arptab", arpTable.length ? arpTable.map((v) => v & 0xff) : [0]);
 
@@ -771,6 +831,11 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   L.push(`vars:`);
   for (const name of VOICE_VARS) if (hasWavetable || !["wtpos", "wtleft", "wtnote"].includes(name)) L.push(`v_${name}: .res 3`);
   for (const name of GLOBAL_VARS) L.push(`${name}: .res 1`);
+  if (hasPulseTable) for (const name of ["ptpos", "ptleft"]) L.push(`v_${name}: .res 3`);
+  if (hasFilterTable) {
+    for (const name of ["ftpos", "ftleft", "cutlo", "cuthi", "ftres", "fttype", "ftnewer"]) L.push(`v_${name}: .res 3`);
+    L.push("g_ftactive: .res 1");
+  }
   L.push(`vars_end:`);
 
   streams.forEach((s, i) => pushByteRows(L, `stream${i}`, s.map((b) => `$${hex2(b)}`)));
@@ -1709,6 +1774,187 @@ gl_env_bot:
   lda #0
   sta g_edir
 gl_done:
+  rts
+`;
+
+// Both tables use the same cursor and signed arithmetic. A zero counter holds the
+// previous register value. A new note seeds the cursor so its first call enters row 0.
+function registerTableCode(prefix: "pt" | "ft", value: "pw" | "cut", min: number, max: number): string {
+  return `
+${prefix}_tick:
+  lda v_${prefix}left,x
+  bne ${prefix}_running
+  rts
+${prefix}_running:
+  dec v_${prefix}left,x
+  bne ${prefix}_current
+  ldy v_inst,x
+  lda v_${prefix}pos,x
+  clc
+  adc #1
+  cmp i_${prefix}len,y
+  bcc ${prefix}_next
+  lda i_${prefix}lp,y
+  cmp #$FF
+  bne ${prefix}_next
+  rts
+${prefix}_next:
+  sta v_${prefix}pos,x
+  clc
+  adc i_${prefix}st,y
+  tay
+  lda ${prefix}_frames,y
+  sta v_${prefix}left,x
+  jmp ${prefix}_step
+${prefix}_current:
+  ldy v_inst,x
+  lda i_${prefix}st,y
+  clc
+  adc v_${prefix}pos,x
+  tay
+${prefix}_step:
+${prefix === "ft" ? `  lda ft_res,y
+  cmp #$FF
+  beq ft_keep_res
+  sta v_ftres,x
+ft_keep_res:
+  lda ft_type,y
+  bmi ft_keep_type
+  sta v_fttype,x
+ft_keep_type:
+` : ""}  lda ${prefix}_add,y
+  beq ${prefix}_set
+  clc
+  lda v_${value}lo,x
+  adc ${prefix}_lo,y
+  sta t_lo
+  lda v_${value}hi,x
+  adc ${prefix}_hi,y
+  bmi ${prefix}_min
+  cmp #>${max}
+  bcc ${prefix}_sum
+  bne ${prefix}_max
+  tay
+  lda t_lo
+  cmp #<${max}
+  bcc ${prefix}_write
+${prefix}_max:
+  lda #<${max}
+  ldy #>${max}
+  bne ${prefix}_write
+${prefix}_min:
+  lda #${min}
+  ldy #0
+  jmp ${prefix}_write
+${prefix}_sum:
+  tay
+  lda t_lo
+${min ? `  bne ${prefix}_write
+  cpy #0
+  bne ${prefix}_write
+  lda #${min}
+` : ""}  jmp ${prefix}_write
+${prefix}_set:
+  lda ${prefix}_lo,y
+  sta v_${value}lo,x
+  lda ${prefix}_hi,y
+  sta v_${value}hi,x
+  rts
+${prefix}_write:
+  sta v_${value}lo,x
+  tya
+  sta v_${value}hi,x
+  rts
+`;
+}
+
+const PULSE_TABLE_CODE = String.raw`
+pt_start:
+  lda #$FF
+  sta v_ptpos,x
+  ldy v_inst,x
+  lda i_ptlen,y
+  beq pt_stop
+  lda #1
+  bne pt_counter
+pt_stop:
+  lda #0
+pt_counter:
+  sta v_ptleft,x
+  rts
+`;
+
+const FILTER_TABLE_CODE = String.raw`
+ft_start:
+  ldy v_inst,x
+  lda i_ftlen,y
+  beq ft_stop
+  lda vbit,x
+  ora g_ftactive
+  sta g_ftactive
+  ; Each voice remembers which voices started more recently. Inactive voices
+  ; are masked out, so the next most recent active note can take over.
+  lda vbit,x
+  ldy #2
+ft_mark_newer:
+  ora v_ftnewer,y
+  sta v_ftnewer,y
+  lda vbit,x
+  dey
+  bpl ft_mark_newer
+  lda #0
+  sta v_ftnewer,x
+  sta v_cutlo,x
+  sta v_cuthi,x
+  lda #$80
+  sta v_ftres,x
+  lda #$10
+  sta v_fttype,x
+  lda #$FF
+  sta v_ftpos,x
+  lda #1
+  sta v_ftleft,x
+  rts
+ft_stop:
+  lda vbit,x
+  eor #$FF
+  and g_ftactive
+  sta g_ftactive
+  rts
+
+ft_globals:
+  ldx #2
+ft_voice:
+  lda vbit,x
+  and g_ftactive
+  beq ft_next_voice
+  jsr ft_tick
+  lda v_ftnewer,x
+  and g_ftactive
+  bne ft_next_voice
+  lda v_cutlo,x
+  and #7
+  sta $D415
+  lda v_cutlo,x
+  sta t_lo
+  lda v_cuthi,x
+  lsr
+  ror t_lo
+  lsr
+  ror t_lo
+  lsr
+  ror t_lo
+  lda t_lo
+  sta $D416
+  lda v_ftres,x
+  ora g_ftactive
+  sta $D417
+  lda v_fttype,x
+  ora g_vol
+  sta $D418
+ft_next_voice:
+  dex
+  bpl ft_voice
   rts
 `;
 

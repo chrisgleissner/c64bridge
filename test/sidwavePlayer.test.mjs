@@ -54,7 +54,7 @@ def("TSX", [[0xba, "imp"]]); def("TXS", [[0x9a, "imp"]]);
 def("PHA", [[0x48, "imp"]]); def("PLA", [[0x68, "imp"]]); def("PHP", [[0x08, "imp"]]); def("PLP", [[0x28, "imp"]]);
 
 const RMW_OPS = new Set(["ASL", "LSR", "ROL", "ROR", "INC", "DEC"]);
-/** Base NMOS 6502 cycle count (page-crossing penalties ignored; taken branches add one in br()). */
+/** Base NMOS 6502 cycle count. Indexed reads and taken branches add page crossing penalties separately. */
 function cycleCost(name, mode) {
   if (name === "JSR" || name === "RTS") return 6;
   if (name === "JMP") return mode === "ind" ? 5 : 3;
@@ -76,23 +76,34 @@ class Cpu {
   fetch() { const v = this.rd(this.pc); this.pc = (this.pc + 1) & 0xffff; return v; }
   fetch16() { const lo = this.fetch(); return lo | (this.fetch() << 8); }
   zp16(a) { return this.m[a & 0xff] | (this.m[(a + 1) & 0xff] << 8); }
-  ea(mode) {
+  indexed(base, index, readPenalty) {
+    const addr = (base + index) & 0xffff;
+    if (readPenalty && (addr >> 8) !== (base >> 8)) this.cycles += 1;
+    return addr;
+  }
+  ea(mode, readPenalty) {
     switch (mode) {
       case "zp": return this.fetch();
       case "zpx": return (this.fetch() + this.x) & 0xff;
       case "zpy": return (this.fetch() + this.y) & 0xff;
       case "abs": return this.fetch16();
-      case "abx": return (this.fetch16() + this.x) & 0xffff;
-      case "aby": return (this.fetch16() + this.y) & 0xffff;
+      case "abx": return this.indexed(this.fetch16(), this.x, readPenalty);
+      case "aby": return this.indexed(this.fetch16(), this.y, readPenalty);
       case "izx": return this.zp16((this.fetch() + this.x) & 0xff);
-      case "izy": return (this.zp16(this.fetch()) + this.y) & 0xffff;
+      case "izy": return this.indexed(this.zp16(this.fetch()), this.y, readPenalty);
       case "ind": { const p = this.fetch16(); return this.rd(p) | (this.rd((p & 0xff00) | ((p + 1) & 0xff)) << 8); }
       default: return 0;
     }
   }
   adc(v) { const r = this.a + v + this.c; this.v = (~(this.a ^ v) & (this.a ^ r) & 0x80) ? 1 : 0; this.c = +(r > 0xff); this.a = this.nz(r); }
   cmp(r, v) { this.c = +(r >= v); this.nz(r - v); }
-  br(cond) { const off = this.fetch(); if (cond) { this.cycles += 1; this.pc = (this.pc + ((off << 24) >> 24)) & 0xffff; } }
+  br(cond) {
+    const off = this.fetch();
+    if (cond) {
+      this.cycles += 1;
+      this.pc = this.indexed(this.pc, (off << 24) >> 24, true);
+    }
+  }
   step() {
     const at = this.pc;
     const op = this.fetch();
@@ -100,7 +111,7 @@ class Cpu {
     if (!entry) throw new Error(`illegal opcode $${op.toString(16)} at $${at.toString(16)}`);
     const [name, mode] = entry;
     if (this.d) throw new Error("decimal mode is not expected in the player");
-    const addr = ["imp", "acc", "imm", "rel"].includes(mode) ? 0 : this.ea(mode);
+    const addr = ["imp", "acc", "imm", "rel"].includes(mode) ? 0 : this.ea(mode, !name.startsWith("ST") && !RMW_OPS.has(name));
     const val = () => (mode === "imm" ? this.fetch() : this.rd(addr));
     const rmw = (fn) => { const v = mode === "acc" ? this.a : this.rd(addr); const r = fn(v) & 0xff; this.nz(r); if (mode === "acc") this.a = r; else this.wr(addr, r); };
     this.steps += 1;
@@ -1003,4 +1014,199 @@ test("SIDWAVE three wavetable voices stay within the per-call cycle budget", () 
   assert.equal(voice(runPsid(sid, 4).states, 0).freq[2], sidFreq("C5"));
   // The standalone PRG includes the fixed player, tables and song streams.
   assert.ok(compiled.prg.length > 0);
+});
+
+test("SIDWAVE pulse tables set, add, clamp, loop, hold and reset on note start", () => {
+  const source = doc({
+    extra: `instruments:
+  held:
+    pulsetable:
+      - { set: 0.5 }
+      - { add: -1000, frames: 3 }
+      - { set: 1 }
+      - { add: 30, frames: 1 }
+      - { add: -42, frames: 2 }
+  looping:
+    pulse_width: 0.25
+    pulsetable:
+      loop: 1
+      steps:
+        - { add: -24, frames: 2 }
+        - { set: 1200, frames: 2 }
+        - { add: -400, frames: 2 }
+`,
+    voices: `  - id: 1
+    instrument: held
+    patterns: { A: { groove: [C4, D4], fx: { pwm_sweep: { depth: 500, speed: 4 } } } }
+  - id: 3
+    instrument: looping
+    patterns: { B: { groove: [G4, F4] } }`,
+    timeline: `  - { bars: 1, layers: { v1: A, v3: B } }`,
+  });
+  const { states } = runPsid(compile(source).sid, at(1) + 10);
+  const read = (v) => states.map((s) => {
+    const lo = s[2 + v * 7];
+    const hi = s[3 + v * 7];
+    assert.ok(hi < 16, "only the low nibble of pulse width high is used");
+    return lo | (hi << 8);
+  });
+  const held = [2048, 1048, 48, 1, 4094, 4094, 4052, 4010, 4010, 4010];
+  const looping = [1000, 976, 1200, 1200, 800, 400, 1200, 1200, 800, 400];
+  for (const start of [0, at(1)]) {
+    assert.deepEqual(read(0).slice(start, start + 10), held);
+    assert.deepEqual(read(2).slice(start, start + 10), looping);
+  }
+});
+
+function filterRegisters(states) {
+  return states.map((s) => Array.from(s.slice(0x15, 0x19)));
+}
+
+function filterFrame(cutoff, resRoute, modeVolume) {
+  return [cutoff & 7, cutoff >> 3, resRoute, modeVolume];
+}
+
+test("SIDWAVE filter tables update all filter registers, loop, hold and hand ownership back", () => {
+  const source = doc({
+    extra: `instruments:
+  held:
+    filtertable:
+      - { cutoff: 1769, resonance: 15, type: lowpass+highpass }
+      - { add: 200, frames: 2, resonance: 0 }
+      - { add: -2048, frames: 1, type: all }
+      - { add: 13, frames: 2 }
+  looping:
+    filtertable:
+      loop: 0
+      steps:
+        - { cutoff: 1031, type: bandpass+highpass, frames: 2 }
+        - { add: -16, frames: 2, resonance: 3 }
+`,
+    voices: `  - id: 1
+    instrument: held
+    patterns: { A: { groove: [C3, "~", D3, "~"] } }
+  - id: 2
+    instrument: looping
+    patterns: { B: { groove: ["-", "-", E4, "~", "~", "-", G4, "-"], length: 0.5 } }`,
+    timeline: `  - { bars: 1, layers: { v1: A, v2: B } }`,
+  });
+  const { states } = runPsid(compile(source).sid, at(4) + 8);
+  const regs = filterRegisters(states);
+  assert.deepEqual(regs.slice(0, 8), [
+    filterFrame(1769, 0xf1, 0x5f),
+    filterFrame(1969, 0x01, 0x5f),
+    filterFrame(2047, 0x01, 0x5f),
+    filterFrame(0, 0x01, 0x7f),
+    filterFrame(13, 0x01, 0x7f),
+    filterFrame(26, 0x01, 0x7f),
+    filterFrame(26, 0x01, 0x7f),
+    filterFrame(26, 0x01, 0x7f),
+  ]);
+  for (const [beat, routing] of [[1, 3], [3, 3]]) {
+    assert.deepEqual(regs.slice(at(beat), at(beat) + 6), [
+      filterFrame(1031, 0x80 | routing, 0x6f),
+      filterFrame(1031, 0x80 | routing, 0x6f),
+      filterFrame(1015, 0x30 | routing, 0x6f),
+      filterFrame(999, 0x30 | routing, 0x6f),
+      filterFrame(1031, 0x30 | routing, 0x6f),
+      filterFrame(1031, 0x30 | routing, 0x6f),
+    ]);
+  }
+  assert.deepEqual(regs[at(2)], filterFrame(1769, 0xf3, 0x5f), "a newly started lower voice takes ownership");
+  assert.deepEqual(regs[at(2.5)], filterFrame(26, 0x01, 0x7f), "voice 2 stops routing when it releases");
+  assert.deepEqual(regs[at(3.5)], filterFrame(26, 0x01, 0x7f), "the older note takes ownership back at its held value");
+  assert.deepEqual(regs.slice(at(4), at(4) + 8), regs.slice(0, 8), "note starts reset filter state on the next song loop");
+});
+
+test("SIDWAVE filter table suspends the global envelope and ramp, preserving master volume", () => {
+  const extra = `instruments:
+  filtered:
+    filtertable: [{ cutoff: 305, resonance: 6, type: highpass }]
+global_fx:
+  filter_env: { cutoff_base: 800, sweep: 800, speed: 3.99, resonance: 9, type: bandpass, voices: [1] }
+`;
+  const source = doc({
+    extra,
+    voices: `  - id: 1
+    patterns: { A: { groove: [C3], length: 4, fx: { filter_mod: { sweep: "+400 over 1 steps" } } } }
+  - id: 2
+    instrument: filtered
+    patterns: { B: { groove: ["-", E4, "-", "-"] } }`,
+    timeline: `  - { bars: 1, layers: { v1: "A–", v2: "B–" } }`,
+  });
+  const reference = source.replace("    instrument: filtered\n", "");
+  const { states } = runPsid(compile(source).sid, at(3) + 1);
+  const baseline = filterRegisters(runPsid(compile(reference).sid, states.length).states);
+  const regs = filterRegisters(states);
+  assert.deepEqual(regs.slice(0, at(1)), baseline.slice(0, at(1)));
+  for (let f = at(1); f < at(2); f += 1) {
+    assert.deepEqual(regs[f], filterFrame(305, 0x62, 0x40 | (baseline[f][3] & 15)), `filter owned on call ${f}`);
+  }
+  assert.equal(regs[at(1)][3], 0x4b, "volume fade also applies while a filter table owns the filter");
+  const paused = at(2) - at(1);
+  for (let f = at(2); f < states.length; f += 1) {
+    assert.deepEqual(regs[f].slice(0, 3), baseline[f - paused].slice(0, 3), `global sweep and ramp resume on call ${f}`);
+    assert.equal(regs[f][3], baseline[f][3]);
+  }
+});
+
+test("SIDWAVE register tables reject invalid steps and loop indices", () => {
+  for (const [table, value, error] of [
+    ["pulsetable", "[{set: 1.5}]", /pulsetable\[0\]\.set/],
+    ["pulsetable", "[{set: 0}]", /pulsetable\[0\]\.set/],
+    ["pulsetable", "[{add: 1}]", /pulsetable\[0\]\.frames/],
+    ["pulsetable", "[{add: -2049, frames: 1}]", /pulsetable\[0\]\.add/],
+    ["pulsetable", "[{set: 20, add: 1, frames: 1}]", /exactly one/],
+    ["pulsetable", "{steps: [{set: 0.2}], loop: 1}", /pulsetable\.loop/],
+    ["filtertable", "[{cutoff: 2048}]", /filtertable\[0\]\.cutoff/],
+    ["filtertable", "[{cutoff: 1, resonance: 16}]", /filtertable\[0\]\.resonance/],
+    ["filtertable", "[{cutoff: 1, type: toString}]", /filtertable\[0\]\.type/],
+    ["filtertable", "[{add: 1, frames: 256}]", /filtertable\[0\]\.frames/],
+    ["filtertable", "[]", /filtertable/],
+  ]) {
+    const source = doc({ extra: `instruments: {tab: {${table}: ${value}}}\n`,
+      voices: `  - id: 1\n    instrument: tab\n    patterns: { A: { groove: [C4] } }`,
+      timeline: `  - { bars: 1, layers: { v1: A } }` });
+    assert.throws(() => parseSidwave(source), error);
+  }
+});
+
+test("SIDWAVE three voices with wave and pulse tables and one filter table fit the player budget", () => {
+  const pulse = "    pulsetable: {loop: 0, steps: [{set: 0.35}, {add: 23, frames: 3}, {add: -61, frames: 2}]}\n";
+  const filter = "    filtertable: {loop: 1, steps: [{cutoff: 1231}, {add: -47, frames: 3, type: lowpass+highpass}, {add: 47, frames: 3}]}\n";
+  const wave = "    loop: 0\n    wavetable: [{wave: pulse, note: '+0', frames: 2}, {wave: tri+pulse, note: '+12', frames: 2}]\n";
+  const source = (tables) => doc({
+    extra: `instruments:\n  lead:\n${wave}    adsr: [0, 5, 12, 3]\n${tables ? pulse : ""}  bass:\n${wave}    adsr: [0, 6, 8, 3]\n${tables ? pulse + filter : ""}`,
+    voices: `  - id: 1
+    instrument: lead
+    patterns: { A: { groove: [C4, D4, E4, D4], length: 0.5 } }
+  - id: 2
+    instrument: lead
+    patterns: { B: { groove: [E4, G4], length: 0.75 } }
+  - id: 3
+    instrument: bass
+    patterns: { C: { groove: [C2, G2, C3, G2], length: 1 } }`,
+    timeline: `  - { bars: 1, layers: { v1: A, v2: B, v3: C } }`,
+  });
+  const { compiled, sid } = compile(source(true));
+  const baseline = compile(source(false)).compiled;
+  const playerBytes = (result) => result.prg.length - 2 - result.streamBytes.reduce((sum, size) => sum + size, 0);
+  const { states, maxPlayCycles, strayWrites } = runPsid(sid, compiled.totalFrames * 2);
+  assert.deepEqual(strayWrites, []);
+  for (let v = 0; v < 3; v += 1) {
+    const { pw, ctrl } = voice(states, v);
+    assert.deepEqual(pw.slice(0, 4), [1433, 1456, 1479, 1502]);
+    assert.deepEqual(ctrl.slice(0, 4), [0x41, 0x41, 0x51, 0x51]);
+  }
+  assert.deepEqual(filterRegisters(states).slice(0, 4), [
+    filterFrame(1231, 0x84, 0x1f),
+    filterFrame(1184, 0x84, 0x5f),
+    filterFrame(1137, 0x84, 0x5f),
+    filterFrame(1090, 0x84, 0x5f),
+  ]);
+  assert.ok(maxPlayCycles < 4000, `three voices with tables use ${maxPlayCycles} cycles per call`);
+  assert.ok(compiled.endAddress < SIDWAVE_MEMORY_END);
+  const growth = playerBytes(compiled) - playerBytes(baseline);
+  assert.ok(growth > 0);
+  console.log(`SIDWAVE tables measurement: ${maxPlayCycles} cycles, ${playerBytes(baseline)} -> ${playerBytes(compiled)} player bytes (+${growth})`);
 });

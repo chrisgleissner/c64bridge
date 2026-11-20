@@ -232,11 +232,76 @@ function normalizeInstruments(raw: unknown, path: string): Record<string, Record
       });
       if (inst.loop !== undefined) requireNumber(inst.loop, `${path}.${name}.loop`, { min: 0, max: inst.wavetable.length - 1, integer: true });
     }
-    if (inst.pulsetable !== undefined && !Array.isArray(inst.pulsetable)) throw new SidwaveValidationError(`${path}.${name}.pulsetable`, "expected a list of steps");
-    if (inst.filtertable !== undefined && !Array.isArray(inst.filtertable)) throw new SidwaveValidationError(`${path}.${name}.filtertable`, "expected a list of steps");
+    const ip = `${path}.${name}`;
+    if (inst.pulsetable !== undefined) inst.pulsetable = normalizeRegisterTable(inst.pulsetable, inst.loop, `${ip}.pulsetable`, "set");
+    if (inst.filtertable !== undefined) inst.filtertable = normalizeRegisterTable(inst.filtertable, inst.loop, `${ip}.filtertable`, "cutoff");
     result[name] = inst;
   }
   return result;
+}
+
+const SIDWAVE_FILTER_TABLE_TYPES = {
+  lowpass: 0x10,
+  bandpass: 0x20,
+  highpass: 0x40,
+  "lowpass+highpass": 0x50,
+  "bandpass+highpass": 0x60,
+  all: 0x70,
+} as const;
+
+export interface SidwaveRegisterTable {
+  steps: Array<{ value: number; add: boolean; frames: number; resonance?: number; type?: number }>;
+  loop?: number;
+}
+
+function normalizeRegisterTable(
+  raw: unknown, instrumentLoop: unknown, path: string, setKey: "set" | "cutoff",
+): SidwaveRegisterTable {
+  const mapped = isPlainObject(raw);
+  if (mapped) checkKeys(raw, new Set(["steps", "loop"]), path);
+  const list = mapped ? raw.steps : raw;
+  const stepPath = mapped ? `${path}.steps` : path;
+  if (!Array.isArray(list) || list.length < 1 || list.length > 255) {
+    throw new SidwaveValidationError(stepPath, "expected a list of 1..255 steps");
+  }
+  const loopValue = mapped ? raw.loop : instrumentLoop;
+  const loop = loopValue === undefined ? undefined : requireNumber(
+    loopValue, mapped ? `${path}.loop` : path.replace(/[^.]+$/, "loop"), { min: 0, max: list.length - 1, integer: true },
+  );
+  const filter = setKey === "cutoff";
+  const keys = new Set([setKey, "add", "frames", ...(filter ? ["resonance", "type"] : [])]);
+  const steps = list.map((step, i) => {
+    const sp = `${stepPath}[${i}]`;
+    if (!isPlainObject(step)) throw new SidwaveValidationError(sp, "expected a step mapping");
+    checkKeys(step, keys, sp);
+    const add = step[setKey] === undefined;
+    if (add === (step.add === undefined)) throw new SidwaveValidationError(sp, `expected exactly one of ${setKey} or add`);
+    const frames = step.frames === undefined && !(add && !filter) ? 1
+      : requireNumber(step.frames, `${sp}.frames`, { min: 1, max: 255, integer: true });
+    let value: number;
+    if (add) {
+      value = requireNumber(step.add, `${sp}.add`, { min: -2048, max: 2047, integer: true });
+    } else if (filter) {
+      value = requireNumber(step.cutoff, `${sp}.cutoff`, { min: 0, max: 2047, integer: true });
+    } else {
+      const set = requireNumber(step.set, `${sp}.set`, { min: 0, max: 4094 });
+      if (set === 0 || (set > 1 && !Number.isInteger(set))) {
+        throw new SidwaveValidationError(`${sp}.set`, "expected fraction 0 < x <= 1 or integer 1..4094");
+      }
+      value = set <= 1 ? Math.max(1, Math.min(4094, Math.round(set * 4095))) : set;
+    }
+    const resonance = step.resonance === undefined ? undefined
+      : requireNumber(step.resonance, `${sp}.resonance`, { min: 0, max: 15, integer: true });
+    let type: number | undefined;
+    if (step.type !== undefined) {
+      if (typeof step.type !== "string" || !Object.prototype.hasOwnProperty.call(SIDWAVE_FILTER_TABLE_TYPES, step.type)) {
+        throw new SidwaveValidationError(`${sp}.type`, "unknown filter type");
+      }
+      type = SIDWAVE_FILTER_TABLE_TYPES[step.type as keyof typeof SIDWAVE_FILTER_TABLE_TYPES];
+    }
+    return { value, add, frames, resonance, type };
+  });
+  return { steps, loop };
 }
 
 function parseTempo(value: unknown, path: string): number {
