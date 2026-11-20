@@ -44,7 +44,8 @@ export interface SidwavePatternMotif extends SidwavePatternCommon {
 }
 
 export interface SidwavePatternGroove extends SidwavePatternCommon {
-  groove: string[];
+  groove: Array<string | Record<string, unknown>>;
+  drums?: never;
 }
 
 export type SidwavePattern = SidwavePatternArp | SidwavePatternMotif | SidwavePatternGroove;
@@ -119,7 +120,7 @@ const LEGACY_KEYS = new Set(["song", "voices", "timeline"]);
 const LEGACY_SONG_KEYS = new Set(["title", "author", "tempo", "mode", "length_bars", "global_fx"]);
 const VOICE_KEYS = new Set(["id", "name", "waveform", "pulse_width", "adsr", "patterns", "instrument"]);
 const ARP_KEYS = new Set(["type", "notes", "frame_rate", "length", "transpositions", "fx"]);
-const GROOVE_KEYS = new Set(["groove", "length", "transpositions", "fx"]);
+const GROOVE_KEYS = new Set(["groove", "drums", "length", "transpositions", "fx"]);
 const MOTIF_KEYS = new Set(["motif", "root", "length", "transpositions", "fx"]);
 /** Upper bound for bars per section, summed timeline bars and length_bars; keeps arranging well under a second. */
 const MAX_SIDWAVE_BARS = 4096;
@@ -215,6 +216,7 @@ function normalizeInstruments(raw: unknown, path: string): Record<string, Record
     if (!isPlainObject(value)) throw new SidwaveValidationError(`${path}.${name}`, "expected an instrument mapping");
     checkKeys(value, fields, `${path}.${name}`);
     const inst = { ...(value as Record<string, any>) };
+    if (inst.portamento !== undefined) requireNumber(inst.portamento, `${path}.${name}.portamento`, { min: 0, max: 255, integer: true });
     if (inst.adsr !== undefined && (!Array.isArray(inst.adsr) || inst.adsr.length !== 4)) throw new SidwaveValidationError(`${path}.${name}.adsr`, "expected [attack, decay, sustain, release]");
     if (inst.wavetable !== undefined && !Array.isArray(inst.wavetable)) throw new SidwaveValidationError(`${path}.${name}.wavetable`, "expected a list of steps");
     if (inst.wavetable !== undefined) {
@@ -379,8 +381,22 @@ function validatePattern(raw: unknown, path: string): SidwavePattern {
     if (p.frame_rate !== undefined) requireNumber(p.frame_rate, `${path}.frame_rate`, { min: 1, max: 50, integer: true });
     return p as SidwavePatternArp;
   }
-  if (p.groove !== undefined) {
+  if (p.groove !== undefined || p.drums !== undefined) {
     checkKeys(p, GROOVE_KEYS, path);
+    if (p.drums !== undefined && p.groove !== undefined) throw new SidwaveValidationError(`${path}.drums`, "use either groove or drums, not both");
+    if (p.drums !== undefined) {
+      const d = p.drums;
+      if (!isPlainObject(d) || !isPlainObject(d.kit) || typeof d.steps !== "string" || !Object.keys(d).every((k) => ["kit", "steps"].includes(k))) throw new SidwaveValidationError(`${path}.drums`, "expected { kit: { letter: instrument }, steps: 'k.h.s.h' }");
+      const kit = d.kit as Record<string, unknown>;
+      if (!Object.keys(kit).length || Object.keys(kit).some((k) => k.length !== 1 || !/^[a-z]$/i.test(k) || typeof kit[k] !== "string")) throw new SidwaveValidationError(`${path}.drums.kit`, "expected one-letter keys mapped to instrument names");
+      p.groove = [...d.steps].map((ch: string, i: number) => {
+        if (ch === ".") return "-";
+        const inst = kit[ch];
+        if (typeof inst !== "string") throw new SidwaveValidationError(`${path}.drums.steps[${i}]`, `no kit instrument for ${JSON.stringify(ch)}`);
+        return { note: "C3", inst };
+      });
+      delete p.drums;
+    }
     if (!Array.isArray(p.groove) || p.groove.length === 0) throw new SidwaveValidationError(`${path}.groove`, "expected a non-empty list of notes, '-' rests or '~' ties");
     // An unquoted ~ in YAML is null; it is the tie token, so read it as one.
     p.groove = p.groove.map((n: unknown) => (n === null ? "~" : n));
@@ -389,6 +405,7 @@ function validatePattern(raw: unknown, path: string): SidwavePattern {
         const entry = n as Record<string, any>;
         checkKeys(entry, new Set(["note", "inst", "len", "legato", "slide_from"]), `${path}.groove[${i}]`);
         requireNote(entry.note, `${path}.groove[${i}].note`);
+        if (entry.inst !== undefined && typeof entry.inst !== "string") throw new SidwaveValidationError(`${path}.groove[${i}].inst`, "expected an instrument name");
         if (entry.len !== undefined) requireNumber(entry.len, `${path}.groove[${i}].len`, { min: 1 / 64, max: 64 });
         if (entry.legato !== undefined && typeof entry.legato !== "boolean") throw new SidwaveValidationError(`${path}.groove[${i}].legato`, "expected a boolean");
         if (entry.slide_from !== undefined) requireNote(entry.slide_from, `${path}.groove[${i}].slide_from`);

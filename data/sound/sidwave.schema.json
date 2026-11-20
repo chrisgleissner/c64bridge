@@ -89,7 +89,8 @@
                   "type": "object",
                   "required": ["groove"],
                   "properties": {
-                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "enum": ["-", ".", "~", "_", "r", "rest"] }] }, "minItems": 1 },
+                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "enum": ["-", ".", "~", "_", "r", "rest"] }, { "$ref": "#/$defs/grooveEntry" }] }, "minItems": 1 },
+                    "drums": { "$ref": "#/$defs/drums" },
                     "length": { "$ref": "#/$defs/length" },
                     "transpositions": { "$ref": "#/$defs/transpositions" },
                     "fx": { "$ref": "#/$defs/fx" }
@@ -134,6 +135,7 @@
         "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
         "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095 },
         "loop": { "type": "integer", "minimum": 0, "description": "Zero-based loop index for tables declared as lists; omitted holds the final value." },
+        "portamento": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Glide duration in player frames." },
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
         "filtertable": { "$ref": "#/$defs/filtertable" },
         "wavetable": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": {
@@ -196,6 +198,8 @@
       },
       "additionalProperties": false
     },
+    "grooveEntry": { "type": "object", "required": ["note"], "properties": { "note": { "$ref": "#/$defs/note" }, "inst": { "type": "string" }, "len": { "$ref": "#/$defs/length" }, "legato": { "type": "boolean" }, "slide_from": { "$ref": "#/$defs/note" } }, "additionalProperties": false },
+    "drums": { "type": "object", "required": ["kit", "steps"], "properties": { "kit": { "type": "object", "minProperties": 1, "propertyNames": { "pattern": "^[A-Za-z]$" }, "additionalProperties": { "type": "string" } }, "steps": { "type": "string", "pattern": "^[A-Za-z.]+$" } }, "additionalProperties": false },
     "note": { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]$" },
     "length": { "type": "number", "exclusiveMinimum": 0, "maximum": 64, "description": "Beats per entry (default 1)." },
     "transpositions": { "type": "array", "items": { "type": "integer", "minimum": -48, "maximum": 48 }, "minItems": 1 },

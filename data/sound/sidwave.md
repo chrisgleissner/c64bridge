@@ -202,6 +202,7 @@ Time is 4/4: a bar has four beats. The player runs once per video frame of a rea
 Every pattern is a list of **entries**. Each entry lasts `length` beats (default 1; fractions allowed, e.g. `0.25` for sixteenth notes). The pattern repeats until its section ends; a note that would run past the section end is cut there.
 
 - **groove** — `groove: [C2, "-", C2, "~", G1]`: one note per entry. `-` (or `.`) is a rest, `~` ties the entry to the previous note (no retrigger). A tie holds whatever note is sounding right before it, also across a section boundary (a section that starts with `~` continues the last note of the previous section). After a rest, or at the very start of the song, a tie is a rest.
+- Per-note entries also accept `C3@bass` or `{ note: C3, inst: bass, len: 0.25, legato: true }`. `drums: { kit: { k: lib:kick, h: lib:hat }, steps: "k.h" }` expands each character into one entry of `length` beats; `.` is a rest. A legato entry keeps the gate on while changing the note.
 - **arpeggio** — `type: arpeggio`, `notes: [...]`. Without `frame_rate`, the notes are played one per entry (a broken chord). With `frame_rate: N`, all notes form one entry that sounds as a fast chord arpeggio, switching to the next chord tone every N frames (`frame_rate: 1` = one tone per frame, about 50 per second on PAL); each entry retriggers the chord.
 - **motif** — `motif: "..."` with tokens separated by spaces or commas:
   - note names (`C4`, `Eb3`, `F#2`),
@@ -246,7 +247,7 @@ Without `filter_env`, a `filter_mod` uses a low-pass filter with cutoff 1024 and
 
 Use a wavetable to change a drum from a short noise transient into a pitched pulse/triangle tail, then reuse that voice for bass. Use one voice for a fast chord arpeggio, allow hard restart enough time before each new note, and route a bass through filter sweeps. Pulse leads benefit from PWM and delayed vibrato. Echo a phrase later on an otherwise free voice, use octave jumps to vary repetitions, and reserve one voice for ring modulation or hard sync. The SID has one shared filter; the most recent instrument with a filter table owns its settings. Voice 1 is modulated/synced by voice 3, voice 2 by voice 1, and voice 3 by voice 2. Combined waveforms can be quieter and are model-dependent between 6581 and 8580.
 
-Built-in recipes: `lib:kick` (noise kick), `lib:snare` (decaying noise snare), `lib:hat` (short noise tick), `lib:bass_pluck` (plucked triangle), `lib:filter_bass` (saw bass), `lib:lead_pwm` (pulse lead), `lib:chip_arp_major` and `lib:chip_arp_minor` (pulse arpeggios), `lib:bell_ring` (ring-modulated triangle), `lib:sync_lead` (sync saw), and `lib:pad_slow` (slow triangle pad).
+Built-in recipes: `lib:kick` (noise burst into descending pitched tail), `lib:snare` (noise burst into pitched tail), `lib:hat` (gated noise tick), `lib:bass_pluck` (octave transient over triangle), `lib:filter_bass` (saw bass with a falling filter table), `lib:lead_pwm` (pulse lead with a looping pulse-width table), `lib:chip_arp_major` (looping major triad), `lib:chip_arp_minor` (looping minor triad), `lib:bell_ring` (ring-modulated triangle), `lib:sync_lead` (sync saw), and `lib:pad_slow` (slow triangle pad with filter sweep).
 
 ```yaml
 sidwave: 1.1

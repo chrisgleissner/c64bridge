@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   compileSidwaveToPrg,
   compileSidwaveToSid,
+  arrangeSidwave,
   hzToSidFrequency,
   SIDWAVE_MEMORY_END,
   sidwaveFrameRate,
@@ -1004,6 +1005,25 @@ test("SIDWAVE wavetable relative note steps loop", () => {
   const { states } = runPsid(compile(source).sid, 8);
   const v = voice(states, 0);
   assert.deepEqual(v.freq.slice(0, 6), [sidFreq("C4"), sidFreq("C5"), sidFreq("C4"), sidFreq("C5"), sidFreq("C4"), sidFreq("C5")]);
+});
+
+test("SIDWAVE drums shorthand expands kit letters and rests into one-beat entries", () => {
+  const source = doc({ extra: `instruments:\n  kick: { waveform: noise }\n  hat: { waveform: noise }\n`, voices: `  - id: 1\n    patterns:\n      D: { drums: { kit: { k: kick, h: hat }, steps: "k.h" } }`, timeline: `  - { bars: 1, layers: { v1: D } }` });
+  const { doc: parsed } = compile(source);
+  assert.equal(arrangeSidwave(parsed).voices[0].notes.length, 3);
+});
+
+test("SIDWAVE built-in library recipes compile and drums use noise before descending pitches", () => {
+  const names = ["kick", "snare", "hat", "bass_pluck", "filter_bass", "lead_pwm", "chip_arp_major", "chip_arp_minor", "bell_ring", "sync_lead", "pad_slow"];
+  for (const name of names) {
+    const source = doc({ extra: "", voices: `  - id: 1\n    instrument: lib:${name}\n    patterns: { A: { groove: [C3] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
+    assert.ok(compile(source).compiled.prg.length > 100, `${name} compiles`);
+  }
+  const source = doc({ voices: `  - id: 1\n    instrument: lib:kick\n    patterns: { A: { groove: [C3] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
+  const v = voice(runPsid(compile(source).sid, 8).states, 0);
+  assert.ok(v.ctrl.some((c) => (c & 0xf0) === 0x80), `kick writes noise (${[...v.ctrl].join(",")})`);
+  assert.ok(v.ctrl.some((c) => (c & 0xf0) === 0x40), `kick changes to pulse (${[...v.ctrl].join(",")})`);
+  assert.ok(v.freq[3] < v.freq[2], "kick pitch falls during its tail");
 });
 
 test("SIDWAVE three wavetable voices stay within the per-call cycle budget", () => {
