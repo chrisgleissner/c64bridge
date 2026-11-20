@@ -23,7 +23,7 @@
 | `$DC02` | 56322 | **DDRA** | Port A direction (0=in, 1=out). Default `$FF`. |
 | `$DC03` | 56323 | **DDRB** | Port B direction (0=in, 1=out). Default `$00`. |
 | `$DC04` | 56324 | **TALO** | Timer A **low**. **R:** counter; **W:** latch low. |
-| `$DC05` | 56325 | **TAHI** | Timer A **high**. **R:** counter; **W:** latch high (if stopped, also loads). |
+| `$DC05` | 56325 | **TAHI** | Timer A **high**. **R:** counter; **W:** latch high (if stopped, also loads; unverified). |
 | `$DC06` | 56326 | **TBLO** | Timer B **low**. **R/W** as above. |
 | `$DC07` | 56327 | **TBHI** | Timer B **high**. **R/W** as above. |
 | `$DC08` | 56328 | **TOD10TH** | TOD tenths BCD (0–9). **CRB7=0:** writes set **time**; **=1:** set **alarm**. |
