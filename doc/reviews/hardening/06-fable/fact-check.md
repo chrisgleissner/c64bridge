@@ -435,3 +435,22 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | Ident service JSON reply trigger | hardware | ADDED | software/network/socket_dma.cc:650 |
 | "IEC activity can re-trigger the 1 MHz window" | hardware | REMOVED (no source, no measurement) | - |
 | C64U LED section "UNRESOLVED" hedge | hardware | REWRITTEN as measured C64U facts; restart recovery to Not verified | earlier camera measurements |
+| No data phase for REBOOT and zero-length commands | uci | CORRECTED: only the no-reply bit skips it; a null command ends in data-last | software/io/command_interface/command_intf.cc:214-247,274-281 |
+| IRQ on completion "firmware 3.15+" | uci | CORRECTED to gateware commit date 2026-03-08 | 1541ultimate git log 3ebd5322e |
+| `$DF1B` reads 0 when unset | uci | CORRECTED: Soft Drive Bus ID (default 11), 31 when IEC Drive Disabled | software/io/iec/iec_drive.cc:34,553; command_protocol.vhd:203-207 |
+| C64 reset keeps HTTP handles, "probably" the DOS file | uci | CORRECTED: reset frees HTTP handles and closes sockets; DOS file stays open | command_intf.cc:46-53,185-190; http_target.cc:1140-1143 |
+| "200x256 polls is about 1.5 s" | uci | REMOVED; replaced by jiffy-clock deadline rule | - |
+| Volume names /Usb0, /Usb1, /SD; case-insensitive names | uci | CORRECTED: names depend on device (measured U64: USB2); list the root | results.md (device directories) |
+| MOUNT_DISK id 0 = last mounted | uci | CONFIRMED + drive A fallback, 90 on no match | software/filemanager/dos.cc:69-83,325-336 |
+| SET_TIME "earlier note … a device check decides" | uci | REWRITTEN from source (sets RTC and chip; wrong length 21 + length digits) | dos.cc:531-576 |
+| LOAD_REU/SAVE_REU truncation, ABORT behaviour | uci | CONFIRMED | dos.cc:255-323 |
+| READ_SOCKET history (older firmware $FFFF; 3.15 crash) | uci | REMOVED history; crash moved to Not verified (request U-2) | network_target.h:41; network_target.cc:540-556 |
+| Connect timing 31 s / 30 ms | uci | MOVED to Not verified (request U-1) | - |
+| Control LOAD_REU/SAVE_REU return codes, wedge history | uci | CORRECTED (codes -1/-2/-3, 81 below 5 bytes); history removed | control_target.cc:345-378; reu_preloader.cc:82-176 |
+| GET_DRVINFO argument | uci | CORRECTED: 1/omitted = effective address, 0 = configured | control_target.cc:216-248 |
+| Palette lengths; RESET_PALETTE restores built-in colours; U64-only | uci | CONFIRMED | control_target.cc:250-301; palette_command.h; u64_config.cc:2881-2884 |
+| Palette "quarter of a frame at 1 MHz" | uci | REMOVED (no source); C64U 12-58 ms measurement kept | - |
+| LOAD_CONFIG all-or-nothing | uci | CORRECTED: no store effectuated, RAM values change and apply at next store apply; full error list | configio.cc:230-434; control_target.cc:559-609 |
+| SoftwareIEC CHKOUT layout "(unverified)" | uci | RESOLVED from source: `<sec> <unused> <data>`, `$Fx` open, `$Ex` close; status 00,OK text | software/io/command_interface/softiec_target.cc:305-333 |
+| SoftwareIEC status 04 missing; store name | uci | ADDED `04` unknown command; store `SoftIEC Drive Settings` | softiec_target.cc:12-21; iec_drive.cc:165 |
+| HTTPS "a device check decides" | uci | REWRITTEN: https only selects port 443, plain socket | io/command_interface/http_target.h:77-86; software/network/http_request.cc:6-40 |
