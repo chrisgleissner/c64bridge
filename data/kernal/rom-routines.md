@@ -26,7 +26,7 @@
 | `$E20E` | 57870 | Check comma | Require comma; advance text ptr | — | — | — | Error on missing comma |
 | `$E219` | 57881 | Param setup O/C | Set filename/LFN/dev/sec for O/C | — | Before OPEN/CLOSE | — | — |
 | `$E264` | 57956 | COS | COS(FAC1) via SIN | — | FAC1 | FAC1 | Adds PI/2 then SIN |
-| `$E268` | 57960 | SIN | SIN(FAC1) | — | FAC1 | FAC1 | — |
+| `$E26B` | 57963 | SIN | SIN(FAC1) | — | FAC1 | FAC1 | — |
 | `$E2B4` | 58036 | TAN | TAN(FAC1)=SIN/COS | — | FAC1 | FAC1 | — |
 | `$E2E0` | 58080 | PI2 | Const PI/2 (5‑byte) | — | — | — | Constant |
 | `$E2E5` | 58085 | TWOPI | Const 2*PI (5‑byte) | — | — | — | Constant |
