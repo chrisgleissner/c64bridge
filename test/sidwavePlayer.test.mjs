@@ -1379,3 +1379,192 @@ test("the one-shot PRG removes its IRQ after the last call", () => {
   assert.deepEqual([...mem.slice(0x0314, 0x0316)], [0x31, 0xea]);
   assert.deepEqual([mem[0xd404], mem[0xd40b], mem[0xd412]], [0, 0, 0]);
 });
+
+const MULTI_BASES = ["$D400", "$D420", "$D500", "$D460", "$D440", "$D480", "$D4A0", "$D5A0"];
+const sidMap = (count) => MULTI_BASES.slice(0, count).map((address, i) => ({
+  id: `chip${i + 1}`, address, volume: 15 - i,
+}));
+const multiScore = (sids, voices, options = {}) => ({
+  sidwave: 1.2, title: "Fanfare", tempo: 120, mode: "PAL", sids, voices,
+  timeline: [{ bars: 1, layers: Object.fromEntries(voices.map((v) => [`v${v.id}`, "A"])) }],
+  ...options,
+});
+
+function loadMultiPlayer(doc, options) {
+  const compiled = compileSidwaveToPrg(doc, options);
+  const mem = new Uint8Array(65536);
+  mem.set(compiled.prg.subarray(2), compiled.loadAddress);
+  mem[0xea31] = 0x60; // KERNAL IRQ stub
+  mem[0x02a6] = 1;
+  let raster = 100;
+  const writes = [];
+  const cpu = new Cpu(mem, {
+    write(address, value) { writes.push([address, value]); },
+    read(address) { if (address === 0xd012) return (raster = (raster + 1) % 312) & 0xff; },
+  });
+  return { compiled, mem, cpu, writes };
+}
+
+for (const count of [4, 8]) {
+  test(`SIDWAVE 1.2 writes each ${count}-SID window and gives each filter independent ownership`, () => {
+    const sids = sidMap(count);
+    if (count === 8) sids[7].volume = 0;
+    sids[1].filter = { filter_env: { cutoff_base: 800, sweep: 800, speed: 3.99, resonance: 9, type: "bandpass" } };
+    sids[2].filter = { filter_env: { cutoff_base: 700, resonance: 4, type: "lowpass" } };
+    sids[3].filter = { filter_mod: { sweep: 300, frames: 10 } };
+    const pitches = ["C3", "D3", "E3", "F3", "G3", "A3", "B3", "C4"];
+    const voices = sids.map((_, i) => ({
+      id: 1 + 3 * i, waveform: "triangle",
+      patterns: { A: { groove: [pitches[i]], length: 4 } },
+    }));
+    voices[2].instrument = "lower";
+    voices.push({ id: 30, sid: "chip3", channel: 2, instrument: "upper", patterns: {
+      A: { groove: ["G4", "-", "G4", "-"] },
+    } });
+    const doc = parseSidwave(multiScore(sids, voices, { instruments: {
+      lower: { waveform: "triangle", filtertable: [{ cutoff: 400, resonance: 5, type: "lowpass" }] },
+      upper: { waveform: "pulse", filtertable: [{ cutoff: 1200, resonance: 7, type: "highpass" }] },
+    } }));
+    const { cpu, mem, writes, compiled } = loadMultiPlayer(doc, { loop: false });
+    mem[0xfd] = 0x12;
+    mem[0xfe] = 0x34;
+    cpu.call(compiled.initAddress);
+    assert.deepEqual([...mem.slice(0xfd, 0xff)], [0x12, 0x34]);
+    const bases = doc.sids.map((sid) => sid.address);
+    for (const [i, base] of bases.entries()) assert.equal(mem[base + 24], sids[i].volume);
+
+    const cutoff = (base) => mem[base + 21] | (mem[base + 22] << 3);
+    for (let frame = 0; frame <= compiled.totalFrames + 1; frame++) {
+      writes.length = 0;
+      const cycles = cpu.call(compiled.playAddress);
+      assert.ok(cycles <= compiled.worstCaseCyclesPerCall);
+      assert.deepEqual([...mem.slice(0xfd, 0xff)], [0x12, 0x34]);
+      const io = writes.filter(([address]) => address >= 0xd000 && address < 0xe000);
+      assert.ok(io.every(([address]) => bases.some((base) => address >= base && address <= base + 24)));
+      if (frame >= compiled.totalFrames) {
+        assert.ok(bases.every((base) => mem[base + 4] === 0 && mem[base + 24] === 0));
+        if (frame > compiled.totalFrames) assert.deepEqual(io, []);
+        continue;
+      }
+      for (const [i, base] of bases.entries()) {
+        assert.ok(io.some(([address]) => address === base + 4), `frame ${frame}, SID ${i + 1} control write`);
+        assert.ok(io.some(([address]) => address === base + 24), `frame ${frame}, SID ${i + 1} volume write`);
+        assert.equal(mem[base] | (mem[base + 1] << 8), hzToSidFrequency(midiToHz(noteNameToMidi(pitches[i])), "PAL"));
+        assert.equal(mem[base + 24] & 15, sids[i].volume);
+      }
+      if (frame < 10) {
+        assert.equal(cutoff(0xd420), 800 + frame * 8);
+        assert.equal(cutoff(0xd460), 1024 + frame * 30);
+        assert.equal(mem[0xd437], 0x91);
+        assert.equal(mem[0xd438], 0x2e);
+      }
+      if (frame === 0) {
+        assert.equal(cutoff(0xd500), 1200);
+        assert.equal(mem[0xd517], 0x73);
+        assert.equal(mem[0xd518], 0x4d);
+        assert.equal(mem[0xd507] | (mem[0xd508] << 8), hzToSidFrequency(midiToHz(noteNameToMidi("G4")), "PAL"));
+      }
+      if (frame === 26) {
+        assert.equal(cutoff(0xd500), 400, "the still sounding table takes over on the same chip");
+        assert.equal(mem[0xd517], 0x51);
+        assert.equal(mem[0xd518], 0x1d);
+        assert.equal(cutoff(0xd460), 1324, "the other chip retains its own ramp");
+      }
+    }
+  });
+}
+
+test("SIDWAVE 1.2 PSID v3/v4 addresses, flags and payload offset match HVSC", () => {
+  for (const count of [2, 3]) {
+    const sids = sidMap(count);
+    sids[0].model = "6581";
+    sids[1].model = "8580";
+    if (count === 3) sids[2].model = "6581";
+    // PSID treats $D400 as primary even when another chip is first in the score.
+    const map = count === 3 ? [sids[1], sids[0], sids[2]] : sids;
+    const doc = parseSidwave(multiScore(map, [{ id: 1, patterns: { A: { groove: ["C4"] } } }]));
+    const { compiled } = loadMultiPlayer(doc);
+    const { sid } = compileSidwaveToSid(doc, compiled.prg);
+    assert.equal(sid.readUInt16BE(4), count + 1);
+    assert.equal(sid.readUInt16BE(6), 0x7c);
+    assert.equal(sid.readUInt16BE(0x76), count === 2 ? 0x0094 : 0x0194);
+    assert.deepEqual([...sid.subarray(0x7a, 0x7c)], [0x42, count === 2 ? 0 : 0x50]);
+    assert.deepEqual(sid.subarray(0x7c), compiled.prg);
+  }
+});
+
+test("SIDWAVE refuses illegal SID maps, unsupported PSID maps and songs crossing $D000", () => {
+  const voices = [{ id: 1, patterns: { A: { groove: ["C4"] } } }];
+  for (const address of ["$DE00", "$D410", "$D800", "$D400junk"]) {
+    assert.throws(() => parseSidwave(multiScore([{ id: "main", address }], voices)), /SID address.*\$D400\.\.\$D7E0/);
+  }
+  const four = parseSidwave(multiScore(sidMap(4), voices));
+  assert.throws(() => compileSidwaveToSid(four, compileSidwaveToPrg(four).prg), /PSID supports at most 3 SID chips.*use PRG/);
+  const moved = parseSidwave(multiScore([{ id: "main", address: "$D420" }], voices));
+  assert.throws(() => compileSidwaveToSid(moved, compileSidwaveToPrg(moved).prg), /primary SID at \$D400.*use PRG/);
+  const large = multiScore(sidMap(8), Array.from({ length: 24 }, (_, i) => ({
+    id: i + 1, patterns: { A: { groove: ["C4", "E4"], length: 0.25 } },
+  })));
+  large.timeline[0].bars = 60;
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(large)), /past the \$D000 limit/);
+});
+
+test("SIDWAVE measures the peak of a 30-voice table score and sets Ultimate turbo at PRG init", () => {
+  const score = multiScore({ layout: "ultisid8+sockets" }, Array.from({ length: 30 }, (_, i) => ({
+    id: i + 1, instrument: "table", patterns: { A: { groove: ["C3", "D3", "E3", "F3"] } },
+  })), { instruments: {
+    table: {
+      waveform: "saw", adsr: [0, 0, 15, 0],
+      wavetable: [{ wave: "saw", note: "+0" }, { wave: "saw", note: "+12" }], loop: 0,
+      pulsetable: [{ set: 0.5 }, { add: -47, frames: 1 }],
+      filtertable: [{ cutoff: 1200 }, { add: -34, frames: 1, resonance: 9, type: "highpass" }],
+    },
+  } });
+  assert.throws(() => compileSidwaveToPrg(parseSidwave(score)), /cycles per call at speed 1.*use cpu: turbo.*at least [2-9] MHz/);
+  const doc = parseSidwave({ ...score, cpu: "turbo" });
+  const { compiled, cpu, writes, mem } = loadMultiPlayer(doc);
+  assert.ok(compiled.warnings.some((warning) => /Sawtooth level.*30\.0.*maximum 10/.test(warning)));
+  cpu.call(compiled.entryAddress);
+  assert.deepEqual(writes.filter(([address]) => address === 0xd031), [[0xd031, 0x8f]]);
+  const irq = mem[0x0314] | (mem[0x0315] << 8);
+  const holdCalls = Math.ceil(4.25 * sidwaveFrameRate("PAL"));
+  for (let i = 0; i < holdCalls; i++) {
+    writes.length = 0;
+    cpu.call(irq);
+    assert.ok(writes.every(([a]) => a < 0xd400 || a >= 0xd800), "no SID writes during the startup hold");
+  }
+  cpu.call(irq);
+  for (const { address } of doc.sids) {
+    for (const offset of [0, 7, 14]) {
+      assert.equal(mem[address + offset + 4], 0x21, "every voice starts after the hold");
+      assert.equal(mem[address + offset + 2] | (mem[address + offset + 3] << 8), 2048);
+    }
+  }
+  const stock = loadMultiPlayer(doc);
+  stock.mem[0xd031] = 0xff;
+  stock.cpu.call(stock.compiled.entryAddress);
+  assert.equal(stock.mem[0x0314] | (stock.mem[0x0315] << 8), 0, "an overloaded tune leaves the stock IRQ alone");
+  assert.ok(stock.writes.every(([address]) => address !== 0xd031));
+  cpu.call(compiled.initAddress);
+  let measured = 0;
+  for (let frame = 0; frame <= compiled.totalFrames * 2; frame++) {
+    writes.length = 0;
+    measured = Math.max(measured, cpu.call(compiled.playAddress));
+  }
+  assert.ok(measured <= compiled.worstCaseCyclesPerCall, `observed ${measured} exceeds estimate`);
+  assert.ok(measured > 18_056, `observed ${measured} fits the stock PAL budget`);
+  console.info(`SIDWAVE 30 voices, speed 1, all three tables: ${measured} peak emulated cycles, ${compiled.worstCaseCyclesPerCall} estimated upper bound`);
+});
+
+test("SIDWAVE 1.2 keeps existing note effects when they are used", () => {
+  const path = new URL("./fixtures/sidwave-1.0/all-fx.yaml", import.meta.url);
+  const single = parseSidwave(fs.readFileSync(path, "utf8"));
+  const legacy = compileSidwaveToPrg(single);
+  const expected = runPsid(compileSidwaveToSid(single, legacy.prg).sid, legacy.totalFrames * 2);
+  const mapped = parseSidwave({ ...single.song, sidwave: 1.2, voices: single.voices, timeline: single.timeline,
+    sids: sidMap(2), cpu: "turbo" });
+  const { compiled } = loadMultiPlayer(mapped);
+  const observed = runPsid(compileSidwaveToSid(mapped, compiled.prg).sid, compiled.totalFrames * 2);
+  assert.deepEqual(observed.states, expected.states);
+  assert.ok(observed.maxPlayCycles <= compiled.worstCaseCyclesPerCall);
+});

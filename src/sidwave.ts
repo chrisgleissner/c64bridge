@@ -63,7 +63,7 @@ export interface SidwavePatternDrums extends SidwavePatternCommon {
 export type SidwavePattern = SidwavePatternDrums | SidwavePatternArp | SidwavePatternMotif | SidwavePatternGroove;
 
 export interface SidwaveVoice {
-  id: number; // 1..3
+  id: number; // 1..30
   name?: string;
   waveform?: Waveform;
   pulse_width?: number;
@@ -80,6 +80,27 @@ export interface SidwaveTimelineSection {
   layers: Record<string, string>;
 }
 
+type SidModel = "6581" | "8580";
+interface SidFilter {
+  filter_env?: Record<string, unknown>;
+  filter_mod?: FilterModSpec;
+}
+
+interface SidMapEntry {
+  id: string;
+  address: number;
+  volume: number;
+  model?: SidModel;
+  filter?: SidFilter;
+}
+
+type SidLayout = "ultisid8" | "ultisid8+socket1" | "ultisid8+sockets";
+type SidVoiceFields = Omit<SidwaveVoice, "id">;
+type SidVoiceSource = SidVoiceFields & (
+  { id: number; sid?: never; channel?: never } |
+  { id?: number; sid: string | number; channel: number }
+);
+
 export interface SidwaveDocument {
   sidwave?: number | string;
   title?: string;
@@ -89,8 +110,16 @@ export interface SidwaveDocument {
   length_bars?: number;
   global_fx?: Record<string, unknown>;
   speed?: number;
+  cpu?: "turbo";
+  sids?: Array<{
+    id: string | number;
+    address: string;
+    model?: SidModel;
+    volume?: number;
+    filter?: Record<string, unknown>;
+  }> | { layout: SidLayout };
   instruments?: Record<string, Record<string, unknown>>;
-  voices?: SidwaveVoice[];
+  voices?: SidVoiceSource[];
   timeline?: SidwaveTimelineSection[];
   // Legacy CPG compatibility
   song?: {
@@ -104,6 +133,7 @@ export interface SidwaveDocument {
 }
 
 export interface ParsedSidwave {
+  version: "1.0" | "1.1" | "1.2";
   song: Required<Pick<SidwaveSongMeta, "title" | "tempo" | "mode">> & {
     author?: string;
     length_bars: number;
@@ -112,6 +142,10 @@ export interface ParsedSidwave {
   voices: SidwaveVoice[];
   instruments: Record<string, Record<string, any>>;
   speed: number;
+  cpu?: "turbo";
+  sids: SidMapEntry[];
+  /** Zero based physical voice slot for each declared voice ID. */
+  voiceSlots: Map<number, number>;
   timeline: SidwaveTimelineSection[];
 }
 
@@ -127,10 +161,10 @@ export const SIDWAVE_TEMPO_RANGE = { min: 30, max: 220 } as const;
 /** MIDI numbers of C0 and B7, the note range of the player's frequency table. */
 export const SIDWAVE_NOTE_RANGE = { min: 12, max: 107 } as const;
 
-const TOP_LEVEL_KEYS = new Set(["sidwave", "title", "author", "tempo", "mode", "length_bars", "global_fx", "voices", "timeline", "instruments", "speed"]);
+const TOP_LEVEL_KEYS = new Set(["sidwave", "title", "author", "tempo", "mode", "length_bars", "global_fx", "voices", "timeline", "instruments", "speed", "sids", "cpu"]);
 const LEGACY_KEYS = new Set(["song", "voices", "timeline"]);
 const LEGACY_SONG_KEYS = new Set(["title", "author", "tempo", "mode", "length_bars", "global_fx"]);
-const VOICE_KEYS = new Set(["id", "name", "waveform", "pulse_width", "adsr", "patterns", "instrument"]);
+const VOICE_KEYS = new Set(["id", "sid", "channel", "name", "waveform", "pulse_width", "adsr", "patterns", "instrument"]);
 const ARP_KEYS = new Set(["type", "notes", "frame_rate", "length", "transpositions", "fx"]);
 const GROOVE_KEYS = new Set(["groove", "drums", "length", "transpositions", "fx"]);
 const MOTIF_KEYS = new Set(["motif", "root", "length", "transpositions", "fx"]);
@@ -168,8 +202,8 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     checkKeys(obj.song, LEGACY_SONG_KEYS, "$.song");
   } else {
     checkKeys(obj, TOP_LEVEL_KEYS, "$");
-    if (obj.sidwave !== undefined && !["1", "1.0", "1.1"].includes(String(obj.sidwave))) {
-      throw new SidwaveValidationError("$.sidwave", `unsupported version ${JSON.stringify(obj.sidwave)}; use 1.0 or 1.1`);
+    if (obj.sidwave !== undefined && !["1", "1.0", "1.1", "1.2"].includes(String(obj.sidwave))) {
+      throw new SidwaveValidationError("$.sidwave", `unsupported version ${JSON.stringify(obj.sidwave)}; use 1.0, 1.1 or 1.2`);
     }
   }
   const header = (legacy ? obj.song : obj) as Record<string, unknown>;
@@ -182,21 +216,40 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   const global_fx = parseGlobalFx(header.global_fx, `${headerPath}.global_fx`);
 
   if (!Array.isArray(obj.voices) || obj.voices.length === 0) {
-    throw new SidwaveValidationError("$.voices", "missing voices (expected a list of 1 to 3 voices)");
+    throw new SidwaveValidationError("$.voices", "missing voices (expected a list of 1 to 30 voices)");
   }
-  if (obj.voices.length > 3) {
-    throw new SidwaveValidationError("$.voices", `the SID has 3 voices; ${obj.voices.length} were given`);
+  const sids = normalizeSids(obj.sids);
+  const capacity = sids.length * 3;
+  if (obj.voices.length > capacity) {
+    throw new SidwaveValidationError("$.voices", `the SID${sids.length > 1 ? " map" : ""} has ${capacity} voices; ${obj.voices.length} were given`);
   }
   const instruments = normalizeInstruments(obj.instruments, "$.instruments");
-  const voices = obj.voices.map((v: unknown, i: number) => normalizeVoice(v, `$.voices[${i}]`));
-  for (let i = 0; i < voices.length; i += 1) {
-    const name = voices[i]!.instrument;
-    if (name && !name.startsWith("lib:") && !instruments[name]) throw new SidwaveValidationError(`$.voices[${i}].instrument`, `instrument ${JSON.stringify(name)} is not defined`);
-  }
-  const seen = new Set<number>();
-  voices.forEach((v: SidwaveVoice, i: number) => {
-    if (seen.has(v.id)) throw new SidwaveValidationError(`$.voices[${i}].id`, `voice id ${v.id} is declared more than once`);
-    seen.add(v.id);
+  const voiceSlots = new Map<number, number>();
+  const occupied = new Set<number>();
+  const voices: SidwaveVoice[] = obj.voices.map((raw: unknown, i: number) => {
+    const path = `$.voices[${i}]`;
+    if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a voice mapping");
+    checkKeys(raw, VOICE_KEYS, path);
+    let slot: number | undefined;
+    if (raw.sid !== undefined || raw.channel !== undefined) {
+      const chip = sids.findIndex((sid) => sid.id === String(raw.sid));
+      if ((typeof raw.sid !== "string" && !Number.isSafeInteger(raw.sid)) || chip < 0) throw new SidwaveValidationError(`${path}.sid`, "references an unknown SID");
+      slot = chip * 3 + requireNumber(raw.channel, `${path}.channel`, { min: 1, max: 3, integer: true }) - 1;
+    }
+    const id = raw.id === undefined && slot !== undefined ? slot + 1
+      : requireNumber(raw.id, `${path}.id`, { min: 1, max: 30, integer: true });
+    slot ??= id - 1;
+    if (slot >= capacity) throw new SidwaveValidationError(`${path}.id`, `voice ${id} requires SID ${Math.ceil(id / 3)}, which is outside the SID map`);
+    if (voiceSlots.has(id)) throw new SidwaveValidationError(`${path}.id`, `voice id ${id} is declared more than once`);
+    if (occupied.has(slot)) throw new SidwaveValidationError(path, "the SID channel is assigned to more than one voice");
+    voiceSlots.set(id, slot);
+    occupied.add(slot);
+    const voice = normalizeVoice(raw, path, id);
+    const name = voice.instrument;
+    if (name && !name.startsWith("lib:") && !instruments[name]) {
+      throw new SidwaveValidationError(`${path}.instrument`, `instrument ${JSON.stringify(name)} is not defined`);
+    }
+    return voice;
   });
 
   if (!Array.isArray(obj.timeline) || obj.timeline.length === 0) {
@@ -216,7 +269,66 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, global_fx };
   if (author !== undefined) song.author = author;
   const speed = obj.speed === undefined ? 1 : requireNumber(obj.speed, "$.speed", { min: 1, max: 4, integer: true });
-  return { song, voices, timeline, instruments, speed };
+  if (obj.cpu !== undefined && obj.cpu !== "turbo") throw new SidwaveValidationError("$.cpu", "expected turbo");
+  const declaredVersion = String(obj.sidwave);
+  const version = declaredVersion === "1.1" || declaredVersion === "1.2" ? declaredVersion : "1.0";
+  return { version, song, voices, timeline, instruments, speed, sids, voiceSlots, cpu: obj.cpu };
+}
+
+// data/ultimate/multisid.md, Owner configurations.
+const ULTISID8 = [0xd400, 0xd480, 0xd500, 0xd580, 0xd420, 0xd4a0, 0xd520, 0xd5a0];
+const SID_LAYOUTS: Record<SidLayout, number[]> = {
+  ultisid8: ULTISID8,
+  "ultisid8+socket1": [...ULTISID8, 0xd440],
+  "ultisid8+sockets": [...ULTISID8, 0xd440, 0xd460],
+};
+
+function normalizeSids(raw: unknown): SidMapEntry[] {
+  if (raw === undefined) return [{ id: "sid1", address: 0xd400, volume: 15 }];
+  if (!Array.isArray(raw)) {
+    const value = requireObject(raw, "$.sids", ["layout"]);
+    if (typeof value.layout !== "string" || !Object.prototype.hasOwnProperty.call(SID_LAYOUTS, value.layout)) {
+      throw new SidwaveValidationError("$.sids.layout", "expected ultisid8, ultisid8+socket1 or ultisid8+sockets");
+    }
+    return SID_LAYOUTS[value.layout as SidLayout].map((address, i) => ({ id: `sid${i + 1}`, address, volume: 15 }));
+  }
+  if (raw.length < 1 || raw.length > 10) throw new SidwaveValidationError("$.sids", "expected 1..10 SIDs");
+  const addresses = new Set<number>();
+  const ids = new Set<string>();
+  return raw.map((entry, i) => {
+    const path = `$.sids[${i}]`;
+    const sid = requireObject(entry, path, ["id", "address", "model", "volume", "filter"]);
+    const id = typeof sid.id === "number" && Number.isSafeInteger(sid.id) ? String(sid.id) : sid.id;
+    if (typeof id !== "string" || !id.trim()) throw new SidwaveValidationError(`${path}.id`, "expected a non-empty string or integer SID identifier");
+    if (ids.has(id)) throw new SidwaveValidationError(`${path}.id`, "SID id is duplicated");
+    ids.add(id);
+    if (typeof sid.address !== "string" || !/^\$D[4-7][02468ACE]0$/i.test(sid.address)) {
+      throw new SidwaveValidationError(`${path}.address`, "use a SID address in $D400..$D7E0 on $20 steps; $DE00..$DFFF is unavailable");
+    }
+    const address = Number.parseInt(sid.address.slice(1), 16);
+    if (addresses.has(address)) throw new SidwaveValidationError(`${path}.address`, "SID address is duplicated");
+    addresses.add(address);
+    if (sid.model !== undefined && sid.model !== "6581" && sid.model !== "8580") {
+      throw new SidwaveValidationError(`${path}.model`, 'expected "6581" or "8580"');
+    }
+    const volume = sid.volume === undefined ? 15 : requireNumber(sid.volume, `${path}.volume`, { min: 0, max: 15, integer: true });
+    let filter: SidFilter | undefined;
+    if (sid.filter !== undefined) {
+      const fp = `${path}.filter`;
+      if (!isPlainObject(sid.filter)) throw new SidwaveValidationError(fp, "expected a mapping");
+      const value = sid.filter;
+      if (value.cutoff_base !== undefined) {
+        filter = { filter_env: parseFilterEnv(value, fp) };
+      } else {
+        checkKeys(value, new Set(["filter_env", "filter_mod"]), fp);
+        filter = {
+          filter_env: value.filter_env === undefined ? undefined : parseFilterEnv(value.filter_env, `${fp}.filter_env`),
+          filter_mod: value.filter_mod === undefined ? undefined : parseFilterMod(value.filter_mod, `${fp}.filter_mod`),
+        };
+      }
+    }
+    return { id, address, volume, model: sid.model, filter };
+  });
 }
 
 function normalizeInstruments(raw: unknown, path: string): Record<string, Record<string, any>> {
@@ -331,12 +443,7 @@ function parseMode(value: unknown, path: string): SystemMode {
   return m;
 }
 
-function normalizeVoice(raw: unknown, path: string): SidwaveVoice {
-  if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a voice mapping");
-  const v = raw as Record<string, any>;
-  checkKeys(v, VOICE_KEYS, path);
-  const id = requireNumber(v.id, `${path}.id`, { min: 1, max: 3, integer: true });
-
+function normalizeVoice(v: Record<string, any>, path: string, id: number): SidwaveVoice {
   const wfRaw = v.waveform === undefined ? "pulse" : String(v.waveform).toLowerCase();
   if (!WAVEFORMS.has(wfRaw)) {
     throw new SidwaveValidationError(`${path}.waveform`, `unknown waveform ${JSON.stringify(v.waveform)}; use pulse, sawtooth, triangle or noise`);
@@ -503,21 +610,24 @@ function parseGlobalFx(raw: unknown, path: string): Record<string, unknown> {
     requireNumber(v.depth, `${path}.reverb_sim.depth`, { min: 0, max: 1, exclusiveMin: true });
     v.delay_frames = requireNumber(v.delay_frames, `${path}.reverb_sim.delay_frames`, { min: 1, max: 50, integer: true });
   }
-  if (fx.filter_env !== undefined) {
-    const v = requireObject(fx.filter_env, `${path}.filter_env`, ["cutoff_base", "sweep", "speed", "resonance", "type", "voices"]);
-    requireNumber(v.cutoff_base, `${path}.filter_env.cutoff_base`, { min: 0, max: 2047 });
-    if (v.sweep !== undefined) requireNumber(v.sweep, `${path}.filter_env.sweep`, { min: -2047, max: 2047 });
-    if (v.speed !== undefined) requireNumber(v.speed, `${path}.filter_env.speed`, { min: 0, max: 1024, exclusiveMin: true });
-    if (v.resonance !== undefined) requireNumber(v.resonance, `${path}.filter_env.resonance`, { min: 0, max: 15, integer: true });
-    if (v.type !== undefined && !["lowpass", "bandpass", "highpass"].includes(String(v.type).toLowerCase())) {
-      throw new SidwaveValidationError(`${path}.filter_env.type`, "expected lowpass, bandpass or highpass");
-    }
-    if (v.voices !== undefined) {
-      if (!Array.isArray(v.voices)) throw new SidwaveValidationError(`${path}.filter_env.voices`, "expected a list of voice ids");
-      v.voices.forEach((id: unknown, i: number) => requireNumber(id, `${path}.filter_env.voices[${i}]`, { min: 1, max: 3, integer: true }));
-    }
-  }
+  if (fx.filter_env !== undefined) fx.filter_env = parseFilterEnv(fx.filter_env, `${path}.filter_env`);
   return fx;
+}
+
+function parseFilterEnv(raw: unknown, path: string): Record<string, unknown> {
+  const v = requireObject(raw, path, ["cutoff_base", "sweep", "speed", "resonance", "type", "voices"]);
+  requireNumber(v.cutoff_base, `${path}.cutoff_base`, { min: 0, max: 2047 });
+  if (v.sweep !== undefined) requireNumber(v.sweep, `${path}.sweep`, { min: -2047, max: 2047 });
+  if (v.speed !== undefined) requireNumber(v.speed, `${path}.speed`, { min: 0, max: 1024, exclusiveMin: true });
+  if (v.resonance !== undefined) requireNumber(v.resonance, `${path}.resonance`, { min: 0, max: 15, integer: true });
+  if (v.type !== undefined && !["lowpass", "bandpass", "highpass"].includes(String(v.type).toLowerCase())) {
+    throw new SidwaveValidationError(`${path}.type`, "expected lowpass, bandpass or highpass");
+  }
+  if (v.voices !== undefined) {
+    if (!Array.isArray(v.voices)) throw new SidwaveValidationError(`${path}.voices`, "expected a list of voice ids");
+    v.voices.forEach((id: unknown, i: number) => requireNumber(id, `${path}.voices[${i}]`, { min: 1, max: 3, integer: true }));
+  }
+  return v;
 }
 
 function normalizeWaveform(w: Waveform): Waveform {
@@ -526,7 +636,7 @@ function normalizeWaveform(w: Waveform): Waveform {
   return w;
 }
 
-const LAYER_KEY = /^(?:v|voice)?([1-3])$/i;
+const LAYER_KEY = /^(?:v|voice)?([1-9]|[12][0-9]|30)$/i;
 
 function normalizeTimelineSection(raw: unknown, path: string, voices: SidwaveVoice[]): SidwaveTimelineSection {
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a section mapping with bars and layers");
@@ -539,7 +649,7 @@ function normalizeTimelineSection(raw: unknown, path: string, voices: SidwaveVoi
   if (t.layers !== undefined && !isPlainObject(t.layers)) throw new SidwaveValidationError(`${path}.layers`, "expected a mapping such as { v1: A, v2: \"-\" }");
   for (const [k, v] of Object.entries((t.layers ?? {}) as Record<string, unknown>)) {
     const km = LAYER_KEY.exec(k);
-    if (!km) throw new SidwaveValidationError(`${path}.layers.${k}`, "layer keys must be v1, v2 or v3");
+    if (!km) throw new SidwaveValidationError(`${path}.layers.${k}`, "layer keys must be v1 through v30");
     const id = Number(km[1]);
     const key = `v${id}`;
     if (layers[key] !== undefined) throw new SidwaveValidationError(`${path}.layers.${k}`, `voice ${id} is assigned twice`);

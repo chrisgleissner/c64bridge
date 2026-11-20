@@ -236,3 +236,35 @@ test("SIDWAVE rejects length_bars and total section bars above the limit without
   assert.throws(() => compileSidwaveToPrg(parseSidwave(song({}, 1_000_000))), /bars/);
   assert.ok(Date.now() - started < 100, "validation must be fast");
 });
+
+test("SIDWAVE 1.2 expands the Ultimate layouts in voice order", () => {
+  const base = [0xd400, 0xd480, 0xd500, 0xd580, 0xd420, 0xd4a0, 0xd520, 0xd5a0];
+  for (const [layout, extra] of [["ultisid8", []], ["ultisid8+socket1", [0xd440]], ["ultisid8+sockets", [0xd440, 0xd460]]]) {
+    const addresses = [...base, ...extra];
+    const voice = addresses.length * 3;
+    const doc = parseSidwave(withChange((d) => {
+      d.sidwave = 1.2;
+      d.sids = { layout };
+      d.voices[0].id = voice;
+      d.timeline[0].layers = { [`v${voice}`]: "A" };
+    }));
+    assert.deepEqual(doc.sids.map((sid) => sid.address), addresses);
+    assert.equal(doc.sids.at(-1).id, `sid${addresses.length}`);
+    assert.equal(doc.voiceSlots.get(voice), voice - 1);
+  }
+});
+
+test("SIDWAVE 1.2 resolves a named chip and channel and rejects overlapping placements", () => {
+  const score = withChange((d) => {
+    d.sidwave = 1.2;
+    d.sids = [{ id: "main", address: "$D400" }, { id: 2, address: "$D7E0" }];
+    d.voices.push({ sid: 2, channel: 3 });
+  });
+  const doc = parseSidwave(score);
+  assert.equal(doc.voices[1].id, 6);
+  assert.equal(doc.voiceSlots.get(6), 5);
+  assert.throws(() => parseSidwave({ ...score, voices: [...score.voices, { id: 2, sid: 2, channel: 3 }] }), /SID channel is assigned/);
+  assert.throws(() => parseSidwave({ ...score, sids: [...score.sids, { id: "2", address: "$D420" }] }), /SID id is duplicated/);
+  assert.throws(() => parseSidwave({ ...score, sids: [...score.sids, { id: "other", address: "$D7E0" }] }), /SID address is duplicated/);
+  assert.throws(() => parseSidwave({ ...score, voices: [{ sid: "unknown", channel: 1 }] }), /references an unknown SID/);
+});

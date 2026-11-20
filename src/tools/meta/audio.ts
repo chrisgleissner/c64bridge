@@ -1,6 +1,6 @@
 import { cancelGeneratedSidPlayback } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
-import { compileSidwaveToPrg, compileSidwaveToSid } from "../../sidwaveCompiler.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "../../sidwaveCompiler.js";
 import { parseSidwave } from "../../sidwave.js";
 import { noAudioMeasurement, recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
@@ -655,6 +655,10 @@ export const tools: ToolDefinition[] = [
         const silenceWaitMs = parsed.silenceWaitMs ?? DEFAULT_SILENCE_WAIT_MS;
         const expectedSidwave = normalizeSidwaveInput(parsed.expectedSidwave ?? parsed.sidwave ?? parsed.cpg);
 
+        const document = parseSidwave(source);
+        if (format === "sid") validateSidwavePsidMap(document);
+        const compiled = compileSidwaveToPrg(document);
+
         const analyzer = resolveAnalyzer(context);
         // Without an audio capture backend the score is still compiled and played; the analysis is skipped and said so.
         let unavailable = await audioCaptureAvailable(context) ? null : noAudioMeasurement(platform);
@@ -677,9 +681,6 @@ export const tools: ToolDefinition[] = [
             preSilence = check;
           }
         }
-
-        const document = parseSidwave(source as any);
-        const compiled = compileSidwaveToPrg(document);
 
         const playbackMethod = format === "sid" ? "sidplay_attachment" : "run_prg";
         let playbackDetails: Record<string, unknown> | null = null;
@@ -714,6 +715,7 @@ export const tools: ToolDefinition[] = [
               prgBytes: compiled.prg.length,
               title: document.song?.title ?? null,
               basicFreeBytes: compiled.basicFreeBytes,
+              worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
               warnings: compiled.warnings,
             },
             playback: { method: playbackMethod, details: playbackDetails },
@@ -779,6 +781,7 @@ export const tools: ToolDefinition[] = [
             prgBytes: compiled.prg.length,
             title: document.song?.title ?? null,
             basicFreeBytes: compiled.basicFreeBytes,
+            worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
             warnings: compiled.warnings,
           },
           playback: {

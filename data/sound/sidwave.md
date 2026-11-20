@@ -1,7 +1,7 @@
 # SIDWAVE Format Specification
 
 This document defines **SIDWAVE**, a declarative format for describing structured C64 SID compositions.
-SIDWAVE files are authored in YAML (or JSON) and compiled by the MCP server (`music_compile_and_play`) into a `.PRG` or `.SID` (PSID v2) binary with a built-in frame-based player.
+SIDWAVE files are authored in YAML (or JSON) and compiled by the MCP server (`music_compile_and_play`) into a `.PRG` or `.SID` binary with a built-in frame-based player.
 
 Pipeline:
 
@@ -13,7 +13,7 @@ LLM → SIDWAVE (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VIC
 
 - **Format name:** SIDWAVE
 - **File suffix:** `.sidwave.yaml` (or `.sid.yaml` for brevity)
-- **Version field:** `sidwave: 1.0` or `sidwave: 1.1`
+- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, or `sidwave: 1.2`
 - **Schema file:** `sidwave.schema.json`
 - **Serialization:** YAML 1.2 or JSON
 
@@ -92,7 +92,7 @@ timeline:
 
 | Field | Meaning |
 | --- | --- |
-| `sidwave` | Format version, `1.0` (legacy) or `1.1`. |
+| `sidwave` | Format version, `1.0` (legacy), `1.1`, or `1.2`. |
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
 | `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
@@ -100,7 +100,9 @@ timeline:
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
 | `global_fx` | `reverb_sim` and `filter_env`, described below. |
-| `voices` | One to three voices with ids 1–3. Voices that are not declared stay silent. |
+| `sids` | Optional SID map or layout. Defaults to one SID at `$D400`. |
+| `cpu` | Optional `turbo` for standalone PRG playback on Ultimate hardware. |
+| `voices` | One to 30 voices, up to three per configured SID. Undeclared channels stay silent. |
 | `timeline` | Sections played in order. The song loops forever after the last section. |
 
 ### Instrument wavetables
@@ -352,14 +354,55 @@ The compiler arranges the timeline into per-voice note events and encodes them a
 
 ### Output formats
 
-- **PSID (`output: sid`):** PSID v2 with init at $0810, play at $0813, and the PAL or NTSC clock flag from `mode`. Speed 1 uses vertical-blank timing. Higher speeds set the first song’s CIA timing bit and write the CIA timer latch in init. The header does not encode a numeric play rate. The SID model is unspecified.
+- **PSID (`output: sid`):** v2 for one SID, v3 for two and v4 for three. The map must include the primary SID at `$D400`. The byte at `$7A` encodes the second SID base and `$7B` encodes the third. For example, `$42` means `$D420`. The payload begins at `$7C` in all three versions. An optional `model` sets that SID's model flag. This follows the HVSC specification. [SID_file_format.txt](https://hvsc.c64.org/download/C64Music/DOCUMENTS/SID_file_format.txt)
+  - Init is at `$0810` and play is at `$0813`. The header clock flag follows `mode`. Speed 1 uses vertical blank timing. Higher speeds set the first song's CIA timing bit and write the CIA timer latch in init.
 - **PRG (`output: prg`):** `10 SYS2061`. The program detects whether the machine is PAL or NTSC, programs CIA 1 timer A for the song’s play rate on that clock, installs an IRQ handler, and returns to BASIC while the music plays. Pitch and tempo are therefore correct on either machine type.
   - Before returning, it moves the start of BASIC and the variable area behind the player (like `NEW` with a raised start of BASIC), so direct-mode commands, variables and new program lines work without touching the player. The compile result reports `basicFreeBytes`. A song whose PRG ends at or above $A000 leaves no BASIC memory: BASIC commands that need memory then fail with `?OUT OF MEMORY` while the music keeps playing, and the compile result carries a warning.
   - The KERNAL IRQ (keyboard scan, cursor blink, jiffy clock) runs at the song’s play rate. At speed 1, `TI`/`TI$` runs about 16.5% slow for a PAL song and 0.3% slow for NTSC. Higher speeds also increase the KERNAL IRQ rate.
 
+## Multiple SIDs (1.2)
+
+List the SID windows in playback order, or use a layout from [Owner configurations](../ultimate/multisid.md#owner-configurations-and-settings). Use distinct IDs and distinct addresses from `$D400` through `$D7E0` in `$20` increments. The compiler refuses `$DE00–$DFFF`. Use PRG for a map with more than three SIDs. Before playing a multi-SID PRG, configure the device to decode those same windows.
+
+| Layout | SID bases in voice order |
+|---|---|
+| `ultisid8` | `$D400 $D480 $D500 $D580 $D420 $D4A0 $D520 $D5A0` |
+| `ultisid8+socket1` | The eight bases above, then `$D440` |
+| `ultisid8+sockets` | The eight bases above, then `$D440 $D460` |
+
+The layouts assign IDs `sid1` through `sid10` in list order. Numeric voice IDs address groups of three, so `v4` is channel 1 of the second SID and `v30` is channel 3 of the tenth. Set `sid` and `channel` instead to select a named chip and a channel. The voice ID defaults to its physical slot (1–30). You can supply an explicit `id` to label that voice in the timeline. Ring and sync use the preceding oscillator on the same chip, with channel 3 as the source for channel 1.
+
+```yaml
+sidwave: 1.2
+title: Two windows
+tempo: 120
+mode: PAL
+sids:
+  - { id: bass, address: "$D400", model: "8580", volume: 12 }
+  - id: lead
+    address: "$D420"
+    volume: 8
+    filter:
+      filter_env: { cutoff_base: 800, sweep: 500, speed: 4, voices: [2] }
+      filter_mod: { sweep: 100, beats: 2 }
+voices:
+  - { id: 1, waveform: sawtooth, patterns: { A: { groove: [C3, G2] } } }
+  - { sid: lead, channel: 2, waveform: triangle, patterns: { A: { groove: [E4, G4] } } }
+timeline:
+  - { bars: 1, layers: { v1: A, v5: A } }
+```
+
+Each SID's volume defaults to 15. Its `filter.filter_env.voices` uses local channels 1–3. A pattern's `filter_mod` affects the SID that plays the pattern. A SID's optional `filter.filter_mod` starts its ramp at the beginning of each pass. Its `steps` unit uses one beat per step. The most recent active filter table owns cutoff, mode and resonance for its own SID. Filter tables on other SIDs run independently. Top-level `global_fx.filter_env` applies to the first SID unless its own `filter_env` overrides it.
+
+The compiler warns if the sum of peak sawtooth sustain scaled by each SID's volume exceeds 10. The estimate assumes all SIDs could share a pan side because the score does not describe the hardware mixer. Keep the actual sum of `(volume / 15) × (sustain / 15)` per side at or below 10. [Ultimate multi-SID level measurements](../ultimate/multisid.md)
+
+The compiler reports `worstCaseCyclesPerCall` and refuses a 1.2 score above the 1 MHz budget for its selected video standard unless it declares `cpu: turbo`. The error gives the minimum CPU speed. Higher values of `speed` leave fewer cycles per player call. Song code and data must fit below `$D000`.
+
+For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and delays playback past the startup hold, which can keep the CPU at 1 MHz for up to 4.2 seconds. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
+
 ### Not supported
 
-Time signatures other than 4/4, per-note velocity, multiple subtunes, external sample playback, multiple SID chips, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than 4/4, per-note velocity, multiple subtunes, external sample playback, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
