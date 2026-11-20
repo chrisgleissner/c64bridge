@@ -58,3 +58,80 @@ test("replaced line numbers are returned", () => {
   assert.deepEqual(basicToPrgDetailed('10 PRINT\n20 PRINT').replacedLines, []);
   assert.deepEqual([...result.prg], [...basicToPrg('20 PRINT "B"\n10 PRINT "D"')]);
 });
+
+// Review point 5 of branch F (decision D6): list then tokenise is byte-exact.
+
+const roundTrip = (body) => {
+  const text = detokenizeLine(Uint8Array.from(body));
+  return { text, bytes: lineBytes(`10 ${text}`) };
+};
+
+test("listing then tokenising reproduces every byte after REM, in DATA, in code and at both ends of a line", () => {
+  for (let byte = 1; byte <= 255; byte += 1) {
+    const contexts = [
+      [0x8f, byte], // after REM: no tokens, no strings
+      [0x83, byte, 0x3a, 0x80], // in DATA, then END after the colon
+      [0x83, 0x22, byte, 0x22], // a string in DATA
+      [0x41, byte, 0x41], // in code
+      [0x20, byte], // leading space
+      [byte, 0x20], // trailing space
+    ];
+    for (const body of contexts) {
+      const { text, bytes } = roundTrip(body);
+      assert.deepEqual(bytes, body, `bytes ${body.map((b) => b.toString(16)).join(" ")} listed as ${JSON.stringify(text)}`);
+    }
+  }
+  // Text after REM is listed as text: a shifted letter is a code, not the keyword of the same byte.
+  assert.equal(detokenizeLine(Uint8Array.of(0x8f, 0x20, 0xc1, 0x61, 0xff)), "REM {$C1}{$61}{$FF}");
+  assert.equal(detokenizeLine(Uint8Array.of(0x20, 0x99, 0x20)), "{$20}PRINT{$20}");
+  // Plain letters that spell a keyword (only in a hand-made image) are listed as codes.
+  const handMade = Uint8Array.of(0x50, 0x52, 0x49, 0x4e, 0x54, 0x22, 0x41, 0x22);
+  assert.equal(detokenizeLine(handMade), '{$50}{$52}{$49}{$4E}{$54}"A"');
+  assert.deepEqual(roundTrip([...handMade]).bytes, [...handMade]);
+});
+
+test("a program with REM, DATA and strings survives list and tokenise", () => {
+  const source = [
+    '10 REM "HELLO" {red}π: ?',
+    '20 DATA 1,"A:B",π,{$C1}:PRINT "{clr}X";:?π',
+    "30 IF A THEN GOTO 10",
+  ].join("\n");
+  const prg = basicToPrg(source);
+  const listed = listBasicProgram(new Uint8Array(prg.subarray(2)), 0x801).lines.map((l) => `${l.number} ${l.text}`).join("\n");
+  assert.deepEqual([...basicToPrg(listed)], [...prg], listed);
+});
+
+test("every control-code name of the keyboard tool and of skill and data examples is accepted", async () => {
+  const { readFileSync, readdirSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { lookupNamedPetscii } = await import("../src/petscii.js");
+  // src/tools/input.ts keeps its own table until it imports the shared one (wave 2); the names must agree.
+  const input = readFileSync(new URL("../src/tools/input.ts", import.meta.url), "utf8");
+  const table = /const PETSCII_TOKENS: Readonly<Record<string, number>> = \{([\s\S]*?)\};/.exec(input);
+  assert.ok(table, "control-key table in src/tools/input.ts");
+  const entries = [...table[1].matchAll(/^\s*([A-Z0-9_]+): (\d+),/gm)];
+  assert.ok(entries.length >= 40, `${entries.length} names`);
+  for (const [, name, code] of entries) assert.equal(lookupNamedPetscii(name), Number(code), name);
+  // Brace codes inside quoted strings of BASIC lines in .github/skills and data/.
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const path = join(dir, entry);
+      if (statSync(path).isDirectory()) walk(path);
+      else if (/\.(md|bas|txt)$/.test(entry)) files.push(path);
+    }
+  };
+  walk(new URL("../.github/skills", import.meta.url).pathname);
+  walk(new URL("../data", import.meta.url).pathname);
+  assert.ok(files.length > 20, `${files.length} files`);
+  for (const file of files) {
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      if (!/^\s*\d+\s*\S/.test(line)) continue;
+      for (const [, inner] of line.matchAll(/"([^"]*)"/g)) {
+        for (const [token] of inner.matchAll(/\{[^}]*\}/g)) {
+          assert.doesNotThrow(() => basicToPrg(`10 PRINT"${token}"`), `${token} in ${file}`);
+        }
+      }
+    }
+  }
+});

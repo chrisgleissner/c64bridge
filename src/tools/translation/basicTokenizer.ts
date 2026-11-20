@@ -169,6 +169,18 @@ function encodeBraceToken(text: string, index: number, lineNumber: number, stric
   return { value: token.value, endIndex: token.endIndex };
 }
 
+/**
+ * Bytes of one line's text (after the line number), or undefined when the text is not valid.
+ * For the listing, which checks that its text tokenises back to the same bytes.
+ */
+export function tokenizeLineContent(content: string): Uint8Array | undefined {
+  try {
+    return tokenize(content);
+  } catch {
+    return undefined;
+  }
+}
+
 function tokenize(content: string, lineNumber = 0): Uint8Array {
   // ASCII-only folding keeps every index aligned with content; full Unicode
   // upper-casing changes the length for characters such as the German sharp s.
