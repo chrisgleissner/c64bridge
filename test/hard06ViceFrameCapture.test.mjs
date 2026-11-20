@@ -53,3 +53,26 @@ test("an empty frame is retried until VICE renders one", async () => {
   assert.equal(frames[0].width, 4);
   assert.equal(calls(), 2);
 });
+
+test("an inner area outside the canvas returns the whole canvas with a warning", async () => {
+  const { client } = viceClient(() => ({ ...snapshot(1), offsetX: 8, innerWidth: 4 }));
+  const { frames, warnings } = await client.captureFrames({ count: 1 });
+  assert.equal(frames[0].width, 10);
+  assert.equal(frames[0].height, 6);
+  assert.equal(warnings?.length, 1);
+  assert.match(warnings[0], /inner screen area \(4 x 2 at 8,2\) outside its 10 x 6 canvas/);
+});
+
+test("a backend switch during the capture does not change the backend it reads", async () => {
+  const { client, calls } = viceClient(() => snapshot(1));
+  const vice = client.facadePromise;
+  let reads = 0;
+  Object.defineProperty(client, "facadePromise", {
+    configurable: true,
+    get: () => (reads++ === 0 ? vice : Promise.resolve({ type: "c64u" })),
+  });
+  const { backend, frames } = await client.captureFrames({ count: 1 });
+  assert.equal(backend, "vice");
+  assert.equal(frames[0].width, 4);
+  assert.equal(calls(), 1);
+});
