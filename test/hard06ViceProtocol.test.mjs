@@ -238,7 +238,7 @@ import fs from "node:fs";
 import { startViceMockServer } from ${JSON.stringify(path.join(root, "src/vice/mockServer.ts"))};
 const port = Number(process.argv[process.argv.indexOf("-binarymonitoraddress") + 1].split(":")[1]);
 const server = await startViceMockServer({ port });
-setInterval(() => fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(server.commands.map((c) => c[0]))), 20);
+setInterval(() => { fs.writeFileSync(${JSON.stringify(log + ".tmp")}, JSON.stringify(server.commands.map((c) => c[0]))); fs.renameSync(${JSON.stringify(log + ".tmp")}, ${JSON.stringify(log)}); }, 20);
 `);
   const fake = path.join(dir, "x64sc");
   fs.writeFileSync(fake, `#!/bin/sh\ncd ${root} && exec node --import tsx/esm ${fakeTs} "$@"\n`, { mode: 0o755 });
