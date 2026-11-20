@@ -275,8 +275,8 @@ test("SIDWAVE 1.2 validates sample timing, encoding and CIA2 rate", () => {
   const withSamples = (rate, voices) => ({ ...doc, samples: { rate, voices } });
   assert.throws(() => parseSidwave(withSamples(8001, [entry])), /rate.*maximum 8000/);
   assert.throws(() => parseSidwave(withSamples(4000, [entry, entry])), /SID already has a sample scheduled/);
-  assert.throws(() => parseSidwave(withSamples(4000, [{ ...entry, hex: undefined, base64: "a!" }])), /expected base64/);
-  assert.throws(() => parseSidwave(withSamples(4000, [{ ...entry, kit: "kick" }])), /exactly one of hex, base64 or kit/);
+  assert.throws(() => parseSidwave(withSamples(4000, [{ ...entry, hex: undefined, base64: "a!" }])), /expected base64/i);
+  assert.throws(() => parseSidwave(withSamples(4000, [{ ...entry, kit: "kick" }])), /exactly one of synth, file, kit, hex or b64/);
   assert.throws(() => compileSidwaveToPrg(parseSidwave(withSamples(4000, [{ ...entry, at: [200] }]))), /outside the song/);
 });
 

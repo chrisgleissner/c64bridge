@@ -212,26 +212,170 @@
     },
     "samples": {
       "type": "object",
-      "required": ["rate", "voices"],
+      "required": ["rate"],
       "properties": {
-        "rate": { "type": "integer", "minimum": 16, "maximum": 8000 },
-        "voices": {
-          "type": "array", "minItems": 1, "maxItems": 255,
+        "rate": {"type": "integer", "minimum": 16, "maximum": 8000},
+        "defs": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"},
+          "maxProperties": 255,
+          "additionalProperties": {"$ref": "#/$defs/sampleDefinition"}
+        },
+        "voices": {"type": "array", "minItems": 1, "maxItems": 255, "items": {"$ref": "#/$defs/sampleTrigger"}},
+        "triggers": {"type": "array", "minItems": 1, "maxItems": 255, "items": {"$ref": "#/$defs/sampleTrigger"}}
+      },
+      "additionalProperties": false,
+      "anyOf": [{"required": ["voices"]}, {"required": ["triggers"]}]
+    },
+    "sampleDefinition": {
+      "type": "object",
+      "properties": {
+        "synth": {"$ref": "#/$defs/sampleSynth"},
+        "file": {"type": "string", "minLength": 1},
+        "file_rate": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "b64": {"type": "string", "minLength": 1},
+        "base64": {"type": "string", "minLength": 1},
+        "hex": {"type": "string", "minLength": 1},
+        "kit": {"enum": ["kick", "snare", "clap", "hat", "tom", "zap"]},
+        "loop": {"type": "boolean"},
+        "dither": {"enum": ["none", "tpdf", "shaped"]},
+        "gain_db": {"type": "number", "minimum": -96, "maximum": 48},
+        "trim": {"type": "boolean"}
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["synth"]},
+        {"required": ["file"]},
+        {"required": ["b64"]},
+        {"required": ["base64"]},
+        {"required": ["hex"]},
+        {"required": ["kit"]}
+      ]
+    },
+    "sampleTrigger": {
+      "type": "object",
+      "properties": {
+        "synth": {"$ref": "#/$defs/sampleSynth"},
+        "file": {"type": "string", "minLength": 1},
+        "file_rate": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "b64": {"type": "string", "minLength": 1},
+        "base64": {"type": "string", "minLength": 1},
+        "hex": {"type": "string", "minLength": 1},
+        "kit": {"enum": ["kick", "snare", "clap", "hat", "tom", "zap"]},
+        "loop": {"type": "boolean"},
+        "dither": {"enum": ["none", "tpdf", "shaped"]},
+        "gain_db": {"type": "number", "minimum": -96, "maximum": 48},
+        "trim": {"type": "boolean"},
+        "sid": {"$ref": "#/$defs/sidId"},
+        "sample": {"type": "string", "minLength": 1},
+        "at": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "items": {"type": "integer", "minimum": 0, "maximum": 16777215},
+          "uniqueItems": true
+        },
+        "bar": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "beat": {"type": "number", "minimum": 1, "maximum": 4.999999999},
+        "at_beat": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
           "items": {
-            "type": "object",
-            "required": ["sid", "at"],
-            "oneOf": [{ "required": ["hex"] }, { "required": ["base64"] }, { "required": ["kit"] }],
-            "properties": {
-              "sid": { "$ref": "#/$defs/sidId" },
-              "at": { "type": "array", "minItems": 1, "maxItems": 20000, "uniqueItems": true,
-                "items": { "type": "integer", "minimum": 0, "maximum": 16777215 } },
-              "hex": { "type": "string", "minLength": 1 },
-              "base64": { "type": "string", "minLength": 1 },
-              "kit": { "enum": ["kick", "snare", "clap"] }
-            },
-            "additionalProperties": false
+            "anyOf": [
+              {"type": "number", "minimum": 0, "maximum": 16384},
+              {
+                "type": "object",
+                "required": ["bar"],
+                "properties": {"bar": {"type": "integer", "minimum": 1, "maximum": 4096}, "beat": {"type": "number", "minimum": 1, "maximum": 4.999999999}},
+                "additionalProperties": false
+              }
+            ]
           }
+        },
+        "pattern": {"$ref": "#/$defs/samplePattern"},
+        "pitch": {"type": "number", "minimum": -48, "maximum": 48},
+        "length_beats": {"type": "number", "minimum": 0.001, "maximum": 16384}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "oneOf": [{"required": ["at"]}, {"required": ["bar"]}, {"required": ["at_beat"]}, {"required": ["pattern"]}]
+        },
+        {
+          "oneOf": [
+            {"required": ["sample"]},
+            {"required": ["pattern"]},
+            {"required": ["synth"]},
+            {"required": ["file"]},
+            {"required": ["b64"]},
+            {"required": ["base64"]},
+            {"required": ["hex"]},
+            {"required": ["kit"]}
+          ]
         }
+      ]
+    },
+    "samplePattern": {
+      "type": "object",
+      "required": ["steps", "map"],
+      "properties": {
+        "steps": {"type": "string", "pattern": "^[A-Za-z0-9.]{1,256}$"},
+        "map": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+        "from_bar": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "to_bar": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "every": {"type": "integer", "minimum": 1, "maximum": 4096}
+      },
+      "additionalProperties": false
+    },
+    "sampleSynth": {
+      "type": "object",
+      "properties": {
+        "osc": {"enum": ["sine", "triangle", "square", "saw", "noise"]},
+        "freq": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "to": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "ms": {"type": "number", "minimum": 0.1, "maximum": 120000},
+        "gain": {"type": "number", "minimum": 0, "maximum": 16},
+        "duty": {"type": "number", "minimum": 0.01, "maximum": 0.99},
+        "layers": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"$ref": "#/$defs/sampleLayer"}},
+        "notes": {"type": "string", "minLength": 1},
+        "formant": {"enum": ["a", "e", "i", "o", "u"]},
+        "env": {
+          "type": "object",
+          "properties": {
+            "a": {"type": "number", "minimum": 0, "maximum": 120000},
+            "d": {"type": "number", "minimum": 0, "maximum": 120000},
+            "s": {"type": "number", "minimum": 0, "maximum": 1},
+            "r": {"type": "number", "minimum": 0, "maximum": 120000}
+          },
+          "additionalProperties": false
+        },
+        "lp": {"type": "number", "minimum": 1, "maximum": 100000},
+        "hp": {"type": "number", "minimum": 1, "maximum": 100000},
+        "drive": {"type": "number", "minimum": 0, "maximum": 32},
+        "crush": {
+          "anyOf": [
+            {"type": "integer", "minimum": 1, "maximum": 16},
+            {
+              "type": "object",
+              "properties": {"bits": {"type": "integer", "minimum": 1, "maximum": 16}, "rate": {"type": "number", "minimum": 1, "maximum": 100000}},
+              "additionalProperties": false
+            }
+          ]
+        },
+        "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "additionalProperties": false
+    },
+    "sampleLayer": {
+      "type": "object",
+      "properties": {
+        "osc": {"enum": ["sine", "triangle", "square", "saw", "noise"]},
+        "freq": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "to": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "ms": {"type": "number", "minimum": 0.1, "maximum": 120000},
+        "gain": {"type": "number", "minimum": 0, "maximum": 16},
+        "duty": {"type": "number", "minimum": 0.01, "maximum": 0.99}
       },
       "additionalProperties": false
     },

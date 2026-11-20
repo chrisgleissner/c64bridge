@@ -3,7 +3,7 @@ import { DEFAULT_MUSIC_SEED, generateSidwave, MUSIC_STYLES, type MusicStyle } fr
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, type CompileResult } from "../sidwaveCompiler.js";
 import { midiToHz, noteNameToMidi, parseSidwave, type ParsedSidwave } from "../sidwave.js";
-import { noAudioMeasurement, recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
+import { analyzePcm, noAudioMeasurement, recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
   booleanSchema,
@@ -25,6 +25,7 @@ import {
 
 import { sidwaveSetupWarnings, validateViceSidwaveMap } from "../sidwavePlaybackConfig.js";
 import { getPlatformStatus } from "../platform.js";
+import { readPcmFile } from "../sidwavePcm.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -327,6 +328,7 @@ const recordAndAnalyzeArgsSchema = objectSchema({
 const analyzeAudioArgsSchema = objectSchema({
   description: "Analyze recent SID playback when a verification-style request is detected.",
   properties: {
+    wavPath: optionalSchema(stringSchema({ minLength: 1 })),
     request: optionalSchema(stringSchema({
       description: "Verification goal wording; \"does it sound right\" requests add a verdict.",
       minLength: 1,
@@ -1125,6 +1127,13 @@ export const audioModule = defineToolModule({
             entryAddress: compiled.entryAddress,
             basicFreeBytes: compiled.basicFreeBytes,
             worstCaseCyclesPerCall: compiled.worstCaseCyclesPerCall,
+            ...(document.samples && {
+              sampleDefinitions: compiled.sampleDefinitions,
+              sampleBytes: compiled.sampleBytes,
+              bytesBelowD000: compiled.bytesBelowD000,
+              digiCyclesPerCall: compiled.digiCyclesPerCall,
+              digiWorstCaseCyclesPerNmi: compiled.digiWorstCaseCyclesPerNmi,
+            }),
             warnings,
             song: document.song,
             voices: voiceSummaries,
@@ -1209,16 +1218,20 @@ export const audioModule = defineToolModule({
           const duration = parsed.durationSeconds ?? 3;
           ctx.logger.info("Auto-analyzing SID audio", { durationSeconds: duration });
 
-          const analyzer = resolveAnalyzer(ctx);
           let analysis: Awaited<ReturnType<AudioAnalyzer>>;
-          try {
-            analysis = await analyzer({
-              durationSeconds: duration,
-              expectedSidwave: normaliseSidwaveInput(parsed.expectedSidwave),
-            });
-          } catch (error) {
-            if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
-            return audioMeasurementError(ctx, error);
+          const expected = normaliseSidwaveInput(parsed.expectedSidwave);
+          if (parsed.wavPath) {
+            const { data, rate } = readPcmFile(parsed.wavPath);
+            if (!data.length) throw new ToolValidationError("WAV contains no audio frames");
+            const limit = Math.max(1, Math.floor((parsed.durationSeconds ?? 120) * rate));
+            analysis = await analyzePcm(Float32Array.from(data.subarray(0, limit)), rate, "wav", expected, undefined, ctx.signal);
+          } else {
+            try {
+              analysis = await resolveAnalyzer(ctx)({ durationSeconds: duration, expectedSidwave: expected });
+            } catch (error) {
+              if (ctx.signal?.aborted) return cancelledResult("Audio recording was cancelled by the client.");
+              return audioMeasurementError(ctx, error);
+            }
           }
           const metrics = analysis?.analysis?.global_metrics;
           const { average, max } = extractRmsMetrics(metrics ?? {});
