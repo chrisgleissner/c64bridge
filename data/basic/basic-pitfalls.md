@@ -138,7 +138,7 @@ Common mistakes and gotchas when writing Commodore BASIC v2 programs.
 
 ## Memory Conflicts
 
-**Problem:** The BASIC program, then variables and then arrays grow upward from `$0801`. Strings grow downward from the top of BASIC memory (MEMSIZ, `$A000` by default). They can collide.
+**Problem:** The BASIC program, then variables and then arrays grow upward from `$0801`. Strings grow downward from the top of BASIC memory (MEMSIZ; the highest BASIC RAM byte is `$9FFF` by default). They can collide.
 
 **Symptoms:** `OUT OF MEMORY` errors or system crashes.
 
