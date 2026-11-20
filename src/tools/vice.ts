@@ -14,7 +14,6 @@ import {
 import { jsonResult, textResult } from "./responses.js";
 import {
   ToolError,
-  ToolExecutionError,
   ToolValidationError,
   toolErrorResult,
   unknownErrorResult,
