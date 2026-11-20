@@ -21,7 +21,6 @@ test("ACME spellings and screen-code text (TRANSLATE-4)", () => {
   assert.deepEqual(asm("!byte 1,2\n!by 3\n!08 4\n!8 5"), [1, 2, 3, 4, 5]);
   assert.deepEqual(asm("!word $1234\n!wo 2\n!16 3"), [0x34, 0x12, 2, 0, 3, 0]);
   assert.deepEqual(asm("!fill 3,7\n!fi 1,9"), [7, 7, 7, 9]);
-  assert.deepEqual(asm('!text "AB"\n!tx "C"\n!pet "d"\n.petscii "e"'), [0x41, 0x42, 0x43, 0x44, 0x45]);
   assert.deepEqual(asm("nop\n!align 3,0\nnop"), [0xea, 0xea, 0xea, 0xea, 0xea]);
   // ACME !align ANDVALUE, EQUALVALUE: pad to the next page, default fill NOP.
   const page = assemblyToPrgDetailed("* = $c0f0\nnop\n!align $ff, 0\nrts\n").prg;
@@ -34,13 +33,36 @@ test("ACME spellings and screen-code text (TRANSLATE-4)", () => {
 test("screen-code text follows the KERNAL PETSCII-to-screen rule and matches the chargen table", () => {
   const byPetscii = new Map(getChargenGlyphs().map((glyph) => [glyph.petsciiCode, glyph.screenCode & 0x7f]));
   assert.deepEqual(asm('.scr "ABC abc@Z"'), [1, 2, 3, 32, 1, 2, 3, 0, 26]);
-  assert.deepEqual(asm('!scr "AZ"\n.screen "0"'), [1, 26, 0x30]);
+  assert.deepEqual(asm('.screen "AZ0"'), [1, 26, 0x30]);
   for (let ascii = 0x20; ascii <= 0x5f; ascii += 1) {
     const char = String.fromCharCode(ascii);
     if (char === '"' || char === "\\") continue;
     assert.deepEqual(asm(`.scr "${char}"`), [byPetscii.get(ascii)], `ASCII ${char}`);
   }
   fails('.scr "\\n"', /no screen code/);
+});
+
+test("ACME text directives use ACME's tables: !text raw, !pet swaps case, !scr screen codes (review point 2)", () => {
+  // Expected bytes are the output of ACME 0.97 for the same lines.
+  assert.deepEqual(asm('!text "Test@[", 0'), [0x54, 0x65, 0x73, 0x74, 0x40, 0x5b, 0x00]);
+  assert.deepEqual(asm('!tx "ab"\n!txt "C"\n!raw "d"'), [0x61, 0x62, 0x43, 0x64]);
+  assert.deepEqual(asm('!text "a\\nb\\\\"'), [0x61, 0x0a, 0x62, 0x5c]);
+  assert.deepEqual(asm('!pet "Test", 13'), [0xd4, 0x45, 0x53, 0x54, 0x0d]);
+  assert.deepEqual(asm('!scr "Test@[]^ "'), [0x54, 0x05, 0x13, 0x14, 0x00, 0x1b, 0x1d, 0x1e, 0x20]);
+  assert.deepEqual(asm('!scr "AZ"\n!pet "{clr}"'), [0x41, 0x5a, 0x7b, 0x43, 0x4c, 0x52, 0x7d]);
+  // A single character in a formula is converted with the directive's table.
+  assert.deepEqual(asm("!pet 'a'+1\n!scr 'a'\n!text 'a'"), [0x42, 0x01, 0x61]);
+  fails('!text "\u0100"', /does not fit in one byte/);
+  fails("!macro m {\n nop\n}", /unsupported directive !macro/);
+});
+
+test("ACME !binary takes SIZE then SKIP and pads a short file with zeros (review point 2)", () => {
+  const options = { resolveIncbin: () => Uint8Array.of(1, 2, 3, 4, 5) };
+  assert.deepEqual(asm('!binary "data.bin", 2, 1\n!bin "data.bin",, 3', options), [2, 3, 4, 5]);
+  const padded = assemblyToPrgDetailed('* = $c000\n!bin "data.bin", 7\n', options);
+  assert.deepEqual([...padded.prg].slice(2), [1, 2, 3, 4, 5, 0, 0]);
+  assert.match(padded.warnings.join("\n"), /padded with 2 zero bytes/);
+  fails('!bin "data.bin", 1, 6', /SKIP 6 is outside/, options);
 });
 
 test(".res n,value fills, .res n reserves (TRANSLATE-4)", () => {
@@ -139,7 +161,7 @@ test(".include and .incbin through resolvers", () => {
   };
   assert.deepEqual(asm('jsr helper\n.include "lib.asm"', options), [0x20, 0x03, 0xc0, 0x60]);
   assert.deepEqual(asm('!source "lib.asm"', options), [0x60]);
-  assert.deepEqual(asm('.incbin "data.bin"\n.incbin "data.bin", 1\n!binary "data.bin", 1, 2', options), [1, 2, 3, 4, 5, 2, 3, 4, 5, 2, 3]);
+  assert.deepEqual(asm('.incbin "data.bin"\n.incbin "data.bin", 1\n.incbin "data.bin", 1, 2', options), [1, 2, 3, 4, 5, 2, 3, 4, 5, 2, 3]);
   fails('.incbin "data.bin", 9', /do not fit/, options);
   fails('.incbin "data.bin"', /needs a resolveIncbin option/);
   fails('.include "lib.asm"', /needs a resolveInclude option/);

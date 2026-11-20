@@ -18,9 +18,10 @@ import type { OpcodeAddressingMode } from "./opcodeInventory.js";
  *    ".local:" labels belong to the last global label. Names are case-sensitive, mnemonics are not.
  *  - Numbers: $hex, 0xhex, %binary, 0bbinary, decimal; "<x" and ">x" take the low and high byte.
  *  - Text: character literals ('A', "A" in an expression) and strings under .byte are raw ASCII;
- *    .text/.ascii/.petscii/!text/!pet fold a-z to the PETSCII letters $41-$5A and accept
- *    {name}/{$xx} control codes; .scr/.screen/!scr give screen codes. So 'a' is $61 but
- *    .text "a" is $41; write .text for text the C64 prints.
+ *    .text/.ascii/.petscii fold a-z to the PETSCII letters $41-$5A and accept
+ *    {name}/{$xx} control codes; .scr/.screen give screen codes. So 'a' is $61 but
+ *    .text "a" is $41; write .text for text the C64 prints. ACME's !text (raw), !pet and !scr
+ *    use ACME's own tables (ACME_ENCODERS).
  *  - Comments: ";" and "//".
  *  - Conditionals, macros (\1..\9, named parameters, \@ unique per expansion) and repeats are
  *    expanded here; see SUPPORTED_DIRECTIVES for every accepted directive spelling.
@@ -110,11 +111,14 @@ interface AssignmentStatement {
 
 type DirectiveName =
   | "org" | "byte" | "word" | "text" | "screen" | "fill" | "align" | "alignmask" | "equ" | "reserve" | "include" | "incbin"
+  | "acmeText" | "acmePet" | "acmeScr" | "acmeBinary"
   | "if" | "else" | "endif";
 
 type DirectiveArg =
   | { kind: "expr"; expr: Expression }
-  | { kind: "string"; value: string };
+  | { kind: "string"; value: string }
+  /** An argument left out between commas, as in ACME's !binary "file",, 9. */
+  | { kind: "none" };
 
 type Operand =
   | { kind: "none" }
@@ -207,7 +211,9 @@ const LARGE_FILL_WARNING_BYTES = 1024;
 const INT32_MIN = -0x80000000;
 const UINT32_MAX = 0xffffffff;
 
-const SINGLE_CHAR_TOKENS = new Set<string>([",", ":", "#", "(", ")", "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "=", "!", "~"]);
+// "{" and "}" are tokens only so that block syntax such as ACME's "!macro m {" reaches the
+// unsupported-directive message; no statement accepts them.
+const SINGLE_CHAR_TOKENS = new Set<string>([",", ":", "#", "(", ")", "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "=", "!", "~", "{", "}"]);
 
 const MULTI_CHAR_TOKENS = new Set<string>([
   "<<",
@@ -266,19 +272,24 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   "!ALIGN": "alignmask",
   ".TEXT": "text",
   ".ASCII": "text",
-  "!TEXT": "text",
-  "!TX": "text",
+  // ACME, docs/AllPOs.txt of ACME 0.97: !text uses the current conversion table, which is "raw"
+  // because !convtab is not supported; !pet and !scr use the fixed PETSCII and screen-code tables.
+  "!TEXT": "acmeText",
+  "!TX": "acmeText",
+  "!TXT": "acmeText",
+  "!RAW": "acmeText",
   ".PETSCII": "text",
-  "!PET": "text",
+  "!PET": "acmePet",
   ".SCR": "screen",
   ".SCREEN": "screen",
-  "!SCR": "screen",
+  "!SCR": "acmeScr",
   ".INCLUDE": "include",
   "INCLUDE": "include",
   "!SOURCE": "include",
+  "!SRC": "include",
   ".INCBIN": "incbin",
-  "!BINARY": "incbin",
-  "!BIN": "incbin",
+  "!BINARY": "acmeBinary",
+  "!BIN": "acmeBinary",
   ".IF": "if",
   ".ELSE": "else",
   ".ENDIF": "endif",
@@ -286,8 +297,8 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
 
 /** Shown with "unsupported directive": every spelling the assembler accepts, grouped by meaning. */
 const SUPPORTED_DIRECTIVES =
-  ".org/org/* = ; .byte/.db/!byte/!by/!8 ; .word/.dw/!word/!wo/!16 ; .text/.ascii/.petscii/!text/!tx/!pet ; .scr/.screen/!scr ; " +
-  ".fill/!fill/!fi ; .align ; !align ; .res/.ds ; .equ/name = value ; .include/!source ; .incbin/!binary/!bin ; " +
+  ".org/org/* = ; .byte/.db/!byte/!by/!8 ; .word/.dw/!word/!wo/!16 ; .text/.ascii/.petscii ; !text/!tx/!txt/!raw ; !pet ; .scr/.screen ; !scr ; " +
+  ".fill/!fill/!fi ; .align ; !align ; .res/.ds ; .equ/name = value ; .include/!source/!src ; .incbin ; !binary/!bin ; " +
   ".if/.else/.endif ; .macro name params/.endmacro/.endm ; .repeat n/.rept/.endrepeat/.endr";
 
 const RELATIVE_ONLY = new Set<string>(["BCC", "BCS", "BEQ", "BMI", "BNE", "BPL", "BVC", "BVS"]);
@@ -887,6 +898,20 @@ class Parser {
             args: [{ kind: "expr", expr }],
           };
         }
+        case "acmeBinary": {
+          // ACME: !binary "file" [, [SIZE] [, [SKIP]]]; either value may be left out.
+          const path = stream.consumeString("!binary expects a string literal path");
+          const args: DirectiveArg[] = [{ kind: "string", value: path }];
+          while (stream.peek()?.kind === "punct" && stream.peek()!.value === "," && args.length < 3) {
+            stream.consumePunct(",");
+            const next = stream.peek();
+            args.push(next === undefined || (next.kind === "punct" && next.value === ",")
+              ? { kind: "none" }
+              : { kind: "expr", expr: parseExpression(stream, new Set<string>([","])) });
+          }
+          stream.expectEnd();
+          return { kind: "directive", name: "acmeBinary", args };
+        }
         case "include":
         case "incbin": {
           const path = stream.consumeString(`${directive} expects a string literal path`);
@@ -967,8 +992,13 @@ class Parser {
         case "byte":
         case "text":
         case "screen":
+        case "acmeText":
+        case "acmePet":
+        case "acmeScr":
         case "word": {
           const args: DirectiveArg[] = [];
+          // ACME converts single characters inside a formula with the directive's table: !pet 'a'+1 is $42.
+          const charCode = ACME_ENCODERS[directive as AcmeTextDirective];
           while (!stream.isAtEnd()) {
             const next = stream.peek();
             if (!next) break;
@@ -977,7 +1007,7 @@ class Parser {
             if (next.kind === "string" && !startsExpression) {
               args.push({ kind: "string", value: stream.consumeString() });
             } else {
-              args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>()) });
+              args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>(), charCode) });
             }
             if (stream.peek()?.kind === "punct" && stream.peek()!.value === ",") {
               stream.consumePunct(",");
@@ -1288,12 +1318,15 @@ function parseNumberToken(line: string, startIndex: number): { value: number; ne
   return { value, nextIndex: index };
 }
 
-function parseExpression(stream: TokenStream, terminators: Set<string>): Expression {
-  return parseBinaryExpression(stream, terminators, 1);
+/** Maps the code of a one-character string in an expression, for ACME's !pet and !scr. */
+type CharCodeMapper = (code: number) => number;
+
+function parseExpression(stream: TokenStream, terminators: Set<string>, charCode?: CharCodeMapper): Expression {
+  return parseBinaryExpression(stream, terminators, 1, charCode);
 }
 
-function parseBinaryExpression(stream: TokenStream, terminators: Set<string>, minPrecedence: number): Expression {
-  let left = parseUnaryExpression(stream, terminators);
+function parseBinaryExpression(stream: TokenStream, terminators: Set<string>, minPrecedence: number, charCode?: CharCodeMapper): Expression {
+  let left = parseUnaryExpression(stream, terminators, charCode);
 
   while (true) {
     const next = stream.peek();
@@ -1310,14 +1343,14 @@ function parseBinaryExpression(stream: TokenStream, terminators: Set<string>, mi
       break;
     }
     stream.consume();
-    const right = parseBinaryExpression(stream, terminators, precedence + 1);
+    const right = parseBinaryExpression(stream, terminators, precedence + 1, charCode);
     left = { type: "binary", op, left, right };
   }
 
   return left;
 }
 
-function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Expression {
+function parseUnaryExpression(stream: TokenStream, terminators: Set<string>, charCode?: CharCodeMapper): Expression {
   const token = stream.consume();
   if (!token) {
     throw new Error("Unexpected end of expression");
@@ -1327,14 +1360,14 @@ function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Ex
   // As in ACME, 64tass, DASM and Kick Assembler, "<" and ">" apply to the
   // whole rest of the expression: "#>msg+1" is the high byte of msg+1.
   if (token.kind === "punct" && (token.value === "<" || token.value === ">")) {
-    const operand = parseBinaryExpression(stream, terminators, 0);
+    const operand = parseBinaryExpression(stream, terminators, 0, charCode);
     return { type: "unary", op: token.value as UnaryOperator, operand };
   }
   if (
     token.kind === "punct" &&
     (token.value === "+" || token.value === "-" || token.value === "!" || token.value === "~")
   ) {
-    const operand = parseUnaryExpression(stream, terminators);
+    const operand = parseUnaryExpression(stream, terminators, charCode);
     return { type: "unary", op: token.value as UnaryOperator, operand };
   }
   if (token.kind === "punct" && token.value === "*") {
@@ -1348,7 +1381,7 @@ function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Ex
     }
   }
   if (token.kind === "punct" && token.value === "(") {
-    const expr = parseExpression(stream, new Set<string>([")"]));
+    const expr = parseExpression(stream, new Set<string>([")"]), charCode);
     const closing = stream.consume();
     if (!closing || closing.kind !== "punct" || closing.value !== ")") {
       throw new Error("Expected closing parenthesis");
@@ -1366,7 +1399,8 @@ function parseUnaryExpression(stream: TokenStream, terminators: Set<string>): Ex
     if (token.value.length !== 1) {
       throw new Error("String constants in expressions must be exactly one character");
     }
-    return { type: "number", value: token.value.charCodeAt(0) };
+    const code = token.value.charCodeAt(0);
+    return { type: "number", value: charCode && code <= 0xff ? charCode(code) : code };
   }
 
   throw new Error("Unexpected token in expression");
@@ -1907,7 +1941,10 @@ class Assembler {
       }
       case "byte":
       case "text":
-      case "screen": {
+      case "screen":
+      case "acmeText":
+      case "acmePet":
+      case "acmeScr": {
         for (const arg of statement.args) {
           if (arg.kind === "string") {
             // Both passes encode, so the size is the same and a bad character is reported at once.
@@ -1917,7 +1954,7 @@ class Assembler {
             } else {
               this.pc += codes.length;
             }
-          } else {
+          } else if (arg.kind === "expr") {
             const value = this.evaluate(arg.expr, pass, location);
             if (pass === 1) {
               if (value === undefined) {
@@ -1949,7 +1986,7 @@ class Assembler {
               // Count code points, as pass 1 iterates, so both passes agree for characters above $FFFF.
               this.pc += Array.from(arg.value).length * 2;
             }
-          } else {
+          } else if (arg.kind === "expr") {
             const value = this.evaluate(arg.expr, pass, location);
             if (value === undefined) {
               if (pass === 1) {
@@ -1995,19 +2032,35 @@ class Assembler {
         }
         break;
       }
+      case "acmeBinary": {
+        // ACME: SIZE bytes from file offset SKIP; without SIZE up to the end of the file; a file
+        // shorter than SIZE is padded with zeros, with a warning (ACME 0.97 pseudoopcodes.c).
+        const path = (statement.args[0] as { kind: "string"; value: string }).value;
+        const data = this.loadBinary(path, location, "!binary");
+        const sizeArg = statement.args[1];
+        const skipArg = statement.args[2];
+        const skip = skipArg && skipArg.kind !== "none" ? this.evaluateDefined(skipArg, pass, location, "!binary SKIP") : 0;
+        if (!Number.isInteger(skip) || skip < 0 || skip > data.length) {
+          throw new AssemblyError(`!binary "${path}": SKIP ${skip} is outside the ${data.length} bytes of the file`, location);
+        }
+        const size = sizeArg && sizeArg.kind !== "none" ? this.evaluateDefined(sizeArg, pass, location, "!binary SIZE") : data.length - skip;
+        if (!Number.isInteger(size) || size < 0 || size > 0x10000) {
+          throw new AssemblyError(`!binary "${path}": SIZE ${size} is outside 0..65536`, location);
+        }
+        if (pass === 1) {
+          const available = Math.min(size, data.length - skip);
+          for (let index = 0; index < size; index += 1) this.writeByte(index < available ? data[skip + index]! : 0, location);
+          if (available < size) {
+            this.warnings.push(`${location.file}:${location.line}: !binary "${path}" has ${available} bytes after offset ${skip}; padded with ${size - available} zero bytes to SIZE ${size}`);
+          }
+        } else {
+          this.pc += size;
+        }
+        break;
+      }
       case "incbin": {
         const path = (statement.args[0] as { kind: "string"; value: string }).value;
-        if (!this.resolveIncbin) {
-          throw new AssemblyError(".incbin needs a resolveIncbin option; the MCP tools provide none, so write the bytes with .byte", location);
-        }
-        let data = this.incbinCache.get(path);
-        if (!data) {
-          data = this.resolveIncbin(path, location.file);
-          if (!(data instanceof Uint8Array) || data.length > 0x10000) {
-            throw new AssemblyError(`.incbin "${path}" must give at most 65536 bytes`, location);
-          }
-          this.incbinCache.set(path, data);
-        }
+        const data = this.loadBinary(path, location, ".incbin");
         const offset = statement.args[1] ? this.evaluateDefined(statement.args[1], pass, location, ".incbin offset") : 0;
         const length = statement.args[2] ? this.evaluateDefined(statement.args[2], pass, location, ".incbin length") : data.length - offset;
         if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length < 0 || offset + length > data.length) {
@@ -2121,6 +2174,21 @@ class Assembler {
       default:
         throw new AssemblyError(`Unhandled addressing mode ${info.mode}`, location);
     }
+  }
+
+  private loadBinary(path: string, location: SourceLocation, directive: string): Uint8Array {
+    if (!this.resolveIncbin) {
+      throw new AssemblyError(`${directive} needs a resolveIncbin option; the MCP tools provide none, so write the bytes with .byte`, location);
+    }
+    let data = this.incbinCache.get(path);
+    if (!data) {
+      data = this.resolveIncbin(path, location.file);
+      if (!(data instanceof Uint8Array) || data.length > 0x10000) {
+        throw new AssemblyError(`${directive} "${path}" must give at most 65536 bytes`, location);
+      }
+      this.incbinCache.set(path, data);
+    }
+    return data;
   }
 
   private emitFill(countArg: DirectiveArg, valueArg: DirectiveArg | undefined, pass: 0 | 1, location: SourceLocation, context: string): void {
@@ -2332,8 +2400,19 @@ function asciiToPetscii(char: string, location: SourceLocation): number {
  * strings; `.scr` (`.screen`, `!scr`) is screen codes: the PETSCII of the text converted by the
  * KERNAL rule (petsciiToScreenCode), so letters of either case are screen codes 1-26.
  */
-function encodeStringArgument(kind: "byte" | "text" | "screen", value: string, location: SourceLocation): number[] {
+function encodeStringArgument(kind: "byte" | "text" | "screen" | AcmeTextDirective, value: string, location: SourceLocation): number[] {
   const codes: number[] = [];
+  if (kind === "acmeText" || kind === "acmePet" || kind === "acmeScr") {
+    const encode = ACME_ENCODERS[kind];
+    for (const char of value) {
+      const code = char.codePointAt(0)!;
+      if (code > 0xff) {
+        throw new AssemblyError(`text character '${char}' (code ${code}) does not fit in one byte; use \\xNN for a byte value`, location);
+      }
+      codes.push(encode(code));
+    }
+    return codes;
+  }
   if (kind === "byte") {
     for (const char of value) {
       const code = char.charCodeAt(0);
@@ -2372,6 +2451,21 @@ function encodeStringArgument(kind: "byte" | "text" | "screen", value: string, l
   }
   return codes;
 }
+
+type AcmeTextDirective = "acmeText" | "acmePet" | "acmeScr";
+
+/**
+ * ACME's built-in conversion tables, from encoderfn_raw, encoderfn_pet and encoderfn_scr in
+ * src/encoding.c of ACME 0.97 (svn trunk, acme-crossass on SourceForge), checked byte for byte
+ * against the acme binary in test/hard06AssemblerDifferential.test.mjs. Braces are ordinary
+ * characters in ACME strings, so {name} codes are not read here.
+ */
+const ACME_ENCODERS: Record<AcmeTextDirective, CharCodeMapper> = {
+  acmeText: (code) => code,
+  acmePet: (code) => (code >= 0x41 && code <= 0x5a ? code | 0x80 : code >= 0x61 && code <= 0x7a ? code - 0x20 : code),
+  acmeScr: (code) =>
+    code >= 0x61 && code <= 0x7a ? code - 0x60 : code >= 0x5b && code <= 0x5f ? code - 0x40 : code === 0x60 ? 0x40 : code === 0x40 ? 0 : code,
+};
 
 interface ResolvedInstruction {
   mode: AddressingMode;
