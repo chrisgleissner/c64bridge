@@ -15,7 +15,7 @@ On startup the server probes connectivity (REST + zero-page read) and announces 
 
 2) Configure target (optional)
 
-The server resolves config in this order: `C64BRIDGE_CONFIG` → `./.c64bridge.json` → `~/.c64bridge.json` → defaults (`host=c64u`, `port=80`).
+The server resolves config in this order: `C64BRIDGE_CONFIG` → `./.c64bridge.json` → `~/.c64bridge.json` → defaults (`host=c64u`, `port=80`). A `C64BRIDGE_CONFIG` file that does not exist is an error, not a fallback.
 
 Example C64U/U64 configuration:
 
@@ -102,14 +102,14 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 
 ## Capabilities
 
-- Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`). `upload_run_basic` repairs a missing closing quote or parenthesis and reruns once; pass `autoFix: false` for programs with side effects.
+- Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`). `upload_run_basic` observes the run, and repairs a missing closing quote or parenthesis and reruns once, only with `verify: true`; pass `autoFix: false` for programs with side effects. `run_crt`, `run_prg`, `load_prg` and disk mount take `location: "host"` to upload a host file to an Ultimate. `upload_run_asm` reads `.include`/`.incbin` host files and reports assembler `warnings`.
 - Fast demo workflow: `c64_program` (`cross_platform_greeting`) for one-call greetings on VICE and/or C64U with screenshot capture and verification
-- Screen & memory: `c64_memory` (`read`, `write`, `read_screen`, `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory`). `read` accepts `format: "hex"` (default) or `"dump"` (addresses plus a PETSCII column); `list_basic` lists the BASIC program in memory as text.
+- Screen & memory: `c64_memory` (`read`, `write`, `read_screen` (graphics characters appear as U+2592), `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory`; on Ultimate these skip or refuse `$D000-$DFFF` unless `includeIo: true`). `read` accepts `format: "hex"` (default) or `"dump"` (addresses plus a PETSCII column); `list_basic` lists the BASIC program in memory as text.
 - System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks). `reset`, `reboot` and `power_cycle` accept `waitForReady` and `readyTimeoutMs` to wait for the BASIC READY. prompt. `pause` and `resume` also work on VICE: `pause` holds the binary monitor connection open, which stops the CPU, until `resume`. `reset`, `reboot`, `power_cycle` and `poweroff` end the pause.
 - Input: `c64_input` (`write_text`, `key`, `keyboard`, `joystick`, `release_all`, `state`)
 - Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`, `load_flash`, `save_flash`, `reset_defaults`). The flash operations take an optional `category`.
 - Drives & files: `c64_disk` (including `find_paths`, which returns `results` and `truncated`; limit with `maxResults`), `c64_drive`
-- SID / music: `c64_sound` (`play_preset`, playback, generate, analyze, `capture_samples`)
+- SID / music: `c64_sound` (`play_preset`, playback, generate, analyze, `capture_samples`). `play_preset` and `pipeline` do not verify unless `verify: true`; without `system`, note frequencies follow the machine's PAL/NTSC flag at `$02A6`; `set_volume` takes `filterMode`
 - Graphics: `c64_graphics` (PETSCII, sprites, `capture_frame`). `capture_frame` omits raw pixels unless `includePixels: true`; `format: "png"` returns viewable images (at most 4 frames; raw output is capped at 2 MiB, as for `capture_samples`).
 - Debugging (VICE): `c64_debug` (checkpoints, registers, stepping, `wait_for_state`), `c64_vice` (resources)
 - Streaming and extraction: `c64_stream` (C64U), `c64_extract` (sprites, charset, memory dump, firmware health)
@@ -162,6 +162,8 @@ Use ListResources to discover built-in knowledge, then read specific URIs to enr
 - `c64://io/spec` — memory-mapped VIC-II, SID, CIA, colour RAM, and expansion I/O registers
 - `c64://io/cia/spec` — CIA timers, keyboard matrix, serial bus, TOD, IRQ/NMI details
 - `c64://graphics/petscii/style-guide` — readable PETSCII, colour/dither guidance
+
+Every skill is also readable as the resource `c64://skills/<name>` (use it when `.github/skills` is not available to the client).
 
 Pull RAG snippets via `c64_rag` (ops `basic`/`asm`/`docs`) for targeted examples.
 
