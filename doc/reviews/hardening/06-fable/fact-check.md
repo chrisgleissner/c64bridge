@@ -440,3 +440,22 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | VICE: REU image must match the size; DMA 1 byte per cycle; no turbo | CONFIRMED, made precise | vice-3.10 `src/util.c:373`, `src/c64/cart/reu.c:694,819-849`; Bauer 3.2 (`$D02F-$D03F` read `$FF`) |
 | VICE `-warp`, `-pal`, `-ntsc`, `-autostart` | CONFIRMED | vice-3.10 `doc/vice.texi:1323,4006,13238,13243` |
 | Opinions ("richest", "best C64 libraries", "cc65 C code is slow", Charpad loader) | REMOVED | no primary source |
+
+### F2 - data/gamedev/architecture.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| Frame loop snippet | CONFIRMED (assembles) | 64tass 1.60, 2026-11-20 |
+| "VIC takes about 43 cycles, the CPU keeps about 20 of 63" | CORRECTED | Bauer 3.5: bad line stops the CPU for 40-43 cycles |
+| 25 bad lines 1,081, 8 sprites 802 cycles per PAL frame | CONFIRMED | `data/ultimate/bench/results/summary.md` (bench, 2026-11-13) |
+| "Border/vblank lines fully free (about 112 lines PAL)" | IMPRECISE, fixed | 312 - 200 = 112 lines without bad lines; sprite DMA still stalls (Bauer 3.8.1) |
+| "PAL about 17,800 ... NTSC about 15,000" | IMPRECISE, fixed | PAL 17,783 (bench); NTSC 15,212 derived (17,095 - 1,081 - 802), not measured: hardware request G-2 |
+| Per-frame cost estimates (music, sprites, scroll, sort) | REMOVED | estimates without source |
+| Turbo budget table | CONFIRMED | bench summary rows idx 8/15 (U64), 8/15 (C64U), badbit80 rows |
+| I/O, REU and Upic figures in "MODERN budget" | MOVED to pointers | duplicated `c64://ultimate/hardware`, `reu`, `upic` |
+| VIC bank notes; "good for bitmap games", "best for large games" | REWRITTEN as facts | Mapping `$DD00`; character ROM image in banks 0 and 2 |
+| `$0900-$8FFF` "about 32 KB" | CORRECTED | 34,560 bytes |
+| `$E000-$FFFF` "128 sprite shapes" | CORRECTED | vectors `$FFFA-$FFFF` fall in shape 127 |
+| `$EA31` / `$EA81` exits | CONFIRMED, made precise | c64ref `c64disasm_en.txt:6147-6186` (`$EA81` skips clock, keyboard and the CIA ICR read) |
+| "VICE wraps at 512 KB"; length 0 = 64 KB | CONFIRMED, made precise | vice-3.10 `src/c64/cart/reu.c:1085-1093,1534` |
+| Host writes limited to 64 KB; preload not re-run on reset | CONFIRMED | measured (row 6); `io/c64/reu_preloader.cc:58-77` |
