@@ -3,7 +3,7 @@ import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { createSocket } from "node:dgram";
 import { C64Client } from "../src/c64Client.js";
-import { collectCompleteVideoFrames, parseVideoPacket } from "../src/streamCapture.js";
+import { collectCompleteVideoFrames, parseVideoPacket, VideoFrameAssembler } from "../src/streamCapture.js";
 
 // HARD06 CLIENT-1: frames are assembled as packets arrive, so the cost per packet does not grow
 // with the packets already received. DEVICE-8: a frame is complete only when every line below the
@@ -90,4 +90,18 @@ test("lines beyond the announced height do not complete a frame with missing lin
   assert.equal(frames.length, 1);
   assert.equal(frames[0].height, 272);
   assert.equal(frames[0].complete, true);
+});
+
+test("the assembler does not count lines beyond the announced height, before or after the last packet", () => {
+  const stray = videoPacket(0, 400, false);
+  for (const strayFirst of [true, false]) {
+    const assembler = new VideoFrameAssembler();
+    const packets = framePackets(0).filter((_, index) => index !== 25); // lines 100-103 missing
+    const ordered = strayFirst ? [stray, ...packets] : [...packets, stray];
+    const done = ordered.map((packet) => assembler.add(parseVideoPacket(packet))).filter(Boolean);
+    assert.equal(done.length, 0, `stray line ${strayFirst ? "before" : "after"} the last packet completed the frame`);
+    const completed = assembler.add(parseVideoPacket(videoPacket(0, 100, false)));
+    assert.equal(completed?.frame.height, 272);
+    assert.equal(completed?.frame.complete, true);
+  }
 });
