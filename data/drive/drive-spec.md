@@ -180,25 +180,26 @@ Reads/writes 1541 disks (side A only); auto‑flips heads; suppo
 
 ## 1581 — 3½″ Drive (DOS 10.0)
 
-**Medium:** 3½″ DS/DD, 80 tracks, 40 sectors/track (512 B).  
-**Capacity:** 316 416 B (316 logical blocks × 256 B).  
-Supports subdirectories and partitions. Compatible with C64 and C128 via IEC. I/O ≈ 4× 1541 speed.
+**Medium:** 3½″ DS/DD. Logical format: 80 tracks × 40 sectors × 256 B = 3200 blocks.  
+**Capacity:** 819 200 B; 3160 blocks free on a new disk.  
+Supports partitions; a partition that meets the size rules can be used as a sub-directory. Compatible with C64 and C128 via IEC. I/O ≈ 4× 1541 speed.
 
 ### Command Summary
 
 | Action | Command | Example |
 |---|---|---|
 | Format disk | `N0:NAME,ID` | `OPEN15,8,15,"N0:WORK,01"` |
-| Create directory | `MD:NAME` | `PRINT#15,"MD:DATA"` |
-| Change directory | `CD:NAME` | `PRINT#15,"CD:DATA"` |
+| Create partition | `/0:NAME,`+track+sector+blocks lo+blocks hi+`,C` | `PRINT#15,"/0:DATA,"+CHR$(41)+CHR$(0)+CHR$(120)+CHR$(0)+",C"` |
+| Select partition | `/0:NAME` | `PRINT#15,"/0:DATA"` |
+| Back to root | `/` | `PRINT#15,"/"` |
 | Delete file/dir | `S0:NAME` | `PRINT#15,"S0:OLD"` |
 | Validate | `V0` | `PRINT#15,"V0"` |
 
 ### Notes
 
-- MS‑DOS‑like directory tree and BAM per partition.  
-- Geometry: 80 × 40 × 512 B = 1.6 MB raw (≈800 KB used).  
-- DOS 10 implements subdir navigation and hierarchical file lookup.
+- The 1581 has no `MD`/`CD` commands. A sub-directory is a partition of at least 120 sectors that starts at sector 0, ends on a multiple of 40 sectors and does not contain track 40; select it with `/0:NAME`, then format it with `N`.  
+- Only one level is selected per command; return to the root with `/`. Sub-directory file and BAM information is stored inside the partition.  
+- Geometry: logical 80 × 40 × 256 B = 819 200 B (physically 80 tracks × 2 sides × 10 × 512 B).
 
 ---
 
@@ -208,7 +209,7 @@ Supports subdirectories and partitions. Compatible with C64 and 
 |:--|:--|:--|:--|:--|:--|:--|
 | **1541** | 2.6 | 1 | 35 | 17–21 | 174 848 (664 free blocks) | Standard C64 drive |
 | **1571** | 3.0 | 2 | 70 | 17–21 per side | 349 696 | Burst mode, dual BAM |
-| **1581** | 10.0 | 2 (3½″) | 80 | 40 @ 512 B | 316 416 (316 KB free) | Subdirs, partitions |
+| **1581** | 10.0 | 2 (3½″) | 80 | 40 × 256 B (logical) | 819 200 (3160 free blocks) | Partitions, sub-directories |
 
 ---
 
