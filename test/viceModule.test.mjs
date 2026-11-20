@@ -25,13 +25,13 @@ function createCtx(overrides = {}) {
   };
 }
 
-test("c64_vice resource_get returns JSON payload for string values", async () => {
+test("c64_vice resource_get returns JSON payload for SidEngine", async () => {
   const calls = [];
   const ctx = createCtx({
     client: {
       async viceResourceGet(name) {
         calls.push(name);
-        return { type: "string", value: "resid-fp" };
+        return { type: "int", value: 1 };
       },
       async viceResourceSet() {},
     },
@@ -46,11 +46,11 @@ test("c64_vice resource_get returns JSON payload for string values", async () =>
   assert.equal(result.isError, undefined);
   assert.equal(result.metadata.success, true);
   assert.equal(result.metadata.name, "SidEngine");
-  assert.equal(result.metadata.type, "string");
+  assert.equal(result.metadata.type, "int");
   assert.deepEqual(result.structuredContent?.data, {
     name: "SidEngine",
-    type: "string",
-    value: "resid-fp",
+    type: "int",
+    value: 1,
   });
   assert.deepEqual(calls, ["SidEngine"]);
 });
@@ -358,4 +358,13 @@ test("HARD03-001 the VICE monitor mock matches resource names case-insensitively
   await client.resourceSet("sidengine", 3);
   assert.equal((await client.resourceGet("SidEngine")).value, 3);
   await assert.rejects(() => client.resourceGet("NoSuchResource"));
+});
+
+test("PROGMEM-15 c64_vice examples give SidEngine values only as the VICE manual defines them", () => {
+  // VICE 3.10 manual (doc/vice.texi, SidEngine): 0 FastSID, 1 ReSID, 2 Catweasel MKIII, 3 HardSID.
+  const [descriptor] = viceModuleGroup.describeTools();
+  const examples = JSON.stringify(descriptor.metadata.examples);
+  assert.ok(!/resid-fp/i.test(examples), examples);
+  assert.ok(!/"op":"resource_set","name":"SidEngine"/.test(examples), examples);
+  assert.match(examples, /0 FastSID, 1 ReSID/);
 });

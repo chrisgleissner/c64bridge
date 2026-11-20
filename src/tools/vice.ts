@@ -162,10 +162,9 @@ export const viceModuleGroup = defineToolModule({
       examples: [
         {
           name: "Read SID engine",
-          description: "Inspect the active SID emulation mode.",
+          description: "Read the SID engine (integer; 0 FastSID, 1 ReSID).",
           arguments: { op: "resource_get", name: "SidEngine" },
         },
-
       ],
       execute: viceOperationDispatcher,
     },
