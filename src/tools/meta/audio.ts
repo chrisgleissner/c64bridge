@@ -1,7 +1,7 @@
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../../sidwaveCompiler.js";
 import { parseSidwave } from "../../sidwave.js";
-import { recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
+import { noAudioMeasurement, recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { jsonResult } from "../responses.js";
 import { ToolExecutionError, ToolUnsupportedPlatformError, toolErrorResult, unknownErrorResult } from "../errors.js";
@@ -258,11 +258,33 @@ function extractRmsMetrics(globalMetrics: Record<string, unknown>): { average: n
   return { average, max };
 }
 
+type NoAudioMeasurement = ReturnType<typeof noAudioMeasurement>;
+
+async function captureMeasurement(
+  analyzer: AnalyzeAudioFn,
+  options: AnalyzeAudioParams,
+  backend: string,
+  signal?: AbortSignal,
+) {
+  try {
+    const analysis = await analyzer(options);
+    const metrics = extractRmsMetrics(analysis?.analysis?.global_metrics ?? {});
+    if (metrics.average === null && metrics.max === null) {
+      return noAudioMeasurement(backend, new Error("Audio analysis did not include RMS metrics"));
+    }
+    return { analysis, metrics };
+  } catch (error) {
+    signal?.throwIfAborted();
+    return noAudioMeasurement(backend, error);
+  }
+}
+
 async function performSilenceCheck(
   context: ToolExecutionContext,
   analyzer: AnalyzeAudioFn,
+  backend: string,
   options: SilenceCheckOptions,
-): Promise<SilenceCheckResult> {
+): Promise<SilenceCheckResult | NoAudioMeasurement> {
   const { logger } = context;
   const label = options.label ?? "silence";
 
@@ -279,14 +301,9 @@ async function performSilenceCheck(
     await sleep(options.waitBeforeCaptureMs);
   }
 
-  const analysis = await analyzer({ durationSeconds: options.durationSeconds });
-  const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
-
-  if (metrics.average === null && metrics.max === null) {
-    throw new ToolExecutionError("Audio analysis did not include RMS metrics", {
-      details: { globalMetrics: analysis?.analysis?.global_metrics ?? {} },
-    });
-  }
+  const capture = await captureMeasurement(analyzer, { durationSeconds: options.durationSeconds }, backend, context.signal);
+  if ("measured" in capture) return capture;
+  const { analysis, metrics } = capture;
 
   const averageRms = metrics.average ?? metrics.max ?? 0;
   const maxRms = metrics.max ?? metrics.average ?? 0;
@@ -397,12 +414,14 @@ export const tools: ToolDefinition[] = [
               if (waitBeforeCaptureMs > 0) {
                 await sleep(waitBeforeCaptureMs);
               }
-              try {
-                const analysis = await analyzer({
-                  durationSeconds: analysisDurationSeconds,
-                  expectedSidwave: preset.sidwave,
-                });
-                const metrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
+              const capture = await captureMeasurement(analyzer, {
+                durationSeconds: analysisDurationSeconds,
+                expectedSidwave: preset.sidwave,
+              }, backend, context.signal);
+              if ("measured" in capture) {
+                verification = capture;
+              } else {
+                const { analysis, metrics } = capture;
                 const audible = (metrics.max ?? metrics.average ?? 0) > DEFAULT_RMS_THRESHOLD;
                 verification = {
                   mode: "audio-analysis",
@@ -416,9 +435,6 @@ export const tools: ToolDefinition[] = [
                 if (!audible) {
                   backendResult.error = "no_audio_detected";
                 }
-              } catch (error) {
-                // Playback already started; a failed capture must not turn it into an error.
-                verification = { error: error instanceof Error ? error.message : String(error) };
               }
             }
 
@@ -507,24 +523,24 @@ export const tools: ToolDefinition[] = [
 
         const analyzer = resolveAnalyzer(context);
         // Without an audio capture backend the score is still compiled and played; the analysis is skipped and said so.
-        const canCapture = await audioCaptureAvailable(context);
-        const warnings: string[] = [];
-        if (!canCapture) {
-          warnings.push("No audio capture backend is available (install the naudiodon/PortAudio dependency, or use a C64U with streaming); played without silence checks or analysis.");
-        }
+        let unavailable = await audioCaptureAvailable(context) ? null : noAudioMeasurement(platform);
         let preSilence: SilenceCheckResult | null = null;
-        if (verifySilenceBefore && canCapture) {
-          preSilence = await performSilenceCheck(context, analyzer, {
+        if (verifySilenceBefore && !unavailable) {
+          const check = await performSilenceCheck(context, analyzer, platform, {
             durationSeconds: silenceDurationSeconds,
             rmsThreshold: silenceRmsThreshold,
             waitBeforeCaptureMs: silenceWaitMs,
             label: "pre",
           });
 
-          if (!preSilence.silent) {
+          if ("measured" in check) {
+            unavailable = check;
+          } else if (!check.silent) {
             throw new ToolExecutionError("Pre-playback silence check failed", {
-              details: { metrics: preSilence.metrics },
+              details: { metrics: check.metrics },
             });
+          } else {
+            preSilence = check;
           }
         }
 
@@ -555,8 +571,8 @@ export const tools: ToolDefinition[] = [
           }
         }
 
-        if (!canCapture) {
-          return jsonResult({
+        const playedWithoutMeasurement = (verification: NoAudioMeasurement) =>
+          jsonResult({
             format,
             compilation: {
               entryAddress: compiled.entryAddress,
@@ -568,9 +584,11 @@ export const tools: ToolDefinition[] = [
             playback: { method: playbackMethod, details: playbackDetails },
             analysis: null,
             playing: true,
-            warnings,
+            verification,
+            warnings: [verification.message],
           }, { success: true, format, method: playbackMethod, analyzed: false });
-        }
+
+        if (unavailable) return playedWithoutMeasurement(unavailable);
 
         if (waitBeforeCaptureMs > 0) {
           await sleep(waitBeforeCaptureMs);
@@ -581,14 +599,9 @@ export const tools: ToolDefinition[] = [
           analysisParams.expectedSidwave = expectedSidwave;
         }
 
-        const analysis = await analyzer(analysisParams);
-        const analysisMetrics = extractRmsMetrics((analysis?.analysis?.global_metrics ?? {}) as Record<string, unknown>);
-
-        if (analysisMetrics.average === null && analysisMetrics.max === null) {
-          throw new ToolExecutionError("Audio analysis did not include RMS metrics", {
-            details: { globalMetrics: analysis?.analysis?.global_metrics ?? {} },
-          });
-        }
+        const capture = await captureMeasurement(analyzer, analysisParams, platform, context.signal);
+        if ("measured" in capture) return playedWithoutMeasurement(capture);
+        const { analysis, metrics: analysisMetrics } = capture;
 
         if ((analysisMetrics.max ?? analysisMetrics.average ?? 0) <= silenceRmsThreshold) {
           let cleanupError: string | undefined;
@@ -602,20 +615,20 @@ export const tools: ToolDefinition[] = [
           });
         }
 
-        let postSilence: SilenceCheckResult | null = null;
+        let postSilence: SilenceCheckResult | NoAudioMeasurement | null = null;
         if (verifySilenceAfter) {
           if (postSilenceWaitMs > 0) {
             await sleep(postSilenceWaitMs);
           }
 
-          postSilence = await performSilenceCheck(context, analyzer, {
+          postSilence = await performSilenceCheck(context, analyzer, platform, {
             durationSeconds: silenceDurationSeconds,
             rmsThreshold: silenceRmsThreshold,
             waitBeforeCaptureMs: silenceWaitMs,
             label: "post",
           });
 
-          if (!postSilence.silent) {
+          if (!("measured" in postSilence) && !postSilence.silent) {
             throw new ToolExecutionError("Post-playback silence check failed", {
               details: { metrics: postSilence.metrics },
             });
@@ -650,8 +663,9 @@ export const tools: ToolDefinition[] = [
                   metrics: preSilence.metrics,
                 }
               : null,
-            after: postSilence
-              ? {
+            after: postSilence && "measured" in postSilence
+              ? postSilence
+              : postSilence ? {
                   silent: postSilence.silent,
                   durationSeconds: postSilence.durationSeconds,
                   metrics: postSilence.metrics,
