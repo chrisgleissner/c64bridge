@@ -411,7 +411,8 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | `claude mcp add` sets environment variables with `-e`/`--env KEY=value` before `--` | README.md | CONFIRMED | `claude mcp add --help`, Claude Code 2.1.329 |
 | Beyond 480 bit image columns: MPS-801 prints the line once more than 480 dots are used; the Ultimate emulation discards dots past pixel 1920 and does not wrap | data/printer/printer-commodore-bitmap.md | CONFIRMED | MPS-801 manual section 6; 1541ultimate@700c7f2fa:software/io/printer/mps_printer.cc:945, mps_printer_cbm.cc:133, mps_printer.h:50 |
 | SIDWAVE hard restart: gate off and AD=SR=0 two frames before each note; release 0 empties the envelope in 6 ms; rate 0 avoids the ADSR delay bug (rate counter wrap at 32768) | data/sound/sidwave.md | CONFIRMED | src/sidwaveCompiler.ts c_hr and SIDWAVE_HARD_RESTART_FRAMES; Mapping the Commodore 64 $D406; reSID envelope.h/envelope.cc (VICE 3.10 src/resid), ENV3-sampled on a MOS SID |
-| Duration in seconds of the FOR-loop note timings | data/sound/sid-programming-best-practices.md | NOT VERIFIED (no primary source; U64 measurement requested as O-1) | inline markers moved to a "Not verified" section |
+| Duration in seconds of the FOR-loop note timings | data/sound/sid-programming-best-practices.md | SUPERSEDED by the O-1 row (CONFIRMED by measurement) | the "Not verified" entry was removed |
+| O-1 (data/sound/sid-programming-best-practices.md): duration of an empty `FOR I=1 TO n:NEXT I` iteration at 1 MHz | data/sound/sid-programming-best-practices.md | CONFIRMED, measured value written in the note-duration bullet and the timing section; removed from Not verified | Measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md` Session 3, O-1): 1.36 to 1.37 ms per iteration with `NEXT I`; 1.07 ms with `NEXT`; T1/T2 = 6.0, T1/T3 = 11.2. The request expected T4 slightly below T1; T4 was 22 % below T1. |
 
 ## Part F: precision rewrite (package G: data/gamedev)
 
@@ -469,6 +470,7 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | `$EA31` / `$EA81` exits | CONFIRMED, made precise | c64ref `c64disasm_en.txt:6147-6186` (`$EA81` skips clock, keyboard and the CIA ICR read) |
 | "VICE wraps at 512 KB"; length 0 = 64 KB | CONFIRMED, made precise | vice-3.10 `src/c64/cart/reu.c:1085-1093,1534` |
 | Host writes limited to 64 KB; preload not re-run on reset | CONFIRMED | measured (row 6); `io/c64/reu_preloader.cc:58-77` |
+| G-1 (data/gamedev/toolchain.md): `$D030`/`$D031` read values per Turbo Control mode | NO CHANGE, no `$D030`/`$D031` read values are stated in this file; the claims are in techniques.md section 10 (G-1 row there) | n/a |
 
 ### F3 - data/gamedev/techniques.md
 
@@ -498,6 +500,7 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | Speed probe returns 4 at 1 MHz | KEPT (VICE 3.10), hardware request G-4 | loop is 14 cycles |
 | UCI `$DF1D & $7F == $49` | CONFIRMED | `fpga/io/command_interface/vhdl_source/command_protocol.vhd:99` |
 | Quarter squares "speed unverified" | REMOVED marker | no routine given |
+| G-2 (data/gamedev/architecture.md section 3): NTSC free cycles per frame at 1 MHz with the screen on and eight sprites, stated as 15,212 (derived, not measured) | CONFIRMED with the measured value 15,219; the derived figure is kept only as history | Measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (Session 3, G-2): frame 17,095 ticks; 15,219 cycles per frame with the screen on and eight sprites; 16,025 with the screen on and RAM only |
 
 ### F4 - data/gamedev/references.md
 
@@ -514,6 +517,9 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | Forced 1 MHz window "about 2 s after reset" | CORRECTED | 2.55 / 2.57 s after the run_prg reset (bench summary) |
 | Upic palette "firmware 3.15 or later; older C64U lacks it" | REWRITTEN | palette commands measured on Ultimate 64 Elite 3.15a (row 36); C64U history not settled, removed |
 | "palette writes measured at tens of ms" | REMOVED | no measurement found |
+| G-1 (data/gamedev/techniques.md section 10 step 1): `$D031` read values per Turbo Control mode, with `$D031` bit 7 following Badline Timing | CONTRADICTED for the bit 7 part; `$D031` read rewritten as `$00` after a reset in both register modes | Measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (Session 3, G-1): `$D030 $D031` = `FF FF` Off, `FF FF` Manual, `FF 00` U64 Turbo Registers, `FE 00` TurboEnable Bit; with Badline Timing Disabled, `$D031` still reads `$00` after a reset |
+| G-3 (data/gamedev/techniques.md, stable raster by double IRQ, "Not verified" item 1): double-IRQ recipe with the screen off | CONFIRMED; recipe moved into the body with WAIT = 8; removed from Not verified | Measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (Session 3, G-3): stable.prg edge at x = 161 on all 8 lines in all 8 frames (spread 0 px); single.prg spread 16 px (2 cycles) |
+| G-4 (data/gamedev/techniques.md section 10 step 3): speed probe values per speed | CONTRADICTED at 48 MHz (the probe does not saturate at `$FF`); CONFIRMED at 1, 2 and 4 MHz; measured values written into step 3 | Measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (Session 3, G-4): 1 MHz 4 (20/20 runs); 2 MHz 8-9; 4 MHz 17-18; 48 MHz 196-197 (not 255) |
 
 ### F5 - data/gamedev/index.md
 
@@ -616,3 +622,9 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | ADSR delay / split filter range "not measured … plan for two frames late" | multisid | MOVED to Not verified | - |
 | Bench README: Turbo Control "named per device", $D031 bit 7 polarity "not documented" | bench | CORRECTED: four source values; bit 7 = 1 suppresses stalls (measured U64 row 39) | u64_config.cc:328,390; results.md row 39 |
 | Bench README: "about 25 badlines x 43 cycles (about 1,080)" | bench | CORRECTED to measured 1,081 (25 x 43.2) | results/summary.md |
+| U-1 (uci.md): OPEN_TCP to an unreachable address and to an unresolved host | uci | CONTRADICTED for the timeout (18.02 to 18.35 s with `11,ERROR ON CONNECT: 113`, not about 31 s); CONFIRMED for the unresolved host (`84,UNRESOLVED HOST` in 17 ms or less, not about 30 ms); both written into uci.md, Not verified row removed | measured U64: 1081, 1089, 1101 jiffies (1/60 s); 0-1 jiffy for the unresolved host; Session 3, U-1 |
+| U-2 (uci.md): READ_SOCKET of 800-1023 bytes on firmware 3.15a | uci | NOT RUN (unsafe for an unattended device; needs physical restart); claim stays in Not verified | none |
+| U-3 (reu.md): `$FF00`-triggered REU fetch into RAM under I/O | reu | CONFIRMED; written into the `$FF00` trigger bullet; Not verified row removed | measured U64: 256 bytes stashed and copied back through RAM under I/O; the last byte was `$00` because the harness cleared the source byte; VIC `$D000-$D02E` unchanged except raster, light pen and collision registers; Session 3, U-3 |
+| U-4 (reu.md): core 1.50 contains the 2026-08-28 `g_no_dma_delay` change | reu | CONFIRMED; written into the turbo bullet; Not verified row removed | measured U64 core 1.50, `U64 Turbo Registers`, 48 MHz: `$C001` differed from `$C000` in 0 of 3000 runs; Session 3, U-4 |
+| U-5 (upic.md): Upic renderer on U64 at 48 MHz, 288 of 384 pixels | upic | PARTIAL: picture shown, CONFIRMED; 288 of 384 INCONCLUSIVE, moved to Not verified with the reason | four PNG frames, full 384 x 256 area; no fixed dropped pixel per group of four; colour changes on all four x mod 4 phases; Session 3, U-5 |
+| U-6 (multisid.md): access to an undecoded SID address stalls the 6510 | multisid | NOT RUN (hangs the U64, needs a power cycle; run last and only with owner agreement); claim stays in Not verified | none |
