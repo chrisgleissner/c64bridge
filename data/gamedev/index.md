@@ -35,7 +35,7 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 | Frame loop that plays the same at 1 MHz and turbo; cycle budget per frame | architecture sections 1 and 3 |
 | Detect and enable turbo; speed probe | techniques section 10, `c64://ultimate/hardware` |
 | Detect REU and its size; load a level from REU to `$4000` | `c64://ultimate/reu` (Recipes, Size detection) |
-| Raster IRQ chain, stable raster | techniques section 1 |
+| Raster IRQ chain, raster timing, stable raster, open top/bottom and side borders | techniques section 1 |
 | Sprite multiplexer, collision, scrolling, input | techniques sections 2, 4, 3, 5 |
 | Music and SFX, several SIDs, NTSC speed | techniques section 6, `c64://ultimate/multisid` |
 | Memory map and VIC bank | architecture sections 4 and 5 |

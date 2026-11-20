@@ -233,3 +233,16 @@ Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64br
 | llvm-mos argument and return order, caller/callee-saved sets, variadic and struct rules | ADDED | `MOSCallingConv.td` (CC_MOS lists, header comment "A, X, Y, C, N, V, Z, and RS1-RS9 are caller-saved ... RS0, and RS10-RS15 are callee-saved"); `MOSCallLowering.cpp:54` uses CC_MOS for returns too |
 | llvm-mos `link.ld` RAM `$0801` length `$C7FF`, `__stack = $D000`, BASIC header; init `$00=$2F`, `$01=$3E`; exit loop, `save-basic.o` | ADDED | `link.ld`, `basic-header.S`, `unmap-basic.S` ("ldx #$3E ; LORAM = 0", ".fini.990 ... ldx #$3F"), `c64/CMakeLists.txt` (`common-exit-loop`), `save-basic.S` header comment |
 | Toolchain Makefile note: Oscar64 output flags "see its README"; label file "(unverified)" | IMPRECISE, replaced | `oscar64.md` "Compiler arguments" (`-o`), "Vice debugger .lbl" |
+
+### D2 - Raster timing, stable raster and open borders (data/gamedev/techniques.md section 1)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| 63 / 65 / 64 cycles per line (6569, 6567R8, 6567R56A) | ADDED | Bauer 3.6.3 "63 cycles on the 6569, 64 cycles on the 6567R56A, and 65 cycles on the 6567R8"; table in 3.4 |
+| Raster compare in cycle 1 (line 0: cycle 2), at most one IRQ per line | ADDED | Bauer 3.12 RST row |
+| Bad line 40-43 cycles; 2 cycles per sprite; BA low 3 cycles before | ADDED | Bauer 3.5 "stun the processor for 40-43 cycles"; 2.4.3/3.8.1 "three cycles before"; A8f |
+| Longest documented instruction 7 cycles | ADDED | c64ref `cpu_6502.txt` [timing]: maximum base value 7 (e.g. `00`, `1E`) |
+| Double-IRQ stable raster | UNVERIFIED, kept as sketch | no primary source fetched; not run |
+| Open top/bottom border: RSEL=0 in lines 248-250, back to RSEL=1 after 251; never 0 to 1 in 52-54; `$D011` values `$13`/`$1B` | ADDED | Bauer 3.14.1 steps 1-4 and "If you switch from RSEL=0 to RSEL=1 in the raster line range 52-54, the border never turns off"; bit layout Bauer register table ($D011 RST8 ECM BMM DEN RSEL YSCROLL) |
+| Opened border shows sprites and the idle byte at `$3FFF` (`$39FF` with ECM), set bits black | ADDED | Bauer 3.14.1 ("mainly limited to sprites"), 3.7.3.9 "the VIC reads the graphics data from address $3fff ($39ff if ... ECM)"; 3.7.1 |
+| Side border: CSEL 1 to 0 exactly in cycle 56; inside the vertical border area also open that border | ADDED | Bauer 3.14.1 "the change from CSEL=1 to CSEL=0 has to be exactly in cycle 56", "the main border flip-flop can only be reset if the vertical flip-flop is not set" |
