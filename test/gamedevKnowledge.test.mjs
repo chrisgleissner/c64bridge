@@ -70,7 +70,7 @@ test("game-development prompt defaults to the modern target", () => {
   assert.equal(result.resources[0].uri, RESOURCE_URIS.gamedev.index);
   assert.ok(result.resources.some((r) => r.uri === RESOURCE_URIS.ultimate.hardware));
   const text = result.messages.map((m) => m.content).join("\n");
-  assert.match(text, /\.github\/skills\/game-development\/SKILL\.md/);
+  assert.match(text, /c64:\/\/skills\/game-development/);
   assert.match(text, /c64:\/\/gamedev\/index/);
   assert.match(text, /target is `modern`/);
 });
