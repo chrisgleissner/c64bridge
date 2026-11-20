@@ -324,4 +324,4 @@ Calculations in `verify/` notes: PAL 985248 Hz, NTSC 1022727 Hz as in A1b.
 | ADSR nibbles 0-15; filter cutoff 0-2047 | :116,:159 | CONFIRMED | - | PRG $D405/$D406; A1c (11-bit cutoff) |
 | Program must end below $D000, about 50 KB | :173 | CONFIRMED | - | $D000 - $0801 = 51199 bytes |
 | KERNAL IRQ normally 60 Hz; TI about 16.5 % slow on a PAL song, 0.3 % on NTSC | :181 | CONFIRMED | - | ROM $FDE2-$FDF0: CIA1 timer A = $4025 (PAL) / $4295 (NTSC), 985248/16422 = 59.996 Hz, 1022727/17046 = 59.998 Hz; 1 - 50.1245/59.996 = 16.45 %, 1 - 59.826/59.998 = 0.29 % |
-| `10 SYS2061` | :180 | CONFIRMED | - | 2061 = $080D |
+| `10 SYS2061` | :179 | CONFIRMED | - | 2061 = $080D |
