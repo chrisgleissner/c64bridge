@@ -27,6 +27,7 @@
     "lint": "npm run check",
     "test": "node scripts/invoke-bun.mjs scripts/run-tests.ts",
     "test:node": "node scripts/run-tests.mjs",
+    "test:sidwave-hil": "node scripts/sidwave-hil.mjs",
     "test:stress": "node scripts/stress-mcp.mjs",
     "test:vice:mock": "npm run test -- --platform=vice --target=mock",
     "test:vice:device": "FORCE_XVFB=1 VICE_VISIBLE=false VICE_WARP=true npm run test -- --platform=vice --target=device",
