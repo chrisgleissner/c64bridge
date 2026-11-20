@@ -28,7 +28,8 @@ game/
   build/   game.prg game.d64 game.crt game.sym game.map
 ```
 - Print a memory report at build time (`-showmem` in Kick, link map elsewhere); fail on overlap.
-- Write the symbol/label file (Kick `-symbolfile`, 64tass `-l`) and pass it as `symbolsFile` to `c64_program` `run_prg`/`load_prg` so debug output shows labels.
+- Write a label file and pass it as `symbolsFile` to `c64_program` `run_prg`/`load_prg`; `c64_memory` (`read`, `write`, `disassemble`) and `c64_debug` (`create_checkpoint`, `wait_for_state`) then accept label names as addresses. Accepted formats: VICE `al C:0810 .name`, `name = $0810` (64tass, ACME; bare digits are decimal), KickAssembler `.label name=$0810`.
+- Label file per tool: cc65 `cl65 -Ln build/game.sym` (VICE format); 64tass `-l build/game.sym`; KickAssembler `-symbolfile` (writes `.sym`; format unverified); ACME `-l build/game.sym` (unverified); Oscar64 and llvm-mos (unverified; check the tool's own documentation and convert to one of the formats above if needed).
 
 ## 3. Makefile skeleton (64tass + Exomizer + c1541; tabs required)
 ```
@@ -63,10 +64,10 @@ run: build/game.prg
 CharPad (charsets, maps), SpritePad (sprites), GoatTracker or SID-Wizard (music, `.sid` export), Python scripts (PNG to charset/tiles, TMX to map bytes). Convert at build time; commit sources.
 
 ## 6. Test loop with c64bridge
-1. Build, then VICE: `c64_select_backend` `vice`, `run_prg` the PRG. `x64sc` is cycle-exact; use warp mode for long loads; PAL and NTSC models both (`-pal`/`-ntsc`).
+1. Build on the host, then VICE: `c64_select_backend` `vice`, `run_prg` the PRG with `symbolsFile` (the same call works on Ultimate with `location: "host"`, see step 4). `x64sc` is cycle-exact; use warp mode for long loads; PAL and NTSC models both (`-pal`/`-ntsc`).
 2. Assert state: `c64_memory` `read`/`wait_for_text`/`read_screen`; `c64_graphics` `capture_frame` PNG; `c64_input` `joystick`.
-3. Debug: `c64_debug` `create_checkpoint` on a label address from the symbol file, `wait_for_state` for PC, `get_registers`, `step`. Remove checkpoints before timing runs.
-4. Hardware gate (MODERN or authentic release): `c64_select_backend` `c64u`, `run_prg` from device storage; compare a captured frame with VICE; check raster effects, turbo, SID layout, REU/UCI.
+3. Debug: `c64_debug` `create_checkpoint` on a label name (`address: "game_loop"`), `wait_for_state` for PC, `get_registers`, `step`. Remove checkpoints before timing runs.
+4. Hardware gate (MODERN or authentic release): `c64_select_backend` `c64u`, `run_prg` with `location: "host"` and `symbolsFile` (the host PRG is uploaded, 2 to 65,538 bytes; no device storage needed; `location: "device"` runs a PRG already on device storage such as `/Usb0/`); compare a captured frame with VICE; check raster effects, turbo, SID layout, REU/UCI.
 5. VICE gaps for MODERN: no UCI, no turbo, no Ultimate audio, REU DMA costs about 1 cycle per byte (Ultimate rates differ), REU image must match the configured size exactly.
 6. Keep a hardware log: firmware/core version, result, frame capture.
 7. Do not interrupt another user's running program or flash on a shared device; power operations need explicit user authorisation.

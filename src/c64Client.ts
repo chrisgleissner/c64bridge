@@ -805,9 +805,9 @@ export class C64Client {
    * to the entry point: the target of a leading SYS stub at $0801, or else
    * the first assembled instruction.
    */
-  async uploadAndRunAsm(program: string): Promise<RunBasicResult> {
+  async uploadAndRunAsm(program: string, assembledProgram?: ReturnType<typeof assemblyToPrgDetailed>): Promise<RunBasicResult> {
     try {
-      const assembled = assemblyToPrgDetailed(program);
+      const assembled = assembledProgram ?? assemblyToPrgDetailed(program);
       const prg = assembled.prg;
       if (prg.length < 2) {
         return { success: false, details: { message: "Assembled program produced no output" } };
@@ -863,6 +863,16 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       const res = await facade.runPrg(prg);
+      return { success: res.success, details: res.details };
+    } catch (error) {
+      return { success: false, details: this.normaliseError(error) };
+    }
+  }
+
+  async loadPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
+    try {
+      const facade = await this.facadePromise;
+      const res = await facade.loadPrg(prg);
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };

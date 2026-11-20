@@ -830,7 +830,7 @@ test("disassemble accepts 0x-prefixed addresses and includes symbol annotations"
   assert.match(res.content[0].text, /LDA/);
 });
 
-test("disassemble ignores cached VICE symbols on non-VICE backends", async () => {
+test("disassemble annotates with registered symbols on every backend (HARD04-002)", async () => {
   setViceSymbols([["stale", 0x0810]]);
   const ctx = {
     client: createMockClient({
@@ -847,7 +847,7 @@ test("disassemble ignores cached VICE symbols on non-VICE backends", async () =>
   const res = await toolRegistry.invoke("c64_memory", { op: "disassemble", address: "$0810", length: 4 }, ctx);
 
   assert.equal(res.isError, undefined);
-  assert.equal(/stale:/i.test(res.content[0].text), false);
+  assert.match(res.content[0].text, /stale:/i);
 });
 
 test("disassemble rejects unknown symbols", async () => {

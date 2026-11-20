@@ -26,6 +26,16 @@ Memory/layout checks reject graphics or charset spans over `$D000-$DFFF` I/O. Th
 
 Ultimate firmware file discovery is single-directory and returns at most one match per pattern. `fs_stats` and shuffle use this same contract; they do not recursively enumerate the device filesystem. Returned matched filenames are used for launching rather than echoed wildcards. Disk mount verification failures are reported.
 
+## Programs and labels (Hardening 4)
+
+`c64_program` `run_prg` and `load_prg` take an optional `location`: `auto` (default, unchanged: Ultimate device path on c64u/u2, host path on VICE), `host` (on Ultimate, the file is read through the host-file boundary and uploaded; 2 to 65,538 bytes, checked before any request) or `device` (rejected on VICE). Results report `location` and, for uploaded files, `loadAddress`.
+
+`symbolsFile` is read on every backend and accepts VICE (`al C:0810 .name`), 64tass/ACME (`name = $0810`, bare digits decimal) and KickAssembler (`.label name=$0810`) label files. When it is given, the result carries `symbolsLoaded`; 0 adds a warning naming the accepted formats. `upload_run_asm` returns its labels (`symbols`, at most 256, `symbolsTruncated` when cut) and registers them on every backend. `run_prg` without `symbolsFile` clears earlier labels on every backend; `load_prg` keeps them. `disassemble` annotates with registered labels on every backend.
+
+Address arguments of `c64_memory` and of `c64_debug` checkpoints and `wait_for_state` accept a registered label. Order: numeric literal, then the ambiguous bare-hex rejection (a label such as `beef` cannot replace it), then loaded labels, then documented names such as `screen`. A loaded label therefore takes precedence over a documented name of the same spelling; results show the resolved address.
+
+The HTTP transport prints a stderr warning at startup when `C64BRIDGE_HTTP_TOKEN` is not set.
+
 ## Limits and knowledge
 
 Raw graphics/audio output is capped at 2 MiB, PNG captures at four images, including aggregate batch output. Artifact snapshots accept at most 256 memory ranges and 2 MiB of aggregate raw memory before reading the device. SIDWAVE input is limited to 4096 bars. Regex waits on runtimes without interruptible evaluation enforce a conservative repetition budget. Knowledge queries (`c64_rag` operations `basic`, `asm`, `docs`) are limited to 500 characters and lexical ranking to 32 distinct terms.

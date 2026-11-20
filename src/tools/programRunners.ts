@@ -20,7 +20,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { pollForProgramOutcome } from "./pollValidator.js";
-import { clearViceSymbols, setViceSymbols, parseViceSymbolFile } from "./translation/symbolRegistry.js";
+import { clearViceSymbols, setViceSymbols, parseSymbolFile, SYMBOL_FILE_FORMATS } from "./translation/symbolRegistry.js";
 
 function extractFailureDetails(details: unknown): Record<string, unknown> | undefined {
   if (details === undefined || details === null) {
@@ -343,8 +343,12 @@ const prgFileArgsSchema = objectSchema({
       description: prgPathDescription,
       minLength: 1,
     }),
+    location: optionalSchema(stringSchema({
+      description: "auto (default): Ultimate device path on c64u/u2, host path on VICE. host: read the file from the host and upload it (Ultimate). device: Ultimate path only.",
+      enum: ["auto", "host", "device"],
+    })),
     symbolsFile: optionalSchema(stringSchema({
-      description: "Path to a VICE symbol file (.vs) to load alongside the PRG. Symbols are used by the disassemble tool when annotating addresses.",
+      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
       minLength: 1,
     })),
   },
@@ -612,7 +616,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const prg = asmResult.prg;
     const entryAddress = asmResult.entryAddress;
 
-    const result = await ctx.client.uploadAndRunAsm(parsed.program);
+    const result = await ctx.client.uploadAndRunAsm(parsed.program, asmResult);
     if (!result.success) {
       return toolErrorResult(
         new ToolExecutionError("C64 backend reported failure while running assembly program", {
@@ -632,9 +636,16 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     }
     // Replace the registered symbols only once the program has started, so a
     // failed run keeps the previous table.
-    if (ctx.platform.id === "vice") {
-      setViceSymbols(asmResult.symbols.entries());
+    setViceSymbols(asmResult.symbols.entries());
+    const symbolEntries = [...asmResult.symbols.entries()].sort((a, b) => a[1] - b[1]);
+    const symbolsTruncated = symbolEntries.length > 256;
+    const symbolList: Record<string, string> = {};
+    for (const [name, address] of symbolEntries.slice(0, 256)) {
+      symbolList[name] = `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
     }
+    const symbolFields = symbolEntries.length > 0
+      ? { symbols: symbolList, ...(symbolsTruncated ? { symbolsTruncated: true } : {}) }
+      : {};
 
     // Read back the program bytes (load evidence), then poll for signs of execution.
     let verified = false;
@@ -696,6 +707,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...symbolFields,
     };
     const message = startQueued
       ? `Assembly program assembled, uploaded and loaded. The SYS command is queued (${keyboardFeed?.pending ?? "?"} character(s) pending) because the CPU is paused; the program starts when the machine resumes.`
@@ -711,6 +723,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(execution ? { execution } : {}),
       ...(keyboardFeed ? { keyboard: keyboardFeed } : {}),
       ...(shouldVerify && verified ? { verified: true } : {}),
+      ...symbolFields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
@@ -733,17 +746,81 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
   }
 }
 
+async function readSymbolsFile(file: string): Promise<Map<string, number>> {
+  const symbolsPath = resolveHostPath(file, { purpose: "read" });
+  try {
+    return parseSymbolFile((await readHostFile(symbolsPath)).toString("utf8"));
+  } catch (fileError) {
+    throw new ToolExecutionError(`Failed to read symbols file: ${file}`, {
+      details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
+    });
+  }
+}
+
+// Replaces the registered symbols after a successful start. Without a symbols
+// file the table is cleared only when clearWithoutFile is set: run_prg starts a
+// new program on every backend, while load_prg may add data to a running one.
+function applySymbols(newSymbols: Map<string, number> | undefined, ctx: ToolExecutionContext, clearWithoutFile: boolean) {
+  if (!newSymbols) {
+    if (clearWithoutFile) clearViceSymbols();
+    return { loaded: 0, note: "", fields: {} as Record<string, unknown> };
+  }
+  clearViceSymbols();
+  setViceSymbols(newSymbols.entries());
+  const loaded = newSymbols.size;
+  ctx.logger.info("Loaded symbols from file", { count: loaded });
+  if (loaded === 0) {
+    const warning = `symbolsFile contained no recognisable labels; accepted formats: ${SYMBOL_FILE_FORMATS}.`;
+    return { loaded, note: ` Warning: ${warning}`, fields: { symbolsLoaded: 0, warnings: [warning] } as Record<string, unknown> };
+  }
+  return { loaded, note: ` Loaded ${loaded} debug symbol(s).`, fields: { symbolsLoaded: loaded } as Record<string, unknown> };
+}
+
+const MAX_UPLOAD_PRG_BYTES = 65538;
+
+type PrgSource = { location: "host" | "device"; bytes?: Buffer; loadAddress?: number };
+
+// Decides where the PRG comes from. Host files are read and validated here, so
+// nothing reaches the device when the path or size is unacceptable.
+async function resolvePrgSource(
+  parsed: { path: string; location?: string },
+  ctx: ToolExecutionContext,
+): Promise<PrgSource> {
+  const requested = parsed.location ?? "auto";
+  const isVice = ctx.platform.id === "vice";
+  if (isVice) {
+    if (requested === "device") {
+      throw new ToolValidationError("location \"device\" is not available on VICE; PRG paths are host paths there.", { path: "$.location" });
+    }
+    return { location: "host" };
+  }
+  if (requested !== "host") return { location: "device" };
+  const bytes = await readHostFile(parsed.path, { maxBytes: MAX_UPLOAD_PRG_BYTES + 1 });
+  if (bytes.length < 2 || bytes.length > MAX_UPLOAD_PRG_BYTES) {
+    throw new ToolValidationError(
+      `PRG file must be 2 to ${MAX_UPLOAD_PRG_BYTES} bytes (load address plus at most 64 KiB); ${parsed.path} is ${bytes.length} bytes.`,
+      { path: "$.path" },
+    );
+  }
+  return { location: "host", bytes, loadAddress: bytes.readUInt16LE(0) };
+}
+
 async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promise<ToolRunResult> {
   try {
     const parsed = prgFileArgsSchema.parse(rawArgs ?? {});
     ctx.logger.info("Loading PRG file", { path: parsed.path });
 
-    const result = await ctx.client.loadPrgFile(parsed.path);
+    const source = await resolvePrgSource(parsed, ctx);
+    const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
+
+    const result = source.bytes ? await ctx.client.loadPrg(source.bytes) : await ctx.client.loadPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while loading PRG", {
         details: extractFailureDetails(result.details),
       });
     }
+
+    const symbolReport = applySymbols(newSymbols, ctx, false);
 
     const data = {
       kind: "load_prg" as const,
@@ -751,12 +828,18 @@ async function executeLoadPrg(rawArgs: unknown, ctx: ToolExecutionContext): Prom
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...symbolReport.fields,
     };
-    const base = textResult(`PRG ${parsed.path} loaded into memory.`, {
+    const base = textResult(`PRG ${parsed.path} loaded into memory.${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
@@ -775,35 +858,18 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     // Validate and parse the symbols file before touching the registered
     // symbols, and replace them only after the PRG has started. A bad path or a
     // failed run then leaves the previous symbol table as it was.
-    let symbolsLoaded = 0;
-    let newSymbols: Map<string, number> | undefined;
-    if (ctx.platform.id === "vice" && parsed.symbolsFile) {
-      const symbolsPath = resolveHostPath(parsed.symbolsFile, { purpose: "read" });
-      try {
-        const content = (await readHostFile(symbolsPath)).toString("utf8");
-        newSymbols = parseViceSymbolFile(content);
-      } catch (fileError) {
-        throw new ToolExecutionError(`Failed to read symbols file: ${parsed.symbolsFile}`, {
-          details: { message: fileError instanceof Error ? fileError.message : String(fileError) },
-        });
-      }
-    }
+    const source = await resolvePrgSource(parsed, ctx);
+    const newSymbols = parsed.symbolsFile ? await readSymbolsFile(parsed.symbolsFile) : undefined;
 
-    const result = await ctx.client.runPrgFile(parsed.path);
+    const result = source.bytes ? await ctx.client.runPrg(source.bytes) : await ctx.client.runPrgFile(parsed.path);
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running PRG", {
         details: extractFailureDetails(result.details),
       });
     }
 
-    if (ctx.platform.id === "vice") {
-      clearViceSymbols();
-      if (newSymbols) {
-        setViceSymbols(newSymbols.entries());
-        symbolsLoaded = newSymbols.size;
-        ctx.logger.info("Loaded VICE symbols from file", { path: parsed.symbolsFile, count: symbolsLoaded });
-      }
-    }
+    const symbolReport = applySymbols(newSymbols, ctx, true);
+    const symbolsLoaded = symbolReport.loaded;
 
     const data = {
       kind: "run_prg" as const,
@@ -811,15 +877,18 @@ async function executeRunPrg(rawArgs: unknown, ctx: ToolExecutionContext): Promi
       path: parsed.path,
       entryAddress: null as number | null,
       resources: ["c64://guide/bootstrap"],
-      ...(symbolsLoaded > 0 ? { symbolsLoaded } : {}),
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...symbolReport.fields,
     };
-    const symbolNote = symbolsLoaded > 0 ? ` Loaded ${symbolsLoaded} debug symbol(s).` : "";
-    const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolNote}`, {
+    const base = textResult(`PRG ${parsed.path} loaded and executed.${symbolReport.note}`, {
       success: true,
       path: parsed.path,
       entryAddress: null,
       details: toRecord(result.details) ?? null,
-      ...(symbolsLoaded > 0 ? { symbolsLoaded } : {}),
+      location: source.location,
+      ...(source.loadAddress !== undefined ? { loadAddress: source.loadAddress } : {}),
+      ...symbolReport.fields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
