@@ -66,10 +66,12 @@ export const SCREEN_GRAPHIC_PLACEHOLDER = "\u2592";
  * (@, A-Z or a-z at 1-26, [ pound ] up-arrow left-arrow at $1B-$1F, then ASCII $20-$3F);
  * the upper-case/graphics set has only graphics at $40-$7F, the lower-case set has
  * upper-case letters at $41-$5A and graphics elsewhere in $40-$7F. Reverse video (+$80)
- * shows the same character. Source: C64 Programmer's Reference Guide appendix B, and
- * data/graphics/character-set.csv (every row maps PETSCII to the screen code by the
- * KERNAL rule in petsciiToScreenCode). The pound sign is shown as a backslash, the arrows
- * as ^ and _ (ASCII approximations, unchanged from earlier versions).
+ * shows the same character. Source: mist64/c64ref src/charset/C64IPRI.TXT (upper-case/graphics
+ * set) and C64IALT.TXT (lower-case set), which map PETSCII to Unicode; through
+ * petsciiToScreenCode every character shown here equals the c64ref character of its PETSCII
+ * code in both sets, and no letter or digit is shown as the placeholder. The pound sign is
+ * shown as a backslash, the arrows as ^ and _ (ASCII approximations, unchanged from earlier
+ * versions).
  */
 function screenCodeChar(code: number, lowerCase: boolean): string {
   const base = code & 0x7f;
@@ -149,25 +151,32 @@ const LEGACY_NAMES: ReadonlySet<string> = new Set([
 /**
  * Shared PETSCII control-code table for "{name}", "{$xx}" and "{nn}" in BASIC string
  * text. The first name of every row is the canonical one used when listing a program.
- * Sources: C64 Programmer's Reference Guide, appendix C (PETSCII codes: 5 WHT, 13 RETURN,
- * 14 lower case, 17 CRSR down, 18 RVS ON, 19 HOME, 20 DEL, 28 RED, 29 CRSR right, 30 GRN,
- * 31 BLU, 129 ORANGE, 133-140 F1-F8, 141 SHIFT RETURN, 142 upper case, 144 BLK, 145 CRSR up,
- * 146 RVS OFF, 147 CLR, 148 INST, 149 BROWN, 150 LT RED, 151-152 GREY 1-2, 153 LT GREEN,
- * 154 LT BLUE, 155 GREY 3, 156 PURPLE, 157 CRSR left, 158 YELLOW, 159 CYAN), cross-checked
- * against the independent table in src/tools/input.ts and the petcat names (VICE). Codes
- * 0 is not offered: a NUL ends a tokenised BASIC line. 7 (bell), 10 (lf), 115 (heart),
- * 94/95 (arrows) and 222 (pi) are the older names of this module (115 = SHIFT+S, 222 = pi).
+ * Source of every C64 control code and its meaning: mist64/c64ref src/charset/control_codes_c64.txt
+ * (3 STOP, 5 white, 8/9 disable/enable case switch, 13 RETURN, 14 lower case, 17 cursor down,
+ * 18 RVS ON, 19 home, 20 DEL, 28 red, 29 cursor right, 30 green, 31 blue, 129 orange, 131 RUN,
+ * 133-140 F1 F3 F5 F7 F2 F4 F6 F8, 141 SHIFT RETURN, 142 upper case, 144 black, 145 cursor up,
+ * 146 RVS OFF, 147 CLEAR, 148 INST, 149 brown, 150 light red, 151 dark grey, 152 medium grey,
+ * 153 light green, 154 light blue, 155 light grey, 156 purple, 157 cursor left, 158 yellow,
+ * 159 cyan); every value was compared with that file. Code 0 is not offered: a NUL ends a
+ * tokenised BASIC line.
+ * Older names of this module that are not C64 control codes: 7 (bell) and 10 (lf) do nothing on
+ * the C64 (c64ref names them BELL_TONE and LINE_FEED only for the C128), so a listing writes them
+ * as {$07} and {$0A}; 94/95 (arrows), 115 (heart) and 222 (pi) are printable characters of the
+ * upper-case/graphics set (c64ref src/charset/C64IPRI.TXT: $5E, $5F, $73, $DE; in the
+ * lower-case set $73 is "S").
  */
 const CONTROL_CODE_ROWS: ReadonlyArray<readonly [number, ReadonlyArray<string>]> = [
   [3, ["stop"]],
   [5, ["wht", "white"]],
   [7, ["bell", "beep"]],
+  [8, ["dis_case_switch"]],
+  [9, ["ena_case_switch"]],
   [10, ["lf"]],
   [13, ["return", "cr", "newline"]],
   [14, ["lowercase", "swlc"]],
   [17, ["down", "cursor_down", "crsr_down"]],
   [18, ["rvs_on", "reverse_on", "rvon"]],
-  [19, ["home", "cursor_home"]],
+  [19, ["home", "cursor_home", "crsr_home"]],
   [20, ["del", "delete"]],
   [28, ["red"]],
   [29, ["right", "cursor_right", "crsr_right"]],
@@ -210,8 +219,10 @@ const CONTROL_CODE_ROWS: ReadonlyArray<readonly [number, ReadonlyArray<string>]>
 const NAMED_CHARS: ReadonlyMap<string, number> = new Map(
   CONTROL_CODE_ROWS.flatMap(([code, names]) => names.map((name) => [name, code] as const)),
 );
+/** Codes that have no function on the C64; their names are accepted but not used for listing. */
+const NOT_C64_CONTROL_CODES: ReadonlySet<number> = new Set([7, 10]);
 const CANONICAL_NAMES: ReadonlyMap<number, string> = new Map(
-  CONTROL_CODE_ROWS.map(([code, names]) => [code, names[0]!.replace(/_/g, " ")] as const),
+  CONTROL_CODE_ROWS.filter(([code]) => !NOT_C64_CONTROL_CODES.has(code)).map(([code, names]) => [code, names[0]!.replace(/_/g, " ")] as const),
 );
 
 /** Canonical brace name for a PETSCII byte (for listings), or undefined. */
@@ -316,9 +327,12 @@ export function encodeStringWithNames(input: string, options: { foldLowercase?: 
 /**
  * PETSCII code to screen code, the rule the KERNAL applies when it prints a character:
  * $20-$3F unchanged, $40-$5F minus $40, $60-$7F minus $20, $A0-$BF minus $40,
- * $C0-$FE minus $80, $FF gives $5E. Control codes ($00-$1F, $80-$9F) have no screen code.
- * Source: C64 Programmer's Reference Guide appendix B/C; verified against all 256 rows
- * of data/graphics/character-set.csv (src/chargen.ts) in test/petscii.test.mjs.
+ * $C0-$FE minus $80, $FF gives $5E (it is printed as $DE, the pi sign). Control codes
+ * ($00-$1F, $80-$9F) have no screen code; the KERNAL prints them in quote mode as reverse
+ * characters, which this function does not model.
+ * Source: mist64/c64ref src/charset/generate.py (scrcode_from_petscii, with the $FF note from
+ * sta.c64.org); the rule gives the same value for all 192 printable codes. Also checked against
+ * all 256 rows of data/graphics/character-set.csv (src/chargen.ts) in test/petscii.test.mjs.
  */
 export function petsciiToScreenCode(petscii: number): number | undefined {
   const p = petscii & 0xff;

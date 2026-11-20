@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { encodeStringWithNames, lookupNamedPetscii, parseBraceToken, petsciiToScreenCode, screenCodesToAscii, SCREEN_GRAPHIC_PLACEHOLDER } from "../src/petscii.js";
+import { encodeStringWithNames, lookupNamedPetscii, parseBraceToken, petsciiControlName, petsciiToScreenCode, screenCodesToAscii, SCREEN_GRAPHIC_PLACEHOLDER } from "../src/petscii.js";
 import { getChargenGlyphs } from "../src/chargen.js";
 
 function buildCharToScreenMap() {
@@ -118,4 +118,26 @@ test("multi-word named codes need braces, so ordinary text with colons is kept",
   assert.deepEqual([...encodeStringWithNames("{reverse on}")], [18]);
   assert.equal(Buffer.from(encodeStringWithNames("Mode: reverse on: yes")).toString("latin1"), "Mode: reverse on: yes");
   assert.deepEqual([...encodeStringWithNames(":heart:")], [0x73]);
+});
+
+test("control-code names follow mist64/c64ref control_codes_c64.txt (HARD06 fact check)", () => {
+  // Every C64 control code of c64ref with its value; the names are this module's spellings.
+  const c64ref = {
+    stop: 0x03, white: 0x05, dis_case_switch: 0x08, ena_case_switch: 0x09, return: 0x0d, lowercase: 0x0e,
+    crsr_down: 0x11, rvs_on: 0x12, crsr_home: 0x13, del: 0x14, red: 0x1c, crsr_right: 0x1d, green: 0x1e,
+    blue: 0x1f, orange: 0x81, run: 0x83, f1: 0x85, f3: 0x86, f5: 0x87, f7: 0x88, f2: 0x89, f4: 0x8a,
+    f6: 0x8b, f8: 0x8c, shift_return: 0x8d, uppercase: 0x8e, black: 0x90, crsr_up: 0x91, rvs_off: 0x92,
+    clear: 0x93, inst: 0x94, brown: 0x95, light_red: 0x96, dark_gray: 0x97, medium_gray: 0x98,
+    light_green: 0x99, light_blue: 0x9a, light_gray: 0x9b, purple: 0x9c, crsr_left: 0x9d, yellow: 0x9e, cyan: 0x9f,
+  };
+  for (const [name, code] of Object.entries(c64ref)) {
+    assert.equal(lookupNamedPetscii(name), code, name);
+    assert.ok(petsciiControlName(code), `listing name for $${code.toString(16)}`);
+  }
+  // 7 and 10 have no function on the C64: still accepted, but a listing writes the code.
+  assert.equal(lookupNamedPetscii("bell"), 7);
+  assert.equal(petsciiControlName(7), undefined);
+  assert.equal(petsciiControlName(10), undefined);
+  // $FF prints as the pi sign $DE (c64ref generate.py), screen code $5E.
+  assert.equal(petsciiToScreenCode(0xff), petsciiToScreenCode(0xde));
 });
