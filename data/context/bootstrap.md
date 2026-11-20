@@ -87,11 +87,11 @@ Bitmap setup (typical):
 Example:
 
 ```basic
-10 PRINT CHR$(147);CHR$(14);" /\\_/\\"
-20 PRINT " ( o.o )"
-30 PRINT "  > ^ <"
-40 PRINT CHR$(142)
+10 PRINT CHR$(147);" ( O.O )";CHR$(13);"  > - <"
+20 PRINT CHR$(92):REM $5C PRINTS THE POUND SIGN, NOT A BACKSLASH
 ```
+
+Line 10 prints two lines through `CHR$(13)` (RETURN). Avoid `\` and `^` in PETSCII art: `$5C` shows the pound sign and `$5E` an up arrow.
 
 ## Raster IRQ Setup
 
