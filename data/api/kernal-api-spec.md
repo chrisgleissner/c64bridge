@@ -64,5 +64,5 @@ and maintains IRQ/NMI linkage through `$0314–$0318`. Avoid overwriting these u
 | `$FFE7` | 65511 | **CLALL** | Close all files | — | — | — | Resets open-file index; restores I/O |
 | `$FFEA` | 65514 | **UDTIM** | Jiffy clock tick; STOP key scan | — | IRQ calls every 1/60 s | `$00A0–$00A2`++ | Part of standard IRQ |
 | `$FFED` | 65517 | **SCREEN** | Return screen size | — | — | X=cols(40), Y=rows(25) | For cross‑platform compatibility |
-| `$FFF0` | 65520 | **PLOT** | Read/Set cursor | C=1 read; C=0 set; Y=row, X=col | — | On read: X=col, Y=row | Uses PNTR `$00D3`/TBLX `$00D6` |
+| `$FFF0` | 65520 | **PLOT** | Read/Set cursor | C=1 read; C=0 set from X=row, Y=column | — | On read: X=row, Y=column | Uses PNTR `$00D3`/TBLX `$00D6` |
 | `$FFF3` | 65523 | **IOBASE** | Return I/O base address | — | — | X=lo, Y=hi | Present value `$DC00` (CIA1) |

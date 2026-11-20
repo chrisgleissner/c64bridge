@@ -51,7 +51,7 @@
 | `$E4EC` | 58604 | PAL baud tbl | PAL RS‑232 prescalers | — | — | — | Matches NTSC at `$FEC2` |
 | `$E500` | 58624 | **IOBASE** | Return I/O base | — | — | X=lo,Y=hi | Default `$DC00` |
 | `$E505` | 58629 | **SCREEN** | Return screen cols/rows | — | — | X=40,Y=25 | For compat layouts |
-| `$E50A` | 58634 | **PLOT** | Read/Set cursor | C=1 read; C=0 set; Y=row,X=col | — | Read→X/Y | Uses PNTR/TBLX |
+| `$E50A` | 58634 | **PLOT** | Read/Set cursor | C=1 read; C=0 set from X=row, Y=column | — | Read: X=row, Y=column | Uses PNTR/TBLX |
 | `$E518` | 58648 | CINT (part) | Init screen/keyboard (orig) | — | — | — | Falls through |
 | `$E544` | 58692 | Screen links | Init line link table; clear screen | — | — | — | — |
 | `$E566` | 58726 | Home | Home cursor | — | — | — | Sets PNTR/TBLX=0 |
