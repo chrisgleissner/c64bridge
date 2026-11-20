@@ -357,7 +357,7 @@ Constants: `π`, `TI`, `TI$`.
 
 ## 9. Validation Rules
 
-- Line numbers: 0–65535.  
+- Line numbers: 0–63999.  
 - Each program ends with `$0000` sentinel.  
 - Parentheses depth ≤10.  
 - Array redefinition prohibited.  
