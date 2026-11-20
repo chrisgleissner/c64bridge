@@ -52,10 +52,11 @@ Tracks 40–41 exist physically but unused by DOS 2.6.
 
 | Offset | Field | Size | Notes |
 |:--|:--|:--|:--|
-| 0 | Type/status byte | 1 | bit 7=used, bits 0‑3=file type |
-| 1–2 | Start T/S | 2 | first block |
-| 3–18 | File name | 16 | PETSCII A0‑padded |
-| 30–31 | Blocks used | 2 | file size in blocks |
+| $00–$01 | Next directory T/S | 2 | only in the first entry of a sector |
+| $02 | File type | 1 | bit 7=closed, bit 6=locked, bits 0-3=file type |
+| $03–$04 | Start T/S | 2 | first block |
+| $05–$14 | File name | 16 | PETSCII, `$A0`-padded |
+| $1E–$1F | Blocks used | 2 | file size in blocks, low/high |
 
 ### DOS 2.6 Commands (via channel 15)
 
