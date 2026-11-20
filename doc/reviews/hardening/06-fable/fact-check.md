@@ -280,3 +280,30 @@ Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64br
 | KERNAL `$E4D3-$FFFF` does not access `$02-$8F` or `$FF` except RAMTAS | ADDED | `verify/zpscan.py` over c64ref `c64disasm_en.txt`: only `$FD53 STA $0002,Y` in `$02-$8F`; no access to `$FF` |
 | `$02-$8F` BASIC workspace, `CHRGET` at `$73-$8A`; `$90-$FA` KERNAL (jiffy `$A0-$A2`, editor/keyboard `$C5-$F6`) | ADDED | Mapping entries `$0003`-`$008F`, `$0073-$008A CHRGET`, `$0090`-`$00F6`; KERNAL IRQ `$EA31-$EB48` accesses `$C0`-`$F6` (zpscan) |
 | `$00/$01` CPU port | CONFIRMED | Mapping `$0000 D6510`, `$0001 R6510` |
+
+### D6 - data/gamedev/references.md
+
+Licences read with `gh api repos/<owner>/<repo>` (SPDX field) and the repositories' README/LICENSE files on
+2026-11-20 (`refs/github-licences.txt`, `refs/*.readme`); URLs fetched with curl.
+
+| Item | Verdict | Corrected wording | Source |
+|---|---|---|---|
+| Doom C64U licence "other" | IMPRECISE, fixed | CC BY-NC-SA 4.0: read, do not copy | slesinger/doom `LICENSE` (deed1f7) first line |
+| Doom test-map fps 0.83/7.15/16.78/50.1 | CONFIRMED | "(PAL, 1.1.0" version tag dropped (not in the table) | `pipeline.md:1523-1528` |
+| Doom E1M1 "disputed" 16.7 vs 25.05 fps | CONFIRMED-ERROR, fixed | different milestones: 25.05 flat-shaded (M1), 16.7 textured (M2, 64 MHz) | `IMPLEMENTATION_PLAN.md:3,16`; README:32-36; press article not checked, dropped |
+| ultimate-uci-oscar64 GPL-3.0, 78 of 179 untested in 1.4.0 | CONFIRMED | - | GitHub API; README:15-16 (2def4db) |
+| mandelbrot-upic GPL-3.0, 16 cycles per 2 pixels at 64 MHz | CONFIRMED | - | GitHub API; `docs/UPIC_VIEWER.md` "a pixel written every 8 cycles" (e71abb5) |
+| heartbeat-demo GPL-3.0, 8 SIDs + 7 PCM channels from one tick IRQ | CONFIRMED | - | GitHub API; README:7-8 |
+| c64u-radar GPL-3.0, gateway for TLS/JSON, fake 64 KB RAM harness, 8 sprites, poll about 10 s | CONFIRMED | - | GitHub API; README:28,49,126,158 |
+| ReadyOS MIT, REU suspend, acceptance at 1/16/64 MHz | CONFIRMED | - | GitHub API; README:4,74 |
+| ultimate-uci-sdk MIT, status "early" | CONFIRMED | - | GitHub API; README:38 "Status: early." |
+| Order: Omega facts | UNVERIFIED, marked | - | itch.io returned HTTP 429 |
+| Zzap!64 ratings, "Known for" column, Paradroid/Wizball ratings | UNVERIFIED, marked | - | no primary (magazine) source fetched |
+| Hessian MIT code, assets not free | CONFIRMED | - | README "Code license" and "Graphics, levels, music ... All rights reserved" |
+| Steel Ranger demo MIT code; c64gameframework MIT; Tetris C64 MIT (README); Tony MIT | CONFIRMED | - | READMEs; GitHub API (tony-demo MIT) |
+| UridiumFraktion, Monty, SquareDoom, Gridrunner: no licence | CONFIRMED | - | GitHub API `null`; no licence text in README |
+| CROSS-LIB "none stated" | CONFIRMED-ERROR, fixed | README: zlib-style terms, non-commercial use only | CROSS-LIB README "## LICENSE" ("for non-commercial applications") |
+| Oscar64, Corescape, Cadaver multiplexer GPL-3.0 | CONFIRMED | - | GitHub API |
+| codetapper, cadaver.github.io, elmerproductions, readthedocs, theweb.dk URLs | CONFIRMED (HTTP 200) | - | curl 2026-11-20 |
+| codebase64.net page ids | UNVERIFIED, marked | - | codebase64.net no connection; codebase64.org 404 |
+| generationamiga article | UNVERIFIED, marked | - | no URL given |
