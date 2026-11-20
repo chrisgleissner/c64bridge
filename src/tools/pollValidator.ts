@@ -30,6 +30,10 @@ export interface BasicPollResult {
   type: "BASIC";
   message?: string;
   line?: number;
+  /** The screen row that shows the error, for example `?SYNTAX  ERROR IN 10`. */
+  text?: string;
+  /** The last screen read: the error screen, or the screen when the poll ended. */
+  screen?: string;
 }
 
 /**
@@ -138,7 +142,7 @@ function concatBuffers(...buffers: Uint8Array[]): Uint8Array {
  * Extract BASIC error information from screen text.
  * Looks for patterns like "?SYNTAX ERROR" or "SYNTAX ERROR IN 120".
  */
-function extractBasicError(screen: string): { message?: string; line?: number } | null {
+function extractBasicError(screen: string): { message?: string; line?: number; text?: string } | null {
   const errorMatch = /(?:^|\n)\s*\?([A-Z'\s]+?)\s+ERROR(?:\s+IN\s+(\d+))?(?=\s|$)/im.exec(screen); // A real error has a leading "?"; ordinary output like "0 ERRORS FOUND" must never match. The apostrophe covers UNDEF'D STATEMENT, REDIM'D ARRAY and CAN'T CONTINUE.
   
   if (errorMatch) {
@@ -146,9 +150,11 @@ function extractBasicError(screen: string): { message?: string; line?: number } 
     const lineStr = errorMatch[2];
     const line = lineStr ? parseInt(lineStr, 10) : undefined;
     
+    const matchedRow = screen.slice(errorMatch.index).replace(/^\n/, "").split("\n")[0]?.trim();
     return {
       message: errorType,
       line: Number.isFinite(line) ? line : undefined,
+      ...(matchedRow ? { text: matchedRow } : {}),
     };
   }
   
@@ -225,6 +231,7 @@ async function pollBasicOutcome(
   let pollCount = 0;
   let runDetected = false;
   let previousReadyScreen: string | undefined;
+  let lastScreen: string | undefined;
   const baseline = baselineScreen === undefined ? undefined : normaliseScreen(baselineScreen);
 
   logger.debug("Starting BASIC outcome polling", { maxMs: config.maxMs, intervalMs: config.intervalMs });
@@ -234,6 +241,7 @@ async function pollBasicOutcome(
 
     try {
       const screen = await client.readScreen();
+      lastScreen = screen;
       const upperScreen = screen.toUpperCase();
 
       const errorInfo = extractBasicError(screen);
@@ -244,6 +252,8 @@ async function pollBasicOutcome(
           type: "BASIC",
           message: errorInfo.message,
           line: errorInfo.line,
+          ...(errorInfo.text ? { text: errorInfo.text } : {}),
+          screen,
         };
       }
 
@@ -265,7 +275,7 @@ async function pollBasicOutcome(
           : direct;
         if (settled) {
           logger.debug("BASIC program finished without an error", { pollCount, elapsed: Date.now() - startTime, direct });
-          return { status: "ok", type: "BASIC" };
+          return { status: "ok", type: "BASIC", screen };
         }
         previousReadyScreen = normaliseScreen(screen);
       } else {
@@ -282,12 +292,14 @@ async function pollBasicOutcome(
       status: "error",
       type: "BASIC",
       message: loadMismatch ?? "No execution activity detected: the firmware reported success, but the program does not appear to have run.",
+      ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
     };
   }
   logger.debug("BASIC polling completed without errors", { pollCount, elapsed: Date.now() - startTime });
   return {
     status: "ok",
     type: "BASIC",
+    ...(lastScreen !== undefined ? { screen: lastScreen } : {}),
   };
 }
 
@@ -341,6 +353,18 @@ async function checkProgramLoaded(
     return { loadCheck: "matched", load: { address: windowStart, expected: toHex(expected), found: toHex(found.subarray(0, length)) } };
   }
   return { loadCheck: "matched" };
+}
+
+/**
+ * The load evidence alone, without waiting for signs of execution: used when the caller did not ask
+ * for verification. One memory read.
+ */
+export async function checkAsmProgramLoaded(
+  client: C64Client,
+  logger: ToolLogger,
+  program: ExpectedProgramBytes,
+): Promise<Pick<AsmPollResult, "loadCheck" | "load">> {
+  return checkProgramLoaded(client, logger, program);
 }
 
 async function pollAsmOutcome(
@@ -407,15 +431,21 @@ async function pollAsmOutcome(
   }
   let previousSignature: number | null = null; // Only stable RAM: reading I/O can ack CIA interrupts on Ultimate, and raster/timer values aren't evidence of liveness.
   let alive = false;
+  // With readScreenDetailed one read per poll covers both checks and follows the screen the VIC-II
+  // shows (a program may move it away from $0400). Without it, screen RAM at $0400 is read directly.
+  const detailedClient = client as C64Client & { readScreenDetailed?: () => Promise<{ text: string }> };
+  const detailed = typeof detailedClient.readScreenDetailed === "function";
   
   const pollDeadline = Date.now() + config.maxMs;
   
   while (Date.now() < pollDeadline && !alive) {
     pollCount++;
     
+    let screenText: string | undefined;
     try {
+      screenText = detailed ? (await detailedClient.readScreenDetailed!()).text : await client.readScreen();
       // A routine that works for a while before RTS shows READY. only after the first screen read.
-      if (returnedToBasicAfterSys(await client.readScreen())) {
+      if (returnedToBasicAfterSys(screenText)) {
         logger.debug("ASM program returned to BASIC", { pollCount, elapsed: Date.now() - startTime });
         return { status: "ok", type: "ASM", loadCheck };
       }
@@ -424,7 +454,8 @@ async function pollAsmOutcome(
     }
 
     try {
-      const screenRam = await client.readMemoryRaw(0x0400, 0x03e8);
+      if (detailed && screenText === undefined) throw new Error("screen read failed");
+      const screenRam = detailed ? new TextEncoder().encode(screenText) : await client.readMemoryRaw(0x0400, 0x03e8);
       const signature = computeCrc32(screenRam);
       
       // Check for any activity

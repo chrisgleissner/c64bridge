@@ -45,6 +45,32 @@ const SYMBOLS: Record<string, number> = Object.freeze({
   cia1: 0xdc00,
   cia2: 0xdd00,
   kernal: 0xe000,
+  // KERNAL jump table entries (Commodore 64 Programmer's Reference Guide, chapter 5, "User
+  // callable KERNAL routines"). Names resolve case-insensitively; a loaded program label wins.
+  cint: 0xff81,
+  ioinit: 0xff84,
+  ramtas: 0xff87,
+  restor: 0xff8a,
+  scnkey: 0xff9f,
+  readst: 0xffb7,
+  setlfs: 0xffba,
+  setnam: 0xffbd,
+  open: 0xffc0,
+  close: 0xffc3,
+  chkin: 0xffc6,
+  chkout: 0xffc9,
+  clrchn: 0xffcc,
+  chrin: 0xffcf,
+  chrout: 0xffd2,
+  load: 0xffd5,
+  save: 0xffd8,
+  settim: 0xffdb,
+  rdtim: 0xffde,
+  stop: 0xffe1,
+  getin: 0xffe4,
+  clall: 0xffe7,
+  udtim: 0xffea,
+  plot: 0xfff0,
 });
 
 export function formatAddress(address: number): string {

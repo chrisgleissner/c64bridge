@@ -244,7 +244,7 @@ test("c64_program upload_run_basic uses shared BASIC handler", async () => {
 
   assert.equal(result.isError, undefined);
   assert.equal(uploads.length, 1);
-  assert.ok(screenReads >= 1);
+  assert.equal(screenReads, 0); // HARD06 PROGMEM-6: an unverified run does not read the screen
 });
 
 test("c64_program cross_platform_greeting delegates to the orchestration workflow", async () => {

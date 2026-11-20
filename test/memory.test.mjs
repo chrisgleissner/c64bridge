@@ -385,7 +385,8 @@ test("write handles response without length in details", async () => {
   };
   const res = await memoryModule.invoke("write", { address: "$0400", bytes: "$AABB" }, ctx);
   assert.equal(res.metadata?.success, true);
-  assert.equal(res.metadata?.length, null);
+  assert.equal(res.metadata?.length, 2); // HARD06 PROGMEM-11: the byte count comes from the bytes written
+  assert.match(res.content[0].text, /Wrote 2 bytes/);
 });
 
 testC64uOnly("write verifies written bytes when verify flag is set", async () => {

@@ -309,7 +309,7 @@ test("upload_run_basic is available on vice", async () => {
   assert.equal(data.format, "prg");
   assert.ok(typeof data.entryAddress === "number");
   assert.ok(typeof data.prgSize === "number" && data.prgSize > 2);
-  assert.equal(data.screen, "READY.\n");
+  assert.equal(data.screen, undefined); // HARD06 PROGMEM-6: an unverified run does not read the screen
   assert.equal(calls.length, 1);
 });
 
@@ -517,51 +517,6 @@ test("upload_run_basic handles firmware failure", async () => {
   assert.ok(result.content[0].text.includes("backend reported failure"));
 });
 
-test("upload_run_basic auto-fixes missing closing quote", async () => {
-  const calls = [];
-  const screens = [
-    { kind: "value", value: "?SYNTAX ERROR IN 10\nREADY.\n" },
-    { kind: "error", error: new Error("screen offline after retry") },
-  ];
-  const ctx = {
-    client: {
-      async uploadAndRunBasic(program) {
-        calls.push(program);
-        return { success: true };
-      },
-      async readScreen() {
-        const next = screens.shift();
-        if (!next) {
-          return "READY.\n";
-        }
-        if (next.kind === "error") {
-          throw next.error;
-        }
-        return next.value;
-      },
-    },
-    logger: createLogger(),
-  };
-
-  const program = '10 PRINT "HELLO\n20 END';
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program },
-    ctx,
-  );
-
-  assert.equal(result.isError, undefined);
-  assert.equal(calls.length, 2);
-  assert.ok(calls[1].includes('10 PRINT "HELLO"'));
-  assert.ok(result.content[0].text.includes("auto-fix"));
-  assert.equal(result.metadata.autoFix.applied, true);
-  assert.equal(result.metadata.autoFix.changes[0].line, 10);
-  assert.ok(result.structuredContent && result.structuredContent.type === "json");
-  const data = result.structuredContent.data;
-  assert.equal(data.autoFix.changes[0].line, 10);
-  assert.equal(data.autoFix.originalErrors[0].line, 10);
-});
-
 test("upload_run_basic verify true annotates metadata", async () => {
   const originalMax = process.env.C64BRIDGE_POLL_MAX_MS;
   const originalInterval = process.env.C64BRIDGE_POLL_INTERVAL_MS;
@@ -694,148 +649,6 @@ test("upload_run_basic verify tolerates repeated screen read failures", async ()
     if (originalInterval === undefined) delete process.env.C64BRIDGE_POLL_INTERVAL_MS;
     else process.env.C64BRIDGE_POLL_INTERVAL_MS = originalInterval;
   }
-});
-
-test("upload_run_basic reports failure when auto-fix not possible", async () => {
-  const ctx = {
-    client: {
-      async uploadAndRunBasic() {
-        return { success: true };
-      },
-      async readScreen() {
-        return "?TYPE MISMATCH ERROR IN 20\nREADY.\n";
-      },
-    },
-    logger: createLogger(),
-  };
-
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program: "10 PRINT 1\n20 PRINT \"A\"+5" },
-    ctx,
-  );
-
-  assert.equal(result.isError, true);
-  assert.equal(result.metadata.error.kind, "execution");
-  assert.ok(result.content[0].text.includes("runtime errors"));
-  assert.ok(result.structuredContent && result.structuredContent.type === "json");
-  const data = result.structuredContent.data;
-  assert.equal(data.autoFix.attempted, false);
-  assert.equal(data.errors[0].line, 20);
-  assert.ok(String(data.errors[0].text).includes("ERROR IN 20"));
-});
-
-test("upload_run_basic reports firmware failure after auto-fix retry", async () => {
-  const uploads = [];
-  const screens = [
-    "?SYNTAX ERROR IN 10\nREADY.\n",
-  ];
-  const ctx = {
-    client: {
-      async uploadAndRunBasic(program) {
-        uploads.push(program);
-        if (uploads.length === 1) {
-          return { success: true };
-        }
-        return { success: false, details: { error: "still broken" } };
-      },
-      async readScreen() {
-        const value = screens.shift();
-        if (value === undefined) return "READY.\n";
-        return value;
-      },
-    },
-    logger: createLogger(),
-  };
-
-  const program = '10 PRINT "HELLO\n20 END';
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program },
-    ctx,
-  );
-
-  assert.equal(result.isError, true);
-  assert.equal(result.metadata.error.kind, "execution");
-  assert.ok(result.structuredContent && result.structuredContent.type === "json");
-  const data = result.structuredContent.data;
-  assert.equal(data.kind, "basic_runtime_error");
-  assert.equal(data.autoFix.attempted, true);
-  assert.equal(data.autoFix.failure.reason, "firmware_failure");
-  assert.equal(data.autoFix.changes[0].line, 10);
-  assert.equal(uploads.length, 2);
-});
-
-test("upload_run_basic reports remaining errors after auto-fix retry", async () => {
-  const uploads = [];
-  const screens = [
-    "?SYNTAX ERROR IN 10\nREADY.\n",
-    "?TYPE MISMATCH ERROR IN 10\nREADY.\n",
-  ];
-  const ctx = {
-    client: {
-      async uploadAndRunBasic(program) {
-        uploads.push(program);
-        return { success: true };
-      },
-      async readScreen() {
-        const value = screens.shift();
-        if (value === undefined) return "READY.\n";
-        return value;
-      },
-    },
-    logger: createLogger(),
-  };
-
-  const program = '10 PRINT "HELLO\n20 END';
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program },
-    ctx,
-  );
-
-  assert.equal(result.isError, true);
-  assert.equal(result.metadata.error.kind, "execution");
-  assert.ok(result.structuredContent && result.structuredContent.type === "json");
-  const data = result.structuredContent.data;
-  assert.equal(data.kind, "basic_runtime_error");
-  assert.equal(data.autoFix.attempted, true);
-  assert.ok(Array.isArray(data.autoFix.resultingErrors));
-  assert.equal(data.autoFix.resultingErrors[0].line, 10);
-  assert.equal(uploads.length, 2);
-});
-
-test("upload_run_basic auto-fixes missing closing parenthesis while ignoring REM text", async () => {
-  const uploads = [];
-  const screens = [
-    "?SYNTAX ERROR IN 10\nREADY.\n",
-    "READY.\n",
-  ];
-  const ctx = {
-    client: {
-      async uploadAndRunBasic(program) {
-        uploads.push(program);
-        return { success: true };
-      },
-      async readScreen() {
-        return screens.shift() ?? "READY.\n";
-      },
-    },
-    logger: createLogger(),
-  };
-
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program: '10 PRINT ("DUCKS":REM ")"\n20 END' },
-    ctx,
-  );
-
-  assert.equal(result.isError, undefined);
-  assert.equal(uploads.length, 2);
-  assert.ok(uploads[1] !== uploads[0]);
-  assert.ok(uploads[1].includes('REM ")"'));
-  assert.equal(result.metadata.autoFix.applied, true);
-  assert.ok(result.metadata.autoFix.changes[0].notes.some((note) => note.includes("closing parenthesis")));
 });
 
 test("upload_run_basic handles screen read failures without errors", async () => {
@@ -1136,52 +949,119 @@ test("upload_run_basic reports BASIC syntax problems as validation errors naming
   assert.match(tooBig.content[0].text, /Line number out of range: 99999 on line 2/);
 });
 
-function autoFixContext(calls) {
-  const screens = ["?SYNTAX ERROR IN 10\nREADY.\n"];
+// HARD06 PROGMEM-6: errors are seen by the verify:true poll, so auto-fix runs there. The screen
+// depends on how many runs were started: "READY." before the first run, then screens[n - 1].
+function autoFixContext(calls, screens = ["?SYNTAX  ERROR IN 10\nREADY.\n", "RUN\nREADY.\n"], runResults = []) {
   return {
     client: {
       async uploadAndRunBasic(program) {
         calls.push(program);
-        return { success: true };
+        return runResults[calls.length - 1] ?? { success: true };
       },
       async readScreen() {
-        return screens.shift() ?? "READY.\n";
+        return calls.length === 0 ? "READY.\n" : screens[Math.min(calls.length, screens.length) - 1];
       },
     },
     logger: createLogger(),
   };
 }
 
-test("upload_run_basic autoFix:false does not rewrite or re-run the program", async () => {
+async function withShortPoll(fn) {
+  const saved = [process.env.C64BRIDGE_POLL_MAX_MS, process.env.C64BRIDGE_POLL_INTERVAL_MS];
+  process.env.C64BRIDGE_POLL_MAX_MS = "200";
+  process.env.C64BRIDGE_POLL_INTERVAL_MS = "1";
+  try {
+    return await fn();
+  } finally {
+    if (saved[0] === undefined) delete process.env.C64BRIDGE_POLL_MAX_MS; else process.env.C64BRIDGE_POLL_MAX_MS = saved[0];
+    if (saved[1] === undefined) delete process.env.C64BRIDGE_POLL_INTERVAL_MS; else process.env.C64BRIDGE_POLL_INTERVAL_MS = saved[1];
+  }
+}
+
+test("upload_run_basic verify auto-fixes a missing closing quote", () => withShortPoll(async () => {
   const calls = [];
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program: '10 PRINT "HELLO\n20 END', autoFix: false },
-    autoFixContext(calls),
-  );
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HELLO\n20 END', verify: true }, autoFixContext(calls));
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].includes('10 PRINT "HELLO"'));
+  assert.ok(result.content[0].text.includes("auto-fix"));
+  assert.equal(result.metadata.autoFix.applied, true);
+  const data = result.structuredContent.data;
+  assert.equal(data.autoFix.changes[0].line, 10);
+  assert.equal(data.autoFix.originalErrors[0].line, 10);
+  assert.equal(data.verified, true);
+}));
+
+test("upload_run_basic verify reports failure when auto-fix not possible", () => withShortPoll(async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT 1\n20 PRINT "A"+5', verify: true },
+    autoFixContext(calls, ["?TYPE MISMATCH  ERROR IN 20\nREADY.\n"]));
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata.error.kind, "execution");
+  assert.match(result.content[0].text, /runtime errors.*ERROR IN 20/);
+  const data = result.structuredContent.data;
+  assert.equal(data.autoFix.attempted, false);
+  assert.equal(data.errors[0].line, 20);
+  assert.ok(String(data.errors[0].text).includes("ERROR IN 20"));
+  assert.match(data.screen, /TYPE MISMATCH/);
+  assert.equal(calls.length, 1);
+}));
+
+test("upload_run_basic verify reports firmware failure after auto-fix retry", () => withShortPoll(async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HELLO\n20 END', verify: true },
+    autoFixContext(calls, undefined, [{ success: true }, { success: false, details: { error: "still broken" } }]));
+  assert.equal(result.isError, true);
+  const data = result.structuredContent.data;
+  assert.equal(data.kind, "basic_runtime_error");
+  assert.equal(data.autoFix.attempted, true);
+  assert.equal(data.autoFix.failure.reason, "firmware_failure");
+  assert.equal(data.autoFix.changes[0].line, 10);
+  assert.equal(calls.length, 2);
+}));
+
+test("upload_run_basic verify reports remaining errors after auto-fix retry", () => withShortPoll(async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HELLO\n20 END', verify: true },
+    autoFixContext(calls, ["?SYNTAX  ERROR IN 10\nREADY.\n", "?TYPE MISMATCH  ERROR IN 10\nREADY.\n"]));
+  assert.equal(result.isError, true);
+  const data = result.structuredContent.data;
+  assert.equal(data.kind, "basic_runtime_error");
+  assert.equal(data.autoFix.attempted, true);
+  assert.equal(data.autoFix.resultingErrors[0].line, 10);
+  assert.equal(calls.length, 2);
+}));
+
+test("upload_run_basic verify auto-fixes missing closing parenthesis while ignoring REM text", () => withShortPoll(async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT ("DUCKS":REM ")"\n20 END', verify: true }, autoFixContext(calls));
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].includes('REM ")"'));
+  assert.ok(result.metadata.autoFix.changes[0].notes.some((note) => note.includes("closing parenthesis")));
+}));
+
+test("upload_run_basic autoFix:false does not rewrite or re-run the program", () => withShortPoll(async () => {
+  const calls = [];
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HELLO\n20 END', autoFix: false, verify: true }, autoFixContext(calls));
   assert.equal(calls.length, 1);
   assert.equal(result.isError, true);
   assert.equal(result.structuredContent.data.autoFix.attempted, false);
   assert.equal(result.structuredContent.data.autoFix.disabled, true);
   assert.match(result.content[0].text, /not rewritten or run again/);
-});
+}));
 
-test("upload_run_basic reports the rewritten lines before and after", async () => {
+test("upload_run_basic reports the rewritten lines before and after", () => withShortPoll(async () => {
   const calls = [];
-  const result = await programRunnersModule.invoke(
-    "upload_run_basic",
-    { program: '10 PRINT "HELLO\n20 END' },
-    autoFixContext(calls),
-  );
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "HELLO\n20 END', verify: true }, autoFixContext(calls));
   assert.equal(calls.length, 2);
   assert.equal(result.isError, undefined);
   const change = result.structuredContent.data.autoFix.changes[0];
   assert.equal(change.before, '10 PRINT "HELLO');
   assert.equal(change.after, '10 PRINT "HELLO"');
-  assert.equal(result.metadata.autoFix.changes[0].before, '10 PRINT "HELLO');
   assert.match(result.content[0].text, /10 PRINT "HELLO" -> .*10 PRINT "HELLO"/);
   assert.match(result.content[0].text, /second time/);
-});
+}));
 
 test("upload_run_basic words an unverified run as started, not executed successfully", async () => {
   const calls = [];
@@ -1296,7 +1176,8 @@ test("HARD03-029 upload_run_asm fails with the stop address when the feed was st
     platform: { id: "vice" },
     client: {
       async uploadAndRunAsm() {
-        return { success: false, details: { started: false, keyboard: { status: "stopped", pending: 6, stoppedAt: 49152 } } };
+        // HARD06 PROGMEM-1: a stop outside the program ($E5CD, KERNAL keyboard wait) means it did not start.
+        return { success: false, details: { started: false, keyboard: { status: "stopped", pending: 6, stoppedAt: 0xe5cd } } };
       },
     },
     logger: createLogger(),
