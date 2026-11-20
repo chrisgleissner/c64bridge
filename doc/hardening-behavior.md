@@ -130,6 +130,13 @@ The built-in assembler accepts the spellings of ACME, 64tass, ca65 and Kick Asse
 - **Progress.** When `tools/call` carries `_meta.progressToken`, the server sends `notifications/progress` every 10 s and handlers can report step progress, so SDK clients with a 60 s request timeout no longer cancel long waits. `c64_batch` reports one step per command.
 - **Resources.** `resources/templates/list` returns an empty list instead of an error. A `#fragment` in a resource link, as returned by `c64_rag`, is ignored when reading.
 - **Result text.** The text of a result carries the result data as compact JSON after the message. Above 16 KiB, long strings that the text already holds are replaced by a note in `structuredContent`. Error results redact secrets per value, not per substring, so a short password no longer corrupts other hex data.
+- **VICE snapshots and version.** `c64_vice` has the operations `snapshot_save` and `snapshot_restore` (the path is confined to the allowed host roots) and `version`.
+- **VICE memory banks.** `c64_memory` `read` takes an optional `bank` on VICE. The name is matched case-insensitively against the banks VICE reports; an unknown name lists the valid ones. Ultimate rejects `bank` with a validation error.
+- **Keyboard cancellation.** `c64_input` `write_text` and `key` pass the request's abort signal on, so cancelling the call stops waiting for the keyboard queue to drain.
+- **HTTP transport.** In stateless `--http` mode, requests other than POST get 405 with `Allow: POST` (previously `GET /mcp` stayed open as an event stream). The HTTP transport code is loaded only with `--http`.
+- **Shutdown.** When the client closes its end of stdout, the server runs its normal shutdown and exits with code 0 (previously an unhandled EPIPE exited with code 1 and skipped cleanup of tasks, capture streams and VICE sessions).
+- **Prompt arguments.** `prompts/get` with an unsupported argument value answers InvalidParams (-32602) with the validation message, not an internal error (-32603).
+
 - **`c64_rag`.** All scopes search every index and rank with BM25. Result text keeps line breaks. A query of only spaces is a validation error. Developer documents (`AGENTS.md`, `doc/hardening-behavior.md` and others) are not indexed.
 - **`c64_sound` SIDWAVE.** A song that reaches 20000 notes in one voice is rejected before arranging. An unquoted `~` in a groove is a tie. Numeric strings in pattern length, transpositions and reverb delay are stored as numbers.
 
