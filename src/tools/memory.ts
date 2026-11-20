@@ -166,10 +166,13 @@ const readMemoryArgsSchema = objectSchema({
       default: 256,
     }),
     format: optionalSchema(stringSchema({
-      description: "Output layout. hex (default) returns one hex string; dump adds a 16-bytes-per-line listing with addresses and a printable PETSCII column.",
+      description: "hex (default): one hex string; dump: 16 bytes per line with addresses and PETSCII.",
       enum: ["hex", "dump"],
       default: "hex",
     }), "hex"),
+    bank: optionalSchema(stringSchema({
+      description: "VICE bank name.",
+    })),
   },
   required: ["address"],
   additionalProperties: false,
@@ -183,12 +186,12 @@ const writeMemoryArgsSchema = objectSchema({
       minLength: 1,
     }),
     bytes: stringSchema({
-      description: "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
+      description: "Hex bytes to write, like $AABBCC or AA BB CC.",
       minLength: 2,
       pattern: /^[\s_0-9A-Fa-f$]+$/,
     }),
     verify: booleanSchema({
-      description: "Verify the write by reading before and after; Ultimate hardware pauses meanwhile.",
+      description: "Verify by reading before and after (Ultimate pauses meanwhile).",
       default: false,
     }),
     expected: optionalSchema(stringSchema({
@@ -353,7 +356,27 @@ async function executeReadMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
     const readLength = lengthGiven ? parsed.length ?? 256 : Math.min(parsed.length ?? 256, 0x10000 - readStart);
     assertAddressRange(readStart, readLength, "$.length");
 
-    const result = await ctx.client.readMemory(fmtAddr(readStart), String(readLength));
+    let result: { success: boolean; data?: string; details?: unknown };
+    if (parsed.bank !== undefined) {
+      if ((await ctx.client.getBackendType()) !== "vice") {
+        throw new ToolValidationError("bank is only supported on the VICE backend; Ultimate hardware has no selectable memory banks.", { path: "$.bank" });
+      }
+      try {
+        const banked = await ctx.client.readMemoryBank(readStart, readLength, parsed.bank);
+        result = {
+          success: true,
+          data: `$${Buffer.from(banked.bytes).toString("hex").toUpperCase()}`,
+          details: { address: fmtAddr(readStart), length: banked.bytes.length, bank: banked.bank, bankId: banked.bankId },
+        };
+      } catch (error) {
+        if (error instanceof Error && /^Unknown VICE memory bank/.test(error.message)) {
+          throw new ToolValidationError(error.message, { path: "$.bank" });
+        }
+        throw error;
+      }
+    } else {
+      result = await ctx.client.readMemory(fmtAddr(readStart), String(readLength));
+    }
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while reading memory", {
         details: normaliseFailure(result.details),
@@ -749,7 +772,7 @@ function validateRangeWithinAddressSpace(start: number, length: number, fieldPat
 // control registers ($DC0D, $DD0D) clears pending interrupts of the running program. Range
 // operations therefore leave that area out unless includeIo is set. VICE reads without side effects.
 const includeIoSchema = optionalSchema(booleanSchema({
-  description: "Ultimate: also read $D000-$DFFF. Reading I/O can clear pending CIA interrupts. Default false; no side effects on VICE.",
+  description: "Ultimate: also read $D000-$DFFF; reading I/O can clear CIA interrupts. No effect on VICE.",
   default: false,
 }));
 
