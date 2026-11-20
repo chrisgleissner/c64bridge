@@ -405,7 +405,9 @@ const inputOperationHandlers: OperationHandlerMap<InputOperationMap> = {
           });
           let state;
           if (parsed.action === "tap") {
-            // The firmware holds a tap for a fixed two frames, so hold the press for durationMs here.
+            // The firmware holds a REST joystick tap for a single tick of its own, measured at 0.5-18.5 ms (under one PAL frame)
+            // on an Ultimate 64 Elite, firmware 3.15a, 2026-11-20. That is too short for a game to poll reliably,
+            // so hold the press for durationMs here.
             let failed = false;
             try {
               // A failed response can follow an applied press, so cleanup also
