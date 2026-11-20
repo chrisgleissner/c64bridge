@@ -37,8 +37,8 @@ Command bytes: `$90` stash, `$91` fetch, `$92` swap, `$93` verify (execute, imme
 - Without autoload, after a transfer both base addresses point past the last byte and length reads 1: consecutive blocks can continue without rewriting REU address, but length and C64 address must be set again as needed. With autoload the base values are restored (repeat the same transfer with only `$DF01`).
 - Swap: both memories read, then both written. Verify: stops at first mismatch, FAULT set, END OF BLOCK not set; the address registers point at the mismatching byte on Ultimate devices (real REUs differ). Clear FAULT first by reading `$DF00`.
 - C64 address wraps at `$FFFF`. `$DF0A = $80` (fix C64 address): a fetch writes every REU byte to one location, at DMA speed (too fast to play samples). `$40` (fix REU address): a fetch fills memory with one byte.
-- Extended registers exist only in FPGA builds with `g_extended => true`: `$DF0C` size mask (read; `$01` 128 KB ... `$FF` 16 MB), `$DF0D` start delay (R/W), `$DF0E` rate divider (R/W), `$DF0F` length bits 23-16 (write-only, allows more than 64 KB per transfer) (`reu.vhd:253-266,469-471`). Every public U2-family top level sets `g_extended_reu => false`. Measured U64 (core 1.50): `$DF0C-$DF0F` read `$FF` at 128 KB and at 16 MB, and a `$05` written to `$DF0D` is not kept (CPU and DMA). A program does not use them; the C64 Ultimate is listed under Not verified.
-- The REU answers reads at `$DF00-$DF17`; `$DF0B` and `$DF10-$DF17` read `$FF` (`reu.vhd:429-487`). `$DF18-$DF1F` belong to UCI. Use only `$DF00-$DF0A`.
+- No Ultimate product has the extended registers `$DF0C-$DF0F`. The REU core has them only when it is built with `g_extended => true` (`reu.vhd:253-266,469-471`): `$DF0C` size mask, `$DF0D` start delay, `$DF0E` rate divider, `$DF0F` length bits 23-16. Every public top level (U2, U2+, U2+L: `slot_server_v4.vhd:33`, `u2p_riscv.vhd:511`, `u2p_riscv_lattice.vhd:596`, `ultimate_mb_700a.vhd:264`) and the Ultimate 64, Ultimate 64 Elite II and C64 Ultimate images build it with the option off; only a simulation harness turns it on. Without the option, reads of `$DF0C-$DF0F` return `$FF` and writes are ignored. Measured on an Ultimate 64 Elite (core 1.50): `$DF0C-$DF0F` read `$FF` at 128 KB and at 16 MB, and a `$05` written to `$DF0D` is not kept, from the CPU and through DMA.
+- While the REU is enabled and idle it drives the data bus for reads of `$DF00-$DF17` (address bits 4-3 not both 1); `$DF0B`, `$DF0C-$DF0F` and `$DF10-$DF17` read `$FF`, and unused bits of `$DF09` (bits 4-0) and `$DF0A` (bits 5-0) read 1 (`reu.vhd:429-487`). Writes change only `$DF01-$DF0A`; a write to `$DF00` or to `$DF0B-$DF1F` changes no REU register (`reu.vhd:211-266`). `$DF18-$DF1F` belong to UCI. Use only `$DF00-$DF0A`.
 
 ## Timing, stall, size, wrap
 
@@ -165,9 +165,3 @@ one:    php               ; 1-byte DMA between zero-page byte tmp and REU offset
 4. Reading `$DF00` clears flags and IRQ; `$FF00` mode leaves a pending command until `$FF00` is written.
 5. VICE charges DMA at 1 cycle per byte (VICE 3.10, measured) and an image must equal the configured size; test streaming budgets on hardware.
 6. `RAM Expansion Unit` = `GeoRAM Mode` replaces the REU: a 256-byte window at `$DE00-$DEFF`; writes to even addresses in `$DF80-$DFFE` select the 256-byte page inside a 16 KB block (bits 5-0), writes to odd addresses `$DF81-$DFFF` select the 16 KB block (bits 7-6 of the even register extend the block number past 4 MB); both are masked to `REU Size` (`fpga/cart_slot/vhdl_source/all_carts_v5.vhd:644-653`).
-
-## Not verified
-
-| Claim | What would settle it |
-|---|---|
-| C64U: `$DF0C-$DF0F` present or absent | `GET /v1/machine:readmem?address=DF0C&length=4` on a C64U with the REU enabled (C64U only) |
