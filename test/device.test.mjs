@@ -1758,7 +1758,7 @@ test("device: C64u facade exercises runner, machine, config, drive, stream, and 
     assert.equal(sidAttachment.success, true);
     const read = await facade.readMemory(0x2000, 4);
     assert.deepEqual(Array.from(read), [0x10, 0x11, 0x12, 0x13]);
-    const readJson = await facade.readMemory(0x2000, 2);
+    const readJson = await facade.readMemory(0x2000, 3); // "AABB" is base64 for 3 bytes
     assert.ok(readJson.length > 0);
 
     await facade.writeMemory(0x2100, Uint8Array.of(0xAA, 0xBB));

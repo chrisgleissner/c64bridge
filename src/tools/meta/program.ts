@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "../translation/symbolRegistry.js";
 // Program testing and orchestration meta tools
 import { cancelledResult, type ToolDefinition, type ToolExecutionContext } from "../types.js";
 import { objectSchema, stringSchema, arraySchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
@@ -484,6 +485,7 @@ export const tools: ToolDefinition[] = [
               executionMode = "basic_program";
               return ctx.client.uploadAndRunBasic(program);
             });
+            if (runResult.success) clearViceSymbols(); // labels belong to one program
             if (prepareCapturePromise) {
               await prepareCapturePromise;
             }
@@ -708,9 +710,11 @@ export const tools: ToolDefinition[] = [
             if (ext === "prg") {
               const run = await (ctx.client as any).runPrgFile(programPath);
               if (!run.success) throw new ToolExecutionError("PRG playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             } else if (ext === "crt") {
               const run = await (ctx.client as any).runCrtFile(programPath);
               if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             }
 
             await sleepUnlessAborted(durationMs, ctx.signal);
@@ -821,9 +825,11 @@ export const tools: ToolDefinition[] = [
             if (ext === "prg") {
               const run = await (ctx.client as any).runPrgFile(program.path);
               if (!run.success) throw new ToolExecutionError("PRG playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             } else if (ext === "crt") {
               const run = await (ctx.client as any).runCrtFile(program.path);
               if (!run.success) throw new ToolExecutionError("CRT playback failed", { details: run.details });
+              clearViceSymbols(); // labels belong to one program
             }
 
             await sleepUnlessAborted(durationMs, ctx.signal);

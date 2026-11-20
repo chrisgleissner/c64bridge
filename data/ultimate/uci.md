@@ -1,11 +1,14 @@
 # Ultimate Command Interface (UCI)
 
-**Summary:** UCI is a polled register interface at `$DF1B-$DF1F` through which a C64 program asks the Ultimate to read/write files, open sockets, make HTTP requests, load files straight into RAM or REU, change the palette and reboot. It is off by default. Commands are `<target> <command> <args>`; replies are data bytes plus a status string. Targets: 1/2 DOS, 3 Network, 4 Control, 5 SoftwareIEC, 6 HTTP.
+**Summary:** UCI is a polled register interface at `$DF1C-$DF1F` (`$DF1B` = IEC device number; a loaded EasyFlash `.crt` moves it to `$DE1C-$DE1F`) through which a C64 program asks the Ultimate to read/write files, open sockets, make HTTP requests, load files straight into RAM or REU, change the palette and reboot. It is off by default. Commands are `<target> <command> <args>`; replies are data bytes plus a status string. Targets: 1/2 DOS, 3 Network, 4 Control, 5 SoftwareIEC, 6 HTTP.
 **Read when:** a game must load levels or data from the Ultimate's storage, save high scores, change the palette, use the network, or detect an Ultimate.
 
+Checked against GideonZ/1541ultimate 700c7f2 (2026-11-13); the public source has no U64 / C64 Ultimate FPGA core, so core register behaviour is device-measured or marked unverified.
 Marks: "(unverified)" = inferred. Dates = when added to public firmware master (github.com/GideonZ/1541ultimate); a device may be older. No UCI version command exists: try the command, check for `21,UNKNOWN COMMAND`. Docs: https://1541u-documentation.readthedocs.io/en/latest/uci/index.html. SDK (MIT): https://github.com/barryw/ultimate-uci-sdk. Enable with `c64_config` ("C64 and Cartridge Settings" / `Command Interface` = Enabled).
 
 ## Registers (all polled; I/O must be visible, `$01` bit 2 set)
+
+Base `$DF1C` (default; `$DF1B` = device number). A loaded `.crt` can relocate the interface: EasyFlash CRTs get `$DE1C-$DE1F` (the same registers at `$DE1B-$DE1F`); a CRT type may also switch UCI off. A PRG always sees `$DF1C`. Probe `$DE1D` too when running as a CRT. Source: slot register `$47` = `$DF1C`, `$07` = `$DE1C`, `$7F` = `$DFFC` (reserved, no CRT type uses it).
 
 | Addr | Read | Write |
 |---|---|---|
@@ -15,7 +18,7 @@ Marks: "(unverified)" = inferred. Dates = when added to public firmware master (
 | `$DF1E` | Response data byte | - |
 | `$DF1F` | Status data byte | - |
 
-Control (write, literal values only): `$01` PUSH_CMD, `$02` DATA_ACC (release block), `$04` ABORT, `$08` CLR_ERR, `$20` IRQ on completion (firmware 3.15+; asserts the IRQ line, not NMI, per the VHDL), `$40` TRIGGER and `$80` DMA (freeze bus; latched only with PUSH_CMD; not a speed-up).
+Control (write, literal values only): `$01` PUSH_CMD, `$02` DATA_ACC (release block), `$04` ABORT, `$08` CLR_ERR, `$20` IRQ on completion (firmware 3.15+; only latched together with PUSH_CMD, so write `$21`; asserts the IRQ line, not NMI, while STATE is data-last or data-more; dropped by reading `$DF1E`/`$DF1F` or by DATA_ACC; `$DF1D` reads `$49` while pending), `$40` TRIGGER and `$80` DMA (freeze bus; latched only with PUSH_CMD; not a speed-up).
 Status (read): bit0 CMD_BUSY, bit1 DATA_ACC, bit2 ABORT_P, bit3 ERROR (command pushed while not idle), bits 4-5 STATE (`$00` idle, `$10` busy, `$20` data-last, `$30` data-more), bit6 STAT_AV (byte at `$DF1F`), bit7 DATA_AV (byte at `$DF1E`).
 
 ## Exchange
@@ -35,7 +38,7 @@ Status (read): bit0 CMD_BUSY, bit1 DATA_ACC, bit2 ABORT_P, bit3 ERROR (command p
 
 ## Detection
 
-- `$DF1D & $7F = $49`: UCI on. Anything else: absent or off (a real REU returns `$FF`). Tell the user to enable `Command Interface`.
+- `$DF1D & $7F = $49`: UCI on (at `$DE1D` instead when running as an EasyFlash CRT). Anything else: absent or off (a real REU returns `$FF`). Tell the user to enable `Command Interface`.
 - Then IDENTIFY (`<target> 01`) once per target used; `NO TARGET` = absent.
 
 ## Status strings
@@ -47,11 +50,17 @@ Status (read): bit0 CMD_BUSY, bit1 DATA_ACC, bit2 ABORT_P, bit3 ERROR (command p
 | 1 binary byte | SoftwareIEC | `$00` |
 | bare text (`DISK IS FULL`, `WRITE PROTECTED`, ...) | DOS filesystem failures | non-digit first char = failure |
 
-Codes mean different things per target, so key on target plus code. Common: `01` dir empty / connection closed by host, `02` request truncated / no data, `04` datagram truncated, `11` connect error, `12` send/close error, `21` UNKNOWN COMMAND, `81` INVALID PARAMS, `82` DOS file not found, `83` DOS no such directory / net interface not available, `84` DOS no file to close / net unresolved host / control REU not enabled, `85` DOS no file open / net socket error, `88`/`89` config file cannot open / had errors (control), `89` not a disk image (DOS), `90` drive not present, `98` prohibited.
+Codes mean different things per target, so key on target plus code. `21` UNKNOWN COMMAND on every target.
+
+| Target | Codes |
+|---|---|
+| DOS | `01` dir empty, `02` request truncated, `81` NOT IN DATA MODE, `82` file not found, `83` no such directory, `84` no file to close, `85` no file open, `86` can't read directory, `87` internal error, `88` no information, `89` not a disk image, `90` drive not present, `91` incompatible image, `98` function prohibited, `99` not implemented |
+| Network | `01` connection closed by host, `02,NO DATA: <errno>`, `03` more data not supported, `04,DATAGRAM TRUNCATED: <n>`, `11,ERROR ON CONNECT: <errno>`, `12,SEND ERROR` / `ERROR ON CLOSE`, `81` invalid params, `82` parameter out of range (READ_SOCKET length above 1472), `83` interface not available, `84` unresolved host, `85` error opening socket, `86` internal error |
+| Control | `81` invalid params, `82` errors on track, `83` not in data mode, `84` REU not enabled, `85` REU file cannot be opened, `86` REU offset > size (not saved), `87,DISK ERR: ...` (U64_SAVEMEM), `88` cannot open config file, `89` config file had errors |
 
 ## Target 1 and 2: DOS (files, directories, images, REU files, clock)
 
-Instances 1 and 2 are independent (own current dir, own open file): use 2 for a second stream. Start dir = root of primary storage. `/Temp` is a RAM file system (lost at power off); persistent: `/USB1/...`, `/SD/...` (check names with GET_PATH/READ_DIR).
+Instances 1 and 2 are independent (own current dir, own open file): use 2 for a second stream. Start dir = root of primary storage. `/Temp` is a RAM file system (lost at power off); persistent: `/Usb0/...`, `/Usb1/...` (first stick is `Usb0`), `/SD/...`; names match case-insensitively (check with GET_PATH/READ_DIR on the root).
 
 | Cmd | Name | Args | Reply |
 |---|---|---|---|
@@ -69,17 +78,20 @@ Instances 1 and 2 are independent (own current dir, own open file): use 2 for a 
 | 13 | OPEN_DIR | - | `01` if empty; snapshots the directory |
 | 14 | READ_DIR | - | one block per entry: `<attrib> <long name>`; last carries `00,OK` |
 | 16 | CREATE_DIR | `<dir>` | status |
-| 21 | LOAD_REU | `<addr:32> <len:32>` | file to REU from open file, no C64 involvement; text `$xxxxxx BYTES LOADED TO REU $xxxxxx` |
-| 22 | SAVE_REU | `<addr:32> <len:32>` | REU to open file |
+| 15 / 17 | COPY_UI_PATH / COPY_HOME_PATH | | 15 answers `99`; 17 copies the home path |
+| 21 | LOAD_REU | `<addr:32> <len:32>` (little-endian) | file to REU from open file, no C64 involvement; text `$xxxxxx BYTES LOADED TO REU $xxxxxx` (space-padded hex, 35 bytes) |
+| 22 | SAVE_REU | `<addr:32> <len:32>` (little-endian) | REU to open file; text `$xxxxxx BYTES SAVED FROM REU $xxxxxx` (36 bytes) |
 | 23 | MOUNT_DISK | `<id> <image>` | id = IEC device (8, 9); 0 = last mounted drive |
 | 24 / 25 | UMOUNT / SWAP_DISK | `<id>` | |
 | 26 | GET_TIME | `[fmt]` | 19 bytes `yyyy/mm/dd hh:mm:ss` (fmt 1: weekday prefix, 23 bytes) |
-| 27 | SET_TIME | `<y-1900> <mon> <day> <h> <min> <s>` | echo; since 2026-09 no longer sets the system clock |
+| 27 | SET_TIME | `<y-1900> <mon> <day> <h> <min> <s>` | message length must be 8 (else `21`); public source sets the Ultimate RTC and RTC chip, then echoes weekday and time (23 bytes). An earlier note here said it no longer sets the clock since 2026-09: the source at 700c7f2 contradicts that, a device check decides |
+| 41 / 42 | LOAD_INTO_RAMDISK / SAVE_RAMDISK | | RAM disk image transfer (not needed by games) |
+| F0 | ECHO | any bytes | returns the command bytes: liveness and throughput test |
 
 - OPEN attrib bits: `$01` read, `$02` write, `$04` create new (truncates), `$08` create always. Read `$01`; write/overwrite `$0E`. Always CLOSE before opening another file.
 - Info record: size:32, FAT date:16, FAT time:16, ext 3, attrib 1, name (reply length minus 12). READ_DIR attrib: `$01` read-only, `$02` hidden, `$04` system, `$08` volume, `$10` directory, `$20` archive.
 - A directory walk is one live exchange: no other command until it ends, or abort.
-- LOAD_REU/SAVE_REU: addr 24 bits, len up to 16 MB; assumes a 16 MB REU regardless of `REU Size`, truncating with `02` beyond it. Chunk calls to 32 KB or less (largest safe length is unverified). See c64://ultimate/reu.
+- LOAD_REU/SAVE_REU: addr 24 bits, len up to 16 MB (`addr + len` above 16 MB is cut to the end and status `02`); assumes a 16 MB REU regardless of `REU Size`. The firmware has no 32 KB limit: one command may move up to 16 MB minus addr. Chunk only to stay responsive and to allow ABORT (a load stops on ABORT, a save always runs to the end). See c64://ultimate/reu.
 
 ## Target 3: Network (client only, reads never block)
 
@@ -87,6 +99,7 @@ Instances 1 and 2 are independent (own current dir, own open file): use 2 for a 
 |---|---|---|---|
 | 01 | IDENTIFY | - | `ULTIMATE-II NETWORK INTERFACE V1.0` |
 | 02 | GET_INTERFACE_COUNT | - | count |
+| 03 | SET_INTERFACE | `<if>` | select interface |
 | 04-06 | GET_NETADDR / GET_IPADDR / SET_IPADDR | `<if> [12 bytes]` | MAC (6); IP, mask, gateway (4 each) |
 | 07 | OPEN_TCP | `<port:16> <host or IP>` | socket handle |
 | 08 | OPEN_UDP | `<port:16> <host or IP>` | handle (connected socket) |
@@ -95,7 +108,7 @@ Instances 1 and 2 are independent (own current dir, own open file): use 2 for a 
 | 11 | WRITE_SOCKET | `<h> <data>` | 2-byte count sent |
 
 - DNS is implicit in OPEN_*. Interface numbering starts at 0 and may include an idle interface (zero IP): find the one with non-zero IP.
-- READ_SOCKET answers at once; nothing waiting gives status `02,NO DATA` (older firmware: count `$FFFF`). Poll every few frames, not every line. Request at most 512 bytes (on firmware 3.15 reads of 800-1023 bytes took the device off the network; reads up to 1472 in several blocks, with UDP truncation status `04`, entered 2026-08-27).
+- READ_SOCKET answers at once; nothing waiting gives status `02,NO DATA` (older firmware: count `$FFFF`). Poll every few frames, not every line. Request at most 512 bytes (on firmware 3.15 reads of 800-1023 bytes took the device off the network; the source now accepts up to 1472 in several blocks, with UDP truncation status `04`, entered 2026-08-27; a longer request gives `82`).
 - After `01,CONNECTION CLOSED BY HOST` the handle is already released.
 - A connect to a dead address blocks the C64 for up to about 31 s; unknown name fails in about 30 ms. Connect before the game loop with a status screen. Never connect to the device's own address.
 - 16 sockets, closed at C64 reset. No inbound listener in public firmware: multiplayer needs a relay server or UDP.
@@ -108,11 +121,15 @@ Instances 1 and 2 are independent (own current dir, own open file): use 2 for a 
 | 01 | IDENTIFY | - | `CONTROL TARGET V1.1` |
 | 05 | FREEZE | - | opens Ultimate menu; use no-reply `84 05` |
 | 06 | REBOOT | - | full C64 reboot, UCI reset, no reply |
-| 08 / 09 | LOAD_REU / SAVE_REU | `<filename>` | wedged the interface on firmware 3.14d; prefer DOS 21/22 |
+| 03 | FINISH_CAPTURE | - | ends a tape capture (not for games) |
+| 08 / 09 | LOAD_REU / SAVE_REU | `<3+ filler bytes>` | no filename is read: `08` loads the file set in `REU Preload Image` into the REU at `REU Preload Offset` (up to `REU Size` minus offset; needs `RAM Expansion Unit` Enabled, `REU Preload` may be Disabled); `09` writes the REU back to that file (an existing file is renamed `.bu`). Reply: 4-byte little-endian result (bytes moved, negative = error) plus text; statuses `81`, `84`, `85`, `86`. A wedge on firmware 3.14d was fixed in the source of 2026-11-13: the way to repeat the boot preload at run time. DOS `21`/`22` take any file and offset |
 | 0F | U64_SAVEMEM | `[<filename>]` | U64-class; saves 64 KB RAM to `/temp/c64_memory.bin`; C64 halted |
 | 28 | GET_HWINFO | `[sub]` | 0 = model string, 1 = SID decoder list (count, 5 bytes each; c64://ultimate/multisid) |
+| 11 / 12 | DECODE_TRACK / ENCODE_TRACK | | disk track tools (not for games) |
+| 20 | EASYFLASH | | EasyFlash sector tool (not for games) |
 | 29 | GET_DRVINFO | `[1]` | count, then 3 bytes per drive: type (`00` 1541, `01` 1571, `02` 1581, `0F` SoftwareIEC, `50` printer), IEC addr, power |
 | 30-35 | drive A/B power | - | `30` A on, `31` A off, `32` B on, `33` B off, `34`/`35` read power (`off`/`on `) |
+| 40 | GET_RAMDISKINFO | | RAM disk info (not for games) |
 | 50 | LOAD_CONFIG | `[<filename>]` | applies a `.cfg`; verified on C64U 1.2.1 |
 | 51 | GET_PALETTE | - | 48 bytes: 16 x R,G,B |
 | 52 | SET_PALETTE | 48 bytes | length 50 total |
@@ -123,7 +140,7 @@ Not available: reset without reboot, run PRG, change CPU speed, single config ge
 
 **Palette `$51-$54`** (U64-class only; U2 answers `21`; firmware 2026-09-03 on; wrong length gives `81`): 8 bits per channel, takes effect on the whole display at once, live only (reset restores defaults; nothing saved). Whole palette costs about a quarter of a frame at 1 MHz, one colour about an eighth; per-frame changes are fine, per-raster-line are not. A blocking write can take 12-58 ms (measured on a C64U), so in a time-critical display issue it as a non-blocking step per frame (push command, poll status once per frame, finish later, one command in flight) or under a fade. Send `04 54` on exit. Raw: `04 53 02 FF FF FF` colour 2 to white. See also c64://ultimate/upic.
 
-**LOAD_CONFIG** (`04 50 <name>`, default `/temp/uci_config.cfg`): the only config entry point. Write a `.cfg` via DOS, then send. Format: `[Store Name]` then `Item=value` lines; `#`/`;` comments; only listed items change; unknown stores skipped; stores are applied immediately. Stores: `[C64 and Cartridge Settings]` (`Command Interface`, REU items), `[U64 Specific Settings]` (`Turbo Control`, `CPU Speed`, `Badline Timing`, `System Mode`, `Palette Definition`, video items), `[Audio Mixer]` (`Vol ...`, `Pan ...`), SID address items. Item, store and value names must equal the menu text (source: case-insensitive, outer spaces ignored); use a `.cfg` saved from the menu as template. Status `88` file cannot open, `89` errors in file (reply data = parse log, up to 511 bytes; unknown store or item only logs a warning and gives `00`). Flash persistence is unverified (assume session only). Example and SID use: c64://ultimate/multisid.
+**LOAD_CONFIG** (`04 50 <name>`, default `/temp/uci_config.cfg`): the only config entry point. Write a `.cfg` via DOS, then send. Format: `[Store Name]` then `Item=value` lines; `#`/`;` comments; only listed items change; unknown stores skipped; stores are applied immediately. Stores: `[C64 and Cartridge Settings]` (`Command Interface`, REU items), `[U64 Specific Settings]` (`Turbo Control`, `CPU Speed`, `Badline Timing`, `System Mode`, `Palette Definition`, video items), `[Audio Mixer]` (`Vol ...`, `Pan ...`), SID address items. Item, store and value names must equal the menu text (source: case-insensitive, outer spaces ignored); use a `.cfg` saved from the menu as template. Status `88` file cannot open, `89` errors in file (reply data = parse log, up to 511 bytes; unknown store or item only logs a warning and gives `00`). All-or-nothing: if ANY line is rejected (invalid value label, missing `=`, empty name, line too long) the status is `89` and NO store is applied to the hardware (RAM values change, effect does not); fix the label, e.g. `CPU Speed=64` is invalid on U64 / Elite MK1 (max `48`). Item names up to 40 characters; strings are taken exactly, numbers are `%d`. The file-browser sidecar path applies the valid lines even when others fail (c64://gamedev/toolchain). Changes are RAM only and marked stale for flash: lost at power cycle unless saved from the menu or REST `save_to_flash` (confirmed in source). Example and SID use: c64://ultimate/multisid.
 
 ## Target 5: SoftwareIEC (fast load into C64 RAM)
 
@@ -133,23 +150,26 @@ Not available: reset without reboot, run PRG, change CPU speed, single config ge
 | 10 | LOAD_SU | `<sec> <verify> <addr:16> 00 00 <name>` | 2 bytes: file load address; if sec = 0, `addr` is used |
 | 11 | LOAD_EX | `<sec> <verify>` | copies into RAM; status `00` + end address:16 |
 | 12 | SAVE | `<verify> <sec> <start:16> <end:16> <name>` | PRG file |
+| 13-16 | OPEN / CLOSE / CHKIN / CHKOUT | | KERNAL-style channel I/O; argument layouts not documented here (unverified) |
+| 20-23 | ADD_PARTITION / DEL_PARTITION / GET_FATNAME / GET_IECNAME | | partition and name mapping (not for games) |
 
-Status: `00` OK, `01` not found, `02` save error, `05` IEC module not loaded, `06` invalid params, `80` verify error. The firmware stops the C64 during the copy, writes into the flat RAM view (RAM under I/O/ROM), and stops at 64 KB.
+Status: `00` OK, `01` not found, `02` save error, `03` no input channel, `05` IEC module not loaded, `06` invalid params, `07` invalid name, `08` invalid partition, `09` invalid dir, `80` verify error. The firmware stops the C64 during the copy, writes into the flat RAM view (RAM under I/O/ROM), and stops at 64 KB.
 - Firmware from 2026-09-23: `IEC Drive` = `UCI Only` (default), `Enabled` or `Disabled`; `Disabled` turns this target off (answers `05`). Fall back to DOS OPEN/READ/CLOSE.
 
 ## Target 6: HTTP (firmware 3.15, 2026-05)
 
-Header and body objects live in the Ultimate (16 slots each, machine-wide; a crashed program leaks them: FREE_ALL at startup). One exchange takes seconds to tens of seconds (DNS, connect, transfer). HTTPS works (certificate validation unverified). No ranges: a reply larger than your buffer is truncated.
+Header and body objects live in the Ultimate (16 slots each, machine-wide; a crashed program leaks them: FREE_ALL at startup). One exchange takes seconds to tens of seconds (DNS, connect, transfer). HTTPS is not supported by the public source: an `https://` URL only selects port 443 and the request is sent in clear text (no TLS code in the Ultimate application). An earlier note here said HTTPS works: the source contradicts that, a device check decides; use `http://` or a relay you control. No ranges: a reply larger than your buffer is truncated.
 
 | Cmd | Name | Args | Reply |
 |---|---|---|---|
 | 01 | IDENTIFY | - | `ULTIMATE HTTP TARGET V1.0` |
 | 10 | FREE_ALL | - | |
-| 11 / 12 | HEADER_CREATE / FREE | `<verb> <url>` / `<h>` | header handle; verbs GET 01 PUT 02 POST 03 PATCH 04 DELETE 05 HEAD 06 OPTIONS 07 |
+| 11 / 12 | HEADER_CREATE / FREE | `<verb> <url>` / `<h>` | header handle; verbs GET 01 PUT 02 POST 03 PATCH 04 DELETE 05 HEAD 06 OPTIONS 07 CONNECT 08 TRACE 09 |
 | 13 / 14 / 15 | HEADER_ADD / QUERY / LIST | `<h> "Key: value"` / `<h> <key>` / `<h> <index>` | |
 | 21 / 22 | BODY_CREATE / FREE | `<fmt>` / `<h>` | formats: BINARY 01, JSON OBJECT 02, JSON ARRAY 03, URL ENCODED 04 |
 | 23-27 | BODY_ADD_INT/BOOL/STRING/OBJECT/ARRAY | `<h> <keylen> <key> <value>` | |
 | 2A | BODY_QUERY | `<h> <path>` | typed value; the Ultimate parses JSON, the C64 needs no parser |
+| 28 / 29 / 2B | BODY_UP / REMOVE / MOVE | | edit the body tree |
 | 2C-2E | BODY_ADD_BINARY / ADD / CLEAR | | binary: repeat to append |
 | 31 | DO_EXCHANGE_OBJ | `<hdr> <body or FF>` | response header and body handles |
 | 32 | DO_EXCHANGE_RAW | `<hdr> <body or FF>` | response body bytes in blocks; status = server response line plus headers |
@@ -160,7 +180,7 @@ HTTP errors: `400` bad command/index, `404` key/entry not found, `500` bad forma
 
 - Levels: DOS open/seek/read 512-byte blocks (pack levels in one indexed file), SoftwareIEC LOAD for whole PRGs, or LOAD_REU once then DMA per level (c64://ultimate/reu).
 - High scores: open `$0E`, WRITE_DATA, CLOSE; read back with `$01`; FILE_STAT checks existence/size. Handle `DISK IS FULL`/`WRITE PROTECTED`. Do not use `/Temp` for persistence.
-- Settings: write `.cfg`, LOAD_CONFIG. Network play: TCP/UDP relay or HTTP JSON; never block in the frame loop.
+- Settings: write `.cfg`, LOAD_CONFIG (all-or-nothing, RAM only). Reload the REU at run time from the preload image with Control `04 08`. Network play: TCP/UDP relay or HTTP JSON; never block in the frame loop.
 
 ## Minimal 6502 routine (ca65 syntax, fresh example)
 

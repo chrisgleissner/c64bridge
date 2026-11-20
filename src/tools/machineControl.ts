@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { cancelledResult, defineToolModule } from "./types.js";
 import { booleanSchema, numberSchema, objectSchema, optionalSchema } from "./schema.js";
 import { waitForScreenText, MAX_WAIT_TIMEOUT_MS } from "./meta/screen.js";
@@ -191,6 +192,7 @@ export const machineControlModule = defineToolModule({
 
           const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.reset();
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while resetting", {
               details: normaliseFailure(result.details),
@@ -233,6 +235,7 @@ export const machineControlModule = defineToolModule({
 
           const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.reboot();
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while rebooting", {
               details: normaliseFailure(result.details),
@@ -351,6 +354,7 @@ export const machineControlModule = defineToolModule({
           ctx.logger.info("Powering off C64");
 
           const result = await ctx.client.poweroff();
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while powering off", {
               details: normaliseFailure(result.details),
@@ -400,6 +404,7 @@ export const machineControlModule = defineToolModule({
           }
           const before = await screenBeforeReset(ctx, parsed);
           const result = await ctx.client.powerCycle();
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("Power cycle did not complete", {
               details: normaliseFailure(result.details),

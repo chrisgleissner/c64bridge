@@ -22,7 +22,7 @@ Wait and workload limits appear in the schemas. MCP cancellation stops further w
 
 A launch acknowledgement does not establish successful execution or completion. Program runners, bundles and shuffle record failed launches and failed artifact reads. BASIC verification requires evidence from the new run. Printer text treats mnemonic-looking text literally; its bounded screen check reports a launch and observed errors rather than guaranteeing a completed print job. Silent or unavailable audio cannot establish accurate playback.
 
-Memory/layout checks reject graphics or charset spans over `$D000-$DFFF` I/O. The assembler rejects implicit zero-filled gaps across `$D000-$DFFF`; use separate blocks rather than a contiguous PRG across I/O. Sprite rendering sets the pointer for the selected VIC bank without clearing the display. Ambiguous four-digit hexadecimal address strings such as `0400` mean `$0400`; use explicit numeric values when decimal intent matters. VICE resource names are validated case-insensitively and unsafe file-backed resources remain blocked. Keyboard feed failures and debug-stop timeouts are errors.
+Memory/layout checks reject graphics or charset spans over `$D000-$DFFF` I/O. The assembler rejects implicit zero-filled gaps across `$D000-$DFFF`; use separate blocks rather than a contiguous PRG across I/O. Sprite rendering sets the pointer for the selected VIC bank without clearing the display. Bare numbers that could be hexadecimal or decimal, such as `0400` (leading zero) or `beef`, are rejected as ambiguous by `c64_memory` and `c64_debug`; write `$0400` or `0x0400` for hexadecimal and `1024` for decimal. VICE resource names are validated case-insensitively and unsafe file-backed resources remain blocked. Keyboard feed failures and debug-stop timeouts are errors.
 
 Ultimate firmware file discovery is single-directory and returns at most one match per pattern. `fs_stats` and shuffle use this same contract; they do not recursively enumerate the device filesystem. Returned matched filenames are used for launching rather than echoed wildcards. Disk mount verification failures are reported.
 
@@ -35,6 +35,19 @@ Ultimate firmware file discovery is single-directory and returns at most one mat
 Address arguments of `c64_memory` and of `c64_debug` checkpoints and `wait_for_state` accept a registered label. Order: numeric literal, then the ambiguous bare-hex rejection (a label such as `beef` cannot replace it), then loaded labels, then documented names such as `screen`. A loaded label therefore takes precedence over a documented name of the same spelling; results show the resolved address.
 
 The HTTP transport prints a stderr warning at startup when `C64BRIDGE_HTTP_TOKEN` is not set.
+
+## Untrusted device data and routes (Hardening 5)
+
+The device, the emulator and their network path are treated as untrusted input.
+
+- Route names: no tool argument can change the REST route. Configuration category and item names and device file paths reject `.` and `..` segments (also percent-encoded, in any letter case), control characters and backslashes; device paths also reject empty inner segments, and category names reject `/`. Item names may contain `/` (the firmware item `Bus Sharing - I/O1`); it is sent as `%2F` inside one segment. Rejection is a validation error before any request.
+- REST: a response body is limited to 16 MiB, and every request has a total deadline of 120 s in addition to the 10 s idle timeout (a call with a longer timeout keeps it as its deadline). Reachability probes are limited to 1 MiB. A memory read that returns a different number of bytes than requested, or a JSON body without data, is an error.
+- Video stream: packets must have width 1 to 512, lines within 0 to 512, 4 bits per pixel, encoding 0 and the payload their header announces; other datagrams (including palette packets) are ignored. A line counts toward a complete frame only when its pixels arrived. A reusable capture session keeps at most 4096 packets. Ignored datagrams are reported in diagnostics at most once per 10 s, with the count (`ignoredPackets`).
+- VICE monitor: a response frame above 4 MiB ends the monitor session.
+
+Labels belong to one program on one backend. They are cleared after every successful program start except `load_prg` (BASIC, assembly, PRG, CRT, find-and-run, shuffle, batch runs, compile cycle, PETSCII and art rendering, greeting, SID, MOD and compiled music), after reset, reboot, power cycle, power off and VICE restart, and on a backend switch. A failed start keeps them. A label named `__proto__` is returned like any other.
+
+`render_petscii_text` prints its text as data: quotes, NUL, `<`, `:` and `{` are spliced as `CHR$`, each line break starts a new printed line, and long lines are split so every BASIC line stays short. Text that would need more than 63999 as a line number is rejected.
 
 ## Limits and knowledge
 

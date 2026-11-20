@@ -1,4 +1,5 @@
 // Compile-run-verify cycle meta tool
+import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { cancelledResult, type ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema, booleanSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
@@ -76,16 +77,19 @@ export const tools: ToolDefinition[] = [
           if (ctx.signal?.aborted) return cancelledResult("Compile/run/verify cycle cancelled before launch.");
           // Compile
           if (sourceType === "basic") {
-            await (ctx.client as any).uploadAndRunBasic(source);
+            const started = await (ctx.client as any).uploadAndRunBasic(source);
+            if (started?.success) clearViceSymbols(); // labels belong to one program
             compiled = true;
             ran = true;
           } else if (sourceType === "asm") {
-            await (ctx.client as any).uploadAndRunAsm(source);
+            const started = await (ctx.client as any).uploadAndRunAsm(source);
+            if (started?.success) clearViceSymbols(); // labels belong to one program
             compiled = true;
             ran = true;
           } else if (sourceType === "sidwave") {
             // For SIDWAVE, use music_compile_and_play
-            await (ctx.client as any).musicCompileAndPlay(source, { format: "prg" });
+            const started = await (ctx.client as any).musicCompileAndPlay(source, { format: "prg" });
+            if (started?.success) clearViceSymbols(); // labels belong to one program
             compiled = true;
             ran = true;
           }

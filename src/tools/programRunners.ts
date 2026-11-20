@@ -384,7 +384,11 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
     let prg = basicToPrg(activeProgram);
     let entryAddress = prg.readUInt16LE(0);
 
-    const runBasic = async (source: string) => ctx.client.uploadAndRunBasic(source);
+    const runBasic = async (source: string) => {
+      const started = await ctx.client.uploadAndRunBasic(source);
+      if (started.success) clearViceSymbols(); // labels belong to one program
+      return started;
+    };
 
     // The screen before the run lets verification tell a program that cleared the screen from one that never ran.
     let screenBeforeRun: string | undefined;
@@ -454,6 +458,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         });
 
         const retryResult = await ctx.client.uploadAndRunBasic(fixAttempt.program);
+        if (retryResult.success) clearViceSymbols();
         if (!retryResult.success) {
           const data = {
             kind: "basic_runtime_error" as const,
@@ -639,10 +644,10 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     setViceSymbols(asmResult.symbols.entries());
     const symbolEntries = [...asmResult.symbols.entries()].sort((a, b) => a[1] - b[1]);
     const symbolsTruncated = symbolEntries.length > 256;
-    const symbolList: Record<string, string> = {};
-    for (const [name, address] of symbolEntries.slice(0, 256)) {
-      symbolList[name] = `$${address.toString(16).toUpperCase().padStart(4, "0")}`;
-    }
+    // fromEntries defines own properties, so a label named __proto__ is kept like any other.
+    const symbolList: Record<string, string> = Object.fromEntries(
+      symbolEntries.slice(0, 256).map(([name, address]) => [name, `$${address.toString(16).toUpperCase().padStart(4, "0")}`]),
+    );
     const symbolFields = symbolEntries.length > 0
       ? { symbols: symbolList, ...(symbolsTruncated ? { symbolsTruncated: true } : {}) }
       : {};
@@ -905,6 +910,7 @@ async function executeRunCrt(rawArgs: unknown, ctx: ToolExecutionContext): Promi
     ctx.logger.info("Running CRT file", { path: parsed.path });
 
     const result = await ctx.client.runCrtFile(parsed.path);
+    if (result.success) clearViceSymbols(); // labels belong to one program
     if (!result.success) {
       throw new ToolExecutionError("C64 backend reported failure while running CRT", {
         details: extractFailureDetails(result.details),
@@ -1080,6 +1086,7 @@ export const programRunnersModule = defineToolModule({
           ctx.logger.info("Running CRT file", { path: parsed.path });
 
           const result = await ctx.client.runCrtFile(parsed.path);
+          if (result.success) clearViceSymbols(); // labels belong to one program
           if (!result.success) {
             throw new ToolExecutionError("C64 backend reported failure while running CRT", {
               details: extractFailureDetails(result.details),

@@ -790,6 +790,9 @@ export async function logConnectivity(client: C64Client, baseUrl: string, networ
     // Share the per-device queue so the probe never overlaps a tool request.
     const probeResponse = await RequestQueue.forDevice(baseUrl).run(() => axios.get(infoUrl, {
       timeout: 2000,
+      // A probe body is small; a device that streams endlessly must not exhaust memory.
+      maxContentLength: 1024 * 1024,
+      signal: AbortSignal.timeout(10_000),
       // Any HTTP answer shows the device is reachable; a 401/403 is reported as an authentication problem below.
       validateStatus: () => true,
       // Device requests go straight to the LAN address, not through HTTP_PROXY.

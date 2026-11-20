@@ -15,6 +15,7 @@ import { resourceNameProblem } from "./vice/resourcePolicy.js";
 import { resetAndWaitForBasic } from "./vice/readiness.js";
 import { screenCodesToAscii } from "./petscii.js";
 import { startViceProcess, type ViceProcessHandle, type ViceProcessOptions } from "./vice/process.js";
+import { assertSafeConfigName, assertSafeDevicePath } from "./devicePathSafety.js";
 import { loadConfig, resolveUltimateEndpoint, type ResolvedUltimateEndpoint } from "./config.js";
 
 let signalDelegate = false;
@@ -342,6 +343,8 @@ export async function probeUltimateReachable(baseUrl: string, timeout: number, n
   try {
     await axios.get(`${baseUrl.replace(/\/+$/, "")}/v1/version`, {
       timeout,
+      maxContentLength: 1024 * 1024,
+      signal: AbortSignal.timeout(Math.max(timeout * 5, 10_000)),
       headers: buildC64uHeaders(networkPassword),
       validateStatus: () => true,
       proxy: false,
@@ -476,12 +479,21 @@ class C64uBackend implements C64Facade {
     );
     const contentType = (response.headers?.["content-type"] ?? "").toString().toLowerCase();
     const body = response.data as unknown;
+    let bytes: Uint8Array;
     if (contentType.includes("application/json")) {
       const text = Buffer.from(body as ArrayBuffer).toString("utf8");
-      try { const parsed = JSON.parse(text); return extractBytes(parsed?.data ?? parsed); } catch { return extractBytes(text); }
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+      if (parsed !== undefined && typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && !("data" in parsed)) {
+        const errors = (parsed as { errors?: unknown }).errors;
+        throw new Error(`Memory read at $${addrStr} returned a JSON body without data${Array.isArray(errors) && errors.length > 0 ? `: ${errors.map(String).join("; ")}` : ""}`);
+      }
+      bytes = parsed === undefined ? extractBytes(text) : extractBytes((parsed as { data?: unknown } | null)?.data ?? parsed);
+    } else {
+      bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : extractBytes(body);
     }
-    if (body instanceof ArrayBuffer) return new Uint8Array(body);
-    return extractBytes(body);
+    if (bytes.length !== length) throw new Error(`Memory read at $${addrStr} returned ${bytes.length} bytes instead of ${length}`);
+    return bytes;
   }
   async writeMemory(address: number, bytes: Uint8Array): Promise<void> {
     const addrStr = address.toString(16).toUpperCase().padStart(4, "0");
@@ -604,8 +616,8 @@ class C64uBackend implements C64Facade {
   // The generated client interpolates path parameters unencoded and the firmware
   // splits the path on "/" before decoding, so names such as "Bus Sharing - I/O1"
   // must be percent-encoded here.
-  async configGet(cat: string, item?: string): Promise<unknown> { const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
-  async configSet(cat: string, item: string, value: string): Promise<RunResult> { const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
+  async configGet(cat: string, item?: string): Promise<unknown> { assertSafeConfigName(cat, "category"); if (item) assertSafeConfigName(item, "item"); const res = item ? await this.api.v1.configsDetail2(encodeURIComponent(cat), encodeURIComponent(item)) : await this.api.v1.configsDetail(encodeURIComponent(cat)); return res.data; }
+  async configSet(cat: string, item: string, value: string): Promise<RunResult> { assertSafeConfigName(cat, "category"); assertSafeConfigName(item, "item"); const res = await this.api.v1.configsUpdate(encodeURIComponent(cat), encodeURIComponent(item), { value }); return this.actionResult(res.data); }
   async configBatchUpdate(payload: Record<string, object>): Promise<RunResult> { const res = await this.api.v1.configsCreate(payload); return this.actionResult(res.data); }
   async configLoadFromFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsLoadFromFlashUpdate(configActionRoute(":load_from_flash", category)); return this.actionResult(res.data); }
   async configSaveToFlash(category?: string): Promise<RunResult> { const res = await this.api.v1.configsSaveToFlashUpdate(configActionRoute(":save_to_flash", category)); return this.actionResult(res.data); }
@@ -1844,12 +1856,15 @@ function unsupported(name: string): Error { const err = new Error(`Operation '${
 
 /** Whole-device route suffix, or `/{category}:action` for one category (the generated client prefixes `/v1/configs`). */
 function configActionRoute(action: string, category?: string): string {
-  return category === undefined ? action : `/${encodeURIComponent(category)}${action}`;
+  if (category === undefined) return action;
+  assertSafeConfigName(category, "category");
+  return `/${encodeURIComponent(category)}${action}`;
 }
 
 /** Ultimate file APIs treat slash as a path separator. Encode each name once,
  * preserving leading and nested separators for firmware routing. */
 function encodeDevicePath(value: string): string {
+  assertSafeDevicePath(value);
   return value.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }
 

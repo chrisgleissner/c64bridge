@@ -265,9 +265,13 @@ interface C64uVideoCaptureSession {
   readonly socket: Socket;
   readonly bindAddress: string;
   readonly target: string;
+  /** The most recent packets, at most VIDEO_SESSION_MAX_PACKETS; older ones are dropped. */
   readonly packets: Array<ReturnType<typeof parseVideoPacket>>;
+  /** Number of packets dropped from the front of `packets`; packet indexes below are absolute. */
+  packetBase: number;
   readonly waiters: Array<{
     count: number;
+    /** Absolute index of the first packet this waiter may use. */
     startIndex: number;
     resolve: (frames: readonly CapturedFrame[]) => void;
     reject: (error: Error) => void;
@@ -277,6 +281,16 @@ interface C64uVideoCaptureSession {
   closed: boolean;
   error: Error | null;
 }
+
+/**
+ * Packets a reusable video capture session keeps. A frame is 68 packets at the firmware geometry
+ * (at most 512 for one-line packets), so this covers several requested frames; older packets can
+ * no longer complete a frame a waiter needs, and the stream must not grow memory while it stays open.
+ */
+export const VIDEO_SESSION_MAX_PACKETS = 4096;
+
+/** Shortest interval between two diagnostic records about ignored video datagrams. */
+const IGNORED_VIDEO_REPORT_INTERVAL_MS = 10_000;
 
 export interface BitmapDisplayResult {
   readonly mode: "hires" | "multicolor";
@@ -1946,6 +1960,7 @@ export class C64Client {
       bindAddress,
       target,
       packets: [],
+      packetBase: 0,
       waiters: [],
       stopTimer: null,
       closed: false,
@@ -1961,7 +1976,16 @@ export class C64Client {
         return;
       }
       session.packets.push(packet);
-      this.flushC64uVideoCaptureWaiters(session);
+      const excess = session.packets.length - VIDEO_SESSION_MAX_PACKETS;
+      if (excess > 0) {
+        session.packets.splice(0, excess);
+        session.packetBase += excess;
+      }
+      try {
+        this.flushC64uVideoCaptureWaiters(session);
+      } catch (error) {
+        this.rejectC64uVideoCaptureWaiters(session, error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
     socket.on("error", (error) => {
@@ -1990,8 +2014,8 @@ export class C64Client {
     if (session.error) {
       throw session.error;
     }
-    const startIndex = options.fresh ? session.packets.length : 0;
-    const existingFrames = collectCompleteVideoFrames(session.packets.slice(startIndex), count);
+    const startIndex = session.packetBase + (options.fresh ? session.packets.length : 0);
+    const existingFrames = collectCompleteVideoFrames(session.packets.slice(startIndex - session.packetBase), count);
     if (existingFrames.length >= count) {
       return existingFrames;
     }
@@ -2028,7 +2052,7 @@ export class C64Client {
   private flushC64uVideoCaptureWaiters(session: C64uVideoCaptureSession): void {
     for (let index = session.waiters.length - 1; index >= 0; index -= 1) {
       const waiter = session.waiters[index];
-      const frames = collectCompleteVideoFrames(session.packets.slice(waiter.startIndex), waiter.count);
+      const frames = collectCompleteVideoFrames(session.packets.slice(Math.max(0, waiter.startIndex - session.packetBase)), waiter.count);
       if (frames.length >= waiter.count) {
         session.waiters.splice(index, 1);
         waiter.resolve(frames);
@@ -2423,14 +2447,27 @@ export class C64Client {
     throw new Error(`Failed to ${action}: ${JSON.stringify(result.details ?? null)}`);
   }
 
+  /** Ignored video datagrams not yet reported, and when the last report was written. */
+  private ignoredVideoPackets = 0;
+  private ignoredVideoReportAt = 0;
+
   private parseVideoPacketOrNull(payload: Buffer): ReturnType<typeof parseVideoPacket> | null {
     try {
       return parseVideoPacket(payload);
     } catch (error) {
-      writeDiagnosticEvent("capture_video_packet_ignored", {
-        message: error instanceof Error ? error.message : String(error),
-        bytes: payload.length,
-      });
+      // A hostile stream can send thousands of bad datagrams per second: report at most one record
+      // per interval, carrying the number ignored since the previous record and the latest reason.
+      this.ignoredVideoPackets += 1;
+      const now = Date.now();
+      if (now - this.ignoredVideoReportAt >= IGNORED_VIDEO_REPORT_INTERVAL_MS) {
+        writeDiagnosticEvent("capture_video_packet_ignored", {
+          message: error instanceof Error ? error.message : String(error),
+          bytes: payload.length,
+          ignoredPackets: this.ignoredVideoPackets,
+        });
+        this.ignoredVideoPackets = 0;
+        this.ignoredVideoReportAt = now;
+      }
       return null;
     }
   }
@@ -2566,7 +2603,11 @@ export class C64Client {
     validateMemoryRange(address, length);
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
-      return await facade.readMemory(address, length);
+      const bytes = await facade.readMemory(address, length);
+      if (bytes.length !== length) {
+        throw new Error(`Memory read at ${this.formatAddress(address)} returned ${bytes.length} bytes instead of ${length}`);
+      }
+      return bytes;
     } catch (facadeError) {
       if (!(facadeError instanceof Error) || (facadeError as any).code !== "UNSUPPORTED") {
         throw facadeError;
@@ -2581,16 +2622,23 @@ export class C64Client {
     );
     const contentType = (response.headers?.["content-type"] ?? "").toString().toLowerCase();
     const body = response.data as unknown;
+    let bytes: Uint8Array;
     if (contentType.includes("application/json")) {
       const text = Buffer.from(body as ArrayBuffer).toString("utf8");
-      try {
-        const parsed = JSON.parse(text);
-        return this.extractBytes(parsed?.data ?? parsed);
-      } catch {
-        return this.extractBytes(text);
+      let parsed: unknown;
+      try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+      if (parsed !== undefined && typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && !("data" in parsed)) {
+        const errors = (parsed as { errors?: unknown }).errors;
+        throw new Error(`Memory read at ${addrStr} returned a JSON body without data${Array.isArray(errors) && errors.length > 0 ? `: ${errors.map(String).join("; ")}` : ""}`);
       }
+      bytes = parsed === undefined ? this.extractBytes(text) : this.extractBytes((parsed as { data?: unknown } | null)?.data ?? parsed);
+    } else {
+      bytes = body instanceof ArrayBuffer ? new Uint8Array(body) : this.extractBytes(body);
     }
-    return body instanceof ArrayBuffer ? new Uint8Array(body) : this.extractBytes(body);
+    if (bytes.length !== length) {
+      throw new Error(`Memory read at ${addrStr} returned ${bytes.length} bytes instead of ${length}`);
+    }
+    return bytes;
   }
 
   /**
@@ -3102,13 +3150,24 @@ export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: numb
   const bg = toByte(opts.backgroundColor ?? 0); // default black
   // Clear screen, set colours, print text starting at 1,1
   // Note: CHR$(147) clears the screen.
-  const sanitized = opts.text.replace(/\r\n?|\n/g, "\\n");
-  const program = [
-    `10 POKE 53280,${border}:POKE 53281,${bg}:PRINT CHR$(147)`,
-    `20 PRINT "${sanitized}"`,
-    `30 GETA$:IFA$=""THEN30:END:REM wait for key then end`,
-  ].join("\n");
-  return program;
+  // The text is data: quotes and the characters the tokenizer expands become CHR$ pieces, and each
+  // line break is a real PRINT line end. Long lines are split so a BASIC line stays short.
+  const lines = [`10 POKE 53280,${border}:POKE 53281,${bg}:PRINT CHR$(147)`];
+  let ln = 20;
+  for (const logical of opts.text.split(/\r\n|\r|\n/)) {
+    if (logical.length === 0) {
+      lines.push(`${ln} PRINT`);
+      ln += 10;
+      continue;
+    }
+    const chunks = chunkByExpressionLength(logical, (text) => printerTextExpression(text, "commodore"), PRINTER_EXPRESSION_MAX);
+    chunks.forEach((chunk, index) => {
+      lines.push(`${ln} PRINT ${printerTextExpression(chunk, "commodore")}${index < chunks.length - 1 ? ";" : ""}`);
+      ln += 10;
+    });
+  }
+  lines.push(`${ln} GETA$:IFA$=""THEN${ln}:END:REM wait for key then end`);
+  return lines.join("\n");
 }
 
 export function buildPrinterBasicProgram(opts: {
@@ -3192,6 +3251,8 @@ function printerTextExpression(input: string, target: "commodore" | "epson", sec
   const needsChr = (char: string): number | undefined => {
     // Literal < and : and { would be expanded to control codes (<RETURN>, :cr:, {home}) by the tokenizer.
     if (char === "<" || char === ":" || char === "{") return char.charCodeAt(0);
+    // A NUL byte in a string literal would end the tokenised BASIC line.
+    if (char === "\u0000") return 0;
     if (target === "epson" && char >= "a" && char <= "z") return char.charCodeAt(0);
     if (target === "commodore" && secondaryAddress === 7 && char >= "A" && char <= "Z") return char.charCodeAt(0) + 0x80;
     return undefined;

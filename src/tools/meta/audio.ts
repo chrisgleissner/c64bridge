@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../../sidwaveCompiler.js";
 import { parseSidwave } from "../../sidwave.js";
 import { recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
@@ -369,6 +370,7 @@ export const tools: ToolDefinition[] = [
             await trySilenceSid(context);
 
             const playback = await context.client.runPrg(compiled.prg);
+            if (playback.success) clearViceSymbols(); // labels belong to one program
             const backendResult: Record<string, unknown> = {
               backend,
               preset: preset.key,
@@ -564,6 +566,7 @@ export const tools: ToolDefinition[] = [
         if (format === "sid") {
           const sid = compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress });
           const playback = await context.client.sidplayAttachment(sid.sid);
+          if (playback.success) clearViceSymbols(); // labels belong to one program
           playbackDetails = normaliseDetails(playback.details);
           if (!playback.success) {
             throw new ToolExecutionError("Playback failed", {
@@ -572,6 +575,7 @@ export const tools: ToolDefinition[] = [
           }
         } else {
           const playback = await context.client.runPrg(compiled.prg);
+          if (playback.success) clearViceSymbols(); // labels belong to one program
           playbackDetails = normaliseDetails(playback.details);
           if (!playback.success) {
             throw new ToolExecutionError("Playback failed", {

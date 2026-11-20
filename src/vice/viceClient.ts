@@ -105,9 +105,17 @@ export interface ViceConnectOptions {
   readonly socketFactory?: (host: string, port: number) => net.Socket;
 }
 
+/** Largest monitor response body accepted from VICE (the largest real response is a 64 KiB memory read or a display buffer). */
+export const VICE_MAX_FRAME_BODY_BYTES = 4 * 1024 * 1024;
+
 export class ViceClient {
   private socket!: net.Socket;
-  private buffer: Buffer = Buffer.alloc(0);
+  /** Received bytes not yet part of a complete frame, as the chunks that arrived (no re-concatenation per chunk). */
+  private chunks: Buffer[] = [];
+  private buffered = 0;
+  /** The unconsumed bytes as one Buffer (diagnostics and tests; the receive path works on the chunk list). */
+  private get buffer(): Buffer { return Buffer.concat(this.chunks, this.buffered); }
+  private set buffer(value: Buffer) { this.chunks = value.length > 0 ? [value] : []; this.buffered = value.length; }
   private nextReqId = 1;
   private pending: Map<number, PendingRequest> = new Map();
   private closing = false;
@@ -203,7 +211,8 @@ export class ViceClient {
     try {
       this.closing = true;
       this.rejectAllPending(reason);
-      this.buffer = Buffer.alloc(0);
+      this.chunks = [];
+      this.buffered = 0;
       this.socket?.removeAllListeners();
       this.socket?.destroy();
     } catch {}
@@ -219,23 +228,72 @@ export class ViceClient {
     this.pending.clear();
   }
 
+  /** The first `count` buffered bytes as one Buffer; the chunk list keeps the rest. */
+  private takeBytes(count: number, consume: boolean): Buffer {
+    const first = this.chunks[0]!;
+    if (first.length >= count) {
+      const head = first.subarray(0, count);
+      if (consume) {
+        if (first.length === count) this.chunks.shift();
+        else this.chunks[0] = first.subarray(count);
+        this.buffered -= count;
+      }
+      return head;
+    }
+    const parts: Buffer[] = [];
+    let missing = count;
+    let index = 0;
+    while (missing > 0) {
+      const part = this.chunks[index]!;
+      parts.push(missing >= part.length ? part : part.subarray(0, missing));
+      missing -= part.length;
+      index += 1;
+    }
+    const joined = Buffer.concat(parts, count);
+    if (consume) {
+      const rest = this.chunks.slice(index);
+      if (missing < 0) rest.unshift(this.chunks[index - 1]!.subarray(this.chunks[index - 1]!.length + missing));
+      this.chunks = rest;
+      this.buffered -= count;
+    }
+    return joined;
+  }
+
+  /** The peer is untrusted: a frame length above the cap ends the session instead of growing a buffer. */
+  private failSession(reason: Error): void {
+    this.chunks = [];
+    this.buffered = 0;
+    this.rejectAllPending(reason);
+    this.socket?.destroy();
+  }
+
   private onData(chunk: ViceDataChunk): void {
     const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    this.buffer = Buffer.concat([this.buffer, data]);
+    if (data.length === 0) return;
+    this.chunks.push(data);
+    this.buffered += data.length;
     // Frame: [0]=0x02, [1]=0x02, [2..5]=len, [6]=respType, [7]=err, [8..11]=reqId, [12..]=body
-    while (this.buffer.length >= 12) {
-      if (this.buffer[0] !== 0x02 || this.buffer[1] !== 0x02) {
-        const idx = this.buffer.indexOf(Buffer.from([0x02, 0x02]), 1);
-        this.buffer = idx === -1 ? Buffer.alloc(0) : this.buffer.subarray(idx);
+    while (this.buffered >= 12) {
+      const header = this.takeBytes(12, false);
+      if (header[0] !== 0x02 || header[1] !== 0x02) {
+        const all = this.takeBytes(this.buffered, true);
+        const idx = all.indexOf(Buffer.from([0x02, 0x02]), 1);
+        if (idx !== -1) {
+          this.chunks = [all.subarray(idx)];
+          this.buffered = all.length - idx;
+        }
         continue;
       }
 
-      const bodyLen = this.buffer.readUInt32LE(2);
+      const bodyLen = header.readUInt32LE(2);
+      if (bodyLen > VICE_MAX_FRAME_BODY_BYTES) {
+        this.failSession(new Error(`VICE monitor frame of ${bodyLen} bytes exceeds the ${VICE_MAX_FRAME_BODY_BYTES} byte limit`));
+        return;
+      }
       const total = 12 + bodyLen;
-      if (this.buffer.length < total) return;
+      if (this.buffered < total) return;
 
-      const frame = this.buffer.subarray(0, total);
-      this.buffer = this.buffer.subarray(total);
+      const frame = this.takeBytes(total, true);
 
       const responseType = frame[6];
       const err = frame[7];

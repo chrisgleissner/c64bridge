@@ -194,13 +194,24 @@ function isPauseControlRequest(requestConfig: AxiosRequestConfig): boolean {
   return /machine:(pause|resume)(\?|$)/.test(url);
 }
 
+/** Largest REST response body that is buffered; the device is untrusted input. */
+export const REST_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Total time one REST request may take, in addition to the idle `timeout` (which a slow trickle
+ * keeps resetting). A request that sets a longer `timeout` keeps that as its total deadline.
+ */
+export const REST_TOTAL_DEADLINE_MS = 120_000;
+
 export function createLoggingHttpClient<SecurityDataType = unknown>(
   config?: ApiConfig<SecurityDataType>,
   logger: PrefixedLogger = loggerFor("c64u"),
   queue?: RequestQueue,
+  limits?: { readonly totalDeadlineMs?: number },
 ): HttpClient<SecurityDataType> {
   // Device requests go straight to the LAN address; HTTP_PROXY must not apply.
-  const http = new HttpClient<SecurityDataType>({ proxy: false, ...config } as ApiConfig<SecurityDataType>);
+  const http = new HttpClient<SecurityDataType>({ proxy: false, maxContentLength: REST_MAX_RESPONSE_BYTES, ...config } as ApiConfig<SecurityDataType>);
+  const totalDeadlineMs = limits?.totalDeadlineMs ?? REST_TOTAL_DEADLINE_MS;
   registerSecret(readPasswordHeader(config?.headers));
 
   http.instance.interceptors.request.use((request) => {
@@ -217,6 +228,11 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
     };
 
     (request as AxiosRequestConfig & { __c64Meta?: RequestMeta }).__c64Meta = meta;
+    // Total deadline per request (runs after the queue wait); the axios timeout only covers idle time.
+    const deadlineMs = limits?.totalDeadlineMs !== undefined ? totalDeadlineMs : Math.max(totalDeadlineMs, Number(request.timeout) || 0);
+    const deadline = AbortSignal.timeout(deadlineMs);
+    request.signal = request.signal ? AbortSignal.any([request.signal as AbortSignal, deadline]) : deadline;
+    (request as AxiosRequestConfig & { __c64Deadline?: { signal: AbortSignal; ms: number } }).__c64Deadline = { signal: deadline, ms: deadlineMs };
     return request;
   });
 
@@ -259,6 +275,11 @@ export function createLoggingHttpClient<SecurityDataType = unknown>(
       return response;
     },
     (error: AxiosError) => {
+      const deadline = (error.config as (AxiosRequestConfig & { __c64Deadline?: { signal: AbortSignal; ms: number } }) | undefined)?.__c64Deadline;
+      if (error.code === "ERR_CANCELED" && deadline?.signal.aborted && (deadline.signal.reason as Error | undefined)?.name === "TimeoutError") {
+        error.code = "ECONNABORTED";
+        error.message = `Request exceeded the total deadline of ${deadline.ms} ms`;
+      }
       handleError(error, logger);
       return Promise.reject(scrubRequestError(error));
     },

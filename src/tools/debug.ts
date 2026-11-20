@@ -23,7 +23,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { parseNumericLiteral, assertNotBareHex } from "../numericArg.js";
-import { getSymbolAddress } from "./translation/symbolRegistry.js";
+import { clearViceSymbols, getSymbolAddress } from "./translation/symbolRegistry.js";
 
 interface DebugOperationMap extends OperationMap {
   readonly list_checkpoints: Record<string, never>;
@@ -643,6 +643,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         });
       }
       checkpointLabels.clear();
+      clearViceSymbols(); // a restarted emulator runs no program
       return textResult("VICE process stopped and restarted.", { success: true });
     } catch (error) {
       return handleToolError(error);

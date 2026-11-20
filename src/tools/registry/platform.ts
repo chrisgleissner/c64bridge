@@ -1,3 +1,4 @@
+import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { describePlatformCapabilities, type PlatformId } from "../../platform.js";
 import { cancelGeneratedSidPlayback } from "../audio.js";
 import { debugModuleGroup as debugModule } from "../debug.js";
@@ -98,6 +99,7 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
 
     cancelGeneratedSidPlayback(); // A backend switch is the documented cue to stop it rather than let it keep playing on the old backend.
     ctx.client.switchBackend(backend);
+    clearViceSymbols(); // labels belong to one program on one backend
     ctx.setPlatform(backend);
 
     const { availableTools, unavailableTools, unavailableOperations } = describeTargetPlatform(backend);

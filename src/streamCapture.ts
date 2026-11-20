@@ -38,6 +38,11 @@ interface VideoFrameGroup {
   readonly packets: readonly ParsedVideoPacket[];
 }
 
+/** Largest frame the firmware sends is 384 x 272; the packet encoding field 0 carries 4 bit video lines. */
+export const VIDEO_MAX_WIDTH = 512;
+export const VIDEO_MAX_HEIGHT = 512;
+const VIDEO_ENCODING_PIXELS = 0;
+
 export function parseVideoPacket(payload: Buffer): ParsedVideoPacket {
   if (payload.length < VIDEO_STREAM_HEADER_BYTES) {
     throw new Error(`Video packet too small: ${payload.length}`);
@@ -52,6 +57,24 @@ export function parseVideoPacket(payload: Buffer): ParsedVideoPacket {
   const linesPerPacket = payload.readUInt8(8);
   const bitsPerPixel = payload.readUInt8(9);
   const encodingType = payload.readUInt16LE(10);
+
+  // The device is untrusted input: bound the geometry before anything is allocated from it.
+  if (encodingType !== VIDEO_ENCODING_PIXELS) {
+    throw new Error(`Video packet encoding ${encodingType} is not a pixel packet`);
+  }
+  if (bitsPerPixel !== 4) {
+    throw new Error(`Video packet uses ${bitsPerPixel} bits per pixel; only 4 is supported`);
+  }
+  if (pixelsPerLine < 1 || pixelsPerLine > VIDEO_MAX_WIDTH) {
+    throw new Error(`Video packet width ${pixelsPerLine} is outside 1..${VIDEO_MAX_WIDTH}`);
+  }
+  if (linesPerPacket < 1 || lineNumber + linesPerPacket > VIDEO_MAX_HEIGHT) {
+    throw new Error(`Video packet lines ${lineNumber}+${linesPerPacket} exceed ${VIDEO_MAX_HEIGHT}`);
+  }
+  const expectedPayloadBytes = Math.ceil((pixelsPerLine * bitsPerPixel) / 8) * linesPerPacket;
+  if (payload.length - VIDEO_STREAM_HEADER_BYTES < expectedPayloadBytes) {
+    throw new Error(`Video packet payload ${payload.length - VIDEO_STREAM_HEADER_BYTES} is shorter than the ${expectedPayloadBytes} bytes its header claims`);
+  }
 
   return {
     sequence,
@@ -113,6 +136,9 @@ export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[]): Ca
   const bytesPerLine = Math.ceil((width * reference.bitsPerPixel) / 8);
   const maxLine = Math.max(...packets.map((packet) => packet.lineNumber + packet.linesPerPacket));
   const height = maxLine;
+  if (width < 1 || width > VIDEO_MAX_WIDTH || height > VIDEO_MAX_HEIGHT || reference.bitsPerPixel !== 4) {
+    throw new Error(`Video frame geometry ${width} x ${height} at ${reference.bitsPerPixel} bits per pixel is not supported`);
+  }
   const pixels = new Uint8Array(width * height);
   const filledLines = new Set<number>();
 
@@ -125,6 +151,9 @@ export function reconstructVideoFrame(packets: readonly ParsedVideoPacket[]): Ca
         continue;
       }
       const srcStart = lineOffset * bytesPerLine;
+      if (packetPayload.length < srcStart + bytesPerLine) {
+        continue; // the line's bytes did not arrive
+      }
       const srcLine = packetPayload.subarray(srcStart, srcStart + bytesPerLine);
       unpack4BitPixelsToRow(srcLine, pixels, lineIndex * width, width);
       filledLines.add(lineIndex);
@@ -164,13 +193,17 @@ function isVideoFrameGroupComplete(group: VideoFrameGroup): boolean {
   }
 
   const expectedHeight = lastPacket.lineNumber + lastPacket.linesPerPacket;
-  if (expectedHeight <= 0) {
+  if (expectedHeight <= 0 || expectedHeight > VIDEO_MAX_HEIGHT) {
     return false;
   }
 
   const coveredLines = new Set<number>();
   for (const packet of group.packets) {
+    const bytesPerLine = Math.ceil((packet.pixelsPerLine * packet.bitsPerPixel) / 8);
     for (let offset = 0; offset < packet.linesPerPacket; offset += 1) {
+      if (packet.payload.length < (offset + 1) * bytesPerLine) {
+        continue; // a line counts only when its payload arrived
+      }
       coveredLines.add(packet.lineNumber + offset);
     }
   }
