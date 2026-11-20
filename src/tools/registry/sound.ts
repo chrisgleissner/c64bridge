@@ -42,7 +42,7 @@ const captureSamplesArgsSchema = objectSchema({
   properties: {
     op: literalSchema("capture_samples"),
     count: optionalSchema(numberSchema({
-      description: "Number of stereo sample pairs to capture.",
+      description: "Stereo sample pairs to capture; at most 65536 (about 1.37 s).",
       integer: true,
       minimum: 1,
       maximum: 65536,
