@@ -182,6 +182,12 @@ function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
     // The client closed its end of stdout (EPIPE): without a listener the write error is an
     // uncaught exception that ends the process before cleanup.
     process.stdout.on("error", () => void shutdown("stdout closed", 0));
+    // Bun (1.3) reports neither an error event nor a failed write callback for a closed stdout
+    // pipe; the only sign is SIGPIPE, which it delivers to a listener. Node already reports EPIPE
+    // above, and a SIGPIPE listener there would also catch writes to broken device sockets.
+    if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
+      process.on("SIGPIPE", () => void shutdown("stdout closed", 0));
+    }
   }
 }
 
