@@ -11,12 +11,12 @@ Sources: the public implementations below (renderer, file format, layout); turbo
 |---|---|
 | Machine | Ultimate 64, Elite (48 MHz), Elite II, C64U (64 MHz). Not U2 cartridges, not a stock C64, not VICE (logic and buffers can be tested in VICE; the picture cannot). |
 | Video | PAL (the renderer timing assumes 63 cycles per line and 312 lines) |
-| Turbo | `Turbo Control` = `U64 Turbo Registers` (the label in the public source, measured U64 and measured C64U) and `CPU Speed` = top entry (`48` or `64`); the program then writes `$D031` = `$8F` (index 15, badline stalls off). Set them with `c64_config` or with a `.cfg` named like the PRG (same folder, started from the Ultimate file browser; c64://gamedev/toolchain). Write exactly one `Turbo Control` line: a value the firmware does not list makes UCI LOAD_CONFIG answer `89` and apply nothing (rule in c64://ultimate/hardware). |
+| Turbo | `Turbo Control` = the registers mode (`U64 Turbo Registers` on U64, `C64U Turbo Registers` on C64U, measured) and `CPU Speed` = top entry (`48` or `64`); the program then writes `$D031` = `$8F` (index 15). Index 15 is 64 MHz on the C64U (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20), so a program that must run at 48 MHz there writes `$8E` (index 14: probe 201, 48 MHz measured); on U64 index 15 is 48 MHz. Set them with `c64_config` or with a `.cfg` named like the PRG (same folder, started from the Ultimate file browser; c64://gamedev/toolchain). Write exactly one `Turbo Control` line: a value the firmware does not list makes UCI LOAD_CONFIG answer `89` and apply nothing (rule in c64://ultimate/hardware). |
 | UCI | `Command Interface` = Enabled, for palette commands (c64://ultimate/uci) |
 | Firmware | palette commands `04 51`-`04 54`: U64 family, public master since 2026-09-03; present on the measured C64U (1.2.1). `21,UNKNOWN COMMAND` means they are missing. |
 
 - Index 15 gives 48 MHz or 64 MHz depending on model; the register cannot tell. Probe (c64://ultimate/hardware).
-- After `run_prg` the CPU runs at 1 MHz for 2.55 s (measured U64) and 2.57 s (measured C64U) whatever `$D031` holds. Probe until two loop results agree before the first frame.
+- After a start the CPU runs at 1 MHz whatever `$D031` holds: 2.6 s after `run_prg` program start, 3.9 s after `load_prg` and a typed `SYS` (`upload_run_asm`), 4.17 s after a reset (measured on U64 3.15a) (measured on C64 Ultimate, firmware 1.2.1, 2026-11-20). Probe until two loop results agree before the first frame.
 
 ## Display model
 
