@@ -307,3 +307,21 @@ Licences read with `gh api repos/<owner>/<repo>` (SPDX field) and the repositori
 | codetapper, cadaver.github.io, elmerproductions, readthedocs, theweb.dk URLs | CONFIRMED (HTTP 200) | - | curl 2026-11-20 |
 | codebase64.net page ids | UNVERIFIED, marked | - | codebase64.net no connection; codebase64.org 404 |
 | generationamiga article | UNVERIFIED, marked | - | no URL given |
+
+### D7 - data/sound/sidwave.md (C64 facts only; compiler behaviour is code, not checked here)
+
+Calculations in `verify/` notes: PAL 985248 Hz, NTSC 1022727 Hz as in A1b.
+
+| Item | file:line | Verdict | Corrected wording | Source |
+|---|---|---|---|---|
+| PAL 985248 Hz, 50.12 (50.1245) frames/s; NTSC 1022727 Hz, 59.83 (59.8262) | sidwave.md:84,90 | CONFIRMED | - | Bauer 3.4 table (63 x 312, 65 x 263) and clock as A1b: 985248/19656 = 50.1245, 1022727/17095 = 59.8261 |
+| B7 exceeds the 16-bit register on PAL; highest PAL note A#7 | :134 | CONFIRMED | - | f x 2^24 / clock (Mapping $D400): B7 PAL 67280 > 65535, NTSC 64815; A#7 PAL 63504 |
+| Vibrato limits A#7 PAL 0.54, B7 NTSC 0.19 semitones | :140 | CONFIRMED | - | 12 log2(65535/63504) = 0.545; 12 log2(65535/64815) = 0.191 |
+| Frequency resolution "about 3 cents in the lowest octave" | :140 | IMPRECISE, fixed | about 6 cents at C0, 3 cents at C1 (PAL) | 1200 log2((r+1)/r): C0 r = 278.4 gives 6.2, C1 r = 556.8 gives 3.1 |
+| Hard restart "avoids the SID's ADSR delay bug" | :170 | UNVERIFIED, marked | - | no primary source fetched |
+| 20-65 raster lines = "about 1,400-4,100 cycles" | :174 | IMPRECISE, fixed | about 1,300-4,100 | 20 x 63 = 1260, 65 x 63 = 4095 |
+| 9,800 cycles = 155 lines, half a PAL frame | :174 | CONFIRMED | - | 9800 / 63 = 155.6; 312 / 2 = 156 |
+| ADSR nibbles 0-15; filter cutoff 0-2047 | :101,:155 | CONFIRMED | - | PRG $D405/$D406; A1c (11-bit cutoff) |
+| Program must end below $D000, about 50 KB | :172 | CONFIRMED | - | $D000 - $0801 = 51199 bytes |
+| KERNAL IRQ normally 60 Hz; TI about 16.5 % slow on a PAL song, 0.3 % on NTSC | :181 | CONFIRMED | - | ROM $FDE2-$FDF0: CIA1 timer A = $4025 (PAL) / $4295 (NTSC), 985248/16422 = 59.996 Hz, 1022727/17046 = 59.998 Hz; 1 - 50.1245/59.996 = 16.45 %, 1 - 59.826/59.998 = 0.29 % |
+| `10 SYS2061` | :180 | CONFIRMED | - | 2061 = $080D |
