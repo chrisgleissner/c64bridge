@@ -540,6 +540,14 @@ class C64uBackend implements C64Facade {
     return bytes;
   }
   async writeMemory(address: number, bytes: Uint8Array): Promise<void> {
+    // Firmware 3.15a writes a POST body that runs past $FFFF only up to $FFFF and still answers 200
+    // (65537 bytes at $0000 wrote $0000-$FFFF), so the range is checked here, before anything is sent.
+    if (!Number.isInteger(address) || address < 0 || address > 0xffff) {
+      throw new Error("Address must be within 0x0000-0xFFFF");
+    }
+    if (bytes.length === 0 || address + bytes.length > 0x10000) {
+      throw new Error(`A write of ${bytes.length} byte(s) at $${address.toString(16).toUpperCase().padStart(4, "0")} does not fit within $0000-$FFFF.`);
+    }
     const addrStr = address.toString(16).toUpperCase().padStart(4, "0");
     if (bytes.length <= 128) {
       await this.api.v1.machineWritememUpdate(":writemem", { address: addrStr, data: Buffer.from(bytes).toString("hex").toUpperCase() });
