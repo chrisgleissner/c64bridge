@@ -54,7 +54,7 @@ import { forgetUserStream, rememberUserStream, userStreamTarget, withStreamLock 
 import {
   C64U_NTSC_AUDIO_SAMPLE_RATE,
   C64U_PAL_AUDIO_SAMPLE_RATE,
-  collectCompleteVideoFrames,
+  VideoFrameAssembler,
   parseAudioPacket,
   parseVideoPacket,
   type CapturedFrame,
@@ -82,18 +82,28 @@ export interface C64ClientOptions {
 }
 
 /** Raised when the KERNAL keyboard buffer did not drain before another chunk
- * could safely be queued. Callers must report this as partial delivery. */
+ * could safely be queued. Callers must report this as partial delivery.
+ * `delivered` counts the bytes handed to the keyboard queue, including the
+ * `pending` ones still waiting there; only the bytes after `delivered` need
+ * to be sent again. */
 export class KeyboardQueueDrainTimeoutError extends Error {
   readonly delivered: number;
   readonly requested: number;
   readonly timeoutMs: number;
+  readonly pending: number | undefined;
 
-  constructor(delivered: number, requested: number, timeoutMs: number) {
-    super(`Keyboard queue did not drain after ${timeoutMs}ms; delivered ${delivered} of ${requested} byte(s). Resume the machine and retry the remaining input.`);
+  constructor(delivered: number, requested: number, timeoutMs: number, pending?: number) {
+    const queued = pending === undefined || pending <= 0
+      ? ""
+      : delivered === 0
+        ? ` The keyboard queue still holds ${pending} byte(s) from earlier input, so nothing was queued.`
+        : ` ${pending} of them are still queued and are typed when the machine reads the keyboard; do not send them again.`;
+    super(`Keyboard queue did not drain after ${timeoutMs}ms; delivered ${delivered} of ${requested} byte(s).${queued} Resume the machine, then send only the remaining ${requested - delivered} byte(s).`);
     this.name = "KeyboardQueueDrainTimeoutError";
     this.delivered = delivered;
     this.requested = requested;
     this.timeoutMs = timeoutMs;
+    this.pending = pending;
   }
 }
 
@@ -152,6 +162,17 @@ export function audioSampleRateForSystemMode(mode: string | null): number {
   return mode !== null && NTSC_CLOCK_SYSTEM_MODES.has(mode.toUpperCase())
     ? C64U_NTSC_AUDIO_SAMPLE_RATE
     : C64U_PAL_AUDIO_SAMPLE_RATE;
+}
+
+/** Longest wait for the first audio datagram after the stream started. */
+const AUDIO_FIRST_DATAGRAM_TIMEOUT_MS = 1_500;
+
+/**
+ * Time allowed for an audio capture: three times its duration at the stream's sample rate plus
+ * 1.5 s for the stream to start. (The stream delivers about 48,000 pairs per second.)
+ */
+export function audioCaptureTimeoutMs(samplePairs: number, sampleRateHz: number): number {
+  return Math.ceil((samplePairs / sampleRateHz) * 3_000) + 1_500;
 }
 
 // A partial capture must still hold one analysis window (2048 stereo frames).
@@ -265,13 +286,13 @@ interface C64uVideoCaptureSession {
   readonly socket: Socket;
   readonly bindAddress: string;
   readonly target: string;
-  /** The most recent packets, at most VIDEO_SESSION_MAX_PACKETS; older ones are dropped. */
-  readonly packets: Array<ReturnType<typeof parseVideoPacket>>;
-  /** Number of packets dropped from the front of `packets`; packet indexes below are absolute. */
-  packetBase: number;
+  /** Frames being assembled; holds at most VIDEO_SESSION_MAX_PACKETS packets of incomplete frames. */
+  readonly assembler: VideoFrameAssembler;
+  /** The most recent complete frames, at most VIDEO_SESSION_MAX_FRAMES. */
+  readonly frames: Array<{ readonly frame: CapturedFrame; readonly firstPacketIndex: number }>;
   readonly waiters: Array<{
     count: number;
-    /** Absolute index of the first packet this waiter may use. */
+    /** Index of the first packet this waiter may use: a frame qualifies when its first packet is at or after it. */
     startIndex: number;
     resolve: (frames: readonly CapturedFrame[]) => void;
     reject: (error: Error) => void;
@@ -288,6 +309,9 @@ interface C64uVideoCaptureSession {
  * no longer complete a frame a waiter needs, and the stream must not grow memory while it stays open.
  */
 export const VIDEO_SESSION_MAX_PACKETS = 4096;
+
+/** Complete frames a reusable session keeps for waiters (the capture count is at most 32). */
+const VIDEO_SESSION_MAX_FRAMES = 64;
 
 /** Shortest interval between two diagnostic records about ignored video datagrams. */
 const IGNORED_VIDEO_REPORT_INTERVAL_MS = 10_000;
@@ -312,19 +336,17 @@ export interface BitmapDisplayResult {
 }
 
 export interface SpriteDisplayResult {
+  /** VIC bank in use (0-3, bank n starts at n * $4000); the sprite is placed in it. */
   readonly bank: number;
   readonly spriteAddress: string;
   readonly screenAddress: string;
-  readonly colorRamAddress: string;
   readonly pointerAddress: string;
   readonly pointerValue: number;
+  /** Sprite registers after the write; the VIC bank and screen mode registers are left as they were. */
   readonly registers: {
     readonly dd00: number;
     readonly d011: number;
-    readonly d016: number;
     readonly d018: number;
-    readonly d020: number;
-    readonly d021: number;
     readonly d010: number;
     readonly d015: number;
     readonly d01c: number;
@@ -335,6 +357,7 @@ export interface SpriteDisplayResult {
   readonly color: number;
   readonly multicolour: boolean;
   readonly spriteByteLength: number;
+  readonly warnings?: readonly string[];
 }
 
 const TEXT_SCREEN_COLUMNS = 40;
@@ -590,6 +613,7 @@ export class C64Client {
     y?: number;
     color?: number;
     multicolour?: boolean;
+    dataAddress?: number;
   }): Promise<RunBasicResult> {
     return this.displaySprite(options);
   }
@@ -621,7 +645,7 @@ export class C64Client {
           borderColor: options.borderColor ?? DEFAULT_BORDER_COLOR,
           backgroundColor: options.backgroundColor ?? DEFAULT_BACKGROUND_COLOR,
         });
-        const screenRam = buildGreetingScreenRam(options.message);
+        const { screenRam, rows, warnings } = buildGreetingScreenRam(options.message);
         const colorRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(DEFAULT_TEXT_FOREGROUND);
 
         const writes = [
@@ -651,6 +675,8 @@ export class C64Client {
             colorRamAddress: this.formatAddress(TEXT_COLOR_RAM_ADDRESS),
             registers: textRegisters,
             message: options.message,
+            rows,
+            ...(warnings.length > 0 ? { warnings } : {}),
           },
         };
       } catch (error) {
@@ -662,6 +688,13 @@ export class C64Client {
     });
   }
 
+  /**
+   * Shows a sprite in the VIC bank and screen mode the machine currently uses: it writes the
+   * 64-byte sprite block, its pointer and the sprite's own registers, and leaves $DD00, $D011,
+   * $D016, $D018 and the colours alone. `dataAddress` (a multiple of 64 inside the current bank)
+   * chooses where the block goes; by default it goes to bank + $2000, $3000 or $0800 (+ 64 per
+   * sprite index), the first one clear of the screen, character set and bitmap in use.
+   */
   async displaySprite(options: {
     readonly spriteBytes: Uint8Array | Buffer;
     readonly spriteIndex?: number;
@@ -669,6 +702,7 @@ export class C64Client {
     readonly y?: number;
     readonly color?: number;
     readonly multicolour?: boolean;
+    readonly dataAddress?: number;
   }): Promise<RunBasicResult & { details?: SpriteDisplayResult | unknown }> {
     try {
       const index = Math.max(0, Math.min(7, Math.floor(options.spriteIndex ?? 0)));
@@ -684,63 +718,64 @@ export class C64Client {
       const spriteSlot = Buffer.alloc(64, 0x00);
       spriteBytes.copy(spriteSlot, 0, 0, 63);
 
-      const spriteAddress = SPRITE_DATA_BASE_ADDRESS + index * 0x40;
-      const pointerAddress = TEXT_SCREEN_ADDRESS + 0x03F8 + index;
+      const facade = await this.facadePromise;
+      const warnings: string[] = [];
+      // $D010-$D01C in one read; it stops before the collision registers $D01E/$D01F, which clear when read.
+      let vic: Uint8Array | undefined;
+      let dd00: number | undefined;
+      try {
+        dd00 = (await facade.readMemory(0xDD00, 1))[0];
+        vic = await facade.readMemory(0xD010, 13);
+      } catch (error) {
+        warnings.push(`The VIC registers could not be read (${error instanceof Error ? error.message : String(error)}); the default screen at $0400 in bank 0 was assumed.`);
+      }
+      const reg = (address: number): number => vic?.[address - 0xD010] ?? 0;
+      const layout = screenLayoutFromRegisters(vic ? reg(0xD018) : undefined, dd00);
+      const screenAddress = layout.baseAddress;
+      const bankBase = screenAddress & 0xC000;
+      const bank = bankBase >> 14;
+      const d011 = reg(0xD011);
+      const d018 = layout.registers ? reg(0xD018) : 0x14;
+
+      const spriteAddress = options.dataAddress === undefined
+        ? defaultSpriteDataAddress(bankBase, index, { screenAddress, d011, d018 })
+        : checkedSpriteDataAddress(options.dataAddress, bankBase);
+      const pointerAddress = screenAddress + 0x03F8 + index;
+      if (pointerAddress >= 0xD000 && pointerAddress <= 0xDFFF) {
+        throw new Error(`The screen at $${hex4(screenAddress)} lies under the I/O area, so its sprite pointer at $${hex4(pointerAddress)} cannot be written.`);
+      }
       const pointerValue = (spriteAddress & 0x3FFF) >> 6;
       const bitMask = 1 << index;
+      const d010 = (reg(0xD010) & ~bitMask) | (x > 0xFF ? bitMask : 0);
+      const d015 = reg(0xD015) | bitMask;
+      const d01c = (reg(0xD01C) & ~bitMask) | (multicolour ? bitMask : 0);
 
-      const facade = await this.facadePromise;
-      const currentDd00 = await this.readByteOrDefault(facade, 0xDD00, 0);
-      const currentBorder = await this.readByteOrDefault(facade, 0xD020, DEFAULT_BORDER_COLOR);
-      const currentBackground = await this.readByteOrDefault(facade, 0xD021, DEFAULT_BACKGROUND_COLOR);
-      const currentD010 = await this.readByteOrDefault(facade, 0xD010, 0);
-      const currentD015 = await this.readByteOrDefault(facade, 0xD015, 0);
-      const currentD01C = await this.readByteOrDefault(facade, 0xD01C, 0);
-      const textRegisters = buildVicTextRegisters({
-        currentDd00,
-        borderColor: currentBorder,
-        backgroundColor: currentBackground,
-      });
-      const d010 = (currentD010 & ~bitMask) | (x > 0xFF ? bitMask : 0);
-      const d015 = currentD015 | bitMask;
-      const d01c = (currentD01C & ~bitMask) | (multicolour ? bitMask : 0);
-
-      await facade.writeMemory(spriteAddress, spriteSlot);
-      await facade.writeMemory(pointerAddress, Uint8Array.of(pointerValue & 0xFF));
-      await facade.writeMemory(0xDD00, Uint8Array.of(textRegisters.dd00));
-      await facade.writeMemory(0xD011, Uint8Array.of(textRegisters.d011));
-      await facade.writeMemory(0xD016, Uint8Array.of(textRegisters.d016));
-      await facade.writeMemory(0xD018, Uint8Array.of(textRegisters.d018));
-      await facade.writeMemory(0xD020, Uint8Array.of(textRegisters.d020));
-      await facade.writeMemory(0xD021, Uint8Array.of(textRegisters.d021));
-      await facade.writeMemory(0xD000 + index * 2, Uint8Array.of(x & 0xFF));
-      await facade.writeMemory(0xD001 + index * 2, Uint8Array.of(y & 0xFF));
-      await facade.writeMemory(0xD010, Uint8Array.of(d010));
-      await facade.writeMemory(0xD015, Uint8Array.of(d015));
-      await facade.writeMemory(0xD01C, Uint8Array.of(d01c));
-      await facade.writeMemory(0xD027 + index, Uint8Array.of(color));
+      await this.writeBlocks(facade, [
+        { address: spriteAddress, bytes: spriteSlot },
+        { address: pointerAddress, bytes: Uint8Array.of(pointerValue) },
+        { address: 0xD000 + index * 2, bytes: Uint8Array.of(x & 0xFF, y) },
+        { address: 0xD010, bytes: Uint8Array.of(d010) },
+        { address: 0xD015, bytes: Uint8Array.of(d015) },
+        { address: 0xD01C, bytes: Uint8Array.of(d01c) },
+        { address: 0xD027 + index, bytes: Uint8Array.of(color) },
+      ]);
 
       return {
         success: true,
         details: {
-          bank: 0,
+          bank,
           spriteAddress: this.formatAddress(spriteAddress),
-          screenAddress: this.formatAddress(TEXT_SCREEN_ADDRESS),
-          colorRamAddress: this.formatAddress(TEXT_COLOR_RAM_ADDRESS),
+          screenAddress: this.formatAddress(screenAddress),
           pointerAddress: this.formatAddress(pointerAddress),
           pointerValue,
-          registers: {
-            ...textRegisters,
-            d010,
-            d015,
-            d01c,
-          },
+          registers: { dd00: dd00 ?? 0, d011, d018, d010, d015, d01c },
           index,
           x,
           y,
           color,
           multicolour,
           spriteByteLength: spriteBytes.length,
+          ...(warnings.length > 0 ? { warnings } : {}),
         } satisfies SpriteDisplayResult,
       };
     } catch (error) {
@@ -748,6 +783,17 @@ export class C64Client {
         success: false,
         details: this.normaliseError(error),
       };
+    }
+  }
+
+  /** Writes blocks in order: one call when the backend can batch them, else one write per block. */
+  private async writeBlocks(facade: C64Facade, blocks: ReadonlyArray<{ address: number; bytes: Uint8Array }>): Promise<void> {
+    if (typeof facade.writeMemoryBlocks === "function") {
+      await facade.writeMemoryBlocks(blocks);
+      return;
+    }
+    for (const block of blocks) {
+      await facade.writeMemory(block.address, block.bytes);
     }
   }
 
@@ -761,10 +807,6 @@ export class C64Client {
         options?.screenAddress ?? 0x0400,
       );
       const facade = await this.facadePromise;
-      await facade.writeMemory(layout.bitmapAddress, bitmap.bitmapData);
-      await facade.writeMemory(layout.screenAddress, bitmap.screenRam);
-      await facade.writeMemory(layout.colorRamAddress, bitmap.colorRam);
-
       let currentDd00 = 0;
       try {
         const dd00 = await facade.readMemory(0xDD00, 1);
@@ -780,12 +822,17 @@ export class C64Client {
         currentDd00,
       });
 
-      await facade.writeMemory(0xDD00, Uint8Array.of(registers.dd00));
-      await facade.writeMemory(0xD011, Uint8Array.of(registers.d011));
-      await facade.writeMemory(0xD016, Uint8Array.of(registers.d016));
-      await facade.writeMemory(0xD018, Uint8Array.of(registers.d018));
-      await facade.writeMemory(0xD020, Uint8Array.of(registers.d020));
-      await facade.writeMemory(0xD021, Uint8Array.of(registers.d021));
+      // Data first, then the registers that make the VIC-II show it.
+      await this.writeBlocks(facade, [
+        { address: layout.bitmapAddress, bytes: bitmap.bitmapData },
+        { address: layout.screenAddress, bytes: bitmap.screenRam },
+        { address: layout.colorRamAddress, bytes: bitmap.colorRam },
+        { address: 0xDD00, bytes: Uint8Array.of(registers.dd00) },
+        { address: 0xD011, bytes: Uint8Array.of(registers.d011) },
+        { address: 0xD016, bytes: Uint8Array.of(registers.d016) },
+        { address: 0xD018, bytes: Uint8Array.of(registers.d018) },
+        { address: 0xD020, bytes: Uint8Array.of(registers.d020, registers.d021) },
+      ]);
 
       return {
         success: true,
@@ -978,8 +1025,8 @@ export class C64Client {
       let charset: "upper" | "lower" = "upper";
       let registers: { d018: number; dd00: number } | undefined;
       try {
-        const d018 = (await this.readMemoryRaw(0xd018, 1))[0];
-        const dd00 = (await this.readMemoryRaw(0xdd00, 1))[0];
+        const d018 = (await this.readMemoryRaw(0xd018, 1, facade))[0];
+        const dd00 = (await this.readMemoryRaw(0xdd00, 1, facade))[0];
         const layout = screenLayoutFromRegisters(d018, dd00);
         baseAddress = layout.baseAddress;
         charset = layout.charset;
@@ -988,7 +1035,8 @@ export class C64Client {
         // Keep the defaults when the VIC registers cannot be read.
       }
       const length = Math.min(0x03e8, 0x10000 - baseAddress);
-      const bytes = await this.readMemoryRaw(baseAddress, length);
+      // All three reads use the facade resolved above, so a backend switch cannot mix two machines.
+      const bytes = await this.readMemoryRaw(baseAddress, length, facade);
       const text = screenCodesToAscii(bytes, { columns: 40, rows: 25, charset });
       return { text, baseAddress, charset, ...(registers ? { registers } : {}) };
     });
@@ -1142,10 +1190,29 @@ export class C64Client {
 
   // --- SID/Music helpers ---
 
-  async sidSetVolume(volume: number, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
+  /**
+   * Writes $D418. Its low nibble is the volume; bits 4-6 select the low-, band- and high-pass
+   * filter and bit 7 turns voice 3 off. The register is write-only, so the upper bits cannot be
+   * kept: they are `filterMode` (0-15, bit 0 = low-pass ... bit 3 = voice 3 off), or 0, which
+   * switches the filter modes off. The result states the value written.
+   */
+  async sidSetVolume(volume: number, pinnedFacade?: C64Facade, options?: { readonly filterMode?: number }): Promise<RunBasicResult> {
     const clamped = Math.max(0, Math.min(15, Math.floor(volume)));
-    const byte = Buffer.from([clamped]);
-    return this.writeMemory("$D418", this.bytesToHex(byte), pinnedFacade);
+    const filterMode = options?.filterMode === undefined ? undefined : Math.max(0, Math.min(15, Math.floor(options.filterMode)));
+    const value = ((filterMode ?? 0) << 4) | clamped;
+    const result = await this.writeMemory("$D418", this.bytesToHex(Uint8Array.of(value)), pinnedFacade);
+    if (!result.success) return result;
+    const details = (result.details && typeof result.details === "object" ? result.details : {}) as Record<string, unknown>;
+    return {
+      ...result,
+      details: {
+        ...details,
+        value,
+        ...(filterMode === undefined
+          ? { notice: "$D418 is write-only, so its filter mode bits 4-7 were set to 0: a low-, band- or high-pass filter in use is now off and voice 3 is on." }
+          : {}),
+      },
+    };
   }
 
   async sidReset(hard = false): Promise<RunBasicResult> {
@@ -1153,18 +1220,22 @@ export class C64Client {
       const facade = await this.facadePromise;
       // Unhooking a running SIDWAVE player is best-effort: a failed read must not stop the SID being silenced.
       const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade).catch(() => false);
+      this.sidControl.delete(facade);
       if (hard) {
         const span = 0x19;
-        const ff = Buffer.alloc(span, 0xff);
-        const zz = Buffer.alloc(span, 0x00);
-        await facade.writeMemory(0xd400, ff);
-        await facade.writeMemory(0xd400, zz);
+        await this.writeBlocks(facade, [
+          { address: 0xd400, bytes: Buffer.alloc(span, 0xff) },
+          { address: 0xd400, bytes: Buffer.alloc(span, 0x00) },
+        ]);
         return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
       }
-      await facade.writeMemory(0xd404, Buffer.from([0x00]));
-      await facade.writeMemory(0xd40b, Buffer.from([0x00]));
-      await facade.writeMemory(0xd412, Buffer.from([0x00]));
-      await facade.writeMemory(0xd418, Buffer.from([0x00]));
+      // Gate and waveform off on all three voices, then volume 0, in one batch.
+      await this.writeBlocks(facade, [
+        { address: 0xd404, bytes: Uint8Array.of(0x00) },
+        { address: 0xd40b, bytes: Uint8Array.of(0x00) },
+        { address: 0xd412, bytes: Uint8Array.of(0x00) },
+        { address: 0xd418, bytes: Uint8Array.of(0x00) },
+      ]);
       return { success: true, ...(stoppedSidwavePlayer ? { details: { stoppedSidwavePlayer } } : {}) };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1248,6 +1319,7 @@ export class C64Client {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
       await facade.writeMemory(base, bytes);
+      this.sidControlFor(facade)[voice - 1] = ctrl;
       return { success: true };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1261,11 +1333,31 @@ export class C64Client {
     const ctrlAddr = 0xd400 + (voice - 1) * 7 + 4;
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
-      await facade.writeMemory(ctrlAddr, Buffer.from([0x00]));
-      return { success: true };
+      // Clearing only the gate bit starts the release phase with the waveform still sounding.
+      // The SID registers are write-only, so the control byte is the one note_on last wrote.
+      const last = this.sidControlFor(facade)[voice - 1];
+      const control = last === undefined ? 0x00 : last & 0xfe;
+      await facade.writeMemory(ctrlAddr, Uint8Array.of(control));
+      if (last === undefined) {
+        return { success: true, details: { control, notice: "No note_on was sent to this voice through this server, so the waveform is unknown; the control register was set to $00, which ends the note without a release." } };
+      }
+      this.sidControlFor(facade)[voice - 1] = control;
+      return { success: true, details: { control } };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
     }
+  }
+
+  /** Control register values ($D404, $D40B, $D412) last written by sidNoteOn/sidNoteOff, per backend. */
+  private readonly sidControl = new WeakMap<C64Facade, Array<number | undefined>>();
+
+  private sidControlFor(facade: C64Facade): Array<number | undefined> {
+    let control = this.sidControl.get(facade);
+    if (!control) {
+      control = [undefined, undefined, undefined];
+      this.sidControl.set(facade, control);
+    }
+    return control;
   }
 
   async sidSilenceAll(): Promise<RunBasicResult> {
@@ -1653,12 +1745,16 @@ export class C64Client {
     await withStreamLock("video", () => this.stopC64uVideoCaptureSession());
   }
 
-  async captureFrames(options?: { readonly count?: number; readonly reuseSession?: boolean; readonly keepAliveMs?: number }): Promise<FrameCaptureResult> {
+  /**
+   * Captures video frames. On VICE a frame is cropped to the inner screen area VICE reports
+   * (offset and size from Display Get); `includeBorder: true` returns the whole canvas VICE renders.
+   */
+  async captureFrames(options?: { readonly count?: number; readonly reuseSession?: boolean; readonly keepAliveMs?: number; readonly includeBorder?: boolean }): Promise<FrameCaptureResult> {
     return withDiagnosticSpan("client", "capture_frames", { count: options?.count ?? 1, reuseSession: options?.reuseSession === true }, async () => {
       const requestedCount = Math.max(1, Math.min(32, Math.trunc(options?.count ?? 1)));
       const facade = await this.facadePromise;
       if (facade.type === "vice") {
-        return this.captureViceFrames(requestedCount);
+        return this.captureViceFrames(facade as ViceBackend, requestedCount, options?.includeBorder === true);
       }
 
       if (facade.type !== "c64u") {
@@ -1856,7 +1952,8 @@ export class C64Client {
     const host = new URL(this.baseUrl).hostname;
     const { bindAddress, acceptsSource } = await this.resolveCaptureEndpoint(host);
     const socket = createSocket("udp4");
-    const packets: ReturnType<typeof parseVideoPacket>[] = [];
+    const assembler = new VideoFrameAssembler(VIDEO_SESSION_MAX_PACKETS);
+    const completed: CapturedFrame[] = [];
     let stopError: Error | null = null;
     let captureFailed = false;
     let streamAttempted = false;
@@ -1895,11 +1992,14 @@ export class C64Client {
             if (!packet) {
               return;
             }
-            packets.push(packet);
-            const frames = collectCompleteVideoFrames(packets, count);
-            if (frames.length >= count) {
+            const assembled = assembler.add(packet);
+            if (!assembled) {
+              return;
+            }
+            completed.push(assembled.frame);
+            if (completed.length >= count) {
               clearTimeout(timer);
-              resolve(frames);
+              resolve(completed.slice(0, count));
             }
           } catch (error) {
             clearTimeout(timer);
@@ -1959,8 +2059,8 @@ export class C64Client {
       socket,
       bindAddress,
       target,
-      packets: [],
-      packetBase: 0,
+      assembler: new VideoFrameAssembler(VIDEO_SESSION_MAX_PACKETS),
+      frames: [],
       waiters: [],
       stopTimer: null,
       closed: false,
@@ -1975,13 +2075,15 @@ export class C64Client {
       if (!packet) {
         return;
       }
-      session.packets.push(packet);
-      const excess = session.packets.length - VIDEO_SESSION_MAX_PACKETS;
-      if (excess > 0) {
-        session.packets.splice(0, excess);
-        session.packetBase += excess;
-      }
       try {
+        const assembled = session.assembler.add(packet);
+        if (!assembled) {
+          return;
+        }
+        session.frames.push(assembled);
+        if (session.frames.length > VIDEO_SESSION_MAX_FRAMES) {
+          session.frames.splice(0, session.frames.length - VIDEO_SESSION_MAX_FRAMES);
+        }
         this.flushC64uVideoCaptureWaiters(session);
       } catch (error) {
         this.rejectC64uVideoCaptureWaiters(session, error instanceof Error ? error : new Error(String(error)));
@@ -2014,8 +2116,8 @@ export class C64Client {
     if (session.error) {
       throw session.error;
     }
-    const startIndex = session.packetBase + (options.fresh ? session.packets.length : 0);
-    const existingFrames = collectCompleteVideoFrames(session.packets.slice(startIndex - session.packetBase), count);
+    const startIndex = options.fresh ? session.assembler.packetsSeen : 0;
+    const existingFrames = this.sessionFramesFrom(session, startIndex, count);
     if (existingFrames.length >= count) {
       return existingFrames;
     }
@@ -2052,12 +2154,23 @@ export class C64Client {
   private flushC64uVideoCaptureWaiters(session: C64uVideoCaptureSession): void {
     for (let index = session.waiters.length - 1; index >= 0; index -= 1) {
       const waiter = session.waiters[index];
-      const frames = collectCompleteVideoFrames(session.packets.slice(Math.max(0, waiter.startIndex - session.packetBase)), waiter.count);
+      const frames = this.sessionFramesFrom(session, waiter.startIndex, waiter.count);
       if (frames.length >= waiter.count) {
         session.waiters.splice(index, 1);
         waiter.resolve(frames);
       }
     }
+  }
+
+  /** The first `count` complete frames of the session whose packets all arrived at or after `startIndex`. */
+  private sessionFramesFrom(session: C64uVideoCaptureSession, startIndex: number, count: number): CapturedFrame[] {
+    const frames: CapturedFrame[] = [];
+    for (const entry of session.frames) {
+      if (entry.firstPacketIndex < startIndex) continue;
+      frames.push(entry.frame);
+      if (frames.length >= count) break;
+    }
+    return frames;
   }
 
   private rejectC64uVideoCaptureWaiters(session: C64uVideoCaptureSession, error: Error): void {
@@ -2118,18 +2231,23 @@ export class C64Client {
     }
   }
 
-  private async captureViceFrames(count: number): Promise<FrameCaptureResult> {
-    const viceFacade = await this.requireViceBackend();
-
+  private async captureViceFrames(viceFacade: ViceBackend, count: number, includeBorder: boolean): Promise<FrameCaptureResult> {
     const frames: CapturedFrame[] = [];
+    const warnings = new Set<string>();
     for (let index = 0; index < count; index += 1) {
       const snapshot = await this.captureViceDisplaySnapshot(viceFacade);
-      frames.push(this.normaliseViceDisplaySnapshot(snapshot));
+      const { frame, warning } = this.normaliseViceDisplaySnapshot(snapshot, includeBorder);
+      frames.push(frame);
+      if (warning) warnings.add(warning);
     }
 
-    return { backend: "vice", frames };
+    return { backend: "vice", frames, ...(warnings.size > 0 ? { warnings: [...warnings] } : {}) };
   }
 
+  /**
+   * Reads the VICE display. Only an empty frame (VICE has not rendered one yet) is retried; a
+   * monitor error, a timeout or a lost session is reported at once.
+   */
   private async captureViceDisplaySnapshot(viceFacade: ViceBackend): Promise<{
     readonly debugWidth: number;
     readonly debugHeight: number;
@@ -2140,22 +2258,17 @@ export class C64Client {
     readonly bitsPerPixel: number;
     readonly pixels: Uint8Array | Buffer;
   }> {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= 8; attempt += 1) {
-      try {
-        const snapshot = await viceFacade.withMonitor((client) => client.displayGet({}));
-        if (snapshot.pixels.length > 0) {
-          return snapshot;
-        }
-        lastError = new Error("VICE display capture returned an empty frame");
-      } catch (error) {
-        lastError = error;
+    const attempts = 8;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const snapshot = await viceFacade.withMonitor((client) => client.displayGet({}));
+      if (snapshot.pixels.length > 0) {
+        return snapshot;
       }
-      if (attempt < 8) {
+      if (attempt < attempts) {
         await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, 150 * attempt)));
       }
     }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "VICE display capture failed"));
+    throw new Error(`VICE display capture returned an empty frame ${attempts} times`);
   }
 
   private async captureC64uAudioSamples(
@@ -2192,11 +2305,13 @@ export class C64Client {
     let notifyCapture: () => void = () => {};
     let streamAttempted = false;
     let failed = false;
+    let datagramSeen = false;
 
     // The firmware can emit UDP before its REST response reaches us. Listen
     // before starting, and cap collection even while start/config/stop requests are pending.
     const onMessage = (msg: Buffer, rinfo: { address: string }) => {
       if (!acceptsSource(rinfo.address)) return;
+      datagramSeen = true;
       if (captureSettled || captureError || collectedValues >= neededValues) return;
       try {
         const packet = parseAudioPacket(msg);
@@ -2229,8 +2344,17 @@ export class C64Client {
       await this.ensureStreamSuccess(await this.startStreamResolvingHost(facade, "audio", target), "start audio stream");
 
       await new Promise<void>((resolve, reject) => {
-        const timeoutMs = options?.timeoutMs ?? Math.max(1_000, Math.ceil(samplePairs / 192) * 500);
+        const sampleRateHz = options?.sampleRateHz ?? C64U_NTSC_AUDIO_SAMPLE_RATE;
+        const timeoutMs = options?.timeoutMs ?? audioCaptureTimeoutMs(samplePairs, sampleRateHz);
+        // The stream sends a datagram every few milliseconds; none at all means UDP from the device does not arrive.
+        const silenceTimer = setTimeout(() => {
+          if (captureSettled || datagramSeen) return;
+          captureSettled = true;
+          clearTimeout(timer);
+          reject(new Error(`No audio datagram arrived within ${AUDIO_FIRST_DATAGRAM_TIMEOUT_MS}ms after the audio stream started. Check that UDP from the device reaches this host (firewall, network route).`));
+        }, Math.min(AUDIO_FIRST_DATAGRAM_TIMEOUT_MS, timeoutMs));
         const timer = setTimeout(() => {
+          clearTimeout(silenceTimer);
           captureSettled = true;
           // UDP drops packets, so a count-based capture can fall short. Analysis accepts what arrived.
           if (options?.acceptPartial && collectedValues >= MIN_PARTIAL_AUDIO_VALUES) {
@@ -2245,6 +2369,7 @@ export class C64Client {
           if (captureError || collectedValues >= neededValues) {
             captureSettled = true;
             clearTimeout(timer);
+            clearTimeout(silenceTimer);
             if (captureError) reject(captureError);
             else resolve();
           }
@@ -2472,6 +2597,11 @@ export class C64Client {
     }
   }
 
+  /**
+   * Crops a VICE display snapshot to the inner area VICE reports (XO, YO, IW, IH of Display Get),
+   * so the geometry does not depend on what the screen shows. With `includeBorder`, or when the
+   * snapshot cannot be cropped, the whole canvas is returned; an unusable inner area is reported.
+   */
   private normaliseViceDisplaySnapshot(snapshot: {
     readonly debugWidth: number;
     readonly debugHeight: number;
@@ -2481,116 +2611,55 @@ export class C64Client {
     readonly innerHeight?: number;
     readonly bitsPerPixel: number;
     readonly pixels: Uint8Array | Buffer;
-  }): CapturedFrame {
+  }, includeBorder = false): { frame: CapturedFrame; warning?: string } {
     const bytesPerPixel = snapshot.bitsPerPixel > 0 && snapshot.bitsPerPixel % 8 === 0
       ? snapshot.bitsPerPixel / 8
       : 0;
     const pixels = Uint8Array.from(snapshot.pixels);
+    const whole: CapturedFrame = {
+      frameNumber: null,
+      width: snapshot.debugWidth,
+      height: snapshot.debugHeight,
+      bitsPerPixel: snapshot.bitsPerPixel,
+      pixels,
+      complete: true,
+    };
     const canCrop = bytesPerPixel > 0
       && snapshot.debugWidth > 0
       && snapshot.debugHeight > 0
       && pixels.length >= snapshot.debugWidth * snapshot.debugHeight * bytesPerPixel;
+    if (includeBorder || !canCrop) {
+      return { frame: whole };
+    }
 
-    if (!canCrop) {
+    const left = snapshot.offsetX ?? 0;
+    const top = snapshot.offsetY ?? 0;
+    const width = snapshot.innerWidth ?? 0;
+    const height = snapshot.innerHeight ?? 0;
+    if (width <= 0 || height <= 0 || left + width > snapshot.debugWidth || top + height > snapshot.debugHeight) {
       return {
-        frameNumber: null,
-        width: snapshot.debugWidth,
-        height: snapshot.debugHeight,
-        bitsPerPixel: snapshot.bitsPerPixel,
-        pixels,
-        complete: true,
+        frame: whole,
+        warning: `VICE reported an inner screen area (${width} x ${height} at ${left},${top}) outside its ${snapshot.debugWidth} x ${snapshot.debugHeight} canvas; the whole canvas was returned.`,
       };
     }
-
-    const innerWidth = typeof snapshot.innerWidth === "number" && snapshot.innerWidth > 0
-      ? snapshot.innerWidth
-      : snapshot.debugWidth;
-    const innerHeight = typeof snapshot.innerHeight === "number" && snapshot.innerHeight > 0
-      ? snapshot.innerHeight
-      : snapshot.debugHeight;
-    const rowThreshold = Math.max(1, Math.min(innerWidth, snapshot.debugWidth, 32));
-    const columnThreshold = Math.max(1, Math.min(innerHeight, snapshot.debugHeight, 32));
-
-    const isPixelVisible = (pixelIndex: number): boolean => {
-      const offset = pixelIndex * bytesPerPixel;
-      for (let byteIndex = 0; byteIndex < bytesPerPixel; byteIndex += 1) {
-        if ((pixels[offset + byteIndex] ?? 0) !== 0) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    const rowVisibleCounts = new Array<number>(snapshot.debugHeight).fill(0);
-    for (let row = 0; row < snapshot.debugHeight; row += 1) {
-      let visiblePixels = 0;
-      const rowStart = row * snapshot.debugWidth;
-      for (let column = 0; column < snapshot.debugWidth; column += 1) {
-        if (isPixelVisible(rowStart + column)) {
-          visiblePixels += 1;
-        }
-      }
-      rowVisibleCounts[row] = visiblePixels;
-    }
-
-    const top = rowVisibleCounts.findIndex((count) => count >= rowThreshold);
-    const bottom = rowVisibleCounts.length - 1 - [...rowVisibleCounts].reverse().findIndex((count) => count >= rowThreshold);
-
-    if (top < 0 || bottom < top) {
-      return {
-        frameNumber: null,
-        width: snapshot.debugWidth,
-        height: snapshot.debugHeight,
-        bitsPerPixel: snapshot.bitsPerPixel,
-        pixels,
-        complete: true,
-      };
-    }
-
-    const columnVisibleCounts = new Array<number>(snapshot.debugWidth).fill(0);
-    for (let column = 0; column < snapshot.debugWidth; column += 1) {
-      let visiblePixels = 0;
-      for (let row = top; row <= bottom; row += 1) {
-        if (isPixelVisible((row * snapshot.debugWidth) + column)) {
-          visiblePixels += 1;
-        }
-      }
-      columnVisibleCounts[column] = visiblePixels;
-    }
-
-    const left = columnVisibleCounts.findIndex((count) => count >= columnThreshold);
-    const right = columnVisibleCounts.length - 1 - [...columnVisibleCounts].reverse().findIndex((count) => count >= columnThreshold);
-
-    if (left < 0 || right < left) {
-      return {
-        frameNumber: null,
-        width: snapshot.debugWidth,
-        height: snapshot.debugHeight,
-        bitsPerPixel: snapshot.bitsPerPixel,
-        pixels,
-        complete: true,
-      };
-    }
-
-    const croppedWidth = right - left + 1;
-    const croppedHeight = bottom - top + 1;
 
     const rowStride = snapshot.debugWidth * bytesPerPixel;
-    const croppedRowStride = croppedWidth * bytesPerPixel;
-    const cropped = new Uint8Array(croppedRowStride * croppedHeight);
-    for (let row = 0; row < croppedHeight; row += 1) {
+    const croppedRowStride = width * bytesPerPixel;
+    const cropped = new Uint8Array(croppedRowStride * height);
+    for (let row = 0; row < height; row += 1) {
       const sourceStart = ((top + row) * rowStride) + (left * bytesPerPixel);
-      const sourceEnd = sourceStart + croppedRowStride;
-      cropped.set(pixels.subarray(sourceStart, sourceEnd), row * croppedRowStride);
+      cropped.set(pixels.subarray(sourceStart, sourceStart + croppedRowStride), row * croppedRowStride);
     }
 
     return {
-      frameNumber: null,
-      width: croppedWidth,
-      height: croppedHeight,
-      bitsPerPixel: snapshot.bitsPerPixel,
-      pixels: cropped,
-      complete: true,
+      frame: {
+        frameNumber: null,
+        width,
+        height,
+        bitsPerPixel: snapshot.bitsPerPixel,
+        pixels: cropped,
+        complete: true,
+      },
     };
   }
 
@@ -2687,50 +2756,78 @@ export class C64Client {
     }
     const chunkSize = Math.max(1, Math.min(10, options?.chunkSize ?? 10));
     const pollMs = Math.max(1, options?.drainPollMs ?? 8);
-    const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
 
     const facade = options?.pinnedFacade ?? await this.facadePromise;
-    if (facade.feedKeyboard) {
-      const fed = await facade.feedKeyboard(data, options?.drainTimeoutMs === undefined ? undefined : { drainTimeoutMs: options.drainTimeoutMs });
-      if (fed.status === "timeout") {
-        throw new KeyboardQueueDrainTimeoutError(Math.max(0, fed.delivered - fed.pending), data.length, totalTimeoutMs);
-      }
-      return {
-        delivered: fed.delivered,
-        status: fed.status,
-        pending: fed.pending,
-        ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
-      };
-    }
-    const KEYD = 0x0277; // KERNAL keyboard buffer base
-    const NDX = 0x00C6;  // pending byte count
-
-    let delivered = 0;
-    for (let offset = 0; offset < data.length; offset += chunkSize) {
-      const slice = data.subarray(offset, Math.min(data.length, offset + chunkSize));
-      // Write the bytes into the queue first so KERNAL never reads a stale
-      // length+old-byte combination.
-      await facade.writeMemory(KEYD, Buffer.from(slice));
-      await facade.writeMemory(NDX, Buffer.from([slice.length]));
-
-      // Drain before another write.  Overwriting a non-empty KERNAL queue loses
-      // user input, so a timeout is an explicit partial-delivery failure.
-      const drainStart = Date.now();
-      let drained = false;
-      while (Date.now() - drainStart < totalTimeoutMs) {
-        const ndx = await facade.readMemory(NDX, 1);
-        if ((ndx[0] ?? 0) === 0) {
-          drained = true;
-          break;
+    // One injection per machine at a time: two calls writing the queue in turn would mix or drop each other's bytes.
+    return this.withKeyboardLock(facade, async () => {
+      if (facade.feedKeyboard) {
+        // VICE counts the bytes it queues (a NUL is dropped) and needs about 150 ms per key at least.
+        const queuedBytes = data.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
+        const timeoutMs = Math.max(50, options?.drainTimeoutMs ?? Math.max(2_000, queuedBytes * 150));
+        const fed = await facade.feedKeyboard(data, { drainTimeoutMs: timeoutMs });
+        if (fed.status === "timeout") {
+          throw new KeyboardQueueDrainTimeoutError(fed.delivered, data.length, timeoutMs, fed.pending);
         }
-        await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+        return {
+          delivered: fed.delivered,
+          status: fed.status,
+          pending: fed.pending,
+          ...(fed.stoppedAt === undefined ? {} : { stoppedAt: fed.stoppedAt }),
+        };
       }
-      delivered += slice.length;
-      if (!drained) {
-        throw new KeyboardQueueDrainTimeoutError(delivered, data.length, totalTimeoutMs);
+      const totalTimeoutMs = Math.max(50, options?.drainTimeoutMs ?? 2000);
+      const KEYD = 0x0277; // KERNAL keyboard buffer base
+      const NDX = 0x00C6;  // pending byte count
+
+      /** Waits until NDX is 0 and returns 0, or returns the count still pending at the timeout. */
+      const waitForEmptyQueue = async (): Promise<number> => {
+        const drainStart = Date.now();
+        for (;;) {
+          const ndx = (await facade.readMemory(NDX, 1))[0] ?? 0;
+          if (ndx === 0) return 0;
+          if (Date.now() - drainStart >= totalTimeoutMs) return ndx;
+          await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+        }
+      };
+
+      // Bytes still queued from earlier input (a keypress, a call that timed out) must not be overwritten.
+      let pending = await waitForEmptyQueue();
+      if (pending > 0) {
+        throw new KeyboardQueueDrainTimeoutError(0, data.length, totalTimeoutMs, pending);
       }
+      let delivered = 0;
+      for (let offset = 0; offset < data.length; offset += chunkSize) {
+        const slice = data.subarray(offset, Math.min(data.length, offset + chunkSize));
+        // Write the bytes into the queue first so KERNAL never reads a stale
+        // length+old-byte combination.
+        await facade.writeMemory(KEYD, Buffer.from(slice));
+        await facade.writeMemory(NDX, Buffer.from([slice.length]));
+        delivered += slice.length;
+
+        // Drain before another write. Overwriting a non-empty KERNAL queue loses
+        // user input, so a timeout is an explicit partial-delivery failure.
+        pending = await waitForEmptyQueue();
+        if (pending > 0) {
+          throw new KeyboardQueueDrainTimeoutError(delivered, data.length, totalTimeoutMs, pending);
+        }
+      }
+      return { delivered };
+    });
+  }
+
+  /** Keyboard injections per facade, chained so each starts after the previous one ended. */
+  private readonly keyboardLocks = new WeakMap<C64Facade, Promise<unknown>>();
+
+  private async withKeyboardLock<T>(facade: C64Facade, fn: () => Promise<T>): Promise<T> {
+    const previous = this.keyboardLocks.get(facade) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(fn);
+    const settled = run.catch(() => undefined);
+    this.keyboardLocks.set(facade, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.keyboardLocks.get(facade) === settled) this.keyboardLocks.delete(facade);
     }
-    return { delivered };
   }
 
     /** `continue_execution`: lets the CPU run and ends the explicit pause and any debugger stop. */
@@ -3064,6 +3161,56 @@ function normaliseColorNibble(value: number): number {
   return Math.max(0, Math.min(0x0F, Math.floor(value))) & 0x0F;
 }
 
+function hex4(value: number): string {
+  return value.toString(16).toUpperCase().padStart(4, "0");
+}
+
+/** True when the VIC-II sees the character ROM, not RAM, at this address (offsets $1000-$1FFF of banks 0 and 2). */
+function vicSeesCharRom(address: number): boolean {
+  const bank = address >> 14;
+  const offset = address & 0x3FFF;
+  return (bank === 0 || bank === 2) && offset >= 0x1000 && offset < 0x2000;
+}
+
+/** Memory the VIC-II reads for the current screen mode: screen RAM and either the bitmap or a RAM character set. */
+function vicDisplayRanges(bankBase: number, screenAddress: number, d011: number, d018: number): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [[screenAddress, screenAddress + 0x0400]];
+  if ((d011 & 0x20) !== 0) {
+    const bitmap = bankBase + ((d018 & 0x08) !== 0 ? 0x2000 : 0);
+    ranges.push([bitmap, bitmap + 0x2000]);
+  } else {
+    const charset = bankBase + ((d018 >> 1) & 0x07) * 0x0800;
+    if (!vicSeesCharRom(charset)) ranges.push([charset, charset + 0x0800]);
+  }
+  return ranges;
+}
+
+function defaultSpriteDataAddress(bankBase: number, index: number, vic: { screenAddress: number; d011: number; d018: number }): number {
+  const ranges = vicDisplayRanges(bankBase, vic.screenAddress, vic.d011, vic.d018);
+  for (const offset of [0x2000, 0x3000, 0x0800]) {
+    const address = bankBase + offset + index * 0x40;
+    const clear = ranges.every(([start, end]) => address + 0x40 <= start || address >= end);
+    if (clear && !(address >= 0xD000 && address <= 0xDFFF)) return address;
+  }
+  throw new Error(`No free sprite block was found in VIC bank ${bankBase >> 14} next to the screen and graphics in use; pass dataAddress.`);
+}
+
+function checkedSpriteDataAddress(address: number, bankBase: number): number {
+  if (!Number.isInteger(address) || address < 0 || address > 0xFFC0 || address % 0x40 !== 0) {
+    throw new ToolValidationError("dataAddress must be a multiple of 64 between $0000 and $FFC0");
+  }
+  if ((address & 0xC000) !== bankBase) {
+    throw new ToolValidationError(`dataAddress $${hex4(address)} is outside the VIC bank in use ($${hex4(bankBase)}-$${hex4(bankBase + 0x3FFF)}); the VIC-II can only show sprites from its bank`);
+  }
+  if (vicSeesCharRom(address)) {
+    throw new ToolValidationError(`dataAddress $${hex4(address)} is where the VIC-II sees the character ROM; choose an address outside offsets $1000-$1FFF of the bank`);
+  }
+  if (address >= 0xD000 && address <= 0xDFFF) {
+    throw new ToolValidationError(`dataAddress $${hex4(address)} lies under the I/O area, where writes reach the chip registers`);
+  }
+  return address;
+}
+
 function buildVicTextRegisters(options: {
   readonly currentDd00?: number;
   readonly borderColor?: number;
@@ -3086,63 +3233,73 @@ function buildVicTextRegisters(options: {
   };
 }
 
-function asciiCharToScreenCode(char: string): number {
+/**
+ * Screen code of an ASCII character in the upper-case/graphics set, or undefined when the set has
+ * no such glyph. $20-$3F (space, digits, punctuation) are the same codes as ASCII; @ is $00, A-Z
+ * are $01-$1A (lower case shown as upper case), [ is $1B and ] is $1D.
+ */
+function asciiCharToScreenCode(char: string): number | undefined {
   if (char.length !== 1) {
-    return SPACE_SCREEN_CODE;
+    return undefined;
   }
-
-  const upper = char.toUpperCase();
-  if (upper >= "A" && upper <= "Z") {
-    return upper.charCodeAt(0) - 64;
-  }
-
-  if (upper >= "0" && upper <= "9") {
-    return upper.charCodeAt(0);
-  }
-
-  switch (upper) {
-    case " ":
-      return SPACE_SCREEN_CODE;
-    case ".":
-      return 0x2E;
-    case ",":
-      return 0x2C;
-    case "!":
-      return 0x21;
-    case ":":
-      return 0x3A;
-    case ";":
-      return 0x3B;
-    case "-":
-      return 0x2D;
-    case "'":
-      return 0x27;
-    case "/":
-      return 0x2F;
-    case "?":
-      return 0x3F;
-    default:
-      return SPACE_SCREEN_CODE;
-  }
+  const code = char.toUpperCase().charCodeAt(0);
+  if (code >= 0x20 && code <= 0x3F) return code;
+  if (code >= 0x40 && code <= 0x5A) return code - 0x40;
+  if (code === 0x5B) return 0x1B;
+  if (code === 0x5D) return 0x1D;
+  return undefined;
 }
 
-function writeScreenLine(screenRam: Uint8Array, row: number, text: string): void {
-  if (row < 0 || row >= TEXT_SCREEN_ROWS) {
-    return;
-  }
+/** Message rows of the greeting screen: row 1 up to row 21, so READY. still fits two rows below. */
+const GREETING_FIRST_ROW = 1;
+const GREETING_MAX_ROWS = 21;
 
-  const offset = row * TEXT_SCREEN_COLUMNS;
-  const clipped = text.slice(0, TEXT_SCREEN_COLUMNS);
-  for (let index = 0; index < clipped.length; index += 1) {
-    screenRam[offset + index] = asciiCharToScreenCode(clipped[index] ?? " ");
+/** Splits text into 40-column rows, breaking at a space where one is near so no word is cut. */
+function wrapScreenText(text: string): string[] {
+  const rows: string[] = [];
+  for (const line of text.split(/\r\n|\r|\n/)) {
+    let rest = line;
+    while (rest.length > TEXT_SCREEN_COLUMNS) {
+      const cut = rest.lastIndexOf(" ", TEXT_SCREEN_COLUMNS);
+      if (cut <= 0) {
+        rows.push(rest.slice(0, TEXT_SCREEN_COLUMNS));
+        rest = rest.slice(TEXT_SCREEN_COLUMNS);
+      } else {
+        rows.push(rest.slice(0, cut));
+        rest = rest.slice(cut + 1);
+      }
+    }
+    rows.push(rest);
   }
+  return rows;
 }
 
-function buildGreetingScreenRam(message: string): Uint8Array {
+function buildGreetingScreenRam(message: string): { screenRam: Uint8Array; rows: number; warnings: string[] } {
   const screenRam = new Uint8Array(TEXT_SCREEN_SIZE).fill(SPACE_SCREEN_CODE);
-  writeScreenLine(screenRam, 1, message);
-  writeScreenLine(screenRam, 3, "READY.");
-  return screenRam;
+  const warnings: string[] = [];
+  const unsupported = new Set<string>();
+  let rows = wrapScreenText(message);
+  if (rows.length > GREETING_MAX_ROWS) {
+    warnings.push(`The message needs ${rows.length} screen rows; only the first ${GREETING_MAX_ROWS} were written.`);
+    rows = rows.slice(0, GREETING_MAX_ROWS);
+  }
+  rows.forEach((text, index) => {
+    const offset = (GREETING_FIRST_ROW + index) * TEXT_SCREEN_COLUMNS;
+    for (let column = 0; column < text.length; column += 1) {
+      const code = asciiCharToScreenCode(text[column]!);
+      if (code === undefined) unsupported.add(text[column]!);
+      screenRam[offset + column] = code ?? SPACE_SCREEN_CODE;
+    }
+  });
+  if (unsupported.size > 0) {
+    warnings.push(`These characters have no glyph in the C64 upper-case set and were written as spaces: ${[...unsupported].map((char) => JSON.stringify(char)).join(", ")}.`);
+  }
+  const readyRow = GREETING_FIRST_ROW + rows.length + 1;
+  const ready = "READY.";
+  for (let column = 0; column < ready.length; column += 1) {
+    screenRam[readyRow * TEXT_SCREEN_COLUMNS + column] = asciiCharToScreenCode(ready[column]!)!;
+  }
+  return { screenRam, rows: rows.length, warnings };
 }
 
 export function buildPetsciiScreenBasic(opts: { text: string; borderColor?: number; backgroundColor?: number }): string {
@@ -3273,6 +3430,30 @@ function printerTextExpression(input: string, target: "commodore" | "epson", sec
   return pieces.join(";");
 }
 
+/** A BASIC V2 string holds at most 255 characters, so bitmap rows are kept in an array of such strings. */
+const BASIC_STRING_MAX = 255;
+
+/**
+ * BASIC lines that READ `count` DATA bytes into A$(0), A$(1), ... with at most 255 bytes each,
+ * and the DATA lines themselves (numbered from `dataLine`).
+ */
+function bitmapRowLoader(count: number, chunks: number, firstLine: number): string[] {
+  return [
+    `${firstLine} DIM A$(${chunks - 1})`,
+    `${firstLine + 10} FOR I=0 TO ${count - 1}:READ A:K=INT(I/${BASIC_STRING_MAX}):A$(K)=A$(K)+CHR$(A):NEXT I`,
+  ];
+}
+
+function bitmapDataLines(values: readonly number[], firstLine: number): string[] {
+  const lines: string[] = [];
+  let ln = firstLine;
+  for (let i = 0; i < values.length; i += 8) {
+    lines.push(`${ln} DATA ${values.slice(i, i + 8).join(",")}`);
+    ln += 10;
+  }
+  return lines;
+}
+
 export function buildCommodoreBitmapBasicProgram(opts: {
   columns: number[];
   repeats?: number;
@@ -3287,28 +3468,24 @@ export function buildCommodoreBitmapBasicProgram(opts: {
     const n = Math.max(0, Math.min(255, Math.floor(v)));
     return ensureMsb ? (n | 0x80) : n;
   });
+  const chunks = Math.max(1, Math.ceil(cols.length / BASIC_STRING_MAX));
   const lines: string[] = [];
   lines.push(`10 OPEN1,4,${saddr}`);
-  lines.push(`20 A$=""`);
-  lines.push(`30 FOR I=1 TO ${cols.length}`);
-  lines.push(`40 READ A:A$=A$+CHR$(A)`);
-  lines.push(`50 NEXT I`);
-  lines.push(`60 FOR J=1 TO ${repeats}`);
+  lines.push(...bitmapRowLoader(cols.length, chunks, 20));
+  lines.push(`40 FOR J=1 TO ${repeats}`);
+  // CHR$(8) selects bit image mode; the row ends with the carriage return of the bare PRINT#1.
   if (typeof opts.useSubRepeat === "number") {
     const r = Math.max(0, Math.min(255, Math.floor(opts.useSubRepeat)));
-    lines.push(`70 PRINT#1,CHR$(8);CHR$(26);CHR$(${r});A$`);
+    lines.push(`50 PRINT#1,CHR$(8);CHR$(26);CHR$(${r});`);
   } else {
-    lines.push(`70 PRINT#1,CHR$(8);A$`);
+    lines.push(`50 PRINT#1,CHR$(8);`);
   }
+  lines.push(`60 FOR K=0 TO ${chunks - 1}:PRINT#1,A$(K);:NEXT K`);
+  lines.push(`70 PRINT#1`);
   lines.push(`80 NEXT J`);
   lines.push(`90 CLOSE1`);
   lines.push(`100 END`);
-  let ln = 110;
-  for (let i = 0; i < cols.length; i += 8) {
-    const group = cols.slice(i, i + 8);
-    lines.push(`${ln} DATA ${group.join(",")}`);
-    ln += 10;
-  }
+  lines.push(...bitmapDataLines(cols, 110));
   return lines.join("\n");
 }
 
@@ -3320,43 +3497,35 @@ export function buildEpsonBitmapBasicProgram(opts: {
   timesPerLine?: number;
 }): string {
   const cols = (opts.columns ?? []).map((v) => Math.max(0, Math.min(255, Math.floor(v))));
-  const len = cols.length;
-  const n = len & 0xff;
-  const m = (len >> 8) & 0xff;
   const mode = (opts.mode ?? "K").toUpperCase() as "K" | "L" | "Y" | "Z" | "*";
   const repeats = Math.max(1, Math.floor(opts.repeats ?? 1));
-  const timesPerLine = Math.max(1, Math.floor(opts.timesPerLine ?? 4));
+  const timesPerLine = Math.max(1, Math.floor(opts.timesPerLine ?? 1));
+  const chunks = Math.max(1, Math.ceil(cols.length / BASIC_STRING_MAX));
 
   function modeCode(mo: string): number | null {
     const map: Record<string, number> = { K: 75, L: 76, Y: 89, Z: 90 };
     return map[mo] ?? null;
   }
 
+  // Each string is sent as its own graphics command: ESC K n1 n2 (or ESC * m n1 n2), where
+  // n1 + 256 * n2 is the number of column bytes that follow; one string holds at most 255.
+  const command = mode === "*"
+    ? `CHR$(27);"*";CHR$(${Math.max(0, Math.min(6, Math.floor(opts.density ?? 0)))})`
+    : `CHR$(27);CHR$(${modeCode(mode)!})`;
+
   const lines: string[] = [];
   lines.push(`10 OPEN1,4`);
-  if (mode === "*") {
-    const density = Math.max(0, Math.min(6, Math.floor(opts.density ?? 0)));
-    lines.push(`20 A$=CHR$(27)+"*"+CHR$(${density})+CHR$(${n})+CHR$(${m})`);
-  } else {
-    const mc = modeCode(mode)!;
-    lines.push(`20 A$=CHR$(27)+CHR$(${mc})+CHR$(${n})+CHR$(${m})`);
-  }
-  lines.push(`30 FOR I=1 TO ${cols.length}`);
-  lines.push(`40 READ A:A$=A$+CHR$(A)`);
-  lines.push(`50 NEXT I`);
-  lines.push(`60 PRINT#1,CHR$(27);CHR$(65);CHR$(8);CHR$(10);CHR$(13)`);
-  lines.push(`70 FOR J=1 TO ${repeats}`);
-  const seg = Array.from({ length: timesPerLine }).map(() => "A$").join(";");
-  lines.push(`80 PRINT#1,${seg};CHR$(10);CHR$(13)`);
-  lines.push(`90 NEXT J`);
-  lines.push(`100 CLOSE1`);
-  lines.push(`110 END`);
-  let ln = 120;
-  for (let i = 0; i < cols.length; i += 8) {
-    const group = cols.slice(i, i + 8);
-    lines.push(`${ln} DATA ${group.join(",")}`);
-    ln += 10;
-  }
+  lines.push(...bitmapRowLoader(cols.length, chunks, 20));
+  lines.push(`40 PRINT#1,CHR$(27);CHR$(65);CHR$(8);CHR$(10);CHR$(13)`);
+  lines.push(`50 FOR J=1 TO ${repeats}`);
+  lines.push(`60 FOR T=1 TO ${timesPerLine}`);
+  lines.push(`70 FOR K=0 TO ${chunks - 1}:PRINT#1,${command};CHR$(LEN(A$(K)));CHR$(0);A$(K);:NEXT K`);
+  lines.push(`80 NEXT T`);
+  lines.push(`90 PRINT#1,CHR$(10);CHR$(13)`);
+  lines.push(`100 NEXT J`);
+  lines.push(`110 CLOSE1`);
+  lines.push(`120 END`);
+  lines.push(...bitmapDataLines(cols, 130));
   return lines.join("\n");
 }
 

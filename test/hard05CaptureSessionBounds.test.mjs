@@ -30,6 +30,9 @@ function videoPacket(frame, line, last) {
 
 const fromDevice = { address: "127.0.0.1", family: "IPv4", port: 11000, size: 0 };
 
+// Packets of incomplete frames the session holds (HARD06 CLIENT-1 moved them into the frame assembler).
+const retained = (session) => session.assembler?.retainedPackets ?? session.packets.length;
+
 test("a long-open capture session holds a bounded number of packets and still assembles new frames", async () => {
   const client = clientWithStubFacade();
   try {
@@ -40,7 +43,7 @@ test("a long-open capture session holds a bounded number of packets and still as
     for (let index = 0; index < VIDEO_SESSION_MAX_PACKETS + 1000; index += 1) {
       session.socket.emit("message", videoPacket(index % 1000, (index % 60) * 4, false), fromDevice);
     }
-    assert.ok(session.packets.length <= VIDEO_SESSION_MAX_PACKETS, `retained ${session.packets.length} packets`);
+    assert.ok(retained(session) <= VIDEO_SESSION_MAX_PACKETS, `retained ${retained(session)} packets`);
     for (let line = 0; line < 272; line += 4) {
       session.socket.emit("message", videoPacket(2000, line, line + 4 >= 272), fromDevice);
     }
@@ -61,7 +64,7 @@ test("an idle capture session without waiters does not accumulate packets", asyn
     for (let index = 0; index < VIDEO_SESSION_MAX_PACKETS * 2; index += 1) {
       session.socket.emit("message", videoPacket(index % 1000, 0, false), fromDevice);
     }
-    assert.ok(session.packets.length <= VIDEO_SESSION_MAX_PACKETS, `retained ${session.packets.length} packets`);
+    assert.ok(retained(session) <= VIDEO_SESSION_MAX_PACKETS, `retained ${retained(session)} packets`);
   } finally {
     await client.releaseVideoCapture();
   }
