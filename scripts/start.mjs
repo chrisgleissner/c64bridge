@@ -65,12 +65,12 @@ function resolveBunExecutable() {
   return 'bun';
 }
 
-async function runWithBun(entryPath) {
+async function runWithBun(entryPath, extraArgs = process.argv.slice(2)) {
   const bunExecutable = resolveBunExecutable();
 
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(bunExecutable, [entryPath], {
+      const child = spawn(bunExecutable, [entryPath, ...extraArgs], {
         stdio: 'inherit',
         env: {
           ...process.env,

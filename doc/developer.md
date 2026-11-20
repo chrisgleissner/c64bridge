@@ -4,8 +4,8 @@ Focused reference for maintainers and contributors. User-facing setup lives in [
 
 ## 1. Environment
 
-- **Node.js** ≥ 24 (enforced via [`package.json`](../package.json))
-- **Bun** ≥ 1.3 optional but recommended for faster dev loops (repo `packageManager`)
+- **Node.js** ≥ 24 (declared in `engines` of [`package.json`](../package.json); npm only warns about a mismatch, nothing enforces it)
+- **Bun** ≥ 1.3, required to build and test (repo `packageManager`): `npm run build`, `npm test` and `npm pack` (via `prepack`) call `scripts/invoke-bun.mjs`, which fails with `Unable to start Bun` when `bun` is missing. Running the published server needs Node only.
 - **Optional**: [`naudiodon`](https://www.npmjs.com/package/naudiodon) when working on SID audio capture
 
 Install once:
@@ -14,7 +14,7 @@ Install once:
 ./build install      # install via the project build helper
 # or directly:
 npm install          # reliable everywhere
-bun install          # faster workflow (respects package-lock)
+bun install          # faster workflow (uses bun.lock; keep it in step with package-lock.json)
 ```
 
 ## 2. Core Workflows
@@ -38,7 +38,7 @@ Most day-to-day tasks are run through the [`./build`](../build) helper at the pr
 | Node-only sanity | `./build check:node-compat` |
 | VICE smoke (readiness + HELLO) | `./build vice:smoke` |
 
-`scripts/invoke-bun.mjs` automatically delegates npm scripts to Bun when available; stay on the npm variants if Bun is not installed.
+`scripts/invoke-bun.mjs` delegates the build, generator and test scripts to Bun. Without Bun, only the scripts that run plain Node work (`npm start` falls back to `dist/`, `npm run check:node-compat` needs Bun too, because `npm pack` runs the build).
 
 ### Test Matrix
 
