@@ -4,7 +4,7 @@
  * stream and compares the capture with the schedule (src/audio/sidwaveFidelity.ts, doc/sidwave-hil.md).
  *
  *   node scripts/sidwave-hil.mjs --host <ip> --song <file.yaml|preset:chiptune|ambient|funk>
- *        [--seconds N] [--out dir] [--latency-ms 1500] [--pan sid1=left,sid2=right] [--model 6581|8580] [--password P] [--configure]
+ *        [--seconds N] [--out dir] [--latency-ms 4000] [--pan sid1=left,sid2=right] [--model 6581|8580] [--password P] [--configure]
  *
  * Primary check: the capture is compared with a sidplayfp rendering of the same song (one render per SID, SID model
  * forced to --model, default 8580 for UltiSID) by chroma similarity and onset correlation, with controls that must fail.
@@ -31,7 +31,7 @@ function usage(message) {
 }
 
 function parseArgs(argv) {
-  const opts = { configure: false, latencyMs: 1500, out: "sidwave-hil-out" };
+  const opts = { configure: false, latencyMs: 4000, out: "sidwave-hil-out" };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     const value = () => { const v = argv[++i]; if (v === undefined) usage(`${a} needs a value`); return v; };

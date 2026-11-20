@@ -8,7 +8,7 @@ import { fft } from "./sidwaveFidelity.js";
 
 export interface Stereo { left: Float32Array | Float64Array; right: Float32Array | Float64Array; sampleRate: number }
 
-export const FRAME_SECONDS = 0.1;
+export const FRAME_SECONDS = 0.3;
 export const HOP_SECONDS = 0.05;
 const ENV_HOP_SECONDS = 0.01;
 /** A frame with less RMS than this (about -60 dBFS) in the reference is silence and is not scored. */
@@ -22,51 +22,72 @@ function mixMono(s: Stereo): Float64Array {
 
 const pow2 = (n: number) => { let p = 1; while (p < n) p <<= 1; return p; };
 
-/** Onset strength at 100 Hz: positive log-magnitude change between 20 ms frames, 60 Hz to 8 kHz. */
+const ENV_BANDS = [60, 150, 300, 600, 1200, 2400, 4800, 9000];
+
+/**
+ * Onset strength at 100 Hz: 20 ms frames, log energy in 7 bands (60 Hz to 9 kHz), positive change per band, each band
+ * scaled by its own mean so loud low bands do not dominate, summed, smoothed over 3 frames, then max-pooled over +-20 ms
+ * so a few milliseconds of timing difference do not matter. Level and filter shape changes only scale the bands.
+ */
 export function onsetEnvelope(x: Float64Array, sampleRate: number): Float64Array {
   const win = pow2(Math.round(0.02 * sampleRate));
   const hop = Math.round(ENV_HOP_SECONDS * sampleRate);
   const frames = Math.max(0, Math.floor((x.length - win) / hop) + 1);
   const hann = new Float64Array(win).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / win));
   const re = new Float64Array(win), im = new Float64Array(win);
-  const prev = new Float64Array(win / 2);
-  const lo = Math.ceil((60 * win) / sampleRate), hi = Math.min(win / 2 - 1, Math.floor((8000 * win) / sampleRate));
-  const out = new Float64Array(frames);
+  const edges = ENV_BANDS.map((f) => Math.min(win / 2, Math.round((f * win) / sampleRate)));
+  const nb = edges.length - 1;
+  const prev = new Float64Array(nb);
+  const perBand = Array.from({ length: nb }, () => new Float64Array(frames));
   for (let f = 0; f < frames; f += 1) {
     for (let i = 0; i < win; i += 1) { re[i] = x[f * hop + i]! * hann[i]!; im[i] = 0; }
     fft(re, im);
-    let sum = 0;
-    for (let k = lo; k <= hi; k += 1) {
-      const l = Math.log1p((Math.hypot(re[k]!, im[k]!) / win) * 1000);
-      if (f > 0) sum += Math.max(0, l - prev[k]!);
-      prev[k] = l;
+    for (let b = 0; b < nb; b += 1) {
+      let e = 0;
+      for (let k = Math.max(1, edges[b]!); k < Math.max(edges[b]! + 1, edges[b + 1]!); k += 1) e += re[k]! * re[k]! + im[k]! * im[k]!;
+      const l = Math.log(1e-9 + e / (win * win));
+      if (f > 0) perBand[b]![f] = Math.max(0, l - prev[b]!);
+      prev[b] = l;
     }
-    out[f] = sum;
   }
-  // Light smoothing (3 frames) tolerates timing jitter of a few ms.
-  return out.map((_, i) => ((out[i - 1] ?? 0) + 2 * out[i]! + (out[i + 1] ?? 0)) / 4);
+  const sum = new Float64Array(frames);
+  for (const band of perBand) {
+    const mean = band.reduce((a, v) => a + v, 0) / Math.max(1, frames) || 1;
+    for (let i = 0; i < frames; i += 1) sum[i]! += Math.min(band[i]! / mean, 8);
+  }
+  const smooth = sum.map((_, i) => ((sum[i - 1] ?? 0) + 2 * sum[i]! + (sum[i + 1] ?? 0)) / 4);
+  return smooth.map((_, i) => Math.max(smooth[i - 2] ?? 0, smooth[i - 1] ?? 0, smooth[i]!, smooth[i + 1] ?? 0, smooth[i + 2] ?? 0));
 }
 
-/** Chroma vector (12 pitch classes, C = 0) of x[start .. start + FRAME_SECONDS], 60 Hz to 4 kHz, sqrt-compressed. */
+const MIDI_LO = 33; // 55 Hz
+const MIDI_HI = 83; // 1.97 kHz
+
+/**
+ * Chroma of x[start .. start + FRAME_SECONDS]: Hann-windowed FFT magnitudes are summed per semitone band (A1 to B5,
+ * a constant-Q-like layout), log-compressed, whitened by subtracting a +-12 semitone moving mean (so a loud bass or
+ * a dense harmonic series does not dominate and only bands that stand out remain), clipped at 0, and folded into 12
+ * pitch classes by the mean. The vector is centred and scaled to unit length, so a level change does not matter.
+ */
 function chromaAt(x: Float64Array, sampleRate: number, startSample: number, ctx: ChromaContext): Float64Array | null {
   const n = Math.round(FRAME_SECONDS * sampleRate);
   if (startSample < 0 || startSample + n > x.length) return null;
   const { size, hann, bins, re, im } = ctx;
-  for (let i = 0; i < size; i += 1) { re[i] = i < n ? x[startSample + i]! * hann[i]! : 0; im[i] = 0; }
   let energy = 0;
+  for (let i = 0; i < size; i += 1) { re[i] = i < n ? x[startSample + i]! * hann[i]! : 0; im[i] = 0; }
   for (let i = 0; i < n; i += 1) energy += x[startSample + i]! * x[startSample + i]!;
   fft(re, im);
-  const chroma = new Float64Array(12);
-  // Only spectral peaks vote (broadband noise has none that stand out), each with its log magnitude above a floor.
-  const mag = (k: number) => Math.hypot(re[k]!, im[k]!);
-  let top = 0;
-  for (const [k] of bins) top = Math.max(top, mag(k));
-  for (const [k, pc] of bins) {
-    const m = mag(k);
-    if (m > mag(k - 1) && m >= mag(k + 1) && m > top * 0.01) chroma[pc] += Math.log1p((m / top) * 100) / Math.pow((k * ctx.hzPerBin) / 100, 0.75);
+  const band = new Float64Array(MIDI_HI - MIDI_LO + 1);
+  for (const [k, midi] of bins) band[midi - MIDI_LO] += Math.hypot(re[k]!, im[k]!);
+  const peak = Math.max(...band, 1e-12);
+  const logged = band.map((v) => Math.log1p((v / peak) * 1000));
+  const chroma = new Float64Array(12), counts = new Float64Array(12);
+  for (let i = 0; i < logged.length; i += 1) {
+    let sum = 0, cnt = 0;
+    for (let j = Math.max(0, i - 12); j <= Math.min(logged.length - 1, i + 12); j += 1) { sum += logged[j]!; cnt += 1; }
+    const v = Math.max(0, logged[i]! - sum / cnt);
+    chroma[(MIDI_LO + i) % 12] += v; counts[(MIDI_LO + i) % 12] += 1;
   }
-  // Low partials count more than high ones (weight f^-0.75), so harmonics add less than fundamentals.
-  // Remove the mean so a flat chroma (noise, dense harmonics) does not look similar to everything.
+  for (let i = 0; i < 12; i += 1) chroma[i] /= counts[i]!;
   const mean = chroma.reduce((a, b) => a + b, 0) / 12;
   const centred = chroma.map((v) => v - mean);
   const norm = Math.hypot(...centred);
@@ -75,18 +96,18 @@ function chromaAt(x: Float64Array, sampleRate: number, startSample: number, ctx:
   return out;
 }
 
-interface ChromaContext { hzPerBin: number; size: number; hann: Float64Array; bins: Array<[number, number]>; re: Float64Array; im: Float64Array }
+interface ChromaContext { size: number; hann: Float64Array; bins: Array<[number, number]>; re: Float64Array; im: Float64Array }
 
 function chromaContext(sampleRate: number): ChromaContext {
   const n = Math.round(FRAME_SECONDS * sampleRate);
   const size = pow2(n * 2);
-  const hann = new Float64Array(n).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n));
+  const hann = new Float64Array(size).map((_, i) => (i < n ? 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n) : 0));
   const bins: Array<[number, number]> = [];
-  for (let k = Math.ceil((60 * size) / sampleRate); k <= Math.floor((4000 * size) / sampleRate); k += 1) {
-    const midi = 69 + 12 * Math.log2((k * sampleRate) / size / 440);
-    bins.push([k, ((Math.round(midi) % 12) + 12) % 12]);
+  for (let k = 1; k < size / 2; k += 1) {
+    const midi = Math.round(69 + 12 * Math.log2((k * sampleRate) / size / 440));
+    if (midi >= MIDI_LO && midi <= MIDI_HI) bins.push([k, midi]);
   }
-  return { hzPerBin: sampleRate / size, size, hann: new Float64Array(size).map((_, i) => hann[i] ?? 0), bins, re: new Float64Array(size), im: new Float64Array(size) };
+  return { size, hann, bins, re: new Float64Array(size), im: new Float64Array(size) };
 }
 
 const cosine = (a: ArrayLike<number>, b: ArrayLike<number>) => {
@@ -108,31 +129,37 @@ function pearson(a: ArrayLike<number>, b: ArrayLike<number>): number {
 }
 
 /**
- * Offset (s) such that capture time = reference time + offset, from cross-correlating onset envelopes of
- * reference[fromS, toS) over lags -minS..maxS. Returns the offset and the correlation at the peak.
+ * Offsets (s) such that capture time = reference time + offset, as local maxima of the correlation of the onset
+ * envelopes of reference[fromS, toS) over offsets minOffsetS..maxOffsetS, best first (at most `count`). A song repeats
+ * its bars, so several maxima one bar or one beat apart are normal; the caller must choose among them.
  */
-export function alignEnvelopes(refEnv: Float64Array, capEnv: Float64Array, minOffsetS: number, maxOffsetS: number, fromS = 0, toS = Infinity): { offsetS: number; correlation: number } {
+export function alignCandidates(refEnv: Float64Array, capEnv: Float64Array, minOffsetS: number, maxOffsetS: number, fromS = 0, toS = Infinity, count = 1): Array<{ offsetS: number; correlation: number }> {
   const dt = ENV_HOP_SECONDS;
   const a = Math.max(0, Math.round(fromS / dt)), b = Math.min(refEnv.length, Math.round(toS / dt));
-  let best = -Infinity, bestLag = 0;
   const lo = Math.round(minOffsetS / dt), hi = Math.round(maxOffsetS / dt);
-  const scores: Record<number, number> = {};
+  const scores = new Map<number, number>();
   for (let lag = lo; lag <= hi; lag += 1) {
     const x: number[] = [], y: number[] = [];
     for (let i = a; i < b; i += 1) { const j = i + lag; if (j < 0 || j >= capEnv.length) continue; x.push(refEnv[i]!); y.push(capEnv[j]!); }
-    if (x.length < 50) continue;
-    const c = pearson(x, y);
-    scores[lag] = c;
-    if (c > best) { best = c; bestLag = lag; }
+    if (x.length >= 50) scores.set(lag, pearson(x, y));
   }
-  let frac = 0;
-  const l = scores[bestLag - 1], r = scores[bestLag + 1];
-  if (l !== undefined && r !== undefined) { const d = l - 2 * best + r; if (d !== 0) frac = (0.5 * (l - r)) / d; }
-  return { offsetS: (bestLag + frac) * dt, correlation: best };
+  const peaks: Array<{ offsetS: number; correlation: number }> = [];
+  for (const [lag, c] of scores) {
+    const l = scores.get(lag - 1), r = scores.get(lag + 1);
+    if ((l !== undefined && l > c) || (r !== undefined && r >= c)) continue;
+    let frac = 0;
+    if (l !== undefined && r !== undefined) { const d = l - 2 * c + r; if (d !== 0) frac = (0.5 * (l - r)) / d; }
+    peaks.push({ offsetS: (lag + frac) * dt, correlation: c });
+  }
+  return peaks.sort((p, q) => q.correlation - p.correlation).slice(0, count);
+}
+
+export function alignEnvelopes(refEnv: Float64Array, capEnv: Float64Array, minOffsetS: number, maxOffsetS: number, fromS = 0, toS = Infinity): { offsetS: number; correlation: number } {
+  return alignCandidates(refEnv, capEnv, minOffsetS, maxOffsetS, fromS, toS)[0] ?? { offsetS: 0, correlation: 0 };
 }
 
 export interface CompareOptions {
-  /** Capture may start up to this long before the reference starts (the capture is `offset` later). Default 4000. */
+  /** Largest offset of the song start in the capture (capture time = reference time + offset), ms. Default 4000. */
   latencySearchMs?: number;
   /** Capture may be at most this much earlier than the reference. Default 200. */
   earlyMs?: number;
@@ -153,11 +180,12 @@ export interface Thresholds {
 }
 
 /**
- * Calibrated on the generated chiptune song (seed 65): a 6581 rendering against an 8580 rendering of the same notes scores
- * chroma 0.65 / onset 0.80, the controls -0.25 (+1 semitone) and 0.11 / 0.15 (half-bar shift); synthetic square-vs-saw
- * copies score 0.87 / 0.96. See doc/sidwave-hil.md.
+ * Calibrated on the first U64 hardware run (chiptune seed 65, UltiSID against an 8580 sidplayfp rendering): chroma 0.96,
+ * onset 0.79; controls 0.05 / 0.07 chroma and 0.25 onset. Other pairs: 6581 against 8580 renderings 0.96 / 0.76 and
+ * synthetic square against low-passed saw 0.91 / 0.94, with controls up to 0.37 chroma and 0.37 onset.
+ * See doc/sidwave-hil.md.
  */
-export const DEFAULT_THRESHOLDS: Thresholds = { chromaMedian: 0.45, onset: 0.5, controlMargin: 0.2, balanceError: 0.3 };
+export const DEFAULT_THRESHOLDS: Thresholds = { chromaMedian: 0.6, onset: 0.5, controlMargin: 0.2, balanceError: 0.3 };
 
 export interface Score { chromaMedian: number; chromaAbove07: number; onset: number }
 
@@ -219,7 +247,17 @@ export function compareToReference(reference: Stereo, capture: Stereo, options: 
   const refEnv = onsetEnvelope(refMono, reference.sampleRate), capEnv = onsetEnvelope(capMono, capture.sampleRate);
   const duration = reference.left.length / reference.sampleRate;
   const min = -(options.earlyMs ?? 200) / 1000, max = (options.latencySearchMs ?? 4000) / 1000;
-  const whole = alignEnvelopes(refEnv, capEnv, min, max);
+  // Onset correlation has several maxima for a song with repeating bars. Rank them by mean chroma similarity.
+  const candidates = alignCandidates(refEnv, capEnv, min, max, 0, Infinity, 8).filter((c, _i, all) => c.correlation >= 0.5 * all[0]!.correlation);
+  const sampleTimes = Array.from({ length: 48 }, (_, i) => ((i + 0.5) / 48) * Math.max(0, duration - FRAME_SECONDS));
+  const refSample = features(reference, refMono, sampleTimes);
+  const chromaMean = (offset: number) => {
+    const cap = features(capture, capMono, sampleTimes.map((t) => t + offset));
+    const sims = refSample.flatMap((rf, i) => (rf && cap[i] && rf.rms >= SILENCE_RMS ? [cosine(rf.chroma, cap[i]!.chroma)] : []));
+    return sims.length ? sims.reduce((a, b) => a + b, 0) / sims.length : -1;
+  };
+  const ranked = candidates.map((c) => ({ ...c, chroma: chromaMean(c.offsetS) })).sort((p, q) => q.chroma - p.chroma);
+  const whole = ranked[0] ?? { offsetS: 0, correlation: 0 };
   const first = alignEnvelopes(refEnv, capEnv, whole.offsetS - 0.2, whole.offsetS + 0.2, 0, duration / 3);
   const last = alignEnvelopes(refEnv, capEnv, whole.offsetS - 0.2, whole.offsetS + 0.2, (2 * duration) / 3, duration);
   const offsetS = whole.offsetS;
