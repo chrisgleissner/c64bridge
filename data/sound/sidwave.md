@@ -257,6 +257,21 @@ Set either field on a named instrument or on a groove note object. Entry values 
 - `portamento: N` starts from the preceding note's pitch on the same voice, including after a rest. It reaches the new target after **N player calls**, interpolating the SID frequency linearly. The range is 0–255. Zero disables the glide. The first note of each loop starts normally. A glide replaces the instrument's ordinary slide for that note. Wavetable rows that set a pitch take precedence while those rows are active.
 - `legato: true` changes the pitch of a contiguous note while preserving the active instrument, gate, ADSR and table positions. If the entry names another instrument, that instrument's articulation settings still apply. Use a normal attack to switch the sounding instrument. After a rest or at the start of the loop, the player makes a normal attack. An explicit `false` restores hard restart when the instrument defaults to legato.
 
+## Generated pieces
+
+`c64_sound` with `op: generate` plays a seeded eight-bar piece once and returns
+the SIDWAVE source. Like `play_preset`, it loads and runs the song as a PRG
+with its own player, so it replaces the program in memory. The styles are `chiptune` (130 BPM, speed 2), `ambient`
+(80 BPM) and `funk` (105 BPM). Use `seed` to reproduce the harmony and melody.
+
+`root` sets the tonic and lead register. An explicit `pattern` repeats semitone
+offsets relative to that root. `steps` sets the number of lead notes and
+`tempoMs` sets their spacing with `preset: classic`. The `expression` preset
+uses varied phrasing and retains its 250, 180, 180 and 400 ms timing cycle when
+you customize the lead length, pattern or spacing. The accompaniment then runs
+to the end of the final bar. `waveform` overrides the lead sound, and `system`
+sets the score timing to PAL or NTSC. By default, timing follows the machine.
+
 ## Built-in instruments
 
 Use these names as voice defaults, groove note instruments, or drum kit entries. The recipes use techniques described in [SID programming best practices](sid-programming-best-practices.md) and the [SID specification](sid-spec.md).

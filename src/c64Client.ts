@@ -922,9 +922,9 @@ export class C64Client {
     }
   }
 
-  async runPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
+  async runPrg(prg: Uint8Array | Buffer, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
-      const facade = await this.facadePromise;
+      const facade = pinnedFacade ?? await this.facadePromise;
       const res = await facade.runPrg(prg);
       return { success: res.success, details: res.details };
     } catch (error) {
@@ -1278,6 +1278,14 @@ export class C64Client {
     if (!isSidwaveHandler) return false;
     await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
     return true;
+  }
+
+  /** Release a SIDWAVE PRG when another operation needs the SID or its memory. */
+  async stopSidwavePlayback(pinnedFacade?: C64Facade): Promise<void> {
+    const facade = pinnedFacade ?? await this.facadePromise;
+    if (!await this.stopSidwaveIrqPlayer(facade)) return;
+    this.sidControl.delete(facade);
+    await this.writeBlocks(facade, [0xd404, 0xd40b, 0xd412, 0xd417].map((address) => ({ address, bytes: Uint8Array.of(0) })));
   }
 
   async sidNoteOn(options: {

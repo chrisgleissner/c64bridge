@@ -1,3 +1,4 @@
+import { cancelGeneratedSidPlayback } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../../sidwaveCompiler.js";
 import { parseSidwave } from "../../sidwave.js";
@@ -520,6 +521,7 @@ export const tools: ToolDefinition[] = [
             context.setPlatform(backend);
             await trySilenceSid(context);
 
+            await cancelGeneratedSidPlayback(context.client);
             const playback = await context.client.runPrg(compiled.prg);
             if (playback.success) clearViceSymbols(); // labels belong to one program
             const backendResult: Record<string, unknown> = {
@@ -688,6 +690,7 @@ export const tools: ToolDefinition[] = [
             });
           }
         } else {
+          await cancelGeneratedSidPlayback(context.client);
           const playback = await context.client.runPrg(compiled.prg);
           if (playback.success) clearViceSymbols(); // labels belong to one program
           playbackDetails = normaliseDetails(playback.details);

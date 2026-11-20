@@ -45,29 +45,23 @@ function createCtx(client, setPlatformCalls, platform = "c64u") {
   };
 }
 
-test("HARD01-030 c64_select_backend cancels an in-flight music_generate arpeggio", async () => {
-  const noteOnCalls = [];
+test("HARD01-030 c64_select_backend stops a music_generate song on the old backend before switching", async () => {
+  const events = [];
   const setPlatformCalls = [];
   const client = createSwitchClient(["c64u", "vice"], "vice");
-  client.pinFacade = async () => ({ type: "vice" });
-  client.sidSetVolume = async () => ({ success: true });
-  client.sidNoteOn = async (payload) => { noteOnCalls.push(payload.note); return { success: true }; };
-  client.sidNoteOff = async () => ({ success: true });
+  const viceFacade = { type: "vice" };
+  client.pinFacade = async () => viceFacade;
+  client.runPrg = async (_prg, facade) => { events.push(["run", facade]); return { success: true }; };
+  client.stopSidwavePlayback = async (facade) => { events.push(["stop", facade]); };
+  const switchBackend = client.switchBackend?.bind(client);
+  client.switchBackend = (backend) => { events.push(["switch", backend]); return switchBackend?.(backend); };
 
   const scheduleResult = await toolRegistry.invoke(
     "c64_sound",
     { op: "generate", root: "C4", pattern: "0,4,7,12,16", steps: 5, tempoMs: 40 },
     createCtx(client, setPlatformCalls, "vice"),
   );
-  assert.equal(scheduleResult.isError, undefined);
-
-  // Let the first note play, then switch backends mid-arpeggio.
-  const firstNoteDeadline = Date.now() + 2000;
-  while (noteOnCalls.length === 0 && Date.now() < firstNoteDeadline) {
-    await new Promise((resolve) => setTimeout(resolve, 2));
-  }
-  const callsBeforeSwitch = noteOnCalls.length;
-  assert.ok(callsBeforeSwitch >= 1, "expected at least one note before the switch");
+  assert.equal(scheduleResult.isError, undefined, JSON.stringify(scheduleResult));
 
   await toolRegistry.invoke(
     "c64_select_backend",
@@ -75,10 +69,9 @@ test("HARD01-030 c64_select_backend cancels an in-flight music_generate arpeggio
     createCtx(client, setPlatformCalls, "vice"),
   );
 
-  // Wait past the arpeggio's full natural duration; cancellation must have
-  // stopped further notes rather than letting them keep playing.
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  assert.equal(noteOnCalls.length, callsBeforeSwitch);
+  const kinds = events.map(([kind]) => kind);
+  assert.deepEqual(kinds.slice(0, 3), ["run", "stop", "switch"]);
+  assert.equal(events[1][1], viceFacade, "the player is stopped on the backend that runs it");
 });
 
 test("c64_select_backend switches to an available backend and updates platform state", async () => {

@@ -669,7 +669,10 @@
             ]
           },
           "waveform": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "SID waveform to enable. Limits depend on op.",
             "enum": [
               "pulse",
@@ -736,36 +739,59 @@
           },
           "root": {
             "type": "string",
-            "description": "Root note for the arpeggio such as C4 or A#3.",
+            "description": "Tonic and lead register.",
             "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$",
             "default": "C4"
           },
           "pattern": {
-            "type": "string",
-            "description": "Comma-separated semitone offsets (e.g. '0,4,7').",
-            "minLength": 1,
-            "default": "0,4,7"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Repeating lead semitone offsets from root.",
+            "minLength": 1
           },
           "steps": {
-            "type": "integer",
-            "description": "Number of notes to schedule.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Lead notes to play.",
             "minimum": 1,
-            "maximum": 128,
-            "default": 16
+            "maximum": 128
           },
           "tempoMs": {
-            "type": "integer",
-            "description": "Delay in milliseconds between notes.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Classic lead spacing in ms.",
             "minimum": 20,
-            "maximum": 2000,
-            "default": 120
+            "maximum": 2000
           },
           "preset": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Optional musical preset to influence timing/expression. Limits depend on op."
+            "description": "Classic or varied lead phrasing. Limits depend on op."
+          },
+          "style": {
+            "type": "string",
+            "description": "Arrangement style.",
+            "enum": [
+              "chiptune",
+              "ambient",
+              "funk"
+            ],
+            "default": "chiptune"
+          },
+          "seed": {
+            "type": "integer",
+            "description": "Reproducible composition seed.",
+            "minimum": 0,
+            "maximum": 4294967295,
+            "default": 65
           },
           "sidwave": {
             "type": [
@@ -950,7 +976,7 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the Ultimate audio UDP stream. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Soft or hard reset of the SID registers. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Generate a lightweight SID arpeggio playback sequence. Optional inputs: root, pattern, steps, tempoMs, waveform, preset, system.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Optional inputs: sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play and analyze it. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback when verification is requested. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the Ultimate audio UDP stream. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Soft or hard reset of the SID registers. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Compose and play eight SIDWAVE bars by default as a PRG, which replaces the program in memory. Root sets key/register, pattern gives lead offsets, steps sets lead count, tempoMs sets classic spacing, waveform sets lead sound, preset sets phrasing, and system sets PAL/NTSC timing. Optional inputs: root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Optional inputs: sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play and analyze it. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback when verification is requested. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
         "additionalProperties": false
       },
       "annotations": {

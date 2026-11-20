@@ -2,19 +2,8 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { audioModule } from "../src/tools/audio.js";
-
-// music_generate schedules playback asynchronously, so tests wait for the
-// expected SID calls instead of sleeping for a fixed time (which raced the
-// playback loop under load).
-async function waitUntil(predicate, timeoutMs = 2000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      throw new Error("Timed out waiting for asynchronous playback");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
+import { compileSidwaveToPrg } from "../src/sidwaveCompiler.js";
+import { parseSidwave } from "../src/sidwave.js";
 
 function createLogger() {
   return {
@@ -60,260 +49,58 @@ function buildSidwaveDoc() {
   };
 }
 
-test("music_generate builds timeline and triggers SID sequence", async () => {
-  const volumeCalls = [];
-  const noteCalls = [];
-  let noteOffCount = 0;
-
+test("music_generate reports a seeded score and plays its compiled PRG", async () => {
+  const played = [];
   const ctx = {
-    client: {
-      sidSetVolume: async (volume) => {
-        volumeCalls.push(volume);
-        return { success: true };
-      },
-      sidNoteOn: async (payload) => {
-        if (payload.voice === 1) noteCalls.push(payload);
-        return { success: true };
-      },
-      sidNoteOff: async (voice) => {
-        if (voice === 1) noteOffCount += 1;
-        return { success: true };
-      },
-    },
+    client: { runPrg: async (prg) => { played.push(prg); return { success: true }; } },
     logger: createLogger(),
   };
-
-  const result = await audioModule.invoke(
-    "music_generate",
-    { root: "C4", pattern: "0,4", steps: 2, tempoMs: 40, waveform: "tri" },
-    ctx,
-  );
-
-  assert.equal(result.content[0].type, "text");
+  const result = await audioModule.invoke("music_generate", {}, ctx);
   assert.equal(result.isError, undefined);
-  assert.deepEqual(result.metadata.intervals, [0, 4]);
-  assert.equal(result.metadata.steps, 2);
-  assert.equal(result.metadata.timeline.length, 2);
-
-  await waitUntil(() => noteOffCount >= 3);
-
-  assert.equal(volumeCalls.length, 1);
-  assert.equal(noteCalls.length, 2);
-  // HARD01-033: the gate is cleared between every note (steps) plus a final
-  // release, so envelope articulation retriggers for each note.
-  assert.equal(noteOffCount, 3);
-  assert.deepEqual(noteCalls.map((call) => call.note), ["C4", "E4"]);
+  assert.equal(result.metadata.style, "chiptune");
+  assert.equal(result.metadata.tempo, 130);
+  assert.equal(result.metadata.speed, 2);
+  assert.equal(result.metadata.bars, 8);
+  assert.match(result.metadata.key, /^C (minor|major)$/);
+  assert.equal(result.metadata.progression.length, 4);
+  assert.ok(Number.isInteger(result.metadata.seed));
+  assert.equal(played.length, 1);
+  const expected = compileSidwaveToPrg(parseSidwave(result.metadata.sidwave), { loop: false });
+  assert.deepEqual(played[0], expected.prg);
+  assert.equal(result.metadata.prgSize, expected.prg.length);
 });
 
-test("music_generate holds the gate for most of each note and clears it only briefly", async () => {
-  const events = [];
+test("music_generate returns a failure when the backend cannot start the PRG", async () => {
   const ctx = {
-    client: {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async ({ voice }) => { if (voice === 1) events.push({ op: "on", at: Date.now() }); return { success: true }; },
-      sidNoteOff: async (voice) => { if (voice === 1) events.push({ op: "off", at: Date.now() }); return { success: true }; },
-    },
+    client: { runPrg: async () => ({ success: false, details: { message: "offline" } }) },
     logger: createLogger(),
   };
-
-  // tempoMs 160 gives a 20 ms gate gap, so the gate should stay high for about 140 ms.
-  const result = await audioModule.invoke(
-    "music_generate",
-    { root: "C4", pattern: "0,4", steps: 2, tempoMs: 160 },
-    ctx,
-  );
-  assert.equal(result.isError, undefined);
-  await waitUntil(() => events.filter((event) => event.op === "off").length >= 3);
-
-  const [firstOn, firstOff, secondOn] = events;
-  assert.deepEqual([firstOn.op, firstOff.op, secondOn.op], ["on", "off", "on"]);
-  assert.ok(firstOff.at - firstOn.at >= 100, `gate held only ${firstOff.at - firstOn.at} ms`);
-  assert.ok(secondOn.at - firstOff.at < 100, `gate gap was ${secondOn.at - firstOff.at} ms`);
+  const result = await audioModule.invoke("music_generate", {}, ctx);
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata.error.kind, "execution");
+  assert.equal(result.metadata.error.details.message, "offline");
 });
 
-test("music_generate replacing a running sequence does not cut off the new note", async () => {
-  const events = [];
-  const ctx = {
-    client: {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async (payload) => { if (payload.voice === 1) events.push({ op: `on-${payload.note}`, at: Date.now() }); return { success: true }; },
-      sidNoteOff: async (voice) => { if (voice === 1) events.push({ op: "off", at: Date.now() }); return { success: true }; },
+test("music_generate reads the clock and launches on the same pinned backend", async () => {
+  const first = { type: "vice" };
+  const next = { type: "c64u" };
+  let active = first;
+  const touched = [];
+  const client = {
+    pinFacade: async () => active,
+    readMemoryRaw: async (address, length, facade) => {
+      assert.equal(address, 0x02a6);
+      assert.equal(length, 1);
+      touched.push(facade);
+      active = next;
+      return Uint8Array.of(0);
     },
-    logger: createLogger(),
+    runPrg: async (_prg, facade) => { touched.push(facade); return { success: true }; },
   };
-
-  await audioModule.invoke("music_generate", { root: "C4", pattern: "0", steps: 1, tempoMs: 2000 }, ctx);
-  await waitUntil(() => events.some((event) => event.op === "on-C4"));
-  await audioModule.invoke("music_generate", { root: "G4", pattern: "0", steps: 1, tempoMs: 400 }, ctx);
-  await waitUntil(() => events.filter((event) => event.op === "off").length >= 3);
-
-  const ops = events.map((event) => event.op);
-  // The replaced sequence gates off once, promptly, before the new note starts.
-  assert.deepEqual(ops, ["on-C4", "off", "on-G4", "off", "off"]);
-  const newNote = events[2];
-  const firstOffAfter = events[3];
-  assert.ok(newNote.at - events[0].at < 1000, "the replaced sequence must stop well before its 2000 ms note ends");
-  assert.ok(firstOffAfter.at - newNote.at >= 300, `the new note was gated off after ${firstOffAfter.at - newNote.at} ms`);
-});
-
-test("music_generate defaults to triangle waveform and best-practice ADSR", async () => {
-  const volumeCalls = [];
-  const noteCalls = [];
-  let noteOffCount = 0;
-
-  const ctx = {
-    client: {
-      sidSetVolume: async (v) => { volumeCalls.push(v); return { success: true }; },
-      sidNoteOn: async (p) => { if (p.voice === 1) noteCalls.push(p); return { success: true }; },
-      sidNoteOff: async (voice) => { if (voice === 1) noteOffCount += 1; return { success: true }; },
-    },
-    logger: createLogger(),
-  };
-
-  // Omit waveform and ADSR to exercise defaults
-  const result = await audioModule.invoke(
-    "music_generate",
-    { root: "C4", pattern: "0", steps: 1, tempoMs: 30 },
-    ctx,
-  );
-
+  const result = await audioModule.invoke("music_generate", {}, { client, logger: createLogger() });
   assert.equal(result.isError, undefined);
-  await waitUntil(() => noteOffCount >= 2);
-
-  assert.equal(volumeCalls.length, 1);
-  assert.equal(noteCalls.length, 1);
-  const call = noteCalls[0];
-  assert.equal(call.waveform, "tri");
-  assert.equal(call.attack, 1);
-  assert.equal(call.decay, 7);
-  assert.equal(call.sustain, 15);
-  assert.equal(call.release, 0);
-  // HARD01-033: one gate-clear before the (non-existent) next note never
-  // happens for a single-step run, but the trailing release still fires,
-  // plus the loop's own gate-clear for its one note.
-  assert.equal(noteOffCount, 2);
-});
-
-test("music_generate expression preset uses varied durations and reports preset", async () => {
-  const ctx = {
-    client: {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async () => ({ success: true }),
-      sidNoteOff: async () => ({ success: true }),
-    },
-    logger: createLogger(),
-  };
-
-  const result = await audioModule.invoke(
-    "music_generate",
-    { root: "C4", pattern: "0,4,7", steps: 4, preset: "expression", tempoMs: 50 },
-    ctx,
-  );
-
-  assert.equal(result.isError, undefined);
-  assert.equal(result.metadata.preset, "expression");
-  const timeline = result.metadata.timeline;
-  assert.equal(Array.isArray(timeline), true);
-  // Expect the first four durations to match the expressive pattern
-  const durations = timeline.slice(0, 4).map((e) => e.durationMs);
-  assert.deepEqual(durations, [250, 180, 180, 400]);
-});
-
-test("music_generate survives playback error and logs", async () => {
-  let noteOnCalls = 0;
-  const ctx = {
-    client: {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async () => { noteOnCalls += 1; throw new Error("boom"); },
-      sidNoteOff: async () => ({ success: true }),
-    },
-    logger: createLogger(),
-  };
-
-  const result = await audioModule.invoke(
-    "music_generate",
-    { root: "C4", pattern: "0", steps: 1, tempoMs: 30 },
-    ctx,
-  );
-
-  assert.equal(result.isError, undefined);
-  await new Promise((r) => setTimeout(r, 40));
-  assert.equal(noteOnCalls, 1);
-});
-
-test("HARD01-030 music_generate pins its facade so a mid-playback backend switch cannot retarget later notes", async () => {
-  const events = [];
-  let activeFacadeType = "vice";
-  const viceFacade = { type: "vice" };
-  const c64uFacade = { type: "c64u" };
-
-  const ctx = {
-    client: {
-      async pinFacade() {
-        return activeFacadeType === "vice" ? viceFacade : c64uFacade;
-      },
-      async sidSetVolume(volume, facade) {
-        events.push({ op: "volume", facade: facade?.type });
-        return { success: true };
-      },
-      async sidNoteOn(payload, facade) {
-        events.push({ op: `note-on-${payload.note}`, facade: facade?.type });
-        // Simulate a concurrent c64_select_backend firing mid-arpeggio.
-        activeFacadeType = "c64u";
-        return { success: true };
-      },
-      async sidNoteOff(voice, facade) {
-        events.push({ op: "note-off", voice, facade: facade?.type });
-        return { success: true };
-      },
-    },
-    logger: createLogger(),
-  };
-
-  const result = await audioModule.invoke(
-    "music_generate",
-    { root: "C4", pattern: "0,4", steps: 2, tempoMs: 20, waveform: "tri" },
-    ctx,
-  );
-  assert.equal(result.isError, undefined);
-
-  await waitUntil(() => events.filter((event) => event.op === "note-off" && event.voice === 1).length >= 3);
-
-  // Every write must have used the facade pinned when the arpeggio started
-  // (vice), never the one made active by the mid-flight switch (c64u).
-  assert.ok(events.length > 0);
-  assert.ok(events.every((event) => event.facade === "vice"), JSON.stringify(events));
-});
-
-test("music_generate plays library drum transients and tails on voice 2", async () => {
-  const drums = [];
-  let done = false;
-  let leadReleases = 0;
-  const ctx = {
-    client: {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async ({ voice, note, waveform }) => {
-        if (voice === 2) drums.push([note, waveform]);
-        return { success: true };
-      },
-      sidNoteOff: async (voice) => {
-        if (voice === 1 && ++leadReleases === 6) done = true;
-        return { success: true };
-      },
-    },
-    logger: createLogger(),
-  };
-  const result = await audioModule.invoke("music_generate", { steps: 5, tempoMs: 120, system: "PAL" }, ctx);
-  assert.equal(result.isError, undefined);
-  assert.deepEqual(result.metadata.drums, [
-    { t: 0, instrument: "lib:kick" }, { t: 240, instrument: "lib:hat" }, { t: 480, instrument: "lib:snare" },
-  ]);
-  await waitUntil(() => done);
-  assert.deepEqual(drums, [
-    ["C6", "noise"], ["C3", "pulse"], ["C2", "pulse"], ["C1", "tri"],
-    ["G7", "noise"], ["C7", "noise"],
-    ["A6", "noise"], ["C6", "noise"], ["C4", "pulse"], ["C3", "tri"],
-  ]);
+  assert.equal(result.metadata.system, "NTSC");
+  assert.deepEqual(touched, [first, first]);
 });
 
 test("music_compile_and_play compiles SIDWAVE to PRG and runs on C64", async () => {

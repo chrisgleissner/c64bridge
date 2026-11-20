@@ -5,7 +5,7 @@ import {
   defineToolModule,
   discriminatedUnionSchema,
 } from "../types.js";
-import { audioModule } from "../audio.js";
+import { audioModule, MUSIC_GENERATE_DESCRIPTION } from "../audio.js";
 import { metaModule } from "../meta/index.js";
 import {
   literalSchema,
@@ -185,7 +185,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "generate",
       ensureDescriptor(audioDescriptorIndex, "music_generate").inputSchema,
-      { description: "Generate a lightweight SID arpeggio playback sequence." },
+      { description: MUSIC_GENERATE_DESCRIPTION },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "music_generate", rawArgs, ctx),
   },

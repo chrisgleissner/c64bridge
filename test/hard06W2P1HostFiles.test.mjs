@@ -129,30 +129,20 @@ test("upload_run_basic names line numbers whose text was replaced by a later lin
 });
 
 for (const tool of ["run_prg", "load_prg"]) {
-  test(`${tool} stops a running music_generate sequence`, async () => {
-    const { audioModule, cancelGeneratedSidPlayback } = await import("../src/tools/audio.js");
-    const state = { noteOns: 0 };
+  test(`${tool} detaches a generated SIDWAVE PRG before using its memory`, async () => {
+    const { audioModule } = await import("../src/tools/audio.js");
+    const calls = [];
     const client = {
-      sidSetVolume: async () => ({ success: true }),
-      sidNoteOn: async () => { state.noteOns += 1; return { success: true }; },
-      sidNoteOff: async () => ({ success: true }),
-      runPrgFile: async () => ({ success: true }),
-      loadPrgFile: async () => ({ success: true }),
+      runPrg: async () => { calls.push("generate"); return { success: true }; },
+      stopSidwavePlayback: async () => { calls.push("stop"); },
+      runPrgFile: async () => { calls.push("run_prg"); return { success: true }; },
+      loadPrgFile: async () => { calls.push("load_prg"); return { success: true }; },
     };
-    try {
-      await audioModule.invoke("music_generate", { steps: 128, tempoMs: 20 }, { client, logger });
-      const deadline = Date.now() + 2000;
-      while (state.noteOns === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 2));
-      assert.ok(state.noteOns > 0);
-      const result = await programRunnersModule.invoke(tool, { path: "//USB0/a.prg" }, { client, logger, platform: platform("c64u") });
-      assert.equal(result.isError, undefined, JSON.stringify(result.content));
-      await new Promise((r) => setTimeout(r, 30));
-      const settled = state.noteOns;
-      await new Promise((r) => setTimeout(r, 120));
-      assert.equal(state.noteOns, settled);
-    } finally {
-      cancelGeneratedSidPlayback();
-    }
+    const ctx = { client, logger, platform: platform("c64u") };
+    assert.equal((await audioModule.invoke("music_generate", {}, ctx)).isError, undefined);
+    const result = await programRunnersModule.invoke(tool, { path: "//USB0/a.prg" }, ctx);
+    assert.equal(result.isError, undefined, JSON.stringify(result.content));
+    assert.deepEqual(calls, ["generate", "stop", tool]);
   });
 }
 

@@ -1,6 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { audioModule, cancelGeneratedSidPlayback } from "../src/tools/audio.js";
+import { audioModule } from "../src/tools/audio.js";
 import { machineControlModule } from "../src/tools/machineControl.js";
 import { setPlatform } from "../src/platform.js";
 
@@ -27,22 +27,18 @@ function makeClient(flag, extra = {}) {
 }
 
 for (const tool of ["reset_c64", "reboot_c64", "power_cycle"]) {
-  test(`${tool} stops a running music_generate sequence`, async () => {
+  test(`${tool} detaches generated SIDWAVE playback before controlling the machine`, async () => {
     setPlatform("c64u");
-    const { client, state } = makeClient(1);
-    try {
-      await audioModule.invoke("music_generate", { steps: 128, tempoMs: 20 }, { client, logger });
-      const deadline = Date.now() + 2000;
-      while (state.noteOns === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 2));
-      assert.ok(state.noteOns > 0);
-      await machineControlModule.invoke(tool, {}, { client, logger });
-      await new Promise((r) => setTimeout(r, 30));
-      const settled = state.noteOns;
-      await new Promise((r) => setTimeout(r, 120));
-      assert.equal(state.noteOns, settled);
-    } finally {
-      cancelGeneratedSidPlayback();
-    }
+    const calls = [];
+    const operation = { reset_c64: "reset", reboot_c64: "reboot", power_cycle: "powerCycle" }[tool];
+    const { client } = makeClient(1, {
+      runPrg: async () => { calls.push("generate"); return { success: true }; },
+      stopSidwavePlayback: async () => { calls.push("stop"); },
+      [operation]: async () => { calls.push(tool); return { success: true }; },
+    });
+    assert.equal((await audioModule.invoke("music_generate", {}, { client, logger })).isError, undefined);
+    assert.equal((await machineControlModule.invoke(tool, {}, { client, logger })).isError, undefined);
+    assert.deepEqual(calls, ["generate", "stop", tool]);
   });
 }
 
