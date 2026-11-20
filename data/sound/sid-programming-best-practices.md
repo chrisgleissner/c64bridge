@@ -25,11 +25,11 @@ This document captures the successful approach for creating pleasant, musical SI
 
 ## Key Success Factors
 
-### 1. Ultra-Low Frequencies
+### 1. Frequency Register Bytes
 
-- **Critical Discovery**: The standard frequency tables from documentation are too high for pleasant listening
-- **Working Range**: Use frequencies around 30-60 for the low byte, 0 for high byte
-- **Result**: Produces warm, bass-like tones instead of harsh, screechy sounds
+- **Register layout**: 54272 ($D400) is the frequency LOW byte and 54273 ($D401) the frequency HIGH byte. 54274 ($D402) is the pulse width LOW byte and has no effect on a triangle wave.
+- **What the program does**: it writes 30-60 to the frequency HIGH byte and leaves the low byte alone. With the low byte at 0 that is register value 7680-15360, which is about 451-902 Hz on PAL (468-936 Hz NTSC). These are not low frequencies.
+- **Pitch from a table**: the standard frequency table gives correct pitches (C4 = $1167 on PAL); see `sid-spec.md`. The scale above is not tuned to it.
 
 ### 2. Triangle Wave Instead of Pulse
 
@@ -39,50 +39,50 @@ This document captures the successful approach for creating pleasant, musical SI
 
 ### 3. Proper ADSR Envelope
 
-- **Attack/Decay (54277)**: `17` = fast attack (1), slow decay (7)
+- **Attack/Decay (54277)**: `17` = $11 = attack 1 (8 ms), decay 1 (24 ms)
 - **Sustain/Release (54278)**: `240` = high sustain (15), no release (0)
 - **Effect**: Creates natural-sounding note onset and sustain
 
 ### 4. Timing is Everything
 
-- **Note Duration**: 3000 cycles provides proper sustain (~1.5 seconds)
-- **Pause Duration**: 500 cycles between notes for clear separation
+- **Note Duration**: a `FOR I=1 TO 3000:NEXT I` loop (3000 iterations, not CPU cycles; the duration in seconds is unverified)
+- **Pause Duration**: a 500-iteration loop between notes for clear separation
 - **GATE Control**: Keep GATE on during entire note, then turn off cleanly
 
 ### 5. Musical Expression and Phrasing
 
 - **Varied Note Lengths**: Don't make all notes the same duration - create rhythm and emphasis
-- **Phrase Breathing**: Use longer pauses between musical phrases (150-200 cycles)
+- **Phrase Breathing**: Use longer pauses between musical phrases (150-200 loop iterations)
 - **Dynamic Emphasis**: Emphasize important notes (phrase beginnings/endings) with longer durations
 - **Narrative Flow**: Each phrase should have its own character and emotional arc
-- **Quick Passages**: Use shorter notes (140-180 cycles) for rapid, flowing sections
-- **Sustained Endings**: Use longer notes (400-600 cycles) for phrase climaxes and endings
+- **Quick Passages**: Use shorter notes (140-180 loop iterations) for rapid, flowing sections
+- **Sustained Endings**: Use longer notes (400-600 loop iterations) for phrase climaxes and endings
 
 ## Technical Analysis
 
 ### Frequency Values Used
 
 ```text
-Note | Low Byte | High Byte | Estimated Hz
------|----------|-----------|-------------
-C    | 30       | 0         | ~50 Hz
-D    | 34       | 0         | ~57 Hz  
-E    | 38       | 0         | ~63 Hz
-F    | 40       | 0         | ~67 Hz
-G    | 45       | 0         | ~75 Hz
-A    | 51       | 0         | ~85 Hz
-B    | 57       | 0         | ~95 Hz
-C    | 60       | 0         | ~100 Hz
+Note | High Byte (54273) | Hz PAL (low byte 0) | Hz NTSC (low byte 0)
+-----|-------------------|---------------------|---------------------
+C    | 30                | 451                 | 468
+D    | 34                | 511                 | 531
+E    | 38                | 571                 | 593
+F    | 40                | 601                 | 624
+G    | 45                | 677                 | 702
+A    | 51                | 767                 | 796
+B    | 57                | 857                 | 890
+C    | 60                | 902                 | 936
 ```
 
 ### Register Settings
 
 ```text
 54296 (Volume): 15 (maximum)
-54277 (AD): 17 (attack=1, decay=7)
+54277 (AD): 17 = $11 (attack=1, decay=1)
 54278 (SR): 240 (sustain=15, release=0)
-54273 (Freq Lo): Variable per note
-54274 (Freq Hi): 0 (always)
+54273 (Freq Hi): Variable per note
+54274 (Pulse Width Lo): 0 (always; no effect on a triangle wave)
 54276 (Control): 17 (triangle+gate) / 16 (triangle only)
 ```
 
@@ -90,8 +90,8 @@ C    | 60       | 0         | ~100 Hz
 
 ### 1. Using Documentation Frequencies Directly
 
-- Standard frequency tables (C4=261Hz → 0x113E) produce harsh, unpleasant sounds
-- These frequencies are mathematically correct but not musically pleasant for listening
+- The standard frequency table gives the correct pitch (C4 = 261.63 Hz = $1167 on PAL, $10C4 on NTSC)
+- Write both bytes: low byte to 54272 ($D400), high byte to 54273 ($D401)
 
 ### 2. Pulse Wave Without Proper Setup
 
@@ -146,13 +146,13 @@ The following example demonstrates how to create a musically expressive children
 
 ### Key Musical Programming Principles
 
-1. **Opening Emphasis**: First note gets longer duration (250 cycles) to establish the song
-2. **Flowing Middle**: Quick notes (180 cycles) for melodic flow
-3. **Phrase Endings**: Extended notes (400-600 cycles) at the end of each phrase
-4. **Breathing Space**: Longer pauses (150-200 cycles) between phrases
+1. **Opening Emphasis**: First note gets longer duration (250 loop iterations) to establish the song
+2. **Flowing Middle**: Quick notes (180 loop iterations) for melodic flow
+3. **Phrase Endings**: Extended notes (400-600 loop iterations) at the end of each phrase
+4. **Breathing Space**: Longer pauses (150-200 loop iterations) between phrases
 5. **Character Variation**: Each verse has its own timing character:
-   - "Swimming" = light, quick notes (160 cycles)
-   - "Diving" = very short, rapid notes (140 cycles)
+   - "Swimming" = light, quick notes (160 loop iterations)
+   - "Diving" = very short, rapid notes (140 loop iterations)
    - "Triumphant ending" = building emphasis
 
 ### Example Implementation
@@ -171,16 +171,18 @@ REM ... continued with varied timing for musical expression
 
 ### Timing Patterns for Different Musical Effects
 
-- **Emphasis/Importance**: 250-400+ cycles
-- **Normal melody notes**: 180-200 cycles  
-- **Quick/flowing passages**: 140-160 cycles
-- **Short pauses**: 25-40 cycles
-- **Phrase breathing**: 120-200 cycles
-- **Dramatic pauses**: 150-250 cycles
+Values are FOR-loop iteration counts; durations in seconds are unverified.
+
+- **Emphasis/Importance**: 250-400+ iterations
+- **Normal melody notes**: 180-200 iterations  
+- **Quick/flowing passages**: 140-160 iterations
+- **Short pauses**: 25-40 iterations
+- **Phrase breathing**: 120-200 iterations
+- **Dramatic pauses**: 150-250 iterations
 
 ## Conclusion
 
-The key insight is that **musical programming requires human feedback**, not just technical accuracy. The "correct" mathematical frequencies from documentation don't necessarily produce the most pleasant musical experience. This approach prioritizes:
+The key insight is that **musical programming requires human feedback** in addition to correct register values. The frequency table in `sid-spec.md` gives correct pitches; the scale above uses only the high frequency byte. This approach prioritizes:
 
 1. **Listenability** over technical accuracy
 2. **Smooth waveforms** (triangle) over complex ones (pulse)
