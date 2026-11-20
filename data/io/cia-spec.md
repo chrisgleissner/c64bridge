@@ -35,7 +35,7 @@
 | `$DC0E` | 56334 | **CRA** | **Timer A ctrl**/**serial/TOD**: **b0** start; **b1** PB6 enable; **b2** PB6 mode (1 toggle / 0 pulse); **b3** one‑shot; **b4** force load; **b5** count src (1=CNT / 0=Φ2); **b6** SDR dir (1 out); **b7** TOD freq (1=50 Hz/0=60 Hz). |
 | `$DC0F` | 56335 | **CRB** | **Timer B ctrl/TOD sel**: **b0** start; **b1** PB7 enable; **b2** PB7 mode; **b3** one‑shot; **b4** force load; **b6..b5** mode: `00`=Φ2, `01`=CNT, `10`=TA underflow, `11`=TA underflow gated by CNT; **b7** TOD write target (1=ALARM/0=TIME). |
 
-**Notes (CIA1):** Keyboard matrix via column write (PRA) + row read (PRB), active‑low. Joystick‑keyboard contention on **Port 1** (PRB) exists; avoid or gate scanning accordingly. Paddle select uses **PRA b7/b6**; paddle *positions* read via SID POTX/POTY; paddle buttons via CIA (bits 2–3). Lightpen appears as fire on PRA b4 and via VIC `/LP`.
+**Notes (CIA1):** Keyboard matrix via column write (PRA) + row read (PRB), active‑low. Joystick‑keyboard contention on **Port 1** (PRB) exists; avoid or gate scanning accordingly. Paddle select uses **PRA b7/b6**; paddle *positions* read via SID POTX/POTY; paddle buttons via CIA (bits 2–3). Lightpen uses the control port 1 trigger: it reads as joystick 1 fire on PRB b4 (`$DC01`) and latches the VIC light pen registers via `/LP`.
 
 ## CIA #2 Registers (`$DD00–$DD0F`) — IEC/User Port/RS‑232/VIC Bank/NMI
 
