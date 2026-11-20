@@ -402,3 +402,41 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | 39 | $D031 bit 7 set = badline stalls suppressed | CONFIRMED | hardware.md, written |
 | 40 | GET /v1/info fields | CONFIRMED | hardware.md (already stated) |
 | 41-44 | C64 Ultimate only | SKIPPED | C64 Ultimate statements left as they are |
+
+## Part F: precision rewrite
+
+Gamedev documents (`data/gamedev/*.md`), 2026-11-20. Firmware citations are `1541ultimate@700c7f2fa:software/<path>:<line>`
+(GideonZ/1541ultimate master, 2026-11-13) unless a row names `fpga/`. "Measured" = measured on Ultimate 64 Elite,
+firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were produced locally on 2026-11-20 with
+64tass 1.60, KickAssembler 5.25, VICE 3.10 `c1541`/`cartconv`; VICE source is vice-3.10.
+
+### F1 - data/gamedev/toolchain.md
+
+| Claim | Verdict | Source |
+|---|---|---|
+| Sidecar `.cfg` paths: PRG run/load (`.usr` fallback), REST run_prg/load_prg `file=`, CRT, TAP Run, Run Disk (D64/D81/G64); not Mount Disk, REST run_crt, host uploads | CONFIRMED, made a table | `filetypes/filetype_prg.cc:164-168,188-190`, `filetype_crt.cc:72`, `filetype_tap.cc:235`, `filetype_d64.cc:118`, `filetype_g64.cc:87`; results.md row 13 |
+| Unknown section/item skipped without error; bad enum value is an error and only that line is skipped | CONFIRMED | `userinterface/configio.cc:230-430` |
+| Enum match case-insensitive, outer spaces ignored, label without unit (`CPU Speed=48`) | ADDED | `configio.cc:338-345,416-428`; `u64/u64_config.cc:392-394` ("%s MHz" display format) |
+| Store matched by name or alternate name; `C64U Specific Settings` is the alternate name of `U64 Specific Settings` | ADDED | `components/config.cc:196-207`; `u64/u64_config.cc:948` |
+| "Settings are RAM only (lost at power cycle)" | IMPRECISE, fixed | values are marked unsaved and are written to flash when the user leaves the config menu with `Auto Save Config` = Yes (or Ask + Yes): `userinterface/config_menu.cc:169-200`, `userinterface.cc:128,143` |
+| LOAD_CONFIG "all-or-nothing, nothing applied" | IMPRECISE, fixed | valid lines change the stored values; on any error no store is effectuated: `io/command_interface/control_target.cc:559-610`; status 89/88/00 texts measured (row 14) |
+| `Turbo Control` values Off, Manual, U64 Turbo Registers, TurboEnable Bit, same on MK1 and Elite II | CONFIRMED | `u64/u64_config.cc:328,390` (enum max 3; entries "a", "b" unreachable); measured row 37 |
+| `C64U Turbo Registers` "reported by one test script" | REWRITTEN | not a value in public source: an error in any `.cfg`; C64 Ultimate list moved to Not verified (UltimateDemo2026 `config/UltimateDemo2026.cfg` lines 2-3) |
+| `CPU Speed=64` invalid on MK1 (max 48) | CONFIRMED, extended | `u64_config.cc:324-325,391-395`: MK1 table has 5 MHz and no 64, Elite II no 5 MHz; index 4 = 5 vs 6 MHz |
+| `RAM Expansion Unit` values, `REU Size` labels | ADDED | `io/c64/c64.cc:61,71,91-92` |
+| REU preload "read at firmware boot only" | IMPRECISE, fixed | `io/c64/reu_preloader.cc:14-115`: setting read when the preloader starts; image loaded once when its volume is mounted, at the offset, up to the REU size; UCI 04 08 detail moved to `c64://ultimate/reu` |
+| KickAssembler label file "format unverified" | VERIFIED | KickAss 5.25 `-symbolfile` wrote `.label start=$810`; accepted by `symbolRegistry.ts:49-81` |
+| 64tass `-l` format | VERIFIED | 64tass 1.60 wrote `start\t\t= $0810` |
+| ACME `-l` "unverified" | CORRECTED | ACME `src/symbol.c:29-62` (meonwax/acme mirror) writes `+2`/`+3`/`!addr` forms; `--vicelabels` writes `al C:%04x .%s` (`symbol.c:75`): use that |
+| llvm-mos label file "unverified" | CORRECTED | llvm-mos-sdk 555253f README: ELF output beside the PRG, no label file; conversion with `llvm-nm` given |
+| `cc1541` "(unverified)" | VERIFIED | cc1541 README (rtlprmft/cc1541 fork of the Bitbucket repository): `-f name -w file.prg image.d64`, MIT, `-s` interleave |
+| `cartconv` from a binary | VERIFIED | VICE 3.10 `cartconv` usage text (`-t`, `-i`, `-o`, `--types`) |
+| `c1541 -format "game,01" d64 ... -write ... game` | VERIFIED | run locally: image with one PRG `game` |
+| Exomizer `sfx sys`, `mem -l none file@addr` | VERIFIED | Exomizer `exo20info.txt` ("sfx" and "mem" sub commands, `-l <address>\|none`, `<file name>@<load address>`); `exodecrs/exodecrunch.s` |
+| Oscar64 `__zeropage` "usually `$80-$FF`" | CORRECTED | `oscar64/Compiler.cpp:575-582` (08b01c9): `$F7-$FF` on the C64 by default, `$80-$FF` with `-xz` |
+| Oscar64 hazards "reordered constant I/O stores" | REWRITTEN | `oscar64.md` "volatile" (`volatile`, `volatile __memmap`) and `__asm volatile {}` |
+| Oscar64 libraries | CONFIRMED | `include/c64/{rasterirq,sprites,memmap,reu,joystick}.h` |
+| Oscar64 `-O2` | CONFIRMED | `oscar64.md:128` |
+| VICE: REU image must match the size; DMA 1 byte per cycle; no turbo | CONFIRMED, made precise | vice-3.10 `src/util.c:373`, `src/c64/cart/reu.c:694,819-849`; Bauer 3.2 (`$D02F-$D03F` read `$FF`) |
+| VICE `-warp`, `-pal`, `-ntsc`, `-autostart` | CONFIRMED | vice-3.10 `doc/vice.texi:1323,4006,13238,13243` |
+| Opinions ("richest", "best C64 libraries", "cc65 C code is slow", Charpad loader) | REMOVED | no primary source |
