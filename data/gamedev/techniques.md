@@ -1,7 +1,7 @@
 # C64 Game Techniques: IRQ, Sprites, Scrolling, Input, Sound
 
 **Summary:** Compact recipes for the techniques almost every C64 game needs, with fresh minimal 6502 snippets. Snippets use 64tass/KickAssembler-compatible syntax (`* = addr`, `.byte`, `<label`, `>label`, `;` comments); the bridge's built-in assembler (`upload_run_asm`) accepts the basic subset. Anonymous `+` branch labels are 64tass style; rename for other assemblers. Snippets for IRQ setup, joystick edge, NTSC skip, LFSR, PAL detect and the turbo speed probe assembled with 64tass and ran in VICE 3.10 x64sc; the multiplexer assembled but was not run; the double-IRQ stable-raster text is a sketch; the open-border entries follow Bauer's steps and were not run.
-**Read when:** implementing display timing, sprites, scrolling, collision, input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling or Ultimate start-up checks (section 10). Frame structure and budgets: `c64://gamedev/architecture`. Register detail: `c64://graphics/vic/spec`, `c64://io/cia/spec`, `c64://sound/sid/spec`.
+**Read when:** implementing display timing, sprites, scrolling, collision, input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling, Ultimate start-up checks (section 10) or bitmap and multicolour modes (section 11). Frame structure and budgets: `c64://gamedev/architecture`. Register detail: `c64://graphics/vic/spec`, `c64://io/cia/spec`, `c64://sound/sid/spec`.
 
 Sections 1-3, 6 and 9 end with **Seen in** (open-source projects to study; URLs and licences in `c64://gamedev/references`). Marks: "(unverified)" = not confirmed against a primary source.
 
@@ -267,3 +267,23 @@ full:   lda #$ff
         rts
 ```
 4. UCI: `$DF1D & $7F == $49` (needs Command Interface enabled). REU: `reu_present`, size probe and level load in `c64://ultimate/reu`. SIDs: `c64://ultimate/multisid`.
+
+## 11. Bitmap and multicolour modes
+Mode bits: `$D011` bit 5 BMM, `$D016` bit 4 MCM, `$D011` bit 6 ECM = 0 (Bauer 3.7.3).
+| Mode | BMM, MCM | Pixels | Colour of bit pattern |
+|---|---|---|---|
+| Multicolour text | 0, 1 | 4x8 per character whose colour RAM bit 3 is 1; others stay hires in colours 0-7 | `00` `$D021`, `01` `$D022`, `10` `$D023`, `11` colour RAM bits 0-2 |
+| Standard bitmap | 1, 0 | 320x200, colours per 8x8 cell | `0` screen byte bits 0-3, `1` screen byte bits 4-7 |
+| Multicolour bitmap | 1, 1 | 160x200, pixels twice as wide | `00` `$D021`, `01` screen bits 4-7, `10` screen bits 0-3, `11` colour RAM bits 0-3 |
+- Memory: the bitmap is 8 KB at bank offset `$0000` or `$2000` (`$D018` bit 3); the screen matrix (cell colours) at `$D018` bits 4-7 x `$400`. In banks 0 and 2 the character ROM image at offset `$1000-$1FFF` hides that RAM, so the bitmap goes to `$2000` there.
+- Setup, bank 0, colours at `$0400`, bitmap at `$2000`:
+```
+        lda #$3b          ; $D011: BMM, DEN, RSEL, YSCROLL 3 (RST8 0)
+        sta $d011
+        lda #$18          ; $D016: MCM, CSEL (use #$08 for hires bitmap)
+        sta $d016
+        lda #$18          ; $D018: screen $0400 (1 x $400), bitmap $2000 (bit 3)
+        sta $d018
+```
+- Layout: 8 consecutive bytes form one 8x8 cell, cells run left to right, 40 per row (320 bytes per cell row). Hires byte for (x, y): `base + 40 * (y AND 248) + (y AND 7) + (x AND 504)`, bit `7 - (x AND 7)` (leftmost pixel = bit 7). Multicolour (x = 0-159): byte `base + 40 * (y AND 248) + (y AND 7) + 2 * (x AND 252)`, bit pair `(3 - (x AND 3)) * 2` upwards.
+- Clear the bitmap (8000 bytes) and set the 1000 screen bytes (and colour RAM for multicolour) before turning the mode on, or blank the screen (`$D011` bit 4 = 0) while you do.

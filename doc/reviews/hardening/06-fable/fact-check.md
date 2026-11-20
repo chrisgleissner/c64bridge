@@ -246,3 +246,16 @@ Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64br
 | Open top/bottom border: RSEL=0 in lines 248-250, back to RSEL=1 after 251; never 0 to 1 in 52-54; `$D011` values `$13`/`$1B` | ADDED | Bauer 3.14.1 steps 1-4 and "If you switch from RSEL=0 to RSEL=1 in the raster line range 52-54, the border never turns off"; bit layout Bauer register table ($D011 RST8 ECM BMM DEN RSEL YSCROLL) |
 | Opened border shows sprites and the idle byte at `$3FFF` (`$39FF` with ECM), set bits black | ADDED | Bauer 3.14.1 ("mainly limited to sprites"), 3.7.3.9 "the VIC reads the graphics data from address $3fff ($39ff if ... ECM)"; 3.7.1 |
 | Side border: CSEL 1 to 0 exactly in cycle 56; inside the vertical border area also open that border | ADDED | Bauer 3.14.1 "the change from CSEL=1 to CSEL=0 has to be exactly in cycle 56", "the main border flip-flop can only be reset if the vertical flip-flop is not set" |
+
+### D3 - Bitmap and multicolour setup (data/gamedev/techniques.md section 11)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| BMM `$D011` bit 5, MCM `$D016` bit 4, ECM `$D011` bit 6 | ADDED | Bauer register table; A3a, A3b |
+| Multicolour text: colour RAM bit 3 selects multicolour per character; `00` `$D021`, `01` `$D022`, `10` `$D023`, `11` colour RAM bits 0-2; otherwise colours 0-7 | ADDED | Bauer 3.7.3.2 ("If bit 11 of the c-data is zero ... colors 0-7", MC flag table) |
+| Standard bitmap: `0` = screen bits 0-3, `1` = bits 4-7 | ADDED | Bauer 3.7.3.3 c-access data table |
+| Multicolour bitmap 160x200; `00` `$D021`, `01` bits 4-7, `10` bits 0-3, `11` colour RAM | ADDED | Bauer 3.7.3.4 g-access data table (bits 8-11 of c-data = colour RAM) |
+| Bitmap 8 KB at bank offset `$0000`/`$2000` by `$D018` bit 3; screen matrix by bits 4-7; `$2000` in banks 0 and 2 because of the ROM image | ADDED | Mapping $D011 bit 5 text ("Only Bit 3 is significant", "the VIC-II chip sees an image of the character ROM ... $1000-$1FFF"); Bauer $D018 CB13 |
+| Setup values `$3B`, `$18`/`$08`, `$18` | ADDED | from the bit layouts above; `$D018 = $18` as A3d |
+| Byte `base + 40*(y AND 248) + (y AND 7) + (x AND 504)`, bit `7 - (x AND 7)`; multicolour form with `2*(x AND 252)` | ADDED | Mapping $D011 bit 5 program line 100 and "POKE BY,PEEK(BY) OR (2^(NOTX AND 7))"; multicolour form derived (x_hires = 2x) |
+| 8 bytes per cell, 40 cells per row | ADDED | Mapping ("The ninth byte controls the eight dots directly to the right"); Bauer g-access address VC/RC |
