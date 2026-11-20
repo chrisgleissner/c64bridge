@@ -402,3 +402,10 @@ All measured on Ultimate 64 Elite, firmware 3.15a, 2026-11-20 (core 1.50, FPGA 1
 | 39 | $D031 bit 7 set = badline stalls suppressed | CONFIRMED | hardware.md, written |
 | 40 | GET /v1/info fields | CONFIRMED | hardware.md (already stated) |
 | 41-44 | C64 Ultimate only | SKIPPED | C64 Ultimate statements left as they are |
+
+## Part F: precision rewrite (package O: printer, SID, CIA, README)
+
+| Claim | File | Verdict | Source |
+| --- | --- | --- | --- |
+| A write to the timer high byte while the timer is stopped also loads the latch into the counter; while it runs only the latch changes | data/io/cia-spec.md | CONFIRMED | MOS 6526 datasheet (6502.org recreated copy), Interval Timers: "The timer latch is loaded into the timer on any timer underflow, on a force load or following a write to the high byte of the prescaler while the timer is stopped. If the timer is running, a write to the high byte will load the timer latch, but not reload the counter." |
+| `claude mcp add` sets environment variables with `-e`/`--env KEY=value` before `--` | README.md | CONFIRMED | `claude mcp add --help`, Claude Code 2.1.329 |
