@@ -583,6 +583,29 @@ test("SIDWAVE PRG runs standalone: SYS stub, machine detection, CIA timer and IR
   }
 });
 
+test("SIDWAVE speed 2: CIA IRQ invokes the player twice and PSID selects CIA timing", () => {
+  const source = SCALE.replace("sidwave: 1.0", "sidwave: 1.1").replace("title: Probe", "title: Probe\nspeed: 2");
+  const { compiled, sid } = compile(source);
+  assert.equal(sid.readUInt32BE(18), 0x80000000);
+  assert.equal(sid.readUInt16BE(0x76), 0x04);
+  const mem = new Uint8Array(65536);
+  mem.set(compiled.prg.subarray(2), 0x0801);
+  mem[0xea31] = 0x60;
+  let raster = 0;
+  const io = {};
+  const cpu = new Cpu(mem, {
+    read(a) { if (a === 0xd012) return (raster = (raster + 1) % 312) & 0xff; return undefined; },
+    write(a, v) { if (a >= 0xdc00 && a <= 0xdc0f) io[a] = v; },
+  });
+  mem[0xdc0e] = 0x80;
+  cpu.call(compiled.entryAddress);
+  const irq = mem[0x0314] | (mem[0x0315] << 8);
+  const irqCycles = cpu.call(irq);
+  assert.equal(io[0xdc04] | (io[0xdc05] << 8), Math.round(985_248 / (sidwaveFrameRate("PAL") * 2)) - 1);
+  const one = compile(SCALE).compiled;
+  assert.ok(irqCycles > one.prg.length * 0.2, `two player calls executed (${irqCycles} IRQ cycles)`);
+});
+
 test("SIDWAVE player stays inside its memory and the frame budget", () => {
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "sound", "sidwave.md"), "utf8");
   const yaml = /```yaml\n([\s\S]*?)```/.exec(source)[1];

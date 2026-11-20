@@ -139,7 +139,7 @@ export function compileSidwaveToSid(
   header.writeUInt16BE(options?.playAddress ?? SIDWAVE_PLAY_ADDRESS, 12);
   header.writeUInt16BE(1, 14); // songs
   header.writeUInt16BE(1, 16); // start song
-  header.writeUInt32BE(0, 18); // speed: vertical blank timing for song 1
+  header.writeUInt32BE(doc.speed > 1 ? 0x80000000 : 0, 18); // bit 31 selects CIA timer timing for multispeed songs
   writeLatin1(header, doc.song.title ?? "Untitled", 0x16);
   writeLatin1(header, doc.song.author ?? "SIDWAVE", 0x36);
   writeLatin1(header, "c64bridge SIDWAVE", 0x56);
@@ -232,6 +232,7 @@ type GlobalEvent =
 
 export interface Arrangement {
   fps: number;
+  speed: number;
   framesPerBeat: number;
   totalFrames: number;
   system: SystemMode;
@@ -451,6 +452,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
 
   return {
     fps,
+    speed: doc.speed,
     framesPerBeat,
     totalFrames,
     system,
@@ -640,7 +642,7 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   const insts = arr.instruments;
   const clockIndex = arr.system === "NTSC" ? 1 : 0;
   // The PRG's CIA timer reproduces the song's video frame rate on whichever clock the machine has.
-  const ciaLatch = (clock: number) => Math.round(clock / arr.fps) - 1;
+  const ciaLatch = (clock: number) => Math.round(clock / (arr.fps * arr.speed)) - 1;
   const f = arr.filter;
   const fBase = Math.max(0, Math.min(2047, f.base)) * 32;
   const fEnd = Math.max(0, Math.min(2047, f.base + f.sweep)) * 32;
@@ -657,7 +659,7 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   L.push(`  jmp init`);
   L.push(`play_vec:`);
   L.push(`  jmp play`);
-  L.push(PLAYER_CODE);
+  L.push(PLAYER_CODE.replace("  jsr play\n  jmp $EA31", `${Array.from({ length: arr.speed }, () => "  jsr play").join("\n")}\n  jmp $EA31`));
   // Constants
   L.push(`doc_clock: .byte ${clockIndex}`);
   L.push(`cia_lo: .byte <${ciaLatch(CLOCK_HZ.PAL)}, <${ciaLatch(CLOCK_HZ.NTSC)}`);
