@@ -492,3 +492,5 @@ Sources: `1541ultimate@700c7f2fa` (firmware `software/`, FPGA `fpga/`); measured
 | Range split and DualSID split values | multisid | CONFIRMED | u64_config.cc:268-269 |
 | "about" level and click figures | multisid | REWRITTEN as measured values | earlier C64U measurements |
 | ADSR delay / split filter range "not measured … plan for two frames late" | multisid | MOVED to Not verified | - |
+| Bench README: Turbo Control "named per device", $D031 bit 7 polarity "not documented" | bench | CORRECTED: four source values; bit 7 = 1 suppresses stalls (measured U64 row 39) | u64_config.cc:328,390; results.md row 39 |
+| Bench README: "about 25 badlines x 43 cycles (about 1,080)" | bench | CORRECTED to measured 1,081 (25 x 43.2) | results/summary.md |
