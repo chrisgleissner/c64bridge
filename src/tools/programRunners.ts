@@ -694,6 +694,11 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
 
     const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;
     const programEnd = loadAddress + Math.max(0, prg.length - 2); // exclusive
+    let baselineScreen: string | undefined;
+    if (shouldVerify) {
+      try { baselineScreen = await ctx.client.readScreen(); }
+      catch (error) { ctx.logger.debug("Unable to capture pre-run ASM screen baseline", { error }); }
+    }
     const result = await ctx.client.uploadAndRunAsm(parsed.program, asmResult);
     const keyboardFeed = toRecord(result.details)?.keyboard as { status?: string; pending?: number; stoppedAt?: number } | undefined;
     // A checkpoint that stops the CPU inside the loaded program means SYS reached the program: it
@@ -742,7 +747,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       verified = shouldVerify;
     } else try {
       const outcome: { status: string; reason?: string; loadCheck?: string; load?: { address: number; expected: string; found: string } } = shouldVerify
-        ? await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, expected) as AsmPollResult
+        ? await pollForProgramOutcome("ASM", ctx.client, ctx.logger, undefined, expected, baselineScreen) as AsmPollResult
         : await (async () => {
             const check = await checkAsmProgramLoaded(ctx.client, ctx.logger, expected);
             return check.load
