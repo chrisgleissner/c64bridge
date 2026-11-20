@@ -225,4 +225,4 @@
 | `$FFF3` | 65523 | **IOBASE** | I/O base | — | — | X,Y | Jump table |
 | `$FFFA` | 65530 | NMI vec | NMI vector | — | HW | — | RAM at `$0318/9` |
 | `$FFFC` | 65532 | RESET vec | RESET vector | — | HW | — | Points to `$FCE2` |
-| `$FFFE` | 65534 | IRQ/BRK vec | IRQ/BRK vector | — | HW | — | RAM at `$0314/5` |
+| `$FFFE` | 65534 | IRQ/BRK vec | IRQ/BRK vector | — | HW | — | IRQ via RAM `$0314/5`, BRK via `$0316/7` |
