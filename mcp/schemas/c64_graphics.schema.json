@@ -201,6 +201,15 @@
       "description": "Enable multicolour mode for the sprite.",
       "default": false
     },
+    "dataAddress": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Where to write the 64-byte block (multiple of 64, inside the current VIC bank); default is chosen clear of screen, charset and bitmap.",
+      "minimum": 0,
+      "maximum": 65472
+    },
     "imagePath": {
       "type": "string",
       "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
@@ -233,6 +242,6 @@
   "required": [
     "op"
   ],
-  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap [write]: Convert an image file to VIC-II bitmap memory, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
+  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image file to VIC-II bitmap memory, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
   "additionalProperties": false
 }

@@ -5,7 +5,10 @@
       "type": "string",
       "enum": [
         "resource_get",
-        "resource_set"
+        "resource_set",
+        "snapshot_save",
+        "snapshot_restore",
+        "version"
       ],
       "description": "Selects the operation."
     },
@@ -22,11 +25,15 @@
         "integer"
       ],
       "description": "VICE resource value (string or integer)."
+    },
+    "path": {
+      "type": "string",
+      "description": "File path."
     }
   },
   "required": [
     "op"
   ],
-  "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.",
+  "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.\n- snapshot_save [write]: Save snapshot. Required inputs: path.\n- snapshot_restore [destructive]: Restore snapshot. Required inputs: path.\n- version: VICE version.",
   "additionalProperties": false
 }

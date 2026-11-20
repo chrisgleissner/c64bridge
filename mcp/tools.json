@@ -31,7 +31,7 @@
               "string",
               "null"
             ],
-            "description": "auto (default): Ultimate device path on c64u/u2, host path on VICE. host: read the file from the host and upload it (Ultimate). device: Ultimate path only.",
+            "description": "auto (default): Ultimate device path on c64u/u2, host path on VICE. host: read the file from the host and upload it (Ultimate). device: Ultimate path only. Limits depend on op.",
             "enum": [
               "auto",
               "host",
@@ -287,7 +287,7 @@
         "required": [
           "op"
         ],
-        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg [write]: Load a PRG from Ultimate storage without executing it. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_prg [write]: Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_crt [c64u, u2] [write]: Mount and run a CRT cartridge image. Required inputs: path.\n- upload_run_basic [write]: Upload Commodore BASIC v2 source and execute it immediately. Required inputs: program. Optional inputs: verify, autoFix.\n- upload_run_asm [write]: Assemble 6502/6510 source, upload the PRG, and execute it. Required inputs: program. Optional inputs: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory and debug registers into a bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Show a platform-specific greeting on configured backends, capture screenshots and verify. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
+        "description": "Program operations available via the c64_program tool.\n\nOperations:\n- load_prg [write]: Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host). Required inputs: path. Optional inputs: location, symbolsFile.\n- run_prg [write]: Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_crt [c64u, u2] [write]: Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2). Required inputs: path. Optional inputs: location.\n- upload_run_basic [write]: Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line. Required inputs: program. Optional inputs: verify, autoFix.\n- upload_run_asm [write]: Assemble 6502/6510 source (ACME, ca65 and 64tass directive spellings; .include/.incbin read host files), upload and run it. Required inputs: program. Optional inputs: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory and debug registers into a bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Show a platform-specific greeting on configured backends, capture screenshots and verify. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
         "additionalProperties": false
       },
       "annotations": {
@@ -362,22 +362,29 @@
               "string",
               "null"
             ],
-            "description": "Output layout. hex (default) returns one hex string; dump adds a 16-bytes-per-line listing with addresses and a printable PETSCII column.",
+            "description": "hex (default): one hex string; dump: 16 bytes per line with addresses and PETSCII.",
             "enum": [
               "hex",
               "dump"
             ],
             "default": "hex"
           },
+          "bank": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "VICE bank name."
+          },
           "bytes": {
             "type": "string",
-            "description": "Hex byte sequence like $AABBCC or AA BB CC to write starting at the resolved address.",
+            "description": "Hex bytes to write, like $AABBCC or AA BB CC.",
             "minLength": 2,
             "pattern": "^[\\s_0-9A-Fa-f$]+$"
           },
           "verify": {
             "type": "boolean",
-            "description": "Verify the write by reading before and after; Ultimate hardware pauses meanwhile.",
+            "description": "Verify by reading before and after (Ultimate pauses meanwhile).",
             "default": false
           },
           "expected": {
@@ -467,7 +474,7 @@
               "boolean",
               "null"
             ],
-            "description": "Ultimate: also read $D000-$DFFF. Reading I/O can clear pending CIA interrupts. Default false; no side effects on VICE.",
+            "description": "Ultimate: also read $D000-$DFFF; reading I/O can clear CIA interrupts. No effect on VICE.",
             "default": false
           },
           "startAddress": {
@@ -527,7 +534,7 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
+        "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format, bank.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
         "additionalProperties": false
       },
       "annotations": {
@@ -614,6 +621,15 @@
             "minimum": 0,
             "maximum": 15
           },
+          "filterMode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+            "minimum": 0,
+            "maximum": 15
+          },
           "hard": {
             "type": "boolean",
             "description": "If true, perform a hard register scrub; otherwise silence voices softly.",
@@ -646,12 +662,11 @@
               "string",
               "null"
             ],
-            "description": "Video system for frequency calculation. Limits depend on op.",
+            "description": "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
             "enum": [
               "PAL",
               "NTSC"
-            ],
-            "default": "PAL"
+            ]
           },
           "waveform": {
             "type": "string",
@@ -935,7 +950,7 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the Ultimate audio UDP stream. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume.\n- reset [write]: Soft or hard reset of the SID registers. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Generate a lightweight SID arpeggio playback sequence. Optional inputs: root, pattern, steps, tempoMs, waveform, preset, system.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Optional inputs: sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play and analyze it. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback when verification is requested. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics (Ultimate audio stream on c64u, host microphone otherwise). Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the Ultimate audio UDP stream. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Soft or hard reset of the SID registers. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Generate a lightweight SID arpeggio playback sequence. Optional inputs: root, pattern, steps, tempoMs, waveform, preset, system.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Optional inputs: sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play and analyze it. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback when verification is requested. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1421,6 +1436,15 @@
             "description": "Enable multicolour mode for the sprite.",
             "default": false
           },
+          "dataAddress": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Where to write the 64-byte block (multiple of 64, inside the current VIC bank); default is chosen clear of screen, charset and bitmap.",
+            "minimum": 0,
+            "maximum": 65472
+          },
           "imagePath": {
             "type": "string",
             "description": "Filesystem path of the source image (PNG, JPEG, BMP, GIF, TIFF, and other Jimp-supported formats).",
@@ -1453,7 +1477,7 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour.\n- render_bitmap [write]: Convert an image file to VIC-II bitmap memory, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
+        "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image file to VIC-II bitmap memory, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1600,6 +1624,17 @@
               "readwrite",
               "readonly",
               "unlinked"
+            ]
+          },
+          "location": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "device (default): Ultimate path. host: upload the image from the host (needs verify false; type from the extension).",
+            "enum": [
+              "device",
+              "host"
             ]
           },
           "driveMode": {
@@ -1756,7 +1791,7 @@
         "required": [
           "op"
         ],
-        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List drive slots and mounted images.\n- mount [write]: Mount a disk image with optional verification/retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Unmount the image from a drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Search Ultimate storage for paths containing a name substring, without running anything. Required inputs: nameContains. Optional inputs: root, extensions, maxResults, caseInsensitive.",
+        "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List drive slots and mounted images.\n- mount [write]: Mount a disk image with optional verification/retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, location, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Unmount the image from a drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Search Ultimate storage for paths containing a name substring, without running anything. Required inputs: nameContains. Optional inputs: root, extensions, maxResults, caseInsensitive.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2503,7 +2538,7 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, includeRows, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Walk the filesystem and aggregate counts/bytes by extension. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
+        "description": "Extraction operations available via the c64_extract tool.\n\nOperations:\n- sprites [write]: Scan RAM for sprites and optionally export .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, includeRows, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with manifest metadata. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Per-extension size statistics for one directory (no recursion); the firmware returns at most one file per extension. Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2869,7 +2904,7 @@
     {
       "name": "c64_vice",
       "title": "Reads or updates selected VICE resources that are safe to expose through MCP.",
-      "description": "Grouped entry point for reading and updating selected VICE resources.",
+      "description": "VICE resources, snapshots.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2877,7 +2912,10 @@
             "type": "string",
             "enum": [
               "resource_get",
-              "resource_set"
+              "resource_set",
+              "snapshot_save",
+              "snapshot_restore",
+              "version"
             ],
             "description": "Selects the operation."
           },
@@ -2894,12 +2932,16 @@
               "integer"
             ],
             "description": "VICE resource value (string or integer)."
+          },
+          "path": {
+            "type": "string",
+            "description": "File path."
           }
         },
         "required": [
           "op"
         ],
-        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.",
+        "description": "VICE emulator operations available via the c64_vice tool.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.\n- snapshot_save [write]: Save snapshot. Required inputs: path.\n- snapshot_restore [destructive]: Restore snapshot. Required inputs: path.\n- version: VICE version.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2916,7 +2958,10 @@
         ],
         "operationEffects": {
           "resource_get": "read",
-          "resource_set": "write"
+          "resource_set": "write",
+          "snapshot_save": "write",
+          "snapshot_restore": "destructive",
+          "version": "read"
         }
       }
     },

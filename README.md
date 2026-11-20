@@ -847,7 +847,7 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 | `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
 | `find_paths` | Search Ultimate storage for paths containing a name substring, without running anything. | `nameContains` | `root="/"`, `extensions`, `maxResults=100`, `caseInsensitive=true` | ✅ | ✅ |  |
 | `list_drives` | List drive slots and mounted images. | — | — | ✅ | ✅ | ✅ |
-| `mount` | Mount a disk image with optional verification/retries. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
+| `mount` | Mount a disk image with optional verification/retries. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `location`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
 | `unmount` | Unmount the image from a drive slot. | `drive` | — | ✅ | ✅ |  |
 
 #### c64_drive
@@ -870,7 +870,7 @@ Grouped entry point for sprite/charset extraction, memory dumps, filesystem stat
 | --- | --- | --- | --- | --- | --- | --- |
 | `charset` | Locate and extract 2KB character sets from RAM. | — | `address`, `scanRange="common"`, `outputPath`, `pauseDuringRead=true`, `minNonEmptyChars=32`, `minEntropy=0.3` | ✅ | ✅ | ✅ |
 | `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ | ✅ | ✅ |
-| `fs_stats` | Walk the filesystem and aggregate counts/bytes by extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ | ✅ |  |
+| `fs_stats` | Per-extension size statistics for one directory (no recursion); the firmware returns at most one file per extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ | ✅ |  |
 | `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize`, `pauseDuringRead=true`, `retries=1` | ✅ | ✅ | ✅ |
 | `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=false`, `includeRows=false`, `outputDir`, `pauseDuringRead=true` | ✅ | ✅ | ✅ |
 
@@ -885,7 +885,7 @@ Grouped entry point for frame capture and graphics rendering workflows.
 | `render_bitmap` | Convert an image file to VIC-II bitmap memory, write it to RAM and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | ✅ | ✅ | ✅ |
 | `render_petscii_art` | Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | ✅ | ✅ | ✅ |
 | `render_petscii_text` | Display PETSCII text with optional border and background colours. | `text` | `borderColor`, `backgroundColor` | ✅ | ✅ | ✅ |
-| `render_sprite` | Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. | `sprite` | `index=0`, `x=100`, `y=100`, `color=1`, `multicolour=false` | ✅ | ✅ | ✅ |
+| `render_sprite` | Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. | `sprite` | `index=0`, `x=100`, `y=100`, `color=1`, `multicolour=false`, `dataAddress` | ✅ | ✅ | ✅ |
 
 #### c64_input
 
@@ -911,7 +911,7 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 | `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ | ✅ |
 | `list_basic` | List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. | — | — | ✅ | ✅ | ✅ |
-| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"` | ✅ | ✅ | ✅ |
+| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"`, `bank` | ✅ | ✅ | ✅ |
 | `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ | ✅ |
 | `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
@@ -937,11 +937,11 @@ Grouped entry point for program upload, execution, and batch workflows.
 | `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | `continueOnError=false`, `durationMs=2000`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ | ✅ |
 | `bundle_run` | Capture screen, memory and debug registers into a bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg` | ✅ | ✅ | ✅ |
 | `cross_platform_greeting` | Show a platform-specific greeting on configured backends, capture screenshots and verify. Supports verification. | — | `platforms`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
-| `load_prg` | Load a PRG from Ultimate storage without executing it. | `path` | `location`, `symbolsFile` | ✅ | ✅ | ✅ |
-| `run_crt` | Mount and run a CRT cartridge image. | `path` | — | ✅ | ✅ |  |
-| `run_prg` | Load and execute a PRG from Ultimate-visible storage on C64U/U64 or U2-family hardware, or from a host-local path on VICE. | `path` | `location`, `symbolsFile` | ✅ | ✅ | ✅ |
-| `upload_run_asm` | Assemble 6502/6510 source, upload the PRG, and execute it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
-| `upload_run_basic` | Upload Commodore BASIC v2 source and execute it immediately. Supports verification. | `program` | `verify=false`, `autoFix=true` | ✅ | ✅ | ✅ |
+| `load_prg` | Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host). | `path` | `location`, `symbolsFile` | ✅ | ✅ | ✅ |
+| `run_crt` | Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2). | `path` | `location` | ✅ | ✅ |  |
+| `run_prg` | Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE. | `path` | `location`, `symbolsFile` | ✅ | ✅ | ✅ |
+| `upload_run_asm` | Assemble 6502/6510 source (ACME, ca65 and 64tass directive spellings; .include/.incbin read host files), upload and run it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
+| `upload_run_basic` | Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line. Supports verification. | `program` | `verify=false`, `autoFix=true` | ✅ | ✅ | ✅ |
 
 #### c64_rag
 
@@ -970,16 +970,16 @@ Grouped entry point for SID control, playback, composition, and analysis workflo
 | `analyze` | Analyze SID playback when verification is requested. | — | `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture raw stereo PCM samples from the Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
-| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"`, `system="PAL"` | ✅ | ✅ | ✅ |
+| `generate` | Generate a lightweight SID arpeggio playback sequence. | — | `root="C4"`, `pattern="0,4,7"`, `steps=16`, `tempoMs=120`, `waveform="tri"`, `preset="classic"`, `system` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | ✅ | ✅ | ✅ |
-| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system="PAL"`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
+| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile a SIDWAVE score, play and analyze it. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `preset="fuer_elise"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | ✅ | ✅ |  |
-| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics (Ultimate audio stream on c64u, host microphone otherwise). | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
+| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `reset` | Soft or hard reset of the SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
-| `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | — | ✅ | ✅ | ✅ |
+| `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | `filterMode` | ✅ | ✅ | ✅ |
 | `silence_all` | Silence all SID voices with optional audio verification. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
 
 #### c64_stream
@@ -1014,12 +1014,15 @@ Grouped entry point for power, reset, menu, and background task control.
 
 #### c64_vice
 
-Grouped entry point for reading and updating selected VICE resources.
+VICE resources, snapshots.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `resource_get` | Read a VICE configuration resource (safe prefixes only). | `name` | — |  |  | ✅ |
 | `resource_set` | Write a VICE configuration resource (safe prefixes only). | `name`, `value` | — |  |  | ✅ |
+| `snapshot_restore` | Restore snapshot. | `path` | — |  |  | ✅ |
+| `snapshot_save` | Save snapshot. | `path` | — |  |  | ✅ |
+| `version` | VICE version. | — | — |  |  | ✅ |
 
 ### Resources
 
