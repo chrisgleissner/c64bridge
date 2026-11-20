@@ -24,7 +24,7 @@ import {
   unknownErrorResult,
 } from "./errors.js";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
-import { parseAddressArg } from "./memory.js";
+import { ADDRESS_FORMS, parseAddressArg } from "./memory.js";
 
 interface DebugOperationMap extends OperationMap {
   readonly list_checkpoints: Record<string, never>;
@@ -158,8 +158,8 @@ const createCheckpointArgsSchema = objectSchema({
   description: "Create a new checkpoint (breakpoint) in VICE.",
   properties: {
     op: literalSchema("create_checkpoint"),
-    address: stringSchema({ description: "Start address (e.g. $0801).", minLength: 1 }),
-    endAddress: optionalSchema(stringSchema({ description: "Optional end address for range.", minLength: 1 })),
+    address: stringSchema({ description: `Start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    endAddress: optionalSchema(stringSchema({ description: "End address (inclusive) of an address range, in the same forms as address.", minLength: 1 })),
     stopOnHit: optionalSchema(booleanSchema({ description: "Pause execution when hit (default true).", default: true })),
     enabled: optionalSchema(booleanSchema({ description: "Whether the checkpoint is enabled (default true).", default: true })),
     temporary: optionalSchema(booleanSchema({ description: "Automatically remove after first hit.", default: false })),
@@ -277,7 +277,7 @@ const waitForStateArgsSchema = objectSchema({
   description: "Wait until the CPU is stopped (checkpoint hit or step) and, when expectedPC is given, until PC equals it, or until the timeout elapses. Without a debug session the registers are polled.",
   properties: {
     op: literalSchema("wait_for_state"),
-    expectedPC: optionalSchema(stringSchema({ description: "Target PC address to wait for (e.g. $0810).", minLength: 1 })),
+    expectedPC: optionalSchema(stringSchema({ description: `PC address to wait for: ${ADDRESS_FORMS}.`, minLength: 1 })),
     timeoutMs: optionalSchema(numberSchema({ description: "Maximum wait time in milliseconds.", integer: true, minimum: 1, maximum: 60000, default: 5000 })),
     pollMs: optionalSchema(numberSchema({ description: "Poll interval in milliseconds.", integer: true, minimum: 10, maximum: 1000, default: 100 })),
   },

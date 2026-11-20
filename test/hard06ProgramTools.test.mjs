@@ -206,7 +206,8 @@ test("HARD06 PROGMEM-8 wait_for_state returns at once when the CPU is stopped at
 
 test("HARD06 PROGMEM-9 / WORKFLOW-12 c64_memory and c64_debug share one address parser with documented names, offsets and suggestions", async () => {
   const { debugModuleGroup } = await import("../src/tools/debug.js");
-  const { memoryModule } = await import("../src/tools/memory.js");
+  const memory = await import("../src/tools/memory.js");
+  const { memoryModule } = memory;
   const { setViceSymbols, clearViceSymbols } = await import("../src/tools/translation/symbolRegistry.js");
   const created = [];
   const reads = [];
@@ -401,4 +402,44 @@ test("HARD06 PROGMEM-14 range operations leave $D000-$DFFF alone on Ultimate har
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("HARD06 WORKFLOW-11 address and file parameter descriptions state the accepted forms", async () => {
+  const memory = await import("../src/tools/memory.js");
+  const { memoryModule } = memory;
+  const { debugModuleGroup } = await import("../src/tools/debug.js");
+  const addressFields = new Set(["address", "endAddress", "source", "dest", "startAddress", "address1", "address2", "expectedPC"]);
+  const found = [];
+  const visit = (node, tool) => {
+    if (!node || typeof node !== "object") return;
+    if (node.properties && typeof node.properties === "object") {
+      for (const [name, schema] of Object.entries(node.properties)) {
+        if (addressFields.has(name) && [schema?.type].flat().includes("string")) found.push({ tool, name, description: schema.description ?? "" });
+      }
+    }
+    for (const value of Object.values(node)) visit(value, tool);
+  };
+  for (const descriptor of [...memoryModule.describeTools(), ...debugModuleGroup.describeTools()]) {
+    visit(descriptor.inputSchema, descriptor.name);
+  }
+  for (const key of ["disassembleArgsSchema", "copyMemoryArgsSchema", "fillMemoryArgsSchema", "searchMemoryArgsSchema", "compareMemoryArgsSchema", "saveMemoryArgsSchema"]) {
+    visit(memory[key].jsonSchema, key.replace("ArgsSchema", ""));
+  }
+  const names = new Set(found.map((entry) => `${entry.tool}.${entry.name}`));
+  for (const expected of ["read.address", "write.address", "disassemble.address", "copyMemory.source", "copyMemory.dest", "fillMemory.address", "searchMemory.startAddress", "searchMemory.endAddress", "compareMemory.address1", "saveMemory.startAddress", "c64_debug.endAddress", "c64_debug.address", "c64_debug.expectedPC"]) {
+    assert.ok(names.has(expected), `${expected} in ${[...names].join(", ")}`);
+  }
+  for (const { tool, name, description } of found) {
+    assert.ok(/loaded program label|same forms as|address syntax/.test(description), `${tool}.${name}: ${description}`);
+  }
+  const primary = found.filter((entry) => !/same forms as/.test(entry.description));
+  for (const { tool, name, description } of primary) {
+    assert.match(description, /\+n or -n/, `${tool}.${name}`);
+  }
+
+  const [loadPrg] = programRunnersModule.describeTools().filter((descriptor) => descriptor.name === "load_prg");
+  assert.match(loadPrg.inputSchema.properties.symbolsFile.description, /c64_memory and c64_debug take an address/);
+  assert.match(loadPrg.inputSchema.properties.path.description, /location host/);
+  const [runCrt] = programRunnersModule.describeTools().filter((descriptor) => descriptor.name === "run_crt");
+  assert.match(runCrt.inputSchema.properties.path.description, /c64u and u2/);
 });

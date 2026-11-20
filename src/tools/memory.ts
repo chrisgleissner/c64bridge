@@ -142,6 +142,9 @@ export const __memoryHelpersForTests = {
   stripOperationDiscriminator,
 };
 
+/** The address syntax accepted by parseAddressArg, for parameter descriptions. */
+export const ADDRESS_FORMS = "$HHHH, 0xHHHH, decimal, a loaded program label, a documented name such as screen or CHROUT, or a name followed by +n or -n (loop+3)";
+
 const readScreenArgsSchema = objectSchema<Record<string, never>>({
   description: "No arguments are required for reading the current screen contents.",
   properties: {},
@@ -152,7 +155,7 @@ const readMemoryArgsSchema = objectSchema({
   description: "Parameters for reading a block of memory from the C64.",
   properties: {
     address: stringSchema({
-      description: "Start address expressed as $HHHH, decimal, or a documented symbol name.",
+      description: `Start address: ${ADDRESS_FORMS}.`,
       minLength: 1,
     }),
     length: numberSchema({
@@ -176,7 +179,7 @@ const writeMemoryArgsSchema = objectSchema({
   description: "Parameters for writing hexadecimal bytes into C64 memory.",
   properties: {
     address: stringSchema({
-      description: "Destination address expressed as $HHHH, decimal, or a documented symbol name.",
+      description: `Destination address: ${ADDRESS_FORMS}.`,
       minLength: 1,
     }),
     bytes: stringSchema({
@@ -595,7 +598,7 @@ const disassembleArgsSchema = objectSchema({
   description: "Parameters for disassembling a block of C64 memory into 6502/6510 instructions (all backends; loaded labels annotate the listing).",
   properties: {
     address: stringSchema({
-      description: "Start address as $HHHH, decimal, or symbol name.",
+      description: `Start address: ${ADDRESS_FORMS}.`,
       minLength: 1,
     }),
     length: numberSchema({
@@ -768,8 +771,8 @@ function refuseIoRange(ctx: ToolExecutionContext, includeIo: boolean | undefined
 const copyMemoryArgsSchema = objectSchema({
   description: "Copy a region of RAM from one address to another.",
   properties: {
-    source: stringSchema({ description: "Source start address ($HHHH, decimal, or symbol).", minLength: 1 }),
-    dest: stringSchema({ description: "Destination start address.", minLength: 1 }),
+    source: stringSchema({ description: `Source start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    dest: stringSchema({ description: "Destination start address, in the same forms as source.", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to copy (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
     includeIo: includeIoSchema,
   },
@@ -804,7 +807,7 @@ async function executeCopyMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
 const fillMemoryArgsSchema = objectSchema({
   description: "Fill a memory region with a repeating byte pattern.",
   properties: {
-    address: stringSchema({ description: "Start address ($HHHH, decimal, or symbol).", minLength: 1 }),
+    address: stringSchema({ description: `Start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to fill (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
     pattern: stringSchema({
       description: "Hex bytes to repeat, e.g. 'FF' or 'AA 55'. Space-separated or run together.",
@@ -842,8 +845,8 @@ async function executeFillMemory(rawArgs: unknown, ctx: ToolExecutionContext): P
 const searchMemoryArgsSchema = objectSchema({
   description: "Search for a byte pattern within a memory range.",
   properties: {
-    startAddress: stringSchema({ description: "Start of search range ($HHHH, decimal, or symbol).", minLength: 1 }),
-    endAddress: stringSchema({ description: "End of search range (inclusive).", minLength: 1 }),
+    startAddress: stringSchema({ description: `Start of the search range: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    endAddress: stringSchema({ description: "End of the search range (inclusive), in the same forms as startAddress.", minLength: 1 }),
     pattern: stringSchema({
       description: "Hex bytes to find, e.g. 'A9 00' for LDA #$00.",
       minLength: 2,
@@ -902,8 +905,8 @@ async function executeSearchMemory(rawArgs: unknown, ctx: ToolExecutionContext):
 const compareMemoryArgsSchema = objectSchema({
   description: "Compare two memory regions and report differing bytes.",
   properties: {
-    address1: stringSchema({ description: "First region start address.", minLength: 1 }),
-    address2: stringSchema({ description: "Second region start address.", minLength: 1 }),
+    address1: stringSchema({ description: `First region start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    address2: stringSchema({ description: "Second region start address, in the same forms as address1.", minLength: 1 }),
     length: numberSchema({ description: "Number of bytes to compare (1–16384).", integer: true, minimum: 1, maximum: 16384 }),
     maxDiffs: optionalSchema(numberSchema({ description: "Max differences to report (default 10).", integer: true, minimum: 1, maximum: 200, default: 10 })),
     includeIo: includeIoSchema,
@@ -962,8 +965,8 @@ async function executeCompareMemory(rawArgs: unknown, ctx: ToolExecutionContext)
 const saveMemoryArgsSchema = objectSchema({
   description: "Dump a memory region to a local file, optionally with a PRG load-address header.",
   properties: {
-    startAddress: stringSchema({ description: "Start address of region to save.", minLength: 1 }),
-    endAddress: stringSchema({ description: "End address (inclusive).", minLength: 1 }),
+    startAddress: stringSchema({ description: `Start address of the region to save: ${ADDRESS_FORMS}.`, minLength: 1 }),
+    endAddress: stringSchema({ description: "End address (inclusive), in the same forms as startAddress.", minLength: 1 }),
     filePath: stringSchema({ description: "Absolute or relative path for the output file.", minLength: 1 }),
     asPrg: optionalSchema(booleanSchema({ description: "Prepend a 2-byte little-endian load-address header (PRG format). Default: true.", default: true })),
     includeIo: includeIoSchema,

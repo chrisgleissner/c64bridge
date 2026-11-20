@@ -44,8 +44,8 @@ function toRecord(details: unknown): Record<string, unknown> | undefined {
 
 const BASIC_MAX_LINE = 63999;
 
-const prgPathDescription = "Path to the PRG image. Use an Ultimate-visible filesystem path on c64u, or a host-local filesystem path on VICE.";
-const crtPathDescription = "Path to the CRT image on Ultimate-visible storage. CRT mounting is only supported on c64u.";
+const prgPathDescription = "Path to the PRG file: on c64u/u2 an Ultimate-visible path such as //USB0/demo.prg, or a host path with location host; on VICE a host path.";
+const crtPathDescription = "Path to the CRT image on Ultimate-visible storage (c64u and u2; not VICE).";
 
 type OperationlessArgs<T extends Record<string, unknown>> = Omit<T, typeof OPERATION_DISCRIMINATOR>;
 
@@ -348,7 +348,7 @@ const prgFileArgsSchema = objectSchema({
       enum: ["auto", "host", "device"],
     })),
     symbolsFile: optionalSchema(stringSchema({
-      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler) used by disassemble to annotate addresses.",
+      description: "Label file (VICE .vs, 64tass, ACME or KickAssembler). Its labels annotate disassemble listings and are accepted wherever c64_memory and c64_debug take an address (label, label+n).",
       minLength: 1,
     })),
   },
