@@ -10,7 +10,7 @@ Main reference drive: **1541 (DOS 2.6)**; extensions for **1571 (DOS 3.0)*
 
 **Medium:** 5¼″ single‑sided DD, 35 tracks (17–21 sectors per track).  
 **Capacity:** 174 848 B (683 × 256 B); 664 free (169 984 B).  
-**Directory:** Track 18 Sectors 1–17; BAM = Track 18 Sector 0.  
+**Directory:** Track 18 Sectors 1–18; BAM = Track 18 Sector 0.  
 **Max files:** 144 (no subdirs). **DOS:** v2.6.
 
 ### File Types
