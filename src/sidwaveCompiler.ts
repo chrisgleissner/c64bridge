@@ -46,7 +46,7 @@ export interface CompileResult {
   loadAddress: number;
   /** First address after the program. */
   endAddress: number;
-  /** Frames in one pass of the song; the player loops after this many play calls. */
+  /** Player calls in one pass of the song. */
   totalFrames: number;
   framesPerSecond: number;
   instrumentCount: number;
@@ -66,13 +66,13 @@ export interface CompileResult {
  * streams once per frame and runs the per-note modulation itself: hard restart, fast arpeggio,
  * pitch slide, vibrato, pulse-width sweep, and a global filter with sweep and per-pattern ramp.
  */
-export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
+export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true }: { loop?: boolean } = {}): CompileResult {
   const arrangement = arrangeSidwave(doc);
   const streams = arrangement.voices.map((v) => encodeVoiceStream(v.events, arrangement.totalFrames));
   // Check the size before assembling the streams: the player and its tables are assembled once with
   // empty streams, which gives the exact start of the stream data. Songs larger than 64 KB would
   // otherwise wrap the address counter inside the assembler.
-  const layout = assemblyToPrgDetailed(buildPlayerAsm(arrangement, [[OP.LOOP], [OP.LOOP], [OP.LOOP]]), {
+  const layout = assemblyToPrgDetailed(buildPlayerAsm(arrangement, [[OP.LOOP], [OP.LOOP], [OP.LOOP]], loop), {
     fileName: "sidwave_player.asm",
     loadAddress: SIDWAVE_LOAD_ADDRESS,
   });
@@ -86,7 +86,7 @@ export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
       `the compiled song needs ${kb} KB and would end at $${projectedEnd.toString(16).toUpperCase()}, past the $D000 limit (about 50 KB); shorten the timeline or use longer note lengths`,
     );
   }
-  const asm = buildPlayerAsm(arrangement, streams);
+  const asm = buildPlayerAsm(arrangement, streams, loop);
   const assembled = assemblyToPrgDetailed(asm, { fileName: "sidwave_player.asm", loadAddress: SIDWAVE_LOAD_ADDRESS });
   const prg = assembled.prg;
   const endAddress = SIDWAVE_LOAD_ADDRESS + prg.length - 2;
@@ -728,7 +728,7 @@ export function encodeVoiceStream(events: StreamEvent[], total: number): number[
 // ---------------------------------------------------------------------------
 // 6502 player
 
-function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
+function buildPlayerAsm(arr: Arrangement, streams: number[][], loop: boolean): string {
   const L: string[] = [];
   const insts = arr.instruments;
   const hasLegato = arr.voices.some(({ events }) => events.some((event) => event.order === ORDER.note && event.bytes[0] === OP.LEGATO));
@@ -814,6 +814,23 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   sta $DC05
   txa
 init_core:`);
+  }
+  if (!loop) {
+    const calls = arr.totalFrames + 1;
+    // Both anchors must exist; a silent miss would turn a play-once piece into a loop.
+    if (!playerCode.includes("  jsr env_reset\n  pla") || !playerCode.includes("play:\n")) {
+      throw new Error("SIDWAVE player code changed: the play-once patch points were not found");
+    }
+    playerCode = playerCode.replace("  jsr env_reset\n  pla", `  jsr env_reset
+  lda #${calls & 255}
+  sta song_left
+  lda #${(calls >> 8) & 255}
+  sta song_left+1
+  lda #${calls >> 16}
+  sta song_left+2
+  pla`);
+    playerCode = playerCode.replace("play:\n", "play:\n  jmp play_once\nplay_tick:\n");
+    playerCode += PLAY_ONCE_CODE;
   }
   L.push(playerCode);
   // Constants
@@ -1981,6 +1998,71 @@ ${prefix}_write:
   rts
 `;
 }
+
+// A generated piece plays once. Stop writing the SID after the last score tick
+// and detach the IRQ only when running as the installed PRG.
+const PLAY_ONCE_CODE = String.raw`
+play_once:
+  lda song_left
+  ora song_left+1
+  ora song_left+2
+  bne play_once_running
+  rts
+play_once_running:
+  lda song_left
+  bne play_once_low
+  lda song_left+1
+  bne play_once_mid
+  dec song_left+2
+play_once_mid:
+  dec song_left+1
+play_once_low:
+  dec song_left
+  lda song_left
+  ora song_left+1
+  ora song_left+2
+  beq finish_song
+  jmp play_tick
+finish_song:
+  lda $01
+  pha
+  lda #$36
+  sta $01
+  lda #0
+  sta $D404
+  sta $D40B
+  sta $D412
+  sta $D417
+  lda #$0F
+  sta $D418
+  lda $0314
+  cmp #<irq
+  bne finish_done
+  lda $0315
+  cmp #>irq
+  bne finish_done
+  lda #$31
+  sta $0314
+  lda #$EA
+  sta $0315
+  ; Restore the 60 Hz KERNAL jiffy clock.
+  ldx #0
+  lda $02A6
+  bne finish_latch
+  inx
+finish_latch:
+  lda kernal_cia_lo,x
+  sta $DC04
+  lda kernal_cia_hi,x
+  sta $DC05
+finish_done:
+  pla
+  sta $01
+  rts
+kernal_cia_lo: .byte <16420, <17044
+kernal_cia_hi: .byte >16420, >17044
+song_left: .res 3
+`;
 
 const LEGATO_CODE = String.raw`
 c_legato:

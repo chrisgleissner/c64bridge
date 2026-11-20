@@ -1,6 +1,7 @@
 // Runs the compiled SIDWAVE player in a small 6502 emulator and checks the SID register writes
 // frame by frame against what the SIDWAVE document specifies. No external tools are needed.
 import test from "#test/runner";
+import { DEFAULT_MUSIC_SEED, generateSidwave } from "../src/audio/generateSidwave.js";
 import assert from "#test/assert";
 import fs from "node:fs";
 import path from "node:path";
@@ -1337,4 +1338,44 @@ test("SIDWAVE 1.1 authoring example plays within the three-voice CPU and memory 
   assert.ok(maxPlayCycles < 4000, `authoring example uses ${maxPlayCycles} cycles`);
   assert.ok(compiled.endAddress < SIDWAVE_MEMORY_END);
   console.info(`SIDWAVE articulation measurement: ${maxPlayCycles} cycles, ${playerBytes(baseline)} -> ${playerBytes(compiled)} player bytes`);
+});
+
+
+test("generated SIDWAVE pieces gate on all three voices within two bars and release them at the end", () => {
+  for (const style of ["chiptune", "ambient", "funk"]) {
+    const generated = generateSidwave({ root: "C4", style, seed: DEFAULT_MUSIC_SEED, system: "PAL", preset: "classic" });
+    const doc = parseSidwave(generated.score);
+    const compiled = compileSidwaveToPrg(doc, { loop: false });
+    const { sid } = compileSidwaveToSid(doc, compiled.prg);
+    const { states, cpu, strayWrites } = runPsid(sid, compiled.totalFrames + 4);
+    const twoBars = Math.round(8 * compiled.framesPerSecond * 60 / generated.tempo);
+    for (let v = 0; v < 3; v += 1) {
+      const registers = voice(states, v);
+      assert.ok(gateOns(registers).some(({ frame }) => frame < twoBars), `${style} voice ${v + 1} starts`);
+      assert.ok(registers.ctrl.slice(compiled.totalFrames).every((ctrl) => ctrl === 0), `${style} voice ${v + 1} finishes`);
+    }
+    assert.deepEqual(strayWrites, []);
+    const writes = [];
+    cpu.hooks.write = (address) => writes.push(address);
+    cpu.call(compiled.playAddress);
+    assert.deepEqual(writes, [], "no SID writes after the piece has ended");
+  }
+});
+
+test("the one-shot PRG removes its IRQ after the last call", () => {
+  const score = generateSidwave({ root: "C4", style: "chiptune", seed: DEFAULT_MUSIC_SEED, system: "PAL", preset: "classic" }).score;
+  const compiled = compileSidwaveToPrg(parseSidwave(score), { loop: false });
+  const mem = new Uint8Array(65536);
+  mem.set(compiled.prg.subarray(2), compiled.loadAddress);
+  mem[0xea31] = 0x60; // RTS in place of the KERNAL IRQ
+  mem[0x02a6] = 1;
+  let raster = 100;
+  const cpu = new Cpu(mem, {
+    read(address) { if (address === 0xd012) return (raster = (raster + 1) % 312) & 0xff; },
+  });
+  cpu.call(compiled.entryAddress);
+  const irq = mem[0x0314] | (mem[0x0315] << 8);
+  for (let tick = 0; tick <= compiled.totalFrames; tick += 1) cpu.call(irq);
+  assert.deepEqual([...mem.slice(0x0314, 0x0316)], [0x31, 0xea]);
+  assert.deepEqual([mem[0xd404], mem[0xd40b], mem[0xd412]], [0, 0, 0]);
 });
