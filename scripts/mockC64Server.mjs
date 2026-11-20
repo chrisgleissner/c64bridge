@@ -606,6 +606,35 @@ export async function startMockC64Server(options = {}) {
       return;
     }
 
+    if (url === "/v1/runners:run_crt" || url.startsWith("/v1/runners:run_crt?")) {
+      const routeUrl = new URL(url, "http://mock.local");
+      if (method === "PUT") {
+        state.lastCrtFile = routeUrl.searchParams.get("file") ?? "";
+        state.crtCount = (state.crtCount ?? 0) + 1;
+        sendJson(res, { result: "run_crt", file: state.lastCrtFile });
+        return;
+      }
+      if (method === "POST") {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const body = Buffer.concat(chunks);
+        const contentType = String(req.headers["content-type"] ?? "");
+        // Like the firmware, the cartridge is the first file part of a multipart upload.
+        const parts = contentType.startsWith("multipart/form-data")
+          ? [...(await new Response(body, { headers: { "content-type": contentType } }).formData()).values()]
+          : null;
+        if (parts && (parts.length === 0 || parts.some((part) => typeof part === "string"))) {
+          sendJson(res, { errors: ["Upload of file failed."] }, 400);
+          return;
+        }
+        const crt = parts ? Buffer.from(await parts[0].arrayBuffer()) : body;
+        state.lastCrt = { name: parts ? parts[0].name : null, bytes: crt.length, crt };
+        state.crtCount = (state.crtCount ?? 0) + 1;
+        sendJson(res, { result: "run_crt", bytes: crt.length });
+        return;
+      }
+    }
+
     if (method === "POST" && url === "/v1/runners:load_prg") {
       const chunks = [];
       for await (const chunk of req) {
@@ -1003,6 +1032,27 @@ export async function startMockC64Server(options = {}) {
               mode,
             };
             respond({ result: "mounted", drive: driveId, image, type, mode });
+            return;
+          }
+
+          if (action === "mount" && method === "POST") {
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            const body = Buffer.concat(chunks);
+            const contentType = String(req.headers["content-type"] ?? "");
+            const parts = contentType.startsWith("multipart/form-data")
+              ? [...(await new Response(body, { headers: { "content-type": contentType } }).formData()).values()]
+              : null;
+            if (!parts || parts.length === 0 || parts.some((part) => typeof part === "string")) {
+              sendJson(res, { errors: ["Upload of file failed."] }, 400);
+              return;
+            }
+            const bytes = Buffer.from(await parts[0].arrayBuffer());
+            const type = routeUrl.searchParams.get("type") ?? null;
+            const mode = routeUrl.searchParams.get("mode") ?? null;
+            driveState.mountedImage = { image: parts[0].name, type, mode, bytes: bytes.length };
+            state.lastMountUpload = { drive: driveId, name: parts[0].name, type, mode, bytes: bytes.length, image: bytes };
+            respond({ result: "mounted", drive: driveId, image: parts[0].name, type, mode });
             return;
           }
 
