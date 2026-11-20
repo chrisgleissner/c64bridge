@@ -224,7 +224,7 @@ jobs:
 
       - name: Upload smoke log artifact on failure
         if: failure() && steps.smoke.outputs.log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: smoke-log
           path: ${{ steps.smoke.outputs.log }}
