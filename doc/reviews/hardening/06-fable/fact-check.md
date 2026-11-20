@@ -198,3 +198,38 @@ ERROR verdicts on other branches: none.
 
 Test: `test/knowledge.test.mjs` "VIC-II spec gives the $D011 bit layout" passes on bun and node, and fails
 on both with the previous `src/knowledge.ts` restored.
+
+## Part D - Wave 2 item 6: knowledge gaps and remaining documents (W6, 2026-11-20)
+
+Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64bridge/h6/W6-src`
+(not from memory). Sources:
+
+- cc65 `eebf54af545f4ae52f8489a2f6d4d5f93e7942d2` (https://github.com/cc65/cc65): `doc/cc65-intern.sgml`,
+  `doc/c64.sgml`, `cfg/c64.cfg`, `libsrc/c64/crt0.s`, `libsrc/c64/irq.s`, `libsrc/runtime/zeropage.s`, `asminc/zeropage.inc`.
+- Oscar64 `08b01c9ec14f0c6080c3a26be7adb16b1a0d6432` (https://github.com/drmortalwombat/oscar64): `oscar64.md`, `include/crt.c`.
+- llvm-mos-sdk `555253f65a0fa3b4bbe8a203fe21f160da27f931` (https://github.com/llvm-mos/llvm-mos-sdk):
+  `mos-platform/c64/{link.ld,clang.cfg,unmap-basic.S,basic-header.S}`, `mos-platform/commodore/{commodore.ld,save-basic.S}`,
+  `mos-platform/common/ldscripts/imag-regs.ld`. llvm-mos `ae72e49843c256272d89421942079cd623bedafb`
+  (https://github.com/llvm-mos/llvm-mos): `llvm/lib/Target/MOS/MOSCallingConv.td`, `MOSCallLowering.cpp`.
+  The llvm-mos wiki (llvm-mos.org) refused automated fetches (HTTP 403), so the compiler source is used instead.
+- mist64/c64ref `7cae8b9` and the Bauer VIC-II article, as in Part A.
+- Multiply/divide: routines assembled with 64tass 1.60 and run in `verify/sim6502.py`, a 6502 interpreter whose
+  opcode, addressing-mode and cycle tables are parsed from c64ref `src/6502/cpu_6502.txt` (`verify/test_muldiv.py`).
+
+### D1 - C compiler runtime facts (data/gamedev/toolchain.md section 1)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| cc65 runtime zero page `$02-$1B`, 26 bytes, names and 6-byte `regbank` | ADDED | `c64.cfg` "ZP: start = $0002, size = $001A"; `zeropage.s` (`c_sp` 2, `sreg` 2, `regsave` 4, `ptr1-4`, `tmp1-4`, `regbank`); `zeropage.inc` "zpspace = 26", "regbanksize = 6" |
+| cc65 `fastcall` default, A/X/`sreg` order, push order, return rules, free registers, `regbank` kept, variadic = `cdecl` with Y | ADDED | `cc65-intern.sgml` "Calling conventions", "Prologue", "Return requirements", "Clobbered state" |
+| cc65 `c64.cfg`: `$0801`, 13-byte HEADER, HIMEM `$D000`, stack `$800`; `c64-asm.cfg`, `--start-addr`, `-u __EXEHDR__`; `-Ln` label file | ADDED | `c64.cfg` ("size = $000D", "__HIMEM__ ... $D000", "__STACKSIZE__ ... $0800"); `c64.sgml` "c64-asm.cfg"; `cl65.sgml` "-Ln name Create a VICE label file" |
+| cc65 startup: `$01` AND `$F8` OR `$06`, saved SP and zero page, `c_sp`, `CHR$(14)`, constructors, BSS, exit to BASIC with code in ST; IRQ via `$0314` | ADDED | `crt0.s` ("ora #$06 ; Enable Kernal+I/O, disable BASIC", "sta STATUS"); `irq.s` (`IRQVec`) |
+| Oscar64 zero-page layout `$02` ... `$53-$8F`, "not yet final"; `__zeropage` usually `$80-$FF`; `-xz` | ADDED | `oscar64.md` "Zero page usage", "Usage of zero page", "Compiler arguments" |
+| Oscar64 calling convention per function, static stack, inline asm access, `__interrupt`/`__hwinterrupt` | ADDED | `oscar64.md` "Global Analyzer", "Avoid Recursion", "Accessing variables in assembler", "Interrupt routines" |
+| Oscar64 regions (`startup` `$0801-$0900`, `bytecode`, `main` `$0A00-$A000`), pragmas, stack 4 KB, heap 1 KB, `.lbl`, `-o=`, `-d64=` | ADDED | `oscar64.md` "Placement", "Heap and Stack sections", "Vice debugger .lbl", "Creating a d64" |
+| Oscar64 startup saves SP, clears BSS and zero-page BSS, calls `main` | ADDED | `crt.c` `startup` ("tsx / stx spentry", "Clear BSS Segment", "jsr main"); `oscar64.md` "-dNOBSSCLEAR", "-dNOZPCLEAR" |
+| `.lbl` lines `al 0801 .startup` are accepted as `symbolsFile` | ADDED | `src/tools/translation/symbolRegistry.ts:66` (device prefix optional) |
+| llvm-mos `__rc0` at `$02`, 32 imaginary registers, zero page `$22-$8F`, `-mlto-zp=110` | ADDED | `link.ld` "__basic_zp_start = 0x0002", "__basic_zp_end = 0x0090"; `commodore.ld` "__rc0 = __basic_zp_start", "zp : ORIGIN = __rc31 + 1"; `clang.cfg` "-mlto-zp=110" ($90 - $22 = 110) |
+| llvm-mos argument and return order, caller/callee-saved sets, variadic and struct rules | ADDED | `MOSCallingConv.td` (CC_MOS lists, header comment "A, X, Y, C, N, V, Z, and RS1-RS9 are caller-saved ... RS0, and RS10-RS15 are callee-saved"); `MOSCallLowering.cpp:54` uses CC_MOS for returns too |
+| llvm-mos `link.ld` RAM `$0801` length `$C7FF`, `__stack = $D000`, BASIC header; init `$00=$2F`, `$01=$3E`; exit loop, `save-basic.o` | ADDED | `link.ld`, `basic-header.S`, `unmap-basic.S` ("ldx #$3E ; LORAM = 0", ".fini.990 ... ldx #$3F"), `c64/CMakeLists.txt` (`common-exit-loop`), `save-basic.S` header comment |
+| Toolchain Makefile note: Oscar64 output flags "see its README"; label file "(unverified)" | IMPRECISE, replaced | `oscar64.md` "Compiler arguments" (`-o`), "Vice debugger .lbl" |

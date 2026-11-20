@@ -17,6 +17,15 @@ Marks: "(unverified)" = flag or command not confirmed against current docs here;
 | c64bridge `upload_run_asm` | asm (basic subset) | zero setup, good for snippets and tests; no macros/segments | built in |
 Rule of thumb: IRQ chains, multiplexer, scroll copy and music glue in assembly; game logic, data tables and tools in assembly or Oscar64. Pin tool versions; check KickAssembler redistribution terms before bundling.
 
+### C compiler runtime facts (cc65, Oscar64, llvm-mos)
+Read from each project's own files (cc65 `eebf54a`: `doc/cc65-intern.sgml`, `doc/c64.sgml`, `cfg/c64.cfg`, `libsrc/c64/crt0.s`, `libsrc/runtime/zeropage.s`; Oscar64 `08b01c9`: `oscar64.md`, `include/crt.c`; llvm-mos-sdk `555253f`: `mos-platform/c64/link.ld`, `c64/clang.cfg`, `commodore/commodore.ld`, `commodore/save-basic.S`; llvm-mos `ae72e49`: `MOSCallingConv.td`). Re-check after a version change.
+| | cc65 (`-t c64`) | Oscar64 (`.prg` target) | llvm-mos (`mos-c64-clang`) |
+|---|---|---|---|
+| Zero page | Runtime uses `$02-$1B` (26 bytes: `c_sp`, `sreg`, `regsave`, `ptr1-4`, `tmp1-4`, 6-byte `regbank`), the whole `ZP` area of `c64.cfg`; extra `.zeropage` data needs a `.cfg` with a larger `ZP` | `$02` Y spill, `$03-$0C` mul/div/float work, `$0D-$1A` leaf-function arguments, `$1B-$1E` accumulator, `$1F-$22` pointers, `$23-$24` stack pointer, `$25-$26` frame pointer, `$43-$52` caller-saved, `$53-$8F` callee-saved (manual: "not yet final"). `__zeropage` globals go to the zero-page segment (usually `$80-$FF`, only when the KERNAL is not used; not initialised). `-xz`: more zero page, no return to BASIC | Imaginary registers `__rc0-__rc31` at `$02-$21`; zero-page variables `$22-$8F` (`-mlto-zp=110`); `$90-$FF` (KERNAL) untouched |
+| Calling convention | Default `fastcall`: rightmost argument in A (low), X (high), `sreg` (bytes 2-3); the others pushed on the C stack (`c_sp`) left to right. Return in A/X/`sreg`; an 8-bit return must also set X to the high byte. Callee removes its arguments. Free in asm: Y, `tmp1-4`, `ptr1-4`, `regsave`, unused `sreg`; keep `regbank`. Variadic = `cdecl`, Y = bytes pushed | Chosen per function by the global analyser; parameters and locals on a static stack built from the call graph (recursion forces the dynamic stack). Inline asm reads locals and parameters by name but cannot change them. `__interrupt` saves the zero-page registers it uses; `__hwinterrupt` also saves A/X/Y and ends with `RTI` | Bytes go to A, X, then `__rc2-__rc15`; pointers first to `__rs1-__rs7` (register pairs); the rest on the soft stack. Return values use the same order. Caller-saved: A, X, Y, flags, `__rs1-__rs9`; callee-saved: `__rs0` (soft stack pointer), `__rs10-__rs15`. Variadic arguments always on the soft stack; structs passed by pointer |
+| Linker configuration | `c64.cfg`: load address `$0801`, 13-byte `HEADER` (BASIC `SYS` stub), `MAIN` up to `__HIMEM__` = `$D000`, C stack `__STACKSIZE__` = `$800` below it. Assembly only: `-C c64-asm.cfg` (`--start-addr $C000`; `-u __EXEHDR__` adds the stub). Label file: `cl65 -Ln` | `#pragma region(name, start, end, flags, bank, {sections})`, `section`, `code()/data()/bss()`, `stacksize` (default 4 KB), `heapsize` (1 KB). Default regions `startup` `$0801-$0900`, `bytecode` `$0900-$0A00`, `main` `$0A00-$A000`; up to `$D000` with `#pragma region(main, 0x0a00, 0xd000, , , {code, data, bss, heap, stack})` and `mmap_set(MMAP_NO_BASIC)`. Writes `.map`, `.asm`, VICE `.lbl` (`al 0801 .startup`, accepted as `symbolsFile`); `-d64=` builds a disk | GNU-ld script `link.ld`: RAM from `$0801`, length `$C7FF`; soft stack `__stack = $D000` growing down; `.basic_header` = `SYS` to `_start` |
+| Startup and exit | `crt0.s`: saves `$01`, sets `$01` to (`$01` AND `$F8`) OR `$06` (BASIC off, KERNAL and I/O on), saves SP and the 26 zero-page bytes, sets `c_sp` to the end of `MAIN`, prints `CHR$(14)` (lower-case set), runs constructors, clears BSS, calls `main`. Exit restores zero page, SP and `$01` and returns to BASIC with the exit code in ST. IRQ: chains the `$0314` vector to `.interruptor` routines | `crt.c` `startup` (region `$0801-$0900`): saves SP, clears BSS (`-dNOBSSCLEAR` skips) and zero-page BSS (`-dNOZPCLEAR`), calls `main` | `.init.010`: `$00 = $2F`, `$01 = $3E` (BASIC off); soft stack from `__stack`; `main`. Default exit loops forever; link `-l:save-basic.o` to save `$02-$8F` and SP and return to BASIC (`$01 = $3F` at exit) |
+
 ## 2. Project layout
 ```
 game/
@@ -29,7 +38,7 @@ game/
 ```
 - Print a memory report at build time (`-showmem` in Kick, link map elsewhere); fail on overlap.
 - Write a label file and pass it as `symbolsFile` to `c64_program` `run_prg`/`load_prg`; `c64_memory` (`read`, `write`, `disassemble`) and `c64_debug` (`create_checkpoint`, `wait_for_state`) then accept label names as addresses. Accepted formats: VICE `al C:0810 .name`, `name = $0810` (64tass, ACME; bare digits are decimal), KickAssembler `.label name=$0810`.
-- Label file per tool: cc65 `cl65 -Ln build/game.sym` (VICE format); 64tass `-l build/game.sym`; KickAssembler `-symbolfile` (writes `.sym`; format unverified); ACME `-l build/game.sym` (unverified); Oscar64 and llvm-mos (unverified; check the tool's own documentation and convert to one of the formats above if needed).
+- Label file per tool: cc65 `cl65 -Ln build/game.sym` (VICE format); 64tass `-l build/game.sym`; KickAssembler `-symbolfile` (writes `.sym`; format unverified); ACME `-l build/game.sym` (unverified); Oscar64 writes `<name>.lbl` (`al 0801 .startup`, accepted as is); llvm-mos (unverified; check its documentation and convert to one of the formats above if needed).
 
 ## 3. Makefile skeleton (64tass + Exomizer + c1541; tabs required)
 ```
@@ -46,7 +55,7 @@ build:
 run: build/game.prg
 	x64sc -autostart build/game.prg
 ```
-- Kick: `java -jar KickAss.jar src/main.asm -o build/game.prg -symbolfile`. ACME: `acme -f cbm -o build/game.prg src/main.asm`. cc65: `cl65 -t c64 -o build/game.prg src/main.c`. llvm-mos: `mos-c64-clang -Os -o build/game.prg src/main.c`. Oscar64: `oscar64 -O2 -g src/main.c` (output flags: see its README).
+- Kick: `java -jar KickAss.jar src/main.asm -o build/game.prg -symbolfile`. ACME: `acme -f cbm -o build/game.prg src/main.asm`. cc65: `cl65 -t c64 -o build/game.prg src/main.c`. llvm-mos: `mos-c64-clang -Os -o build/game.prg src/main.c`. Oscar64: `oscar64 -O2 -o=build/game.prg src/main.c` (`-d64=build/game.d64` adds a disk image).
 - `sfx sys` packs the whole PRG; multipart games use `exomizer mem -l none part.bin@0xADDR` plus the in-game decruncher (see Tony).
 - BASIC start stub at `$0801`: `10 SYS 2064` bytes `0B 08 0A 00 9E 32 30 36 34 00 00 00`; code starts at `$0810`. Kick: `BasicUpstart2(start)`.
 

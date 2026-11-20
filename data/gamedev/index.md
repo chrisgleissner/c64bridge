@@ -40,15 +40,16 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 | Music and SFX, several SIDs, NTSC speed | techniques section 6, `c64://ultimate/multisid` |
 | Memory map and VIC bank | architecture sections 4 and 5 |
 | Build, `.cfg`, REU image, crunch | toolchain |
+| C compilers: zero page, calling convention, linker config, startup (cc65, Oscar64, llvm-mos) | toolchain section 1 |
 | Real code to study, licences | references |
 
 ## Resource table (KB, bytes/1000)
 | URI | Content | KB |
 |---|---|---|
-| `c64://gamedev/index` | this page | 6.6 |
+| `c64://gamedev/index` | this page | 6.7 |
 | `c64://gamedev/architecture` | frame loop, state machine, cycle budgets, memory-map templates | 12.4 |
 | `c64://gamedev/techniques` | raster IRQ, multiplexer, scrolling, collision, input, music, RNG, PAL/NTSC, start-up checks | 18.9 |
-| `c64://gamedev/toolchain` | assemblers, build, crunchers, test loop, `.cfg` and REU image | 7.5 |
+| `c64://gamedev/toolchain` | assemblers, C compiler runtimes (zero page, calling convention, linker, startup), build, crunchers, test loop, `.cfg` and REU image | 13.2 |
 | `c64://gamedev/references` | projects and games to learn from, licences | 10.0 |
 | `c64://ultimate/hardware` | turbo, SIDs, video, detection, LEDs, config | 12.9 |
 | `c64://ultimate/multisid` | 8-10 SIDs: limit, address map, split, mixer, LOAD_CONFIG, detection | 10.9 |
