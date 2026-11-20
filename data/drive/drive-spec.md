@@ -39,13 +39,14 @@ Tracks 40–41 exist physically but unused by DOS 2.6.
 
 ### BAM (Track 18 Sector 0)
 
-| Bytes | Purpose |
+| Bytes | Purpose |
 |:--|:--|
-| 0–1 | DOS version ("A0") |
-| 2–3 | First dir T/S (18/1) |
-| 4–143 | 4 bytes per track (free bitmap + count) |
-| 144–159 | Disk name (16 B PETSCII) |
-| 162–163 | ID (2 B) + type "2A" |
+| $00–$01 | First directory T/S (18/1) |
+| $02 | DOS version type `$41` ("A") |
+| $04–$8F | 4 bytes per track (free count + 3-byte bitmap) |
+| $90–$9F | Disk name (16 B PETSCII, `$A0`-padded) |
+| $A2–$A3 | Disk ID |
+| $A5–$A6 | DOS type "2A" |
 
 ### Directory Entries (32 B each)
 
