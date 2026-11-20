@@ -401,7 +401,7 @@ test("program operation handlers accept op-tagged args and use shared CRT helper
   assert.equal(loadResult.isError, undefined);
   assert.equal(runResult.isError, undefined);
   assert.equal(crtResult.isError, undefined);
-  assert.ok(String(crtResult.content[0].text).includes("loaded and executed"));
+  assert.ok(String(crtResult.content[0].text).includes("CRT //USB0/handler.crt started"));
   assert.deepEqual(calls, [
     ["load", "//USB0/handler.prg"],
     ["run", "//USB0/handler.prg"],
