@@ -6,7 +6,7 @@
   "type": "object",
   "required": ["sidwave", "title", "tempo", "mode", "voices", "timeline"],
   "properties": {
-    "sidwave": { "type": ["number", "string"], "enum": [1, "1.0", "1", "1.1"] },
+    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, "1.0", "1", "1.1"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
@@ -52,7 +52,7 @@
         "properties": {
           "id": { "type": "integer", "minimum": 1, "maximum": 3 },
           "name": { "type": "string" },
-          "instrument": { "type": "string" },
+          "instrument": { "$ref": "#/$defs/instrumentRef" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },
           "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095, "description": "Fraction (0 < x <= 1) or 12-bit value." },
           "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
@@ -87,9 +87,9 @@
                 },
                 {
                   "type": "object",
-                  "required": ["groove"],
+                  "oneOf": [{ "required": ["groove"] }, { "required": ["drums"] }],
                   "properties": {
-                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "enum": ["-", ".", "~", "_", "r", "rest"] }, { "$ref": "#/$defs/grooveEntry" }] }, "minItems": 1 },
+                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]@[^@]+$" }, { "enum": ["-", ".", "~", "_", "r", "rest", null] }, { "$ref": "#/$defs/grooveEntry" }] }, "minItems": 1 },
                     "drums": { "$ref": "#/$defs/drums" },
                     "length": { "$ref": "#/$defs/length" },
                     "transpositions": { "$ref": "#/$defs/transpositions" },
@@ -135,7 +135,8 @@
         "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
         "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095 },
         "loop": { "type": "integer", "minimum": 0, "description": "Zero-based loop index for tables declared as lists; omitted holds the final value." },
-        "portamento": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Glide duration in player frames." },
+        "portamento": { "$ref": "#/$defs/portamento" },
+        "legato": { "$ref": "#/$defs/legato" },
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
         "filtertable": { "$ref": "#/$defs/filtertable" },
         "wavetable": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": {
@@ -198,8 +199,52 @@
       },
       "additionalProperties": false
     },
-    "grooveEntry": { "type": "object", "required": ["note"], "properties": { "note": { "$ref": "#/$defs/note" }, "inst": { "type": "string" }, "len": { "$ref": "#/$defs/length" }, "legato": { "type": "boolean" }, "slide_from": { "$ref": "#/$defs/note" } }, "additionalProperties": false },
-    "drums": { "type": "object", "required": ["kit", "steps"], "properties": { "kit": { "type": "object", "minProperties": 1, "propertyNames": { "pattern": "^[A-Za-z]$" }, "additionalProperties": { "type": "string" } }, "steps": { "type": "string", "pattern": "^[A-Za-z.]+$" } }, "additionalProperties": false },
+    "instrumentRef": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A local instrument name or a built-in recipe such as lib:kick. See sidwave.md for all recipes."
+    },
+    "portamento": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "Player calls to glide from the previous note. Zero disables the glide."
+    },
+    "legato": {
+      "type": "boolean",
+      "description": "Continue the previous instrument, gate and tables across adjacent notes."
+    },
+    "grooveEntry": {
+      "type": "object",
+      "required": ["note"],
+      "properties": {
+        "note": { "$ref": "#/$defs/note" },
+        "inst": { "$ref": "#/$defs/instrumentRef" },
+        "len": { "$ref": "#/$defs/length" },
+        "legato": { "$ref": "#/$defs/legato" },
+        "portamento": { "$ref": "#/$defs/portamento" },
+        "slide_from": { "$ref": "#/$defs/note" }
+      },
+      "additionalProperties": false
+    },
+    "drums": {
+      "type": "object",
+      "required": ["kit", "steps"],
+      "properties": {
+        "kit": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[A-Za-z]$" },
+          "additionalProperties": { "$ref": "#/$defs/instrumentRef" }
+        },
+        "steps": {
+          "type": "string",
+          "pattern": "^[A-Za-z.]+$",
+          "description": "Each character occupies one pattern entry. Letters select kit instruments and periods are rests."
+        }
+      },
+      "additionalProperties": false
+    },
     "note": { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]$" },
     "length": { "type": "number", "exclusiveMinimum": 0, "maximum": 64, "description": "Beats per entry (default 1)." },
     "transpositions": { "type": "array", "items": { "type": "integer", "minimum": -48, "maximum": 48 }, "minItems": 1 },

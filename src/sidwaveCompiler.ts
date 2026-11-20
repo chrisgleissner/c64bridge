@@ -8,7 +8,7 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from "node:buffer";
 import { assemblyToPrgDetailed } from "./tools/translation/assembler.js";
-import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, MotifEntry, SidwaveRegisterTable } from "./sidwave.js";
+import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, SidwavePatternGroove, MotifEntry, SidwaveRegisterTable } from "./sidwave.js";
 import {
   SidwaveValidationError,
   isRestToken,
@@ -121,7 +121,7 @@ export function compileSidwaveToPrg(doc: ParsedSidwave): CompileResult {
 
 /**
  * Wraps the compiled PRG in a PSID v2 file. Init and play are the player's fixed entry points;
- * the clock flag follows the document's mode so the host calls play at 50 Hz (PAL) or 60 Hz (NTSC).
+ * the clock flag follows the document's mode. Multispeed init sets the CIA play rate.
  * `entryAddress` is accepted for compatibility and ignored.
  */
 export function compileSidwaveToSid(
@@ -139,7 +139,7 @@ export function compileSidwaveToSid(
   header.writeUInt16BE(options?.playAddress ?? SIDWAVE_PLAY_ADDRESS, 12);
   header.writeUInt16BE(1, 14); // songs
   header.writeUInt16BE(1, 16); // start song
-  header.writeUInt32BE(doc.speed > 1 ? 0x80000000 : 0, 18); // bit 31 selects CIA timer timing for multispeed songs
+  header.writeUInt32BE(doc.speed > 1 ? 1 : 0, 18); // bit 0 selects CIA timer timing for the first song
   writeLatin1(header, doc.song.title ?? "Untitled", 0x16);
   writeLatin1(header, doc.song.author ?? "SIDWAVE", 0x36);
   writeLatin1(header, "c64bridge SIDWAVE", 0x56);
@@ -227,6 +227,7 @@ export interface ArrangedNote {
   midi: number;
   inst: number;
   legato?: boolean;
+  portamento?: number;
   /** Fade window applied to this note's sustain level, if any. */
   fade?: { start: number; end: number };
 }
@@ -258,7 +259,7 @@ const MAX_NOTES_PER_VOICE = 20_000;
 
 export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   const system: SystemMode = doc.song.mode ?? "PAL";
-  const fps = sidwaveFrameRate(system);
+  const fps = sidwaveFrameRate(system) * doc.speed;
   const framesPerBeat = (fps * 60) / doc.song.tempo;
   const frameAt = (beat: number) => Math.round(beat * framesPerBeat + BEAT_EPS);
   const maxMidi = maxSidwaveMidi(system);
@@ -327,7 +328,9 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
       const entries = patternEntries(pattern, patPath);
       const lengthBeats = pattern.length ?? 1;
       const transpositions = pattern.transpositions ?? [0];
-      const cycleBeats = entries.length * lengthBeats;
+      const durations = entries.map((entry) => entry.kind === "note" ? entry.len ?? lengthBeats : lengthBeats);
+      const variableLength = durations.some((duration) => duration !== lengthBeats);
+      const cycleBeats = variableLength ? durations.reduce((sum, duration) => sum + duration, 0) : entries.length * lengthBeats;
       const out = notes[id - 1]!;
       for (let c = 0; ; c += 1) {
         const cycleStart = sec.startBeat + c * cycleBeats;
@@ -340,12 +343,15 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
           const step = Math.round((filterMod.sweep * 32) / count);
           globals.push({ frame: frameAt(cycleStart), kind: "filtermod", step, count });
         }
+        let offset = 0;
         for (let k = 0; k < entries.length; k += 1) {
-          const b = cycleStart + k * lengthBeats;
+          const b = cycleStart + (variableLength ? offset : k * lengthBeats);
+          const duration = durations[k]!;
+          offset += duration;
           if (b >= sec.endBeat - BEAT_EPS) break;
-          const truncated = b + lengthBeats > sec.endBeat + BEAT_EPS;
+          const truncated = b + duration > sec.endBeat + BEAT_EPS;
           const f0 = frameAt(b);
-          const f1 = frameAt(Math.min(b + lengthBeats, sec.endBeat));
+          const f1 = frameAt(Math.min(b + duration, sec.endBeat));
           const entry = entries[k]!;
           if (entry.kind === "rest") continue;
           if (entry.kind === "tie") {
@@ -358,7 +364,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
             if (truncated) continue;
             throw new SidwaveValidationError(
               patPath,
-              `each entry lasts ${(lengthBeats * framesPerBeat).toFixed(2)} frames at ${doc.song.tempo} BPM; the player needs at least ${SIDWAVE_MIN_NOTE_FRAMES} frames per note (one sounding frame plus the ${SIDWAVE_HARD_RESTART_FRAMES}-frame hard restart); raise 'length' or lower the tempo`,
+              `each entry lasts ${(duration * framesPerBeat).toFixed(2)} frames at ${doc.song.tempo} BPM; the player needs at least ${SIDWAVE_MIN_NOTE_FRAMES} frames per note (one sounding frame plus the ${SIDWAVE_HARD_RESTART_FRAMES}-frame hard restart); raise 'length' or lower the tempo`,
             );
           }
           const base = entry.notes[0]! + tr;
@@ -393,14 +399,24 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
             }
           }
           const instrumentName = entry.instrument ?? voice.instrument;
-          const namedInstrument = instrumentName ? (instrumentName.startsWith("lib:") ? SIDWAVE_INSTRUMENT_LIBRARY[instrumentName.slice(4)] : doc.instruments[instrumentName]) : undefined;
+          const isLibrary = instrumentName?.startsWith("lib:");
+          const bank = isLibrary ? SIDWAVE_INSTRUMENT_LIBRARY : doc.instruments;
+          const key = isLibrary ? instrumentName!.slice(4) : instrumentName;
+          const namedInstrument = key && Object.prototype.hasOwnProperty.call(bank, key) ? bank[key] : undefined;
           if (instrumentName && !namedInstrument) throw new SidwaveValidationError(`${patPath}.instrument`, `instrument ${JSON.stringify(instrumentName)} is not defined`);
           const instVoice = namedInstrument ? { ...voice, waveform: (namedInstrument.waveform ?? namedInstrument.wave ?? voice.waveform) as any, pulse_width: namedInstrument.pulse_width ?? voice.pulse_width, adsr: namedInstrument.adsr ?? voice.adsr } : voice;
           const inst = buildInstrument(instVoice, { ...fxRaw, ...(namedInstrument ?? {}) }, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps);
           if (out.length >= MAX_NOTES_PER_VOICE) {
             throw new SidwaveValidationError(patPath, `voice ${id} has more than ${MAX_NOTES_PER_VOICE} notes; every note takes at least 3 bytes, so the song would end past the $D000 limit (about 50 KB); use longer note lengths or fewer bars`);
           }
-          out.push({ start: f0, end: f1, midi: base, inst: instIndex(inst), legato: Boolean((entry as any).legato || namedInstrument?.legato) });
+          const previous = out[out.length - 1];
+          const legato = (entry.legato ?? namedInstrument?.legato) && previous?.end === f0;
+          out.push({
+            start: f0, end: f1, midi: base,
+            inst: legato ? previous!.inst : instIndex(inst),
+            legato,
+            portamento: entry.portamento ?? namedInstrument?.portamento,
+          });
         }
       }
       if (filterMod) globals.push({ frame: ef, kind: "filtermod", step: 0, count: 0 });
@@ -428,7 +444,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
         const srcInst = instruments[n.inst]!;
         const sustain = Math.round((srcInst.sr >> 4) * reverb.depth);
         const echo: Instrument = { ...srcInst, sr: (sustain << 4) | (srcInst.sr & 0x0f) };
-        notes[tgt - 1]!.push({ start, end, midi: n.midi, inst: instIndex(echo) });
+        notes[tgt - 1]!.push({ ...n, start, end, inst: instIndex(echo) });
       }
       if (fading.includes(src)) fadeWindows[tgt - 1]!.push({ start: sf, end: ef });
     }
@@ -470,8 +486,9 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
 type PatternEntry =
   | { kind: "rest" }
   | { kind: "tie" }
-  | { kind: "note"; notes: number[]; arp: false; arpSpeed: 0; instrument?: string; legato?: boolean }
-  | { kind: "note"; notes: number[]; arp: true; arpSpeed: number; instrument?: string };
+  | ({
+    kind: "note"; notes: number[]; instrument?: string; len?: number; legato?: boolean; portamento?: number;
+  } & ({ arp: false; arpSpeed: 0 } | { arp: true; arpSpeed: number }));
 
 function patternEntries(pattern: SidwavePattern, path: string): PatternEntry[] {
   const p = pattern as any;
@@ -481,8 +498,11 @@ function patternEntries(pattern: SidwavePattern, path: string): PatternEntry[] {
     return midis.map((m) => ({ kind: "note", notes: [m], arp: false, arpSpeed: 0 }));
   }
   if (Array.isArray(p.groove)) {
-    return (p.groove as unknown[]).map((raw) => {
-      if (typeof raw === "object" && raw) return { kind: "note", notes: [noteNameToMidi((raw as any).note)!], arp: false, arpSpeed: 0, instrument: (raw as any).inst, legato: (raw as any).legato };
+    return (p.groove as SidwavePatternGroove["groove"]).map((raw) => {
+      if (typeof raw === "object") {
+        const { note, inst: instrument, len, legato, portamento } = raw;
+        return { kind: "note", notes: [noteNameToMidi(note)!], arp: false, arpSpeed: 0, instrument, len, legato, portamento };
+      }
       const tok = String(raw).trim();
       if (isRestToken(tok)) return { kind: "rest" };
       if (isTieToken(tok)) return { kind: "tie" };
@@ -543,16 +563,54 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
 
 /** Small documented SID instrument recipes; waveform bits follow the SID control-register map. */
 export const SIDWAVE_INSTRUMENT_LIBRARY: Record<string, Record<string, any>> = {
-  kick: { waveform: "noise", adsr: [0, 0, 12, 4], wavetable: [{ wave: "noise", frames: 2 }, { wave: "pulse", note: "C3" }, { wave: "pulse", note: "C2" }, { wave: "tri", note: "C1" }] },
-  snare: { waveform: "noise", adsr: [0, 2, 8, 5], wavetable: [{ wave: "noise", frames: 4 }, { wave: "pulse", note: "C4" }, { wave: "tri", note: "C3" }] },
-  hat: { waveform: "noise", adsr: [0, 0, 4, 2], wavetable: [{ wave: "noise", frames: 5 }, { wave: "noise", gate: false, frames: 2 }] },
-  bass_pluck: { waveform: "triangle", adsr: [0, 8, 0, 4], wavetable: [{ wave: "pulse", note: "+12" }, { wave: "tri" }] },
-  filter_bass: { waveform: "saw", adsr: [0, 7, 9, 3], filtertable: [{ cutoff: 1400 }, { add: -8, frames: 24 }] },
-  lead_pwm: { waveform: "pulse", pulse_width: 0.3, adsr: [1, 4, 10, 3], pulsetable: { steps: [{ set: 0.2 }, { add: 12, frames: 16 }, { add: -12, frames: 16 }], loop: 1 } },
-  chip_arp_major: { waveform: "pulse", adsr: [0, 3, 8, 2], wavetable: [{ wave: "pulse", note: "+0", frames: 4 }, { wave: "pulse", note: "+4", frames: 4 }, { wave: "pulse", note: "+7", frames: 4 }, { wave: "pulse", note: "+12", frames: 4 }], loop: 0 },
-  chip_arp_minor: { waveform: "pulse", adsr: [0, 3, 8, 2], wavetable: [{ wave: "pulse", note: "+0", frames: 4 }, { wave: "pulse", note: "+3", frames: 4 }, { wave: "pulse", note: "+7", frames: 4 }, { wave: "pulse", note: "+12", frames: 4 }], loop: 0 },
-  bell_ring: { waveform: "tri", adsr: [0, 4, 7, 5], ring: true }, sync_lead: { waveform: "saw", adsr: [0, 4, 9, 3], sync: true },
-  pad_slow: { waveform: "tri", adsr: [5, 4, 11, 7], filtertable: [{ cutoff: 500, type: "lowpass" }, { add: 4, frames: 32 }, { add: -4, frames: 32 }], loop: 1 },
+  kick: {
+    waveform: "noise", adsr: [0, 0, 12, 4],
+    wavetable: [{ wave: "noise", note: "C6", frames: 1 }, { wave: "pulse", note: "C3" }, { wave: "pulse", note: "C2" }, { wave: "tri", note: "C1" }],
+  },
+  snare: {
+    waveform: "noise", adsr: [0, 2, 8, 5],
+    wavetable: [{ wave: "noise", note: "A6", frames: 2 }, { wave: "noise", note: "C6" }, { wave: "pulse", note: "C4" }, { wave: "tri", note: "C3" }],
+  },
+  hat: {
+    waveform: "noise", adsr: [0, 0, 4, 2],
+    wavetable: [{ wave: "noise", note: "G7" }, { wave: "noise", note: "C7" }, { wave: "noise", note: "C7", gate: false }],
+  },
+  bass_pluck: {
+    waveform: "triangle", adsr: [0, 8, 0, 4],
+    wavetable: [{ wave: "pulse", note: "+12" }, { wave: "tri" }],
+  },
+  filter_bass: {
+    waveform: "saw", adsr: [0, 7, 9, 3],
+    filtertable: { steps: [{ value: 1450, add: false, frames: 1, resonance: 8, type: 0x10 }, { value: -36, add: true, frames: 24 }] },
+  },
+  lead_pwm: {
+    waveform: "pulse", pulse_width: 0.3, adsr: [1, 4, 10, 3],
+    pulsetable: { steps: [{ value: 819, add: false, frames: 1 }, { value: 38, add: true, frames: 16 }, { value: -38, add: true, frames: 16 }], loop: 1 },
+  },
+  chip_arp_major: {
+    waveform: "pulse", adsr: [0, 3, 8, 2], loop: 0,
+    wavetable: ["+0", "+4", "+7", "+12"].map((note) => ({ note, frames: 2 })),
+  },
+  chip_arp_minor: {
+    waveform: "pulse", adsr: [0, 3, 8, 2], loop: 0,
+    wavetable: ["+0", "+3", "+7", "+12"].map((note) => ({ note, frames: 2 })),
+  },
+  bell_ring: {
+    waveform: "tri", adsr: [0, 4, 7, 5], ring: true,
+    wavetable: [{ wave: "tri", note: "+12" }, { wave: "tri" }],
+  },
+  sync_lead: {
+    waveform: "saw", adsr: [0, 4, 9, 3], sync: true,
+    wavetable: [{ wave: "saw", note: "+12", frames: 2 }, { wave: "saw" }],
+  },
+  pad_slow: {
+    waveform: "tri", adsr: [5, 4, 11, 7],
+    filtertable: { steps: [
+      { value: 500, add: false, frames: 1, type: 0x10 },
+      { value: 12, add: true, frames: 32 },
+      { value: -12, add: true, frames: 32 },
+    ], loop: 1 },
+  },
 };
 
 /** Represents 0 < k < 1 as mant / 2^(8 + shift) with the largest shift that keeps mant <= 255 (at least 7 bits of precision). */
@@ -576,6 +634,8 @@ export const OP = {
   WAITLONG: 0xe4, // nn frames, 0 = 256
   FILTERMOD: 0xe5, // step (signed 24-bit, cutoff x 32), count lo, count hi
   LOOP: 0xe6,
+  LEGATO: 0xe7, // target note index
+  PORTAMENTO: 0xe8, // duration, direction, PAL and NTSC magnitude (16-bit) and step (16.8)
 } as const;
 
 const ORDER = { gate: 0, filterReset: 1, inst: 2, note: 3, sustain: 4, filterStart: 5, volume: 6 } as const;
@@ -586,16 +646,31 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
   let currentInst = -1;
   for (let i = 0; i < notes.length; i += 1) {
     const n = notes[i]!;
-    const next = i + 1 < notes.length ? notes[i + 1]!.start : notes[0]!.start + total;
+    const nextNote = notes[i + 1];
+    const next = nextNote?.start ?? notes[0]!.start + total;
     const hr = Math.max(n.start + 1, next - SIDWAVE_HARD_RESTART_FRAMES);
-    const gateOff = Math.min(n.end, hr);
-    if (!n.legato && gateOff < hr) events.push({ frame: wrap(gateOff), order: ORDER.gate, bytes: [OP.GATEOFF] });
-    if (!n.legato) events.push({ frame: wrap(hr), order: ORDER.gate, bytes: [OP.HARDRESTART] });
+    const continues = nextNote?.legato && nextNote.start === n.end;
+    const gateOff = continues ? n.end : Math.min(n.end, hr);
+    if (!continues) {
+      if (gateOff < hr) events.push({ frame: wrap(gateOff), order: ORDER.gate, bytes: [OP.GATEOFF] });
+      events.push({ frame: wrap(hr), order: ORDER.gate, bytes: [OP.HARDRESTART] });
+    }
     if (n.inst !== currentInst) {
       events.push({ frame: n.start, order: ORDER.inst, bytes: [OP.INST + n.inst] });
       currentInst = n.inst;
     }
-    events.push({ frame: n.start, order: ORDER.note, bytes: [OP.NOTE + (n.midi - 12)] });
+    const note = n.midi - 12;
+    const bytes = n.legato && i > 0 && notes[i - 1]!.end === n.start ? [OP.LEGATO, note] : [OP.NOTE + note];
+    const previous = notes[i - 1];
+    if (n.portamento && previous) {
+      bytes.push(OP.PORTAMENTO, n.portamento, Number(previous.midi > n.midi));
+      for (const system of ["PAL", "NTSC"] as const) {
+        const magnitude = Math.abs(hzToSidFrequency(midiToHz(previous.midi), system) - hzToSidFrequency(midiToHz(n.midi), system));
+        const step = Math.floor((magnitude * 256) / n.portamento);
+        bytes.push(magnitude & 255, magnitude >> 8, step & 255, (step >> 8) & 255, step >> 16);
+      }
+    }
+    events.push({ frame: n.start, order: ORDER.note, bytes });
     if (n.fade) {
       const inst = instruments[n.inst]!;
       const sustain = inst.sr >> 4;
@@ -656,12 +731,14 @@ export function encodeVoiceStream(events: StreamEvent[], total: number): number[
 function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   const L: string[] = [];
   const insts = arr.instruments;
+  const hasLegato = arr.voices.some(({ events }) => events.some((event) => event.order === ORDER.note && event.bytes[0] === OP.LEGATO));
+  const hasPortamento = arr.voices.some(({ events }) => events.some((event) => event.order === ORDER.note && event.bytes.length > 2));
   const hasWavetable = insts.some((i) => i.wavetable?.length);
   const hasPulseTable = insts.some((i) => i.pulsetable?.steps?.length);
   const hasFilterTable = insts.some((i) => i.filtertable?.steps?.length);
   const clockIndex = arr.system === "NTSC" ? 1 : 0;
   // The PRG's CIA timer reproduces the song's video frame rate on whichever clock the machine has.
-  const ciaLatch = (clock: number) => Math.round(clock / (arr.fps * arr.speed)) - 1;
+  const ciaLatch = (clock: number) => Math.round(clock / (arr.fps)) - 1;
   const f = arr.filter;
   const fBase = Math.max(0, Math.min(2047, f.base)) * 32;
   const fEnd = Math.max(0, Math.min(2047, f.base + f.sweep)) * 32;
@@ -712,7 +789,33 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
     playerCode = playerCode.replace("globals:\n", "globals:\n  lda g_ftactive\n  beq gl_regular\n  jmp ft_globals\ngl_regular:\n");
     playerCode += FILTER_TABLE_CODE + registerTableCode("ft", "cut", 0, 2047);
   }
-  L.push(playerCode.replace("  jsr play\n  jmp $EA31", `${Array.from({ length: arr.speed }, () => "  jsr play").join("\n")}\n  jmp $EA31`));
+  if (hasWavetable) {
+    // Stop the table on release so its gate bit cannot undo a rest or hard restart.
+    for (const label of ["c_gateoff", "c_hr"]) {
+      playerCode = playerCode.replace(`${label}:\n`, `${label}:\n  lda #0\n  sta v_wtleft,x\n`);
+    }
+    playerCode = playerCode.replace("  lda wt_ctrl,y\n", "  lda wt_ctrl,y\n  pha\n  lda v_wtleft,x\n  bne vr_wt_active\n  pla\n  and #$FE\n  jmp vr_wt_ctrl\nvr_wt_active:\n  pla\nvr_wt_ctrl:\n");
+    playerCode = playerCode.replace("  dec v_wtleft,x\n", "  lda v_wtleft,x\n  beq va_return\n  dec v_wtleft,x\n");
+  }
+  if (hasLegato) {
+    playerCode += LEGATO_CODE;
+  }
+  if (hasPortamento) {
+    playerCode = playerCode.replace("init_core:\n", "init_core:\n  sta port_clock\n");
+    playerCode += PORTAMENTO_CODE;
+  }
+  if (arr.speed > 1) {
+    // PSID hosts use the CIA latch written by init when song 1 selects CIA timing.
+    // The PRG installer already sets the latch and enters at init_core.
+    playerCode = playerCode.replace("  lda doc_clock\ninit_core:", `  ldx doc_clock
+  lda cia_lo,x
+  sta $DC04
+  lda cia_hi,x
+  sta $DC05
+  txa
+init_core:`);
+  }
+  L.push(playerCode);
   // Constants
   L.push(`doc_clock: .byte ${clockIndex}`);
   L.push(`cia_lo: .byte <${ciaLatch(CLOCK_HZ.PAL)}, <${ciaLatch(CLOCK_HZ.NTSC)}`);
@@ -728,7 +831,10 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
   L.push(`start_lo: .byte <stream0, <stream1, <stream2`);
   L.push(`start_hi: .byte >stream0, >stream1, >stream2`);
   L.push(`cmd_tab:`);
-  for (const name of ["c_gateoff", "c_hr", "c_sr", "c_vol", "c_waitl", "c_fmod", "c_loop"]) L.push(`  .byte <(${name}-1), >(${name}-1)`);
+  const commands = ["c_gateoff", "c_hr", "c_sr", "c_vol", "c_waitl", "c_fmod", "c_loop"];
+  if (hasLegato || hasPortamento) commands.push(hasLegato ? "c_legato" : "c_loop");
+  if (hasPortamento) commands.push("c_portamento");
+  for (const name of commands) L.push(`  .byte <(${name}-1), >(${name}-1)`);
 
   // Instrument tables
   const arpTable: number[] = [];
@@ -773,8 +879,10 @@ function buildPlayerAsm(arr: Arrangement, streams: number[][]): string {
     if (!inst.wavetable?.length) return 0;
     const start = wt.length;
     for (const s of inst.wavetable) {
-      const wave = waveformToCtrl(String(s.wave ?? "pulse"));
-      const ctrl = wave | (s.gate === false ? 0 : 1) | (s.ring ? 4 : 0) | (s.sync ? 2 : 0) | (s.test ? 8 : 0);
+      const wave = s.wave === undefined ? inst.wave & 0xf0 : waveformToCtrl(String(s.wave));
+      const ring = s.ring ?? Boolean(inst.wave & 4);
+      const sync = s.sync ?? Boolean(inst.wave & 2);
+      const ctrl = wave | (s.gate === false ? 0 : 1) | (ring ? 4 : 0) | (sync ? 2 : 0) | (s.test ? 8 : 0);
       const n = s.note === undefined ? "" : String(s.note);
       const mode = !n ? 0 : /^[+-]/.test(n) ? 1 : 2;
       const note = mode === 0 ? 0 : mode === 1 ? (Number(n) & 255) : (noteNameToMidi(n)! - 12);
@@ -1873,6 +1981,55 @@ ${prefix}_write:
   rts
 `;
 }
+
+const LEGATO_CODE = String.raw`
+c_legato:
+  jsr fetch
+  sta v_note,x
+  lda #0
+  sta v_scnt,x
+  jmp v_read
+`;
+
+const PORTAMENTO_CODE = String.raw`
+; Each clock has five bytes of glide data, prepared by the compiler.
+c_portamento:
+  jsr fetch
+  sta v_scnt,x
+  jsr fetch
+  sta v_sdir,x
+  lda port_clock
+  beq port_load
+  jsr port_skip
+port_load:
+  lda #0
+  sta v_sofflo,x
+  jsr fetch
+  sta v_soffmd,x
+  jsr fetch
+  sta v_soffhi,x
+  jsr fetch
+  sta v_sstlo,x
+  jsr fetch
+  sta v_sstmd,x
+  jsr fetch
+  sta v_ssthi,x
+  lda port_clock
+  bne port_done
+  jsr port_skip
+port_done:
+  jmp v_read
+port_skip:
+  clc
+  lda ptr
+  adc #5
+  sta ptr
+  bcc port_skip_done
+  inc ptr+1
+port_skip_done:
+  rts
+port_clock: .byte 0
+`;
 
 const PULSE_TABLE_CODE = String.raw`
 pt_start:

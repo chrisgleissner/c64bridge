@@ -188,7 +188,7 @@ function runPsid(sid, frames) {
   const cpu = new Cpu(mem, {
     write(a, v) {
       if (a >= 0xd400 && a <= 0xd418) regs[a - 0xd400] = v;
-      else if (!(a === 0x01 || (a >= 0xfb && a <= 0xfe) || (a >= 0x0100 && a < 0x0200) || (a >= load && a < end))) strayWrites.push(a);
+      else if (!(a === 0x01 || a === 0xdc04 || a === 0xdc05 || (a >= 0xfb && a <= 0xfe) || (a >= 0x0100 && a < 0x0200) || (a >= load && a < end))) strayWrites.push(a);
     },
   });
   cpu.call(init, 0);
@@ -595,10 +595,10 @@ test("SIDWAVE PRG runs standalone: SYS stub, machine detection, CIA timer and IR
   }
 });
 
-test("SIDWAVE speed 2: CIA IRQ invokes the player twice and PSID selects CIA timing", () => {
+test("SIDWAVE speed 2 doubles the CIA call rate and keeps score tempo", () => {
   const source = SCALE.replace("sidwave: 1.0", "sidwave: 1.1").replace("title: Probe", "title: Probe\nspeed: 2");
   const { compiled, sid } = compile(source);
-  assert.equal(sid.readUInt32BE(18), 0x80000000);
+  assert.equal(sid.readUInt32BE(18), 1);
   assert.equal(sid.readUInt16BE(0x76), 0x04);
   const mem = new Uint8Array(65536);
   mem.set(compiled.prg.subarray(2), 0x0801);
@@ -612,10 +612,18 @@ test("SIDWAVE speed 2: CIA IRQ invokes the player twice and PSID selects CIA tim
   mem[0xdc0e] = 0x80;
   cpu.call(compiled.entryAddress);
   const irq = mem[0x0314] | (mem[0x0315] << 8);
-  const irqCycles = cpu.call(irq);
-  assert.equal(io[0xdc04] | (io[0xdc05] << 8), Math.round(985_248 / (sidwaveFrameRate("PAL") * 2)) - 1);
-  const one = compile(SCALE).compiled;
-  assert.ok(irqCycles > one.prg.length * 0.2, `two player calls executed (${irqCycles} IRQ cycles)`);
+  const latch = Math.round(985_248 / (sidwaveFrameRate("PAL") * 2)) - 1;
+  assert.equal(io[0xdc04] | (io[0xdc05] << 8), latch);
+  const onsets = [];
+  for (let tick = 0; tick < 205; tick += 1) {
+    const gate = mem[0xd404] & 1;
+    cpu.call(irq);
+    if (!gate && (mem[0xd404] & 1)) onsets.push(tick);
+  }
+  assert.deepEqual(onsets.slice(0, 4), [0, 1, 2, 3].map((beat) => Math.round(beat * sidwaveFrameRate("PAL"))));
+  const psid = runPsid(sid, 205);
+  assert.equal(psid.mem[0xdc04] | (psid.mem[0xdc05] << 8), latch, "PSID init sets the multispeed latch");
+  assert.deepEqual(gateOns(voice(psid.states, 0)).slice(0, 4).map(({ frame }) => frame), onsets.slice(0, 4));
 });
 
 test("SIDWAVE player stays inside its memory and the frame budget", () => {
@@ -1007,23 +1015,109 @@ test("SIDWAVE wavetable relative note steps loop", () => {
   assert.deepEqual(v.freq.slice(0, 6), [sidFreq("C4"), sidFreq("C5"), sidFreq("C4"), sidFreq("C5"), sidFreq("C4"), sidFreq("C5")]);
 });
 
-test("SIDWAVE drums shorthand expands kit letters and rests into one-beat entries", () => {
-  const source = doc({ extra: `instruments:\n  kick: { waveform: noise }\n  hat: { waveform: noise }\n`, voices: `  - id: 1\n    patterns:\n      D: { drums: { kit: { k: kick, h: hat }, steps: "k.h" } }`, timeline: `  - { bars: 1, layers: { v1: D } }` });
-  const { doc: parsed } = compile(source);
-  assert.equal(arrangeSidwave(parsed).voices[0].notes.length, 3);
+test("SIDWAVE portamento glides from the previous pitch and reaches the target after N calls", () => {
+  for (const mode of ["PAL", "NTSC"]) {
+    const source = doc({
+      mode,
+      extra: `instruments: { lead: { waveform: tri, portamento: 4 } }\n`,
+      voices: `  - id: 1
+    instrument: lead
+    patterns:
+      A: { groove: [C4, G4, "-", { note: D4, portamento: 2 }, { note: F4, portamento: 0 }], length: 0.5 }`,
+      timeline: `  - { bars: 1, layers: { v1: A } }`,
+    });
+    const frame = (beat) => at(beat, 120, mode);
+    const { states } = runPsid(compile(source).sid, frame(2) + 1);
+    const v = voice(states, 0);
+    const hz = (note) => sidFreq(note, mode);
+    const rise = hz("G4") - hz("C4");
+    const onset = frame(0.5);
+    assert.equal(v.freq[0], hz("C4"), "the first note has no previous pitch");
+    assert.deepEqual(v.freq.slice(onset, onset + 5), [0, 1, 2, 3, 4].map((i) => hz("G4") - Math.floor(rise * (4 - i) / 4)));
+    assert.equal(v.ctrl[onset - 1] & 1, 0, "portamento retriggers unless legato is set");
+    assert.equal(v.ctrl[onset] & 1, 1);
+    const fall = hz("G4") - hz("D4");
+    assert.deepEqual(v.freq.slice(frame(1.5), frame(1.5) + 3), [hz("G4"), hz("D4") + Math.floor(fall / 2), hz("D4")]);
+    assert.equal(v.freq[frame(2)], hz("F4"), "entry zero overrides the instrument duration");
+  }
 });
 
-test("SIDWAVE built-in library recipes compile and drums use noise before descending pitches", () => {
+test("SIDWAVE legato keeps GATE, ADSR and all three tables running while pitch glides", () => {
+  const source = doc({
+    extra: `instruments:
+  lead:
+    adsr: [1, 4, 10, 3]
+    legato: true
+    portamento: 3
+    wavetable: [{ wave: pulse, frames: 10 }, { wave: tri+pulse }]
+    pulsetable: [{ set: 1000 }, { add: 7, frames: 60 }]
+    filtertable: [{ cutoff: 500, type: lowpass, resonance: 6 }, { add: 3, frames: 60 }]
+`,
+    voices: `  - id: 1
+    instrument: lead
+    patterns:
+      A: { length: 0.5, groove: [C4, D4, { note: E4, legato: false }, "-", { note: G4, legato: true, portamento: 0 }] }`,
+    timeline: `  - { bars: 1, layers: { v1: A } }`,
+  });
+  const { states } = runPsid(compile(source).sid, at(2) + 2);
+  const v = voice(states, 0);
+  const onset = at(0.5);
+  const delta = sidFreq("D4") - sidFreq("C4");
+  assert.deepEqual(v.ctrl.slice(onset - 2, onset + 4), Array(6).fill(0x51), "no gate drop or wavetable reset");
+  assert.deepEqual(v.ad.slice(onset - 2, onset + 4), Array(6).fill(0x14), "no hard restart");
+  assert.deepEqual(v.pw.slice(onset - 1, onset + 2), [-1, 0, 1].map((i) => 1000 + 7 * (onset + i)));
+  assert.deepEqual(filterRegisters(states).slice(onset - 1, onset + 2), [-1, 0, 1].map((i) => filterFrame(500 + 3 * (onset + i), 0x61, 0x1f)));
+  for (let i = 0; i <= 3; i += 1) {
+    const expected = Math.round(sidFreq("C4") + delta * i / 3);
+    assert.ok(Math.abs(v.freq[onset + i] - expected) <= (i % 3 ? 1 : 0), `glide call ${i}`);
+  }
+  assert.equal(v.ctrl[at(1) - 1] & 1, 0, "explicit false enables hard restart");
+  assert.equal(v.ad[at(1) - 1], 0);
+  assert.equal(v.ctrl[at(1)], 0x41, "the wavetable restarts on a normal attack");
+  assert.equal(v.ctrl[at(1.5)] & 1, 0, "the rest releases the gate");
+  assert.equal(v.ctrl[at(2)], 0x41, "legato after a rest plays a new attack");
+  assert.equal(v.freq[at(2)], sidFreq("G4"), "portamento zero changes pitch immediately");
+});
+
+test("SIDWAVE drums shorthand plays kit letters and leaves the dots silent", () => {
+  const source = doc({
+    extra: `instruments: { kick: { waveform: pulse }, hat: { waveform: noise } }\n`,
+    voices: `  - id: 1
+    patterns:
+      D: { length: 0.5, drums: { kit: { k: kick, h: hat }, steps: "k.h." } }`,
+    timeline: `  - { bars: 1, layers: { v1: D } }`,
+  });
+  const { doc: parsed, sid } = compile(source);
+  assert.equal(arrangeSidwave(parsed).voices[0].notes.length, 4);
+  const v = voice(runPsid(sid, at(4)).states, 0);
+  assert.deepEqual(gateOns(v).map(({ frame }) => frame), [0, at(1), at(2), at(3)]);
+  assert.equal(v.ctrl[0], 0x41);
+  assert.equal(v.ctrl[at(0.5)] & 1, 0);
+  assert.equal(v.ctrl[at(1)], 0x81);
+  assert.equal(v.ctrl[at(1.5)] & 1, 0);
+  assert.throws(() => parseSidwave(source.replace('"k.h."', '"x.h."')), /no kit instrument for "x"/);
+});
+
+test("SIDWAVE built-in library recipes compile and each drum writes descending frequencies", () => {
+  const drumPitches = {
+    kick: ["C6", "C3", "C2", "C1"],
+    snare: ["A6", "A6", "C6", "C4", "C3"],
+    hat: ["G7", "C7", "C7"],
+  };
   const names = ["kick", "snare", "hat", "bass_pluck", "filter_bass", "lead_pwm", "chip_arp_major", "chip_arp_minor", "bell_ring", "sync_lead", "pad_slow"];
   for (const name of names) {
-    const source = doc({ extra: "", voices: `  - id: 1\n    instrument: lib:${name}\n    patterns: { A: { groove: [C3] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
-    assert.ok(compile(source).compiled.prg.length > 100, `${name} compiles`);
+    const source = doc({ voices: `  - id: 1\n    instrument: lib:${name}\n    patterns: { A: { groove: [C3] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
+    const { sid } = compile(source);
+    const v = voice(runPsid(sid, 8).states, 0);
+    assert.equal(v.ctrl[0] & 1, 1, `${name} starts with gate on`);
+    if (drumPitches[name]) {
+      assert.equal(v.ctrl[0], 0x81, `${name} starts with noise`);
+      assert.deepEqual(v.freq.slice(0, drumPitches[name].length), drumPitches[name].map((note) => sidFreq(note)));
+    }
+    if (name === "kick") assert.equal(v.ctrl[1], 0x41);
+    if (name === "snare") assert.equal(v.ctrl[3], 0x41);
+    if (name === "hat") assert.equal(v.ctrl[2], 0x80);
   }
-  const source = doc({ voices: `  - id: 1\n    instrument: lib:kick\n    patterns: { A: { groove: [C3] } }`, timeline: `  - { bars: 1, layers: { v1: A } }` });
-  const v = voice(runPsid(compile(source).sid, 8).states, 0);
-  assert.ok(v.ctrl.some((c) => (c & 0xf0) === 0x80), `kick writes noise (${[...v.ctrl].join(",")})`);
-  assert.ok(v.ctrl.some((c) => (c & 0xf0) === 0x40), `kick changes to pulse (${[...v.ctrl].join(",")})`);
-  assert.ok(v.freq[3] < v.freq[2], "kick pitch falls during its tail");
 });
 
 test("SIDWAVE three wavetable voices stay within the per-call cycle budget", () => {
@@ -1229,4 +1323,18 @@ test("SIDWAVE three voices with wave and pulse tables and one filter table fit t
   const growth = playerBytes(compiled) - playerBytes(baseline);
   assert.ok(growth > 0);
   console.log(`SIDWAVE tables measurement: ${maxPlayCycles} cycles, ${playerBytes(baseline)} -> ${playerBytes(compiled)} player bytes (+${growth})`);
+});
+
+
+test("SIDWAVE 1.1 authoring example plays within the three-voice CPU and memory budgets", () => {
+  const spec = fs.readFileSync(new URL("../data/sound/sidwave.md", import.meta.url), "utf8");
+  const example = /```yaml\n(sidwave: 1\.1\n[\s\S]*?)```/.exec(spec)[1];
+  const { compiled, sid } = compile(example);
+  const baseline = compile(example.replace(/, portamento: \d+|, legato: true|^    portamento: \d+\n/gm, "")).compiled;
+  const { maxPlayCycles, strayWrites } = runPsid(sid, compiled.totalFrames * 2);
+  const playerBytes = ({ prg, streamBytes }) => prg.length - 2 - streamBytes.reduce((a, b) => a + b, 0);
+  assert.deepEqual(strayWrites, []);
+  assert.ok(maxPlayCycles < 4000, `authoring example uses ${maxPlayCycles} cycles`);
+  assert.ok(compiled.endAddress < SIDWAVE_MEMORY_END);
+  console.info(`SIDWAVE articulation measurement: ${maxPlayCycles} cycles, ${playerBytes(baseline)} -> ${playerBytes(compiled)} player bytes`);
 });
