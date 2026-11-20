@@ -176,7 +176,7 @@ Joystick port 2: `$DC00`, port 1: `$DC01`; bits 0-4 = up, down, left, right, fir
 - Paddles and the 1351 mouse (SID `$D419/$D41A`) are unverified here; keep them optional.
 
 ## 6. Music and sound effects
-- PSID files (GoatTracker, SID-Wizard, other trackers export them) carry load, init and play addresses (`c64://sound/sid/file-format`). Place the player at its load address (often `$1000`); call `init` with the song number in A once; call `play` once per frame from the raster IRQ at a fixed line. If play address is 0 the tune installs its own interrupt: do not call it.
+- PSID files (GoatTracker, SID-Wizard, other trackers export them) carry load, init and play addresses (`c64://sound/sid/file-format`). Place the player at its load address (often `$1000`); call `init` once with the song number minus one in A (`$00` = song 1); call `play` once per frame from the raster IRQ at a fixed line. If play address is 0 the tune installs its own interrupt: do not call it.
 - Reserve the player's zero page and RAM range in the memory map first. A player at `$A000-$BFFF` needs LORAM=0: `$01` = `$36`/`$35`/`$34`.
 - Speed: a tune written for 50 Hz runs 20% fast at 60 Hz. On NTSC skip one call in six:
 ```
