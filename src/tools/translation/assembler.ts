@@ -8,23 +8,43 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from "node:buffer";
 import { rangeOverlapsIo } from "../../ioRange.js";
-import { parseBraceToken, petsciiToScreenCode } from "../../petscii.js";
+import { parseBraceToken } from "../../petscii.js";
 import { OPCODE_INVENTORY } from "./opcodeInventory.js";
 import type { OpcodeAddressingMode } from "./opcodeInventory.js";
 
 /*
- * Dialect summary (what an LLM can rely on):
- *  - Labels: "name:" or, in column 0, "name" followed by an instruction, directive or nothing.
- *    ".local:" labels belong to the last global label. Names are case-sensitive, mnemonics are not.
- *  - Numbers: $hex, 0xhex, %binary, 0bbinary, decimal; "<x" and ">x" take the low and high byte.
- *  - Text: character literals ('A', "A" in an expression) and strings under .byte are raw ASCII;
- *    .text/.ascii/.petscii fold a-z to the PETSCII letters $41-$5A and accept
- *    {name}/{$xx} control codes; .scr/.screen give screen codes. So 'a' is $61 but
- *    .text "a" is $41; write .text for text the C64 prints. ACME's !text (raw), !pet and !scr
- *    use ACME's own tables (ACME_ENCODERS).
- *  - Comments: ";" and "//".
- *  - Conditionals, macros (\1..\9, named parameters, \@ unique per expansion) and repeats are
- *    expanded here; see SUPPORTED_DIRECTIVES for every accepted directive spelling.
+ * Dialect summary (what an LLM can rely on). Every directive spelling follows the documented
+ * meaning in one named assembler; test/hard06AssemblerDifferential.test.mjs holds the bytes of
+ * those assemblers for each spelling.
+ *  - Labels: "name:" or, in column 0, "name" followed by an instruction, directive or nothing
+ *    (ACME, 64tass); a colon-less name alone on a line must be referenced somewhere, otherwise it
+ *    is reported as an unknown instruction. ".local:" labels belong to the last global label.
+ *    Names are case-sensitive, mnemonics are not.
+ *  - Numbers: $hex, 0xhex, %binary, 0bbinary, decimal; "<x" and ">x" take the low and high byte
+ *    of the whole rest of the expression (ACME, 64tass, Kick Assembler). Comments: ";" and "//".
+ *  - ca65 (cc65 "ca65 Users Guide"): .byte/.byt (strings as written, which is ca65 without a
+ *    target character map), .word, .res n[, value] (zero when value is left out), .align n[, fill]
+ *    (fill 0), .incbin "file"[, offset[, size]], .include, .if/.else/.endif, .macro/.mac name
+ *    params ... .endmacro/.endmac (parameters replaced by their bare names), .repeat n ...
+ *    .endrep/.endrepeat (no counter name).
+ *  - 64tass (manual at tass64.sourceforge.net): .fill n[, value] (zero when value is left out;
+ *    64tass leaves the bytes uninitialised and outputs them as zeros), .rept n ... .endrept, .fi,
+ *    .binary "file"[, offset[, length]], "name .macro params" ... .endm/.endmacro called as #name
+ *    or .name, with \1-\9, \name, \{name} and \@ (the whole parameter list).
+ *  - ACME 0.97 (docs/AllPOs.txt): !byte/!by/!8/!08, !word/!wo/!16, !text/!tx/!txt/!raw (raw, as
+ *    without !convtab), !pet, !scr, !fill/!fi (fill 0), !align and, equal[, fill] (fill $EA),
+ *    !source/!src, !binary/!bin "file"[, [size][, [skip]]]. See ACME_ENCODERS.
+ *  - Kick Assembler 5.25 manual: .by, .wo; .fill n, value with a constant value (the loop
+ *    variable i is not supported).
+ *  - This assembler's own spellings, documented in data/assembly/assembly-spec.md ("Minimal
+ *    Directives"): .text/.ascii fold a-z to the PETSCII letters $41-$5A, turn "\n" into RETURN
+ *    ($0D) and accept {name}/{$xx} control codes, so .text "a" is $41 while 'a' is $61. 64tass
+ *    emits ASCII and Kick Assembler screen codes for .text, so lowercase letters in .text add a
+ *    warning. Also .org/org, .db/db, .dw/dw (a 16-bit word; in Kick Assembler .dw is a 32-bit
+ *    .dword), .ds/ds/res, .equ, byte, word, include.
+ *  - Strings take the escapes \0 \t \n \r \xNN \\ \" \' (the set of ACME 0.97).
+ *  - Unsupported spellings fail with SUPPORTED_DIRECTIVES; .scr, .screen, .petscii and .endr are
+ *    not documented by these assemblers and fail with the spelling to use instead.
  */
 export interface AssembleOptions {
   /**
@@ -110,7 +130,7 @@ interface AssignmentStatement {
 }
 
 type DirectiveName =
-  | "org" | "byte" | "word" | "text" | "screen" | "fill" | "align" | "alignmask" | "equ" | "reserve" | "include" | "incbin"
+  | "org" | "byte" | "word" | "text" | "fill" | "align" | "alignmask" | "equ" | "reserve" | "include" | "incbin"
   | "acmeText" | "acmePet" | "acmeScr" | "acmeBinary"
   | "if" | "else" | "endif";
 
@@ -247,6 +267,8 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   ".ORG": "org",
   ORG: "org",
   ".BYTE": "byte",
+  ".BYT": "byte",
+  ".BY": "byte",
   "BYTE": "byte",
   "DB": "byte",
   ".DB": "byte",
@@ -254,6 +276,7 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   "!BY": "byte",
   "!8": "byte",
   ".WORD": "word",
+  ".WO": "word",
   "WORD": "word",
   "DW": "word",
   ".DW": "word",
@@ -278,28 +301,36 @@ const DIRECTIVE_ALIASES: Record<string, DirectiveName> = {
   "!TX": "acmeText",
   "!TXT": "acmeText",
   "!RAW": "acmeText",
-  ".PETSCII": "text",
   "!PET": "acmePet",
-  ".SCR": "screen",
-  ".SCREEN": "screen",
   "!SCR": "acmeScr",
   ".INCLUDE": "include",
   "INCLUDE": "include",
   "!SOURCE": "include",
   "!SRC": "include",
   ".INCBIN": "incbin",
+  ".BINARY": "incbin",
   "!BINARY": "acmeBinary",
   "!BIN": "acmeBinary",
   ".IF": "if",
   ".ELSE": "else",
   ".ENDIF": "endif",
+  ".FI": "endif",
+};
+
+/** Spellings that no supported assembler documents with this meaning, and what to write instead. */
+const REMOVED_DIRECTIVES: Record<string, string> = {
+  ".SCR": "use !scr (ACME screen codes)",
+  ".SCREEN": "use !scr (ACME screen codes)",
+  ".PETSCII": "use !pet (ACME PETSCII) or .text",
+  ".ENDR": "use .endrept (64tass) or .endrep (ca65)",
 };
 
 /** Shown with "unsupported directive": every spelling the assembler accepts, grouped by meaning. */
 const SUPPORTED_DIRECTIVES =
-  ".org/org/* = ; .byte/.db/!byte/!by/!8 ; .word/.dw/!word/!wo/!16 ; .text/.ascii/.petscii ; !text/!tx/!txt/!raw ; !pet ; .scr/.screen ; !scr ; " +
-  ".fill/!fill/!fi ; .align ; !align ; .res/.ds ; .equ/name = value ; .include/!source/!src ; .incbin ; !binary/!bin ; " +
-  ".if/.else/.endif ; .macro name params/.endmacro/.endm ; .repeat n/.rept/.endrepeat/.endr";
+  ".org/org/* = ; .byte/.byt/.by/.db/!byte/!by/!8/!08 ; .word/.wo/.dw/!word/!wo/!16 ; .text/.ascii ; !text/!tx/!txt/!raw ; !pet ; !scr ; " +
+  ".fill/!fill/!fi ; .align ; !align ; .res/.ds ; .equ/name = value ; .include/!source/!src ; .incbin/.binary ; !binary/!bin ; " +
+  ".if/.else/.endif/.fi ; .macro/.mac name params ... .endmacro/.endmac/.endm ; name .macro params ... .endm ; " +
+  ".repeat n ... .endrep/.endrepeat ; .rept n ... .endrept";
 
 const RELATIVE_ONLY = new Set<string>(["BCC", "BCS", "BEQ", "BMI", "BNE", "BPL", "BVC", "BVS"]);
 
@@ -413,6 +444,11 @@ interface SourceLine {
 interface MacroDefinition {
   name: string;
   params: string[];
+  /**
+   * "ca65": ".macro name a, b", parameters are replaced where their bare names appear.
+   * "64tass": "name .macro a, b", parameters are referenced only as \name or \{name}.
+   */
+  style: "ca65" | "64tass";
   body: SourceLine[];
   location: SourceLocation;
 }
@@ -422,8 +458,10 @@ const MAX_NESTING_DEPTH = 16;
 const MAX_REPEAT_COUNT = 65_536;
 
 const BLOCK_CLOSERS: Record<string, { opens: string[]; closes: string[] }> = {
-  macro: { opens: [".MACRO"], closes: [".ENDMACRO", ".ENDM"] },
-  repeat: { opens: [".REPEAT", ".REPT"], closes: [".ENDREPEAT", ".ENDR"] },
+  // ca65: .macro/.mac ... .endmacro/.endmac; 64tass: .macro ... .endm/.endmacro.
+  macro: { opens: [".MACRO", ".MAC"], closes: [".ENDMACRO", ".ENDMAC", ".ENDM"] },
+  // ca65: .repeat ... .endrep/.endrepeat; 64tass: .rept ... .endrept.
+  repeat: { opens: [".REPEAT", ".REPT"], closes: [".ENDREPEAT", ".ENDREP", ".ENDREPT"] },
 };
 
 /** Upper-cased first directive of a line (after any "label:" prefixes), or undefined. */
@@ -438,12 +476,30 @@ function leadingDirective(text: string): string | undefined {
   while (tokens[index]?.kind === "symbol" && tokens[index + 1]?.kind === "punct" && tokens[index + 1]!.value === ":") {
     index += 2;
   }
+  // 64tass names a macro in column 0 before the directive: "name .macro".
+  if (index === 0 && /^[A-Za-z_]/.test(text) && tokens[1]?.kind === "symbol" && tokens[1].value.toUpperCase() === ".MACRO") {
+    index = 1;
+  }
   const head = tokens[index];
   return head?.kind === "symbol" && head.value.startsWith(".") ? head.value.toUpperCase() : undefined;
 }
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The text before a ";" or "//" comment that is outside quotes. */
+function withoutComment(text: string): string {
+  let quote: string | undefined;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+    if (quote) {
+      if (char === "\\") index += 1;
+      else if (char === quote) quote = undefined;
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === ";" || (char === "/" && text[index + 1] === "/")) return text.slice(0, index);
+  }
+  return text;
 }
 
 /** Splits macro call arguments at top-level commas; a trailing comment is dropped. */
@@ -487,25 +543,45 @@ function splitMacroArguments(text: string): string[] {
 }
 
 /**
- * Replaces `\1`..`\9` (positional arguments) and `\@` (a number unique to this expansion) in a
- * macro or repeat body line, and named parameters outside strings and comments.
+ * Replaces macro parameter references in one body line: `\1`..`\9` (positional), `\name` and
+ * `\{name}` (64tass), `\@` (64tass: the whole parameter list as written) and, for ca65-style
+ * macros, the bare parameter names outside strings and comments. `\` followed by anything else is
+ * left alone, so string escapes such as `\n` keep working. `allArgs` is undefined in a repeat body.
  */
-function substituteMacroText(text: string, params: readonly string[], args: readonly string[], unique: number): string {
+function substituteMacroText(
+  text: string,
+  params: readonly string[],
+  args: readonly string[],
+  allArgs: string | undefined,
+  bareNames: boolean,
+): string {
   let out = "";
   let quote: string | undefined;
   let comment = false;
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index]!;
-    if (char === "\\" && index + 1 < text.length) {
+    if (char === "\\" && index + 1 < text.length && !comment) {
       const next = text[index + 1]!;
       if (next === "@") {
-        out += String(unique);
+        if (allArgs === undefined) throw new Error("\\@ (the macro parameter list) is only valid inside a macro");
+        out += allArgs;
         index += 1;
         continue;
       }
       if (next >= "1" && next <= "9") {
         out += args[Number(next) - 1] ?? "";
         index += 1;
+        continue;
+      }
+      const braced = next === "{";
+      const nameStart = index + (braced ? 2 : 1);
+      let nameEnd = nameStart;
+      while (nameEnd < text.length && isSymbolPart(text[nameEnd]!) && text[nameEnd] !== ".") nameEnd += 1;
+      const name = text.slice(nameStart, nameEnd);
+      const position = name !== "" && isSymbolStart(name[0]!) ? params.indexOf(name) : -1;
+      if (position >= 0 && (!braced || text[nameEnd] === "}")) {
+        out += args[position] ?? "";
+        index = braced ? nameEnd : nameEnd - 1;
         continue;
       }
       out += char + next;
@@ -535,7 +611,7 @@ function substituteMacroText(text: string, params: readonly string[], args: read
       let end = index + 1;
       while (end < text.length && isSymbolPart(text[end]!)) end += 1;
       const word = text.slice(index, end);
-      const position = params.indexOf(word);
+      const position = bareNames ? params.indexOf(word) : -1;
       out += position >= 0 ? args[position] ?? "" : word;
       index = end - 1;
       continue;
@@ -599,7 +675,6 @@ class Parser {
   /** Constants defined so far by `name = expr`, for `.repeat` counts. */
   private readonly constants = new Map<string, number>();
   private expandedLines = 0;
-  private expansionCounter = 0;
   /** Names taken as labels because they stand in column 0 without a colon. */
   readonly bareLabels: Array<{ name: string; location: SourceLocation; alone: boolean }> = [];
 
@@ -675,6 +750,22 @@ class Parser {
           stream.consumePunct(":");
         }
 
+        // 64tass: "name .macro [params]" defines a macro called name.
+        const named = stream.peek();
+        const afterName = stream.peek(1);
+        if (
+          labels.length === 0 && named?.kind === "symbol" && /^[A-Za-z_]/.test(originalLine) &&
+          afterName?.kind === "symbol" && afterName.value.toUpperCase() === ".MACRO"
+        ) {
+          stream.consume();
+          stream.consume();
+          const end = this.findBlockEnd(lines, index, "macro", location);
+          this.defineMacro(named.value, "64tass", stream, lines.slice(index + 1, end), location);
+          statements.push({ labels, statement: undefined, location });
+          index = end;
+          continue;
+        }
+
         // A name in column 0 that is neither a mnemonic, a directive, a macro nor an assignment is a
         // label without a colon, as ACME, 64tass and DASM accept.
         const head = stream.peek();
@@ -701,17 +792,25 @@ class Parser {
         }
 
         const directive = leadingDirectiveOf(stream);
-        if (directive === ".MACRO") {
+        if (directive === ".MACRO" || directive === ".MAC") {
+          stream.consume();
+          const nameToken = stream.peek();
+          if (nameToken?.kind !== "symbol" || nameToken.value.startsWith(".")) {
+            throw new AssemblyError(".macro needs a name: .macro name param1, param2 (ca65) or name .macro param1, param2 (64tass)", location);
+          }
           stream.consume();
           const end = this.findBlockEnd(lines, index, "macro", location);
-          this.defineMacro(stream, lines.slice(index + 1, end), location);
+          this.defineMacro(nameToken.value, "ca65", stream, lines.slice(index + 1, end), location);
           statements.push({ labels, statement: undefined, location });
           index = end;
           continue;
         }
         if (directive === ".REPEAT" || directive === ".REPT") {
           stream.consume();
-          const expr = parseExpression(stream, new Set<string>());
+          const expr = parseExpression(stream, new Set<string>([","]));
+          if (stream.peek()?.kind === "punct" && stream.peek()!.value === ",") {
+            throw new AssemblyError(`${directive.toLowerCase()} with a counter name (ca65 ".repeat count, name") is not supported; use a macro or write the values out`, location);
+          }
           stream.expectEnd();
           const count = evaluateConstantExpression(expr, this.constants);
           if (count === undefined || !Number.isInteger(count) || count < 0 || count > MAX_REPEAT_COUNT) {
@@ -725,9 +824,8 @@ class Parser {
           this.countExpansion(count * body.length, location);
           statements.push({ labels, statement: undefined, location });
           for (let iteration = 0; iteration < count; iteration += 1) {
-            const unique = ++this.expansionCounter;
             const expanded = body.map((line) => ({
-              text: substituteMacroText(line.text, [], [], unique),
+              text: substituteMacroText(line.text, [], [], undefined, false),
               line: source.line,
               context: source.context ?? "repeat",
             }));
@@ -736,12 +834,25 @@ class Parser {
           index = end;
           continue;
         }
-        if (directive !== undefined && [".ENDMACRO", ".ENDM", ".ENDREPEAT", ".ENDR"].includes(directive)) {
-          throw new AssemblyError(`${directive.toLowerCase()} without a matching ${directive.includes("MACRO") || directive === ".ENDM" ? ".macro" : ".repeat"}`, location);
+        if (directive !== undefined && BLOCK_CLOSERS.macro!.closes.includes(directive)) {
+          throw new AssemblyError(`${directive.toLowerCase()} without a matching .macro`, location);
+        }
+        if (directive !== undefined && BLOCK_CLOSERS.repeat!.closes.includes(directive)) {
+          throw new AssemblyError(`${directive.toLowerCase()} without a matching .repeat or .rept`, location);
         }
 
+        // A macro is called by its name (ca65), or as #name or .name (64tass).
         const macroHead = stream.peek();
-        const macroName = macroHead?.kind === "symbol" ? macroHead.value.toUpperCase() : undefined;
+        let macroName: string | undefined;
+        if (macroHead?.kind === "symbol") {
+          macroName = macroHead.value.toUpperCase();
+          if (!this.macros.has(macroName) && macroName.startsWith(".")) macroName = macroName.slice(1);
+        } else if (macroHead?.kind === "punct" && macroHead.value === "#" && stream.peek(1)?.kind === "symbol") {
+          macroName = (stream.peek(1) as { value: string }).value.toUpperCase();
+          if (!this.macros.has(macroName)) {
+            throw new AssemblyError(`#${(stream.peek(1) as { value: string }).value} calls a macro that is not defined (macros must be defined before use)`, location);
+          }
+        }
         const macro = macroName !== undefined ? this.macros.get(macroName) : undefined;
         if (macro) {
           expansion = this.expandMacro(macro, originalLine, source, location);
@@ -771,13 +882,7 @@ class Parser {
     }
   }
 
-  private defineMacro(stream: TokenStream, body: SourceLine[], location: SourceLocation): void {
-    const nameToken = stream.peek();
-    if (nameToken?.kind !== "symbol" || nameToken.value.startsWith(".")) {
-      throw new AssemblyError(".macro needs a name: .macro name param1, param2", location);
-    }
-    stream.consume();
-    const name = nameToken.value;
+  private defineMacro(name: string, style: MacroDefinition["style"], stream: TokenStream, body: SourceLine[], location: SourceLocation): void {
     const upper = name.toUpperCase();
     if (INSTRUCTION_TABLE.has(upper) || upper in DIRECTIVE_ALIASES) {
       throw new AssemblyError(`Macro name "${name}" is a mnemonic or directive`, location);
@@ -798,14 +903,15 @@ class Parser {
       }
       params.push(stream.consumeSymbol());
     }
-    this.macros.set(upper, { name, params, body, location });
+    this.macros.set(upper, { name, params, style, body, location });
   }
 
   private expandMacro(macro: MacroDefinition, text: string, source: SourceLine, location: SourceLocation): SourceLine[] {
-    // Skip label prefixes and the macro name itself; the rest is the argument list.
-    const afterName = new RegExp(`^\\s*(?:[A-Za-z_.][\\w.]*\\s*:\\s*)*${escapeRegExp(macro.name)}(?![\\w.])`, "i").exec(text);
+    // Skip label prefixes and the macro name itself (with the # or . of a 64tass call); the rest is the argument list.
+    const afterName = new RegExp(`^\\s*(?:[A-Za-z_.][\\w.]*\\s*:\\s*)*[#.]?${escapeRegExp(macro.name)}(?![\\w.])`, "i").exec(text);
     const rest = afterName ? text.slice(afterName[0].length) : "";
     const args = splitMacroArguments(rest);
+    const allArgs = withoutComment(rest).trim();
     // A macro without named parameters takes its arguments as \\1 .. \\9.
     if (macro.params.length > 0 && args.length !== macro.params.length) {
       throw new AssemblyError(
@@ -814,9 +920,8 @@ class Parser {
       );
     }
     this.countExpansion(macro.body.length, location);
-    const unique = ++this.expansionCounter;
     return macro.body.map((line) => ({
-      text: substituteMacroText(line.text, macro.params, args, unique),
+      text: substituteMacroText(line.text, macro.params, args, allArgs, macro.style === "ca65"),
       line: source.line,
       context: `macro ${macro.name}`,
     }));
@@ -833,6 +938,9 @@ class Parser {
     if (!first) return undefined;
 
     if (first.kind === "symbol" && stream.peek(1)?.kind === "punct" && stream.peek(1)!.value === "=") {
+      if (first.value.toUpperCase() === ".PC") {
+        throw new AssemblyError('unsupported directive .pc (Kick Assembler); use "* = address"', location);
+      }
       const target = stream.consumeSymbol();
       stream.consumePunct("=");
       const expr = parseExpression(stream, new Set<string>());
@@ -866,6 +974,9 @@ class Parser {
       upper = `!${word.kind === "number" ? String(word.value) : String(word.value).toUpperCase()}`;
     } else {
       if (first.kind !== "symbol") {
+        if (first.kind === "punct" && (first.value === "+" || first.value === "-")) {
+          throw new AssemblyError("Anonymous labels (+ and -, as in 64tass and ACME) are not supported; use a named label such as \"loop:\"", location);
+        }
         throw new AssemblyError("Expected an opcode, directive, or assignment", location);
       }
 
@@ -883,7 +994,11 @@ class Parser {
     }
 
     if ((upper.startsWith(".") || upper.startsWith("!")) && !(upper in DIRECTIVE_ALIASES)) {
-      throw new AssemblyError(`unsupported directive ${upper.toLowerCase()}; supported: ${SUPPORTED_DIRECTIVES}${upper.startsWith(".") ? ' (a local label needs a trailing ":")' : ""}`, location);
+      const instead = REMOVED_DIRECTIVES[upper] ?? (upper === ".PC" ? 'use "* = address" (Kick Assembler .pc is not supported)' : undefined);
+      throw new AssemblyError(
+        `unsupported directive ${upper.toLowerCase()}${instead ? ` (${instead})` : ""}; supported: ${SUPPORTED_DIRECTIVES}${upper.startsWith(".") && !instead ? ' (a local label needs a trailing ":")' : ""}`,
+        location,
+      );
     }
 
     if (upper in DIRECTIVE_ALIASES) {
@@ -991,7 +1106,6 @@ class Parser {
         }
         case "byte":
         case "text":
-        case "screen":
         case "acmeText":
         case "acmePet":
         case "acmeScr":
@@ -1005,7 +1119,12 @@ class Parser {
             // A one-character string followed by an operator starts an expression: 'A'-64.
             const startsExpression = next.kind === "string" && [...next.value].length === 1 && asBinaryOperator(stream.peek(1)) !== undefined;
             if (next.kind === "string" && !startsExpression) {
-              args.push({ kind: "string", value: stream.consumeString() });
+              const value = stream.consumeString();
+              // ACME's !byte and !word take a string only as one character ("There's more than one character").
+              if (upper.startsWith("!") && (directive === "byte" || directive === "word") && [...value].length !== 1) {
+                throw new AssemblyError(`${upper.toLowerCase()} takes a string only as a single character, as in ACME; use !text for longer strings`, location);
+              }
+              args.push({ kind: "string", value });
             } else {
               args.push({ kind: "expr", expr: parseExpression(stream, new Set<string>(), charCode) });
             }
@@ -1422,6 +1541,15 @@ function parseOperand(stream: TokenStream, mnemonic: string): Operand {
   const first = stream.peek();
   if (!first) return { kind: "none" };
 
+  // "bne -" or "bcc ++": a reference to an anonymous label.
+  if (first.kind === "punct" && (first.value === "+" || first.value === "-")) {
+    let index = 0;
+    while (stream.peek(index)?.kind === "punct" && stream.peek(index)!.value === first.value) index += 1;
+    if (stream.peek(index) === undefined) {
+      throw new Error("Anonymous labels (+ and -, as in 64tass and ACME) are not supported; use a named label");
+    }
+  }
+
   // "A" alone is the accumulator for ASL, LSR, ROL and ROR; for every other instruction it is a
   // symbol, so a label named "a" works in "lda a" and "lda a+1".
   if (first.kind === "symbol" && first.value.toUpperCase() === "A" && stream.peek(1) === undefined && INSTRUCTION_TABLE.get(mnemonic)?.has(AddressingMode.Accumulator)) {
@@ -1622,6 +1750,8 @@ class Assembler {
   /** Reserved (.res) ranges from the last pass, as [start, end] inclusive. */
   private reserved: Array<[number, number]> = [];
   private readonly warnings: string[] = [];
+  /** Set once the .text letter-folding warning was given. */
+  private textFoldWarned = false;
   private readonly incbinCache = new Map<string, Uint8Array>();
   /** Open `.if` blocks of the current pass. */
   private ifStack: Array<{ active: boolean; parentActive: boolean; taken: boolean; seenElse: boolean; location: SourceLocation }> = [];
@@ -1941,7 +2071,6 @@ class Assembler {
       }
       case "byte":
       case "text":
-      case "screen":
       case "acmeText":
       case "acmePet":
       case "acmeScr": {
@@ -1950,6 +2079,12 @@ class Assembler {
             // Both passes encode, so the size is the same and a bad character is reported at once.
             const codes = encodeStringArgument(statement.name, arg.value, location);
             if (pass === 1) {
+              if (statement.name === "text" && !this.textFoldWarned && /[a-z]/.test(arg.value.replace(/\{[^}]*\}/g, ""))) {
+                this.textFoldWarned = true;
+                this.warnings.push(
+                  `${location.file}:${location.line}: .text turns a-z into the PETSCII letters $41-$5A (this assembler's rule); 64tass would emit the ASCII codes and Kick Assembler screen codes. Use !text for raw bytes, !pet for ACME's PETSCII or !scr for screen codes`,
+                );
+              }
               for (const code of codes) this.writeByte(code, location);
             } else {
               this.pc += codes.length;
@@ -2395,12 +2530,11 @@ function asciiToPetscii(char: string, location: SourceLocation): number {
 }
 
 /**
- * Bytes of a string argument. `.byte` is raw character codes; `.text` (also `.ascii`, `.petscii`,
- * `!text`, `!pet`) is PETSCII as above, plus {name}, {$xx} and {nn} control codes as in BASIC
- * strings; `.scr` (`.screen`, `!scr`) is screen codes: the PETSCII of the text converted by the
- * KERNAL rule (petsciiToScreenCode), so letters of either case are screen codes 1-26.
+ * Bytes of a string argument. `.byte` is raw character codes; `.text` and `.ascii` are PETSCII as
+ * above, plus {name}, {$xx} and {nn} control codes as in BASIC strings; the ACME directives use
+ * ACME_ENCODERS.
  */
-function encodeStringArgument(kind: "byte" | "text" | "screen" | AcmeTextDirective, value: string, location: SourceLocation): number[] {
+function encodeStringArgument(kind: "byte" | "text" | AcmeTextDirective, value: string, location: SourceLocation): number[] {
   const codes: number[] = [];
   if (kind === "acmeText" || kind === "acmePet" || kind === "acmeScr") {
     const encode = ACME_ENCODERS[kind];
@@ -2438,16 +2572,7 @@ function encodeStringArgument(kind: "byte" | "text" | "screen" | AcmeTextDirecti
     }
     const char = String.fromCodePoint(value.codePointAt(index)!);
     index += char.length;
-    const petscii = asciiToPetscii(char, location);
-    if (kind === "text") {
-      codes.push(petscii);
-      continue;
-    }
-    const screen = petsciiToScreenCode(petscii);
-    if (screen === undefined) {
-      throw new AssemblyError(`screen text character ${JSON.stringify(char)} has no screen code (it is a control code)`, location);
-    }
-    codes.push(screen);
+    codes.push(asciiToPetscii(char, location));
   }
   return codes;
 }

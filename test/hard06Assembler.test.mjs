@@ -2,7 +2,6 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { assemblyToPrgDetailed, AssemblyError } from "../src/tools/translation/assembler.js";
 import { disassemble, formatDisassembly } from "../src/tools/translation/disassembler.js";
-import { getChargenGlyphs } from "../src/chargen.js";
 
 // HARD06 TRANSLATE-3 to 8, 12 to 16: assembler dialect, expressions, diagnostics.
 
@@ -30,39 +29,33 @@ test("ACME spellings and screen-code text (TRANSLATE-4)", () => {
   fails("!align 3", /needs ANDVALUE, EQUALVALUE/);
 });
 
-test("screen-code text follows the KERNAL PETSCII-to-screen rule and matches the chargen table", () => {
-  const byPetscii = new Map(getChargenGlyphs().map((glyph) => [glyph.petsciiCode, glyph.screenCode & 0x7f]));
-  assert.deepEqual(asm('.scr "ABC abc@Z"'), [1, 2, 3, 32, 1, 2, 3, 0, 26]);
-  assert.deepEqual(asm('.screen "AZ0"'), [1, 26, 0x30]);
-  for (let ascii = 0x20; ascii <= 0x5f; ascii += 1) {
-    const char = String.fromCharCode(ascii);
-    if (char === '"' || char === "\\") continue;
-    assert.deepEqual(asm(`.scr "${char}"`), [byPetscii.get(ascii)], `ASCII ${char}`);
-  }
-  fails('.scr "\\n"', /no screen code/);
+test("spellings no supported assembler documents fail with the one to use (review point 3)", () => {
+  fails('.scr "A"', /unsupported directive \.scr \(use !scr/);
+  fails('.screen "A"', /unsupported directive \.screen \(use !scr/);
+  fails('.petscii "A"', /unsupported directive \.petscii \(use !pet/);
+  fails(".rept 2\n nop\n.endr", /no matching \.endrepeat|unsupported directive \.endr/);
+  fails(".pc = $1000", /unsupported directive \.pc .*\* = address/);
+  fails(".repeat 3, I\n.byte I\n.endrep", /counter name .* is not supported/);
+  fails(" ldx #3\n- dex\n bne -", /Anonymous labels/);
+  fails(" bne +\n nop\n+ rts", /Anonymous labels/);
+  // ACME rejects a longer string in !byte and !word; a single character is a value.
+  fails('!byte "ab"', /single character, as in ACME/);
+  assert.deepEqual(asm('!byte "a"\n!word "b"\n.byte "cd"'), [0x61, 0x62, 0x00, 0x63, 0x64]);
 });
 
-test("ACME text directives use ACME's tables: !text raw, !pet swaps case, !scr screen codes (review point 2)", () => {
-  // Expected bytes are the output of ACME 0.97 for the same lines.
-  assert.deepEqual(asm('!text "Test@[", 0'), [0x54, 0x65, 0x73, 0x74, 0x40, 0x5b, 0x00]);
-  assert.deepEqual(asm('!tx "ab"\n!txt "C"\n!raw "d"'), [0x61, 0x62, 0x43, 0x64]);
-  assert.deepEqual(asm('!text "a\\nb\\\\"'), [0x61, 0x0a, 0x62, 0x5c]);
-  assert.deepEqual(asm('!pet "Test", 13'), [0xd4, 0x45, 0x53, 0x54, 0x0d]);
-  assert.deepEqual(asm('!scr "Test@[]^ "'), [0x54, 0x05, 0x13, 0x14, 0x00, 0x1b, 0x1d, 0x1e, 0x20]);
-  assert.deepEqual(asm('!scr "AZ"\n!pet "{clr}"'), [0x41, 0x5a, 0x7b, 0x43, 0x4c, 0x52, 0x7d]);
-  // A single character in a formula is converted with the directive's table.
-  assert.deepEqual(asm("!pet 'a'+1\n!scr 'a'\n!text 'a'"), [0x42, 0x01, 0x61]);
-  fails('!text "\u0100"', /does not fit in one byte/);
-  fails("!macro m {\n nop\n}", /unsupported directive !macro/);
-});
-
-test("ACME !binary takes SIZE then SKIP and pads a short file with zeros (review point 2)", () => {
+test("ca65, 64tass and Kick Assembler data spellings (review point 3)", () => {
+  assert.deepEqual(asm(".byt 1, 2\n.by 3\n.wo $1234"), [1, 2, 3, 0x34, 0x12]);
+  assert.deepEqual(asm("F = 0\n.if F\n lda #1\n.fi\n rts"), [0x60]);
   const options = { resolveIncbin: () => Uint8Array.of(1, 2, 3, 4, 5) };
-  assert.deepEqual(asm('!binary "data.bin", 2, 1\n!bin "data.bin",, 3', options), [2, 3, 4, 5]);
-  const padded = assemblyToPrgDetailed('* = $c000\n!bin "data.bin", 7\n', options);
-  assert.deepEqual([...padded.prg].slice(2), [1, 2, 3, 4, 5, 0, 0]);
-  assert.match(padded.warnings.join("\n"), /padded with 2 zero bytes/);
-  fails('!bin "data.bin", 1, 6', /SKIP 6 is outside/, options);
+  assert.deepEqual(asm('.binary "f", 2, 2', options), [3, 4]);
+});
+
+test(".text folds letters and warns once that 64tass and Kick Assembler differ (review point 3)", () => {
+  const lower = assemblyToPrgDetailed('* = $c000\n.text "ab"\n.ascii "c"\n');
+  assert.deepEqual([...lower.prg].slice(2), [0x41, 0x42, 0x43]);
+  assert.equal(lower.warnings.length, 1);
+  assert.match(lower.warnings[0], /:2: \.text turns a-z into the PETSCII letters/);
+  assert.deepEqual(assemblyToPrgDetailed('* = $c000\n.text "AB {clr}"\n').warnings, []);
 });
 
 test(".res n,value fills, .res n reserves (TRANSLATE-4)", () => {
@@ -109,23 +102,43 @@ test("conditional assembly with .if, .else and .endif", () => {
   fails(".if later\n.endif\nlater = 1", /Undefined symbol "later"|known at this point/);
 });
 
-test("macros with named and positional parameters and a unique suffix", () => {
-  const source = [
+test("macros: ca65 and 64tass definitions, calls and parameter references (review point 3)", () => {
+  const ca65 = [
     ".macro setborder color",
     " lda #color",
     " sta $d020",
     ".endmacro",
-    ".macro wait n, label",
-    "label\\@: dex",
-    " bne label\\@",
-    ".endmacro",
+    ".mac twice",
+    " nop",
+    " nop",
+    ".endmac",
     " setborder 5",
     " setborder 2+1",
-    "wait 1, w",
-    "wait 2, w",
+    " twice",
   ].join("\n");
-  assert.deepEqual(asm(source), [0xa9, 5, 0x8d, 0x20, 0xd0, 0xa9, 3, 0x8d, 0x20, 0xd0, 0xca, 0xd0, 0xfd, 0xca, 0xd0, 0xfd]);
+  assert.deepEqual(asm(ca65), [0xa9, 5, 0x8d, 0x20, 0xd0, 0xa9, 3, 0x8d, 0x20, 0xd0, 0xea, 0xea]);
   assert.deepEqual(asm(".macro two\n lda #\\1\n ldx #\\2\n.endm\n two 1, 2"), [0xa9, 1, 0xa2, 2]);
+  // 64tass: "name .macro", called as #name or .name; \1, \name, \{name}; \@ is the parameter list.
+  const tass = [
+    "inc16 .macro",
+    " inc \\1",
+    " .endm",
+    "store .macro value, addr",
+    " lda #\\value",
+    " sta \\{addr}+1",
+    " .endmacro",
+    "list .macro",
+    " .byte \\@",
+    " .endm",
+    " #inc16 $fb",
+    " .store 7, $c0",
+    " #list 1, 2 ; comment",
+  ].join("\n");
+  assert.deepEqual(asm(tass), [0xe6, 0xfb, 0xa9, 7, 0x85, 0xc1, 1, 2]);
+  // In a 64tass macro a bare parameter name is not replaced; in a string \n stays an escape.
+  assert.deepEqual(asm("m .macro n\n .byte n, \\n\n .text \"a\\nb\"\n .endm\nn = 9\n #m 4"), [9, 4, 0x41, 0x0d, 0x42]);
+  fails(".repeat 2\n .byte \\@\n.endrep", /only valid inside a macro/);
+  fails(" #nothing 1", /not defined/);
   fails(".macro one a\n nop\n.endmacro\n one 1, 2", /Macro one takes 1 argument .*got 2/);
   fails(".macro one a\n nop\n.endmacro\n one", /got 0/);
   // An error inside an expansion names the macro and the calling line.
@@ -143,10 +156,10 @@ test("macro expansion is bounded", () => {
   fails(source, /nesting is deeper|exceeds/);
 });
 
-test(".repeat and .rept with constants (TRANSLATE-4)", () => {
+test(".repeat/.endrep/.endrepeat (ca65) and .rept/.endrept (64tass) with constants (TRANSLATE-4)", () => {
   assert.deepEqual(asm(".repeat 3\n nop\n.endrepeat"), [0xea, 0xea, 0xea]);
-  assert.deepEqual(asm("N = 2\n.rept N*2\n inx\n.endr"), [0xe8, 0xe8, 0xe8, 0xe8]);
-  assert.deepEqual(asm(".repeat 2\nl\\@: dex\n bne l\\@\n.endrepeat"), [0xca, 0xd0, 0xfd, 0xca, 0xd0, 0xfd]);
+  assert.deepEqual(asm("N = 2\n.rept N*2\n inx\n.endrept"), [0xe8, 0xe8, 0xe8, 0xe8]);
+  assert.deepEqual(asm(".repeat 2\n asl\n.endrep"), [0x0a, 0x0a]);
   assert.deepEqual(asm(".repeat 0\n nop\n.endrepeat\n rts"), [0x60]);
   fails(".repeat later\n nop\n.endrepeat\nlater = 1", /needs a count/);
   fails(".repeat 70000\n.endrepeat", /needs a count/);
