@@ -30,7 +30,7 @@ Not reachable: c64-wiki "Bank_Switching", VICE manual chapter 17. "(WF)" marks q
 | Item | file:line | Verdict | Corrected wording | Source |
 |---|---|---|---|---|
 | A1a | sound/sid-spec.md:41,53,109 | CONFIRMED-ERROR | `FREQ = round(f * 2^24 / clock)` is the 16-bit register value (no `>>8`, no "upper 16 bits") | Mapping $D400: "FREQUENCY=(REGISTER VALUE*CLOCK/16777216)Hz"; freq.py |
-| A1b | sound/sid-spec.md:117-124 | CONFIRMED-ERROR | PAL/NTSC: C4 $1167/$10C4, D4 $1389/$12D1, E4 $15ED/$151F, F4 $173B/$1661, G4 $1A13/$191E, A4 $1D45/$1C32, B4 $20DA/$1FA6, C5 $22CE/$2188 | freq.py (PAL 985248 Hz, NTSC 1022727 Hz) |
+| A1b | sound/sid-spec.md:117-124 | CONFIRMED-ERROR | PAL/NTSC: C4 $1167/$10C4, D4 $1389/$12D1, E4 $15ED/$151F, F4 $173B/$1661, G4 $1A13/$191F (fact check had $191E; 392 x 2^24 / 1022727 = 6430.52, rounds to 6431 = $191F), A4 $1D45/$1C32, B4 $20DA/$1FA6, C5 $22CE/$2188 | freq.py (PAL 985248 Hz, NTSC 1022727 Hz) |
 | A1c | sound/sid-spec.md:30-31 | CONFIRMED-ERROR | $D415 bits 0-2 = low 3 bits of cutoff; $D416 = high 8 bits | Mapping: "0-2 Low portion of filter cutoff frequency"; PRG: "Filter Cutoff Frequency: High-Byte" |
 | A2a | sound/sid-programming-best-practices.md:31,66-75,84-85 | CONFIRMED-ERROR | 54273 = $D401 frequency HIGH byte; 54274 = $D402 pulse width LOW. High byte 30..60 = 451-902 Hz PAL | PRG: "$D401 Voice 1: Frequency Control - High-Byte"; calculation |
 | A2b | same:28-32,91-94,183-185 | CONFIRMED-ERROR | "Ultra-low frequency" diagnosis is wrong; the quoted table value 0x113E is wrong (C4 PAL = $1167) | as A1b, A2a |
