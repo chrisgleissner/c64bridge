@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { readHostFile, resolveHostPath } from "../hostPaths.js";
 import { assemblyToPrgDetailed, AssemblyError } from "./translation/assembler.js";
-import { basicToPrg } from "./translation/basicTokenizer.js";
+import { basicToPrgDetailed } from "./translation/basicTokenizer.js";
 import {
   defineToolModule,
   OPERATION_DISCRIMINATOR,
@@ -386,7 +386,9 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
     // Compute PRG locally to expose structured metadata
     let activeProgram = originalProgram;
-    let prg = basicToPrg(activeProgram);
+    const tokenized = basicToPrgDetailed(activeProgram);
+    let prg = tokenized.prg;
+    let replacedLines = tokenized.replacedLines;
     let entryAddress = prg.readUInt16LE(0);
 
     const runBasic = async (source: string) => {
@@ -423,8 +425,11 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         });
       }
       const addresses = prgAddresses(prg);
-      const message = `BASIC program uploaded and started (RUN typed); it occupies ${addresses.load}-${addresses.end}. Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).`;
-      const fields = { entryAddress, addresses, prgSize: prg.length };
+      const unverifiedReplacedNote = replacedLines.length > 0
+        ? ` Line number(s) ${replacedLines.join(", ")} appear more than once in the source; the later text replaced the earlier text, as when typing a line again.`
+        : "";
+      const message = `BASIC program uploaded and started (RUN typed); it occupies ${addresses.load}-${addresses.end}. Its outcome was not observed; pass verify:true to poll the screen for BASIC errors (auto-fix applies there).${unverifiedReplacedNote}`;
+      const fields = { entryAddress, addresses, prgSize: prg.length, ...(replacedLines.length > 0 ? { replacedLines } : {}) };
       const base = textResult(message, { success: true, ...fields, details: result.details ?? null });
       return { ...base, structuredContent: { type: "json", data: { kind: "upload_run_basic" as const, format: "prg" as const, ...fields, resources: ["c64://basic/spec", "c64://guide/bootstrap"] } } };
     }
@@ -527,7 +532,8 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
         return structuredExecutionError("Auto-fix failed due to firmware error while re-running BASIC program.", data);
       }
 
-      const retryPrg = basicToPrg(fixAttempt.program);
+      const retryTokenized = basicToPrgDetailed(fixAttempt.program);
+      const retryPrg = retryTokenized.prg;
       let retryOutcome: BasicPollResult;
       try {
         retryOutcome = await pollRun(retryPrg, retryBefore);
@@ -556,6 +562,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
 
       activeProgram = fixAttempt.program;
       prg = retryPrg;
+      replacedLines = retryTokenized.replacedLines;
       entryAddress = prg.readUInt16LE(0);
       screenOutput = retryOutcome.screen;
       autoFixInfo = { changes: fixAttempt.changes, originalErrors: errors };
@@ -579,6 +586,10 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
           },
         }
       : {};
+    const replacedFields = replacedLines.length > 0 ? { replacedLines } : {};
+    const replacedNote = replacedLines.length > 0
+      ? ` Line number(s) ${replacedLines.join(", ")} appear more than once in the source; the later text replaced the earlier text, as when typing a line again.`
+      : "";
     const metadata = {
       success: true,
       entryAddress,
@@ -587,6 +598,7 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       details: result.details ?? null,
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...autoFixFields,
+      ...replacedFields,
       verified: true,
     };
 
@@ -599,10 +611,11 @@ async function executeUploadRunBasic(rawArgs: unknown, ctx: ToolExecutionContext
       resources: ["c64://basic/spec", "c64://guide/bootstrap"],
       ...(screenOutput ? { screen: screenOutput } : {}),
       ...autoFixFields,
+      ...replacedFields,
       verified: true,
     };
 
-    const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.`, metadata);
+    const base = textResult(`${message} Program at ${addresses.load}-${addresses.end}.${replacedNote}`, metadata);
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {
     if (error instanceof ToolError) {
@@ -765,6 +778,9 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
     const addresses = prgAddresses(prg, entryAddress);
     const where = ` Program at ${addresses.load}-${addresses.end}, entry ${addresses.entry} (SYS ${entryAddress}).`;
     const stopFields = stoppedInProgram ? { stopped: true, stoppedAt: fmt(stoppedAt!), ...(stopLabel ? { stoppedAtLabel: stopLabel } : {}) } : {};
+    const asmWarnings = asmResult.warnings;
+    const warningFields = asmWarnings.length > 0 ? { warnings: asmWarnings } : {};
+    const warningNote = asmWarnings.length > 0 ? ` Assembler warnings: ${asmWarnings.join(" | ")}` : "";
     const data = {
       kind: "upload_run_asm" as const,
       format: "prg" as const,
@@ -778,6 +794,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(shouldVerify && verified ? { verified: true } : {}),
       ...stopFields,
       ...symbolFields,
+      ...warningFields,
     };
     const message = stoppedInProgram
       ? `Assembly program assembled, uploaded and started; a checkpoint stopped the CPU at ${fmt(stoppedAt!)}${stopLabel ? ` (${stopLabel})` : ""} inside the program. Use c64_debug to inspect, step or continue.`
@@ -786,7 +803,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       : execution === "unconfirmed"
       ? "Assembly program assembled, uploaded and loaded, and the SYS command was typed. Execution was not observed (verify:false does not poll); pass verify:true to poll the screen for evidence."
       : "Assembly program assembled, uploaded, and executed successfully (verified).";
-    const base = textResult(message + where, {
+    const base = textResult(message + where + warningNote, {
       success: true,
       entryAddress,
       addresses,
@@ -798,6 +815,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
       ...(shouldVerify && verified ? { verified: true } : {}),
       ...stopFields,
       ...symbolFields,
+      ...warningFields,
     });
     return { ...base, structuredContent: { type: "json", data } };
   } catch (error) {

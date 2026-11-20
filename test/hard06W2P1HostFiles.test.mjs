@@ -109,3 +109,21 @@ test("assembler .include and .incbin read files inside the allowed host director
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("upload_run_asm reports assembler warnings in the text block and the data", async () => {
+  const program = '*=$C000\n.text "abc"\nrts\n';
+  const result = await programRunnersModule.invoke("upload_run_asm", { program }, { client: asmClient(program), logger, platform: platform("c64u") });
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.ok(result.structuredContent.data.warnings.length > 0);
+  assert.match(result.content[0].text, /Assembler warnings: /);
+});
+
+test("upload_run_basic names line numbers whose text was replaced by a later line", async () => {
+  const client = { async uploadAndRunBasic() { return { success: true }; }, async readScreen() { return "READY.\n"; } };
+  const result = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\n20 END\n10 PRINT "B"\n' }, { client, logger, platform: platform("c64u") });
+  assert.equal(result.isError, undefined, JSON.stringify(result.content));
+  assert.deepEqual(result.structuredContent.data.replacedLines, [10]);
+  assert.match(result.content[0].text, /Line number\(s\) 10 appear more than once/);
+  const clean = await programRunnersModule.invoke("upload_run_basic", { program: '10 PRINT "A"\n' }, { client, logger, platform: platform("c64u") });
+  assert.equal(clean.structuredContent.data.replacedLines, undefined);
+});
