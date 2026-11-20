@@ -1,0 +1,18 @@
+import fs from "node:fs";
+import { startViceMockServer } from "/home/claude/c64bridge/src/vice/mockServer.ts";
+const vice: any = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+fs.writeFileSync("/tmp/h6/progmem/vicecfg6.json", JSON.stringify({ vice: { host: "127.0.0.1", port: vice.port } }));
+process.env.C64BRIDGE_CONFIG = "/tmp/h6/progmem/vicecfg6.json"; process.env.C64_MODE = "vice"; process.env.VICE_TEST_TARGET = "mock";
+const { C64Client } = await import("/home/claude/c64bridge/src/c64Client.ts");
+const { toolRegistry } = await import("/home/claude/c64bridge/src/tools/registry/index.ts");
+const client = new C64Client("http://unused.local", { forceC64uFacade: false });
+const logger = { debug() {}, info() {}, warn() {}, error() {} };
+const platform = { id: "vice", features: [], limitedFeatures: [] } as any;
+const ctx: any = { client, logger, platform, setPlatform: () => platform, rag: {} };
+const call = async (args: any) => { const t = performance.now(); const r: any = await toolRegistry.invoke("c64_debug", args, ctx); console.log(`${args.op} ${(performance.now() - t).toFixed(0)}ms err=${r.isError ?? false} ${r.content[0].text.slice(0, 120)}`); };
+await call({ op: "create_checkpoint", address: "$C000" });
+await call({ op: "create_checkpoint", address: "$C100" });
+await call({ op: "continue_execution" });
+vice.registerValues.set(0, 0xC100); console.log("hit #2:", vice.hitCheckpoint(2));
+await call({ op: "wait_for_state", expectedPC: "$C000", timeoutMs: 3000 });
+process.exit(0);

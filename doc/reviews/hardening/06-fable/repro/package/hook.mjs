@@ -1,0 +1,1 @@
+export async function resolve(s,c,n){const r=await n(s,c);globalThis.__x=1;if(/node_modules/.test(r.url)){const m=r.url.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);process.stderr.write('MOD '+m[1]+'\n')}return r}

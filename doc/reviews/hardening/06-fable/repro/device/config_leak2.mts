@@ -1,0 +1,13 @@
+import fs from "node:fs"; import http from "node:http"; import net from "node:net";
+let seen: unknown = "none";
+const s = http.createServer((req, res) => { seen = req.headers["x-password"] ?? null; res.writeHead(200, {"content-type":"application/json"}); res.end('{"version":"0.1","errors":[]}'); });
+await new Promise<void>((r) => s.listen(0, "127.0.0.1", () => r()));
+fs.writeFileSync("/tmp/h6/device/cfg2.json", JSON.stringify({ c64u: { host: "192.0.2.1", networkPassword: "pw-for-c64u" } }));
+process.env.C64BRIDGE_CONFIG = "/tmp/h6/device/cfg2.json";
+process.env.U2_HOST = `127.0.0.1:${(s.address() as net.AddressInfo).port}`;
+const { createAllFacades } = await import("/home/claude/c64bridge/src/device.ts");
+const { primary, facades } = await createAllFacades();
+const u2: any = facades.get("u2");
+await u2.version();
+console.log(JSON.stringify({ primary: primary.selected, backends: [...facades.keys()], xPasswordReceivedByU2Host: seen }));
+s.close(); process.exit(0);

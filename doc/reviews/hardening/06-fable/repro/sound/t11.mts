@@ -1,0 +1,12 @@
+import { audioModule } from "/home/claude/c64bridge/src/tools/audio.ts";
+const logger={info(){},warn(){},debug(){},error(){}};
+let ons=0; const t0=Date.now(); const log:string[]=[];
+const client:any={ sidSetVolume: async()=>({success:true}), sidNoteOn: async()=>{ons++; log.push("on@"+(Date.now()-t0));return {success:true}}, sidNoteOff: async()=>({success:true}), runPrg: async()=>{log.push("runPrg@"+(Date.now()-t0));return {success:true}} };
+const ctx:any={client,logger,platform:{id:"c64u"},setPlatform(){}};
+await audioModule.invoke("music_generate",{steps:128,tempoMs:20},ctx);
+await new Promise(r=>setTimeout(r,100));
+const src = "sidwave: 1.0\ntempo: 120\nvoices:\n  - id: 1\n    patterns: { A: { groove: [C4, E4] } }\ntimeline:\n  - { bars: 1, layers: { v1: A } }\n";
+await audioModule.invoke("music_compile_and_play",{sidwave:src},ctx);
+const before=ons; await new Promise(r=>setTimeout(r,300));
+console.log("noteOn calls before/after 300ms after runPrg:", before, ons, log.slice(0,3).join(","), log.filter(l=>l.startsWith("runPrg")));
+process.exit(0);

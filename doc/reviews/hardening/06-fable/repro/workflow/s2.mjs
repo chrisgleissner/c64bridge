@@ -1,0 +1,15 @@
+import { start } from "./lib.mjs";
+const h = await start();
+const P = (o) => h.call("c64_program", o, { show: 3000 });
+const M = (o) => h.call("c64_memory", o, { show: 3000 });
+await P({ op: "upload_run_basic", program: '10 PRINT "HELLO WORLD"\n20 FOR I=1 TO 3:PRINT I:NEXT\n30 END' });
+await M({ op: "read_screen" });
+await P({ op: "upload_run_basic", program: '10 PRINT "HELLO\n20 PRINT (1+2\n30 GOTO 10' , verify: true});
+await P({ op: "upload_run_basic", program: '10 PRIMT "X"\n20 END', verify: true });
+await P({ op: "upload_run_basic", program: '10 PRIMT "X"\n20 END' });
+await M({ op: "list_basic" });
+await M({ op: "wait_for_text", pattern: "READY" });
+await M({ op: "wait_for_text", pattern: "NEVER", timeoutMs: 500 });
+await M({ op: "read", address: "$0801", length: 32, format: "dump" });
+await M({ op: "read", address: "$0801", length: 32 });
+await h.stop(); process.exit(0);

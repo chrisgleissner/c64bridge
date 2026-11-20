@@ -1,0 +1,11 @@
+import { start } from "./lib.mjs";
+const h = await start();
+const sc = (s) => Buffer.from([...s].map(ch => { const c = ch.charCodeAt(0); if (c>=65&&c<=90) return c-64; return c; }));
+const buf = Buffer.alloc(1000, 0x20); ["RUN","?SYNTAX  ERROR IN 10","READY."].forEach((l,i)=>sc(l).copy(buf,i*40));
+let r = await h.client.callTool({ name: "c64_memory", arguments: { op: "write", address: "$0400", bytes: buf.toString("hex") } });
+console.log(JSON.stringify(r).length, JSON.stringify(r.structuredContent.data, null, 0).slice(-300));
+r = await h.client.callTool({ name: "c64_program", arguments: { op: "upload_run_basic", program: '10 PRIMT "X"\n20 END' } });
+console.log(JSON.stringify(r, null, 1));
+r = await h.client.callTool({ name: "c64_memory", arguments: { op: "write", address: "$C000", bytes: "01 02" } });
+console.log(JSON.stringify(r, null, 1));
+await h.stop(); process.exit(0);

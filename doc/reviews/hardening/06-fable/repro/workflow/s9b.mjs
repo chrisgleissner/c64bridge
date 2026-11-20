@@ -1,0 +1,10 @@
+import { start } from "./lib.mjs";
+const h = await start();
+const c = (n, a) => h.call(n, a, { show: 1200 });
+await c("c64_select_backend", { op: "select", backend: "vice" });
+await c("c64_memory", { op: "write", address: "$D020", bytes: "05" });
+await c("c64_disk", { op: "unmount", drive: "8" });
+await c("c64_stream", { op: "start", stream: "video", target: "127.0.0.1:1" });
+await c("c64_input", { op: "keyboard", keys: ["RETURN"] });
+await c("c64_memory", { op: "read", address: "$0400", length: 4 });
+await h.stop(); process.exit(0);

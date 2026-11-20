@@ -1,0 +1,11 @@
+import { tools } from "/home/claude/c64bridge/src/tools/meta/audio.ts";
+import { recordAndAnalyzeAudio } from "/home/claude/c64bridge/src/audio/record_and_analyze_audio.ts";
+const logger={info(){},warn(){},debug(){},error(){}};
+const calls:string[]=[];
+const client:any={ sidSilenceAll: async()=>{calls.push("silence");return {success:true}}, runPrg: async()=>{calls.push("runPrg");return {success:true}}, recordAndAnalyzeAudio: (p:any)=>recordAndAnalyzeAudio(p) };
+const ctx:any={client,logger,platform:{id:"vice"},setPlatform(){}};
+const t = tools.find(x=>x.name==="music_compile_play_analyze")!;
+const src = "sidwave: 1.0\ntempo: 120\nvoices:\n  - id: 1\n    patterns: { A: { groove: [C4, E4] } }\ntimeline:\n  - { bars: 1, layers: { v1: A } }\n";
+const s=Date.now();
+const r:any = await t.execute({sidwave:src}, ctx);
+console.log(Date.now()-s,"ms", JSON.stringify(r).slice(0,300), calls);

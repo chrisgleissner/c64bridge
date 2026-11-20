@@ -1,0 +1,13 @@
+import {spawn} from 'node:child_process';
+const t0=Date.now();
+const c=spawn('node',['dist/index.js'],{cwd:'/home/claude/c64bridge',env:{...process.env,C64BRIDGE_STATE_DIR:'/tmp/h6/package/state'}});
+let buf='';const waiters=[];
+c.stdout.on('data',d=>{buf+=d;let i;while((i=buf.indexOf('\n'))>=0){const l=buf.slice(0,i);buf=buf.slice(i+1);try{const m=JSON.parse(l);const w=waiters.find(w=>w.id===m.id);if(w)w.res({m,len:l.length,t:Date.now()-t0})}catch{}}});
+const call=(id,method,params)=>new Promise(res=>{waiters.push({id,res});c.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n')});
+const i=await call(1,'initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'t',version:'1'}});
+console.log('initialize at',i.t,'ms; instructions?',!!i.m.result.instructions);
+c.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
+const l=await call(2,'tools/list',{});console.log('tools/list at',l.t,'ms bytes',l.len,'tools',l.m.result.tools.length);
+const r=await call(3,'resources/list',{});console.log('resources/list',r.t,'bytes',r.len);
+const p=await call(4,'prompts/list',{});console.log('prompts/list',p.t,'bytes',p.len);
+c.kill('SIGTERM');

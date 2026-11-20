@@ -1,0 +1,15 @@
+import { startViceMockServer } from "/home/claude/c64bridge/src/vice/mockServer.ts";
+import { ViceBackend } from "/home/claude/c64bridge/src/device.ts";
+process.env.VICE_TEST_TARGET="mock";
+const mock = await startViceMockServer();
+const b = new ViceBackend({ host: "127.0.0.1", port: mock.port } as any);
+await b.checkpointOperation((c) => c.checkpointCreate({ start: 0xc000 }));
+console.log("stopping checkpoints before reset:", mock.stoppingCheckpoints);
+const r = await b.reset();
+console.log("reset result:", JSON.stringify(r));
+console.log("stopping checkpoints after reset:", mock.stoppingCheckpoints);
+await b.runPrg(Buffer.from([0x01,0x08,0,0,0]));
+await b.checkpointOperation((c) => c.checkpointCreate({ start: 0xc100 }));
+await b.runPrg(Buffer.from([0x01,0x08,0,0,0]));
+console.log("after runPrg with a bp set:", mock.stoppingCheckpoints);
+await b.stop?.(); await mock.stop(); process.exit(0);

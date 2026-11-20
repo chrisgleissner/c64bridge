@@ -1,0 +1,11 @@
+import { startViceMockServer } from "/home/claude/c64bridge/src/vice/mockServer.ts";
+import { ViceBackend } from "/home/claude/c64bridge/src/device.ts";
+const mock = await startViceMockServer();
+delete process.env.VICE_TEST_TARGET;
+process.env.C64BRIDGE_VICE_REQUEST_TIMEOUT_MS="300";
+const b = new ViceBackend({ host: "127.0.0.1", port: mock.port } as any);
+mock.hang = true;
+const t = Date.now();
+const r = await b.ping();
+console.log("ping", r, "ms", Date.now()-t, "connections", mock.connectionsOpened);
+await mock.stop(); process.exit(0);

@@ -1,0 +1,38 @@
+import fs from "node:fs";
+import { startViceMockServer } from "/home/claude/c64bridge/src/vice/mockServer.ts";
+const vice: any = await startViceMockServer({ host: "127.0.0.1", port: 0 });
+fs.writeFileSync("/tmp/h6/progmem/vicecfg2.json", JSON.stringify({ vice: { host: "127.0.0.1", port: vice.port } }));
+process.env.C64BRIDGE_CONFIG = "/tmp/h6/progmem/vicecfg2.json"; process.env.C64_MODE = "vice";
+process.env.VICE_TEST_TARGET = "mock"; process.env.C64BRIDGE_POLL_MAX_MS = "300";
+const { C64Client } = await import("/home/claude/c64bridge/src/c64Client.ts");
+const { toolRegistry } = await import("/home/claude/c64bridge/src/tools/registry/index.ts");
+const client = new C64Client("http://unused.local", { forceC64uFacade: false });
+const logger = { debug() {}, info() {}, warn() {}, error() {} };
+const platform = { id: "vice", features: [], limitedFeatures: [] } as any;
+const ctx: any = { client, logger, platform, setPlatform: () => platform, rag: {} };
+async function call(tool: string, args: any, max = 500) {
+  const t0 = performance.now();
+  const r: any = await toolRegistry.invoke(tool, args, ctx);
+  console.log(`--- ${tool} ${JSON.stringify(args)} ${(performance.now() - t0).toFixed(0)}ms err=${r.isError ?? false}`);
+  console.log("   " + String(r.content?.[0]?.text).slice(0, max).replace(/\n/g, "\n   "));
+  return r;
+}
+const src = "*=$C000\nstart: lda #1\nloop: sta $0400\n jsr sub\n jmp loop\nsub: inc $d020\n rts\n";
+await call("c64_program", { op: "upload_run_asm", program: src }, 900);
+await call("c64_debug", { op: "create_checkpoint", address: "loop" });
+await call("c64_debug", { op: "create_checkpoint", address: "CHROUT" });
+await call("c64_memory", { op: "read", address: "CHROUT", length: 3 });
+const w = call("c64_debug", { op: "wait_for_state", timeoutMs: 3000 }, 900);
+setTimeout(() => console.log("hit:", vice.hitCheckpoint(1)), 200);
+await w;
+await call("c64_debug", { op: "get_registers" }, 900);
+await call("c64_memory", { op: "read", address: "$0400", length: 8 });
+await call("c64_debug", { op: "get_monitor_state" }, 200);
+await call("c64_debug", { op: "step" });
+await call("c64_debug", { op: "step", mode: "over", count: 2 });
+await call("c64_memory", { op: "disassemble", address: "loop", instructionCount: 3 });
+await call("c64_debug", { op: "list_checkpoints" }, 900);
+await call("c64_debug", { op: "continue_execution" });
+await call("c64_debug", { op: "get_monitor_state" }, 200);
+await call("c64_debug", { op: "wait_for_state", timeoutMs: 300 }, 300);
+process.exit(0);

@@ -1,0 +1,14 @@
+import { start } from "./lib.mjs";
+const h = await start();
+const P = (o) => h.call("c64_program", o, { show: 3000 });
+const M = (o) => h.call("c64_memory", o, { show: 3000 });
+const sc = (s) => Buffer.from([...s].map(ch => { const c = ch.charCodeAt(0); if (c>=65&&c<=90) return c-64; return c; })).toString("hex");
+const screen = (lines) => { const buf = Buffer.alloc(1000, 0x20); lines.forEach((l, i) => Buffer.from(sc(l), "hex").copy(buf, i*40)); return buf.toString("hex"); };
+await M({ op: "write", address: "$0400", bytes: screen(["RUN", "", "?SYNTAX  ERROR IN 10", "READY."]) });
+await P({ op: "upload_run_basic", program: '10 PRIMT "X"\n20 END' });
+await P({ op: "upload_run_basic", program: '10 PRINT "X\n20 END', verify: true });
+await M({ op: "write", address: "$0400", bytes: screen(["RUN", "?SYNTAX  ERROR IN 10", "READY."]) });
+await P({ op: "upload_run_basic", program: '10 PRINT "X"\n20 END', verify: true });
+await M({ op: "write", address: "$0400", bytes: screen(["RUN", "?UNDEF'D STATEMENT  ERROR IN 20", "READY."]) });
+await P({ op: "upload_run_basic", program: '10 PRINT "X"\n20 GOTO 99', verify: true });
+await h.stop(); process.exit(0);
