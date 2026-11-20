@@ -38,7 +38,7 @@ Each BASIC program in memory (and on disk/tape) is a contiguous block:
 | Terminator | 2 bytes | Final `$0000` sentinel |
 
 Pointers increase monotonically. The final record’s pointer references the terminator.  
-Tokenisation replaces keywords by single-byte codes (`$80–$CB`), ignoring quoted strings and `REM` comments. Empty lines are stored as a single `$20` (space).
+Tokenisation replaces keywords by single-byte codes (`$80–$CB`, including the operator tokens `$AA–$AE` for `+ - * / ↑` and `$B1–$B3` for `> = <`; π is `$FF`), ignoring quoted strings and `REM` comments. Empty lines are stored as a single `$20` (space).
 
 ---
 
@@ -345,7 +345,7 @@ Constants: `π`, `TI`, `TI$`.
 
 | Name | Meaning | Typical Range |
 |------|----------|----------------|
-| `PI` | 3.14159265 | Constant |
+| `PI` | 3.14159265 | Constant (π character, token `$FF`) |
 | `ST` | Device status byte | Bit6=EOF, Bit7=No device |
 | `TI` | System tick counter | 1/60s resolution |
 | `TI$` | Time string | "hhmmss" |
