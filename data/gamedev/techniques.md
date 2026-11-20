@@ -1,7 +1,7 @@
 # C64 Game Techniques: IRQ, Sprites, Scrolling, Input, Sound
 
 **Summary:** Compact recipes for the techniques almost every C64 game needs, with fresh minimal 6502 snippets. Snippets use 64tass/KickAssembler-compatible syntax (`* = addr`, `.byte`, `<label`, `>label`, `;` comments); the bridge's built-in assembler (`upload_run_asm`) accepts the basic subset. Anonymous `+` branch labels are 64tass style; rename for other assemblers. Snippets for IRQ setup, joystick edge, NTSC skip, LFSR, PAL detect and the turbo speed probe assembled with 64tass and ran in VICE 3.10 x64sc; the multiplexer assembled but was not run; the double-IRQ stable-raster text is a sketch; the open-border entries follow Bauer's steps and were not run.
-**Read when:** implementing display timing, sprites, scrolling, collision, input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling, Ultimate start-up checks (section 10) or bitmap and multicolour modes (section 11). Frame structure and budgets: `c64://gamedev/architecture`. Register detail: `c64://graphics/vic/spec`, `c64://io/cia/spec`, `c64://sound/sid/spec`.
+**Read when:** implementing display timing, sprites, scrolling, collision, input, music/SFX (also several SIDs), random numbers, PAL/NTSC handling, Ultimate start-up checks (section 10) bitmap and multicolour modes (section 11) or multiply and divide (section 12). Frame structure and budgets: `c64://gamedev/architecture`. Register detail: `c64://graphics/vic/spec`, `c64://io/cia/spec`, `c64://sound/sid/spec`.
 
 Sections 1-3, 6 and 9 end with **Seen in** (open-source projects to study; URLs and licences in `c64://gamedev/references`). Marks: "(unverified)" = not confirmed against a primary source.
 
@@ -287,3 +287,85 @@ Mode bits: `$D011` bit 5 BMM, `$D016` bit 4 MCM, `$D011` bit 6 ECM = 0 (Bauer 3.
 ```
 - Layout: 8 consecutive bytes form one 8x8 cell, cells run left to right, 40 per row (320 bytes per cell row). Hires byte for (x, y): `base + 40 * (y AND 248) + (y AND 7) + (x AND 504)`, bit `7 - (x AND 7)` (leftmost pixel = bit 7). Multicolour (x = 0-159): byte `base + 40 * (y AND 248) + (y AND 7) + 2 * (x AND 252)`, bit pair `(3 - (x AND 3)) * 2` upwards.
 - Clear the bitmap (8000 bytes) and set the 1000 screen bytes (and colour RAM for multicolour) before turning the mode on, or blank the screen (`$D011` bit 4 = 0) while you do.
+
+## 12. Multiply and divide (unsigned, shift-and-add)
+All operands are zero-page bytes (`f1`, `f2`; 16-bit `m1`, `m2`, `dvd`, `dvs`, `rem`; 32-bit `prod`), low byte first; choose free bytes from `c64://gamedev/architecture` section 4. Decimal mode must be off (`cld`). X is used as the loop counter and ends at 0; Y is not touched. Local labels `_x` are 64tass style.
+| Routine | Bytes | Cycles (with `rts`, without `jsr`) | Divide by zero |
+|---|---|---|---|
+| `mul8` 8x8 -> 16 | 18 | 134-166 | - |
+| `mul16` 16x16 -> 32 | 39 | 623-927 | - |
+| `div8` 8/8 | 19 | 158-174 | quotient `$FF`; test the divisor first |
+| `div16` 16/16 | 44 | 655-1007 | quotient `$FFFF`; test the divisor first |
+Verified: assembled with 64tass 1.60 and run in a 6502 interpreter built from the c64ref opcode and cycle tables, against exact results for all 65,536 input pairs of `mul8` and `div8` and for 350,144 pairs of `mul16` and `div16` (all pairs of 12 edge values plus random pairs). Removing a `clc` or a `cmp` makes the check fail. Alternative for many 8x8 products: a table of squares, a*b = f(a+b) - f(a-b) with f(n) = floor(n*n/4) (arithmetic identity; no routine given, speed unverified).
+```
+; 8 x 8 -> 16 unsigned. In: f1, f2. Out: A = high byte, f1 = low byte. f2 kept.
+mul8    lda #0
+        ldx #8
+        lsr f1
+_m8     bcc _m8n
+        clc
+        adc f2
+_m8n    ror a
+        ror f1
+        dex
+        bne _m8
+        rts
+; 16 x 16 -> 32 unsigned. In: m1, m2. Out: prod..prod+3. m1 destroyed, m2 kept.
+mul16   lda #0
+        sta prod+2
+        sta prod+3
+        ldx #16
+_m16    lsr m1+1
+        ror m1
+        bcc _m16n
+        lda prod+2
+        clc
+        adc m2
+        sta prod+2
+        lda prod+3
+        adc m2+1
+        sta prod+3
+_m16n   ror prod+3
+        ror prod+2
+        ror prod+1
+        ror prod
+        dex
+        bne _m16
+        rts
+; 8 / 8 unsigned. In: f1 = dividend, f2 = divisor. Out: f1 = quotient, A = remainder.
+div8    lda #0
+        ldx #8
+        asl f1
+_d8     rol a          ; partial remainder < 128 before ROL: no carry out
+        cmp f2
+        bcc _d8n
+        sbc f2          ; C = 1 here: quotient bit 1
+_d8n    rol f1
+        dex
+        bne _d8
+        rts
+; 16 / 16 unsigned. In: dvd, dvs. Out: dvd = quotient, rem = remainder. dvs kept.
+div16   lda #0
+        sta rem
+        sta rem+1
+        ldx #16
+_d16    asl dvd
+        rol dvd+1
+        rol rem
+        rol rem+1      ; remainder < $8000 before ROL: no carry out
+        lda rem
+        cmp dvs
+        lda rem+1
+        sbc dvs+1
+        bcc _d16n
+        lda rem
+        sbc dvs
+        sta rem
+        lda rem+1
+        sbc dvs+1
+        sta rem+1
+        inc dvd
+_d16n   dex
+        bne _d16
+        rts
+```

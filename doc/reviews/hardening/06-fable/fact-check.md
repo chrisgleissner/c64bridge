@@ -259,3 +259,14 @@ Every row was checked against a copy fetched on 2026-11-20 and kept in `~/.c64br
 | Setup values `$3B`, `$18`/`$08`, `$18` | ADDED | from the bit layouts above; `$D018 = $18` as A3d |
 | Byte `base + 40*(y AND 248) + (y AND 7) + (x AND 504)`, bit `7 - (x AND 7)`; multicolour form with `2*(x AND 252)` | ADDED | Mapping $D011 bit 5 program line 100 and "POKE BY,PEEK(BY) OR (2^(NOTX AND 7))"; multicolour form derived (x_hires = 2x) |
 | 8 bytes per cell, 40 cells per row | ADDED | Mapping ("The ninth byte controls the eight dots directly to the right"); Bauer g-access address VC/RC |
+
+### D4 - Multiply and divide (data/gamedev/techniques.md section 12)
+
+| Fact | Verdict | Source |
+|---|---|---|
+| `mul8`, `mul16`, `div8`, `div16` give exact products, quotients and remainders | ADDED, verified | `verify/muldiv.asm` assembled with 64tass 1.60; `verify/test_muldiv.py` runs the bytes in `verify/sim6502.py` (tables parsed from c64ref `cpu_6502.txt`): all 65,536 pairs for `mul8`/`div8`, 350,144 pairs (12x12 edge grid plus random) for `mul16`/`div16`; result in `verify/result.txt` |
+| The checks can fail | CONFIRMED | `neg_mul8.asm` (first `clc` removed) fails at (1,0); `neg_div8.asm`, `neg_div16.asm` (`cmp` replaced by `nop`) fail at (1,1) |
+| Sizes 18/39/19/44 bytes; cycles 134-166, 623-927, 158-174, 655-1007 | ADDED | 64tass label file `muldiv.lbl` (routine start addresses, 120 bytes total); cycle counts from the interpreter using c64ref [timing] including branch-taken and page-cross extras |
+| Divide by zero returns quotient `$FF` / `$FFFF` | ADDED | `result.txt` divide-by-zero set |
+| An earlier draft guarded a carry out of `ROL` in the dividers; the guard was removed | NOTE | the guarded and unguarded versions agree on all pairs: the partial remainder is below 128 (`$8000`) before each `ROL` because it is less than the divisor and is built from at most 7 (15) dividend bits |
+| Quarter-square identity a*b = f(a+b) - f(a-b), f(n) = floor(n*n/4) | ADDED (arithmetic) | (a+b)^2 - (a-b)^2 = 4ab; a+b and a-b have the same parity, so the floors cancel |

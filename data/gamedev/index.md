@@ -40,6 +40,7 @@ A stock-C64 version of a MODERN design: drop the detection and `.cfg`, budget 17
 | Music and SFX, several SIDs, NTSC speed | techniques section 6, `c64://ultimate/multisid` |
 | Memory map and VIC bank | architecture sections 4 and 5 |
 | Bitmap, multicolour text and bitmap setup, pixel address | techniques section 11 |
+| 8/16-bit multiply and divide routines | techniques section 12 |
 | Build, `.cfg`, REU image, crunch | toolchain |
 | C compilers: zero page, calling convention, linker config, startup (cc65, Oscar64, llvm-mos) | toolchain section 1 |
 | Real code to study, licences | references |
