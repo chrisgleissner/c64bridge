@@ -513,3 +513,4 @@ firmware 3.15a, 2026-11-20 (`~/.c64bridge/h6/hw/results.md`). Tool outputs were 
 | Turbo row "via `$D031` if enabled by config" | MADE precise | `Turbo Control` = `U64 Turbo Registers` or `TurboEnable Bit` (measured rows 31, 37) |
 | SID count 8 / 10 on C64U | MOVED to pointer | duplicated `c64://ultimate/multisid` |
 | Resource sizes | UPDATED | file sizes after this rewrite |
+| Built-in assembler "basic directives only"; `run_prg` path "host-local on VICE, device-visible on Ultimate" | CORRECTED (also toolchain section 1) | `src/tools/translation/assembler.ts:16-46,330-334` (macros, `.if`, `.include`, `.incbin`, repeat); `run_prg` `location: "host"` measured row 8 |

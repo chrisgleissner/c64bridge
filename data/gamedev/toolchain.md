@@ -14,7 +14,7 @@ Sources: the tools' own files (versions named per row), firmware `1541ultimate@7
 | ca65/cc65 | asm + C | linker configurations per target (`cfg/c64.cfg`) | https://cc65.github.io |
 | Oscar64 (GPL-3.0) | C/C++ | C64 libraries in `include/c64`: `rasterirq.h` (IRQ chain), `sprites.h` (`vspr_*` virtual sprites), `memmap.h`, `reu.h`, `joystick.h`; overlays. Declare hardware registers and variables shared with interrupts `volatile`, a `$01` bank switch `volatile __memmap`; `__asm volatile {}` stops the optimiser changing that block (`oscar64.md` "volatile", "inline assembler") | https://github.com/drmortalwombat/oscar64 |
 | llvm-mos | C/C++ (LLVM) | `mos-c64-clang`; writes an ELF file beside the PRG (README example `hello.elf`) | https://github.com/llvm-mos/llvm-mos-sdk |
-| c64bridge `upload_run_asm` | asm subset | no installation; directives `* =`, `.byte`, `.word`, `.text`, `.fill`, `.align`; no macros or segments | built in |
+| c64bridge `upload_run_asm` | asm | no installation; data, fill, align, `.if`, `.include`, `.incbin`, macro and repeat directives in ca65, 64tass, ACME and Kick Assembler spellings; no segments (`src/tools/translation/assembler.ts:16-46`) | built in |
 Write IRQ chains, the multiplexer, the scroll copy and the music call in assembly; game logic may be assembly or C. Pin tool versions in the build. KickAssembler is a separate download: read its licence before bundling the jar.
 
 ### C compiler runtime facts (cc65, Oscar64, llvm-mos)
