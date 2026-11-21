@@ -6,6 +6,31 @@
 
 
 
+## 1.3.1 - 2026-11-20
+
+### Features
+
+- add SIDWAVE 1.1: named instruments and per-note instruments, combined waveforms, ring modulation and hard sync, instrument wavetables, pulse tables and filter tables, portamento and legato, drum patterns, multispeed playback (speed 1-4) and a library of 11 instruments (lib:kick, lib:snare, lib:hat, lib:bass_pluck, lib:filter_bass, lib:lead_pwm, lib:chip_arp_major, lib:chip_arp_minor, lib:bell_ring, lib:sync_lead, lib:pad_slow); SIDWAVE 1.0 documents compile to the same bytes as in 1.3.0
+- add the original presets chiptune_drive (the new default), ambient_filter and funk_bass; fuer_elise stays available
+- make music_generate compose a seeded eight-bar song with a chord progression, filtered bass, chip arpeggio, lead with portamento and vibrato, and drums, with the new optional parameters style (chiptune, ambient, funk) and seed
+- describe joystick actions, sound checks and the placement of sprite data in the game-development skill
+
+### Bug Fixes
+
+- compare upload_run_asm verify: true against the screen before the program starts, so a program that prints once and loops is no longer reported as having changed nothing
+- report verification.measured: false with both causes when SID verification on the u2 profile or VICE cannot measure anything
+- set the SID volume to 15 in note_on when it is 0, as after a reset
+- include the border in VICE capture_frame
+- count configuration items, not categories, in the snapshot itemCount
+- report detected_bpm as null instead of a rate of pitch changes when arpeggios or wavetables play
+- correct the C64 Ultimate facts: the Turbo Control label C64U Turbo Registers, CPU Speed in registers mode, the 1 MHz hold of up to 4.2 s after a start, the speed probe values, the $00 terminator of a UCI LOAD_CONFIG file name and Badline Timing in registers mode
+- fix two test races that hung or failed the mock suite under load
+
+### Breaking or behaviour changes
+
+- music_generate runs its song as a PRG with its own player, like play_preset, so it replaces the program in memory; it previously played notes timed from the host
+- play_preset without a preset plays chiptune_drive instead of fuer_elise
+
 ## 1.3.0 - 2026-11-20
 
 ### Features
