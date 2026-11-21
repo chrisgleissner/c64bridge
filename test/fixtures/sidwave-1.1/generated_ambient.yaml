@@ -1,0 +1,293 @@
+sidwave: "1.1"
+title: Signal 41 | ambient
+tempo: 80
+mode: PAL
+speed: 1
+voices:
+  - id: 1
+    name: Bass and drums
+    instrument: lib:filter_bass
+    patterns:
+      Bass:
+        length: 0.25
+        groove:
+          - C2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - C3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - C2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - G#2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - G#3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - G#2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - D#2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - D#3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - D#2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - A#2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - A#3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - A#2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - C2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - C3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - C2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - G#2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - G#3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - G#2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - D#2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - D#3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - D#2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+          - A#2
+          - "-"
+          - "-"
+          - C3@lib:hat
+          - "-"
+          - "-"
+          - A#3
+          - "-"
+          - "-"
+          - "-"
+          - C3@lib:snare
+          - A#2
+          - "-"
+          - "-"
+          - C3@lib:kick
+          - "-"
+  - id: 2
+    name: Harmony
+    patterns:
+      Chords:
+        length: 0.5
+        groove:
+          - note: C3
+            len: 2
+            inst: lib:pad_slow
+          - note: C3
+            len: 1.5
+            inst: lib:chip_arp_minor
+          - C3@lib:bell_ring
+          - note: G#3
+            len: 2
+            inst: lib:pad_slow
+          - note: G#3
+            len: 1.5
+            inst: lib:chip_arp_major
+          - G#3@lib:bell_ring
+          - note: D#3
+            len: 2
+            inst: lib:pad_slow
+          - note: D#3
+            len: 1.5
+            inst: lib:chip_arp_major
+          - D#3@lib:bell_ring
+          - note: A#3
+            len: 2
+            inst: lib:pad_slow
+          - note: A#3
+            len: 1.5
+            inst: lib:chip_arp_major
+          - A#3@lib:bell_ring
+          - note: C3
+            len: 2
+            inst: lib:pad_slow
+          - note: C3
+            len: 1.5
+            inst: lib:chip_arp_minor
+          - C3@lib:bell_ring
+          - note: G#3
+            len: 2
+            inst: lib:pad_slow
+          - note: G#3
+            len: 1.5
+            inst: lib:chip_arp_major
+          - G#3@lib:bell_ring
+          - note: D#3
+            len: 2
+            inst: lib:pad_slow
+          - note: D#3
+            len: 1.5
+            inst: lib:chip_arp_major
+          - D#3@lib:bell_ring
+          - note: A#3
+            len: 2
+            inst: lib:pad_slow
+          - note: A#3
+            len: 1.5
+            inst: lib:chip_arp_major
+          - A#3@lib:bell_ring
+  - id: 3
+    name: Lead
+    instrument: lib:lead_pwm
+    patterns:
+      Lead:
+        length: 0.5
+        groove:
+          - &a1
+            note: C3
+            len: 1.5
+          - &a2
+            note: D#3
+            len: 0.5
+            legato: true
+            portamento: 7
+          - &a3
+            note: G3
+            len: 1.5
+          - "-"
+          - &a4
+            note: G#3
+            len: 1.5
+            inst: lib:bell_ring
+          - &a5
+            note: F3
+            len: 0.5
+            legato: true
+            portamento: 7
+          - &a6
+            note: G#3
+            len: 1.5
+          - "-"
+          - note: A#3
+            len: 1.5
+          - note: C4
+            len: 0.5
+            legato: true
+            portamento: 7
+          - note: G3
+            len: 1.5
+          - "-"
+          - note: D3
+            len: 1.5
+            inst: lib:bell_ring
+          - note: F3
+            len: 0.5
+            legato: true
+            portamento: 7
+          - note: A#3
+            len: 1.5
+          - "-"
+          - *a1
+          - *a2
+          - *a3
+          - "-"
+          - *a4
+          - *a5
+          - *a6
+          - "-"
+          - note: G3
+            len: 1.5
+          - note: A#3
+            len: 0.5
+            legato: true
+            portamento: 7
+          - note: D#4
+            len: 1.5
+          - "-"
+          - note: D4
+            len: 1.5
+            inst: lib:bell_ring
+          - note: D#4
+            len: 0.5
+            legato: true
+            portamento: 7
+          - note: C3
+            len: 1.5
+          - "-"
+        fx:
+          vibrato:
+            depth: 0.18
+            rate: 3
+            delay: 10
+timeline:
+  - section: Composition
+    bars: 8
+    layers:
+      v1: Bass
+      v2: Chords
+      v3: Lead
