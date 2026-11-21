@@ -35,6 +35,8 @@ export function panGains(setting: string | undefined): [number, number] | undefi
 
 export interface RenderOptions {
   model: "6581" | "8580";
+  /** Use each SID's declared model instead of forcing `model` across all stems. */
+  useScoreModels?: boolean;
   sampleRate?: number;
   pan?: Record<number, PanSide>;
   /** Seconds to render per SID; default the song length. */
@@ -76,14 +78,16 @@ export function renderReference(doc: ParsedSidwave, options: RenderOptions): Ste
   const bin = options.sidplayfp ?? "sidplayfp";
   const dir = options.workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "sidwave-ref-"));
   const arr = options.arrangement ?? arrangeSidwave(doc);
-  const seconds = options.seconds ?? arr.totalFrames / arr.fps;
+  // sidplayfp's -t parser accepts whole seconds and truncates decimal values, which can cut the final score frames.
+  const seconds = Math.ceil(options.seconds ?? arr.totalFrames / arr.fps);
   const renders: Array<{ gains: [number, number]; samples: Float32Array }> = [];
   try {
     for (let chip = 0; chip < doc.sids.length; chip += 1) {
       const sid = compileSidwaveStem(doc, arr, chip);
       const sidFile = path.join(dir, `sid${chip + 1}.sid`), wav = path.join(dir, `sid${chip + 1}.wav`);
       fs.writeFileSync(sidFile, sid);
-      const run = spawnSync(bin, ["-m", `-m${options.model === "8580" ? "n" : "o"}f`, `-f${sampleRate}`, `-t${seconds.toFixed(3)}`, `-w${wav}`, sidFile], { encoding: "utf8" });
+      const model = options.useScoreModels ? doc.sids[chip]?.model ?? options.model : options.model;
+      const run = spawnSync(bin, ["-m", `-m${model === "8580" ? "n" : "o"}f`, `-f${sampleRate}`, `-t${seconds}`, `-w${wav}`, sidFile], { encoding: "utf8" });
       if (run.error) throw new Error(`cannot run ${bin}: ${run.error.message}`);
       if (run.status !== 0 || !fs.existsSync(wav)) throw new Error(`${bin} failed for SID ${chip + 1}: ${run.stderr || run.stdout}`);
       const w = readWav(wav);

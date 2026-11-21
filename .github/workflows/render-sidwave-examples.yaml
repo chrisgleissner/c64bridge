@@ -1,0 +1,67 @@
+name: Render SIDWAVE examples
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+        description: Commit SHA or ref to render
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.1
+
+      - name: Install dependencies and build source
+        run: npm ci && npm run build
+
+      - name: Authenticate to the builder image registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build the offline renderer image
+        env:
+          GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-builder:latest
+        run: docker build -f Dockerfile.sidwave-render --build-arg BUILDER_IMAGE="$GHCR_IMAGE" -t c64bridge-sidwave-render .
+
+      - name: Render all public examples
+        run: |
+          docker create --name sidwave-renderer \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
+            --workdir /workspace \
+            -e CI=1 \
+            c64bridge-sidwave-render \
+            node scripts/render-sidwave-examples.mjs --out-dir /tmp/sidwave-rendered --jobs 3
+          docker start --attach sidwave-renderer
+          mkdir -p "$RUNNER_TEMP/sidwave-rendered"
+          docker cp sidwave-renderer:/tmp/sidwave-rendered/. "$RUNNER_TEMP/sidwave-rendered/"
+          docker rm sidwave-renderer
+
+      - name: Upload rendered examples
+        uses: actions/upload-artifact@v6
+        with:
+          name: sidwave-examples
+          path: ${{ runner.temp }}/sidwave-rendered/
+          if-no-files-found: error
