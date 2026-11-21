@@ -767,7 +767,7 @@ The result includes the resource URI and a short summary. Set `includeScore: tru
 to include the YAML in the result. Each original YAML has a technique and form
 guide in its header. [Composition index](c64://sound/examples)
 
-- Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). These three scores keep their pinned SIDWAVE 1.1 output.
+- Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). They were rewritten in SIDWAVE 1.2 for 1.3.2; their 1.3.1 (SIDWAVE 1.1) texts are kept as test fixtures that pin the 1.1 compiler output.
 - Use [acid bass](c64://sound/examples/acid_line) for filter accents, [the ballad](c64://sound/examples/arp_ballad) for chord arps and PWM, [drum and bass](c64://sound/examples/drum_and_bass) for multispeed breakbeats, and [the digi groove](c64://sound/examples/digi_groove) for CIA2 samples.
 - Use [metal](c64://sound/examples/metal_sync) for sync, ring and bends, [the chamber waltz](c64://sound/examples/chamber_waltz) for 3/4 counterpoint, and [the fanfare](c64://sound/examples/title_fanfare) for filtered brass and a held cadence.
 - Use [stereo echo](c64://sound/examples/stereo_echo) for panning, [the orchestra](c64://sound/examples/ultisid_orchestra) for 24 voices, and [the nine-SID finale](c64://sound/examples/wall_of_sid) for the build to 27 voices. The last piece needs `configure: true` and a fitted SID in socket 1.
