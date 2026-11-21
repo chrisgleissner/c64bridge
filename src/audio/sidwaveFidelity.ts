@@ -25,6 +25,11 @@ export interface ScheduledNote {
   /** Ring modulation or oscillator sync can shift the strongest partial away from the played pitch. */
   inharmonic?: boolean;
   role?: SidwaveVoice["role"];
+  /**
+   * Seconds until the envelope reaches zero when the instrument's sustain level is 0 (nominal attack plus decay
+   * time). The note is silent from then until its gate closes, so silence there is not a dropout.
+   */
+  audible?: number;
 }
 
 export interface PercussionOnset {
@@ -109,8 +114,10 @@ export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = 
       const alternates = inst.arp.length > 0 ? inst.arp.map((o) => midiToHz(n.midi + o + cents)) : [];
       const modulated = alternates.length > 0 || !!n.portamento || inst.vibRate !== 0 || inst.slideSemis !== 0 || !!inst.wavetable?.length;
       const inharmonic = !!(inst.wave & 6) || inst.wavetable?.some((step) => !!(step.ring || step.sync));
+      // Attack times are a third of the decay/release times (MOS 6581 datasheet; see RELEASE_MS).
+      const audible = (inst.sr >> 4) === 0 ? (RELEASE_MS[inst.ad >> 4]! / 3 + RELEASE_MS[inst.ad & 15]!) / 1000 : undefined;
       notes.push({ voice: v, sid, pan, role, start, duration: (gateOff - n.start) / arr.fps,
-        hz: midiToHz(n.midi + cents), alternates, modulated, inharmonic });
+        hz: midiToHz(n.midi + cents), alternates, modulated, inharmonic, ...(audible === undefined ? {} : { audible }) });
     }
   });
   if (arr.samples) {

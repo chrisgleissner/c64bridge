@@ -188,7 +188,7 @@ export function analyseQuality(input: QualityInput): QualityReport {
   if (!schedule) checks.dropouts = mk("SKIP", "needs the score");
   else {
     const floor = Math.pow(10, th.dropoutFloorDb / 20), block = Math.round(0.005 * sr);
-    const sounding = schedule.notes.map((n) => [n.start + offset, n.start + n.duration + offset] as const);
+    const sounding = schedule.notes.map((n) => [n.start + offset, n.start + Math.min(n.duration, n.audible ?? Infinity) + offset] as const);
     const covered = (t0: number, t1: number) => sounding.some(([s, e]) => s <= t0 && e >= t1);
     const gaps: Array<{ t: number; ms: number }> = [];
     let runStart = -1;

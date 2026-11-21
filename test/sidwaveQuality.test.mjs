@@ -58,6 +58,32 @@ test("silence inside a scheduled note is a dropout", () => {
   assert.strictEqual(ok.checks.dropouts.status, "PASS");
 });
 
+test("a note whose envelope has decayed to zero is not a dropout", () => {
+  // Sustain 0: the note is silent long before its gate closes; hardware outputs exact zero there.
+  const s = render(3, [{ start: 0, duration: 0.3, hz: 220 }, { start: 1, duration: 0.3, hz: 220 }, { start: 2, duration: 0.3, hz: 220 }]);
+  const notes = [note(0, 1, 220, { audible: 0.3 }), note(1, 1, 220, { audible: 0.3 }), note(2, 1, 220, { audible: 0.3 })];
+  assert.strictEqual(analyseQuality({ signal: s, schedule: sched(notes, [], 3) }).checks.dropouts.status, "PASS");
+  // A gap inside the audible part still counts.
+  const cut = render(3, [{ start: 0, duration: 0.1, hz: 220 }, { start: 0.2, duration: 0.8, hz: 220 }]);
+  const r = analyseQuality({ signal: cut, schedule: sched([note(0, 1, 220, { audible: 0.6 })], [], 3) });
+  assert.notStrictEqual(r.checks.dropouts.status, "PASS");
+});
+
+test("the schedule gives sustain-0 notes their envelope length", async () => {
+  const { expectedSchedule } = await import("../src/audio/sidwaveFidelity.js");
+  const doc = parseSidwave(JSON.stringify({
+    sidwave: 1.2, mode: "PAL", tempo: 60,
+    instruments: { stab: { waveform: "pulse", adsr: [1, 5, 0, 1] }, pad: { waveform: "pulse", adsr: [1, 5, 8, 1] } },
+    voices: [{ id: 1, instrument: "stab", patterns: { A: { groove: ["C4"] } } }, { id: 2, instrument: "pad", patterns: { A: { groove: ["E4"] } } }],
+    timeline: [{ bars: 1, layers: { v1: "A", v2: "A" } }],
+  }));
+  const notes = expectedSchedule(doc).notes;
+  const stab = notes.find((n) => n.voice === 0), pad = notes.find((n) => n.voice === 1);
+  // Attack 1 (8 ms nominal) plus decay 5 (168 ms nominal), MOS 6581 datasheet times.
+  assert.ok(Math.abs(stab.audible - 0.176) < 1e-9, String(stab.audible));
+  assert.strictEqual(pad.audible, undefined);
+});
+
 test("tonal balance flags a tinny signal and accepts one with bass", () => {
   const tinny = render(4, [{ start: 0, duration: 4, hz: 3000, amp: 0.1 }, { start: 0, duration: 4, hz: 3900, amp: 0.1 }]);
   const t = analyseQuality({ signal: tinny });
