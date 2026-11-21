@@ -167,11 +167,11 @@ instruments:
     wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
     pulsetable: [{ set: 700 }, { add: -12, frames: 30 }]
     filtertable: [{ cutoff: 3kHz, resonance: 14, type: bandpass }, { add: -40, frames: 8 }]
-  # Bell: triangle ring-modulated by a hidden source a major seventh above (voice 1 is silent in Water).
+  # Bell: triangle ring-modulated by a hidden source an octave above (voice 1 is silent in Water).
   bell:
     waveform: triangle
     adsr: [0, 10, 0, 9]
-    source_note: "+11"
+    source_note: "+12"
     wavetable: [{ wave: tri, ring: true, note: "+12", frames: 2 }, { wave: tri, ring: true }]
   # Glass: broken chords, high to low so the root lands last; maj7 at 3 frames per tone, m9 at 2.
   gmaj:

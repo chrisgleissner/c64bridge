@@ -60,7 +60,7 @@ instruments:
     pulse_width: 1000
     adsr: [0, 8, 0, 0]
     hard_restart: { test: true }
-    wavetable: [{ wave: noise, note: C6, calls: 2 }, { wave: pulse, note: G3, slide_to: G1, frames: 3 }, { wave: tri, note: G1 }]
+    wavetable: [{ wave: noise, note: C6, calls: 1 }, { wave: pulse, note: G3, slide_to: G1, frames: 2 }, { wave: tri, note: G1 }]
   kick2:
     waveform: tri
     adsr: [0, 6, 0, 0]
@@ -71,13 +71,13 @@ instruments:
     pulse_width: 2048
     adsr: [0, 8, 0, 0]
     hard_restart: { frames: 0 }
-    wavetable: [{ wave: tri, note: D4, calls: 2 }, { wave: noise, note: C6 }, { wave: pulse, note: A3, calls: 2 }, { wave: noise, note: A5 }]
+    wavetable: [{ wave: tri, note: D4, calls: 1 }, { wave: noise, note: C6, calls: 1 }, { wave: pulse, note: A3, calls: 2 }, { wave: noise, note: A5 }]
   snare2:
     waveform: noise
     pulse_width: 2048
     adsr: [0, 9, 0, 0]
     hard_restart: { frames: 0 }
-    wavetable: [{ wave: tri, note: A3, calls: 2 }, { wave: noise, note: G5 }, { wave: pulse, note: E3, calls: 2 }, { wave: noise, note: E5 }]
+    wavetable: [{ wave: tri, note: A3, calls: 1 }, { wave: noise, note: G5, calls: 1 }, { wave: pulse, note: E3, calls: 2 }, { wave: noise, note: E5 }]
   rim:
     waveform: noise
     adsr: [0, 5, 0, 2]
