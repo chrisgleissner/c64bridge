@@ -11,6 +11,30 @@ export function digiPeriod(clock: number, rate: number, pitch: number): number {
   return Math.round(clock / (rate * 2 ** (pitch / 12)));
 }
 
+/** Playback intervals in player calls, including replacements and explicit stops. */
+export function digiSpans(samples: SidwaveSamples, fps: number, totalFrames: number, clock: number) {
+  const spans: Array<{ chip: number; start: number; end: number }> = [];
+  const active = new Map<number, typeof spans[number]>();
+  const scheduled = samples.commands.flatMap((command) => command.at.map((frame) => ({ command, frame })));
+  // End old playback first at a coincident start/stop.
+  scheduled.sort((a, b) => a.frame - b.frame || Number(!!a.command.name) - Number(!!b.command.name));
+  for (const { command, frame } of scheduled) {
+    for (const chip of command.stopChips ?? [command.chip]) {
+      const old = active.get(chip);
+      if (old) old.end = Math.min(old.end, frame);
+      active.delete(chip);
+    }
+    if (!command.name) continue;
+    const sample = samples.defs.get(command.name)!;
+    const period = digiPeriod(clock, samples.rate, command.pitch);
+    const end = sample.loop ? totalFrames : Math.min(totalFrames, frame + (sample.sampleCount + 1) * period * fps / clock);
+    const span = { chip: command.chip, start: frame, end };
+    spans.push(span);
+    active.set(command.chip, span);
+  }
+  return spans;
+}
+
 function trackCount(samples: SidwaveSamples): number {
   return new Set(samples.commands.map(({ chip }) => chip)).size;
 }

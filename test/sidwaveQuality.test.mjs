@@ -105,3 +105,56 @@ test("identical bars are flagged as a filler loop and varied bars are not; a con
   assert.strictEqual(b.checks.repetition.status, "PASS");
   assert.ok(b.checks.dynamics.metrics.sectionRangeDb > 3, JSON.stringify(b.checks.dynamics.metrics));
 });
+
+test("three-window pitch median removes one displaced peak and keeps sustained drift", () => {
+  const rate = SR;
+  const n = note(0, 2, 440);
+  const signal = (end) => {
+    let phase = 0;
+    const left = Float32Array.from({ length: 2 * rate }, (_, i) => {
+      const time = i / rate;
+      const offset = time >= 0.99 && time < end ? 60 : 0;
+      phase += 2 * Math.PI * 440 * 2 ** (offset / 1200) / rate;
+      return 0.15 * Math.sin(phase);
+    });
+    return { left, right: left, sampleRate: rate };
+  };
+  const check = (end) => analyseQuality({ signal: signal(end), schedule: sched([n], [], 2) }).checks.pitchStability;
+  assert.equal(check(1.065).status, "PASS");
+  assert.equal(check(1.55).status, "FAIL");
+});
+
+test("dense multi-SID pitch review prioritises the declared lead over backing parts", () => {
+  const pitchTrack = [note(0, 1.6, 440, { role: "lead" }), note(2, 1.6, 392, { voice: 4, sid: 1 })];
+  const lead = render(4, [pitchTrack[0]]);
+  const backing = render(4, [pitchTrack[1]], { bend: 120 });
+  lead.left = lead.left.map((sample, i) => sample + backing.left[i]);
+  lead.right = lead.left;
+  const schedule = { ...sched(pitchTrack, [], 4), voiceCount: 12, sidCount: 4 };
+  const verdict = analyseQuality({ signal: lead, schedule }).checks.pitchStability;
+  assert.equal(verdict.status, "PASS");
+  assert.equal(verdict.metrics.notes, 1);
+  const declared = { ...schedule, notes: pitchTrack.map((n, i) => ({ ...n, role: i ? "pad" : undefined })) };
+  assert.notStrictEqual(analyseQuality({ signal: lead, schedule: declared }).checks.pitchStability.status, "PASS");
+});
+
+test("a sharp 41 Hz saw has periodic edges and still exposes an isolated click", () => {
+  const left = Float32Array.from({ length: SR * 2 }, (_, i) => 0.07 * (2 * ((i * 41 / SR) % 1) - 1));
+  const schedule = sched([note(0, 2, 41)], [], 2);
+  const check = () => analyseQuality({ signal: { left, right: left, sampleRate: SR }, schedule }).checks.glitches.metrics;
+  assert.equal(check().count, 0);
+  left[Math.round(1.13 * SR)] = 0.99;
+  const { times } = check();
+  assert.equal(times.length, 1);
+  assert.ok(Math.abs(times[0] - 1.13) < 0.002);
+});
+
+test("a percussion release tail explains a transient while silence between hits does not", () => {
+  const left = new Float32Array(SR);
+  left[Math.round(0.127 * SR)] = 0.8;
+  left[Math.round(0.51 * SR)] = 0.8;
+  const schedule = sched([], [{ voice: 2, sid: 0, start: 0, duration: 0.05, releaseSeconds: 0.09 }], 1);
+  const { times } = analyseQuality({ signal: { left, right: left, sampleRate: SR }, schedule }).checks.glitches.metrics;
+  assert.equal(times.length, 1);
+  assert.ok(Math.abs(times[0] - 0.51) < 0.002);
+});

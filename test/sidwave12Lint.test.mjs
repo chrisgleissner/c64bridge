@@ -187,3 +187,52 @@ test("lint output is aggregated: at most 12 entries, each with code, count, firs
   const unique = new Set(entries.map((f) => f.code));
   assert.equal(unique.size, entries.length, "repeats are merged into one entry");
 });
+
+test("breathing room between attacks stays valid when voices share the beat", () => {
+  const voices = `${v1("C4 C4 C4 C4")}
+  - { id: 2, instrument: p, patterns: { a: { length: 0.5, groove: "- E4 - E4 - E4 - E4" } } }`;
+  const source = doc({ instruments: P, voices, sections: "s: { bars: 2, layers: { v1: a, v2: a } }" });
+  assert.ok(!has(source, "HR-GAP"));
+});
+
+test("a percussion transient inherits general section dynamics without a sustain warning", () => {
+  const make = (extra) => doc({ instruments: P, voices: v1("C3 - - -", { inst: "lib:kick", extra }),
+    sections: "s: { bars: 1, level: pp, layers: { v1: a } }" });
+  assert.ok(!has(make(""), "LEVEL-NOOP"));
+  assert.ok(has(make("level: 5,"), "LEVEL-NOOP"), "a targeted level cannot adjust sustain zero");
+});
+
+test("noise and kit hits never create a pitched semitone clash", () => {
+  const make = (inst, instrument = P) => doc({
+    voices: `${v1("C4 C4 C4 C4")}
+  - { id: 2, instrument: ${inst}, patterns: { a: { length: 1, groove: "C#4 C#4 C#4 C#4" } } }`,
+    instruments: instrument, sections: "s: { bars: 1, layers: { v1: a, v2: a } }",
+  });
+  assert.ok(!has(make("lib:kick"), "CLASH"));
+  assert.ok(!has(make("noise", P + "  noise: { waveform: noise }\n"), "CLASH"));
+  assert.ok(has(make("p"), "CLASH"));
+});
+
+test("a sync source can re-attack at the same oscillator pitch", () => {
+  const make = (source) => doc({
+    instruments: P + "  sync: { waveform: saw, sync: true }\n",
+    voices: `${v1(source, { length: 0.5 })}
+  - { id: 2, instrument: sync, patterns: { a: { length: 4, groove: "A4" } } }`,
+    sections: "s: { bars: 1, layers: { v1: a, v2: a } }",
+  });
+  assert.ok(!has(make("C3 C3 - C3 C3 C3 C3 C3"), "RINGSYNC-SRC"));
+  assert.ok(has(make("C3 D3 - C3 C3 C3 C3 C3"), "RINGSYNC-SRC"));
+});
+
+test("an opposite-pan unison copy centres a hard-panned part", () => {
+  const make = (pan, copy) => doc({
+    sid: `{ id: l, address: "$D400", pan: Left 5 }, { id: r, address: "$D420", pan: ${pan} }`,
+    voices: v1("C2 C2 C2 C2", { extra: "role: bass," }) + (copy ? "\n  - { id: 4, unison: {voice: 1, detune: 0} }" : ""),
+    instruments: P,
+  });
+  assert.ok(!has(make("Right 5", true), "ONE-SIDE"));
+  assert.ok(has(make("Left 5", true), "ONE-SIDE"));
+  assert.ok(has(make("Right 5", false), "ONE-SIDE"));
+  const narrow = make("Right 2", false).replace("pan: Left 5", "pan: Left 2");
+  assert.ok(!has(narrow, "ONE-SIDE"));
+});

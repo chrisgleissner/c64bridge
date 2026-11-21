@@ -1,5 +1,7 @@
-import { midiToHz, type ParsedSidwave } from "../sidwave.js";
-import { arrangeSidwave, OP, type Arrangement } from "../sidwaveCompiler.js";
+import { midiToHz, type ParsedSidwave, type SidwaveVoice } from "../sidwave.js";
+import { arrangeSidwave, OP, type Arrangement, type ArrangedNote } from "../sidwaveCompiler.js";
+import { RELEASE_MS } from "../sidwaveLint.js";
+import { digiSpans } from "../sidwaveDigi.js";
 
 /**
  * Fidelity analysis of a captured Ultimate audio stream against the SIDWAVE schedule.
@@ -20,8 +22,9 @@ export interface ScheduledNote {
   alternates: number[];
   /** The pitch moves on purpose during the note (vibrato, slide, portamento, arpeggio, wavetable). */
   modulated?: boolean;
-  /** Ring modulation, hard sync or a wavetable: the note is meant to have strong high partials and transients. */
-  bright?: boolean;
+  /** Ring modulation or oscillator sync can shift the strongest partial away from the played pitch. */
+  inharmonic?: boolean;
+  role?: SidwaveVoice["role"];
 }
 
 export interface PercussionOnset {
@@ -30,6 +33,7 @@ export interface PercussionOnset {
   start: number;
   /** Time until the gate closes (s). */
   duration?: number;
+  releaseSeconds?: number;
 }
 
 export interface ExpectedSchedule {
@@ -40,6 +44,8 @@ export interface ExpectedSchedule {
   sidCount: number;
   /** Bar boundaries in seconds, including the end of the last bar. */
   bars?: number[];
+  /** Scheduled changes other than audible note onsets and releases. */
+  changes?: number[];
   sections?: Array<{ name: string; start: number; end: number }>;
 }
 
@@ -69,20 +75,25 @@ export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = 
     }
   }
   const notes: ScheduledNote[] = [];
+  const changes = new Set<number>();
+  const declarations = new Map(doc.voices.map((voice) => [doc.voiceSlots.get(voice.id), voice]));
   const percussion: PercussionOnset[] = [];
   arr.voices.forEach((voice, v) => {
     const sid = Math.floor(v / 3);
     const setting = doc.sids[sid]?.pan?.toLowerCase();
     const pan = options.pan?.[sid] ?? (setting?.startsWith("left") ? "left" : setting?.startsWith("right") ? "right" : "center");
-    const gates = voice.events.filter(({ bytes: [op] }) => op === OP.GATEOFF || op === OP.HARDRESTART || op === OP.RESTART)
-      .sort((a, b) => a.frame - b.frame);
-    let gate = 0;
+    const role = declarations.get(v)?.role;
+    const cents = (arr.tuning?.[v] ?? 0) / 100;
+    for (const { frame, bytes: [op] } of voice.events) {
+      if (op !== undefined && (op === OP.SAMPLE || op >= OP.GATEOFF)) changes.add(frame / arr.fps);
+    }
+    scheduleTableChanges(voice.notes, arr, changes);
     for (const n of voice.notes) {
-      if (n.hidden) continue;
       const inst = arr.instruments[n.inst]!;
       const start = n.start / arr.fps;
-      while (gate < gates.length && gates[gate]!.frame <= n.start) gate++;
-      const gateOff = Math.min(n.end, gates[gate]?.frame ?? n.end);
+      changes.add(start);
+      const gateOff = n.releaseFrame ?? n.end;
+      if (n.hidden || inst.wavetable?.every((step) => step.gate === false)) continue;
       if (n.percussion || (inst.wave & 0xf0) === 0x80) {
         const table = inst.wavetable;
         let elapsed = 0, lastGate = 0;
@@ -92,24 +103,67 @@ export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = 
         }
         const closes = inst.waveloop === undefined && table?.[table.length - 1]?.gate === false;
         const duration = Math.min(gateOff - n.start, closes ? lastGate : Infinity) / arr.fps;
-        percussion.push({ voice: v, sid, start, duration });
+        percussion.push({ voice: v, sid, start, duration, releaseSeconds: RELEASE_MS[inst.sr & 15]! / 1000 });
         continue;
       }
-      const alternates = inst.arp.length > 0 ? inst.arp.map((o) => midiToHz(n.midi + o)) : [];
+      const alternates = inst.arp.length > 0 ? inst.arp.map((o) => midiToHz(n.midi + o + cents)) : [];
       const modulated = alternates.length > 0 || !!n.portamento || inst.vibRate !== 0 || inst.slideSemis !== 0 || !!inst.wavetable?.length;
-      notes.push({ voice: v, sid, pan, start, duration: (gateOff - n.start) / arr.fps, hz: midiToHz(n.midi), alternates, modulated, bright: !!inst.ring || !!inst.sync || !!inst.wavetable?.length });
+      const inharmonic = !!(inst.wave & 6) || inst.wavetable?.some((step) => !!(step.ring || step.sync));
+      notes.push({ voice: v, sid, pan, role, start, duration: (gateOff - n.start) / arr.fps,
+        hz: midiToHz(n.midi + cents), alternates, modulated, inharmonic });
     }
   });
-  const samples = arr.samples;
-  for (const command of samples?.commands ?? []) {
-    if (!command.name) continue;
-    const sample = samples!.defs.get(command.name)!;
-    const duration = sample.sampleCount / (sample.stats.rate * 2 ** (command.pitch / 12));
-    for (const frame of command.at) percussion.push({ voice: command.chip * 3, sid: command.chip, start: frame / arr.fps, duration });
+  if (arr.samples) {
+    for (const { chip, start, end } of digiSpans(arr.samples, arr.fps, arr.totalFrames, arr.system === "PAL" ? 985248 : 1022727)) {
+      percussion.push({ voice: chip * 3, sid: chip, start: start / arr.fps, duration: (end - start) / arr.fps });
+    }
   }
   notes.sort((a, b) => a.start - b.start);
   percussion.sort((a, b) => a.start - b.start);
-  return { notes, percussion, durationSeconds: arr.totalFrames / arr.fps, voiceCount: arr.voices.length, sidCount: Math.ceil(arr.voices.length / 3), bars, sections };
+  return { notes, percussion, durationSeconds: arr.totalFrames / arr.fps, voiceCount: arr.voices.length, sidCount: Math.ceil(arr.voices.length / 3), bars, sections, changes: [...changes].sort((a, b) => a - b) };
+}
+
+interface TableCursor { step: number; wait: number }
+
+function scheduleTableChanges(notes: ArrangedNote[], arr: Arrangement, changes: Set<number>): void {
+  let lastInst = -1;
+  let pulse: TableCursor | undefined, filter: TableCursor | undefined;
+  const report = (frame: number) => changes.add(frame / arr.fps);
+  for (let i = 0; i < notes.length;) {
+    const first = notes[i++]!;
+    let last = first;
+    while (notes[i]?.legato) last = notes[i++]!;
+    const inst = arr.instruments[first.inst]!;
+    const gate = last.releaseFrame ?? last.end;
+    if (inst.wavetable) addTableChanges(inst.wavetable, inst.waveloop, first.start, gate, report, () => true);
+    const pt = inst.pulsetable, ft = inst.filtertable;
+    const keepPulse = pt?.reset === false;
+    const keepFilter = ft?.reset === false;
+    const same = lastInst === first.inst;
+    // A persistent pulse table ticks through a release. The filter remains
+    // at its last value while the gate is down and resumes on the next attack.
+    pulse = pt && addTableChanges(pt.steps, pt.loop, first.start,
+      keepPulse ? notes[i]?.start ?? arr.totalFrames : gate, report, (step) => !step.add,
+      keepPulse && same ? pulse : undefined);
+    filter = ft && addTableChanges(ft.steps, ft.loop, first.start, gate, report,
+      (step) => !step.add || step.resonance !== undefined || step.type !== undefined,
+      keepFilter && same ? filter : undefined);
+    lastInst = first.inst;
+  }
+}
+
+function addTableChanges<T extends { frames?: number }>(steps: T[], loop: number | undefined, start: number,
+  end: number, report: (frame: number) => void, abrupt: (step: T) => boolean,
+  cursor: TableCursor = { step: 0, wait: 0 }): TableCursor {
+  let frame = start + cursor.wait;
+  let i = cursor.step;
+  while (steps[i] && frame < end) {
+    const step = steps[i]!;
+    if (abrupt(step)) report(frame);
+    frame += step.frames ?? 1;
+    i = loop !== undefined && i === steps.length - 1 ? loop : i + 1;
+  }
+  return { step: i, wait: Math.max(0, frame - end) };
 }
 
 // ---------------------------------------------------------------------------

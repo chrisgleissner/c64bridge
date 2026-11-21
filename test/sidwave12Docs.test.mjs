@@ -22,7 +22,10 @@ test("the schema describes every 1.2 field of this round", () => {
   for (const key of ["kit", "sections", "loop_to", "accent", "end", "swing", "swing_unit"]) assert.ok(schema.properties[key], key);
   const defs = schema.$defs;
   assert.ok(defs.section.properties.levels && defs.section.properties.volume && defs.section.properties.filter && defs.section.properties.transpose);
-  assert.ok(defs.sid.properties.filter.anyOf[1].properties.owner && defs.sid.properties.filter.anyOf[1].properties.route);
+  const layout = schema.properties.sids.oneOf[1];
+  assert.equal(defs.sid.properties.filter.$ref, "#/$defs/sidFilter");
+  assert.equal(layout.properties.overrides.additionalProperties.properties.filter.$ref, "#/$defs/sidFilter");
+  assert.ok(defs.sidFilter.anyOf[1].properties.owner && defs.sidFilter.anyOf[1].properties.route);
   assert.ok(defs.echo.properties.delay_beats && defs.echo.properties.adsr);
   assert.ok(defs.instrument.properties.source_note);
   assert.ok(defs.pulsetable.oneOf[1].properties.reset && defs.filtertable.oneOf[1].properties.reset);

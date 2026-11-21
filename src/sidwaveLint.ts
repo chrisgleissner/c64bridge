@@ -1,5 +1,6 @@
 import type { Arrangement } from "./sidwaveCompiler.js";
 import { midiToHz, type ParsedSidwave, type SidwaveRamp } from "./sidwave.js";
+import { digiSpans } from "./sidwaveDigi.js";
 import { cutoffHz } from "./sidwaveFilterModel.js";
 
 export interface SidwaveFinding {
@@ -285,7 +286,10 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
     }
   }
   // CLASH: minor second or minor ninth held together for an eighth note or longer, starting on a beat.
-  const byOnset = arr.voices.map(({ notes }) => notes.some((note, i) => i > 0 && note.start < notes[i - 1]!.start)
+  const byOnset = arr.voices.map(({ notes }) => notes.filter((n) => {
+    const inst = arr.instruments[n.inst]!;
+    return !n.percussion && !(inst.wave & 0x80);
+  })).map((notes) => notes.some((note, i) => i > 0 && note.start < notes[i - 1]!.start)
     ? [...notes].sort((a, b) => a.start - b.start) : notes);
   for (let a = 0; a < arr.voices.length; a++) for (let b = a + 1; b < arr.voices.length; b++) {
     const later = byOnset[b]!;
@@ -297,7 +301,7 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
       for (let j = first; j < later.length && later[j]!.start < n.end; j++) {
         const m = later[j]!;
         const start = Math.max(n.start, m.start);
-        const length = Math.min(n.end, m.end) - start;
+        const length = Math.min(n.releaseFrame ?? n.end, m.releaseFrame ?? m.end) - start;
         if (length < fpb / 2 - 1e-6) continue;
         const beat = start / fpb;
         if (Math.abs(beat - Math.round(beat)) > 0.02) continue;
@@ -306,15 +310,35 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
       }
     }
   }
-  // HR-GAP: every sounding voice re-attacks on the same beat for four or more beats.
-  let gap = 0;
-  const beats = Math.floor(arr.totalFrames / fpb);
-  for (let beat = 0; beat < beats; beat++) {
-    const lo = beat * fpb - 1e-6; const hi = (beat + 1) * fpb - 1e-6;
-    const live = arr.voices.filter((v) => v.notes.some((n) => n.end > lo + 1 && n.start < hi));
-    const attacks = arr.voices.filter((v) => v.notes.some((n) => n.start >= lo && n.start < hi && !n.legato));
-    if (live.length >= 2 && attacks.length === live.length) { if (++gap === 4) findings.add("HR-GAP", `bar ${Math.floor((beat - 3) / meter) + 1}`, "Stagger attacks or hold one voice with legato so the mix is never silent at once"); }
-    else gap = 0;
+  // HR-GAP: repeated simultaneous hard restarts with no voice or sample bridging the gap.
+  const attacksAt = new Map<number, Note[]>();
+  for (const { notes } of arr.voices) for (const n of notes) {
+    const attacks = attacksAt.get(n.start) ?? [];
+    attacks.push(n);
+    attacksAt.set(n.start, attacks);
+  }
+  const pcm = arr.samples ? digiSpans(arr.samples, arr.fps, arr.totalFrames, CLOCK_HZ[arr.system]) : [];
+  const cursors = arr.voices.map(() => 0);
+  let gap = 0, pcmCursor = 0, pcmEnd = 0;
+  for (let beat = 0; beat < bars * meter; beat++) {
+    const frame = arr.clock?.frameAt(beat, true) ?? Math.round(beat * fpb);
+    const attacks = attacksAt.get(frame) ?? [];
+    const hard = attacks.filter((n) => !n.legato && (arr.instruments[n.inst]!.restart?.frames ?? 2) > 0);
+    if (hard.length < 2 || hard.length !== attacks.length) {
+      gap = 0;
+      continue;
+    }
+    while (pcm[pcmCursor] && pcm[pcmCursor]!.start < frame) pcmEnd = Math.max(pcmEnd, pcm[pcmCursor++]!.end);
+    const bridged = pcmEnd > 0 && pcmEnd >= frame ||
+      arr.voices.some(({ notes }, slot) => {
+        let index = cursors[slot]!;
+        while (notes[index] && (notes[index]!.releaseFrame ?? notes[index]!.end) < frame) index++;
+        cursors[slot] = index;
+        return !!notes[index] && notes[index]!.start < frame;
+      });
+    if (!bridged) {
+      if (++gap === 4) findings.add("HR-GAP", `bar ${Math.floor((beat - 3) / meter) + 1}`, "Stagger attacks or hold one voice with legato so the mix is never silent at once");
+    } else gap = 0;
   }
   // LOOP-TIE: the note spanning the loop target differs from the last note of the loop.
   if (arr.clock?.loopFrame !== undefined && arr.clock.loopFrame > 0) {
@@ -328,21 +352,46 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
   // RINGSYNC-SRC: ring or sync without source_note while the source channel changes pitch.
   arr.voices.forEach((voice, slot) => {
     const src = arr.voices[chipOf(slot) * 3 + (slot % 3 + 2) % 3]!;
+    let cursor = 0;
     for (const n of voice.notes) {
       const inst = arr.instruments[n.inst]!;
       const uses = (inst.wave & 6) || inst.wavetable?.some((s) => s.ring || s.sync);
       if (!uses || inst.sourceNote) continue;
-      if (src.notes.some((m) => m.start > n.start && m.start < n.end)) findings.add("RINGSYNC-SRC", where(n, slot), "Set source_note on the instrument or keep the source channel still");
+      let pitch = -1;
+      while (src.notes[cursor + 1] && src.notes[cursor + 1]!.start <= n.start) cursor++;
+      for (let i = cursor; i < src.notes.length; i++) {
+        const m = src.notes[i]!;
+        if (m.start >= (n.releaseFrame ?? n.end)) break;
+        const source = arr.instruments[m.inst]!;
+        const moves = m.portamento || source.arp.length || source.vibRate || source.slideSemis ||
+          source.wavetable?.some((step) => step.note !== undefined || step.hz !== undefined);
+        if ((m.start > n.start && m.midi !== pitch) || (moves && m.end > n.start)) {
+          findings.add("RINGSYNC-SRC", where(n, slot), "Set source_note on the instrument or keep the source channel still");
+          break;
+        }
+        pitch = m.midi;
+      }
     }
   });
-  // ONE-SIDE: a bass, lead or drum part (or the lowest voice) on one pan side without a centre mirror.
+  // ONE-SIDE only applies to hard pans. Intermediate mixer positions feed both sides.
+  const sideOf = (slot: number) => doc.sids[chipOf(slot)]?.pan?.split(" ")[0];
+  const centred = new Set(arr.mirrors?.flat() ?? []);
+  for (const voice of doc.voices) {
+    if (!voice.unison) continue;
+    const slot = doc.voiceSlots.get(voice.id)!;
+    const source = doc.voiceSlots.get(voice.unison.voice)!;
+    if (sideOf(slot) !== sideOf(source) && arr.voices[slot]?.notes.length) {
+      centred.add(slot);
+      centred.add(source);
+    }
+  }
   arr.voices.forEach((voice, slot) => {
     const pan = doc.sids[chipOf(slot)]?.pan;
-    if (!pan || !/^(Left|Right)/.test(pan) || !voice.notes.length) return;
+    if (!/^(Left|Right) 5$/.test(pan ?? "") || !voice.notes.length || centred.has(slot)) return;
     const docVoice = doc.voices.find((v) => v.id === bySlot.get(slot));
     const role = docVoice?.role;
     const subject = role ? ["drums", "bass", "lead"].includes(role) : slot === lowest;
-    if (subject && !docVoice?.center) findings.add("ONE-SIDE", `v${docVoice?.id ?? slot + 1}`, "Set center: true so the part sounds on both pan sides");
+    if (subject) findings.add("ONE-SIDE", `v${docVoice?.id ?? slot + 1}`, "Use center: true or an opposite-pan unison copy so the part sounds on both sides");
   });
   // DIGI-SHARED: samples and pitched voices on one SID.
   const digiChips = new Set([...(doc.samples?.triggers.map((t) => t.chip) ?? []), ...(doc.digiVoices?.map((d) => d.chip) ?? [])]);

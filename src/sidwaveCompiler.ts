@@ -245,13 +245,14 @@ function compilePlayer(doc: ParsedSidwave, { loop = true, compress = true }: { l
   };
 }
 
-/** Export one arranged SID stem as a PSID for offline reference rendering. */
-export function compileSidwaveStem(doc: ParsedSidwave, arrangement: Arrangement, chip: number): Buffer {
+/** Project a resolved arrangement to one SID. The source score keeps its original version. */
+export function projectSidwaveStem(doc: ParsedSidwave, arrangement: Arrangement, chip: number): Arrangement {
   const sid = doc.sids[chip];
   if (!sid) throw new RangeError(`SID ${chip} is not declared`);
   const first = chip * 3;
+  const sources = new Map(arrangement.mirrors?.map(([source, target]) => [target, source]));
   const voices = arrangement.voices.slice(first, first + 3).map((voice, channel) => {
-    const source = arrangement.mirrors?.find(([, target]) => target === first + channel)?.[0];
+    const source = sources.get(first + channel);
     const events = source === undefined ? voice.events : [
       ...voice.events,
       ...arrangement.voices[source]!.events.filter(({ bytes }) =>
@@ -260,13 +261,19 @@ export function compileSidwaveStem(doc: ParsedSidwave, arrangement: Arrangement,
     return { ...voice, events: events.filter(({ bytes }) => bytes[0] !== OP.SAMPLE) };
   });
   const original = arrangement.chips?.[chip];
-  const projected: Arrangement = {
-    ...arrangement, voices, findings: undefined, tuning: arrangement.tuning?.slice(first, first + 3),
+  return {
+    ...arrangement, voices, findings: undefined,
+    tuning: arrangement.tuning && voices.map((_, i) => arrangement.tuning![sources.get(first + i) ?? first + i]!),
     chips: original ? [{ ...original, address: 0xd400, owner: original.owner === undefined ? undefined : original.owner - first }] : undefined,
     filter: original?.filter ?? arrangement.filter,
     samples: undefined, mirrors: undefined, turbo: false,
   };
-  const metadata: ParsedSidwave = { ...doc, samples: undefined, sids: [{ ...sid, address: 0xd400 }] };
+}
+
+/** Export one arranged SID stem as a PSID for offline reference rendering. */
+export function compileSidwaveStem(doc: ParsedSidwave, arrangement: Arrangement, chip: number): Buffer {
+  const projected = projectSidwaveStem(doc, arrangement, chip);
+  const metadata: ParsedSidwave = { ...doc, samples: undefined, sids: [{ ...doc.sids[chip]!, address: 0xd400 }] };
   return compileSidwaveToSid(metadata, compilePlayer(metadata, {}, projected).prg).sid;
 }
 
@@ -409,6 +416,7 @@ export interface ArrangedNote {
   portamento?: number;
   glideFrom?: number;
   gateOff?: number;
+  releaseFrame?: number;
   sustain?: number;
   /** Silent note that only drives a sync or ring source oscillator (source_note). */
   hidden?: boolean;
@@ -781,6 +789,7 @@ function arrangeChip(
     ? [...(idByChannel ?? [])].find(([, voiceId]) => voiceId === sid.filter!.owner)?.[0] : undefined;
   const ownerRoute = ownerChannel === undefined ? undefined : (sid!.filter!.route ?? [ownerChannel]).map((slot) => slot);
   const notes: ArrangedNote[][] = [[], [], []];
+  const bends = new Map<ArrangedNote, { path: string; minFrames: number }>();
   const globals: GlobalEvent[] = [];
   if (sidMod) {
     const unitFrames = { steps: framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: modern ? doc.speed : 1 }[sidMod.unit];
@@ -955,7 +964,7 @@ function arrangeChip(
           const previous = out[out.length - 1];
           const legato = (entry.legato ?? namedInstrument?.legato) && previous?.end === f0 && f0 !== clock?.loopFrame;
           const minFrames = legato ? 1 : (inst.restart?.frames ?? SIDWAVE_HARD_RESTART_FRAMES) + (modern ? doc.speed : 1);
-          if (modern && f1 - f0 < minFrames) {
+          if (modern && !entry.bend && f1 - f0 < minFrames) {
             if (truncated) continue;
             throw new SidwaveValidationError(patPath, `the note needs at least ${minFrames} frames including its hard restart`);
           }
@@ -980,7 +989,7 @@ function arrangeChip(
             }
             // The explicit glide supplies its own initial offset and duration.
             inst = { ...inst, slideSemis: 0, slideSpeed: 0, slideRecip: 0 };
-            if (portamento >= f1 - f0) throw new SidwaveValidationError(patPath, "bend or slide_from must reach its target during the note");
+            if (!entry.bend && portamento >= f1 - f0) throw new SidwaveValidationError(patPath, "bend or slide_from must reach its target during the note");
           }
           const gateOff = entry.gateOff === undefined ? undefined : entry.gateOff * (modern ? doc.speed : 1);
           if (gateOff !== undefined && gateOff >= f1 - f0) {
@@ -997,7 +1006,12 @@ function arrangeChip(
           const effective = sustain ? Math.min(15, Math.max(1, Math.round(sustain * centerScale * (entry.level ?? voice.level ?? 15) / 15 *
             rampValue(level, 15, b - sec.startBeat, sec.endBeat - sec.startBeat, beatsPerBar) / 15) +
             (entry.accented ? doc.accent ?? 3 : 0))) : 0;
-          if (mark && !sustain) findings?.once("LEVEL-NOOP", instrumentName ?? `v${voiceId}`, `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`, "Use chip volume or a kit variant for sustain-zero sounds");
+          const percussion = !!entry.kitNote || voice.role === "drums" ||
+            (isLibrary && /^(?:kick|snare|hat|tom|clap|open_hat|crash)$/.test(key!));
+          const transient = percussion || !!inst.wavetable?.length;
+          const targetedLevel = section.levels?.[`v${voiceId}`] !== undefined || voice.level !== undefined ||
+            entry.level !== undefined || entry.accented || !!voice.center;
+          if (mark && !sustain && (!transient || targetedLevel)) findings?.once("LEVEL-NOOP", instrumentName ?? `v${voiceId}`, `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`, "Use chip volume or a kit variant for sustain-zero sounds");
           const sounding = legato ? instruments[previous!.inst]! : inst;
           if (modern) {
             checkDetunedPitch(midi, sounding, voice.detune ?? 0, system, patPath);
@@ -1006,18 +1020,19 @@ function arrangeChip(
               throw new SidwaveValidationError(patPath, "bend and slide_from require a wavetable without pitch steps");
             }
           }
-          out.push({
+          const arranged: ArrangedNote = {
             start: f0, end: f1, midi,
             inst: legato ? previous!.inst : instIndex(inst),
             legato,
-            percussion: !!entry.kitNote || voice.role === "drums" ||
-              (isLibrary && /^(?:kick|snare|hat|tom|clap|open_hat|crash)$/.test(key!)),
+            percussion,
             portamento, glideFrom, gateOff,
             ...(modern ? { sustain: mark && !legato ? effective : legato ? previous?.sustain : undefined, beat: b,
               section: sec.index, path: `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`,
               volume: rampValue(section.volume?.[sid?.id ?? ""], volume, b - sec.startBeat, sec.endBeat - sec.startBeat, beatsPerBar) } : {}),
 
-          });
+          };
+          out.push(arranged);
+          if (entry.bend) bends.set(arranged, { path: patPath, minFrames });
         }
       }
       if (hasFilterMod) globals.push({ frame: ef, kind: "filtermod", step: 0, count: 0 });
@@ -1113,6 +1128,14 @@ function arrangeChip(
       }
     }
     for (const list of notes) list.sort((a, b) => a.start - b.start);
+  }
+  // Ties may extend a bend across a pattern or section boundary.
+  for (const [note, { path, minFrames }] of bends) {
+    const length = note.end - note.start;
+    if (length < minFrames) throw new SidwaveValidationError(path, `the note needs at least ${minFrames} frames including its hard restart`);
+    if (note.portamento! >= length) {
+      throw new SidwaveValidationError(path, "bend or slide_from must reach its target during the note");
+    }
   }
   let tail = 0;
   if (end) {
@@ -1460,6 +1483,7 @@ function buildVoiceEvents(notes: ArrangedNote[], instruments: Instrument[], tota
     const hr = Math.max(n.start + 1, next - Math.max(1, restartFrames));
     const continues = nextNote?.legato && nextNote.start === n.end;
     const gateOff = continues ? n.end : Math.max(n.start + 1, Math.min(n.end - (n.gateOff ?? 0), hr));
+    n.releaseFrame = gateOff;
     if (!continues && (nextNote || (gateFrame === undefined && !!loopNote))) {
       if (restart?.frames && next - n.start <= restart.frames) {
         throw new SidwaveValidationError("$.timeline", `note on call ${next % total} needs ${restart.frames} hard restart calls after the preceding note`);

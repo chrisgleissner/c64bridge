@@ -1932,7 +1932,8 @@ for (const { name } of SIDWAVE_EXAMPLES) {
       .map(([, comment]) => comment.replaceAll(/\n# /g, " ")).join(" ");
     const { lint } = compileSidwaveToPrg(parseSidwave(source));
     const undocumented = lint.filter(({ code }) => !isInfoCode(code) &&
-      !new RegExp(`\\b${code}\\b[ :]+(?!is avoided\\b)[a-zA-Z0-9]`).test(summary));
+      !new RegExp(`\\b${code}\\b[ :]+(?!is avoided\\b)[a-zA-Z0-9]`).test(summary) &&
+      !new RegExp(`^ *# .*\\b${code} accepted\\b`, "m").test(source));
     assert.deepEqual(undocumented, [], undocumented.map(({ code, first }) => `${code} at ${first}`).join(", "));
   });
 }

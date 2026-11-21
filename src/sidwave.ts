@@ -215,7 +215,7 @@ export interface SidwaveDocument {
     model?: SidModel;
     volume?: number;
     filter?: Record<string, unknown>;
-  }> | { layout: SidLayout; overrides?: Record<string, { pan?: string; volume?: number }> };
+  }> | { layout: SidLayout; overrides?: Record<string, { pan?: string; volume?: number; model?: SidMapEntry["model"]; filter?: unknown }> };
   instruments?: Record<string, Record<string, unknown>>;
   voices?: SidVoiceSource[];
   timeline?: SidwaveTimelineSection[];
@@ -443,7 +443,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     const owner = sid.filter?.owner;
     if (owner === undefined) continue;
     const slot = voiceSlots.get(owner);
-    if (slot === undefined || Math.floor(slot / 3) !== chip) throw new SidwaveValidationError(`$.sids[${chip}].filter.owner`, "must name a declared voice of this SID");
+    if (slot === undefined || Math.floor(slot / 3) !== chip) throw new SidwaveValidationError(layout ? `$.sids.overrides.${sid.id}.filter.owner` : `$.sids[${chip}].filter.owner`, "must name a declared voice of this SID");
     sid.filter!.route ??= [slot % 3 + 1];
   }
   return { version, song, voices, timeline, instruments, speed, sids, samples, voiceSlots, cpu: obj.cpu,
@@ -478,10 +478,10 @@ function normalizeSids(raw: unknown, modern: boolean): SidMapEntry[] {
     return entries.map((entry) => {
       const path = `$.sids.overrides.${entry.id}`;
       if (value.overrides[entry.id] === undefined) return entry;
-      const override = requireObject(value.overrides[entry.id], path, ["volume", "pan", ...(modern ? ["model"] : [])]);
+      const override = requireObject(value.overrides[entry.id], path, ["volume", "pan", ...(modern ? ["model", "filter"] : [])]);
       if (override.model !== undefined && !["6581", "8580"].includes(override.model)) throw new SidwaveValidationError(path + ".model", "use 6581 or 8580");
       const mix = parseSidMix(override, path);
-      return { ...entry, ...mix, pan: mix.pan ?? entry.pan, model: override.model };
+      return { ...entry, ...mix, pan: mix.pan ?? entry.pan, model: override.model, ...(override.filter === undefined ? {} : { filter: parseSidFilter(override.filter, path + ".filter", modern) }) };
     });
   }
   if (raw.length < 1 || raw.length > 10) throw new SidwaveValidationError("$.sids", "expected 1..10 SIDs");
@@ -503,26 +503,21 @@ function normalizeSids(raw: unknown, modern: boolean): SidMapEntry[] {
     if (sid.model !== undefined && sid.model !== "6581" && sid.model !== "8580") {
       throw new SidwaveValidationError(`${path}.model`, 'expected "6581" or "8580"');
     }
-    let filter: SidFilter | undefined;
-    if (sid.filter !== undefined) {
-      const fp = `${path}.filter`;
-      if (!isPlainObject(sid.filter)) throw new SidwaveValidationError(fp, "expected a mapping");
-      const value = sid.filter;
-      if (value.cutoff_base !== undefined) {
-        filter = { filter_env: parseFilterEnv(value, fp, modern) };
-      } else {
-        checkKeys(value, new Set(["filter_env", "filter_mod", ...(modern ? ["owner", "route"] : [])]), fp);
-        filter = {
-          filter_env: value.filter_env === undefined ? undefined : parseFilterEnv(value.filter_env, `${fp}.filter_env`, modern),
-          filter_mod: value.filter_mod === undefined ? undefined : parseFilterMod(value.filter_mod, `${fp}.filter_mod`),
-          owner: value.owner === undefined ? undefined : requireNumber(scalarText(value.owner, fp + ".owner").replace(/^v/i, ""), fp + ".owner", { min: 1, max: 30, integer: true }),
-          route: value.route === undefined ? undefined : normalizeRoute(value.route, fp + ".route"),
-
-        };
-      }
-    }
+    const filter = sid.filter === undefined ? undefined : parseSidFilter(sid.filter, path + ".filter", modern);
     return { id, address, model: sid.model, filter, ...parseSidMix(sid, path) };
   });
+}
+
+function parseSidFilter(raw: unknown, path: string, modern: boolean): SidFilter {
+  if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping");
+  if (raw.cutoff_base !== undefined) return { filter_env: parseFilterEnv(raw, path, modern) };
+  checkKeys(raw, new Set(["filter_env", "filter_mod", ...(modern ? ["owner", "route"] : [])]), path);
+  return {
+    filter_env: raw.filter_env === undefined ? undefined : parseFilterEnv(raw.filter_env, path + ".filter_env", modern),
+    filter_mod: raw.filter_mod === undefined ? undefined : parseFilterMod(raw.filter_mod, path + ".filter_mod"),
+    owner: raw.owner === undefined ? undefined : requireNumber(scalarText(raw.owner, path + ".owner").replace(/^v/i, ""), path + ".owner", { min: 1, max: 30, integer: true }),
+    route: raw.route === undefined ? undefined : normalizeRoute(raw.route, path + ".route"),
+  };
 }
 
 function normalizeRoute(raw: unknown, path: string): number[] {

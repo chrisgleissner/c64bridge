@@ -113,11 +113,11 @@ test("restrictToSid keeps only that SID's voices and maps it to $D400", () => {
     timeline: [{ section: "s", bars: 1, layers: { v1: "p", v2: "p", v3: "p", v4: "p", v5: "p" } }],
   });
   const second = restrictToSid(doc, 1);
-  assert.strictEqual(second.sids.length, 1);
-  assert.strictEqual(second.sids[0].address, 0xd400);
-  assert.deepEqual(second.voices.map((v) => v.id), [1, 2]);
-  assert.deepEqual(Object.keys(second.timeline[0].layers), ["v1", "v2"]);
-  const full = arrangeSidwave(doc), part = arrangeSidwave(second);
+  assert.strictEqual(second.chips.length, 1);
+  assert.strictEqual(second.chips[0].address, 0xd400);
+  assert.strictEqual(second.chips[0].volume, 9);
+  assert.equal(second.softVolume, true);
+  const full = arrangeSidwave(doc), part = second;
   const midis = (a) => a.voices.map((v) => v.notes.map((n) => n.midi));
   assert.deepEqual(midis(part).slice(0, 2), midis(full).slice(3, 5));
   assert.strictEqual(part.voices.length, 3);

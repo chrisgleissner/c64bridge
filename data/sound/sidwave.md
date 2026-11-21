@@ -587,6 +587,8 @@ Everything in this chapter applies to `sidwave: 1.2` documents only. SIDWAVE 1.0
 
 ### Time units
 
+A bend can continue through consecutive `~` ties, including ties at the start of the next section. It must reach its target during the complete tied note.
+
 Every duration field of a 1.2 document counts **video frames** (PAL 50.12 Hz, NTSC 59.83 Hz), independent of `speed`: table `frames`, vibrato `delay`, `slide.speed`, `portamento`, `bend.frames`, chord-arp `speed`, `gate_off`, `hard_restart.frames`, numeric echo `delay` and `reverb_sim.delay_frames`. The compiler multiplies by `speed`. A table step may use `calls: N` instead of `frames` for sub-frame steps at `speed` above 1. `add` is a delta per frame (`add / speed` per call when that is an integer, otherwise `add` once per frame). A frame lasts 19 % longer on PAL than on NTSC; the player does not compensate.
 
 ### Pattern text
@@ -672,9 +674,35 @@ sections:
 
 Use slurs for phrases: attack at the start, legato inside. `lib:pad_slow` and `lib:wide_pwm_pad` default to `legato: true` and `hard_restart: { frames: 0 }` in 1.2. A hard restart now counts video frames (default 2) so it lasts the same at every `speed`: after the restart ADSR is written the envelope rate counter can need up to 32768 CPU cycles before the envelope moves (33.3 ms PAL), which 2 calls at `speed: 4` do not cover. The 1.2 player changes the gate before writing ADSR, so the restart rates still govern the rate counter when the gate rises. A gate-off shorter than 32768 cycles is accepted with `HR-SHORT`; `frames: 0` is the explicit soft re-gate. The minimum note length is the hard-restart frames plus 1 frame. `hard_restart: { test: true }` on bass and kick resets the oscillator phase at every attack.
 
+Layout overrides can set a SID's filter just as an explicit SID entry can.
+For example, `sids: { layout: ultisid8, overrides: { sid5: { model: "8580",
+filter: { owner: v13, route: [1, 2] } } } }` gives voice 13 control of the
+filter for channels 1 and 2 on SID 5.
+
 ### Centre placement
 
-`sids: { layout: ultisid8, pan: wide }` sets UltiSID 1 to `Left 5` and UltiSID 2 to `Right 5` (`narrow`: `Left 3` / `Right 3`); with `ultisid8+socket1` the socket SID is `Center`. The four parts of one UltiSID share its pan (data/ultimate/multisid.md). `center: true` on a voice mirrors it onto the same channel of the paired SID (`sidN` and `sidN+4`); write `center: { sid: sid6, channel: 2 }` for explicit maps. The mirror channel must be unscored. Both copies restart with TEST set and the player writes the mirror registers directly after the voice's own, so the two oscillators start in phase; both copies are scaled by 0.75 (`center: { level: N }` overrides). A centred voice counts in the CPU budget. `role: bass | lead | drums | pad | arp` is used only by the lint; `ONE-SIDE` reports a bass, lead or drum part on one pan side only.
+`sids: { layout: ultisid8, pan: wide }` sets UltiSID 1 to `Left 5` and UltiSID 2 to `Right 5` (`narrow`: `Left 3` / `Right 3`); with `ultisid8+socket1` the socket SID is `Center`. The four parts of one UltiSID share its pan (data/ultimate/multisid.md). `center: true` on a voice mirrors it onto the same channel of the paired SID (`sidN` and `sidN+4`); write `center: { sid: sid6, channel: 2 }` for explicit maps. The mirror channel must be unscored. Both copies restart with TEST set and the player writes the mirror registers directly after the voice's own, so the two oscillators start in phase; both copies are scaled by 0.75 (`center: { level: N }` overrides). A centred voice counts in the CPU budget. `role: bass | lead | drums | pad | arp` identifies parts for lint and offline review. `ONE-SIDE` reports a hard-panned bass, lead or drum part without a mirror or unison copy on the other side.
+
+When every channel is scored, declare an opposite-pan unison copy instead of
+reserving a mirror channel. Use zero detune and an instrument with a TEST hard
+restart so both oscillators reset phase on the same attack. The copy uses its
+own channel and SID volume. Set the source level or the chip volumes to balance
+the pair with the rest of the mix.
+
+```yaml
+sidwave: 1.2
+tempo: 125.31
+sids:
+  - { id: left, address: "$D400", pan: Left 5 }
+  - { id: right, address: "$D420", pan: Right 5 }
+instruments:
+  bass: { waveform: pulse, adsr: [0, 6, 9, 2], hard_restart: { frames: 2, test: true } }
+voices:
+  - { id: 1, role: bass, level: 11, instrument: bass, patterns: { a: { groove: "C2 ~ G2 ~" } } }
+  - { id: 4, unison: { voice: 1, detune: 0 } }
+timeline: [{ bars: 1, layers: { v1: a } }]
+```
+
 
 ### Sync and ring source
 
@@ -711,11 +739,11 @@ The compile operations return `lint` (at most 12 aggregated entries, most severe
 | --- | --- |
 | `SEQ-CUT` | a sequence item is cut by the section end |
 | `LOOP-TIE` | tie at the loop target with different predecessors |
-| `LEVEL-NOOP` | level or accent on an instrument with sustain 0 |
+| `LEVEL-NOOP` | level or accent on an instrument with sustain 0. Section-wide levels skip transient instruments unless they are individually targeted. |
 | `FLAT` | estimated loudness spans less than 3 dB across the song |
 | `REPEAT` | more than 75 % of the bars repeat an earlier bar across all voices |
 | `VOL-STEP` | volume ramp with more steps than beats, or a slew longer than a beat |
-| `HR-GAP` | all sounding voices (at least 2) restart on the same beat for 4 or more beats |
+| `HR-GAP` | simultaneous hard restarts on four or more consecutive beats, with no held voice or sample bridging the gaps |
 | `HR-SHORT` | gate-off before an attack shorter than 32768 cycles |
 | `TABLE-CUT` | a wavetable cut by the next attack in more than a quarter of its uses |
 | `FILTER-SHARED`, `FILTER-IGNORED`, `FILTER-MODEL` | filter ownership and model |
@@ -726,7 +754,7 @@ The compile operations return `lint` (at most 12 aggregated entries, most severe
 | `ARP-FAST` | an arpeggio or table tone shorter than 1 video frame |
 | `NO-BASS` | no note below C3 for 8 or more bars while 2 or more voices sound |
 | `DUP` | two voices play the same notes at the same onsets for 2 or more bars without detune, echo or unison |
-| `CLASH` | minor second or minor ninth held for an eighth note or longer, starting on a beat |
+| `CLASH` | pitched minor second or minor ninth held for an eighth note or longer, starting on a beat |
 | `TEMPO-GRID` (info) | a sixteenth is not a whole number of calls; gives the two nearest exact tempos |
 | `RINGSYNC-SRC`, `ONE-SIDE`, `DIGI-SHARED` | see above |
 

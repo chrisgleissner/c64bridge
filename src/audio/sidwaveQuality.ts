@@ -27,7 +27,7 @@ export interface QualityThresholds {
 
 export const DEFAULT_QUALITY_THRESHOLDS: QualityThresholds = {
   clipLevel: 0.99, clipRunWarn: 3, clipRunFail: 8, clipFractionFail: 1e-4,
-  glitchRatio: 12, glitchFloor: 0.02, glitchExcludeMs: 15, glitchWarn: 1, glitchFail: 6,
+  glitchRatio: 8, glitchFloor: 0.02, glitchExcludeMs: 15, glitchWarn: 1, glitchFail: 6,
   dropoutMs: 30, dropoutFloorDb: -66, dropoutFail: 3,
   bassBelowMidWarnDb: 12, bassBelowMidFailDb: 20, centroidWarnHz: 2500, centroidFailHz: 3500,
   fullnessWithinDb: 15, fullnessBands: 3, fullnessWarn: 0.5, fullnessFail: 0.25,
@@ -138,34 +138,50 @@ export function analyseQuality(input: QualityInput): QualityReport {
   if (!schedule) checks.glitches = mk("SKIP", "needs the score to exclude scheduled onsets");
   else {
     const exclude = th.glitchExcludeMs / 1000;
-    const transients = [
-      ...schedule.notes.filter((n) => n.bright).map((n) => [n.start - exclude, n.start + n.duration + 0.3] as const),
-      ...schedule.percussion.map((p) => [p.start - exclude, p.start + (p.duration ?? 0) + 0.04 + exclude] as const),
-    ];
-    const events = schedule.notes.flatMap((n) => [n.start, n.start + n.duration]);
+    const events = [
+      ...schedule.notes.flatMap((n) => [n.start, n.start + n.duration]).map((t) => [t - exclude, t + exclude]),
+      ...schedule.percussion.map((p) => [p.start - exclude, p.start + (p.duration ?? 0) + Math.max(0.04, p.releaseSeconds ?? 0) + exclude]),
+      ...(schedule.changes ?? []).map((t) => [t - 0.002, t + 0.004]),
+    ].sort((x, y) => x[0]! - y[0]!);
+    const intervals: Array<[number, number]> = [];
+    for (const [start, end] of events) {
+      const last = intervals[intervals.length - 1];
+      if (last && start! <= last[1]) last[1] = Math.max(last[1], end!);
+      else intervals.push([start!, end!]);
+    }
     const block = Math.round(0.001 * sr);
-    const nBlocks = Math.floor((b - a) / block);
+    const nBlocks = Math.max(0, Math.floor((b - a) / block));
     const peaks = new Float64Array(nBlocks);
     for (const ch of [signal.left, signal.right]) {
       const hp = highpass(ch, sr, 3000);
-      for (let i = 0; i < nBlocks; i += 1) { let m = 0; for (let k = 0; k < block; k += 1) m = Math.max(m, Math.abs(hp[a + i * block + k]!)); peaks[i] = Math.max(peaks[i]!, m); }
+      for (let i = 0; i < nBlocks; i += 1) {
+        for (let k = 0; k < block; k += 1) peaks[i] = Math.max(peaks[i]!, Math.abs(hp[a + i * block + k]!));
+      }
     }
+    // Use a percentile of short-window peaks. The median of individual
+    // 1 ms blocks falls between normal oscillator edges and understates them.
+    const tiles = new Float64Array(Math.ceil(nBlocks / 10));
+    peaks.forEach((peak, i) => { const tile = Math.floor(i / 10); tiles[tile] = Math.max(tiles[tile]!, peak); });
     const found: Array<{ t: number; ratio: number; peak: number }> = [];
+    let event = 0;
     for (let i = 0; i < nBlocks; i += 1) {
-      const t = from + (i + 0.5) * 0.001;
-      if (peaks[i]! < th.glitchFloor || t < from + 0.06) continue; // the first 60 ms are the player start-up
+      const peak = peaks[i]!;
+      const t = (a + (i + 0.5) * block) / sr;
+      if (peak < th.glitchFloor || t < from + 0.06) continue;
       const songTime = t - offset;
-      if (events.some((event) => Math.abs(event - songTime) <= exclude)) continue;
-      if (transients.some(([start, end]) => songTime >= start && songTime <= end)) continue;
-      const win = Array.from(peaks.subarray(Math.max(0, i - 100), Math.min(nBlocks, i + 101)));
-      const local = Math.max(median(win), 1e-6);
-      if (peaks[i]! > th.glitchRatio * local) found.push({ t, ratio: peaks[i]! / local, peak: peaks[i]! });
+      while (intervals[event] && intervals[event]![1] < songTime) event++;
+      if (intervals[event] && songTime >= intervals[event]![0]) continue;
+      const tile = Math.floor(i / 10);
+      const neighbors = [...tiles.subarray(Math.max(0, tile - 12), Math.max(0, tile - 1)),
+        ...tiles.subarray(tile + 2, tile + 13)];
+      const local = Math.max(quantile(neighbors, 0.85), 1e-6);
+      if (peak > th.glitchRatio * local) found.push({ t, ratio: peak / local, peak });
     }
     // Spikes less than 80 ms apart (the per-frame zipper of a filter or pulse sweep is 20 ms) form one event.
     const merged: typeof found = [];
     for (const f of found) { const last = merged[merged.length - 1]; if (last && f.t - last.t < 0.08) { if (f.ratio > last.ratio) Object.assign(last, { ratio: f.ratio, peak: f.peak }); } else merged.push({ ...f }); }
     const status: Status = merged.length >= th.glitchFail ? "FAIL" : merged.length >= th.glitchWarn ? "WARN" : "PASS";
-    checks.glitches = mk(status, `${merged.length} unexplained high-frequency spike(s) above ${th.glitchRatio}x the local median`, { count: merged.length, times: merged.slice(0, 30).map((m) => +(m.t - offset).toFixed(3)), worstRatio: merged.reduce((m, f) => Math.max(m, f.ratio), 0) });
+    checks.glitches = mk(status, `${merged.length} unexplained high-frequency spike(s) above ${th.glitchRatio}x the local spectral peaks`, { count: merged.length, times: merged.slice(0, 30).map((m) => +(m.t - offset).toFixed(3)), worstRatio: merged.reduce((m, f) => Math.max(m, f.ratio), 0) });
   }
 
   // ---- dropouts
@@ -292,7 +308,10 @@ export function analyseQuality(input: QualityInput): QualityReport {
   // ---- pitch stability
   if (!schedule) checks.pitchStability = mk("SKIP", "needs the score");
   else {
-    const long = schedule.notes.filter((n) => n.duration >= th.longNoteSeconds && !n.modulated && n.hz >= 100);
+    const dense = schedule.sidCount > 3 || (schedule.sidCount > 1 && schedule.voiceCount >= 6);
+    const candidates = schedule.notes.filter((n) => n.duration >= th.longNoteSeconds && !n.modulated && !n.inharmonic && n.hz >= 100);
+    const lead = candidates.some((n) => n.role === "lead");
+    const long = dense ? candidates.filter((n) => lead ? n.role === "lead" : n.role !== undefined && n.role !== "drums") : candidates;
     const devs: number[] = [];
     const win = Math.round(0.15 * sr), hann = new Float64Array(win).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / win));
     const goertzel = (seg: Float64Array, hz: number) => { const c = 2 * Math.cos((2 * Math.PI * hz) / sr); let s1 = 0, s2 = 0; for (let i = 0; i < seg.length; i += 1) { const s = seg[i]! + c * s1 - s2; s2 = s1; s1 = s; } return s1 * s1 + s2 * s2 - c * s1 * s2; };
@@ -315,8 +334,10 @@ export function analyseQuality(input: QualityInput): QualityReport {
         bestC = fineC;
         cents.push(bestC);
       }
-      cents.shift(); cents.pop(); // the first and last window sit on the attack/glide and the release
-      if (cents.length >= 2) { perNote.push(cents); tracks.push({ t: +n.start.toFixed(2), hz: +n.hz.toFixed(1), cents }); }
+      // A single bad estimate within a note should not overrule its neighbours.
+      // The centres omit the first and last window near the attack and release.
+      const stable = cents.slice(1, -1).map((_, i) => median(cents.slice(i, i + 3)));
+      if (stable.length >= 2) { perNote.push(stable); tracks.push({ t: +n.start.toFixed(2), hz: +n.hz.toFixed(1), cents: stable }); }
     }
     if (perNote.length === 0) checks.pitchStability = mk("SKIP", "no long unmodulated note with a clear peak");
     else {

@@ -3,42 +3,18 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ParsedSidwave } from "../sidwave.js";
-import { arrangeSidwave, compileSidwaveStem, type Arrangement } from "../sidwaveCompiler.js";
+import { arrangeSidwave, compileSidwaveStem, projectSidwaveStem, type Arrangement } from "../sidwaveCompiler.js";
 import type { PanSide } from "./sidwaveFidelity.js";
 import type { Stereo } from "./sidwaveSimilarity.js";
 
-/** Single-SID document view for legacy consumers. Reference rendering uses arranged stems. */
-export function restrictToSid(doc: ParsedSidwave, chip: number): ParsedSidwave {
-  const sid = doc.sids[chip];
-  if (!sid) throw new RangeError(`SID ${chip} is not declared (${doc.sids.length} SIDs)`);
-  const idByChannel = new Map<number, number>();
-  const voices = doc.voices.flatMap((voice) => {
-    const slot = doc.voiceSlots.get(voice.id)!;
-    if (Math.floor(slot / 3) !== chip) return [];
-    const channel = (slot % 3) + 1;
-    idByChannel.set(channel, voice.id);
-    return [{ ...voice, id: channel }];
-  });
-  const timeline = doc.timeline.map((section) => ({
-    ...section,
-    layers: Object.fromEntries([...idByChannel].map(([channel, id]) => [`v${channel}`, section.layers[`v${id}`] ?? "-"])),
-  }));
-  const gfx = doc.song.global_fx as Record<string, unknown>;
-  return {
-    ...doc,
-    version: "1.1",
-    cpu: undefined,
-    voices,
-    timeline,
-    sids: [{ id: sid.id, address: 0xd400, volume: 15, model: sid.model }],
-    voiceSlots: new Map(voices.map(({ id }) => [id, id - 1])),
-    song: { ...doc.song, global_fx: { reverb_sim: gfx.reverb_sim, filter_env: chip === 0 ? gfx.filter_env : undefined } },
-  };
+/** Restrict the resolved note streams, including cross-SID copies, to one SID. */
+export function restrictToSid(doc: ParsedSidwave, chip: number, arrangement = arrangeSidwave(doc)): Arrangement {
+  return projectSidwaveStem(doc, arrangement, chip);
 }
 
 /** Pan side of each SID, from `pan` overrides, else centre. */
-export function panOf(pan: Record<number, PanSide> | undefined, sid: number): PanSide {
-  return pan?.[sid] ?? "center";
+export function panOf(pan: Record<number, PanSide> | undefined, sid: number, setting?: string): PanSide {
+  return pan?.[sid] ?? (setting?.startsWith("Left") ? "left" : setting?.startsWith("Right") ? "right" : "center");
 }
 
 export interface RenderOptions {
@@ -75,7 +51,10 @@ export function readWav(file: string): { samples: Float32Array; channels: number
  * support is not needed), with the SID model forced, and mixes the renders into a stereo reference using each
  * SID's pan side. Mono renders are mixed at unit gain to the left, right, or both channels at 1/sqrt(2).
  */
-export function renderReference(doc: ParsedSidwave, options: RenderOptions): Stereo {
+export function renderReference(doc: ParsedSidwave, options: RenderOptions): Stereo & { warnings: string[] } {
+  const warnings = doc.samples
+    ? ["The sidplayfp reference omits CIA2 NMI digi samples. Use a VICE PRG capture to listen to the sample parts."]
+    : [];
   const sampleRate = options.sampleRate ?? 48000;
   const bin = options.sidplayfp ?? "sidplayfp";
   const dir = options.workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "sidwave-ref-"));
@@ -92,7 +71,7 @@ export function renderReference(doc: ParsedSidwave, options: RenderOptions): Ste
       if (run.status !== 0 || !fs.existsSync(wav)) throw new Error(`${bin} failed for SID ${chip + 1}: ${run.stderr || run.stdout}`);
       const w = readWav(wav);
       const mono = w.channels === 1 ? w.samples : w.samples.filter((_, i) => i % w.channels === 0);
-      renders.push({ pan: panOf(options.pan, chip), samples: mono });
+      renders.push({ pan: panOf(options.pan, chip, doc.sids[chip]?.pan), samples: mono });
     }
   } finally {
     if (!options.workDir) fs.rmSync(dir, { recursive: true, force: true });
@@ -108,5 +87,5 @@ export function renderReference(doc: ParsedSidwave, options: RenderOptions): Ste
   let peak = 0;
   for (let i = 0; i < length; i += 1) peak = Math.max(peak, Math.abs(left[i]!), Math.abs(right[i]!));
   if (peak > 1) for (let i = 0; i < length; i += 1) { left[i] /= peak; right[i] /= peak; }
-  return { left, right, sampleRate };
+  return { left, right, sampleRate, warnings };
 }

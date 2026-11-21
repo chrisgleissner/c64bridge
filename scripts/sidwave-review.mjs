@@ -38,7 +38,7 @@ const left = new Float32Array(n), right = new Float32Array(n);
 for (let i = 0; i < n; i += 1) { left[i] = w.channels === 2 ? w.samples[2 * i] : w.samples[i]; right[i] = w.channels === 2 ? w.samples[2 * i + 1] : w.samples[i]; }
 const signal = { left, right, sampleRate: w.sampleRate };
 
-let doc, schedule, offsetSeconds = (opts.offsetMs ?? 0) / 1000;
+let doc, schedule, referenceWarnings = [], offsetSeconds = (opts.offsetMs ?? 0) / 1000;
 if (opts.song) {
   let source;
   if (opts.song.startsWith("preset:")) {
@@ -51,6 +51,8 @@ if (opts.song) {
   schedule = m.expectedSchedule(doc, { arrangement });
   if (opts.offsetMs === undefined) {
     const reference = m.renderReference(doc, { model: opts.model, sampleRate: 48000, arrangement });
+    referenceWarnings = reference.warnings;
+    for (const warning of referenceWarnings) console.error(warning);
     const cmp = m.compareToReference(reference, signal, { latencySearchMs: 4000, halfBarSeconds: (schedule.bars[1] - schedule.bars[0]) / 2 });
     offsetSeconds = cmp.offsetMs / 1000;
     console.error(`song start found at ${cmp.offsetMs.toFixed(0)} ms (chroma ${cmp.real.chromaMedian.toFixed(2)} against the reference)`);
@@ -59,5 +61,5 @@ if (opts.song) {
 
 const report = m.analyseQuality({ signal, schedule, doc, offsetSeconds });
 console.log(m.formatQuality(report));
-if (opts.out) fs.writeFileSync(opts.out, JSON.stringify({ wav: opts.wav, song: opts.song, offsetSeconds, ...report }, null, 2));
+if (opts.out) fs.writeFileSync(opts.out, JSON.stringify({ wav: opts.wav, song: opts.song, offsetSeconds, referenceWarnings, ...report }, null, 2));
 process.exit(report.verdict === "FAIL" ? 1 : 0);

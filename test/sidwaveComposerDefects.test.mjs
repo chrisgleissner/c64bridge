@@ -7,11 +7,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { emulate } from "./helpers/sidwaveFuzzKit.mjs";
 import { compileDoc, runPrg, runPsidWrites } from "./helpers/sidwaveEmulator.mjs";
-import { parseSidwave } from "../src/sidwave.js";
-import { arrangeSidwave, compileSidwaveStem, compileSidwaveToPrg } from "../src/sidwaveCompiler.js";
+import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
+import { arrangeSidwave, compileSidwaveStem, compileSidwaveToPrg, hzToSidFrequency } from "../src/sidwaveCompiler.js";
 import { analyseQuality } from "../src/audio/sidwaveQuality.js";
 import { expectedSchedule } from "../src/audio/sidwaveFidelity.js";
-import { readWav } from "../src/audio/sidwaveReference.js";
+import { readWav, renderReference, restrictToSid } from "../src/audio/sidwaveReference.js";
+
+import { readSidwaveExample } from "../src/sidwaveExamples.js";
 
 const sidplayfpAvailable = !spawnSync("sidplayfp", ["--help"]).error;
 
@@ -137,7 +139,9 @@ test("review excludes library drum transients and retains unexplained spikes", (
   mono[Math.round(0.085 * sampleRate)] = 0.9; // During the triangle kick's pitch sweep.
   mono[Math.round(0.310 * sampleRate)] = 0.9; // Between percussion events.
   const report = analyseQuality({ signal: { left: mono, right: mono, sampleRate }, schedule });
-  assert.deepEqual(report.checks.glitches.metrics.times, [0.31]);
+  const { times } = report.checks.glitches.metrics;
+  assert.equal(times.length, 1);
+  assert.ok(Math.abs(times[0] - 0.31) < 0.002);
 });
 
 test("a remapped offline SID stem retains the arranged filter owner and sequenced note writes", () => {
@@ -194,4 +198,137 @@ test("review runs without an explicit offset on a sequence score", { skip: !sidp
   assert.equal(run.status, report.verdict === "FAIL" ? 1 : 0);
   assert.equal(report.checks.repetition.metrics.bars, 4);
   assert.deepEqual(Object.keys(report.checks.dynamics.metrics.sectionRmsDb), ["Intro", "End"]);
+});
+
+test("a bend reaches its target through ties across a section boundary", () => {
+  const bend = { note: "A4", bend: { to: "B4", frames: 36 } };
+  const song = score({ patterns: { A: { groove: ["-", "-", "-", bend] }, B: { groove: ["~", "~", "-", "-"] } } }, {
+    timeline: [{ bars: 1, layers: { v1: "A" } }, { bars: 1, layers: { v1: "B" } }],
+  });
+  const { sid, doc } = compileDoc(song);
+  const { start, end } = arrangeSidwave(doc).voices[0].notes[0];
+  const { calls } = runPsidWrites(sid, end);
+  const freqAt = (frame) => calls[frame].regs[0] | calls[frame].regs[1] << 8;
+  const frequency = (name) => hzToSidFrequency(midiToHz(noteNameToMidi(name)), "PAL");
+  assert.equal(freqAt(start), frequency("A4"));
+  assert.ok(freqAt(start + 20) < frequency("B4"));
+  assert.equal(freqAt(start + 36), frequency("B4"));
+  assert.ok(calls.slice(start, start + 37).every(({ regs }) => (regs[4] & 1) === 1));
+  song.voices[0].patterns.B.groove[0] = "-";
+  assert.throws(() => compileDoc(song), /must reach its target during the note/);
+});
+
+test("layout overrides give the correct physical SID its filter owner and routing", () => {
+  const song = score({}, {
+    sids: { layout: "ultisid8", overrides: { sid5: { model: "8580", filter: { owner: "v13", route: [1, 2] } } } },
+    instruments: { p: { waveform: "pulse", filtertable: [{ cutoff: "900Hz", resonance: 8 }] } },
+    voices: [{ id: 13, instrument: "p", patterns: { A: { groove: ["C4", "~", "~", "~"] } } }],
+    timeline: [{ bars: 1, layers: { v13: "A" } }],
+  });
+  const doc = parseSidwave(song);
+  const { calls: [{ regs }] } = runPrg(compileSidwaveToPrg(doc), 1);
+  assert.equal(regs[0x37], 0x83, "owner resonance and routes at $D437");
+  assert.equal(regs[0x17], 0, "first SID filter");
+  song.sids.overrides.sid5.filter.owner = "v1";
+  assert.throws(() => parseSidwave(song), /sids.overrides.sid5.filter.owner.*this SID/);
+});
+
+test("the documented phase-reset unison mirrors a bass without a reserved channel", () => {
+  const spec = fs.readFileSync(new URL("../data/sound/sidwave.md", import.meta.url), "utf8");
+  const example = spec.match(/When every channel is scored[\s\S]*?```yaml\n([\s\S]*?)```/)?.[1];
+  assert.ok(example);
+  const original = parseSidwave(example);
+  const { notes } = arrangeSidwave(original).voices[0];
+  const { calls } = runPrg(compileSidwaveToPrg(original), notes[1].start + 1);
+  const { regs: reset } = calls[notes[1].start - 2];
+  assert.equal(reset[4] & 9, 8);
+  assert.equal(reset[0x24] & 9, 8);
+  const { regs } = calls[notes[1].start];
+  assert.deepEqual(regs.slice(0, 7), regs.slice(0x20, 0x27));
+});
+
+test("pitch review excludes unmodulated-looking sync notes and silent gate-off sources", () => {
+  const sampleRate = 12000;
+  const left = Float32Array.from({ length: sampleRate * 3 }, (_, i) =>
+    0.1 * Math.sin(2 * Math.PI * 447 * i / sampleRate));
+  for (const effect of ["sync", "ring"]) {
+    const song = score({}, {
+      instruments: {
+        mod: { waveform: "triangle", [effect]: true, source_note: "+12" },
+        silent: { waveform: "triangle", wavetable: [{ gate: false }] },
+      },
+      voices: [
+        { id: 2, instrument: "mod", patterns: { A: { length: 4, groove: ["A4"] } } },
+        { id: 3, instrument: "silent", patterns: { A: { length: 4, groove: ["E4"] } } },
+      ],
+      timeline: [{ bars: 2, layers: { v2: "A", v3: "A" } }],
+    });
+    const schedule = expectedSchedule(parseSidwave(song));
+    assert.ok(schedule.notes.length > 0);
+    assert.ok(schedule.notes.every((note) => note.voice === 1 && note.inharmonic));
+    const report = analyseQuality({ signal: { left, right: left, sampleRate }, schedule });
+    assert.equal(report.checks.pitchStability.status, "SKIP");
+  }
+});
+
+for (const name of ["ultisid_orchestra", "wall_of_sid"]) {
+  test(`reference renders all resolved stems of ${name} with their 1.2 levels`, { skip: !sidplayfpAvailable }, () => {
+    const doc = parseSidwave(readSidwaveExample(name));
+    const arrangement = arrangeSidwave(doc);
+    const slots = doc.voices.filter((voice) => voice.unison || voice.echo).map((voice) => doc.voiceSlots.get(voice.id));
+    assert.ok(slots.length > 0);
+    for (const slot of slots) {
+      const chip = Math.floor(slot / 3);
+      const stem = restrictToSid(doc, chip, arrangement);
+      assert.equal(stem.softVolume, true);
+      assert.equal(stem.chips[0].volume, doc.sids[chip].volume);
+      assert.deepEqual(stem.voices[slot % 3].notes, arrangement.voices[slot].notes);
+      assert.ok(stem.voices[slot % 3].notes.length);
+    }
+    const rendered = renderReference(doc, { model: "8580", arrangement, sampleRate: 12000, seconds: 1 });
+    for (const channel of [rendered.left, rendered.right]) assert.ok(channel.some((sample) => Math.abs(sample) > 0.005));
+    assert.ok(rendered.left.some((sample, i) => sample !== rendered.right[i]));
+    assert.deepEqual(rendered.warnings, []);
+  });
+}
+
+test("the sample reference reports that CIA2 playback is omitted", { skip: !sidplayfpAvailable }, () => {
+  const doc = parseSidwave(readSidwaveExample("digi_groove"));
+  const reference = renderReference(doc, { model: "8580", sampleRate: 12000, seconds: 1 });
+  assert.match(reference.warnings.join(" "), /omits CIA2 NMI digi samples.*VICE/);
+});
+
+test("a saw bass render has no glitches and still exposes an injected click", { skip: !sidplayfpAvailable }, (t) => {
+  const { doc, sid } = compileDoc(score({ waveform: "saw", adsr: [0, 7, 9, 2], patterns: {
+    A: { groove: ["A1", "~", "~", "~", "G1", "~", "~", "~"] },
+  } }));
+  const { wav } = sidplayfp(t, sid, "8580");
+  const { samples: left, sampleRate } = readWav(wav);
+  const schedule = expectedSchedule(doc);
+  const check = () => analyseQuality({ signal: { left, right: left, sampleRate }, schedule }).checks.glitches.metrics;
+  assert.deepEqual(check().times, []);
+  const click = Math.round(1.13 * sampleRate);
+  left[click] = left[click] > 0 ? -0.99 : 0.99;
+  const { times } = check();
+  assert.equal(times.length, 1);
+  assert.ok(Math.abs(times[0] - 1.13) < 0.002);
+});
+
+test("review masks a compiled wavetable change on any voice, rather than the whole note", () => {
+  const doc = parseSidwave(score({}, {
+    instruments: { p: { waveform: "pulse", wavetable: [{ frames: 30 }, { wave: "saw" }] } },
+    voices: [{ id: 2, instrument: "p", patterns: { A: { length: 4, groove: ["C4"] } } }],
+    timeline: [{ bars: 1, layers: { v2: "A" } }],
+  }));
+  const schedule = expectedSchedule(doc);
+  const transition = schedule.changes.find((time) => time > 0.5 && time < 0.7);
+  assert.ok(transition);
+  const sampleRate = 48000;
+  const left = new Float32Array(sampleRate * 2);
+  left[Math.round(transition * sampleRate)] = 0.9;
+  left[Math.round(1.13 * sampleRate)] = 0.9;
+  const report = analyseQuality({ signal: { left, right: left, sampleRate }, schedule });
+  const { times } = report.checks.glitches.metrics;
+  assert.equal(times.length, 1);
+  assert.ok(Math.abs(times[0] - 1.13) < 0.002);
 });

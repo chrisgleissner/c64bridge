@@ -227,12 +227,14 @@ const toFloat = (pcm16) => {
   return { left, right, sampleRate };
 };
 const toInt16 = (l, r) => { const out = new Int16Array(l.length * 2); for (let i = 0; i < l.length; i += 1) { out[2 * i] = Math.max(-32768, Math.min(32767, Math.round(l[i] * 32767))); out[2 * i + 1] = Math.max(-32768, Math.min(32767, Math.round(r[i] * 32767))); } return out; };
-let similarity = null, similarityError = null;
+let similarity = null, similarityError = null, referenceWarnings = [];
 try {
   const reference = m.renderReference(doc, { model: opts.model, pan, sampleRate: 48000, workDir: opts.out });
+  referenceWarnings = reference.warnings;
+  for (const warning of referenceWarnings) console.error(warning);
   writeWav(path.join(opts.out, "reference.wav"), toInt16(reference.left, reference.right), reference.sampleRate);
   const capture = toFloat(pcm);
-  similarity = m.compareToReference(reference, capture, { latencySearchMs: opts.latencyMs, halfBarSeconds: 120 / doc.song.tempo });
+  similarity = m.compareToReference(reference, capture, { latencySearchMs: opts.latencyMs, halfBarSeconds: (schedule.bars[1] - schedule.bars[0]) / 2 });
   writeSpectrograms(opts.out, reference, capture, similarity.offsetMs / 1000);
 } catch (error) {
   similarityError = error instanceof Error ? error.message : String(error);
@@ -264,7 +266,7 @@ function writeSpectrograms(dir, reference, capture, offsetS) {
 const primaryOk = similarity?.verdict.pass === true;
 fs.writeFileSync(path.join(opts.out, "report.json"), JSON.stringify({
   song: opts.song, host: opts.host, sampleRate, model: opts.model, pass: primaryOk,
-  similarity, similarityError,
+  similarity, similarityError, referenceWarnings,
   diagnostic: { note: "schedule-based note presence; sensitive to SID model and filter, not used for the exit status", thresholds: { pitched: PITCHED_MIN, percussion: PERCUSSION_MIN }, verdict, ...report },
 }, null, 2));
 if (similarity) {
