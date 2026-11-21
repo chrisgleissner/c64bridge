@@ -43,7 +43,7 @@ instruments:
     waveform: pulse
     pulse_width: 1024
     adsr: [0, 4, 0, 0]
-    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse, frames: 2 }, { gate: false }]
+    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse, frames: 1 }, { gate: false }]
     filtertable: [{ cutoff: 600Hz, resonance: 6, type: lowpass }]
   # Hammer-on: two saw frames a whole tone below, then the slap body.
   hm:
