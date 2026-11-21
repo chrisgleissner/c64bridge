@@ -69,6 +69,18 @@ test("a note whose envelope has decayed to zero is not a dropout", () => {
   assert.notStrictEqual(r.checks.dropouts.status, "PASS");
 });
 
+test("silence at a note's edges within the alignment tolerance is not a dropout", () => {
+  // The capture's clock drifts against the score by tens of milliseconds over a piece, so a staccato note can
+  // appear up to about 50 ms late. Its first 45 ms are silent here.
+  const tones = [], notes = [];
+  for (let i = 0; i < 5; i += 1) {
+    const at = i * 0.5;
+    notes.push(note(at, 0.45, 110));
+    tones.push({ start: at + 0.045, duration: 0.445, hz: 110 });
+  }
+  assert.strictEqual(analyseQuality({ signal: render(3, tones), schedule: sched(notes, [], 3) }).checks.dropouts.status, "PASS");
+});
+
 test("the schedule gives sustain-0 notes their envelope length", async () => {
   const { expectedSchedule } = await import("../src/audio/sidwaveFidelity.js");
   const doc = parseSidwave(JSON.stringify({

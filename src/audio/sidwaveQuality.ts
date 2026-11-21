@@ -15,7 +15,7 @@ export interface Check { status: Status; summary: string; metrics: Record<string
 export interface QualityThresholds {
   clipLevel: number; clipRunWarn: number; clipRunFail: number; clipFractionFail: number;
   glitchRatio: number; glitchFloor: number; glitchExcludeMs: number; glitchWarn: number; glitchFail: number;
-  dropoutMs: number; dropoutFloorDb: number; dropoutFail: number;
+  dropoutMs: number; dropoutFloorDb: number; dropoutFail: number; dropoutEdgeSeconds: number;
   bassBelowMidWarnDb: number; bassBelowMidFailDb: number; centroidWarnHz: number; centroidFailHz: number;
   fullnessWithinDb: number; fullnessBands: number; fullnessWarn: number; fullnessFail: number;
   bassBarFloorDb: number; bassBarWarn: number; bassBarFail: number;
@@ -28,7 +28,7 @@ export interface QualityThresholds {
 export const DEFAULT_QUALITY_THRESHOLDS: QualityThresholds = {
   clipLevel: 0.99, clipRunWarn: 3, clipRunFail: 8, clipFractionFail: 1e-4,
   glitchRatio: 8, glitchFloor: 0.02, glitchExcludeMs: 15, glitchWarn: 1, glitchFail: 6,
-  dropoutMs: 30, dropoutFloorDb: -66, dropoutFail: 3,
+  dropoutMs: 30, dropoutFloorDb: -66, dropoutFail: 3, dropoutEdgeSeconds: 0.05,
   bassBelowMidWarnDb: 12, bassBelowMidFailDb: 20, centroidWarnHz: 2500, centroidFailHz: 3500,
   fullnessWithinDb: 15, fullnessBands: 3, fullnessWarn: 0.5, fullnessFail: 0.25,
   bassBarFloorDb: -60, bassBarWarn: 0.8, bassBarFail: 0.5,
@@ -188,7 +188,10 @@ export function analyseQuality(input: QualityInput): QualityReport {
   if (!schedule) checks.dropouts = mk("SKIP", "needs the score");
   else {
     const floor = Math.pow(10, th.dropoutFloorDb / 20), block = Math.round(0.005 * sr);
-    const sounding = schedule.notes.map((n) => [n.start + offset, n.start + Math.min(n.duration, n.audible ?? Infinity) + offset] as const);
+    // A capture's clock drifts against the score by tens of milliseconds over a piece (the HIL harness reports the
+    // drift), so silence within dropoutEdgeSeconds of a note's start or audible end is alignment, not a dropout.
+    const edge = th.dropoutEdgeSeconds;
+    const sounding = schedule.notes.map((n) => [n.start + offset + edge, n.start + Math.min(n.duration, n.audible ?? Infinity) + offset - edge] as const);
     const covered = (t0: number, t1: number) => sounding.some(([s, e]) => s <= t0 && e >= t1);
     const gaps: Array<{ t: number; ms: number }> = [];
     let runStart = -1;
