@@ -6,6 +6,34 @@
 
 
 
+## 1.3.2 - 2026-11-21
+
+### Features
+
+- add SIDWAVE 1.2: up to 10 SIDs and 30 voices, the layouts ultisid8, ultisid8+socket1 and ultisid8+sockets, and configure: true to set SID addressing and mixer pans on Ultimates and VICE and restore them afterwards
+- refuse a 1.2 score above the 1 MHz CPU budget unless it declares cpu: turbo, switch turbo through the U64 Turbo Registers and wait for the end of the 1 MHz hold with a raster probe
+- add echo, unison, centre placement, chord arpeggios, pitch bends across ties, slide_to in tables, hard-restart variants and legato defaults
+- add PCM digis played through CIA2 NMIs: samples described with synth:, loaded with file: or given as packed 4-bit b64:, scheduled with kit keys in drum patterns
+- add sections and sequences, levels and slewed chip-volume ramps, filter ownership and section filter offsets, cutoffs in Hz, table timing in frames, swing, an end release tail and stream subroutines
+- return lint findings and an arrangement report from SIDWAVE compile operations
+- start SIDWAVE songs on Ultimates without a reset, so recordings no longer begin with the reset tone and drive sounds
+- replace the example library with 13 recomposed pieces in different styles, served as play_preset presets and c64://sound/examples resources
+- add the hardware-in-the-loop fidelity harness (scripts/sidwave-hil.mjs), the quality review (scripts/sidwave-review.mjs, including a check of the audio before the song start) and SIDWAVE fuzz tests with a soak mode
+
+### Bug Fixes
+
+- fix the validation, CPU-estimate and size defects found by fuzzing
+- write fractional pulse widths the same way on instruments, voices and tables, and raise GATE before the ADSR after a hard restart so attack 0 starts at once
+- treat the READY prompt right after a reset as idle BASIC when $3A is $00
+- end sustain-0 notes at their envelope length and allow 50 ms of alignment tolerance in the review's dropout check
+- close a SID socket's mixer channel while configure switches the socket, which removes a pop of up to 0.72 of full scale
+- let the end-of-song tail wait for echo copies of the final notes
+
+### Breaking or behaviour changes
+
+- chiptune_drive, ambient_filter and funk_bass are now SIDWAVE 1.2 scores; SIDWAVE 1.0 and 1.1 documents still compile to the same bytes as in 1.3.1
+- SIDWAVE songs on Ultimates are started with SYS instead of after a reset
+
 ## 1.3.1 - 2026-11-20
 
 ### Features
