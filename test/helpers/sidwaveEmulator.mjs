@@ -2,7 +2,7 @@
 import { compileSidwaveToPrg, compileSidwaveToSid } from "../../src/sidwaveCompiler.js";
 import { parseSidwave } from "../../src/sidwave.js";
 
-const OPS = [];
+export const OPS = [];
 function def(name, list) { for (const [op, mode] of list) OPS[op] = [name, mode]; }
 def("ADC", [[0x69, "imm"], [0x65, "zp"], [0x75, "zpx"], [0x6d, "abs"], [0x7d, "abx"], [0x79, "aby"], [0x61, "izx"], [0x71, "izy"]]);
 def("AND", [[0x29, "imm"], [0x25, "zp"], [0x35, "zpx"], [0x2d, "abs"], [0x3d, "abx"], [0x39, "aby"], [0x21, "izx"], [0x31, "izy"]]);
