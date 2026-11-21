@@ -230,7 +230,7 @@ Notes range from C0 to B7. At the PAL clock B7 exceeds the SID's 16-bit frequenc
 
 | Effect | Fields | Behaviour |
 | --- | --- | --- |
-| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth` to within the SID's frequency resolution, about 6 cents at C0 and 3 cents at C1 on PAL), starting `delay` frames after the note. The upward swing must stay within the SID's highest frequency: on PAL a vibrato on A#7 can be at most 0.54 semitones deep, on NTSC B7 at most 0.19; deeper vibratos on such notes (including the highest note of a chord arpeggio) are rejected. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
+| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional), `fade` (1.3, frames, optional; see SIDWAVE 1.3) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth` to within the SID's frequency resolution, about 6 cents at C0 and 3 cents at C1 on PAL), starting `delay` frames after the note. The upward swing must stay within the SID's highest frequency: on PAL a vibrato on A#7 can be at most 0.54 semitones deep, on NTSC B7 at most 0.19; deeper vibratos on such notes (including the highest note of a chord arpeggio) are rejected. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
 | `pwm_sweep` | `depth` (fraction ≤ 1 or 12-bit units), `speed` (cycles per second) | Pulse width moves linearly between `pulse_width − depth` and `pulse_width + depth`, restarting at the base on each note. Pulse waveform only. |
 | `slide` | `depth` (semitones, ±24, non-zero), `speed` (frames, 1–255) | Each note starts `depth` semitones below the target (above when negative) and glides to it linearly in frequency, arriving after `speed` frames. The start note must itself be playable (C0..A#7 on PAL, C0..B7 on NTSC); otherwise the document is rejected. |
 | `filter_mod` | `sweep: "+500 over 8 steps"` (units: `steps`, `beats`, `bars`, `frames`; a step is one entry), or `{ sweep: 500, beats: 8 }` | Routes the voice through the filter while the pattern plays. At each repetition of the pattern the cutoff offset restarts at 0 and ramps to `sweep` (cutoff units, −2047..2047) over the given time, then holds. The resulting cutoff is clamped to 0..2047. The offset is removed when the section ends. |
@@ -808,6 +808,41 @@ voices:
 timeline:
   - { section: odd, bars: 4, meter: { sig: "7/8", groups: [2, 2, 3] }, layers: { v1: "riff*2" } }
   - { section: straight, bars: 4, layers: { v1: rock } }
+```
+
+### Vibrato fade
+
+`vibrato: { depth: 0.5, rate: 5, delay: 12, fade: 40 }` in a pattern's `fx` or an instrument: after `delay`
+frames the depth rises linearly from 0 to `depth` over `fade` frames (1-255), then holds. Like `delay`, `fade`
+counts video frames at any `speed`. The fade restarts with the vibrato at every attack; a legato note continues
+the running vibrato and fade.
+
+The player scales the vibrato triangle by a fade level in steps of 1/256. The level grows by
+`ceil(65536 / (fade x speed))` per player call, so the full depth arrives on call `fade x speed` when that
+product is at most 256; longer fades (only possible at `speed` 2-4) arrive up to 15 calls early, at 1,020 calls.
+
+A groove note object can override the vibrato for one note: `{ note: E5, vibrato: { depth: 0.5, fade: 30 } }`.
+Its fields replace those of the instrument's or pattern's vibrato; without one, the note must give `depth` and
+`rate`. The override needs no player change, but every distinct override is its own instrument variant and
+counts towards the 63 instruments.
+
+Cost: only scores with a fade get the fade code, so other scores keep their player bytes. The player grows by
+66 bytes, plus 2 bytes per instrument and 3 bytes per channel. A fading voice costs up to 165 cycles per call
+(an 8x8 multiply and a 16-bit add) and 25 cycles per attack; `worstCaseCyclesPerCall` adds 170 per voice that
+uses a fade and 16 per other vibrato voice in the same score (test/sidwave13Vibrato measures it in the 6502
+emulator).
+
+```yaml
+sidwave: 1.3
+tempo: 76
+instruments:
+  violin: { waveform: sawtooth, adsr: [3, 4, 11, 6], vibrato: { depth: 0.35, rate: 5.5, delay: 15, fade: 45 } }
+voices:
+  - id: 1
+    instrument: violin
+    patterns:
+      line: { length: 1, groove: ["E5", "~", "D5", "C5", { note: "B4", vibrato: { depth: 0.6, fade: 80 } }, "~", "~", "~"] }
+timeline: [{ bars: 2, layers: { v1: line } }]
 ```
 
 ## Playable examples

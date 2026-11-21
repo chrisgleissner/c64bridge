@@ -509,6 +509,7 @@
         "loop": { "type": "integer", "minimum": 0, "description": "Zero-based loop index for tables declared as lists; omitted holds the final value." },
         "portamento": { "$ref": "#/$defs/portamento" },
         "legato": { "$ref": "#/$defs/legato" },
+        "vibrato": { "$ref": "#/$defs/vibrato", "required": ["depth", "rate"] },
         "hard_restart": { "$ref": "#/$defs/hardRestart" },
         "source_note": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$", "description": "1.2: pitch of the silent source oscillator under a sync or ring voice." },
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
@@ -606,7 +607,8 @@
         "slide_from": { "$ref": "#/$defs/note" },
         "bend": { "$ref": "#/$defs/bend" },
         "gate_off": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames to release the gate before the end of this note." },
-        "level": { "$ref": "#/$defs/level" }
+        "level": { "$ref": "#/$defs/level" },
+        "vibrato": { "$ref": "#/$defs/vibrato", "description": "1.3: depth, rate, delay or fade for this note, merged over the instrument or pattern vibrato." }
       },
       "additionalProperties": false
     },
@@ -629,21 +631,22 @@
       "additionalProperties": false
     },
     "note": { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]$" },
+    "vibrato": {
+      "type": "object",
+      "properties": {
+        "depth": { "type": "number", "minimum": 0.03, "maximum": 6, "description": "Semitones." },
+        "rate": { "type": "number", "minimum": 0.2, "maximum": 12, "description": "Hz; at most about a quarter of the frame rate." },
+        "delay": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames." },
+        "fade": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.3: frames over which the depth rises linearly from 0 after the delay." }
+      },
+      "additionalProperties": false
+    },
     "length": { "type": "number", "exclusiveMinimum": 0, "maximum": 64, "description": "Beats per entry (default 1)." },
     "transpositions": { "type": "array", "items": { "type": "integer", "minimum": -48, "maximum": 48 }, "minItems": 1 },
     "fx": {
       "type": "object",
       "properties": {
-        "vibrato": {
-          "type": "object",
-          "required": ["depth", "rate"],
-          "properties": {
-            "depth": { "type": "number", "minimum": 0.03, "maximum": 6, "description": "Semitones." },
-            "rate": { "type": "number", "minimum": 0.2, "maximum": 12, "description": "Hz; at most about a quarter of the frame rate." },
-            "delay": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames." }
-          },
-          "additionalProperties": false
-        },
+        "vibrato": { "$ref": "#/$defs/vibrato", "required": ["depth", "rate"] },
         "pwm_sweep": {
           "type": "object",
           "required": ["depth", "speed"],

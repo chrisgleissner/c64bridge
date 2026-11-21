@@ -52,6 +52,8 @@ export interface SidwavePatternGroove extends SidwavePatternCommon {
 
 export interface SidwaveGrooveNote {
   note: string;
+  /** SIDWAVE 1.3: per-note vibrato fields merged over the instrument's or pattern's vibrato. */
+  vibrato?: { depth?: number; rate?: number; delay?: number; fade?: number };
   inst?: string;
   len?: number;
   legato?: boolean;
@@ -367,7 +369,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   if (obj.voices.filter((v: any) => v?.digi === undefined).length > capacity) {
     throw new SidwaveValidationError("$.voices", `the SID${sids.length > 1 ? " map" : ""} has ${capacity} voices; ${obj.voices.length} were given`);
   }
-  const instruments = normalizeInstruments(obj.instruments, "$.instruments", modern);
+  const instruments = normalizeInstruments(obj.instruments, "$.instruments", modern, v13);
   // SIDWAVE 1.1 (c64bridge 1.3.1) accepted hard_restart in an instrument without using it. Keep accepting
   // it so that such documents still compile, and report it as ignored.
   const ignoredFields = !modern && obj.instruments && typeof obj.instruments === "object"
@@ -389,7 +391,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
         throw new SidwaveValidationError(path, "need a unique digi ID, a mapped SID and patterns");
       }
       const patterns = Object.fromEntries(Object.entries(raw.patterns).map(([name, pattern]) => [
-        name, validatePattern(pattern, `${path}.patterns.${name}`, true, v13 ? undefined : meter, kit),
+        name, validatePattern(pattern, `${path}.patterns.${name}`, true, v13 ? undefined : meter, kit, v13),
       ]));
       digiVoices.push({ id, chip, patterns });
       return [];
@@ -410,7 +412,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     if (occupied.has(slot)) throw new SidwaveValidationError(path, "the SID channel is assigned to more than one voice");
     voiceSlots.set(id, slot);
     occupied.add(slot);
-    const voice = normalizeVoice(raw, path, id, modern, v13 ? undefined : meter, kit);
+    const voice = normalizeVoice(raw, path, id, modern, v13 ? undefined : meter, kit, v13);
     const name = voice.instrument;
     if (name && !name.startsWith("lib:") && !hasOwn(instruments, name)) {
       throw new SidwaveValidationError(`${path}.instrument`, `instrument ${describeValue(name)} is not defined`);
@@ -679,7 +681,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, st
   return { rate, defs, triggers };
 }
 
-function normalizeInstruments(raw: unknown, path: string, modern: boolean): Record<string, Record<string, any>> {
+function normalizeInstruments(raw: unknown, path: string, modern: boolean, v13 = false): Record<string, Record<string, any>> {
   if (raw === undefined) return Object.create(null);
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping of instrument names to instruments");
   const result: Record<string, Record<string, any>> = Object.create(null);
@@ -705,7 +707,7 @@ function normalizeInstruments(raw: unknown, path: string, modern: boolean): Reco
       if (inst[flag] !== undefined && typeof inst[flag] !== "boolean") throw new SidwaveValidationError(ip + "." + flag, "expected a boolean");
     }
     validatePatternFx({ ...(inst.vibrato !== undefined ? { vibrato: inst.vibrato } : {}),
-      ...(inst.slide !== undefined ? { slide: inst.slide } : {}) }, ip);
+      ...(inst.slide !== undefined ? { slide: inst.slide } : {}) }, ip, v13);
     if (inst.loop !== undefined && inst.wavetable === undefined && !Array.isArray(inst.pulsetable) && !Array.isArray(inst.filtertable)) {
       throw new SidwaveValidationError(ip + ".loop", "needs a wavetable or a step list");
     }
@@ -854,7 +856,7 @@ function parsePulseWidth(raw: unknown, path: string, format: "modern" | "legacyI
   return keepFraction ? pw : register;
 }
 
-function normalizeVoice(v: Record<string, any>, path: string, id: number, modern: boolean, meter: number | undefined, kit?: Record<string, string>): SidwaveVoice {
+function normalizeVoice(v: Record<string, any>, path: string, id: number, modern: boolean, meter: number | undefined, kit?: Record<string, string>, v13 = false): SidwaveVoice {
   const wfRaw = v.waveform === undefined ? "pulse" : requireText(v.waveform, path + ".waveform").toLowerCase();
   if (!WAVEFORMS.has(wfRaw)) {
     throw new SidwaveValidationError(`${path}.waveform`, `unknown waveform ${describeValue(v.waveform)}; use pulse, sawtooth, triangle or noise`);
@@ -875,7 +877,7 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
   if (v.patterns !== undefined) {
     if (!isPlainObject(v.patterns)) throw new SidwaveValidationError(`${path}.patterns`, "expected a mapping of pattern names to patterns");
     for (const [name, p] of Object.entries(v.patterns as Record<string, unknown>)) {
-      patterns[name] = validatePattern(p, `${path}.patterns.${name}`, modern, meter, kit);
+      patterns[name] = validatePattern(p, `${path}.patterns.${name}`, modern, meter, kit, v13);
     }
   }
 
@@ -923,7 +925,7 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
 }
 
 /** `meter` is the bar length for bar-line checks; without it (SIDWAVE 1.3) the checks wait for the sections that play the pattern. */
-function validatePattern(raw: unknown, path: string, modern: boolean, meter: number | undefined, defaultKit?: Record<string, string>): SidwavePattern {
+function validatePattern(raw: unknown, path: string, modern: boolean, meter: number | undefined, defaultKit?: Record<string, string>, v13 = false): SidwavePattern {
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a pattern mapping (groove, motif or type: arpeggio)");
   // Copy first: numeric strings are stored as numbers, and the caller's object stays untouched.
   const p = { ...(raw as Record<string, any>) };
@@ -944,7 +946,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
     }
     p.transpositions = p.transpositions.map((t: unknown, i: number) => requireNumber(t, `${path}.transpositions[${i}]`, { min: -48, max: 48, integer: true }));
   }
-  if (p.fx !== undefined) validatePatternFx(p.fx, `${path}.fx`);
+  if (p.fx !== undefined) validatePatternFx(p.fx, `${path}.fx`, v13);
 
   if (p.type !== undefined || p.notes !== undefined) {
     if (p.type !== undefined && p.type !== "arpeggio") {
@@ -989,8 +991,11 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
           checkKeys(entry, new Set(["chord", "arp", "speed", "inst", "len", "legato", "level", "accented", "glide"]), np);
           parseChordArp({ chord: entry.chord, arp: entry.arp, speed: entry.speed }, np);
         } else {
-          checkKeys(entry, new Set(["note", "inst", "len", "legato", "portamento", "slide_from", ...(modern ? ["bend", "gate_off", "level", "accented", "glide", "kitNote"] : [])]), np);
+          if (entry.vibrato !== undefined && !v13) throw new SidwaveValidationError(np + ".vibrato", "requires sidwave: 1.3");
+          checkKeys(entry, new Set(["note", "inst", "len", "legato", "portamento", "slide_from", ...(modern ? ["bend", "gate_off", "level", "accented", "glide", "kitNote"] : []), ...(v13 ? ["vibrato"] : [])]), np);
           requireNote(entry.note, `${np}.note`);
+          // A per-note vibrato merges over the instrument's or pattern's; the compiler checks the result.
+          if (entry.vibrato !== undefined) entry.vibrato = parseVibrato(entry.vibrato, np + ".vibrato", true, false);
         }
         if (entry.inst !== undefined && typeof entry.inst !== "string") throw new SidwaveValidationError(`${path}.groove[${i}].inst`, "expected an instrument name");
         if (entry.level !== undefined) entry.level = parseLevel(entry.level, np + ".level");
@@ -1031,17 +1036,27 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
   throw new SidwaveValidationError(path, "a pattern needs 'groove', 'drums', 'motif' or 'type: arpeggio' with 'notes'");
 }
 
-function validatePatternFx(raw: unknown, path: string): void {
+/**
+ * Checks a vibrato mapping. `fade` (SIDWAVE 1.3) is the number of frames over which the depth rises from 0 after
+ * the delay. A per-note override may omit depth and rate, which then come from the instrument or pattern.
+ */
+export function parseVibrato(raw: unknown, path: string, v13: boolean, complete = true): Record<string, number> {
+  if (isPlainObject(raw) && raw.fade !== undefined && !v13) throw new SidwaveValidationError(path + ".fade", "requires sidwave: 1.3");
+  const v = requireObject(raw, path, ["depth", "rate", "delay", ...(v13 ? ["fade"] : [])]);
+  const out: Record<string, number> = {};
+  if (complete || v.depth !== undefined) out.depth = requireNumber(v.depth, `${path}.depth`, { min: 0.03, max: 6 });
+  // At about 50 player calls per second, faster rates sample too few points per cycle (25 Hz lands on zero crossings).
+  if (complete || v.rate !== undefined) out.rate = requireNumber(v.rate, `${path}.rate`, { min: 0.2, max: 12 });
+  if (v.delay !== undefined) out.delay = requireNumber(v.delay, `${path}.delay`, { min: 0, max: 255, integer: true });
+  if (v.fade !== undefined) out.fade = requireNumber(v.fade, `${path}.fade`, { min: 1, max: 255, integer: true });
+  return out;
+}
+
+function validatePatternFx(raw: unknown, path: string, v13 = false): void {
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping");
   const fx = raw as Record<string, any>;
   checkKeys(fx, PATTERN_FX_KEYS, path);
-  if (fx.vibrato !== undefined) {
-    const v = requireObject(fx.vibrato, `${path}.vibrato`, ["depth", "rate", "delay"]);
-    requireNumber(v.depth, `${path}.vibrato.depth`, { min: 0.03, max: 6 });
-    // At about 50 player calls per second, faster rates sample too few points per cycle (25 Hz lands on zero crossings).
-    requireNumber(v.rate, `${path}.vibrato.rate`, { min: 0.2, max: 12 });
-    if (v.delay !== undefined) requireNumber(v.delay, `${path}.vibrato.delay`, { min: 0, max: 255, integer: true });
-  }
+  if (fx.vibrato !== undefined) parseVibrato(fx.vibrato, `${path}.vibrato`, v13);
   if (fx.pwm_sweep !== undefined) {
     const v = requireObject(fx.pwm_sweep, `${path}.pwm_sweep`, ["depth", "speed"]);
     requireNumber(v.depth, `${path}.pwm_sweep.depth`, { min: 0, max: 2047, exclusiveMin: true });

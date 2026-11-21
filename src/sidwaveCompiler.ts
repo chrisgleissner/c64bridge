@@ -390,6 +390,11 @@ export interface Instrument {
   vibDown: [number, number];
   vibRate: number; // phase increment per frame (256 = one cycle)
   vibDelay: number;
+  /**
+   * SIDWAVE 1.3 vibrato fade: 16-bit increment per call of the fade level, ceil(65536 / fade calls). The player
+   * scales the triangle by the level's high byte / 256 until the level overflows, then plays the full depth.
+   */
+  vibFade?: number;
   arp: number[]; // semitone offsets; empty = none
   arpSpeed: number;
   slideSemis: number;
@@ -958,6 +963,18 @@ function arrangeChip(
           if (!inst) {
             const instVoice = namedInstrument ? { ...voice, waveform: (namedInstrument.waveform ?? namedInstrument.wave ?? voice.waveform) as any, pulse_width: namedInstrument.pulse_width ?? voice.pulse_width, adsr: namedInstrument.adsr ?? voice.adsr } : voice;
             const fx = { ...fxRaw, ...(namedInstrument ?? {}) };
+            if (entry.vibrato) {
+              // A per-note vibrato merges over the instrument's or pattern's and becomes its own instrument variant.
+              fx.vibrato = { ...(fx.vibrato ?? {}), ...entry.vibrato };
+              if (fx.vibrato.depth === undefined || fx.vibrato.rate === undefined) {
+                throw new SidwaveValidationError(`${patPath}.vibrato`, "a per-note vibrato needs depth and rate when the instrument and pattern have none");
+              }
+              const top = base + Math.max(...offsets);
+              const depth = Number(fx.vibrato.depth);
+              if (Math.round((midiToHz(top) * Math.pow(2, depth / 12) * 16_777_216) / CLOCK_HZ[system]) > 0xffff) {
+                throw new SidwaveValidationError(`${patPath}.vibrato.depth`, `a vibrato of ${depth} semitones on ${midiToNoteName(top)} would rise above the SID's highest frequency on ${system}`);
+              }
+            }
             if (entry.chord) {
               fx.wavetable = offsets.map((offset) => ({ note: offset < 0 ? String(offset) : `+${offset}`, frames: entry.chord!.speed }));
               fx.loop = 0;
@@ -1201,6 +1218,7 @@ type PatternEntry =
     kind: "note"; notes: number[]; instrument?: string; len?: number; legato?: boolean; portamento?: number;
     level?: number; accented?: boolean; glide?: boolean; kitNote?: boolean;
     chord?: ReturnType<typeof parseChordArp>; bend?: SidwaveGrooveNote["bend"]; slideFrom?: number; gateOff?: number;
+    vibrato?: SidwaveGrooveNote["vibrato"];
   } & ({ arp: false; arpSpeed: 0 } | { arp: true; arpSpeed: number }));
 
 function patternEntries(pattern: SidwavePattern, path: string, modern: boolean): PatternEntry[] {
@@ -1222,6 +1240,7 @@ function patternEntries(pattern: SidwavePattern, path: string, modern: boolean):
         return { kind: "note", notes: [noteNameToMidi(note)!], arp: false, arpSpeed: 0, instrument, len, legato, portamento,
           level: raw.level, accented: raw.accented, glide: raw.glide, kitNote: raw.kitNote,
           bend: raw.bend, slideFrom: modern && slide_from ? noteNameToMidi(slide_from) : undefined, gateOff: raw.gate_off,
+          ...(raw.vibrato ? { vibrato: raw.vibrato } : {}),
         };
       }
       const tok = String(raw).trim();
@@ -1324,6 +1343,7 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
     vibDown: vib ? mantissaShift((128 / 126) * (1 - Math.pow(2, -depth / 12))) : [0, 0],
     vibRate: vib ? Math.max(1, Math.min(255, Math.round((256 * Number(vib.rate)) / fps))) : 0,
     vibDelay: vib ? Math.min(255, Number(vib.delay ?? 0) * factor) : 0,
+    ...(vib?.fade ? { vibFade: Math.ceil(65536 / (Number(vib.fade) * factor)) } : {}),
     arp,
     arpSpeed: Math.min(255, arpSpeed * factor),
     slideSemis: slide ? Number(slide.depth) : 0,
@@ -1707,6 +1727,7 @@ function estimatePlayerCycles(arr: Arrangement, loop: boolean): number {
   const hasFilter = arr.instruments.some((inst) => !!inst.filtertable);
   const hasMod = arr.chips?.some((chip) => chip.hasFilterMod);
   const hasSweep = arr.chips?.some((chip) => chip.filter.stepFixed);
+  const hasFade = arr.instruments.some((inst) => inst.vibFade);
   const bursts = new Map<number, number>();
   const add = (frame: number, cycles: number) => bursts.set(frame, (bursts.get(frame) ?? 0) + cycles);
   let regular = 180 + (arr.softVolume ? 35 + 135 * (arr.chips?.length ?? 1) : 0) + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
@@ -1740,6 +1761,10 @@ function estimatePlayerCycles(arr: Arrangement, loop: boolean): number {
     if (used.some((inst) => inst.arp.length)) regular += 85;
     if (notes.some((note) => note.portamento || arr.instruments[note.inst]!.slideSpeed)) regular += 110;
     if (used.some((inst) => inst.vibRate)) regular += 390;
+    // Vibrato fade: an 8x8 multiply of the triangle (117 cycles with page crossings) and the 16-bit level step (48).
+    // A vibrato without a fade in the same score still tests the fade flag twice (16).
+    if (used.some((inst) => inst.vibFade)) regular += 170;
+    else if (hasFade && used.some((inst) => inst.vibRate)) regular += 16;
     if (used.some((inst) => inst.pwStep)) regular += 95;
     if (arr.streamCalls) regular += 110; // CALL and RET
     // LOOP dispatch, pointer reload and a second fetch on the same call.
@@ -1762,6 +1787,7 @@ function estimatePlayerCycles(arr: Arrangement, loop: boolean): number {
           // Two 16x8 multiplications (four mul8 calls), plus both rounded
           // shifts. Allow the carry/sign branches and indexed page crossings.
           if (inst.vibRate) cycles += 655 + 33 * (inst.vibUp[1] + inst.vibDown[1]);
+          if (inst.vibFade) cycles += 25; // arm the fade and clear its level
           if (inst.slideSemis) cycles += 580;
           if (arr.tuning && (inst.vibRate || inst.slideSemis)) cycles += 96;
         }
@@ -2598,6 +2624,55 @@ function omitUnusedVoiceEffects(code: string, insts: Instrument[], hasPortamento
   return code;
 }
 
+/**
+ * SIDWAVE 1.3 vibrato fade. A note start clears the 16-bit fade level and arms it when the instrument has a fade
+ * step. While armed, the triangle factor (0..126) is scaled by the level's high byte / 256 with one 8x8 multiply.
+ * The level advances with the vibrato phase, so it starts after the delay; its overflow disarms the fade and the
+ * vibrato plays at full depth. The template without a fade is left untouched, so other scores keep their bytes.
+ */
+function addVibratoFade(code: string): string {
+  const replace = (from: string, to: string) => {
+    if (!code.includes(from)) throw new Error(`vibrato fade: player template changed near ${JSON.stringify(from.slice(0, 40))}`);
+    code = code.replace(from, to);
+  };
+  replace("  lda i_vibdel,y\n  sta v_vibdel,x\n", `  lda i_vibdel,y
+  sta v_vibdel,x
+  lda i_vfslo,y
+  ora i_vfshi,y
+  sta v_vfon,x
+`);
+  replace("  sta v_vibph,x\n  sta v_vuplo,x\n", "  sta v_vibph,x\n  sta v_vfl,x\n  sta v_vfh,x\n  sta v_vuplo,x\n");
+  replace("vr_tri:\n  asl\n  sta m_fac\n", `vr_tri:
+  asl
+  ldy v_vfon,x
+  beq vr_vf_full
+  sta ma
+  lda v_vfh,x
+  sta mb
+  jsr mul8
+  lda r_hi
+vr_vf_full:
+  sta m_fac
+`);
+  replace("  adc i_vibrate,y\n  sta v_vibph,x\n", `  adc i_vibrate,y
+  sta v_vibph,x
+  lda v_vfon,x
+  beq va_vf_done
+  clc
+  lda v_vfl,x
+  adc i_vfslo,y
+  sta v_vfl,x
+  lda v_vfh,x
+  adc i_vfshi,y
+  sta v_vfh,x
+  bcc va_vf_done
+  lda #0
+  sta v_vfon,x
+va_vf_done:
+`);
+  return code;
+}
+
 function customRestartCode(wave: boolean, pulse: boolean, filter: boolean): string {
   return `
 c_restart:
@@ -2689,8 +2764,9 @@ function buildPlayerAsm(arr: Arrangement, streams: StreamByte[][], loop: boolean
   const hasPulseTable = insts.some((i) => i.pulsetable?.steps?.length);
   const hasFilterTable = insts.some((i) => i.filtertable?.steps?.length);
   const channels = arr.voices.length;
+  const hasFade = insts.some((i) => i.vibFade);
   const voiceVars = [...VOICE_VARS.filter((name) => hasWavetable || !["wtpos", "wtleft", "wtnote"].includes(name)),
-    ...(arr.streamCalls ? ["retlo", "rethi"] : [])];
+    ...(arr.streamCalls ? ["retlo", "rethi"] : []), ...(hasFade ? ["vfl", "vfh", "vfon"] : [])];
   const pulseCadence = insts.some((i) => i.pulsetable?.steps.some((step) => step.cadence));
   const filterCadence = insts.some((i) => i.filtertable?.steps.some((step) => step.cadence));
   const pulseReset = insts.some((i) => i.pulsetable?.reset === false);
@@ -2900,6 +2976,7 @@ c_ret:
 `;
   if (arr.chips) {
     playerCode = omitUnusedVoiceEffects(playerCode, insts, hasPortamento);
+    if (hasFade) playerCode = addVibratoFade(playerCode);
     playerCode = multiplexSids(playerCode, arr.chips, Boolean(hasFilterTable), stateBytes);
     if (arr.mirrors) playerCode = addCenterMirrors(playerCode, arr);
     if (arr.softVolume) playerCode = gateBeforeEnvelope(addSoftVolume(playerCode, arr.chips.length, arr.speed, loop || !!arr.explicitEnd));
@@ -3006,6 +3083,10 @@ c_ret:
   col("i_vdnsh", insts.map((i) => i.vibDown[1]));
   col("i_vibrate", insts.map((i) => i.vibRate));
   col("i_vibdel", insts.map((i) => i.vibDelay));
+  if (hasFade) {
+    col("i_vfslo", insts.map((i) => (i.vibFade ?? 0) & 0xff));
+    col("i_vfshi", insts.map((i) => (i.vibFade ?? 0) >> 8));
+  }
   col("i_arpst", arpStart);
   col("i_arplen", insts.map((i) => i.arp.length));
   col("i_arpspd", insts.map((i) => Math.max(1, i.arpSpeed)));
