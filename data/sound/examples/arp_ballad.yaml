@@ -470,10 +470,10 @@ voices:
           ~ ~ ~ ~ F5@sing E5@sing D5@sing ~ ~ ~ ~ ~ B4@sing ~ ~ ~ C5@sing ~ D5@sing ~ ~ ~ ~ ~ |
           E5@sing ~ ~ ~ C6@sing ~ B5@sing ~ ~ ~ A5@sing ~ G5@sing ~ ~ ~ E5@sing ~ ~ ~ ~ ~ D5@sing C5@sing |
           A5@sing ~ ~ ~ ~ ~ G5@sing ~ F5@sing ~ E5@sing ~ Ab5@sing ~ ~ ~ ~ ~ G5@sing ~ ~ ~ ~ ~ |
-          G4@sing ~ ~ ~ E5@sing ~ D5@sing ~ ~ ~ C5@sing ~ E5@sing ~ F5@sing ~ G5@sing ~ A5@sing ~ ~ ~ ~ ~ |
-          ~ ~ ~ ~ G5@sing F5@sing E5@sing ~ ~ ~ D5@sing ~ C5@smo ~ ~ ~ ~ ~ D5@sing ~ E5@sing ~ F5@sing ~ |
-          F5@sing ~ ~ ~ ~ ~ ~ ~ ~ ~ E5@sing D5@sing C5@sing ~ ~ ~ ~ ~ D5@sing ~ ~ ~ ~ ~ |
-          D5@sing ~ ~ ~ ~ ~ B4@sing ~ ~ ~ ~ ~ - - - - - - - - - - - -
+          C5@sing ~ ~ E5@sing ~ G5@sing ~ A5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ E5@sing ~ G5@sing ~ A5@sing ~ ~ |
+          G5@sing ~ ~ E5@sing ~ D5@sing ~ C5@sing ~ D5@sing ~ E5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ ~ ~ ~ |
+          E5@sing ~ G5@sing ~ C6@sing ~ B5@sing ~ A5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ E5@sing ~ G5@sing ~ ~ ~ |
+          A5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ B4@sing ~ G4@sing ~ C5@sing ~ ~ ~ - - - - ~ ~
       solo:
         length: 0.25
         bars: 5
