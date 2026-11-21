@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROOT, loadModules, writeWav } from "./lib/ultimateAudioStream.mjs";
+import { resolveVice8580ModelArgs } from "./vice-sid-model.mjs";
 
 function usage(message) {
   if (message) console.error(`error: ${message}\n`);
@@ -199,18 +200,39 @@ try {
       const cyclesPerSecond = doc.song.mode === "NTSC" ? 1_022_727 : 985_248;
       const cycles = Math.ceil((expectedSeconds + 5) * cyclesPerSecond);
       const vice = process.env.VICE ?? "x64sc";
-      const viceArgs = ["-default", "-pal", "-console", "-sound", "-sounddev", "alsa", "-soundarg", "null", "-soundrecdev", "wav", "-soundrecarg", rawWav,
+      const headless = !process.env.DISPLAY && Boolean(process.env.CI);
+      const sidModelArgs = resolveVice8580ModelArgs(vice, headless);
+      const romDir = process.env.C64BRIDGE_VICE_ROM_DIR;
+      if (!romDir) throw new Error("C64BRIDGE_VICE_ROM_DIR must point to the pinned open C64 ROM set");
+      const romArgs = ["-basic", path.join(romDir, "basic.rom"), "-kernal", path.join(romDir, "kernal.rom"), "-chargen", path.join(romDir, "chargen.rom")];
+      for (const romPath of [romArgs[1], romArgs[3], romArgs[5]]) {
+        if (!fs.existsSync(romPath)) throw new Error(`VICE ROM is missing: ${romPath}`);
+      }
+      const viceArgs = ["-default", ...romArgs, "-pal", "-console", "-sound", "-sounddev", "alsa", "-soundarg", "null", "-soundrecdev", "wav", "-soundrecarg", rawWav,
         "-soundrate", "48000", "-soundoutput", "2", "-soundfragsize", "0", "+autostart-warp",
-        "-sidextra", "1", "-sid2address", `0x${doc.sids[1].address.toString(16)}`, "-sidmodel", "1",
+        "-sidextra", "1", "-sid2address", `0x${doc.sids[1].address.toString(16)}`, ...sidModelArgs,
         "-autostartprgmode", "1", "-autostart-delay", "0", "-autostart", prgPath,
         "-limitcycles", String(cycles)];
-      const executable = process.env.DISPLAY || !process.env.CI ? vice : "xvfb-run";
+      const executable = headless ? "xvfb-run" : vice;
       const args = executable === "xvfb-run" ? ["-a", vice, ...viceArgs] : viceArgs;
-      const captured = spawnSync(executable, args, { encoding: "utf8", timeout: 10 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 });
+      // Keep VICE stdin attached and send its noisy GTK/VICE output to a file. VICE 3.7 exits
+      // before machine startup when launched with Node's captured stdin/stdout pipes.
+      const viceLogPath = path.join(workDir, `${name}-vice.log`);
+      const logFd = fs.openSync(viceLogPath, "w");
+      let captured;
+      try {
+        captured = spawnSync(executable, args, { stdio: ["inherit", logFd, logFd], timeout: 10 * 60 * 1000 });
+      } finally {
+        fs.closeSync(logFd);
+      }
       if (captured.error) throw new Error(`VICE failed: ${captured.error.message}`);
-      const viceLog = `${captured.stdout ?? ""}\n${captured.stderr ?? ""}`.replace(/\u001b\[[0-9;]*m/g, "");
+      const viceLog = fs.readFileSync(viceLogPath, "utf8").replace(/\u001b\[[0-9;]*m/g, "");
       // VICE intentionally exits with an error when -limitcycles is reached; reject any other exit or dropped audio.
-      if (!/Error - cycle limit reached\./.test(viceLog)) throw new Error(`VICE did not reach its requested cycle limit: ${viceLog.trim()}`);
+      if (!/Error - cycle limit reached\./.test(viceLog)) {
+        throw new Error(`VICE did not reach its requested cycle limit (status ${captured.status ?? "null"}, signal ${captured.signal ?? "none"}; ${executable} ${args.join(" ")}): ${viceLog.trim()}`);
+      }
+      if (!/AUTOSTART: Starting program\./.test(viceLog)) throw new Error("VICE reached the cycle limit without starting the PRG");
+      if ((viceLog.match(/reSID: MOS8580/g) ?? []).length < 2) throw new Error("VICE did not confirm both configured SIDs are MOS8580");
       if (/Sound buffer overflow/i.test(viceLog)) throw new Error("VICE reported a sound buffer overflow; capture is incomplete");
       if (!fs.existsSync(rawWav)) throw new Error(`VICE produced no WAV for ${name}: ${(captured.stderr || captured.stdout).trim()}`);
       if (fs.statSync(rawWav).size <= 44) throw new Error(`VICE WAV for ${name} contains no audio samples`);

@@ -24,3 +24,9 @@ the rendered signal still comes from VICE's SID emulation and PRG execution. Its
 match the saved U64 capture's integrated level without compression or clipping; the manifest records this gain. This
 does not claim hardware capture fidelity. A VICE run that drops audio, misses the requested cycle limit, or produces
 no samples fails the job.
+
+The renderer image supplies VICE with the generic BASIC, KERNAL and character ROMs from the MEGA65 Open ROMs project,
+pinned to commit `ad178dbe4d48cd6a317737a8e0e7e662f7e33d32` and checked against fixed SHA-256 hashes during image build.
+These LGPL-3.0-or-later ROMs avoid bundling proprietary C64 firmware. Their license and attribution are in
+[`doc/third-party/MEGA65-Open-ROMs-LICENSE.txt`](third-party/MEGA65-Open-ROMs-LICENSE.txt); VICE receives their paths
+explicitly through `C64BRIDGE_VICE_ROM_DIR`.
