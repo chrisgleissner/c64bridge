@@ -29,6 +29,17 @@ instruments:
     loop: 0
     wavetable: [{ note: "+0" }, { note: "+7" }, { note: "+12" }]
     filtertable: [{ cutoff: 2.4kHz, resonance: 9, type: lowpass }, { add: -5, frames: 40 }]
+  # Final chord and lead: the same voicings with release 9, so the held E rings out instead of stopping.
+  power_end:
+    waveform: saw
+    adsr: [0, 8, 10, 9]
+    loop: 0
+    wavetable: [{ note: "+0" }, { note: "+7" }, { note: "+12" }]
+    filtertable: [{ cutoff: 2.4kHz, resonance: 9, type: lowpass }, { add: -5, frames: 40 }]
+  lead_end:
+    waveform: saw
+    adsr: [0, 6, 11, 9]
+    vibrato: { depth: 0.2, rate: 6, delay: 14 }
   kick:
     waveform: tri
     adsr: [0, 7, 0, 0]
@@ -64,7 +75,7 @@ voices:
       chorusA: { length: 0.5, bars: 4, groove: "C2@power ~ ~ C2@power ~ ~ E2 E2 | G2@power ~ ~ G2@power ~ ~ E2 E2 | D2@power ~ ~ D2@power ~ ~ E2 E2 | E2@power ~ ~ ~ E2 E2 E2 E2" }
       chorusB: { length: 0.5, bars: 4, groove: "A2@power ~ ~ A2@power ~ ~ E2 E2 | C2@power ~ ~ C2@power ~ ~ E2 E2 | D2@power ~ ~ ~ D2@power ~ ~ ~ | B1@power ~ ~ ~ ~ ~ ~ ~" }
       pedal: { length: 0.25, bars: 1, groove: "E2 E2 - E2 E2 - E2 E2 E2 E2 - E2 E2 - E2 E2" }
-      hit: { length: 1, bars: 4, groove: "E2@power ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+      hit: { length: 1, bars: 4, groove: "E2@power_end ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
   - id: 2
     name: Lead guitar
     role: lead
@@ -100,7 +111,7 @@ voices:
           - "-"
       solo2: { length: 0.25, bars: 2, groove: "E5 G5 A5 B5 D6 B5 A5 G5 E5 G5 A5 B5 D6 E6 D6 B5 | E6 ~ ~ ~ D6 B5 A5 G5 A5 ~ G5 E5 D5 E5 ~ ~" }
       solo3: { length: 0.5, bars: 2, groove: "B5 ~ ~ ~ A5 ~ G5 ~ | F#5 ~ ~ ~ E5 ~ ~ ~" }
-      last: { length: 1, bars: 4, groove: "E5 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+      last: { length: 1, bars: 4, groove: "E5@lead_end ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
   - id: 3
     name: Drums
     role: drums
@@ -123,11 +134,11 @@ sections:
     layers: { v2: bells, v3: "toms*3 swell fill" }
   riff:
     bars: 8
-    volume: 13
+    volume: 14
     layers: { v1: "riff1 riff1 riff1 riff2", v3: "halfz half half fill half half half fill" }
   verse:
     bars: 16
-    volume: 13
+    volume: 14
     levels: { v2: mf }
     layers: { v1: "riff1 riff1 riff1 riff2 riff1 riff1 gallop riff2", v2: verse, v3: "d8z d8 d8 d8b d8 d8 d8 fill" }
   pre:
@@ -141,7 +152,7 @@ sections:
     layers: { v1: "chorusA chorusB", v2: chorus, v3: "dkz dk dk dk dk dk dk fill" }
   verse2:
     bars: 16
-    volume: 13
+    volume: 14
     levels: { v2: mf }
     layers: { v1: "riff2 riff1 riff1 riff2 gallop gallop riff1 riff2", v2: verse2, v3: "d8z d8b d8 d8b d8 d8b d8 fill" }
   solo:
