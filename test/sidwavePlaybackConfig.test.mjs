@@ -103,6 +103,26 @@ for (const [layout, sockets, backend] of [
   });
 }
 
+test("configure closes a socket's mixer channel while it switches the socket on and off", async () => {
+  const { facade, calls, config, configBaseline } = hardware("c64u");
+  config[MIXER]["Vol Socket 1"] = "+1 dB";
+  configBaseline[MIXER]["Vol Socket 1"] = "+1 dB";
+  const client = clientFor(facade);
+  const doc = parseSidwave(score({ layout: "ultisid8+socket1" }));
+  const compiled = compileSidwaveToPrg(doc);
+  await client.playSidwave(doc, compiled, { configure: true });
+  const writes = () => calls.filter(([op]) => op === "write").map(([, payload]) => payload);
+  assert.deepEqual(writes(), [
+    { [MIXER]: { "Vol Socket 1": "OFF" } },
+    { [ADDRESSING]: expectedAddressing(1), [SOCKETS]: { "SID Socket 1": "Enabled" } },
+    { [MIXER]: { "Vol Socket 1": "+1 dB" } },
+  ]);
+  await client.stopSidwavePlayback();
+  assert.deepEqual(writes().slice(3).map((payload) => Object.keys(payload)), [[MIXER], [ADDRESSING, SOCKETS], [MIXER]]);
+  assert.deepEqual(writes()[3], { [MIXER]: { "Vol Socket 1": "OFF" } });
+  assert.deepEqual(config, configBaseline);
+});
+
 for (const [action, replace] of [
   ["replace SIDWAVE", (client, doc, compiled) => client.playSidwave(doc, compiled, { configure: true })],
   ["run_prg", (client, _doc, compiled) => client.runPrg(compiled.prg)],

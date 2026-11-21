@@ -9,6 +9,8 @@ const SOCKETS = "SID Sockets Configuration";
 const MIXER = "Audio Mixer";
 const SID_STORES = [ADDRESSING, SOCKETS, MIXER, "UltiSID Configuration"];
 const DECODERS = ["UltiSID 1", "UltiSID 2", "Socket 1", "Socket 2"];
+/** Wait after a socket switch with the mixer channel closed before reopening it (measured: 1 s is silent). */
+export const SOCKET_SETTLE_MS = 1000;
 const OWNER_WINDOWS = [[0xd400, 0xd480, 0xd500, 0xd580], [0xd420, 0xd4a0, 0xd520, 0xd5a0], [0xd440], [0xd460]];
 const hex = (address: number) => `$${address.toString(16).toUpperCase()}`;
 const object = (value: unknown): Record<string, unknown> | undefined =>
@@ -207,18 +209,35 @@ async function prepareUltimate(facade: C64Facade, doc: ParsedSidwave): Promise<S
     const result = await facade.configBatchUpdate(settings);
     if (!result.success) throw new Error(`Could not ${action} SIDWAVE settings: ${JSON.stringify(result.details ?? {})}`);
   };
-  const remap = async (settings: Settings, action: string, from: number[], to: number[]) => {
+  // Switching a SID socket on or off with its mixer channel open is heard as a pop: on an Ultimate 64 Elite with a
+  // 6581 fitted, 0.71 of full scale on enable and 0.72 on disable, measured through the audio stream. With the
+  // channel at OFF the switch is silent, and unmuting 1 s later is silent too (peak 0.001). The 1541ultimate
+  // firmware notes the same property of the mixer (software/u64/u64_config.cc, u64_mute_sids): it sits after the
+  // point where the SID's DC offset is removed, so closing it is itself silent.
+  const mixer = snapshot.get(MIXER) ?? (categories.includes(MIXER) ? await read(MIXER) : undefined);
+  const toggledSockets = (settings: Settings, currentOf: (name: string) => unknown) => [1, 2].filter((index) => {
+    const next = settings[SOCKETS]?.[`SID Socket ${index}`];
+    return next !== undefined && String(next) !== String(currentOf(`SID Socket ${index}`)) && mixer?.[`Vol Socket ${index}`] !== undefined;
+  });
+  const remap = async (settings: Settings, action: string, from: number[], to: number[], sockets: number[]) => {
+    const volumes = Object.fromEntries(sockets.map((index) => [`Vol Socket ${index}`, String(settingValue(mixer![`Vol Socket ${index}`]))]));
+    if (sockets.length) await write({ [MIXER]: Object.fromEntries(Object.keys(volumes).map((name) => [name, "OFF"])) }, action);
     if (settings[ADDRESSING]) await clearUltimateSidWindows(facade, from);
     try {
       await write(settings, action);
     } finally {
       if (settings[ADDRESSING]) await clearUltimateSidWindows(facade, to);
+      if (sockets.length) {
+        await new Promise((resolve) => setTimeout(resolve, SOCKET_SETTLE_MS));
+        await write({ [MIXER]: volumes }, action);
+      }
     }
   };
+  const socketsBefore = snapshot.get(SOCKETS) ?? {};
   return {
     clearsUltimateSidWindows: !!plan[ADDRESSING],
-    apply: () => remap(plan, "apply", oldWindows, newWindows),
-    restore: () => remap(restore, "restore", newWindows, oldWindows),
+    apply: () => remap(plan, "apply", oldWindows, newWindows, toggledSockets(plan, (name) => settingValue(socketsBefore[name]))),
+    restore: () => remap(restore, "restore", newWindows, oldWindows, toggledSockets(restore, (name) => plan[SOCKETS]?.[name])),
   };
 }
 
