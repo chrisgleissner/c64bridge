@@ -24,8 +24,8 @@ test("sidwave-record records the whole song after it starts and stops the stream
   const mock = await startMockC64Server();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sidwave-record-"));
   try {
-    // A two-second song keeps the run short: the mock sends audio in real time from a timer, which a loaded
-    // machine can slow down.
+    // Keep the score short; the mock paces 192 audio frames every 4 ms so the capture exercises real duration
+    // accounting without waiting through one of the full-length examples.
     const song = path.join(dir, "short.yaml");
     fs.writeFileSync(song, "sidwave: 1.2\ntitle: Short\ntempo: 120\nvoices:\n  - id: 1\n    patterns: { a: { groove: \"C4 E4 G4 C5\" } }\ntimeline: [{ bars: 1, layers: { v1: a } }]\nend: { hold_beats: 0, release: true }\n");
     const wav = path.join(dir, "short.wav");
