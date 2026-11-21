@@ -569,13 +569,14 @@
     {
       "name": "c64_sound",
       "title": "Adjusts SID registers, plays files, composes music, and runs verification captures.",
-      "description": "Grouped entry point for SID control, playback, composition, and analysis workflows.",
+      "description": "SID control, playback, composition and audio analysis.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "op": {
             "type": "string",
             "enum": [
+              "sample_render",
               "capture_samples",
               "set_volume",
               "reset",
@@ -593,12 +594,36 @@
             ],
             "description": "Selects the operation."
           },
+          "definition": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {},
+            "additionalProperties": true
+          },
+          "rate": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 16,
+            "maximum": 8000,
+            "default": 4000
+          },
+          "outputDir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
           "count": {
             "type": [
               "integer",
               "null"
             ],
-            "description": "Stereo sample pairs to capture; at most 65536 (about 1.37 s).",
+            "description": "Stereo pairs (max 65536).",
             "minimum": 1,
             "maximum": 65536,
             "default": 256
@@ -608,7 +633,7 @@
               "string",
               "null"
             ],
-            "description": "Encoding used for the PCM sample payload.",
+            "description": "PCM encoding.",
             "enum": [
               "base64",
               "hex"
@@ -985,6 +1010,13 @@
             "maximum": 5000,
             "default": 150
           },
+          "wavPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
           "request": {
             "type": [
               "string",
@@ -1007,7 +1039,7 @@
         "required": [
           "op"
         ],
-        "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the Ultimate audio UDP stream. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Soft or hard reset of the SID registers. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG. Replaces the program in memory. Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play and analyze it. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback when verification is requested. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG. Replaces the program in memory. Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1053,6 +1085,7 @@
           ]
         },
         "operationEffects": {
+          "sample_render": "write",
           "capture_samples": "read",
           "set_volume": "write",
           "reset": "write",
