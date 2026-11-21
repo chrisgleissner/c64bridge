@@ -10,8 +10,8 @@ sids:
   # Trumpets left, trombone and drums right, contrabass centred on both chips. ONE-SIDE on the trumpets is
   # accepted: orchestral seating with a narrow pan (Left 2 / Right 2); the trombone answers on the right.
   # Timpani and crash have sustain 0, so section level does not scale them (LEVEL-NOOP accepted).
-  - { id: sid1, address: "$D400", model: "8580", volume: 15, pan: "Left 2", filter: { owner: v1, route: [1, 2] } }
-  - { id: sid2, address: "$D420", model: "8580", volume: 15, pan: "Right 2", filter: { owner: v4, route: [1] } }
+  - { id: sid1, address: "$D400", model: "8580", volume: 11, pan: "Left 2", filter: { owner: v1, route: [1, 2] } }
+  - { id: sid2, address: "$D420", model: "8580", volume: 11, pan: "Right 2", filter: { owner: v4, route: [1] } }
 instruments:
   # Trumpet 1 owns the SID1 filter: every attack opens the low-pass from about 1 kHz to 3 kHz in 6 frames
   # and settles near 2 kHz, the brass "blat". Trumpet 2 is routed through the same filter without a table.
@@ -110,7 +110,7 @@ sections:
   build:
     bars: 2
     level: { from: mp, to: ff }
-    volume: { from: 10, to: 15 }
+    volume: { from: 5, to: 11 }
     filter: { sid2: { cutoff: { from: -40, to: 120 } } }
     layers: { v1: build, v2: build, v3: build, v4: build, v5: build }
   arrival:
