@@ -109,8 +109,9 @@ sections:
   drop:
     bars: 32
     volume: 15
-    filter: { cutoff: 70, resonance: 11 }
-    layers: { v1: "crash brkB brkA brkC brkA brkB brkA fill", v2: "r1 r2", v3: "r1" }
+    filter: { cutoff: { from: 40, to: 140 }, resonance: 11 }
+    # Bars 33-48: second Reese oscillator. Bars 49-64: voice 3 plays the lead theme an octave below the breakdown pitch while voice 2 keeps the Reese alone.
+    layers: { v1: "crash brkB brkA brkC brkA brkB brkA fill", v2: "r1 r2", v3: "r1 r1 r1 r1 l1-12 l2-12 l3-12 l4-12" }
   breakdown:
     bars: 16
     volume: 12
