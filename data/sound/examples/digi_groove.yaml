@@ -1,78 +1,117 @@
-# Electro digi groove | 112 BPM | C minor | 1 SID
-# Techniques: CIA2 4-bit sampled kick, snare and clap through $D418; syncopated synth bass and wavetable chord arp.
-# Learn: Listen for offset kick and clap accents and use a quieter bass to leave room for the volume digis
+# Electro digi groove | 107.41 BPM | F minor | 2 SIDs
+# Techniques: Synthesised CIA2 PCM drums (808-style kick, snare, clap, hat and a formant vocal stab) triggered by a digi voice on its own SID, so the volume-register samples never modulate the pitched voices; resonant saw bass under a filter owner, chord-symbol arpeggios, PWM lead with delayed vibrato, section volume and filter dynamics, play-once ending.
+# Learn: Samples are described with synth: and placed with sample:<name> kit keys in an ordinary drum pattern, so they follow sections, sequences and the tempo; the pitched SID carries the harmony (Fm Fm Db Eb | Bbm Fm Db C)
 sidwave: 1.2
 title: Paper Circuit
-tempo: 112
+tempo: 107.41
 mode: PAL
-sids: [{"id": "sid1", "address": "$D400", "volume": 9}]
-samples: {"rate": 4000, "voices": [{"sid": "sid1", "at": [0, 67, 107, 128, 161, 201, 215, 282, 322, 342, 376, 416, 430, 497, 537, 557, 591, 631, 644, 685, 718, 752, 806, 859, 900, 933, 967, 1020, 1074, 1141, 1182, 1202, 1235, 1275, 1289, 1356, 1396, 1416, 1450, 1490, 1504, 1571, 1611], "kit": "kick"}, {"sid": "sid1", "at": [134, 188, 242, 295, 349, 403, 456, 510, 564, 618, 671, 725, 779, 832, 886, 940, 994, 1041, 1061, 1101, 1155, 1208, 1262, 1316, 1369, 1423, 1477, 1531, 1584], "kit": "snare"}, {"sid": "sid1", "at": [389, 470, 604, 705, 846, 920, 1034, 1114, 1249, 1329, 1463, 1544, 1638], "kit": "clap"}]}
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+  - { id: sid2, address: "$D420", model: "8580" }
+samples:
+  rate: 5000
+  defs:
+    kick: { synth: { layers: [{ osc: sine, freq: 150, to: 44, ms: 260 }, { osc: triangle, freq: 300, to: 88, ms: 45, gain: 0.4 }, { osc: noise, ms: 5, gain: 0.5 }], env: { a: 0, d: 240, s: 0, r: 20 }, drive: 1.5, seed: 7 } }
+    snare: { synth: { layers: [{ osc: triangle, freq: 220, to: 170, ms: 90, gain: 0.8 }, { osc: noise, ms: 170, gain: 1 }], env: { a: 0, d: 150, s: 0, r: 25 }, hp: 140, seed: 11 } }
+    clap: { synth: { osc: noise, notes: "C4:9 r:7 C4:9 r:7 C4:150", env: { a: 0, d: 110, s: 0, r: 30 }, hp: 650, seed: 3 } }
+    hat: { synth: { osc: noise, ms: 45, env: { a: 0, d: 35, s: 0, r: 8 }, hp: 1800, seed: 5 } }
+    vox: { synth: { layers: [{ osc: saw, freq: F3, ms: 260 }, { osc: saw, freq: C4, ms: 260, gain: 0.5 }], formant: o, env: { a: 8, d: 200, s: 0.2, r: 50 } } }
 instruments:
-  fold: {"waveform": "pulse", "adsr": [0, 5, 8, 4], "pulse_width": 1550}
-  glass: {"waveform": "triangle", "adsr": [2, 4, 5, 6]}
+  bass:
+    waveform: saw
+    adsr: [0, 6, 8, 2]
+    hard_restart: { test: true }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 13, type: lowpass }, { add: -16, frames: 10 }]
+  arp:
+    waveform: pulse
+    pulse_width: 1433  # 35 %, 12-bit units: a fractional instrument pulse_width is not scaled in 1.2
+    adsr: [0, 4, 7, 6]
+    hard_restart: { frames: 0 }
+  lead:
+    waveform: pulse
+    adsr: [0, 6, 9, 4]
+    vibrato: { depth: 0.15, rate: 5, delay: 15 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 30, frames: 24 }, { add: -30, frames: 24 }] }
 voices:
   - id: 1
-    name: "Folded-paper bass"
-    instrument: "fold"
+    name: Electro bass
+    role: bass
+    instrument: bass
     patterns:
-      Contact:
-        length: 0.5
-        groove:
-          ["C2", "~", "-", "G2", "-", "Bb2", "G2", "-", "C2", "-", "Eb2", "~", "F2", "-", "G2", "-"]
-      Gears:
-        length: 0.5
-        groove:
-          ["C2", "-", "G2", "C3", "-", "Bb2", "-", "G2", "Ab1", "-", "Eb2", "G2", "-", "Ab2", "-", "C3", "Eb2", "-", "Bb2", "-", "G2", "Bb2", "-", "Eb3", "G1", "G2", "-", "D3", "C3", "-", "Bb2", "G2"]
-      Fold:
-        length: 0.5
-        groove:
-          ["F2", "~", "-", "C3", "Eb3", "-", "Ab2", "-", "Ab1", "-", "Eb2", "-", "C3", "Bb2", "Ab2", "-", "Bb1", "-", "F2", "Bb2", "D3", "F2", "-", "Ab2", "G1", "-", "G2", "Bb2", "-", "B2", "D3", "G2"]
-      Crease:
-        length: 0.5
-        groove:
-          ["C2", "G2", "-", "Bb2", "C3", "-", "Eb3", "D3", "Ab1", "-", "Eb2", "Ab2", "Bb2", "-", "C3", "Eb2", "F2", "-", "Ab2", "C3", "-", "Eb3", "D3", "F2", "G1", "G2", "Bb2", "-", "B2", "D3", "-", "G2"]
-      Tail:
-        length: 1
-        groove:
-          ["C2", "G2", "-", "C3", "C2", "~", "~", "~"]
+      e1: { length: 0.25, bars: 1, groove: "F1 - F2 - - F1 - Ab1 - F1 F2 - C2 - Eb2 -" }
+      e2: { length: 0.25, bars: 1, groove: "F1 - - F1 F2 - Ab1 - F1 - (C2 /Eb2) - F2 - C2" }
+      ec: { length: 0.25, bars: 1, groove: "C2 - C3 - - C2 - E2 - C2 C3 - G2 - Bb2 -" }
+      end: { length: 1, bars: 2, groove: "F1 ~ ~ ~ ~ ~ ~ ~" }
   - id: 2
-    name: "Circuit arpeggios"
-    instrument: "glass"
+    name: Chord arps
+    instrument: arp
     patterns:
-      Contact:
-        length: 4
-        groove:
-          - {"chord": "Cm7", "speed": 4}
-          - {"chord": "Cm7", "speed": 4}
-      Gears:
-        length: 4
-        groove:
-          - {"chord": "Cm7", "speed": 4}
-          - {"chord": "Abmaj7", "speed": 4}
-          - {"chord": "Ebmaj7", "speed": 4}
-          - {"chord": "G7", "speed": 4}
-      Fold:
-        length: 4
-        groove:
-          - {"chord": "Fm7", "speed": 4}
-          - {"chord": "Abmaj7", "speed": 4}
-          - {"chord": "Bb7", "speed": 4}
-          - {"chord": "G7", "speed": 4}
-      Crease:
-        length: 4
-        groove:
-          - {"chord": "Cm9", "speed": 4}
-          - {"chord": "Abmaj7", "speed": 4}
-          - {"chord": "Fm7", "speed": 4}
-          - {"chord": "G7", "speed": 4}
-      Tail:
-        length: 4
-        groove:
-          - {"chord": "Cm7", "speed": 4}
-          - {"chord": "Cm", "speed": 4}
-timeline:
-  - {"section": "Contact", "bars": 2, "layers": {"v1": "Contact", "v2": "Contact"}}
-  - {"section": "Paper gears", "bars": 4, "layers": {"v1": "Gears", "v2": "Gears"}}
-  - {"section": "Reverse fold", "bars": 4, "layers": {"v1": "Fold", "v2": "Fold"}}
-  - {"section": "Creases", "bars": 4, "layers": {"v1": "Crease", "v2": "Crease"}}
-  - {"section": "Power down", "bars": 2, "layers": {"v1": "Tail–", "v2": "Tail–"}}
+      a: { length: 0.5, bars: 8, groove: "Fm@arp ~ ~ Fm@arp ~ ~ Fm@arp ~ | Fm@arp ~ ~ Fm@arp ~ Fm@arp ~ - | Db@arp ~ ~ Db@arp ~ ~ Db@arp ~ | Eb@arp ~ ~ Eb@arp ~ Eb@arp ~ - | Bbm@arp ~ ~ Bbm@arp ~ ~ Bbm@arp ~ | Fm@arp ~ ~ Fm@arp ~ Fm@arp ~ - | Db@arp ~ ~ Db@arp ~ ~ Db@arp ~ | C@arp ~ ~ C@arp ~ C7@arp ~ -" }
+      held: { length: 4, bars: 8, groove: "Fm@arp | Fm@arp | Db@arp | Eb@arp | Bbm@arp | Fm@arp | Db@arp | C@arp" }
+      end: { length: 1, bars: 2, groove: "Fm@arp ~ ~ ~ ~ ~ ~ ~" }
+  - id: 3
+    name: Lead
+    role: lead
+    instrument: lead
+    patterns:
+      hook: { length: 0.5, bars: 8, groove: "C5 ~ ~ Ab4 ~ C5 ~ Eb5 | F5 ~ ~ ~ Eb5 ~ C5 ~ | Db5 ~ ~ ~ F5 ~ Ab5 ~ | G5 ~ ~ ~ ~ ~ - - | F5 ~ ~ Db5 ~ F5 ~ Bb5 | Ab5 ~ ~ ~ G5 ~ F5 ~ | F5 ~ ~ ~ Db5 ~ Ab4 ~ | G4 ~ ~ ~ E5 ~ ~ ~" }
+      hook2: { length: 0.5, bars: 8, groove: "C5 ~ Ab4 ~ C5 Eb5 ~ F5 | ~ ~ ~ ~ (Eb5 C5) ~ - | Db5 ~ F5 ~ Ab5 ~ Bb5 Ab5 | G5 ~ ~ ~ Eb5 ~ G5 ~ | Bb5 ~ ~ ~ Ab5 ~ F5 ~ | C6 ~ ~ ~ Ab5 ~ G5 ~ | Ab5 ~ F5 ~ Db5 ~ F5 ~ | E5 ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "C5 ~ ~ ~ ~ ~ ~ ~" }
+  - id: d1
+    digi: sid2
+    patterns:
+      intro: { length: 0.25, bars: 1, groove: "k - h - x - h - k - h - x - h h" }
+      beat1: { length: 0.25, bars: 1, groove: "k - h - s - h k - h k - s - h h" }
+      beat2: { length: 0.25, bars: 1, groove: "k - h k s - h - k - h k s - k h" }
+      beat3: { length: 0.25, bars: 1, groove: "k - h - x - h k - h k - x - v -" }
+      fill: { length: 0.25, bars: 1, groove: "k - s - k s - s k - s s x - x x" }
+      breakb: { length: 0.25, bars: 1, groove: "k - - k - - k - - - k - x - - -" }
+      voxb: { length: 0.25, bars: 1, groove: "k - - k v - k - - - k - x - h h" }
+      last: { length: 1, bars: 2, groove: "k - - - - - - -" }
+kit:
+  k: sample:kick
+  s: sample:snare
+  x: sample:clap
+  h: sample:hat
+  v: sample:vox
+sections:
+  intro:
+    bars: 8
+    volume: { sid1: 11 }
+    filter: { cutoff: { from: -200, to: -60 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", d1: "intro*7 fill" }
+  a:
+    bars: 16
+    volume: { sid1: 13 }
+    levels: { v2: mp }
+    filter: { cutoff: { from: -60, to: 60 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", v2: a, d1: "beat1 beat2 beat1 beat2 beat1 beat2 beat3 fill" }
+  b:
+    bars: 16
+    volume: { sid1: 15 }
+    levels: { v2: p, v3: f }
+    filter: { cutoff: 60 }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", v2: held, v3: hook, d1: "beat1 beat2 beat1 beat3 beat1 beat2 beat3 fill" }
+  break:
+    bars: 8
+    volume: { sid1: 12 }
+    filter: { cutoff: { from: -250, to: 0 } }
+    layers: { v1: "e1 e1 e1-4 e1-2 e1+5 e1 e1-4 ec", d1: "breakb voxb breakb voxb breakb voxb breakb fill" }
+  a2:
+    bars: 16
+    volume: { sid1: 15 }
+    levels: { v2: mp, v3: ff }
+    filter: { cutoff: { from: 40, to: 120 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", v2: a, v3: "hook hook2", d1: "beat1 beat2 beat3 beat2 beat1 beat2 beat3 fill" }
+  outro:
+    bars: 6
+    volume: { sid1: { from: 14, to: 11 } }
+    levels: { v2: mp }
+    filter: { cutoff: { from: 40, to: -180 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1 e2", v2: a, d1: "beat1 beat2 beat1 beat2 beat1 fill" }
+  final:
+    bars: 2
+    volume: { sid1: 11 }
+    layers: { v1: end, v2: end, v3: end, d1: last }
+timeline: [intro, a, b, break, a2, outro, final]
+end: { hold_beats: 2, release: true }
