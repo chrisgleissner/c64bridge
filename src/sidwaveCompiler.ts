@@ -92,26 +92,50 @@ export interface CompileResult {
  * pitch slide, vibrato, pulse-width sweep, and per-SID filters with sweep and per-pattern ramp.
  */
 export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress = true }: { loop?: boolean; compress?: boolean } = {}): CompileResult {
-  const arrangement = arrangeSidwave(doc);
   loop = loop && !doc.end;
   const loopOffsets: number[] = [];
   let streamCalls = 0;
-  const streams: StreamByte[][] = arrangement.voices.map((v, i) => {
-    const tokens = encodeVoiceTokens(v.events, arrangement.totalFrames, loop ? arrangement.clock?.loopFrame : undefined);
+  let streamBytes = 0;
+  const streams: StreamByte[][] = [];
+  const streamLimit = SIDWAVE_MEMORY_END - SIDWAVE_LOAD_ADDRESS - 3;
+  const rejectOversize = () => {
+    throw new SidwaveValidationError("$.timeline", "the compiled voice streams would end past the $D000 limit (about 50 KB); shorten the timeline or use longer note lengths");
+  };
+  let previous: { events: StreamEvent[]; total: number; loopFrame?: number; bytes: number } | undefined;
+  const packVoice = (v: Arrangement["voices"][number], i: number, part: Arrangement) => {
+    const loopFrame = loop ? part.clock?.loopFrame : undefined;
+    // Identical timed events produce the same packed size. If that size
+    // would already exceed the remaining space, avoid packing the copy.
+    if (previous && streamBytes + previous.bytes > streamLimit && part.totalFrames === previous.total &&
+      loopFrame === previous.loopFrame && sameStreamEvents(v.events, previous.events)) rejectOversize();
+    const tokens = encodeVoiceTokens(v.events, part.totalFrames, loopFrame);
+    let bytes: StreamByte[];
     if (doc.version !== "1.2" || !compress) {
-      const bytes: number[] = [];
+      bytes = [];
       for (const token of tokens) { if (!token.length) loopOffsets[i] = bytes.length; bytes.push(...token); }
-      return bytes;
+    } else {
+      const packed = compressVoiceTokens(tokens, i, (offset) => { loopOffsets[i] = offset; });
+      streamCalls += packed.calls;
+      bytes = packed.bytes;
     }
-    const packed = compressVoiceTokens(tokens, i, (offset) => { loopOffsets[i] = offset; });
-    streamCalls += packed.calls;
-    return packed.bytes;
-  });
+    streamBytes += bytes.length;
+    if (streamBytes > streamLimit) rejectOversize();
+    previous = { events: v.events, total: part.totalFrames, loopFrame, bytes: bytes.length };
+    streams[i] = bytes;
+  };
+  // Plain multi-SID scores can be packed and checked one chip at a time. A
+  // score with a release tail or generated voices/samples needs the final arrangement.
+  const independent = doc.sids.length > 1 && !doc.end && !doc.samples &&
+    !doc.voices.some(({ echo, unison, center }) => echo || unison || center);
+  const arrangement = independent
+    ? arrangeAll(doc, 0, (part, chip) => part.voices.forEach((voice, channel) => packVoice(voice, chip * 3 + channel, part)))
+    : arrangeSidwave(doc);
+  if (!independent) arrangement.voices.forEach((voice, i) => packVoice(voice, i, arrangement));
   arrangement.loopOffsets = loopOffsets;
   arrangement.streamCalls = streamCalls;
 
   if (arrangement.samples) validateDigiRate(arrangement.samples, Object.values(CLOCK_HZ));
-  const musicCycles = estimatePlayerCycles(arrangement);
+  const musicCycles = estimatePlayerCycles(arrangement, loop);
   const digiCyclesAt = (system: SystemMode) => arrangement.samples
     ? digiCyclesPerCall(arrangement.samples, arrangement.fps, CLOCK_HZ[system]) : 0;
   const digiCycles = digiCyclesAt(arrangement.system);
@@ -141,6 +165,7 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress 
     );
   }
   const warnings: string[] = [];
+  for (const field of doc.ignoredFields ?? []) warnings.push(`${field} has no effect before sidwave: 1.2 and was ignored`);
   if (arrangement.findings) {
     lintArrangement(doc, arrangement, arrangement.findings);
     for (const finding of arrangement.findings.list()) warnings.push(formatFinding(finding));
@@ -267,7 +292,12 @@ export function compileSidwaveToSid(
 }
 
 function writeLatin1(buf: Buffer, text: string, offset: number): void {
-  const safe = [...text].map((ch) => (ch.codePointAt(0)! <= 0xff ? ch : "?")).join("").slice(0, 32);
+  let safe = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    safe += code < 0x20 || (code >= 0x7f && code <= 0x9f) ? " " : code <= 0xff ? ch : "?";
+    if (safe.length === 32) break;
+  }
   buf.write(safe, offset, 32, "latin1");
 }
 
@@ -419,7 +449,10 @@ function createInstrumentPool() {
   // Instrument 0 is a neutral placeholder: voices that have not played a note yet use it, so they are not routed to the filter.
   const instruments: Instrument[] = [{ ad: 0, sr: 0, wave: 0, pw: 0, pwStep: 0, pwMin: 0, pwMax: 0, vibUp: [0, 0], vibDown: [0, 0], vibRate: 0, vibDelay: 0, arp: [], arpSpeed: 0, slideSemis: 0, slideSpeed: 0, slideRecip: 0, filter: 0 }];
   const instKeys = new Map<string, number>();
+  const instObjects = new WeakMap<Instrument, number>();
   const instIndex = (inst: Instrument): number => {
+    const cached = instObjects.get(inst);
+    if (cached !== undefined) return cached;
     const key = JSON.stringify(inst);
     let idx = instKeys.get(key);
     if (idx === undefined) {
@@ -428,6 +461,7 @@ function createInstrumentPool() {
       instruments.push(inst);
       instKeys.set(key, idx);
     }
+    instObjects.set(inst, idx);
     return idx;
   };
 
@@ -467,7 +501,7 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   return doc.end.release && probe.endTail ? arrangeAll(doc, probe.endTail) : probe;
 }
 
-function arrangeAll(doc: ParsedSidwave, endTail: number): Arrangement {
+function arrangeAll(doc: ParsedSidwave, endTail: number, onPart?: (part: Arrangement, chip: number) => void): Arrangement {
   const first = doc.sids[0]!;
   const extended = doc.version === "1.2" || doc.sids.length > 1 || first.address !== 0xd400 || first.volume !== 15 ||
     first.filter || doc.cpu || doc.voices.some(({ id }) => doc.voiceSlots.get(id) !== id - 1);
@@ -493,10 +527,12 @@ function arrangeAll(doc: ParsedSidwave, endTail: number): Arrangement {
     });
     const globalFx = doc.song.global_fx;
     const filterEnv = sid.filter?.filter_env ?? (chip === 0 ? globalFx.filter_env : undefined);
-    return arrangeChip({
+    const part = arrangeChip({
       ...doc, voices, timeline,
       song: { ...doc.song, global_fx: { reverb_sim: globalFx.reverb_sim, filter_env: filterEnv } },
     }, pool, sid.volume, sid.filter?.filter_mod, idByChannel, clock, findings, sid, endTail);
+    onPart?.(part, chip);
+    return part;
   });
   const voices = parts.flatMap((part) => part.voices);
   // A centred voice sounds on its own channel and on the mirror channel; the player writes both back to back.
@@ -717,6 +753,10 @@ function arrangeChip(
     const count = Math.max(1, Math.min(0xffff, Math.round(sidMod.amount * unitFrames)));
     globals.push({ frame: 0, kind: "filtermod", step: Math.round(sidMod.sweep * 32 / count), count });
   }
+  const patternsBySource = new WeakMap<SidwavePattern, {
+    entries: PatternEntry[]; durations: number[]; variableLength: boolean;
+  }>();
+  const instrumentShapes = new WeakMap<PatternEntry, Map<string, Instrument>>();
   const fadeWindows: Array<Array<{ start: number; end: number }>> = [[], [], []];
   const reverb = gfx.reverb_sim as { depth: number; delay_frames: number } | undefined;
 
@@ -770,11 +810,16 @@ function arrangeChip(
         const filterMod = fxRaw.filter_mod ? parseFilterMod(fxRaw.filter_mod, `${patPath}.fx.filter_mod`) : undefined;
         if (filterMod) filterUsed = hasFilterMod = true;
         const routed = ownerRoute ? Number(ownerRoute.includes(id)) : filterVoices.has(id) || !!filterMod || (!fenv && !!sidMod) ? 1 : 0;
-        const entries = patternEntries(pattern, patPath, modern);
         const lengthBeats = pattern.length ?? 1;
+        let prepared = patternsBySource.get(pattern);
+        if (!prepared) {
+          const entries = patternEntries(pattern, patPath, modern);
+          const durations = entries.map((entry) => entry.kind === "note" ? entry.len ?? lengthBeats : lengthBeats);
+          prepared = { entries, durations, variableLength: durations.some((duration) => duration !== lengthBeats) };
+          patternsBySource.set(pattern, prepared);
+        }
+        const { entries, durations, variableLength } = prepared;
         const transpositions = pattern.transpositions ?? [0];
-        const durations = entries.map((entry) => entry.kind === "note" ? entry.len ?? lengthBeats : lengthBeats);
-        const variableLength = durations.some((duration) => duration !== lengthBeats);
         const tr = transpositions[pass.repetition % transpositions.length]! + pass.transpose + (section.transpose ?? 0);
         if (filterMod) {
           const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: modern ? doc.speed : 1 }[filterMod.unit];
@@ -845,25 +890,34 @@ function arrangeChip(
           const key = isLibrary ? instrumentName!.slice(4) : instrumentName;
           const namedInstrument = key && Object.prototype.hasOwnProperty.call(bank, key) ? bank[key] : undefined;
           if (instrumentName && !namedInstrument) throw new SidwaveValidationError(`${patPath}.instrument`, `instrument ${JSON.stringify(instrumentName)} is not defined`);
-          const instVoice = namedInstrument ? { ...voice, waveform: (namedInstrument.waveform ?? namedInstrument.wave ?? voice.waveform) as any, pulse_width: namedInstrument.pulse_width ?? voice.pulse_width, adsr: namedInstrument.adsr ?? voice.adsr } : voice;
-          const fx = { ...fxRaw, ...(namedInstrument ?? {}) };
-          if (entry.chord) {
-            fx.wavetable = offsets.map((offset) => ({ note: offset < 0 ? String(offset) : `+${offset}`, frames: entry.chord!.speed }));
-            fx.loop = 0;
+          // Repeated entries keep their instrument shape unless the voice,
+          // pitch or filter routing changes. Section dynamics are applied later.
+          let shapes = instrumentShapes.get(entry);
+          if (!shapes) { shapes = new Map(); instrumentShapes.set(entry, shapes); }
+          const shapeKey = `${id}:${base}:${routed}`;
+          let inst = shapes.get(shapeKey);
+          if (!inst) {
+            const instVoice = namedInstrument ? { ...voice, waveform: (namedInstrument.waveform ?? namedInstrument.wave ?? voice.waveform) as any, pulse_width: namedInstrument.pulse_width ?? voice.pulse_width, adsr: namedInstrument.adsr ?? voice.adsr } : voice;
+            const fx = { ...fxRaw, ...(namedInstrument ?? {}) };
+            if (entry.chord) {
+              fx.wavetable = offsets.map((offset) => ({ note: offset < 0 ? String(offset) : `+${offset}`, frames: entry.chord!.speed }));
+              fx.loop = 0;
+            }
+            if (modern && voice.center) {
+              // Both copies restart with TEST set so their oscillators start in phase.
+              const hr = fx.hard_restart as { frames?: number; adsr?: number[] } | undefined;
+              fx.hard_restart = { frames: hr?.frames || SIDWAVE_HARD_RESTART_FRAMES, adsr: hr?.adsr ?? [0, 0, 0, 0], test: true };
+            }
+            if (modern && ownerChannel !== undefined && id !== ownerChannel && fx.filtertable) {
+              fx.filtertable = undefined;
+              findings?.once("FILTER-IGNORED", String(instrumentName ?? `v${id}`), `bar ${Math.floor(b / beatsPerBar) + 1} v${idByChannel?.get(id) ?? id}`, "Move the filter table to the owner voice or remove it");
+            }
+            if (modern && !sid?.model && !isLibrary && JSON.stringify(fx.filtertable ?? "").includes('"hz"')) {
+              throw new SidwaveValidationError(`${patPath}.instrument`, "declare sids[].model before using a cutoff in Hz");
+            }
+            inst = buildInstrument(instVoice, fx, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps, modern, doc.speed, base, sid?.model);
+            shapes.set(shapeKey, inst);
           }
-          if (modern && voice.center) {
-            // Both copies restart with TEST set so their oscillators start in phase.
-            const hr = fx.hard_restart as { frames?: number; adsr?: number[] } | undefined;
-            fx.hard_restart = { frames: hr?.frames || SIDWAVE_HARD_RESTART_FRAMES, adsr: hr?.adsr ?? [0, 0, 0, 0], test: true };
-          }
-          if (modern && ownerChannel !== undefined && id !== ownerChannel && fx.filtertable) {
-            fx.filtertable = undefined;
-            findings?.once("FILTER-IGNORED", String(instrumentName ?? `v${id}`), `bar ${Math.floor(b / beatsPerBar) + 1} v${idByChannel?.get(id) ?? id}`, "Move the filter table to the owner voice or remove it");
-          }
-          if (modern && !sid?.model && !isLibrary && JSON.stringify(fx.filtertable ?? "").includes('"hz"')) {
-            throw new SidwaveValidationError(`${patPath}.instrument`, "declare sids[].model before using a cutoff in Hz");
-          }
-          let inst = buildInstrument(instVoice, fx, entry.arp ? offsets : [], entry.arp ? entry.arpSpeed : 0, routed, fps, modern, doc.speed, base, sid?.model);
           const previous = out[out.length - 1];
           const legato = (entry.legato ?? namedInstrument?.legato) && previous?.end === f0 && f0 !== clock?.loopFrame;
           const minFrames = legato ? 1 : (inst.restart?.frames ?? SIDWAVE_HARD_RESTART_FRAMES) + (modern ? doc.speed : 1);
@@ -1461,6 +1515,14 @@ function encodeVoiceTokens(events: StreamEvent[], total: number, loopFrame?: num
   return out;
 }
 
+function sameStreamEvents(left: StreamEvent[], right: StreamEvent[]): boolean {
+  return left.length === right.length && left.every(({ frame, order, bytes }, i) => {
+    const match = right[i]!;
+    return frame === match.frame && order === match.order && bytes.length === match.bytes.length &&
+      bytes.every((value, j) => value === match.bytes[j]);
+  });
+}
+
 export function encodeVoiceStream(events: StreamEvent[], total: number, loopFrame?: number, setLoopOffset?: (offset: number) => void): number[] {
   const out: number[] = [];
   for (const token of encodeVoiceTokens(events, total, loopFrame)) {
@@ -1480,7 +1542,9 @@ export type StreamByte = number | string;
 export function compressVoiceTokens(tokens: number[][], voice: number, setLoopOffset: (offset: number) => void): { bytes: StreamByte[]; calls: number } {
   const key = tokens.map((t) => t.join(","));
   const barrier = tokens.map((t) => !t.length || t[0] === OP.LOOP);
-  const size = (from: number, to: number) => tokens.slice(from, to).reduce((sum, t) => sum + t.length, 0);
+  const prefix = [0];
+  for (const token of tokens) prefix.push(prefix[prefix.length - 1]! + token.length);
+  const size = (from: number, to: number) => prefix[to]! - prefix[from]!;
   const subs: Array<{ start: number; length: number; uses: number }> = [];
   const matchAt = (i: number, sub: { start: number; length: number }) => {
     if (i + sub.length > tokens.length) return false;
@@ -1496,14 +1560,19 @@ export function compressVoiceTokens(tokens: number[][], voice: number, setLoopOf
     later.get(sig)!.push(i);
   }
   const plan = (discover: boolean, allowed: typeof subs) => {
+    const cursors = new Map<string, number>();
     const steps: Array<{ token?: number; sub?: number }> = [];
     for (let i = 0; i < tokens.length;) {
       if (barrier[i]) { steps.push({ token: i++ }); continue; }
       const hit = allowed.findIndex((sub) => matchAt(i, sub));
       if (hit >= 0) { allowed[hit]!.uses++; steps.push({ sub: hit }); i += allowed[hit]!.length; continue; }
       if (discover && i + 2 < tokens.length) {
-        const positions = later.get(signature(i));
-        const next = positions?.find((p) => p > i);
+        const sig = signature(i);
+        const positions = later.get(sig);
+        let cursor = cursors.get(sig) ?? 0;
+        while (positions?.[cursor] !== undefined && positions[cursor]! <= i) cursor++;
+        cursors.set(sig, cursor);
+        const next = positions?.[cursor];
         if (next !== undefined) {
           let run = 0;
           while (run < next - i && !barrier[i + run] && !barrier[next + run] && key[i + run] === key[next + run]) run++;
@@ -1556,7 +1625,7 @@ export function compressVoiceTokens(tokens: number[][], voice: number, setLoopOf
 // Upper bounds for the NMOS 6502 paths in PLAYER_CODE, including indexed
 // reads and taken branches crossing a page. Costs for instrument-dependent
 // paths are charged only when the corresponding feature is in the score.
-function estimatePlayerCycles(arr: Arrangement): number {
+function estimatePlayerCycles(arr: Arrangement, loop: boolean): number {
   const hasWave = arr.instruments.some((inst) => !!inst.wavetable?.length);
   const hasPulse = arr.instruments.some((inst) => !!inst.pulsetable);
   const hasFilter = arr.instruments.some((inst) => !!inst.filtertable);
@@ -1564,7 +1633,7 @@ function estimatePlayerCycles(arr: Arrangement): number {
   const hasSweep = arr.chips?.some((chip) => chip.filter.stepFixed);
   const bursts = new Map<number, number>();
   const add = (frame: number, cycles: number) => bursts.set(frame, (bursts.get(frame) ?? 0) + cycles);
-  let regular = 140 + (arr.softVolume ? 35 + 135 * (arr.chips?.length ?? 1) : 0) + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
+  let regular = 180 + (arr.softVolume ? 35 + 135 * (arr.chips?.length ?? 1) : 0) + (arr.samples ? 48 * (arr.chips?.length ?? 1) : 0); // entry, pointer/banking saves, play-once wrapper and return
   for (const chip of arr.chips ?? [{ filter: arr.filter, hasFilterTable: hasFilter }]) {
     regular += arr.chips ? 155 : 0; // base table lookup, 3-channel dispatch and unfiltered volume
     if (chip.filter.used || chip.hasFilterTable || !arr.chips) {
@@ -1586,18 +1655,24 @@ function estimatePlayerCycles(arr: Arrangement): number {
     if (used.some((inst) => inst.pulsetable?.steps.some((step) => step.cadence))) regular += 25;
     if (used.some((inst) => inst.filtertable?.steps.some((step) => step.cadence))) regular += 25;
     if (arr.samples) regular += 16;
-    regular += 220; // ordinary wait (including WAITLONG), register output and inactive effects
+    // The legacy player still runs its full register/effects path for all
+    // three channels, even when their streams contain only waits.
+    regular += arr.chips ? 220 : 280; // wait dispatch, register output and inactive effects
     if (hasWave) regular += used.some((inst) => inst.wavetable?.length) ? 100 : 20;
     if (hasPulse) regular += used.some((inst) => inst.pulsetable) ? 145 : 25;
     if (hasFilter) regular += used.some((inst) => inst.filtertable) ? 190 : 25;
     if (used.some((inst) => inst.arp.length)) regular += 85;
     if (notes.some((note) => note.portamento || arr.instruments[note.inst]!.slideSpeed)) regular += 110;
-    if (used.some((inst) => inst.vibRate)) regular += 330;
+    if (used.some((inst) => inst.vibRate)) regular += 390;
     if (used.some((inst) => inst.pwStep)) regular += 95;
     if (arr.streamCalls) regular += 110; // CALL and RET
-    add(arr.clock?.loopFrame ?? 0, 100 + (slot % 3 === 0 && (!chip || chip.filter.used) ? 60 : 0)); // stream wrap and envelope reset
+    // LOOP dispatch, pointer reload and a second fetch on the same call.
+    // Include commands scheduled at the stream end in the loop-target burst.
+    const wrapFrame = arr.clock?.loopFrame ?? 0;
+    if (loop) add(wrapFrame, 149 + (slot % 3 === 0 && (!chip || chip.filter.used) ? 78 : 0));
     let currentInst = 0;
-    for (const { frame, bytes: [op, ...args] } of [...events].sort((a, b) => a.frame - b.frame || a.order - b.order)) {
+    for (const { frame: eventFrame, bytes: [op, ...args] } of [...events].sort((a, b) => a.frame - b.frame || a.order - b.order)) {
+      const frame = loop && eventFrame === arr.totalFrames ? wrapFrame : eventFrame;
       if (op! >= OP.INST && op! < OP.WAIT) {
         currentInst = op! - OP.INST;
         add(frame, 45);
@@ -1608,7 +1683,9 @@ function estimatePlayerCycles(arr: Arrangement): number {
           if (hasWave) cycles += 42;
           if (hasPulse) cycles += 47;
           if (hasFilter) cycles += 160;
-          if (inst.vibRate) cycles += 490 + 33 * (inst.vibUp[1] + inst.vibDown[1]);
+          // Two 16x8 multiplications (four mul8 calls), plus both rounded
+          // shifts. Allow the carry/sign branches and indexed page crossings.
+          if (inst.vibRate) cycles += 655 + 33 * (inst.vibUp[1] + inst.vibDown[1]);
           if (inst.slideSemis) cycles += 580;
           if (arr.tuning && (inst.vibRate || inst.slideSemis)) cycles += 96;
         }

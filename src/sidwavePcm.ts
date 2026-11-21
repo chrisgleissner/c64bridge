@@ -63,10 +63,11 @@ function fields(raw: unknown, label: string, keys: readonly string[]): Record<st
 
 function number(raw: unknown, label: string, min: number, max: number, fallback?: number): number {
   if (raw === undefined && fallback !== undefined) return fallback;
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < min || raw > max) {
+  const value = typeof raw === "string" && raw.trim() ? Number(raw) : raw;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
     throw new Error(`${label} must be a number in ${min}..${max}`);
   }
-  return raw;
+  return value;
 }
 
 function integer(raw: unknown, label: string, min: number, max: number, fallback?: number): number {
@@ -77,9 +78,11 @@ function integer(raw: unknown, label: string, min: number, max: number, fallback
 
 function hz(value: unknown, fallback = 440): number {
   if (value === undefined) return fallback;
-  if (typeof value === "number") return number(value, "frequency", 0.01, 100_000);
+  if (typeof value === "number" || (typeof value === "string" && value.trim() && Number.isFinite(Number(value)))) {
+    return number(value, "frequency", 0.01, 100_000);
+  }
   const match = typeof value === "string" && /^([A-G])([#b]?)(-?\d)$/i.exec(value);
-  if (!match) throw new Error(`Invalid frequency ${String(value)}. Use Hz or a note such as C4`);
+  if (!match) throw new Error("Invalid frequency. Use Hz or a note such as C4");
   const semis: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   const midi = (Number(match[3]) + 1) * 12 + semis[match[1]!.toUpperCase()]! +
     (match[2] === "#" ? 1 : match[2] === "b" ? -1 : 0);
@@ -203,7 +206,7 @@ export function renderSynth(raw: unknown, rate: number): Float64Array {
   const lpAlpha = 1 - Math.exp(-2 * Math.PI * lp / workRate);
   const hpAlpha = 1 - Math.exp(-2 * Math.PI * hp / workRate);
   const drive = number(spec.drive, "drive", 0, 32, 0);
-  const crush = typeof spec.crush === "number" ? { bits: spec.crush } : spec.crush === undefined ? {} : fields(spec.crush, "crush", ["bits", "rate"]);
+  const crush = typeof spec.crush === "number" || typeof spec.crush === "string" ? { bits: spec.crush } : spec.crush === undefined ? {} : fields(spec.crush, "crush", ["bits", "rate"]);
   const levels = 2 ** integer(crush.bits, "crush.bits", 1, 16, 16) - 1;
   const hold = Math.max(1, Math.round(workRate / number(crush.rate, "crush.rate", 1, 100_000, workRate)));
   let low = 0, dc = 0, held = 0;

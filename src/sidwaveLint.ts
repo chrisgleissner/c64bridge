@@ -258,9 +258,17 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
     if (!low && sounding(bar) >= 2) { if (noBass++ === 0) noBassStart = bar; if (noBass === 8) findings.add("NO-BASS", `bar ${noBassStart + 1}`, "Add a voice below C3 or transpose the bass down"); }
     else noBass = 0;
   }
-  const signature = (bar: number, slots?: number[]) => (slots ?? arr.voices.map((_, i) => i)).map((slot) => arr.voices[slot]!.notes
-    .filter((n) => n.start >= bar * barFrames - 1e-6 && n.start < (bar + 1) * barFrames - 1e-6)
-    .map((n) => `${Math.round(n.start - bar * barFrames)}:${n.midi}:${n.inst}`).join(",")).join("|");
+  // Index each note's onset once. REPEAT and every DUP pair reuse the
+  // same per-voice signatures instead of scanning the score for each bar.
+  const voiceBars = arr.voices.map(({ notes }) => {
+    const onsets: string[][] = Array.from({ length: bars }, () => []);
+    for (const n of notes) {
+      const bar = Math.floor((n.start + 1e-6) / barFrames);
+      onsets[bar]?.push(`${Math.round(n.start - bar * barFrames)}:${n.midi}:${n.inst}`);
+    }
+    return onsets.map((entries) => entries.join(","));
+  });
+  const signature = (bar: number) => voiceBars.map((slot) => slot[bar]).join("|");
   if (bars >= 4) {
     const seen = new Set<string>();
     let repeats = 0;
@@ -272,20 +280,30 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
     if (!plain(a) || !plain(b)) continue;
     let streak = 0;
     for (let bar = 0; bar < bars; bar++) {
-      const sa = signature(bar, [a]); const sb = signature(bar, [b]);
+      const sa = voiceBars[a]![bar]!; const sb = voiceBars[b]![bar]!;
       if (sa && sa === sb.replace(/:\d+$/, "") + "" || (sa && sa === sb)) { if (++streak === 2) findings.add("DUP", `bar ${bar} v${bySlot.get(a)}/v${bySlot.get(b)}`, "Detune, echo or offset one of the doubled voices"); } else streak = 0;
     }
   }
   // CLASH: minor second or minor ninth held together for an eighth note or longer, starting on a beat.
+  const byOnset = arr.voices.map(({ notes }) => notes.some((note, i) => i > 0 && note.start < notes[i - 1]!.start)
+    ? [...notes].sort((a, b) => a.start - b.start) : notes);
   for (let a = 0; a < arr.voices.length; a++) for (let b = a + 1; b < arr.voices.length; b++) {
-    for (const n of arr.voices[a]!.notes) for (const m of arr.voices[b]!.notes) {
-      const start = Math.max(n.start, m.start);
-      const length = Math.min(n.end, m.end) - start;
-      if (length < fpb / 2 - 1e-6) continue;
-      const beat = start / fpb;
-      if (Math.abs(beat - Math.round(beat)) > 0.02) continue;
-      const interval = Math.abs(n.midi - m.midi);
-      if (interval === 1 || interval === 13) { findings.add("CLASH", where(n.start >= m.start ? n : m, a), "Move one note a semitone or shorten the overlap"); }
+    const later = byOnset[b]!;
+    let first = 0;
+    for (const n of byOnset[a]!) {
+      // The inputs are in onset order. An expired note can never clash
+      // with this note or any later note on the first voice.
+      while (first < later.length && later[first]!.end <= n.start) first++;
+      for (let j = first; j < later.length && later[j]!.start < n.end; j++) {
+        const m = later[j]!;
+        const start = Math.max(n.start, m.start);
+        const length = Math.min(n.end, m.end) - start;
+        if (length < fpb / 2 - 1e-6) continue;
+        const beat = start / fpb;
+        if (Math.abs(beat - Math.round(beat)) > 0.02) continue;
+        const interval = Math.abs(n.midi - m.midi);
+        if (interval === 1 || interval === 13) { findings.add("CLASH", where(n.start >= m.start ? n : m, a), "Move one note a semitone or shorten the overlap"); }
+      }
     }
   }
   // HR-GAP: every sounding voice re-attacks on the same beat for four or more beats.

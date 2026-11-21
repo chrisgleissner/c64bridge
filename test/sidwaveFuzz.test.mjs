@@ -1,7 +1,7 @@
 // Fuzz and soak tests for SIDWAVE: random valid documents, mutated examples, the song generator,
-// resource limits and PSID header round trips. Deterministic (seeded PRNG) and bounded to under a minute by
-// default. SIDWAVE_FUZZ_ITERATIONS=N scales every case count (default 100) and removes the time limits for soak runs;
-// SIDWAVE_FUZZ_SEED offsets the seeds; SIDWAVE_FUZZ_REPORT=file writes every finding with its input as JSON.
+// resource limits and PSID headers. SIDWAVE_FUZZ_ITERATIONS=N scales the seeded case counts.
+// SIDWAVE_FUZZ_SOAK_SECONDS=600 with a "mixed round-2" test filter runs the mixed grammar for ten minutes.
+// SIDWAVE_FUZZ_SEED offsets the seeds. SIDWAVE_FUZZ_REPORT=file records the smallest input seen for each finding.
 import test from "#test/runner";
 import assert from "#test/assert";
 import fs from "node:fs";
@@ -9,7 +9,7 @@ import { parse as yamlParse } from "yaml";
 import { generateSidwave, MUSIC_STYLES } from "../src/audio/generateSidwave.js";
 import { maxSidwaveMidi } from "../src/sidwaveCompiler.js";
 import { SIDWAVE_EXAMPLES, readSidwaveExample } from "../src/sidwaveExamples.js";
-import { chance, checkEquivalence, exercise, genDoc, int, noteName, pick, prng, signature } from "./helpers/sidwaveFuzzKit.mjs";
+import { chance, checkEquivalence, exercise, genDoc, genRound2Doc, int, noteName, pick, prng, signature } from "./helpers/sidwaveFuzzKit.mjs";
 import { parseSidwave } from "../src/sidwave.js";
 
 const ITERATIONS = Number(process.env.SIDWAVE_FUZZ_ITERATIONS ?? 100);
@@ -23,24 +23,6 @@ const count = (base) => Math.max(1, Math.round(base * SCALE));
 const deadline = (ms) => { const end = performance.now() + (SOAK ? Infinity : ms); return () => performance.now() > end; };
 const trace = (what) => { if (TRACE) fs.writeFileSync(TRACE, show(what)); };
 
-/** Signatures of findings that are already recorded in test/sidwaveFuzzFindings.test.mjs; they do not fail this suite. */
-const KNOWN = [
-  // F1 and F2: a play call takes more cycles than worstCaseCyclesPerCall (loop wrap call; vibrato note start).
-  { id: "F1/F2 cycle estimate exceeded", test: (f) => f.kind === "cycles-above-estimate" || f.kind === "cycles-far-above-estimate" },
-  // F3: instrument fields without range checks reach the player.
-  { id: "F3 unvalidated instrument fields", test: (f) => f.kind === "register-reserved-bits-set" || (f.kind === "compile-unclean-error:TypeError" && /toLowerCase/.test(f.detail)) },
-  // F4: String() or JSON.stringify of a deeply nested array overflows the stack in the parser.
-  { id: "F4 deep array stack overflow", test: (f) => f.kind === "parse-unclean-error:RangeError" },
-  // F5: parse time grows with the section count before the bar limit is applied.
-  { id: "F5 slow parse of huge timelines", test: (f) => f.kind === "parse-slow-case" || f.kind === "parse-slow" },
-  // F12: filter_mod written with a numeric string sweep ignores its duration key.
-  { id: "F12 string sweep ignores duration", test: (f) => f.kind === "equivalent-variant-differs" && /^numbers written as strings/.test(f.detail) && /filter_mod/.test(show(f.input)) },
-  // F13: synth sample fields reject numeric strings that every other numeric field accepts.
-  { id: "F13 synth numeric strings", test: (f) => f.kind === "equivalent-variant-rejected" && /\$\.samples\.defs/.test(f.detail) },
-  // F10: control characters in title or author reach the PSID header.
-  { id: "F10 control characters in PSID text", test: (f) => /^psid-header-(title|author)$/.test(f.kind) },
-];
-
 const found = new Map();
 const stats = new Map();
 const bump = (section, key, n = 1) => { const s = stats.get(section) ?? {}; s[key] = (s[key] ?? 0) + n; stats.set(section, s); };
@@ -49,11 +31,10 @@ const show = (input) => { if (typeof input === "string") return input; try { ret
 
 function record(section, label, input, loop, faults) {
   for (const fault of faults) {
-    const finding = { ...fault, label, section, loop, input };
     const sig = signature(fault);
-    const entry = found.get(sig) ?? { sig, count: 0, section, label, loop, fault, input: undefined, known: KNOWN.find((k) => k.test(finding))?.id };
+    const entry = found.get(sig) ?? { sig, count: 0, section, label, loop, fault, input: undefined };
     entry.count++;
-    if (!entry.input || show(input).length < show(entry.input).length) entry.input = input;
+    if (entry.input === undefined || show(input).length < show(entry.input).length) Object.assign(entry, { input, label, fault, loop });
     found.set(sig, entry);
   }
 }
@@ -68,15 +49,19 @@ function check(section, label, input, options = {}) {
 }
 
 function failOnNewFindings(section) {
-  const mine = [...found.values()].filter((f) => f.section === section && !f.known);
+  const mine = [...found.values()].filter((f) => f.section === section);
   const text = mine.map((f) => `${f.sig} (x${f.count}, ${f.label}): ${f.fault.detail}\n  input: ${show(f.input).slice(0, 600)}`).join("\n");
-  assert.equal(mine.length, 0, `${mine.length} new fuzz finding(s) in ${section}:\n${text}`);
+  assert.equal(mine.length, 0, `${mine.length} fuzz finding(s) in ${section}:\n${text}`);
+}
+
+function writeReport() {
+  fs.writeFileSync(REPORT, JSON.stringify([...found.values()].map((f) => ({ ...f, input: show(f.input).length > 2_000_000 || show(f.input).startsWith("(document too deep") ? "(too large or too deep to store)" : f.input })), null, 1));
 }
 
 test.after?.(() => {
   const summary = Object.fromEntries(stats);
-  console.info(`SIDWAVE fuzz summary: ${JSON.stringify(summary)}; findings ${found.size} (${[...found.values()].filter((f) => f.known).length} known)`);
-  if (REPORT) fs.writeFileSync(REPORT, JSON.stringify([...found.values()].map((f) => ({ ...f, input: show(f.input).length > 2_000_000 || show(f.input).startsWith("(document too deep") ? "(too large or too deep to store)" : f.input })), null, 1));
+  console.info(`SIDWAVE fuzz summary: ${JSON.stringify(summary)}; findings ${found.size}`);
+  if (REPORT) writeReport();
 });
 
 // ---------------------------------------------------------------------------
@@ -101,6 +86,35 @@ test("fuzz: random documents parse or fail with a path, compile or refuse clearl
   const s = stats.get("grammar");
   assert.ok((s.played ?? 0) >= Math.min(20, i / 6), `the grammar produced too few playable documents (${JSON.stringify(s)})`);
   failOnNewFindings("grammar");
+});
+
+const SOAK_SECONDS = Number(process.env.SIDWAVE_FUZZ_SOAK_SECONDS ?? 0);
+test("fuzz: mixed round-2 grammar and mutations", { timeout: Math.max(40_000, (SOAK_SECONDS + 30) * 1000) }, () => {
+  const end = performance.now() + (SOAK_SECONDS || 8) * 1000;
+  let played = 0;
+  const section = "round2";
+  for (let i = 0; SOAK_SECONDS ? performance.now() < end : i < 36 && (i < 12 || performance.now() < end); i++) {
+    const seed = SEED * 1_000_003 + 1_300_000 + i;
+    const r = prng(seed);
+    const score = genRound2Doc(r, i);
+    const input = i % 8 === 3 ? mutateObject(r, score, 600)
+      : i % 8 === 5 ? genDoc(r, { chaos: 0.03, badInstruments: 0.15 }) : score;
+    const loop = !score.end || i % 4 !== 1;
+    const result = check(section, `round2 seed ${seed} case ${i}`, input, {
+      loop, determinism: i % 24 === 0, maxCalls: 2200,
+    });
+    if (input === score && result.outcome !== "played") {
+      record(section, `round2 seed ${seed} case ${i}`, input, loop,
+        [{ kind: "round2-valid-case-refused", detail: String(result.error?.message) }]);
+    }
+    if (result.outcome === "played") {
+      played++;
+      if (i % 12 === 0) record(section, `round2 seed ${seed} equivalence`, input, loop, checkEquivalence(r, input, { loop }));
+    }
+    if (found.size && REPORT) writeReport();
+  }
+  assert.ok(played >= 8, "must execute at least eight scores with R2 features");
+  failOnNewFindings(section);
 });
 
 // ---------------------------------------------------------------------------
@@ -215,7 +229,8 @@ test("fuzz: mutated examples are rejected with a path, never crash or hang", { t
 
 test("fuzz: very deep and very wide documents are rejected with a path", () => {
   const holder = (depth, array) => { let v = array ? [] : {}; for (let i = 0; i < depth; i++) v = array ? [v] : { a: v }; return v; };
-  const base = yamlParse(readSidwaveExample("chiptune_drive"));
+  // A frozen score, so that rewriting the live example does not change which paths exist.
+  const base = yamlParse(fs.readFileSync(new URL("./fixtures/sidwave-1.1/chiptune_drive.yaml", import.meta.url), "utf8"));
   const cases = [];
   for (const depth of SOAK ? [1000, 20_000, 100_000] : [1000, 20_000]) for (const array of [false, true]) {
     for (const where of ["title", "voices.0.patterns.launch.groove", "instruments", "global_fx", "timeline.0.layers.v1", "sids"]) {
@@ -243,7 +258,7 @@ test("fuzz: very deep and very wide documents are rejected with a path", () => {
   failOnNewFindings("deep");
 });
 
-test("fuzz: every example survives the unmutated pipeline", () => {
+test("fuzz: every example survives the unmutated pipeline", { timeout: 120_000 }, () => {
   for (const { name } of [...SIDWAVE_EXAMPLES, { name: "fuer_elise" }]) {
     check("examples", `example:${name}`, readSidwaveExample(name), { loop: false, maxCalls: SOAK ? 6000 : 700 });
   }

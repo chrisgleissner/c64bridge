@@ -212,6 +212,64 @@ export function genDoc(r, { chaos = 0, big = false, badInstruments = 0 } = {}) {
   return doc;
 }
 
+/** Legal timing and disjoint mixer duties give each R2 feature an executable case. */
+export function genRound2Doc(r, i) {
+  const meter = chance(r, 0.2) ? 3 : 4;
+  const model = pick(r, ["6581", "8580"]);
+  const pattern = Array.from({ length: meter }, (_, beat) =>
+    beat === 0 ? pick(r, ["C3!", "D3!", "E3!"]) : beat === 1 ? "/G3" : "-").join(" ");
+  const sample = pick(r, [
+    { hex: "03f2e" }, { b64: "A/5I" },
+    { synth: { osc: "triangle", freq: 330, ms: 40, gain: 0.35, env: { a: 2, s: 0.75, r: 10 } } },
+  ]);
+  const doc = {
+    sidwave: "1.2", title: "Round 2 grammar", mode: pick(r, ["PAL", "NTSC"]),
+    tempo: int(r, 82, 128), meter, speed: int(r, 1, 4), cpu: "turbo", accent: int(r, 0, 8),
+    sids: [
+      { id: "main", address: "$D400", model, pan: "Left 5", filter: { owner: "v1", route: [1, 2] } },
+      { id: "mirror", address: "$D420", model, pan: "Right 5" },
+      { id: "digi", address: "$D440", volume: 8 },
+    ],
+    instruments: {
+      bass: { waveform: "pulse", adsr: [0, 5, 10, 3],
+        filtertable: { reset: chance(r, 0.5), steps: [{ cutoff: pick(r, ["500Hz", "900Hz", "1.2kHz", "2kHz"]), resonance: 6, type: "lowpass" }, { add: -7, frames: 5 }] },
+        pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 7, frames: 12 }, { add: -7, frames: 12 }] } },
+      sync: { waveform: "sawtooth", sync: true, source_note: pick(r, ["+7", "+0", "E3"]),
+        wavetable: [{ wave: "saw", note: "+7", slide_to: "+0", frames: int(r, 2, 5) }, { wave: "saw", calls: 2 }] },
+    },
+    voices: [
+      { id: 1, role: "bass", level: "mf", instrument: "bass", patterns: { A: { groove: pattern, bars: 1 } } },
+      { id: 3, role: "lead", instrument: "sync", patterns: { M: { length: 0.5, groove: "(A3 C4) E4! - E4 - - -" } } },
+      { id: "d1", digi: "digi", patterns: { P: { length: 1, drums: { kit: { k: "sample:hit" }, steps: meter === 3 ? "k.." : "k..." } } } },
+    ],
+    samples: { rate: int(r, 1500, 3000), defs: { hit: sample, ping: { hex: "057eff" } },
+      triggers: [{ sid: "digi", sample: "ping", at_beat: [{ bar: 2, beat: 2 }], pitch: int(r, -3, 3) }] },
+    sections: {
+      intro: { bars: 1, level: "p", layers: { v1: "A" } },
+      part: { bars: 2, level: { from: "mp", to: "ff" }, levels: { v3: "f" }, volume: { main: { from: 12, to: 15 } },
+        filter: { main: { cutoff: { from: -40, to: 210 }, resonance: 10 } },
+        tempo: { to: int(r, 78, 96) }, swing: pick(r, [0.55, 0.625, 0.7]), layers: { v1: "(A A+2)*1", v3: "M -*1", d1: "P*2" } },
+    },
+    timeline: ["intro", { use: "part", transpose: int(r, -3, 3) }, "intro*1"],
+    swing: 0.6, swing_unit: pick(r, [0.25, 0.5]),
+  };
+  // A source oscillator on v3 occupies v2, leaving v1 and its opposite SID free.
+  if (i % 5 === 4) {
+    doc.sids = { layout: "ultisid8+socket1", pan: pick(r, ["wide", "narrow"]),
+      overrides: { sid1: { model }, sid5: { model }, sid9: { volume: 8 } } };
+    delete doc.sections.part.filter;
+    doc.sections.part.volume = { sid1: 13 };
+    doc.voices[0].center = true;
+    doc.voices[2].digi = "sid9";
+    doc.samples.triggers[0].sid = "sid9";
+  } else if (i % 3 === 1) {
+    doc.voices[0].center = { sid: "mirror", channel: 1, level: int(r, 8, 12) };
+  }
+  if (i % 2 === 0) doc.loop_to = chance(r, 0.5) ? "part" : 2;
+  else doc.end = { hold_beats: pick(r, [0, 0.5, 1]), release: chance(r, 0.75) };
+  return doc;
+}
+
 function filterEnv(r, odd, local) {
   const env = { cutoff_base: odd(int(r, 0, 2047)) };
   if (chance(r, 0.6)) { env.sweep = int(r, -2047, 2047); env.speed = pick(r, [0.5, 1, 4, 3.99, 16]); }
@@ -264,7 +322,7 @@ function genInstrument(r, odd, modern) {
   return inst;
 }
 
-/** Instrument fields the parser does not range check today: a fuzzer should still see what the compiler does with them. */
+/** Invalid instrument fields for the parser rejection path. */
 function badInstrumentField(r) {
   return pick(r, [
     () => ({ adsr: [99, 0, 0, 0] }), () => ({ adsr: [-1, 2, 3, 4] }), () => ({ adsr: ["x", 0, 0, 0] }), () => ({ adsr: [1.5, 0, 0, 0] }), () => ({ adsr: [null, null, null, null] }),
@@ -421,6 +479,8 @@ export function emulate(doc, compiled, { loop, maxCalls }, fault, stats = {}) {
   const junk = new Map();
   let sidWrites = 0;
   let raster = 100;
+  let pending = 0;
+  let installing = false;
   const cpu = new Cpu(mem, {
     write(a, v) {
       if (a >= 0xd400 && a <= 0xd7ff) {
@@ -432,23 +492,55 @@ export function emulate(doc, compiled, { loop, maxCalls }, fault, stats = {}) {
           if ((off === 3 || off === 10 || off === 17) && v > 0x0f) junk.set(`pulse width high byte ${off}`, v);
           if (off === 21 && v > 7) junk.set("filter cutoff low register", v);
         } else stray.set(a, (stray.get(a) ?? 0) + 1);
-      } else if (!(allowedElsewhere(a) || (a >= own[0] && a < own[1]))) stray.set(a, (stray.get(a) ?? 0) + 1);
+      } else if (!(allowedElsewhere(a) || (installing && a >= 0x2b && a <= 0x32) || (a >= own[0] && a < own[1]))) stray.set(a, (stray.get(a) ?? 0) + 1);
     },
-    read(a) { if (a === 0xd012) return (raster = (raster + 1) % 312) & 0xff; },
+    read(a) {
+      if (a === 0xd012) return (raster = (raster + 1) % 312) & 0xff;
+      if (a === 0xdd0d) { const value = pending; pending = 0; return value; }
+    },
   });
   mem[0xfb] = 0x12; mem[0xfc] = 0x34; mem[0xfd] = 0x56; mem[0xfe] = 0x78;
+  loop = loop && !doc.end;
   const total = compiled.totalFrames;
   // The 1.2 player fades the master volume by one step per video frame, i.e. per `speed` play calls.
   const tail = 16 * doc.speed + 10;
   const calls = Math.min(maxCalls, loop ? total + 10 : total + tail + 30);
   const stop = (kind, detail) => { fault(kind, detail); };
   try {
-    cpu.call(compiled.initAddress, 0, 2_000_000);
+    if (compiled.digiNmiAddress !== undefined) {
+      if (doc.song.mode === "NTSC") raster = 0;
+      mem.set([0x78, 0x6c, 0x18, 0x03], 0xfe43);
+      mem.set([0x43, 0xfe], 0xfffa);
+      mem.set([0, 0xfe], 0x0318);
+      mem[0xfe00] = 0x40;
+      installing = true;
+      cpu.call(compiled.entryAddress, 0, 2_000_000);
+      installing = false;
+      if ((mem[0x0318] | (mem[0x0319] << 8)) !== compiled.digiNmiAddress) fault("digi-vector-uninstalled", "CIA2 NMI vector did not install");
+    } else cpu.call(compiled.initAddress, 0, 2_000_000);
+    const phi2 = doc.song.mode === "NTSC" ? 1_022_727 : 985_248;
+    let ciaElapsed = 0;
+    let previousPeriod = 0;
     let maxCycles = 0;
     let lateWrites = 0;
     for (let i = 0; i < calls; i++) {
       const w0 = sidWrites;
-      const cycles = cpu.call(compiled.playAddress, 0, 400_000);
+      let cycles = cpu.call(compiled.playAddress, 0, 400_000);
+      if (compiled.digiNmiAddress !== undefined && (mem[0xdd0e] & 1)) {
+        const period = (mem[0xdd04] | (mem[0xdd05] << 8)) + 1;
+        if (period !== previousPeriod) ciaElapsed = 0;
+        previousPeriod = period;
+        ciaElapsed += phi2 / compiled.framesPerSecond;
+        while (ciaElapsed >= period && (mem[0xdd0e] & 1)) {
+          pending = 0x81;
+          const nmiCycles = cpu.nmi();
+          if (nmiCycles > compiled.digiWorstCaseCyclesPerNmi) {
+            fault("digi-cycles-above-estimate", `NMI took ${nmiCycles}, estimate ${compiled.digiWorstCaseCyclesPerNmi}`);
+          }
+          cycles += nmiCycles;
+          ciaElapsed -= period;
+        }
+      } else ciaElapsed = previousPeriod = 0;
       maxCycles = Math.max(maxCycles, cycles);
       if (!loop && i >= total + tail && sidWrites > w0) lateWrites++;
       stats.calls = i + 1;
@@ -486,7 +578,7 @@ export function checkPsidRoundTrip(doc, compiled, fault) {
   if (sid.readUInt16BE(14) !== 1 || sid.readUInt16BE(16) !== 1) bad("songs", `${sid.readUInt16BE(14)}/${sid.readUInt16BE(16)}`, "1/1");
   if (sid.readUInt32BE(18) !== (doc.speed > 1 ? 1 : 0)) bad("speed", sid.readUInt32BE(18), doc.speed > 1 ? 1 : 0);
   const latin = (offset) => { const raw = sid.subarray(offset, offset + 32); const z = raw.indexOf(0); return raw.subarray(0, z < 0 ? 32 : z).toString("latin1"); };
-  const text = (s) => [...s].map((ch) => (ch.codePointAt(0) <= 0xff ? ch : "?")).join("").slice(0, 32);
+  const text = (s) => s.replace(/[\x00-\x1f\x7f-\x9f]/g, " ").replace(/[^\u0000-\u00ff]/gu, "?").slice(0, 32);
   if (latin(0x16) !== text(doc.song.title)) bad("title", JSON.stringify(latin(0x16)), JSON.stringify(text(doc.song.title)));
   if (latin(0x36) !== text(doc.song.author ?? "SIDWAVE")) bad("author", JSON.stringify(latin(0x36)), JSON.stringify(text(doc.song.author ?? "SIDWAVE")));
   const flags = sid.readUInt16BE(0x76);

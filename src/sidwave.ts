@@ -254,12 +254,18 @@ export interface ParsedSidwave {
   end?: { holdBeats: number; release: boolean };
   layout?: SidLayout;
   digiVoices?: Array<{ id: string; chip: number; patterns: Record<string, SidwavePattern> }>;
+  /** Fields that a pre-1.2 document may contain but that have no effect before sidwave: 1.2 (JSON paths). */
+  ignoredFields?: string[];
 }
 
 /** Raised for SIDWAVE documents that cannot be played as written. The message names the offending path. */
 export class SidwaveValidationError extends Error {
-  constructor(readonly path: string, detail: string) {
-    super(`Invalid SIDWAVE at ${path}: ${detail}`);
+  readonly path: string;
+
+  constructor(path: string, detail: string) {
+    const boundedPath = clipText(path, 240);
+    super(`Invalid SIDWAVE at ${boundedPath}: ${clipText(detail, 600)}`);
+    this.path = boundedPath;
     this.name = "SidwaveValidationError";
   }
 }
@@ -309,16 +315,16 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     checkKeys(obj.song, LEGACY_SONG_KEYS, "$.song");
   } else {
     checkKeys(obj, TOP_LEVEL_KEYS, "$");
-    if (obj.sidwave !== undefined && !["1", "1.0", "1.1", "1.2"].includes(String(obj.sidwave))) {
-      throw new SidwaveValidationError("$.sidwave", `unsupported version ${JSON.stringify(obj.sidwave)}; use 1.0, 1.1 or 1.2`);
+    if (obj.sidwave !== undefined && !["1", "1.0", "1.1", "1.2"].includes(scalarText(obj.sidwave, "$.sidwave"))) {
+      throw new SidwaveValidationError("$.sidwave", `unsupported version ${describeValue(obj.sidwave)}; use 1.0, 1.1 or 1.2`);
     }
   }
   const modern = obj.sidwave === 1.2 || obj.sidwave === "1.2";
   const header = (legacy ? obj.song : obj) as Record<string, unknown>;
   const headerPath = legacy ? "$.song" : "$";
 
-  const title = header.title === undefined ? "Untitled" : String(header.title);
-  const author = header.author === undefined ? undefined : String(header.author);
+  const title = header.title === undefined ? "Untitled" : requireText(header.title, `${headerPath}.title`);
+  const author = header.author === undefined ? undefined : requireText(header.author, `${headerPath}.author`);
   const tempo = parseTempo(header.tempo, `${headerPath}.tempo`);
   const mode = parseMode(header.mode, `${headerPath}.mode`);
   const global_fx = parseGlobalFx(header.global_fx, `${headerPath}.global_fx`, modern);
@@ -339,6 +345,13 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     throw new SidwaveValidationError("$.voices", `the SID${sids.length > 1 ? " map" : ""} has ${capacity} voices; ${obj.voices.length} were given`);
   }
   const instruments = normalizeInstruments(obj.instruments, "$.instruments", modern);
+  // SIDWAVE 1.1 (c64bridge 1.3.1) accepted hard_restart in an instrument without using it. Keep accepting
+  // it so that such documents still compile, and report it as ignored.
+  const ignoredFields = !modern && obj.instruments && typeof obj.instruments === "object"
+    ? Object.entries(obj.instruments as Record<string, unknown>)
+      .filter(([, inst]) => inst !== null && typeof inst === "object" && Object.prototype.hasOwnProperty.call(inst, "hard_restart"))
+      .map(([name]) => `$.instruments.${name}.hard_restart`)
+    : [];
   const voiceSlots = new Map<number, number>();
   const occupied = new Set<number>();
   const digiVoices: NonNullable<ParsedSidwave["digiVoices"]> = [];
@@ -347,8 +360,8 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a voice mapping");
     if (modern && raw.digi !== undefined) {
       checkKeys(raw, new Set(["id", "digi", "patterns"]), path);
-      const id = String(raw.id);
-      const chip = sids.findIndex((sid) => sid.id === String(raw.digi));
+      const id = scalarText(raw.id, path + ".id");
+      const chip = sids.findIndex((sid) => sid.id === scalarText(raw.digi, path + ".digi"));
       if (!/^d[1-9][0-9]*$/.test(id) || digiVoices.some((v) => v.id === id) || chip < 0 || !isPlainObject(raw.patterns)) {
         throw new SidwaveValidationError(path, "need a unique digi ID, a mapped SID and patterns");
       }
@@ -361,7 +374,8 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     checkKeys(raw, modern ? VOICE_KEYS : new Set([...VOICE_KEYS].filter((key) => !["level", "role", "center"].includes(key))), path);
     let slot: number | undefined;
     if (raw.sid !== undefined || raw.channel !== undefined) {
-      const chip = sids.findIndex((sid) => sid.id === String(raw.sid));
+      const sidId = scalarText(raw.sid, path + ".sid");
+      const chip = sids.findIndex((sid) => sid.id === sidId);
       if ((typeof raw.sid !== "string" && !Number.isSafeInteger(raw.sid)) || chip < 0) throw new SidwaveValidationError(`${path}.sid`, "references an unknown SID");
       slot = chip * 3 + requireNumber(raw.channel, `${path}.channel`, { min: 1, max: 3, integer: true }) - 1;
     }
@@ -375,14 +389,17 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     occupied.add(slot);
     const voice = normalizeVoice(raw, path, id, modern, meter, kit);
     const name = voice.instrument;
-    if (name && !name.startsWith("lib:") && !instruments[name]) {
-      throw new SidwaveValidationError(`${path}.instrument`, `instrument ${JSON.stringify(name)} is not defined`);
+    if (name && !name.startsWith("lib:") && !hasOwn(instruments, name)) {
+      throw new SidwaveValidationError(`${path}.instrument`, `instrument ${describeValue(name)} is not defined`);
     }
     return [voice];
   });
 
   if (!Array.isArray(obj.timeline) || obj.timeline.length === 0) {
     throw new SidwaveValidationError("$.timeline", "missing timeline (expected a list of sections)");
+  }
+  if (obj.timeline.length > MAX_SIDWAVE_BARS) {
+    throw new SidwaveValidationError("$.timeline", `at most ${MAX_SIDWAVE_BARS} sections can fit in the bar limit`);
   }
   if (digiVoices.length && obj.samples === undefined) throw new SidwaveValidationError("$.samples", "digi voices need samples.defs for the samples their kits name");
   const timeline = modern
@@ -393,9 +410,11 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   }
   let loopTo: number | undefined;
   if (obj.loop_to !== undefined) {
-    loopTo = typeof obj.loop_to === "string" ? timeline.findIndex((s: SidwaveTimelineSection) => s.section === obj.loop_to)
-      : requireNumber(obj.loop_to, "$.loop_to", { min: 1, max: timeline.length, integer: true }) - 1;
-    if (loopTo !== undefined && loopTo < 0) throw new SidwaveValidationError("$.loop_to", "unknown timeline section");
+    const target = obj.loop_to;
+    const named = typeof target === "string" ? timeline.findIndex((s: SidwaveTimelineSection) => s.section === target) : -1;
+    if (named >= 0) loopTo = named;
+    else if (typeof target === "string" && !/^\s*\d+\s*$/.test(target)) throw new SidwaveValidationError("$.loop_to", "unknown timeline section");
+    else loopTo = requireNumber(target, "$.loop_to", { min: 1, max: timeline.length, integer: true }) - 1;
   }
   const endDef = obj.end === true ? {} : obj.end === undefined ? undefined : requireObject(obj.end, "$.end", ["hold_beats", "release"]);
   if (endDef?.release !== undefined && typeof endDef.release !== "boolean") throw new SidwaveValidationError("$.end.release", "expected a boolean");
@@ -428,7 +447,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     sid.filter!.route ??= [slot % 3 + 1];
   }
   return { version, song, voices, timeline, instruments, speed, sids, samples, voiceSlots, cpu: obj.cpu,
-    accent, swing, swingUnit, loopTo, end, layout, digiVoices };
+    accent, swing, swingUnit, loopTo, end, layout, digiVoices, ...(ignoredFields.length ? { ignoredFields } : {}) };
 
 }
 
@@ -496,7 +515,7 @@ function normalizeSids(raw: unknown, modern: boolean): SidMapEntry[] {
         filter = {
           filter_env: value.filter_env === undefined ? undefined : parseFilterEnv(value.filter_env, `${fp}.filter_env`, modern),
           filter_mod: value.filter_mod === undefined ? undefined : parseFilterMod(value.filter_mod, `${fp}.filter_mod`),
-          owner: value.owner === undefined ? undefined : requireNumber(String(value.owner).replace(/^v/i, ""), fp + ".owner", { min: 1, max: 30, integer: true }),
+          owner: value.owner === undefined ? undefined : requireNumber(scalarText(value.owner, fp + ".owner").replace(/^v/i, ""), fp + ".owner", { min: 1, max: 30, integer: true }),
           route: value.route === undefined ? undefined : normalizeRoute(value.route, fp + ".route"),
 
         };
@@ -565,7 +584,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
     entries.forEach((raw: unknown, i: number) => {
       const here = `${path}.${list}[${i}]`;
       const item = requireObject(raw, here, [...SAMPLE_SOURCE_KEYS, "sid", "sample", "at", "bar", "beat", "at_beat", "pattern", "pitch", "length_beats"]);
-      const chip = item.sid === undefined ? 0 : sids.findIndex((sid) => sid.id === String(item.sid));
+      const chip = item.sid === undefined ? 0 : sids.findIndex((sid) => sid.id === scalarText(item.sid, here + ".sid"));
       if (chip < 0 || (item.sid !== undefined && typeof item.sid !== "string" && !Number.isSafeInteger(item.sid))) {
         throw new SidwaveValidationError(here + ".sid", "references an unknown SID");
       }
@@ -581,7 +600,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
       }
       const schedule = (name: unknown, when: Pick<SampleTrigger, "at" | "beat">, triggerPath: string) => {
         if (typeof name !== "string" || !defs.has(name)) {
-          throw new SidwaveValidationError(triggerPath, `sample ${JSON.stringify(name)} is not defined`);
+          throw new SidwaveValidationError(triggerPath, `sample ${describeValue(name)} is not defined`);
         }
         if (defs.get(name)!.loop !== (lengthBeats !== undefined)) {
           throw new SidwaveValidationError(triggerPath, "a looping sample requires length_beats and a one-shot sample cannot use it");
@@ -638,9 +657,9 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
 }
 
 function normalizeInstruments(raw: unknown, path: string, modern: boolean): Record<string, Record<string, any>> {
-  if (raw === undefined) return {};
+  if (raw === undefined) return Object.create(null);
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping of instrument names to instruments");
-  const result: Record<string, Record<string, any>> = {};
+  const result: Record<string, Record<string, any>> = Object.create(null);
   const fields = new Set(["waveform", "wave", "adsr", "pulse_width", "hard_restart", "wavetable", "loop", "pulsetable", "filtertable", "vibrato", "slide", "portamento", "legato", "ring", "sync", ...(modern ? ["source_note"] : [])]);
   for (const [name, value] of Object.entries(raw)) {
     if (!isPlainObject(value)) throw new SidwaveValidationError(`${path}.${name}`, "expected an instrument mapping");
@@ -649,7 +668,24 @@ function normalizeInstruments(raw: unknown, path: string, modern: boolean): Reco
     if (inst.source_note !== undefined && !validTablePitch(inst.source_note)) throw new SidwaveValidationError(path + "." + name + ".source_note", "expected a note or signed semitone offset");
     if (inst.legato !== undefined && typeof inst.legato !== "boolean") throw new SidwaveValidationError(`${path}.${name}.legato`, "expected a boolean");
     if (inst.portamento !== undefined) inst.portamento = requireNumber(inst.portamento, `${path}.${name}.portamento`, { min: 0, max: 255, integer: true });
-    if (inst.adsr !== undefined && (!Array.isArray(inst.adsr) || inst.adsr.length !== 4)) throw new SidwaveValidationError(`${path}.${name}.adsr`, "expected [attack, decay, sustain, release]");
+    const ip = `${path}.${name}`;
+    if (inst.adsr !== undefined) inst.adsr = parseAdsr(inst.adsr, ip + ".adsr");
+    if (inst.pulse_width !== undefined) inst.pulse_width = parsePulseWidth(inst.pulse_width, ip + ".pulse_width", true);
+    for (const key of ["waveform", "wave"]) {
+      if (inst[key] === undefined) continue;
+      const wave = requireText(inst[key], ip + "." + key).toLowerCase();
+      if (!WAVEFORMS.has(wave) && !/^(?:tri\+pulse|tri\+saw|saw\+pulse|tri\+saw\+pulse)$/.test(wave)) {
+        throw new SidwaveValidationError(ip + "." + key, "unknown instrument waveform");
+      }
+    }
+    for (const flag of ["ring", "sync"]) {
+      if (inst[flag] !== undefined && typeof inst[flag] !== "boolean") throw new SidwaveValidationError(ip + "." + flag, "expected a boolean");
+    }
+    validatePatternFx({ ...(inst.vibrato !== undefined ? { vibrato: inst.vibrato } : {}),
+      ...(inst.slide !== undefined ? { slide: inst.slide } : {}) }, ip);
+    if (inst.loop !== undefined && inst.wavetable === undefined && !Array.isArray(inst.pulsetable) && !Array.isArray(inst.filtertable)) {
+      throw new SidwaveValidationError(ip + ".loop", "needs a wavetable or a step list");
+    }
     if (inst.wavetable !== undefined && !Array.isArray(inst.wavetable)) throw new SidwaveValidationError(`${path}.${name}.wavetable`, "expected a list of steps");
     if (inst.wavetable !== undefined) {
       if (!inst.wavetable.length) throw new SidwaveValidationError(`${path}.${name}.wavetable`, "expected at least one step");
@@ -658,21 +694,20 @@ function normalizeInstruments(raw: unknown, path: string, modern: boolean): Reco
         const sp = `${path}.${name}.wavetable[${i}]`;
         if (!isPlainObject(step)) throw new SidwaveValidationError(sp, "expected a step mapping");
         checkKeys(step, new Set(["wave", "test", "gate", "ring", "sync", "note", "frames", ...(modern ? ["calls", "slide_to"] : [])]), sp);
-        if (modern && /noise\+|\+noise/.test(String(step.wave))) {
+        if (modern && step.wave !== undefined && /noise\+|\+noise/.test(requireText(step.wave, sp + ".wave"))) {
           throw new SidwaveValidationError(`${sp}.wave`, "noise combined with another waveform can lock the noise register; use noise alone");
         }
-        if (step.wave !== undefined && !waves.has(String(step.wave))) throw new SidwaveValidationError(`${sp}.wave`, "unknown wavetable waveform");
+        if (step.wave !== undefined && !waves.has(requireText(step.wave, sp + ".wave"))) throw new SidwaveValidationError(`${sp}.wave`, "unknown wavetable waveform");
         for (const flag of ["test", "gate", "ring", "sync"]) if (step[flag] !== undefined && typeof step[flag] !== "boolean") throw new SidwaveValidationError(`${sp}.${flag}`, "expected a boolean");
         if (step.frames !== undefined && step.calls !== undefined) throw new SidwaveValidationError(sp, "choose frames or calls");
         if (step.frames !== undefined) requireNumber(step.frames, `${sp}.frames`, { min: 1, max: 255, integer: true });
         if (step.calls !== undefined) requireNumber(step.calls, `${sp}.calls`, { min: 1, max: 255, integer: true });
         if (step.slide_to !== undefined && !validTablePitch(step.slide_to)) throw new SidwaveValidationError(sp + ".slide_to", "expected a note or signed semitone offset");
-        if (step.note !== undefined && !( /^[+-]\d+$/.test(String(step.note)) || /^[A-Ga-g][#b]?[0-7]$/.test(String(step.note)))) throw new SidwaveValidationError(`${sp}.note`, "expected relative semitones such as +12 or an absolute note such as C5");
+        if (step.note !== undefined && !validTablePitch(step.note)) throw new SidwaveValidationError(`${sp}.note`, "expected relative semitones such as +12 or an absolute note such as C5");
         return { ...step, frames: step.frames ?? 1, gate: step.gate ?? true };
       });
       if (inst.loop !== undefined) requireNumber(inst.loop, `${path}.${name}.loop`, { min: 0, max: inst.wavetable.length - 1, integer: true });
     }
-    const ip = `${path}.${name}`;
     if (modern && inst.hard_restart !== undefined) {
       const hp = `${ip}.hard_restart`;
       const restart = requireObject(inst.hard_restart, hp, ["frames", "adsr", "test"]);
@@ -704,7 +739,7 @@ const SIDWAVE_FILTER_TABLE_TYPES = {
 } as const;
 
 function validTablePitch(value: unknown): boolean {
-  return /^[+-]\d+$/.test(String(value)) || /^[A-Ga-g][#b]?[0-7]$/.test(String(value));
+  return typeof value === "string" && (/^[+-]\d+$/.test(value) || /^[A-Ga-g][#b]?[0-7]$/.test(value));
 }
 
 export interface SidwaveRegisterTable {
@@ -776,26 +811,28 @@ function parseTempo(value: unknown, path: string): number {
 
 function parseMode(value: unknown, path: string): SystemMode {
   if (value === undefined) return "PAL";
-  const m = String(value).toUpperCase();
-  if (m !== "PAL" && m !== "NTSC") throw new SidwaveValidationError(path, `expected PAL or NTSC, got ${JSON.stringify(value)}`);
+  const m = requireText(value, path).toUpperCase();
+  if (m !== "PAL" && m !== "NTSC") throw new SidwaveValidationError(path, `expected PAL or NTSC, got ${describeValue(value)}`);
   return m;
 }
 
+function parsePulseWidth(raw: unknown, path: string, keepFraction = false): number {
+  const pw = requireNumber(raw, path, { min: 0, max: 4095 });
+  const register = pw > 0 && pw <= 1 ? Math.round(pw * 4095) : Math.floor(pw);
+  if (register <= 0 || (register >= 4095 && !(keepFraction && pw === 1))) {
+    throw new SidwaveValidationError(path, "a pulse width of 0% or 100% is silent; use a fraction between 0 and 1 or 1..4094");
+  }
+  return keepFraction ? pw : register;
+}
+
 function normalizeVoice(v: Record<string, any>, path: string, id: number, modern: boolean, meter: number, kit?: Record<string, string>): SidwaveVoice {
-  const wfRaw = v.waveform === undefined ? "pulse" : String(v.waveform).toLowerCase();
+  const wfRaw = v.waveform === undefined ? "pulse" : requireText(v.waveform, path + ".waveform").toLowerCase();
   if (!WAVEFORMS.has(wfRaw)) {
-    throw new SidwaveValidationError(`${path}.waveform`, `unknown waveform ${JSON.stringify(v.waveform)}; use pulse, sawtooth, triangle or noise`);
+    throw new SidwaveValidationError(`${path}.waveform`, `unknown waveform ${describeValue(v.waveform)}; use pulse, sawtooth, triangle or noise`);
   }
   const waveform = normalizeWaveform(wfRaw as Waveform);
 
-  let pulseWidth: number | undefined;
-  if (v.pulse_width !== undefined) {
-    const pw = requireNumber(v.pulse_width, `${path}.pulse_width`, { min: 0, max: 4095 });
-    pulseWidth = pw > 0 && pw <= 1 ? Math.round(pw * 4095) : Math.floor(pw);
-    if (pulseWidth <= 0 || pulseWidth >= 4095) {
-      throw new SidwaveValidationError(`${path}.pulse_width`, "a pulse width of 0% or 100% is silent; use a fraction between 0 and 1 or 1..4094");
-    }
-  }
+  const pulseWidth = v.pulse_width === undefined ? undefined : parsePulseWidth(v.pulse_width, path + ".pulse_width");
 
   let adsr: [number, number, number, number] = [2, 2, 10, 3];
   if (v.adsr !== undefined) {
@@ -805,7 +842,7 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
     adsr = v.adsr.map((n: unknown, i: number) => requireNumber(n, `${path}.adsr[${i}]`, { min: 0, max: 15, integer: true })) as typeof adsr;
   }
 
-  const patterns: Record<string, SidwavePattern> = {};
+  const patterns: Record<string, SidwavePattern> = Object.create(null);
   if (v.patterns !== undefined) {
     if (!isPlainObject(v.patterns)) throw new SidwaveValidationError(`${path}.patterns`, "expected a mapping of pattern names to patterns");
     for (const [name, p] of Object.entries(v.patterns as Record<string, unknown>)) {
@@ -846,13 +883,13 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
   const centerValue = v.center === true ? {} : v.center === undefined || v.center === false ? undefined : requireObject(v.center, path + ".center", ["sid", "channel", "level"]);
   if (centerValue && ((centerValue.sid === undefined) !== (centerValue.channel === undefined))) throw new SidwaveValidationError(path + ".center", "give both sid and channel for an explicit mirror");
   const center = centerValue && {
-    sid: centerValue.sid === undefined ? undefined : String(centerValue.sid),
+    sid: centerValue.sid === undefined ? undefined : scalarText(centerValue.sid, path + ".center.sid"),
     channel: centerValue.channel === undefined ? undefined : requireNumber(centerValue.channel, path + ".center.channel", { min: 1, max: 3, integer: true }),
     level: centerValue.level === undefined ? undefined : parseLevel(centerValue.level, path + ".center.level"),
   };
   return {
-    id, detune, level, role, center, name: v.name === undefined ? `Voice${id}` : String(v.name), waveform, pulse_width: pulseWidth, adsr,
-    instrument: v.instrument === undefined ? undefined : String(v.instrument), patterns, echo, unison,
+    id, detune, level, role, center, name: v.name === undefined ? `Voice${id}` : requireText(v.name, path + ".name"), waveform, pulse_width: pulseWidth, adsr,
+    instrument: v.instrument === undefined ? undefined : requireText(v.instrument, path + ".instrument"), patterns, echo, unison,
   };
 }
 
@@ -866,7 +903,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
   const keys = (base: Set<string>) => modern ? new Set([...base, "bars"]) : base;
   if (modern && p.motif !== undefined) {
     checkKeys(p, keys(MOTIF_KEYS), path);
-    p.groove = compactTokens(String(p.motif), path + ".motif", defaultKit, String(p.root ?? "C3"));
+    p.groove = compactTokens(requireText(p.motif, path + ".motif"), path + ".motif", defaultKit, requireText(p.root ?? "C3", path + ".root"));
     delete p.motif;
     delete p.root;
   }
@@ -881,7 +918,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
 
   if (p.type !== undefined || p.notes !== undefined) {
     if (p.type !== undefined && p.type !== "arpeggio") {
-      throw new SidwaveValidationError(`${path}.type`, `unknown pattern type ${JSON.stringify(p.type)}; only 'arpeggio' is supported (a pattern with 'notes' is an arpeggio)`);
+      throw new SidwaveValidationError(`${path}.type`, `unknown pattern type ${describeValue(p.type)}; only 'arpeggio' is supported (a pattern with 'notes' is an arpeggio)`);
     }
     checkKeys(p, keys(ARP_KEYS), path);
     if (!Array.isArray(p.notes) || p.notes.length === 0) throw new SidwaveValidationError(`${path}.notes`, "expected a non-empty list of note names");
@@ -902,7 +939,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
         if (ch === ".") return "-";
         if (modern && ch === "|") return "|";
         const inst = kit[ch];
-        if (typeof inst !== "string") throw new SidwaveValidationError(`${path}.drums.steps[${i}]`, `no kit instrument for ${JSON.stringify(ch)}`);
+        if (typeof inst !== "string") throw new SidwaveValidationError(`${path}.drums.steps[${i}]`, `no kit instrument for ${describeValue(ch)}`);
         return { note: "C3", inst, ...(modern ? { kitNote: true } : {}) };
       });
       delete p.drums;
@@ -947,7 +984,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
         }
         return entry;
       }
-      const tok = String(n).trim();
+      const tok = requireText(n, `${path}.groove[${i}]`).trim();
       const note = tok.split("@")[0]!;
       if (modern && tok.endsWith("@arp")) parseChordArp({ chord: tok.slice(0, -4) }, `${path}.groove[${i}]`);
       else if (!isRestToken(tok) && !isTieToken(tok)) requireNote(note, `${path}.groove[${i}]`);
@@ -958,7 +995,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
   if (p.motif !== undefined) {
     checkKeys(p, MOTIF_KEYS, path);
     if (p.root !== undefined) requireNote(p.root, `${path}.root`);
-    parseMotif(String(p.motif), p.root === undefined ? "C3" : String(p.root), `${path}.motif`);
+    parseMotif(requireText(p.motif, path + ".motif"), p.root === undefined ? "C3" : String(p.root), `${path}.motif`);
     return p as SidwavePatternMotif;
   }
   throw new SidwaveValidationError(path, "a pattern needs 'groove', 'drums', 'motif' or 'type: arpeggio' with 'notes'");
@@ -994,16 +1031,19 @@ export interface FilterModSpec { sweep: number; amount: number; unit: "steps" | 
 /** Parses `{ sweep: "+500 over 8 steps" }` or `{ sweep: 500, steps: 8 }`. */
 export function parseFilterMod(raw: unknown, path: string): FilterModSpec {
   const v = requireObject(raw, path, ["sweep", "steps", "beats", "bars", "frames"]);
-  if (typeof v.sweep === "string") {
+  const durations = (["steps", "beats", "bars", "frames"] as const).filter((unit) => v[unit] !== undefined);
+  if (durations.length > 1) throw new SidwaveValidationError(path, "choose one sweep duration");
+  if (typeof v.sweep === "string" && !Number.isFinite(Number(v.sweep.trim()))) {
     const m = /^\s*([+-]?\d+(?:\.\d+)?)\s*(?:over\s+(\d+(?:\.\d+)?)\s*(steps?|beats?|bars?|frames?))?\s*$/i.exec(v.sweep);
-    if (!m) throw new SidwaveValidationError(`${path}.sweep`, `expected e.g. "+500 over 8 steps", got ${JSON.stringify(v.sweep)}`);
+    if (!m) throw new SidwaveValidationError(`${path}.sweep`, `expected e.g. "+500 over 8 steps", got ${describeValue(v.sweep)}`);
     const sweep = Number(m[1]);
-    const amount = m[2] === undefined ? 1 : Number(m[2]);
+    if (durations.length) throw new SidwaveValidationError(path, "the sweep text already supplies its duration");
+    const amount = Number(m[2]);
     const unit = (m[3] ? m[3].toLowerCase().replace(/s$/, "") + "s" : "steps") as FilterModSpec["unit"];
     return checkFilterMod({ sweep, amount, unit }, path);
   }
   const sweep = requireNumber(v.sweep, `${path}.sweep`, { min: -2047, max: 2047 });
-  for (const unit of ["steps", "beats", "bars", "frames"] as const) {
+  for (const unit of durations) {
     if (v[unit] !== undefined) return checkFilterMod({ sweep, amount: requireNumber(v[unit], `${path}.${unit}`, { min: 0, exclusiveMin: true }), unit }, path);
   }
   return checkFilterMod({ sweep, amount: 1, unit: "steps" }, path);
@@ -1036,7 +1076,7 @@ function parseFilterEnv(raw: unknown, path: string, modern = false): Record<stri
   if (v.sweep !== undefined) requireNumber(v.sweep, `${path}.sweep`, { min: -2047, max: 2047 });
   if (v.speed !== undefined) requireNumber(v.speed, `${path}.speed`, { min: 0, max: 1024, exclusiveMin: true });
   if (v.resonance !== undefined) requireNumber(v.resonance, `${path}.resonance`, { min: 0, max: 15, integer: true });
-  if (v.type !== undefined && !["lowpass", "bandpass", "highpass"].includes(String(v.type).toLowerCase())) {
+  if (v.type !== undefined && !["lowpass", "bandpass", "highpass"].includes(requireText(v.type, path + ".type").toLowerCase())) {
     throw new SidwaveValidationError(`${path}.type`, "expected lowpass, bandpass or highpass");
   }
   if (v.voices !== undefined) {
@@ -1148,7 +1188,7 @@ export function parseLayerSequence(ref: string, patterns: string[], path: string
   const parse = (item: string) => {
     const layer = parseLayerRef(item, patterns);
     if (layer.pattern !== null && !patterns.includes(layer.pattern)) {
-      throw new SidwaveValidationError(path, `pattern ${JSON.stringify(item)} is not defined${patterns.length ? ` (known: ${patterns.join(", ")})` : ""}`);
+      throw new SidwaveValidationError(path, `pattern ${describeValue(item)} is not defined${patterns.length ? ` (known: ${patterns.join(", ")})` : ""}`);
     }
     if (sequence && layer.fade) throw new SidwaveValidationError(path, "use a section level ramp to fade a sequence");
     return layer;
@@ -1233,7 +1273,7 @@ function formSection(t: Record<string, any>, path: string, voices: SidwaveVoice[
     const key = id ? `v${id}` : raw;
     const patterns = (id ? voices.find((v) => v.id === Number(id)) : digis.find((v) => v.id === raw))?.patterns;
     if (!id && !digis.some((v) => v.id === raw)) throw new SidwaveValidationError(path + ".layers." + raw, "unknown layer");
-    const ref = String(value ?? "-").trim();
+    const ref = value == null ? "-" : requireText(value, path + ".layers." + raw).trim();
     if (hasOwn(layers, key)) throw new SidwaveValidationError(path + ".layers." + raw, "voice assigned twice");
     const sequence = parseLayerSequence(ref, Object.keys(patterns ?? {}), path + ".layers." + raw);
     inferred = Math.max(inferred, sequence.items.reduce((sum, item) => sum + (item.pattern ? patternBeats(patterns![item.pattern]!) : meter), 0));
@@ -1268,7 +1308,7 @@ function formSection(t: Record<string, any>, path: string, voices: SidwaveVoice[
     : parseTempo(t.tempo, path + ".tempo");
   const swing = t.swing === undefined ? undefined : requireNumber(t.swing, path + ".swing", { min: 0.5, max: 0.75 });
   const transpose = t.transpose === undefined ? undefined : numberAt(-96, 96)(t.transpose, path + ".transpose");
-  return { section: String(t.section ?? ""), bars, tempo, swing, transpose, layers, level, levels, volume, filter };
+  return { section: t.section === undefined ? "" : requireText(t.section, path + ".section"), bars, tempo, swing, transpose, layers, level, levels, volume, filter };
 }
 
 function parseCutoff(raw: unknown, path: string, modern: boolean): number | string {
@@ -1294,19 +1334,19 @@ function normalizeTimelineSection(raw: unknown, path: string, voices: SidwaveVoi
     const id = Number(km[1]);
     const key = `v${id}`;
     if (layers[key] !== undefined) throw new SidwaveValidationError(`${path}.layers.${k}`, `voice ${id} is assigned twice`);
-    const ref = v === null || v === undefined ? "-" : String(v).trim();
+    const ref = v === null || v === undefined ? "-" : requireText(v, `${path}.layers.${k}`).trim();
     const voice = voices.find((vv) => vv.id === id);
     const parsed = parseLayerRef(ref, Object.keys(voice?.patterns ?? {}));
     if (parsed.pattern !== null) {
       if (!voice) throw new SidwaveValidationError(`${path}.layers.${k}`, `voice ${id} is not declared in voices`);
-      if (!(parsed.pattern in (voice.patterns ?? {}))) {
+      if (!hasOwn(voice.patterns ?? {}, parsed.pattern)) {
         const known = Object.keys(voice.patterns ?? {});
-        throw new SidwaveValidationError(`${path}.layers.${k}`, `pattern ${JSON.stringify(ref)} is not defined for voice ${id}${known.length ? ` (known: ${known.join(", ")})` : ""}`);
+        throw new SidwaveValidationError(`${path}.layers.${k}`, `pattern ${describeValue(ref)} is not defined for voice ${id}${known.length ? ` (known: ${known.join(", ")})` : ""}`);
       }
     }
     layers[key] = ref;
   }
-  return { section: t.section === undefined ? "" : String(t.section), bars, tempo, swing, layers };
+  return { section: t.section === undefined ? "" : requireText(t.section, path + ".section"), bars, tempo, swing, layers };
 }
 
 export interface LayerRef {
@@ -1377,7 +1417,7 @@ export function isTieToken(token: string): boolean {
 
 function requireNote(raw: unknown, path: string): number {
   const midi = typeof raw === "string" ? noteNameToMidi(raw) : undefined;
-  if (midi === undefined) throw new SidwaveValidationError(path, `invalid note ${JSON.stringify(raw)}; use names such as C4, Eb3 or F#2`);
+  if (midi === undefined) throw new SidwaveValidationError(path, `invalid note ${describeValue(raw)}; use names such as C4, Eb3 or F#2`);
   if (midi < SIDWAVE_NOTE_RANGE.min || midi > SIDWAVE_NOTE_RANGE.max) {
     throw new SidwaveValidationError(path, `note ${raw} is outside the supported range C0..B7`);
   }
@@ -1439,7 +1479,7 @@ export function parseMotif(motif: string, root: string, path: string, strict = f
     const note = noteNameToMidi(token);
     if (note !== undefined) { entries.push(requireNote(token, path)); continue; }
     const chord = /^([A-G])([#b]?)(.*)$/.exec(token);
-    if (chord && chord[3] in CHORD_QUALITIES) {
+    if (chord && hasOwn(CHORD_QUALITIES, chord[3]!)) {
       const base = noteNameToMidi(`${chord[1]}${chord[2]}${rootOctave}`)!;
       for (const iv of CHORD_QUALITIES[chord[3]]!) {
         const midi = base + iv;
@@ -1449,10 +1489,10 @@ export function parseMotif(motif: string, root: string, path: string, strict = f
       continue;
     }
     if (!strict && /^[A-Za-z]+$/.test(token)) continue; // descriptive word
-    throw new SidwaveValidationError(path, `unrecognised motif token ${JSON.stringify(token)}; use notes (C4), semitone offsets (0 4 7), chord symbols (Cmin9), '-' or '~'`);
+    throw new SidwaveValidationError(path, `unrecognised motif token ${describeValue(token)}; use notes (C4), semitone offsets (0 4 7), chord symbols (Cmin9), '-' or '~'`);
   }
   if (!entries.some((e) => typeof e === "number")) {
-    throw new SidwaveValidationError(path, `motif ${JSON.stringify(motif)} contains no notes; use notes (C4 Eb4 G4), semitone offsets (0 3 7) or a chord symbol (Cmin9)`);
+    throw new SidwaveValidationError(path, `motif ${describeValue(motif)} contains no notes; use notes (C4 Eb4 G4), semitone offsets (0 3 7) or a chord symbol (Cmin9)`);
   }
   return entries;
 }
@@ -1480,7 +1520,7 @@ function requireObject(raw: unknown, path: string, keys: string[]): Record<strin
 
 function requireNumber(raw: unknown, path: string, opts: { min?: number; max?: number; integer?: boolean; exclusiveMin?: boolean }): number {
   const n = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw;
-  if (typeof n !== "number" || !Number.isFinite(n)) throw new SidwaveValidationError(path, `expected a number, got ${JSON.stringify(raw)}`);
+  if (typeof n !== "number" || !Number.isFinite(n)) throw new SidwaveValidationError(path, `expected a number, got ${describeValue(raw)}`);
   if (opts.integer && !Number.isInteger(n)) throw new SidwaveValidationError(path, `expected a whole number, got ${n}`);
   if (opts.min !== undefined && (opts.exclusiveMin ? n <= opts.min : n < opts.min)) {
     throw new SidwaveValidationError(path, `${n} is below the minimum ${opts.exclusiveMin ? "(exclusive) " : ""}${opts.min}`);
@@ -1490,3 +1530,23 @@ function requireNumber(raw: unknown, path: string, opts: { min?: number; max?: n
 }
 
 function hasOwn(obj: object, key: string): boolean { return Object.prototype.hasOwnProperty.call(obj, key); }
+
+function clipText(text: string, limit: number): string {
+  return text.length <= limit ? text : text.slice(0, limit) + "…";
+}
+
+function describeValue(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(clipText(value, 80));
+  if (Array.isArray(value)) return `an array (${value.length} elements)`;
+  if (value !== null && typeof value === "object") return "a mapping";
+  return String(value);
+}
+
+function requireText(value: unknown, path: string): string {
+  if (typeof value !== "string") throw new SidwaveValidationError(path, "expected text");
+  return value;
+}
+
+function scalarText(value: unknown, path: string): string {
+  return typeof value === "number" ? String(value) : requireText(value, path);
+}

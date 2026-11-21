@@ -2120,7 +2120,7 @@ test("large packed sample crosses the wide counter and reads RAM under BASIC ROM
 });
 
 test("a sample loop ending at song wrap stops before the first trigger changes pitch", () => {
-  const score = multiScore(sidMap(2), [], { samples: { rate: 1500,
+  const score = multiScore(sidMap(2), [], { samples: { rate: 1200,
     defs: { ping: { hex: "fa" }, drone: { hex: "345", loop: true } },
     triggers: [
       { sid: "chip1", sample: "ping", at: [0], pitch: 12 },
