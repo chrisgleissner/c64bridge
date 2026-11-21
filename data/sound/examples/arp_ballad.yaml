@@ -36,11 +36,11 @@ instruments:
     wavetable: [{ wave: tri, note: "+12" }, { wave: pulse }]
     pulsetable: [{ set: 1400 }, { add: -30, frames: 20 }]
     filtertable: [{ cutoff: 1.2kHz, resonance: 10, type: lowpass }, { add: -10, frames: 16 }]
-  # Music-box bell for the first statement of the motif: ring-modulated triangle, source a major seventh up.
+  # Music-box bell for the first statement of the motif: ring-modulated triangle, source an octave up.
   bell:
     waveform: tri
     adsr: [0, 10, 0, 9]
-    source_note: "+11"
+    source_note: "+12"
     wavetable: [{ wave: tri, ring: true, note: "+12" }, { wave: tri, ring: true }]
   # Ballad lead: one saw frame, a narrow pulse that opens fast and then breathes; vibrato grows after 20 frames.
   voice:

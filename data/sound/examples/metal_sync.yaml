@@ -164,7 +164,8 @@ instruments:
     waveform: noise
     adsr: [0, 9, 9, 11]
     loop: 4
-    wavetable: [{ wave: noise, note: G5, frames: 2 }, { wave: noise, note: D3, frames: 3 }, { wave: noise, note: A2, frames: 4 }, { wave: noise, note: E2, frames: 6 }, { wave: noise, note: B1, frames: 10 }, { wave: noise, note: D2, frames: 8 }, { wave: noise, note: A1, frames: 12 }, { wave: noise, note: C#2, frames: 9 }]
+    # Keep the descending noise sweep's SID clock stages on E-minor chord tones.
+    wavetable: [{ wave: noise, note: G5, frames: 2 }, { wave: noise, note: E5, frames: 3 }, { wave: noise, note: B4, frames: 4 }, { wave: noise, note: G4, frames: 6 }, { wave: noise, note: E4, frames: 10 }, { wave: noise, note: B3, frames: 8 }, { wave: noise, note: G3, frames: 12 }, { wave: noise, note: E3, frames: 9 }]
   uni:
     waveform: saw
     adsr: [0, 8, 11, 10]
@@ -246,24 +247,24 @@ instruments:
     loop: 1
     wavetable: [{ wave: noise, note: "+19", calls: 2 }, { wave: pulse, note: "+0", calls: 1 }, { note: "+4", calls: 1 }, { note: "+7", calls: 1 }, { note: "+10", calls: 1 }, { note: "+13", calls: 1 }, { note: "+16", calls: 1 }, { note: "+19", calls: 1 }, { note: "+13", calls: 1 }, { note: "+10", calls: 1 }, { note: "+4", calls: 1 }]
     pulsetable: { steps: [{ set: 1000 }, { add: 30, frames: 40 }] }
-  bell:      # ring-modulated triangle, its source driven a major seventh above
+  bell:      # ring-modulated triangle, its source driven an octave above for harmonic sidebands
     waveform: tri
     ring: true
-    source_note: "+11"
+    source_note: "+12"
     adsr: [0, 10, 0, 9]
     hard_restart: { frames: 0 }
     wavetable: [{ wave: tri, ring: true, note: "+12" }, { wave: tri, ring: true }]
-  bell2:     # a darker bell: source a minor ninth below
+  bell2:     # a darker bell: source an octave above for harmonic sidebands
     waveform: tri
     ring: true
-    source_note: "-13"
+    source_note: "+12"
     adsr: [0, 11, 0, 10]
     hard_restart: { frames: 0 }
     wavetable: [{ wave: tri, ring: true, note: "+12" }, { wave: tri, ring: true }]
-  bellF:     # the last bell
+  bellF:     # the last bell, with harmonic sidebands
     waveform: tri
     ring: true
-    source_note: "+6"
+    source_note: "+12"
     adsr: [0, 12, 0, 12]
     hard_restart: { frames: 0 }
     wavetable: [{ wave: tri, ring: true, note: "+12" }, { wave: tri, ring: true }]
@@ -329,7 +330,7 @@ voices:
     role: lead
     instrument: lead
     patterns:
-      sky: { length: 0.25, bars: 7, groove: "C3@thunder ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | B4@bell ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ C5@bell ~ ~ ~ ~ ~ ~ ~ | B4@bell ~ ~ ~ ~ ~ ~ ~ G4@bell ~ ~ ~ ~ ~ ~ ~ | E5@bell2 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | C3@thunder ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+      sky: { length: 0.25, bars: 7, groove: "E3@clean2 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | B4@bell ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ C5@bell ~ ~ ~ ~ ~ ~ ~ | B4@bell ~ ~ ~ ~ ~ ~ ~ G4@bell ~ ~ ~ ~ ~ ~ ~ | E5@bell2 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | D3@clean2 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
       crack: { length: 0.25, bars: 1, groove: "C3@thunder ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
       squeal:
         length: 0.25
