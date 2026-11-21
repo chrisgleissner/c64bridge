@@ -317,8 +317,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    needs: release
-    if: ${{ needs.release.outputs.publish == 'true' }}
+    needs: [release, render_examples]
+    if: ${{ needs.release.outputs.publish == 'true' && needs.render_examples.result == 'success' }}
     steps:
       - name: Set up Node.js for release publishing
         uses: actions/setup-node@v6
@@ -357,9 +357,9 @@ jobs:
         shell: bash
     permissions:
       contents: read
-    needs: [release, publish_npm]
+    needs: [release, publish_npm, render_examples]
     # Revalidation of an existing npm version intentionally skips publication.
-    if: ${{ always() && needs.release.result == 'success' && (needs.publish_npm.result == 'success' || needs.publish_npm.result == 'skipped') }}
+    if: ${{ always() && needs.release.result == 'success' && (needs.publish_npm.result == 'success' || needs.publish_npm.result == 'skipped') && (needs.release.outputs.publish != 'true' || needs.render_examples.result == 'success') }}
     steps:
       - name: Set up Node.js for release publishing
         uses: actions/setup-node@v6
@@ -473,6 +473,17 @@ jobs:
         if: ${{ always() }}
         run: ./mcp-publisher logout || true
 
+  render_examples:
+    name: Render SIDWAVE release assets
+    needs: release
+    if: ${{ needs.release.outputs.skip_release_notes != 'true' }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/render-sidwave-examples.yaml
+    with:
+      ref: ${{ format('refs/tags/{0}', needs.release.outputs.tag) }}
+
   release_notes:
     name: Update release notes
     runs-on: ubuntu-latest
@@ -481,8 +492,8 @@ jobs:
         shell: bash
     permissions:
       contents: write
-    needs: [release, verify_npm, publish_registry]
-    if: ${{ always() && needs.release.outputs.skip_release_notes != 'true' && needs.verify_npm.result == 'success' && (needs.publish_registry.result == 'success' || needs.publish_registry.result == 'skipped') }}
+    needs: [release, verify_npm, publish_registry, render_examples]
+    if: ${{ always() && needs.release.outputs.skip_release_notes != 'true' && needs.verify_npm.result == 'success' && (needs.publish_registry.result == 'success' || needs.publish_registry.result == 'skipped') && needs.render_examples.result == 'success' }}
     steps:
       - name: Set up Node.js for release publishing
         uses: actions/setup-node@v6
@@ -490,6 +501,12 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
+
+      - name: Download validated SIDWAVE render assets
+        uses: actions/download-artifact@v7
+        with:
+          name: sidwave-examples
+          path: sidwave-examples
 
       - name: Update GitHub release notes
         env:
@@ -605,4 +622,51 @@ jobs:
             console.error('Unexpected error while updating release notes:', error);
             process.exit(1);
           });
+          NODE
+
+      - name: Attach SIDWAVE MP3/YAML assets to the tag release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readFile } from 'node:fs/promises';
+          import path from 'node:path';
+          import process from 'node:process';
+
+          const token = process.env.GH_TOKEN;
+          const tag = process.env.RELEASE_TAG;
+          const repository = process.env.GITHUB_REPOSITORY;
+          if (!token || !tag || !repository) throw new Error('Missing release asset upload context');
+          const root = 'sidwave-examples';
+          const manifest = JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8'));
+          const names = Object.keys(manifest.songs);
+          if (names.length !== 13 || new Set(names).size !== 13) throw new Error('Expected 13 rendered songs');
+          const expectedFiles = new Set(['manifest.json']);
+          for (const name of names) { expectedFiles.add(`${name}.yaml`); expectedFiles.add(`${name}.mp3`); }
+          const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+          async function request(url, options = {}) {
+            const response = await fetch(url, { ...options, headers: { ...headers, ...options.headers } });
+            if (!response.ok) throw new Error(`${options.method ?? 'GET'} ${url} returned ${response.status}: ${await response.text()}`);
+            return response.status === 204 ? null : response.json();
+          }
+          const api = `https://api.github.com/repos/${repository}`;
+          const release = await request(`${api}/releases/tags/${encodeURIComponent(tag)}`);
+          const uploadBase = `https://uploads.github.com/repos/${repository}/releases/${release.id}/assets`;
+          const existing = await request(`${api}/releases/${release.id}/assets?per_page=100`);
+          const currentByName = new Map(existing.map((asset) => [asset.name, asset.id]));
+          for (const filename of [...expectedFiles].filter((name) => name !== 'manifest.json')) {
+            const bytes = await readFile(path.join(root, filename));
+            const song = filename.slice(0, filename.lastIndexOf('.'));
+            const digest = createHash('sha256').update(bytes).digest('hex');
+            const expected = filename.endsWith('.yaml') ? manifest.songs[song].yamlSha256 : manifest.songs[song].mp3Sha256;
+            if (digest !== expected) throw new Error(`Hash mismatch for ${filename}`);
+            const oldId = currentByName.get(filename);
+            if (oldId) await request(`${api}/releases/assets/${oldId}`, { method: 'DELETE' });
+            const upload = `${uploadBase}?name=${encodeURIComponent(filename)}`;
+            const contentType = filename.endsWith('.mp3') ? 'audio/mpeg' : 'application/yaml';
+            await request(upload, { method: 'POST', headers: { 'Content-Type': contentType }, body: bytes });
+          }
+          console.log(`Attached ${names.length * 2} hash-checked SIDWAVE assets to ${tag}.`);
           NODE

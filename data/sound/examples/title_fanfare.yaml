@@ -1,122 +1,251 @@
-# Heroic title fanfare | 125.31 BPM | Eb major | 2 SIDs, 5 voices
-# Techniques: Saw brass through one filter owner per SID (attack "blat" sweep, then a section cutoff swell), a centred pulse contrabass mirrored on both SIDs, pitch-sliding wavetable timpani with a 16th roll into a crash, chip volume crescendo, delayed vibrato on the held chord and a released, ringing ending.
-# Learn: Call (I), answer (IV-V), drop back and build (vi-IV-ii6-V7) with a timpani roll, then land on a root-position tonic held for a full bar and let it ring out
-sidwave: 1.2
+# Title fanfare "The Gate Opens" | 125.31 BPM | D major with a swerve to Bb and C | 4/4 | 2 SIDs, 5 voices
+# Techniques: Two brass choirs, left and right, each a saw trumpet that owns its SID's filter (one filter owner per SID: a bright attack closing to a warm body, then a slow breath) and a pulse horn with PWM routed through it; delayed vibrato on the long notes; a timpani-and-bass voice that is mirrored to the centre, with pitch-sliding wavetable timpani, rolls with section levels and a cymbal; a slurred 32nd run handed from the left choir to the right; chip volume swells; an octave rip into a released, ringing ending whose two filters open together.
+# Learn: Hear how two short motifs fill nine bars: the call (triplet pickup, rising D major triad) and its inverted answer from the other side, the same cell in canon at the fifth, the pickup that promises D and swerves to Bb, and the final pickup that delivers D an octave higher.
+#
+# Form (PAL, 24 frames per beat, 1.915 s per bar, 9 bars and a 1.5 s release, about 18.8 s):
+#   bar 0  summons   timpani roll on D (crescendo), the left choir's triplet pickup
+#   bars 1-2  call   left: D5 F#5 A5 over D; the right choir echoes the pickup and answers with the inversion
+#                    (A5 F#5 D5, E5) over G/B A/C#; the left takes the next pickup
+#   bars 3-4  canon  left states the cell over Bm and F#m/A, the right enters two beats later a fifth higher;
+#                    both meet in thirds on the triplet climb and in the pickup
+#                    (section levels lean the mix left in bar 3 and right in bar 4)
+#   bars 5-6  swerve the pickup promises D but lands on Bb (bVI) with a cymbal, timpani roll into C (bVII);
+#                    bar 6 hands a 32nd scale run from the left horn (beat 3) to the right trumpet (beat 4)
+#   bar 7  tutti     A7sus to A7 in triplets on all five voices, the last beat is the pickup once more
+#   bar 8  gate      D major: the left trumpet rips from D5 to D6, both filters open over 40 frames, then release
+# Motif: triplet pickup 5 5 5 | 1 (dotted quarter) 3 (eighth) 5 (half). Answer: 5' (quarter) 3 1 (eighths) 2 (half).
+# Harmony: D | G/B A/C# | Bm F#m/A | G Em7 A7sus | Bb | C | A7sus A7 | D (bar 0 is a D pedal).
+# Instruments (frames): trumpet (saw, 1 frame an octave up, low-pass from 2.5 kHz to about 1.2 kHz in 6 frames, then
+#   opening slowly; vibrato 0.3 st at 5.6 Hz after 20 frames, fading in over 16); horn (pulse 35 %, a triangle frame an octave up, pulse
+#   sweep; vibrato 0.25 st at 5 Hz after 28); rip and ring variants for the last chord (filter 600 Hz to about 3 kHz
+#   in 40 frames, release 10); kettle drum (noise, pulse sliding down a fifth in 3 frames, ringing triangle, TEST
+#   restart); roll (noise frame and triangle, sustain for level ramps); contrabass (pulse, octave click); cymbal.
+# Signature: bar 5, where the pickup that opened the piece lands on Bb instead of D (cymbal, piano, roll), and bar 8,
+#   the rip to D6 into the chord whose two filters open together.
+# Layout: left choir sid1 (Left 4: trumpet 1, horn 1, timpani and bass), right choir sid2 (Right 4: trumpet 2,
+#   horn 2, and the centre mirror of the timpani and bass).
+# Accepted lint: LEVEL-NOOP for the kettle drum and cymbal (sustain 0); section levels shape the rolls instead.
+sidwave: 1.3
 title: The Gate Opens
 tempo: 125.31
 mode: PAL
 accent: 2
 sids:
-  # Trumpets left, trombone and drums right, contrabass centred on both chips. ONE-SIDE on the trumpets is
-  # accepted: orchestral seating with a narrow pan (Left 2 / Right 2); the trombone answers on the right.
-  # Timpani and crash have sustain 0, so section level does not scale them (LEVEL-NOOP accepted).
-  - { id: sid1, address: "$D400", model: "8580", volume: 11, pan: "Left 2", filter: { owner: v1, route: [1, 2] } }
-  - { id: sid2, address: "$D420", model: "8580", volume: 11, pan: "Right 2", filter: { owner: v4, route: [1] } }
+  - { id: sid1, address: "$D400", model: "8580", volume: 12, pan: "Left 4", filter: { owner: v1, route: [1, 2] } }
+  - { id: sid2, address: "$D420", model: "8580", volume: 12, pan: "Right 4", filter: { owner: v4, route: [1, 2] } }
 instruments:
-  # Trumpet 1 owns the SID1 filter: every attack opens the low-pass from about 1 kHz to 3 kHz in 6 frames
-  # and settles near 2 kHz, the brass "blat". Trumpet 2 is routed through the same filter without a table.
   trumpet:
     waveform: saw
-    adsr: [1, 6, 11, 4]
-    vibrato: { depth: 0.12, rate: 5.5, delay: 22 }
-    filtertable: [{ cutoff: 1.4kHz, resonance: 6, type: lowpass }, { add: 70, frames: 6 }, { add: -5, frames: 30 }]
-  trumpet2:
+    adsr: [1, 5, 11, 5]
+    vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 16 }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: saw }]
+    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: lowpass }, { add: -36, frames: 6 }, { add: 2, frames: 60 }]
+  # Scoop into the swerve (a slide needs a wavetable without pitch steps: the click is a noise frame) and a lip
+  # turn on the held answer note.
+  trumpet_scoop:
     waveform: saw
-    adsr: [1, 6, 10, 4]
-    vibrato: { depth: 0.1, rate: 5.2, delay: 26 }
-  # The held final chord rings for about 1.5 s after the gate opens (release 10).
+    adsr: [1, 5, 11, 5]
+    vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 16 }
+    wavetable: [{ wave: noise }, { wave: saw }]
+    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: lowpass }, { add: -36, frames: 6 }, { add: 2, frames: 60 }]
+  trumpet_turn:
+    waveform: saw
+    adsr: [1, 5, 11, 5]
+    vibrato: { depth: 0.3, rate: 5.6, delay: 24, fade: 16 }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: saw, frames: 5 }, { wave: saw, note: "+2", frames: 3 }, { wave: saw, note: "-1", frames: 3 }, { wave: saw }]
+    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: lowpass }, { add: -36, frames: 6 }, { add: 2, frames: 60 }]
+  horn:
+    waveform: pulse
+    pulse_width: 1433
+    adsr: [3, 6, 10, 5]
+    hard_restart: { frames: 0 }
+    vibrato: { depth: 0.25, rate: 5.8, delay: 28 }
+    wavetable: [{ wave: tri, note: "+12" }, { wave: pulse }]
+    pulsetable: { loop: 1, steps: [{ set: 1433 }, { add: 14, frames: 30 }, { add: -6, frames: 70 }] }
+  # The last chord: the left trumpet rips up an octave (a bend needs a wavetable without pitch steps, so its click
+  # is a noise frame); both trumpets open their filters over 40 frames and ring out with release 10.
+  rip:
+    waveform: saw
+    adsr: [0, 6, 12, 10]
+    vibrato: { depth: 0.4, rate: 5.6, delay: 22, fade: 30 }
+    wavetable: [{ wave: noise }, { wave: saw }]
+    filtertable: [{ cutoff: 600Hz, resonance: 7, type: lowpass }, { add: 10, frames: 40 }]
   trumpet_ring:
     waveform: saw
-    adsr: [1, 6, 11, 10]
-    vibrato: { depth: 0.12, rate: 5.5, delay: 22 }
-    filtertable: [{ cutoff: 1.4kHz, resonance: 6, type: lowpass }, { add: 70, frames: 6 }, { add: -5, frames: 30 }]
-  trumpet2_ring:
-    waveform: saw
-    adsr: [1, 6, 10, 10]
-    vibrato: { depth: 0.1, rate: 5.2, delay: 26 }
-  trombone:
-    waveform: saw
-    adsr: [2, 6, 11, 5]
-    filtertable: [{ cutoff: 400Hz, resonance: 8, type: lowpass }, { add: 45, frames: 8 }, { add: -5, frames: 36 }]
-  trombone_ring:
-    waveform: saw
-    adsr: [2, 6, 11, 10]
-    filtertable: [{ cutoff: 400Hz, resonance: 8, type: lowpass }, { add: 45, frames: 8 }, { add: -5, frames: 36 }]
-  contrabass:
-    waveform: pulse
-    pulse_width: 2048   # 12-bit value: an instrument fraction compiles to width 0 (see report)
     adsr: [1, 6, 12, 10]
-    hard_restart: { test: true }
-  # Kettle drum: one noise frame, then a triangle that falls a semitone onto the note and decays.
+    vibrato: { depth: 0.4, rate: 5.4, delay: 22, fade: 30 }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: saw }]
+    filtertable: [{ cutoff: 600Hz, resonance: 7, type: lowpass }, { add: 10, frames: 40 }]
+  horn_ring:
+    waveform: pulse
+    pulse_width: 1433
+    adsr: [3, 6, 11, 10]
+    vibrato: { depth: 0.25, rate: 5, delay: 28 }
+    wavetable: [{ wave: tri, note: "+12" }, { wave: pulse }]
+    pulsetable: { loop: 1, steps: [{ set: 1433 }, { add: 14, frames: 30 }, { add: -6, frames: 70 }] }
   timp:
     waveform: tri
-    adsr: [1, 10, 0, 10]
-    wavetable: [{ wave: noise, note: "+12" }, { wave: tri, note: "+1", slide_to: "+0", frames: 5 }, { note: "+0" }]
+    adsr: [0, 10, 0, 10]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse, note: "+7", slide_to: "+0", frames: 3 }, { wave: tri }]
   roll:
     waveform: tri
-    adsr: [1, 6, 0, 6]
-    wavetable: [{ wave: noise, note: "+12" }, { wave: tri, note: "+1", slide_to: "+0", frames: 2 }, { note: "+0" }]
+    adsr: [0, 4, 7, 3]
+    hard_restart: { frames: 0 }
+    wavetable: [{ wave: noise, note: "+12" }, { wave: tri }]
+  contrabass:
+    waveform: pulse
+    adsr: [1, 7, 11, 6]
+    hard_restart: { test: true }
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 1700 }, { add: 8, frames: 60 }]
+  bass_ring:
+    waveform: pulse
+    adsr: [1, 7, 12, 10]
+    hard_restart: { test: true }
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 1700 }, { add: 8, frames: 60 }]
+  cymbal:
+    waveform: noise
+    adsr: [0, 10, 0, 10]
+    hard_restart: { frames: 0 }
+    wavetable: [{ wave: noise, note: C7 }, { wave: noise, note: A6, frames: 2 }, { wave: noise, note: F6 }]
 voices:
   - id: 1
-    name: Trumpet 1
+    name: Left trumpet
     role: lead
     instrument: trumpet
     patterns:
-      call:   { length: 0.25, bars: 1, groove: "Bb4 Bb4 Eb5! ~ ~ ~ Bb4 ~ Eb5 ~ G5! ~ ~ ~ ~ ~" }
-      answer: { length: 0.25, bars: 1, groove: "C5 ~ ~ Ab4 C5 ~ Eb5 ~ D5 ~ ~ Bb4 F5! ~ ~ ~" }
-      build:  { length: 0.25, bars: 2, groove: "G5 ~ ~ ~ ~ ~ F5 Eb5 Eb5 ~ ~ ~ C5 ~ Eb5 ~ | C5 ~ F5 ~ Ab5 ~ ~ ~ G5 ~ ~ ~ F5! ~ ~ ~" }
-      arrive: { length: 0.25, bars: 2, groove: "Eb5! ~ ~ Bb4 Eb5 ~ G5 ~ Bb5! ~ ~ ~ ~ ~ ~ ~ | G5!@trumpet_ring ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+      m0: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - A4 A4 A4" }
+      m1: { length: 0.5, bars: 1, groove: "D5! ~ ~ F#5 A5 ~ ~ ~" }
+      m2: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - F#4 F#4 F#4" }
+      m3: { length: 0.5, bars: 1, groove: "B4 ~ ~ D5 C#5 ~ ~ E5" }
+      m4: { length: 0.3333333333333333, bars: 1, groove: "D5 ~ ~ G5 ~ ~ E5 F#5 G5 A4 A4 A4" }
+      m5:
+        length: 0.5
+        bars: 1
+        groove: [{ note: Bb4, inst: trumpet_scoop, slide_from: A4, portamento: 5, len: 1.5 }, "D5 F5 ~ ~ ~"]
+      m6: { length: 0.5, bars: 1, groove: "G5 F5 E5 ~ F5 E5 D5 C5" }
+      m7: { length: 0.3333333333333333, bars: 1, groove: "D5 D5 D5 E5 E5 E5 G5 E5 C#5 A4 A4 A4" }
+      m8:
+        length: 1
+        bars: 1
+        groove: [{ note: D5, inst: rip, len: 4, bend: { to: D6, frames: 7 } }]
   - id: 2
-    name: Trumpet 2
-    instrument: trumpet2
+    name: Left horn
+    instrument: horn
     patterns:
-      call:   { length: 0.25, bars: 1, groove: "G4 G4 Bb4 ~ ~ ~ G4 ~ Bb4 ~ Eb5 ~ ~ ~ ~ ~" }
-      answer: { length: 0.25, bars: 1, groove: "Ab4 ~ ~ Eb4 Ab4 ~ C5 ~ Bb4 ~ ~ F4 D5 ~ ~ ~" }
-      build:  { length: 0.25, bars: 2, groove: "Eb5 ~ ~ ~ ~ ~ D5 C5 C5 ~ ~ ~ Ab4 ~ C5 ~ | Ab4 ~ C5 ~ F5 ~ ~ ~ Eb5 ~ ~ ~ D5 ~ ~ ~" }
-      arrive: { length: 0.25, bars: 2, groove: "Bb4 ~ ~ G4 Bb4 ~ Eb5 ~ G5 ~ ~ ~ F5 ~ ~ ~ | Eb5@trumpet2_ring ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+      m0: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - F#4 F#4 F#4" }
+      m1: { length: 0.5, bars: 1, groove: "A4 ~ ~ D5 F#5 ~ ~ ~" }
+      m3: { length: 0.5, bars: 1, groove: "F#4 ~ ~ ~ E4 ~ ~ ~" }
+      m4: { length: 0.3333333333333333, bars: 1, groove: "G4 ~ ~ ~ ~ ~ G4 ~ ~ E4 E4 E4" }
+      m5: { length: 0.5, bars: 1, groove: "F4 ~ ~ ~ Bb4 ~ ~ ~" }
+      # The run starts here on beat 3 and is handed to the right trumpet on beat 4.
+      m6:
+        length: 0.125
+        bars: 1
+        groove: [{ note: E4, len: 1.5 }, { note: G4, len: 0.5 }, "(E4 F4 G4 A4 Bb4 C5 D5 E5) - - - - - - - -"]
+      m7: { length: 0.3333333333333333, bars: 1, groove: "A4 A4 A4 B4 B4 B4 E5 C#5 A4 C#5 C#5 C#5" }
+      m8: { length: 1, bars: 1, groove: "D5@horn_ring ~ ~ ~" }
   - id: 3
-    name: Contrabass
+    name: Timpani and contrabass
     role: bass
-    level: 12
+    level: 13
     instrument: contrabass
     center: { sid: sid2, channel: 3 }
     patterns:
-      call:   { length: 1, bars: 1, groove: "Eb2 ~ ~ ~" }
-      answer: { length: 1, bars: 1, groove: "Ab1 ~ Bb1 ~" }
-      build:  { length: 1, bars: 2, groove: "C2 ~ Ab1 ~ | Ab1 ~ Bb1 ~" }
-      arrive: { length: 1, bars: 2, groove: "Eb2! ~ ~ ~ | ~ ~ ~ ~" }
+      m0:
+        length: 0.16666666666666666
+        bars: 1
+        groove: "D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll A1@timp ~ ~ ~ ~ ~"
+      m1: { length: 0.5, bars: 1, groove: "D2@timp ~ D2 ~ ~ ~ A1@timp ~" }
+      m2: { length: 0.5, bars: 1, groove: "B1 ~ ~ ~ C#2 ~ A1@timp ~" }
+      m3: { length: 0.5, bars: 1, groove: "B1@timp ~ B1 ~ A1 ~ ~ ~" }
+      m4: { length: 0.3333333333333333, bars: 1, groove: "G1 ~ ~ ~ ~ ~ E1 ~ ~ A1@timp ~ ~" }
+      m5:
+        length: 0.16666666666666666
+        bars: 1
+        groove: "Bb1@timp ~ ~ ~ ~ ~ Bb1 ~ ~ ~ ~ ~ Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll"
+      m6:
+        length: 0.125
+        bars: 1
+        groove:
+          - "C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~"
+          - { note: C2, inst: timp, len: 1 }
+          - { note: C2, len: 1 }
+      m7: { length: 0.3333333333333333, bars: 1, groove: "A1@timp A1@timp A1@timp A1 ~ ~ A1@timp A1@timp A1@timp A1@roll A1@roll A1@roll" }
+      m8: { length: 0.5, bars: 1, groove: "D2@timp ~ D2@bass_ring ~ ~ ~ ~ ~" }
   - id: 4
-    name: Trombone
-    instrument: trombone
+    name: Right trumpet
+    role: lead
+    instrument: trumpet
     patterns:
-      call:   { length: 0.25, bars: 1, groove: "Eb3 ~ ~ ~ ~ ~ Eb3 ~ Bb3 ~ ~ ~ ~ ~ ~ ~" }
-      answer: { length: 0.25, bars: 1, groove: "Ab3 ~ ~ ~ ~ ~ C4 ~ Bb3 ~ ~ ~ ~ ~ D4 ~" }
-      build:  { length: 0.25, bars: 2, groove: "G3 ~ ~ ~ ~ ~ ~ ~ Ab3 ~ ~ ~ ~ ~ ~ ~ | F3 ~ ~ ~ ~ ~ ~ ~ Ab3 ~ ~ ~ ~ ~ ~ ~" }
-      arrive: { length: 0.25, bars: 2, groove: "G3! ~ ~ ~ ~ ~ ~ ~ Bb3 ~ ~ ~ ~ ~ ~ ~ | Bb3@trombone_ring ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+      m1: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - F#5 F#5 F#5" }
+      m2: { length: 0.5, bars: 1, groove: "A5 ~ F#5 D5 E5@trumpet_turn ~ ~ ~" }
+      m3: { length: 0.5, bars: 1, groove: "- - - - F#5 ~ ~ A5" }
+      m4: { length: 0.16666666666666666, bars: 1, groove: "G5 ~ ~ ~ ~ ~ ~ ~ ~ B5 ~ ~ G5 ~ A5 ~ B5 ~ D5 ~ D5 ~ D5 ~" }
+      m5: { length: 0.5, bars: 1, groove: "D5 ~ ~ F5 Bb5 ~ ~ ~" }
+      m6:
+        length: 0.125
+        bars: 1
+        groove:
+          - { note: E5, len: 1.5 }
+          - { note: G5, len: 0.5 }
+          - "- - - - - - - - (F5 G5 A5 Bb5 C6) ~ ~ ~"
+      m7: { length: 0.3333333333333333, bars: 1, groove: "G5 G5 G5 A5 A5 A5 C#6 A5 G5 G5 G5 G5" }
+      m8: { length: 1, bars: 1, groove: "F#5@trumpet_ring ~ ~ ~" }
   - id: 5
-    name: Kettle drums and cymbal
-    role: drums
-    instrument: timp
+    name: Right horn
+    instrument: horn
     patterns:
-      call:   { length: 0.25, bars: 1, groove: "Eb2 - - - - - - - Bb1 - - - Eb2 - - -" }
-      answer: { length: 0.25, bars: 1, groove: "Eb2 - - - - - - - Bb1 - - - - - Bb1 -" }
-      build:  { length: 0.25, bars: 2, groove: "Eb2 - - - - - - - - - - - Eb2 - - - | Bb1 - - - - - - - Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll" }
-      arrive: { length: 0.25, bars: 2, groove: "C3@lib:crash - - - - - - - - - - - Eb2 - Bb1 - | Eb2 - - - - - - - - - - - - - - -" }
+      m1: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - D5 D5 D5" }
+      m2: { length: 0.5, bars: 1, groove: "D5 ~ D5 B4 C#5 ~ ~ ~" }
+      m3: { length: 0.5, bars: 1, groove: "D4 ~ ~ ~ C#4 ~ ~ ~" }
+      m4: { length: 0.3333333333333333, bars: 1, groove: "B3 ~ ~ ~ ~ ~ B3 ~ ~ D4 D4 D4" }
+      m5: { length: 0.5, bars: 1, groove: "C3@cymbal ~ D4 ~ ~ ~ ~ ~" }
+      m6: { length: 0.5, bars: 1, groove: "G4 ~ ~ ~ E4 ~ ~ ~" }
+      m7: { length: 0.3333333333333333, bars: 1, groove: "E5 E5 E5 D5 D5 D5 A4 C#5 E5 E5 E5 E5" }
+      m8: { length: 1, bars: 1, groove: "A5@horn_ring ~ ~ ~" }
 sections:
-  summons: { bars: 1, level: ff, layers: { v1: call, v2: call, v3: call, v4: call, v5: call } }
-  answer:  { bars: 1, level: f, layers: { v1: answer, v2: answer, v3: answer, v4: answer, v5: answer } }
-  # The second build drops back and swells: lower sustain at each attack, chip volume back up one step per beat,
-  # and the trombone filter opening on top of its own table.
-  build:
+  summons:
+    bars: 1
+    volume: { from: 8, to: 12 }
+    levels: { v3: { from: p, to: ff }, v1: f, v2: mf }
+    layers: { v1: m0, v2: m0, v3: m0 }
+  call:
+    bars: 2
+    level: f
+    levels: { v3: f, v1: ff, v4: ff }
+    layers: { v1: "m1 m2", v2: "m1 -", v3: "m1 m2", v4: "m1 m2", v5: "m1 m2" }
+  # The canon leans left while the left choir leads, then right while the right choir carries the imitation.
+  canon:
+    bars: 1
+    level: f
+    levels: { v1: ff, v2: f, v4: mf, v5: mp }
+    filter: { sid1: { cutoff: { from: 0, to: 40 } }, sid2: { cutoff: 0 } }
+    layers: { v1: m3, v2: m3, v3: m3, v4: m3, v5: m3 }
+  canon2:
+    bars: 1
+    level: ff
+    levels: { v1: f, v2: mp, v4: ff, v5: f }
+    filter: { sid1: { cutoff: 40 }, sid2: { cutoff: { from: 0, to: 60 } } }
+    layers: { v1: m4, v2: m4, v3: m4, v4: m4, v5: m4 }
+  swerve:
     bars: 2
     level: { from: mp, to: ff }
-    volume: { from: 5, to: 11 }
-    filter: { sid2: { cutoff: { from: -40, to: 120 } } }
-    layers: { v1: build, v2: build, v3: build, v4: build, v5: build }
-  arrival:
-    bars: 2
+    # Hit the Bb at full chip volume; the roll and the level change carry the two-bar swell.
+    volume: 12
+    levels: { v1: ff, v2: mf, v3: ff, v4: mf, v5: mp }
+    layers: { v1: "m5 m6", v2: "m5 m6", v3: "m5 m6", v4: "m5 m6", v5: "m5 m6" }
+  tutti:
+    bars: 1
     level: ff
-    filter: { sid1: { cutoff: { from: 0, to: 140 } }, sid2: { cutoff: { from: 120, to: 220 } } }
-    layers: { v1: arrive, v2: arrive, v3: arrive, v4: arrive, v5: arrive }
-timeline: [summons, answer, build, arrival]
+    levels: { v1: ff, v2: mf, v3: ff, v4: mf, v5: mp }
+    filter: { sid1: { cutoff: 80 }, sid2: { cutoff: 80 } }
+    layers: { v1: m7, v2: m7, v3: m7, v4: m7, v5: m7 }
+  gate:
+    bars: 1
+    level: ff
+    layers: { v1: m8, v2: m8, v3: m8, v4: m8, v5: m8 }
+timeline: [summons, call, canon, canon2, swerve, tutti, gate]
 end: { hold_beats: 0, release: true }

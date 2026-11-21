@@ -1,6 +1,7 @@
-# Orchestral pop | 94 BPM | D minor | 8 SIDs, 24 voices
-# Techniques: 24 voices as two antiphonal choirs, unison strings with detune, centred kick, bass and lead (unison copies on the paired SID), twin echo leads (left dotted eighth, right dotted quarter), voice-led string and horn parts, filtered horn swells, harp chord arps, pitched timpani on the chord roots, section levels and chip volume.
-# Learn: Give every SID a role, keep the rhythm section and the lead in the centre, let flute (left) and oboe (right) answer each other, and build with register and orchestration rather than copies
+# An Atlas of Wind | orchestral rhapsody | 8 SIDs, 24 voices
+# Techniques: Antiphonal woodwind and brass, voice-led string choir, harp and timpani; 94 BPM D-minor opening, a 3:2 cut into the brighter F-major crosswind, then a two-bar broadening into the changed D-minor reprise.
+# Learn: The opening wind-call moves from flute to oboe, fragments through the reduced crosswind, then returns with a trumpet counterline and a new cadence. The crosswind is the sudden reduction and harmonic turn.
+# Accepted lint: CLASH (28 short echo tails cross chord changes; the echo levels are 0.3 and remain subordinate).
 #
 # Form (64 bars, about 2:47): Dawn 8 (strings, harps, flute and oboe) / Wind 16 (theme, kit, horns, clarinet ostinato)
 # / Crosswind 16 (true reduction in F major: no kick, no horns, flute-oboe dialogue over the strings) / Full map 16
@@ -12,7 +13,7 @@
 # unscored mirror channel and all 24 channels are used. LEVEL-NOOP: library drums and the crash have sustain 0.
 # Chip volumes are about 4-5 dB lower than before (library loudness balance, round 3 review).
 # CLASH: only where an echo tail (sustain 2-3 of 15) crosses a chord change by up to a dotted quarter.
-sidwave: 1.2
+sidwave: 1.3
 title: An Atlas of Wind
 tempo: 93.98
 mode: PAL
@@ -60,6 +61,7 @@ voices:
       wind: { length: 1, groove: "D2 ~ ~ ~ | Bb1 ~ ~ ~ | F1 ~ ~ ~ | C2 ~ ~ ~ | G1 ~ ~ ~ | D2 ~ ~ ~ | E1 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~ | Bb1 ~ ~ ~ | F1 ~ ~ ~ | C2 ~ ~ ~ | G1 ~ ~ ~ | Bb1 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~" }
       cross: { length: 1, groove: "F1 ~ ~ ~ | C2 ~ ~ ~ | D2 ~ ~ ~ | Bb1 ~ ~ ~ | G1 ~ ~ ~ | C2 ~ ~ ~ | F1 ~ ~ ~ | ~ ~ ~ ~ | Bb1 ~ ~ ~ | C2 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~ | G1 ~ ~ ~ | E1 ~ ~ ~ | A1 ~ ~ ~ | ~ ~ ~ ~" }
       full: { length: 1, groove: "D2 ~ ~ ~ | Bb1 ~ ~ ~ | F1 ~ ~ ~ | C2 ~ ~ ~ | G1 ~ ~ ~ | D2 ~ ~ ~ | E1 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~ | Bb1 ~ ~ ~ | F1 ~ ~ ~ | C2 ~ ~ ~ | G1 ~ ~ ~ | Bb1 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~" }
+      full_reply: { length: 1, bars: 8, groove: "D2 ~ ~ ~ | Bb1 ~ ~ ~ | G1 ~ ~ ~ | A1 ~ ~ ~ | Bb1 ~ ~ ~ | G1 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~" }
       harbor: { length: 1, groove: "D2 ~ ~ ~ | Bb1 ~ ~ ~ | G1 ~ ~ ~ | A1 ~ ~ ~ | Bb1 ~ ~ ~ | G1 ~ ~ ~ | A1 ~ ~ ~ | D2 ~ ~ ~" }
   - id: 3
     name: "Solo wind lead (centre with v15)"
@@ -222,16 +224,16 @@ voices:
     patterns:
       full: { length: 0.5, groove: "- - - - A4 ~ D5 ~ | D5 ~ ~ ~ F4 ~ ~ ~ | A4 ~ ~ ~ C5 ~ ~ ~ | G4 ~ ~ ~ E4 ~ ~ ~ | D4 ~ ~ ~ G4 ~ Bb4 ~ | A4 ~ ~ ~ F4 ~ ~ ~ | G4 ~ ~ ~ Bb4 ~ ~ ~ | A4 ~ ~ ~ C#5 ~ ~ ~ | D5 ~ ~ ~ A4 ~ ~ ~ | Bb4 ~ ~ ~ D5 ~ ~ ~ | C5 ~ ~ ~ A4 ~ ~ ~ | G4 ~ ~ ~ C5 ~ ~ ~ | Bb4 ~ ~ ~ D5 ~ ~ ~ | F5 ~ ~ ~ D5 ~ ~ ~ | C#5 ~ ~ ~ E5 ~ ~ ~ | F5 ~ ~ ~ ~ ~ ~ ~" }
 sections:
-  dawn: { bars: 8, level: { from: p, to: mf }, volume: { from: 6, to: 8 },
+  dawn: { bars: 8, tempo: 93.98, meter: "4/4", level: { from: p, to: mf }, volume: { from: 6, to: 8 },
           layers: { v1: dawn, v2: dawn, v4: dawn, v5: dawn, v17: dawn, v18: dawn, v6: dawn, v19: dawn, v7: dawn, v20: dawn, v9: dawn+12, v22: dawn, v12: dawn } }
-  wind: { bars: 16, level: mf, volume: 8,
+  wind: { bars: 16, tempo: 93.98, meter: "4/4", level: mf, volume: 8,
           layers: { v1: wind, v2: wind, v3: wind, v4: wind, v5: wind, v17: wind, v18: wind, v6: wind, v19: wind, v8: wind, v9: wind+12, v22: wind, v21: "crash - - - - - - - - - - - - - - -" } }
-  crosswind: { bars: 16, level: mp, volume: 7, levels: { v4: p, v5: p, v17: p, v18: p },
+  crosswind: { bars: 16, tempo: 125.31, meter: "4/4", level: mp, volume: 7, levels: { v4: p, v5: p, v17: p, v18: p },
           layers: { v1: cross, v2: cross, v4: cross, v5: cross, v17: cross, v18: cross, v7: cross, v20: cross, v8: cross, v9: cross+12, v22: cross, v10: cross, v12: cross } }
-  full_map: { bars: 16, level: { from: f, to: ff, bars: 8 }, volume: 9,
-          layers: { v1: full, v2: full, v3: full, v4: full, v5: full, v17: full, v18: full, v6: full, v19: full, v8: full, v10: full, v24: full,
+  full_map: { bars: 16, tempo: 125.31, meter: "4/4", level: { from: f, to: ff, bars: 8 }, volume: 9,
+          layers: { v1: full, v2: full_reply, v3: full, v4: full, v5: full, v17: full, v18: full, v6: full, v19: full, v8: full, v10: full, v24: full,
                     v21: "crash - - - - - - - crash - - - - - - -", v7: "- - - - - - - - - - - - fend", v20: "- - - - - - - - - - - - fend" } }
-  harbor: { bars: 8, level: { from: mf, to: p }, volume: { from: 9, to: 7 },
+  harbor: { bars: 8, tempo: { to: 93.98 }, meter: "4/4", level: { from: mf, to: p }, volume: { from: 9, to: 7 },
           layers: { v1: harbor, v2: harbor, v3: harbor, v4: harbor, v5: harbor, v17: harbor, v18: harbor, v6: harbor, v19: harbor, v9: harbor+12, v22: harbor, v12: harbor,
                     v7: "- - - - - - - hend", v20: "- - - - - - - hend" } }
 timeline: [dawn, wind, crosswind, full_map, harbor]

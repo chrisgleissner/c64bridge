@@ -65,7 +65,8 @@ export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = 
   const arr = options.arrangement ?? arrangeSidwave(doc);
   const atBeat = (beat: number) => (arr.clock?.frameAt(beat) ?? Math.round(beat * arr.framesPerBeat)) / arr.fps;
   const meter = doc.song.meter;
-  const bars = Array.from({ length: doc.song.length_bars + 1 }, (_, i) => atBeat(i * meter));
+  // Bar lines follow the metre of each section (SIDWAVE 1.3).
+  const bars = arr.clock ? arr.clock.barStarts.map(atBeat) : Array.from({ length: doc.song.length_bars + 1 }, (_, i) => atBeat(i * meter));
   const sections: NonNullable<ExpectedSchedule["sections"]> = [];
   if (arr.clock) {
     for (const { section, startBeat, endBeat } of arr.clock.sections) {

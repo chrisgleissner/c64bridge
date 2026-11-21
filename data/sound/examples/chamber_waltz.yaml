@@ -1,11 +1,11 @@
-# Chamber waltz | 150.37 BPM, 3/4 | D minor, trio in Bb major | 1 SID
-# Techniques: Waltz accompaniment (bass on 1, two-note chords on 2 and 3 as 3-frame dyad wavetables), slurred PWM soprano with delayed vibrato, cello countermelody, cadential hemiolas, ritardando and a held, released final cadence; triangle and pulse only, no filter or drums.
-# Learn: A minuet-and-trio form (A A' B A'' | Trio | A coda): the theme returns ornamented, the cello turns from oom-pah bass into a second melody, and every phrase cadence is announced by a two-bar hemiola
-sidwave: 1.2
-title: Gilt Footsteps
+# Clockwork waltz | 150.37 BPM, 3/4 | D minor, trio Bb major, return changed | 1 SID
+# Techniques: Contrasting waltz, trio and coda movements; 3/4 becomes 6/8 at the same eighth pulse; dyad wavetables, slurred soprano, cello counterline, hemiola cadences, phrase ornaments, and a short ritardando into a released cadence.
+# Learn: One rising three-note idea changes harmony and role as the melody, cello answer and trio countermelody; the return adds the cello to the opening dance. The A3-to-trio boundary is the sudden new major-mode movement; the coda recalls the opening rhythm over a descending bass.
+sidwave: 1.3
+title: Clockwork Waltz
 tempo: 150.37
 mode: PAL
-meter: 3
+meter: "3/4"
 accent: 2
 sids:
   - { id: sid1, address: "$D400", model: "8580" }
@@ -76,18 +76,20 @@ voices:
       c2: { length: 1, bars: 8, groove: "D3 C3 Bb2 | F2 E2 D2 | G2 Bb2 D3 | C2 E2 G2 | F2 A2 C3 | Bb2 ~ G2 | ~ A2 ~ | D2 - -" }
       cb1: { length: 1, bars: 8, groove: "F2 A2 C3 | E2 G2 C3 | F2 C3 A2 | Bb2 D3 F2 | G2 Bb2 D3 | C3 Bb2 G2 | A2 F2 Bb2 | C3 G2 C2" }
       cb2: { length: 1, bars: 8, groove: "F2 A2 C3 | C#3 E2 A2 | D3 A2 F2 | Bb2 F2 D2 | G2 Bb2 D3 | A2 C#3 E3 | A2 - A2 | A2 ~ ~" }
+      # Recap answer: reopen the original rising D-minor figure, then let the soprano's a1/a2 theme answer.
+      c3: { length: 1, bars: 8, groove: "D2 F2 A2 | D3 C3 Bb2 | A2 C3 E3 | A2 G2 F2 | D2 F2 A2 | Bb2 D3 F3 | G2 Bb2 D3 | A2 ~ ~" }
       ct1: { length: 1, bars: 8, groove: "Bb2 C3 D3 | A2 ~ ~ | D3 C3 Bb2 | Eb3 ~ ~ | C3 Bb2 G2 | F2 ~ A2 | Bb2 D3 F3 | F3 ~ F2" }
       ct2: { length: 1, bars: 8, groove: "Bb2 F2 D2 | G2 F2 Eb2 | Eb2 G2 Bb2 | D3 ~ F2 | C3 Bb2 A2 | F2 G2 A2 | Bb2 F2 D2 | Bb2 ~ ~" }
       ct3: { length: 1, bars: 8, groove: "G2 Bb2 D3 | Eb2 G2 Bb2 | C3 ~ ~ | A2 G2 E2 | D2 F2 A2 | Bb2 A2 G2 | E2 G2 Bb2 | A2 ~ ~" }
       cc: { length: 1, bars: 6, groove: "D2 A2 D3 | Bb2 ~ G2 | A2 ~ ~ | A2 E2 C#3 | D2@cello_end ~ ~ | ~ ~ ~" }
 sections:
-  A:       { bars: 16, level: p, layers: { v1: "a1 a2", v2: "k1 k2", v3: "w1 w2" } }
-  A2:      { bars: 16, level: mp, layers: { v1: "a1v a2v", v2: "k1 k2", v3: "c1 c2" } }
-  B:       { bars: 16, level: f, layers: { v1: "b1 b2", v2: "kb1 kb2", v3: "cb1 cb2" } }
-  A3:      { bars: 16, level: mf, layers: { v1: "a1 a2", v2: "k1 k2", v3: "c1 c2" } }
-  trio:    { bars: 24, level: { from: pp, to: mp }, layers: { v1: "t1 t2 t3", v2: "kt1 kt2 kt3", v3: "ct1 ct2 ct3" } }
-  recap:   { bars: 16, level: { from: f, to: ff }, layers: { v1: "a1v a2v", v2: "k1 k2", v3: "w1 c2" } }
+  A:       { bars: 16, tempo: 150.37, meter: "3/4", level: p, layers: { v1: "a1 a2", v2: "k1 k2", v3: "w1 w2" } }
+  A2:      { bars: 16, tempo: 150.37, meter: "3/4", level: mp, layers: { v1: "a1v a2v", v2: "k1 k2", v3: "c1 c2" } }
+  B:       { bars: 16, tempo: 125.31, meter: "3/4", level: f, layers: { v1: "b1 b2", v2: "kb1 kb2", v3: "cb1 cb2" } }
+  A3:      { bars: 16, tempo: 150.37, meter: "3/4", level: mf, layers: { v1: "a1 a2", v2: "k1 k2", v3: "c3 c2" } }
+  trio:    { bars: 24, tempo: 150.37, meter: "6/8", level: { from: pp, to: mp }, layers: { v1: "t1 t2 t3", v2: "kt1 kt2 kt3", v3: "ct1 ct2 ct3" } }
+  recap:   { bars: 16, tempo: 150.37, meter: "3/4", level: { from: f, to: ff }, layers: { v1: "a1v a2v", v2: "k1 k2", v3: "w1 c2" } }
   # Ritardando over the coda, then the D-minor chord is held and released.
-  coda:    { bars: 6, level: ff, tempo: { to: 112 }, layers: { v1: coda, v2: kc, v3: cc } }
+  coda:    { bars: 6, meter: "3/4", level: ff, tempo: { to: 112 }, layers: { v1: coda, v2: kc, v3: cc } }
 timeline: [A, A2, B, A3, trio, recap, coda]
 end: { hold_beats: 0, release: true }

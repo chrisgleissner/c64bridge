@@ -17,8 +17,26 @@ export function panOf(pan: Record<number, PanSide> | undefined, sid: number, set
   return pan?.[sid] ?? (setting?.startsWith("Left") ? "left" : setting?.startsWith("Right") ? "right" : "center");
 }
 
+/**
+ * Left and right gains of an Ultimate 64 mixer pan setting ("Left 5" .. "Center" .. "Right 5"). The firmware maps
+ * the 11 settings to pan_ctrl = { 0, 40, 79, 116, 150, 181, 207, 228, 243, 253, 256 } (/256) and applies
+ * pan_ctrl[10 - index] and pan_ctrl[index] to the two channels, index 0 being "Left 5" (1541ultimate
+ * software/u64/u64_config.cc, U64Config::setMixer, which names the first value vol_right). On the device a "Left 5"
+ * SID is absent on the right channel (data/ultimate/multisid.md), so pan_ctrl[10 - index] is the left gain.
+ * Returns undefined for any other text.
+ */
+export function panGains(setting: string | undefined): [number, number] | undefined {
+  const PAN_CTRL = [0, 40, 79, 116, 150, 181, 207, 228, 243, 253, 256];
+  const m = /^(?:(Left|Right) ([1-5])|Center)$/.exec(setting?.trim() ?? "");
+  if (!m) return undefined;
+  const index = m[1] === "Left" ? 5 - Number(m[2]) : m[1] === "Right" ? 5 + Number(m[2]) : 5;
+  return [PAN_CTRL[10 - index]! / 256, PAN_CTRL[index]! / 256];
+}
+
 export interface RenderOptions {
   model: "6581" | "8580";
+  /** Use each SID's declared model instead of forcing `model` across all stems. */
+  useScoreModels?: boolean;
   sampleRate?: number;
   pan?: Record<number, PanSide>;
   /** Seconds to render per SID; default the song length. */
@@ -48,8 +66,9 @@ export function readWav(file: string): { samples: Float32Array; channels: number
 
 /**
  * Renders the song with sidplayfp, one PSID per SID (so songs with more than three SIDs work and 2SID/3SID PSID
- * support is not needed), with the SID model forced, and mixes the renders into a stereo reference using each
- * SID's pan side. Mono renders are mixed at unit gain to the left, right, or both channels at 1/sqrt(2).
+ * support is not needed), with the SID model forced, and mixes the renders into a stereo reference. A SID's mixer pan
+ * setting is applied with the Ultimate 64 pan law (panGains); an explicit `pan` side mixes at unit gain to the left
+ * or right channel, or to both at 1/sqrt(2).
  */
 export function renderReference(doc: ParsedSidwave, options: RenderOptions): Stereo & { warnings: string[] } {
   const warnings = doc.samples
@@ -59,28 +78,33 @@ export function renderReference(doc: ParsedSidwave, options: RenderOptions): Ste
   const bin = options.sidplayfp ?? "sidplayfp";
   const dir = options.workDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "sidwave-ref-"));
   const arr = options.arrangement ?? arrangeSidwave(doc);
-  const seconds = options.seconds ?? arr.totalFrames / arr.fps;
-  const renders: Array<{ pan: PanSide; samples: Float32Array }> = [];
+  // sidplayfp's -t parser accepts whole seconds and truncates decimal values, which can cut the final score frames.
+  const seconds = Math.ceil(options.seconds ?? arr.totalFrames / arr.fps);
+  const renders: Array<{ gains: [number, number]; samples: Float32Array }> = [];
   try {
     for (let chip = 0; chip < doc.sids.length; chip += 1) {
       const sid = compileSidwaveStem(doc, arr, chip);
       const sidFile = path.join(dir, `sid${chip + 1}.sid`), wav = path.join(dir, `sid${chip + 1}.wav`);
       fs.writeFileSync(sidFile, sid);
-      const run = spawnSync(bin, ["-m", `-m${options.model === "8580" ? "n" : "o"}f`, `-f${sampleRate}`, `-t${seconds.toFixed(3)}`, `-w${wav}`, sidFile], { encoding: "utf8" });
+      const model = options.useScoreModels ? doc.sids[chip]?.model ?? options.model : options.model;
+      const run = spawnSync(bin, ["-m", `-m${model === "8580" ? "n" : "o"}f`, `-f${sampleRate}`, `-t${seconds}`, `-w${wav}`, sidFile], { encoding: "utf8" });
       if (run.error) throw new Error(`cannot run ${bin}: ${run.error.message}`);
       if (run.status !== 0 || !fs.existsSync(wav)) throw new Error(`${bin} failed for SID ${chip + 1}: ${run.stderr || run.stdout}`);
       const w = readWav(wav);
       const mono = w.channels === 1 ? w.samples : w.samples.filter((_, i) => i % w.channels === 0);
-      renders.push({ pan: panOf(options.pan, chip, doc.sids[chip]?.pan), samples: mono });
+      // An explicit `pan` side wins; otherwise the SID's mixer setting is applied with the firmware pan law.
+      const side = options.pan?.[chip];
+      const gains = side === undefined ? panGains(doc.sids[chip]?.pan) : undefined;
+      const sideGains = (p: PanSide): [number, number] => p === "left" ? [1, 0] : p === "right" ? [0, 1] : [Math.SQRT1_2, Math.SQRT1_2];
+      renders.push({ gains: gains ?? sideGains(panOf(options.pan, chip, doc.sids[chip]?.pan)), samples: mono });
     }
   } finally {
     if (!options.workDir) fs.rmSync(dir, { recursive: true, force: true });
   }
   const length = Math.max(...renders.map((r) => r.samples.length));
   const left = new Float32Array(length), right = new Float32Array(length);
-  const c = Math.SQRT1_2;
   for (const r of renders) {
-    const gl = r.pan === "left" ? 1 : r.pan === "right" ? 0 : c, gr = r.pan === "right" ? 1 : r.pan === "left" ? 0 : c;
+    const [gl, gr] = r.gains;
     for (let i = 0; i < r.samples.length; i += 1) { left[i] += r.samples[i]! * gl; right[i] += r.samples[i]! * gr; }
   }
   // Keep the mix inside full scale without changing balance.

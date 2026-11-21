@@ -1,95 +1,583 @@
-# Minor synth ballad | 75.19 BPM | A minor | 1 SID
-# Techniques: Broken-chord "harp" with a slow pulse-width drift through a low-pass it owns, fast chord-arpeggio shimmer for the last chorus, section filter offsets that open the harp as the song lifts, slurred PWM lead with glides and delayed vibrato, triangle bass with passing tones and a filtered pulse bass in the choruses, a five-bar coda held on Am(add9).
-# Learn: An eight-bar verse heard twice, a lift to the relative major side (iv-VII-III-VI-ii°-V), an instrumental verse an octave higher, the lift again with shimmering chords, and a quiet return that resolves instead of fading
-sidwave: 1.2
+# Rhapsody "A Window in Rain" | 12/8 ballad, 4/4 theatre and rock, 12/8 coda | A minor, C major, Eb/C minor, E minor, A minor to A major | 8580 | 1 SID
+# Techniques: A four-movement rhapsody: 12/8 triplet ballad, cut to staccato 4/4 theatre, a fast E-minor rock movement, then a slower 12/8 coda. The carried E5 becomes the theatre's first chord; the three-note head of the ballad becomes block chords, then a fourfold rock diminution. One SID: harp bass and six-tone left-hand arpeggio, counterline, ornaments and filter ownership on v1.
+# Learn: Hear one E-C / B-A falling-lilt motif change scale, rhythm and role instead of repeating a verse. The shock is the held E5 cut into the Eb theatre at bar 33; after the hard-rock B7, the coda returns the lilt in A major. Signature: the motif's return over a bare harp in the last 10 bars.
+# Accepted lint: LEVEL-NOOP (7 sustain-zero percussion triggers); HR-GAP (1 deliberate recitative rest at bar 60).
+sidwave: 1.3
 title: A Window in Rain
-tempo: 75.19
 mode: PAL
+tempo: 125.31
+meter: "12/8"
 accent: 2
 sids:
-  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1, 3] } }
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+kit:
+  k: kick
+  s: snare
+  z: snare_low
+  j: ghost
+  h: hat
+  o: hat_open
+  x: crash
 instruments:
-  # Plucked broken chords; the width drift keeps running across notes (reset: false).
+  # ---------------- ballad ----------------
+  # Harp: a +12 pluck frame, a slow width drift that runs across notes, and a low-pass that closes on every note.
   harp:
     waveform: pulse
-    adsr: [1, 7, 5, 6]
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.15 }, { add: 10, frames: 60 }, { add: -10, frames: 60 }] }
-    filtertable: [{ cutoff: 1.4kHz, resonance: 5, type: lowpass }]
-  harp_end:
+    adsr: [0, 8, 5, 7]
+    hard_restart: { frames: 0 }
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse }]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 500 }, { add: 6, frames: 120 }, { add: -6, frames: 120 }] }
+    filtertable: [{ cutoff: 1.7kHz, resonance: 9, type: lowpass }, { add: -14, frames: 12 }]
+  # Harp bass note: a triangle click an octave up, then a wide pulse that narrows under a slower low-pass.
+  hb:
     waveform: pulse
-    adsr: [1, 9, 6, 11]
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.15 }, { add: 10, frames: 60 }, { add: -10, frames: 60 }] }
-    filtertable: [{ cutoff: 1.4kHz, resonance: 5, type: lowpass }]
-  # The singing lead: slow PWM, glides inside slurs, vibrato only after 18 frames.
-  breath:
+    adsr: [0, 9, 6, 7]
+    hard_restart: { test: true }
+    wavetable: [{ wave: tri, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 1400 }, { add: -30, frames: 20 }]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 10, type: lowpass }, { add: -10, frames: 16 }]
+  # Music-box bell for the first statement of the motif: ring-modulated triangle, source an octave up.
+  bell:
+    waveform: tri
+    adsr: [0, 10, 0, 9]
+    source_note: "+12"
+    wavetable: [{ wave: tri, ring: true, note: "+12" }, { wave: tri, ring: true }]
+  # Ballad lead: one saw frame, a narrow pulse that opens fast and then breathes; vibrato grows after 20 frames.
+  voice:
     waveform: pulse
-    adsr: [3, 6, 11, 7]
-    portamento: 6
-    vibrato: { depth: 0.18, rate: 4.5, delay: 18 }
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 12, frames: 50 }, { add: -12, frames: 50 }] }
-  breath_end:
+    adsr: [2, 8, 10, 6]
+    portamento: 5
+    wavetable: [{ wave: saw }, { wave: pulse }]
+    pulsetable: &voicepw { loop: 2, steps: [{ set: 320 }, { add: 80, frames: 14 }, { add: -9, frames: 45 }, { add: 9, frames: 45 }] }
+    vibrato: &voicevib { depth: 0.32, rate: 5.4, delay: 20, fade: 30 }
+  vgr:
     waveform: pulse
-    adsr: [3, 6, 11, 11]
-    vibrato: { depth: 0.18, rate: 4.5, delay: 18 }
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 12, frames: 50 }, { add: -12, frames: 50 }] }
-  anchor: { waveform: tri, adsr: [2, 6, 11, 8] }
-  anchor_end: { waveform: tri, adsr: [2, 6, 11, 11] }
-  # Chorus bass: square wave through the harp's low-pass for weight.
-  deep: { waveform: pulse, adsr: [1, 7, 10, 6], pulsetable: [{ set: 2048 }], hard_restart: { test: true } }
+    adsr: [2, 8, 10, 6]
+    wavetable: [{ wave: saw, note: "+1" }, { note: "+1", frames: 2 }, { wave: pulse }]
+    pulsetable: *voicepw
+    vibrato: *voicevib
+  vmo:
+    waveform: pulse
+    adsr: [2, 8, 10, 6]
+    wavetable: [{ wave: saw }, { wave: pulse, frames: 2 }, { note: "+2", frames: 3 }, { wave: pulse }]
+    pulsetable: *voicepw
+    vibrato: *voicevib
+  # Second melody: a two-frame pulse breath into a triangle with a slow, shallow vibrato.
+  flute:
+    waveform: tri
+    adsr: [4, 6, 11, 7]
+    wavetable: [{ wave: pulse, frames: 2 }, { wave: tri }]
+    pulse_width: 1200
+    vibrato: { depth: 0.22, rate: 4.8, delay: 26, fade: 40 }
+  # Chorus and solo lead: a noise breath, a wide pulse that narrows, deeper and faster vibrato.
+  sing:
+    waveform: pulse
+    adsr: [1, 6, 12, 7]
+    portamento: 4
+    wavetable: [{ wave: noise }, { wave: pulse }]
+    pulsetable: &singpw { loop: 2, steps: [{ set: 2000 }, { add: -45, frames: 18 }, { add: 7, frames: 60 }, { add: -7, frames: 60 }] }
+    vibrato: &singvib { depth: 0.45, rate: 6.1, delay: 14, fade: 22 }
+  sgr:
+    waveform: pulse
+    adsr: [1, 6, 12, 7]
+    wavetable: [{ wave: noise, note: "+1" }, { wave: pulse, note: "+1", frames: 2 }, { wave: pulse }]
+    pulsetable: *singpw
+    vibrato: *singvib
+  smo:
+    waveform: pulse
+    adsr: [1, 6, 12, 7]
+    wavetable: [{ wave: noise }, { wave: pulse, frames: 2 }, { note: "+2", frames: 3 }, { wave: pulse }]
+    pulsetable: *singpw
+    vibrato: *singvib
+  # Shimmer chords: one frame per tone after a saw frame two octaves up, top tone first; the played note is the
+  # lowest tone, and the name gives the voicing (6 = first inversion, 64 = second inversion).
+  sh_maj: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: &shpw { reset: false, loop: 1, steps: [{ set: 900 }, { add: 12, frames: 90 }, { add: -12, frames: 90 }] }, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+12" }, { note: "+7" }, { note: "+4" }, { note: "+0" }] }
+  sh_min: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+12" }, { note: "+7" }, { note: "+3" }, { note: "+0" }] }
+  sh_6: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+12" }, { note: "+8" }, { note: "+3" }, { note: "+0" }] }
+  sh_6m: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+12" }, { note: "+9" }, { note: "+4" }, { note: "+0" }] }
+  sh_64: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+12" }, { note: "+9" }, { note: "+5" }, { note: "+0" }] }
+  sh_43: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+8" }, { note: "+5" }, { note: "+3" }, { note: "+0" }] }
+  sh_7sus: { waveform: pulse, adsr: [0, 9, 7, 6], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+10" }, { note: "+7" }, { note: "+5" }, { note: "+0" }] }
+  sh_add9: { waveform: pulse, adsr: [1, 10, 8, 10], loop: 1, pulsetable: *shpw, wavetable: [{ wave: saw, note: "+26" }, { wave: pulse, note: "+14" }, { note: "+7" }, { note: "+4" }, { note: "+0" }] }
+  # Solo chords: two frames per tone (the warbling chord), from chord tokens; the instrument gives envelope and width.
+  warble:
+    waveform: pulse
+    adsr: [0, 8, 8, 5]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 1500 }, { add: -10, frames: 70 }, { add: 10, frames: 70 }] }
+  # ---------------- theatre ----------------
+  # Low voice: a high noise consonant, then a 40 % pulse through a band-pass that opens like a vowel.
+  lowv:
+    waveform: pulse
+    adsr: [0, 6, 10, 4]
+    wavetable: [{ wave: noise, note: "+36" }, { wave: pulse }]
+    pulsetable: [{ set: 1640 }, { add: -6, frames: 40 }]
+    filtertable: [{ cutoff: 450Hz, resonance: 12, type: bandpass }, { add: 5, frames: 22 }, { add: -2, frames: 40 }]
+    vibrato: { depth: 0.3, rate: 5.8, delay: 16, fade: 16 }
+  lows:
+    waveform: pulse
+    adsr: [0, 8, 6, 3]
+    wavetable: [{ wave: noise, note: "+36" }, { wave: pulse }]
+    pulsetable: [{ set: 1640 }]
+    filtertable: [{ cutoff: 1.4kHz, resonance: 6, type: lowpass }, { add: -12, frames: 8 }]
+  # High voice: noise consonant, 15 % pulse, a quick operatic vibrato.
+  highv:
+    waveform: pulse
+    adsr: [0, 6, 11, 4]
+    portamento: 3
+    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse }]
+    pulsetable: { loop: 1, steps: [{ set: 614 }, { add: 8, frames: 30 }, { add: -8, frames: 30 }] }
+    vibrato: { depth: 0.4, rate: 7.2, delay: 9, fade: 9 }
+  highs:
+    waveform: pulse
+    adsr: [0, 8, 6, 3]
+    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse }]
+    pulsetable: [{ set: 614 }, { add: 20, frames: 10 }]
+  # Harpsichord: a saw octave frame, then a narrow pulse that dies fast.
+  pluck:
+    waveform: pulse
+    adsr: [0, 8, 2, 4]
+    hard_restart: { frames: 0 }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 360 }, { add: 30, frames: 8 }]
+  # ---------------- rock ----------------
+  kick:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: C7 }, { wave: pulse, note: B3, slide_to: E2, frames: 3 }, { wave: tri, note: E2, slide_to: B1, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: 2.2kHz, resonance: 4, type: lowpass }]
+  snare:
+    waveform: pulse
+    adsr: [0, 7, 0, 0]
+    wavetable: [{ wave: tri, note: A3 }, { wave: noise, note: D6, frames: 2 }, { wave: pulse, note: E3 }, { wave: noise, note: B5, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: 2kHz, resonance: 6, type: bandpass }]
+  snare_low:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: tri, note: F3 }, { wave: noise, note: A5, frames: 2 }, { wave: pulse, note: C3 }, { wave: noise, note: F5, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: 300Hz, resonance: 3, type: highpass }]
+  ghost:
+    waveform: noise
+    adsr: [0, 4, 0, 0]
+    wavetable: [{ wave: noise, note: C6, frames: 2 }, { gate: false }]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 2, type: highpass }]
+  hat:
+    waveform: noise
+    hard_restart: { frames: 0 }
+    adsr: [0, 2, 0, 0]
+    wavetable: [{ wave: noise, note: A7 }, { gate: false }]
+  hat_open:
+    waveform: noise
+    hard_restart: { frames: 0 }
+    adsr: [0, 7, 0, 0]
+    wavetable: [{ wave: noise, note: A7 }, { wave: noise, note: F7 }]
+  crash:
+    waveform: noise
+    hard_restart: { frames: 0 }
+    adsr: [0, 11, 0, 0]
+    wavetable: [{ wave: noise, note: D7, frames: 2 }, { wave: noise, note: G6 }]
+  # Chug: a saw octave frame, then a pulse narrowing from 63 %, palm-muted by a resonant low-pass that shuts in 6 frames.
+  chug:
+    waveform: pulse
+    adsr: [0, 6, 9, 1]
+    hard_restart: { test: true }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 2600 }, { add: -100, frames: 12 }]
+    filtertable: [{ cutoff: 1.5kHz, resonance: 12, type: lowpass }, { add: -30, frames: 6 }]
+  chug_open:
+    waveform: saw
+    adsr: [0, 9, 8, 4]
+    hard_restart: { test: true }
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: saw }]
+    filtertable: [{ cutoff: 2.4kHz, resonance: 13, type: lowpass }, { add: -8, frames: 30 }]
+  # Power chord: a noise frame, then root, fifth and octave one frame each on a saw.
+  pc:
+    waveform: saw
+    adsr: [0, 8, 9, 3]
+    loop: 1
+    wavetable: [{ wave: noise, note: "+24" }, { wave: saw, note: "+12" }, { note: "+7" }, { note: "+0" }]
+  # Rock lead: an octave pulse click, a fast width sweep, deep vibrato.
+  rlead:
+    waveform: pulse
+    adsr: [0, 5, 12, 4]
+    portamento: 2
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse }]
+    pulsetable: &rockpw { loop: 2, steps: [{ set: 400 }, { add: 150, frames: 10 }, { add: -40, frames: 18 }, { add: 40, frames: 18 }] }
+    vibrato: &rockvib { depth: 0.5, rate: 6.6, delay: 10, fade: 12 }
+  # Bends need a wavetable without pitch steps: the click is a noise frame.
+  rbend:
+    waveform: pulse
+    adsr: [0, 5, 12, 6]
+    wavetable: [{ wave: noise }, { wave: pulse }]
+    pulsetable: *rockpw
+    vibrato: { depth: 0.55, rate: 6.6, delay: 45, fade: 30 }
+  rharm:
+    waveform: saw
+    adsr: [0, 5, 11, 3]
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: saw }]
+    vibrato: { depth: 0.3, rate: 6.6, delay: 12, fade: 12 }
+  # ---------------- coda ----------------
+  deep:
+    waveform: tri
+    adsr: [0, 0, 15, 11]
+    hard_restart: { test: true }
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: tri }]
+    filtertable: [{ cutoff: 900Hz, resonance: 6, type: lowpass }]
 voices:
   - id: 1
-    name: Rain harp
-    role: arp
+    name: Harp, low voice, chug and drums
+    role: bass
     level: 11
     instrument: harp
     patterns:
-      intro: { length: 0.5, bars: 4, groove: "A3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | A3 E4 A4 B4 C5 B4 A4 E4 | E3 B3 D4 E4 A4 E4 D4 B3" }
-      verse: { length: 0.5, bars: 8, groove: "A3 E4 A4 B4 C5 B4 A4 E4 | G3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | G3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 A4 E4 D4 B3" }
-      verse2: { length: 0.5, bars: 8, groove: "A3 E4 A4 B4 C5 B4 A4 E4 | G3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | G3 D4 G4 A4 B4 A4 G4 D4 | D3 A3 C4 F4 E3 B3 D4 G#4 | A3 E4 A4 B4 C5 B4 A4 E4" }
-      lift: { length: 0.5, bars: 8, groove: "D3 A3 C4 F4 A4 F4 C4 A3 | G3 D4 G4 A4 B4 A4 G4 D4 | C3 G3 B3 E4 G4 E4 B3 G3 | F3 C4 E4 G4 A4 G4 E4 C4 | B2 F3 A3 D4 F4 D4 A3 F3 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | E3 B3 D4 E4 G#4 B4 D5 B4" }
-      # Last chorus: whole-bar chord shimmer (one tone every 3 frames), an octave above the chord root.
-      shimmer:
-        length: 4
+      intro:
+        length: 0.5
+        bars: 2
+        groove: >-
+          A2@hb E3 A3 B3 C4 B3 A2@hb E3 A3 B3 E4 B3 | F2@hb C3 A3 C4 E4 C4 E2@hb B2 A3 B3 D4 B3
+      verse1:
+        length: 0.5
         bars: 8
-        groove:
-          - { chord: Dm7, arp: "12,15,19,22", speed: 3 }
-          - { chord: G, arp: "12,16,19,24", speed: 3 }
-          - { chord: Cmaj7, arp: "12,16,19,23", speed: 3 }
-          - { chord: F6, arp: "12,16,19,21", speed: 3 }
-          - { chord: Bm7b5, arp: "12,15,18,22", speed: 3 }
-          - { chord: E7, arp: "12,16,19,22", speed: 3 }
-          - { chord: Am, arp: "12,15,19,24", speed: 3 }
-          - { chord: E7, arp: "12,16,19,22", speed: 3 }
-      coda: { length: 0.5, bars: 5, groove: "F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 A4 E4 D4 B3 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | B4@harp_end ~ ~ ~ ~ ~ ~ ~" }
+        groove: >-
+          A2@hb E3 A3 C4 A3 E3 A2@hb E3 B3 C4 B3 E3 | G2@hb E3 A3 C4 A3 E3 G2@hb E3 B3 C4 B3 E3 |
+          F2@hb C3 A3 C4 A3 E3 F2@hb C3 G3 A3 G3 E3 | E2@hb B2 A3 B3 D4 A3 E2@hb B2 G#3 B3 D4 G#3 |
+          A2@hb E3 A3 C4 A3 E3 A2@hb E3 B3 C4 E4 C4 | G2@hb E3 G3 C4 G3 E3 G2@hb E3 G3 C4 D4 C4 |
+          D2@hb A2 F3 B3 F3 A2 D2@hb A2 F3 B3 D4 B3 | E2@hb B2 G#3 D4 G#3 B2 E2@hb B2 G#3 B3 D4 E4
+      verse2:
+        length: 0.5
+        bars: 8
+        groove: >-
+          A2@hb E3 A3 C4 E4 C4 A2@hb E3 B3 C4 B3 E3 | G2@hb E3 A3 C4 A3 E3 G2@hb D3 B3 C4 B3 D3 |
+          F2@hb C3 A3 C4 E4 C4 F2@hb C3 G3 A3 C4 A3 | E2@hb B2 A3 B3 D4 B3 E2@hb B2 G#3 B3 D4 B3 |
+          A2@hb E3 A3 C4 A3 E3 A2@hb E3 A3 C4 E4 C4 | G2@hb E3 G3 C4 G3 E3 G2@hb C3 E3 G3 C4 E3 |
+          D2@hb A2 F3 C4 F3 A2 D2@hb A2 F3 A3 C4 A3 | G2@hb D3 F3 C4 F3 D3 G2@hb D3 F3 B3 D4 B3
+      chorus:
+        length: 0.5
+        bars: 8
+        groove: >-
+          C3@hb G3 C4 E4 C4 G3 C3@hb G3 D4 E4 D4 G3 | B2@hb G3 B3 D4 B3 G3 B2@hb G3 D4 G4 D4 B3 |
+          A2@hb E3 A3 C4 A3 E3 A2@hb E3 B3 C4 E4 C4 | F2@hb C3 F3 A3 C4 A3 F2@hb C3 F3 Ab3 C4 Ab3 |
+          E2@hb G3 C4 E4 C4 G3 E2@hb G3 C4 G4 E4 C4 | D2@hb A2 F3 C4 F3 A2 D2@hb A2 F3 A3 D4 C4 |
+          G2@hb D3 G3 C4 G3 D3 G2@hb D3 F3 C4 D4 C4 | G2@hb D3 G3 B3 D4 B3 G2@hb D3 F3 B3 D4 F4
+      solo:
+        length: 0.5
+        bars: 6
+        groove: >-
+          A2@hb E3 A3 C4 E4 C4 A2@hb E3 A3 B3 C4 E4 | F2@hb C3 A3 C4 F4 C4 F2@hb C3 G3 A3 C4 E4 |
+          D2@hb A2 F3 B3 D4 B3 D2@hb A2 F3 A3 B3 D4 | B1@hb F2 A2 D3 F3 A3 B1@hb F2 B2 D3 F3 A3 |
+          E2@hb B2 E3 A3 B3 D4 E2@hb B2 E3 A3 B3 A3 | E2@hb B2 G#3 D4 G#3 B2 E2@hb B2 G#3 B3 D4 F4
+      # Theatre: the low voice under its band-pass vowel, staccato chord roots, the call.
+      theatre:
+        length: 0.25
+        bars: 10
+        groove: >-
+          Eb3@lows ~ - - C3@lows ~ B2@lows ~ - - - - - - - - |
+          - - - - E3@lows ~ - - C#3@lows ~ C3@lows ~ - - - - |
+          Eb3@lows ~ - - C3@lows ~ B2@lows ~ - - Ab2@lows ~ G2@lows ~ ~ ~ |
+          G2@lowv ~ ~ ~ ~ ~ Eb3@lowv ~ D3@lowv ~ ~ ~ B2@lowv C3@lowv D3@lowv ~ |
+          C3@lows ~ - - - - - - G2@lows ~ - - - - - - |
+          Ab2@lowv ~ ~ ~ ~ ~ F3@lowv ~ Eb3@lowv ~ ~ ~ C3@lowv D3@lowv Eb3@lowv ~ |
+          F2@lows ~ - - - - - - Bb2@lows ~ - - - - - - |
+          E3@lows ~ - - C#3@lows ~ D#3@lows ~ - - A2@lows ~ B2@lows ~ ~ ~ |
+          Eb3@lows ~ - - C3@lows ~ D3@lows ~ - - Ab2@lows ~ Bb2@lows ~ ~ ~ |
+          - - - - - - - - - - - - - - - -
+      accel:
+        length: 0.25
+        bars: 4
+        groove: >-
+          Ab2@lows ~ - - Ab2@lows ~ Ab2@lows ~ - - Ab2@lows ~ Ab2@lows ~ Eb3@lows ~ |
+          A2@lows ~ - - A2@lows ~ A2@lows ~ - - A2@lows ~ A2@lows ~ E3@lows ~ |
+          Bb2@lows ~ - - Bb2@lows ~ Bb2@lows ~ - - Bb2@lows ~ Bb2@lows ~ F3@lows ~ |
+          B2@lowv ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+      b7:
+        length: 0.25
+        bars: 2
+        groove: >-
+          B1@chug ~ B1@chug ~ B1@chug ~ B1@chug ~ B1@chug B1@chug B1@chug ~ B1@chug B1@chug B1@chug B1@chug |
+          B1@chug C2@chug D#2@chug E2@chug F#2@chug G2@chug A2@chug B2@chug C3@chug D#3@chug E3@chug F#3@chug G3@chug A3@chug B3@chug ~
+      # Rock: the gallop with kick and snare on the same voice.
+      rock_a:
+        length: 0.25
+        bars: 8
+        groove: >-
+          k ~ E2@chug E2@chug s ~ E2@chug E2@chug k ~ E2@chug E2@chug s ~ E2@chug E2@chug | k ~ C2@chug C2@chug s ~ C2@chug C2@chug k ~ C2@chug C2@chug s ~ C2@chug C2@chug |
+          k ~ A1@chug A1@chug s ~ A1@chug A1@chug k ~ A2@chug A1@chug s ~ A1@chug A1@chug | k ~ F2@chug F2@chug s ~ F2@chug F2@chug k ~ B1@chug B1@chug s ~ z ~ |
+          k ~ E2@chug E2@chug s ~ E2@chug E2@chug k ~ E2@chug E2@chug s ~ E2@chug D2@chug | k ~ C2@chug C2@chug s ~ C2@chug C2@chug k ~ C2@chug C2@chug s ~ C2@chug B1@chug |
+          k ~ A1@chug A1@chug s ~ A1@chug A1@chug k ~ A1@chug A1@chug s ~ A1@chug A1@chug | k ~ F2@chug F2@chug s ~ F2@chug F2@chug B1@chug_open ~ B1@chug B1@chug z ~ s ~
+      rock_b:
+        length: 0.25
+        bars: 4
+        groove: >-
+          k ~ C2@chug C2@chug s ~ C2@chug C2@chug k ~ C2@chug C2@chug s ~ C2@chug C2@chug |
+          k ~ D2@chug D2@chug s ~ D2@chug D2@chug k ~ D2@chug D2@chug s ~ D2@chug D2@chug |
+          k ~ D#2@chug D#2@chug s ~ D#2@chug D#2@chug k ~ D#2@chug D#2@chug s ~ D#2@chug D#2@chug |
+          E2@chug_open ~ ~ ~ s ~ E2@chug E2@chug k ~ E2@chug E2@chug s ~ z ~
+      rock_c:
+        length: 0.25
+        bars: 2
+        groove: >-
+          k ~ C2@chug C2@chug s ~ C2@chug C2@chug k ~ D2@chug D2@chug s ~ D2@chug D2@chug |
+          k ~ F2@chug F2@chug s ~ F2@chug F2@chug k ~ B1@chug B1@chug z ~ s ~
+      rock_d:
+        length: 0.25
+        bars: 2
+        groove: >-
+          B1@chug_open ~ ~ ~ ~ ~ ~ ~ - - - - - - - - | - - - - - - - - - - - - - - - -
+      ramp:
+        length: 0.5
+        bars: 2
+        groove: >-
+          B1@hb F#2 A2 D#3 F#3 A3 B1@hb F#2 A2 D#3 F#3 A3 | E2@hb B2 G#3 D4 G#3 B2 E2@hb B2 G#3 B3 D4 E4
+      coda:
+        length: 0.5
+        bars: 5
+        groove: >-
+          A2@hb E3 A3 C4 A3 E3 A2@hb E3 B3 C4 B3 E3 | F2@hb C3 A3 C4 A3 F3 F2@hb C3 G3 A3 G3 C3 |
+          D2@hb A2 F3 B3 F3 A2 Bb1@hb F2 Bb2 D3 F3 D3 | E2@hb B2 A3 B3 D4 A3 E2@hb B2 G#3 B3 D4 G#3 |
+          A2@hb E3 A3 C4 A3 E3 A2@hb E3 A3 C#4 E4 C#4
+      coda_end:
+        length: 0.5
+        bars: 3
+        groove: >-
+          - - - - - - - - - - - - | A2@hb E3 A3 B3 C#4 E4 A2@hb E3 B3 C#4 E4 B3 | A1@deep ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
   - id: 2
-    name: Long breath
-    role: lead
-    instrument: breath
+    name: Bell source, second melody, shimmer, harpsichord, stabs and hats
+    role: arp
+    level: 10
+    instrument: flute
     patterns:
-      a1: { length: 0.5, bars: 4, groove: "E5 ~ ~ (D5 /C5) ~ B4 ~ | C5 ~ ~ ~ ~ ~ - - | A4 ~ ~ (B4 C5) ~ E5 ~ | D5 ~ ~ ~ (C5 /B4) ~ ~" }
-      a2: { length: 0.5, bars: 4, groove: "E5 ~ ~ (D5 /C5) ~ A5 ~ | G5 ~ ~ ~ (F5 /E5) ~ ~ | F5 ~ (E5 D5) C5 ~ ~ ~ | B4 ~ ~ ~ - - - -" }
-      a3: { length: 0.5, bars: 4, groove: "E5 ~ ~ (D5 /C5) ~ B4 ~ | D5 ~ ~ (C5 /B4) ~ G4 ~ | F4 ~ A4 ~ G#4 ~ B4 ~ | A4 ~ ~ ~ ~ ~ - -" }
-      b1: { length: 0.5, bars: 8, groove: "A5 ~ ~ ~ (G5 /F5) ~ ~ | G5 ~ ~ ~ D5 ~ ~ ~ | E5 ~ ~ (D5 E5) ~ G5 ~ | A5 ~ ~ ~ ~ ~ (G5 F5) | F5 ~ ~ ~ (E5 /D5) ~ ~ | D5 ~ ~ ~ B4 ~ G#4 ~ | A4 ~ ~ (B4 C5) ~ E5 ~ | B4 ~ ~ ~ (D5 E5) ~ ~" }
-      solo: { length: 0.5, bars: 8, groove: "E5 ~ (F5 E5) D5 ~ C5 ~ | (B4 C5) ~ E5 ~ ~ G5 ~ | A5 ~ ~ ~ (G5 E5) ~ C5 | B4 ~ ~ (G#4 B4) ~ E5 ~ | C6 ~ ~ ~ (B5 /A5) ~ ~ | B5 ~ ~ ~ (A5 /G5) ~ ~ | F5 ~ (E5 D5) E5 ~ G#5 ~ | A5 ~ ~ ~ ~ ~ - -" }
-      coda: { length: 0.5, bars: 5, groove: "C5 ~ ~ ~ (B4 /A4) ~ ~ | B4 ~ ~ ~ ~ ~ ~ ~ | (G#4 B4) ~ ~ D5 ~ ~ ~ | A4@breath_end ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~" }
+      verse2:
+        length: 0.5
+        bars: 8
+        groove: >-
+          - - - - - - - - - C5 B4 A4 | B4 ~ ~ ~ ~ ~ - - - G4 ~ ~ |
+          A4 ~ ~ ~ ~ ~ C5 ~ ~ ~ ~ ~ | - - - D5 C5 B4 D5 ~ ~ ~ ~ ~ |
+          A4 ~ ~ ~ ~ ~ ~ ~ ~ E5 D5 C5 | C5 ~ ~ ~ ~ ~ G4 ~ ~ E5 ~ ~ |
+          F4 ~ ~ ~ ~ ~ A4 ~ ~ ~ ~ ~ | F4 ~ ~ ~ ~ ~ ~ ~ ~ D5 ~ ~
+      chorus:
+        length: 6
+        bars: 8
+        groove: >-
+          C4@sh_maj | B3@sh_6 | A3@sh_min | A3@sh_6 | G3@sh_64 | A3@sh_43 | G3@sh_7sus | B3@sh_6
+      solo:
+        length: 6
+        bars: 6
+        groove:
+          - { chord: Am, arp: "12,7,3,0", speed: 2 }
+          - { chord: F, arp: "12,7,4,0", speed: 2 }
+          - { chord: D, arp: "9,7,3,0", speed: 2 }
+          - { chord: B, arp: "10,6,3,0", speed: 2 }
+          - { chord: E, arp: "10,7,5,0", speed: 2 }
+          - { chord: E, arp: "13,10,7,4", speed: 2 }
+      theatre:
+        length: 0.25
+        bars: 10
+        groove: >-
+          Bb3@pluck ~ - - G3@pluck ~ G3@pluck ~ - - - - - - - - |
+          - - - - B3@pluck ~ - - G#3@pluck ~ G#3@pluck ~ - - - - |
+          Bb3@pluck ~ - - G3@pluck ~ G3@pluck ~ - - Eb3@pluck ~ D3@pluck ~ ~ ~ |
+          - - - - - - - - - - - - - - - - |
+          C4@pluck - G3@pluck - Eb4@pluck - G3@pluck - C4@pluck - G3@pluck - D4@pluck - B3@pluck - |
+          - - - - - - - - - - - - - - - - |
+          C4@pluck - F3@pluck - Ab3@pluck - F3@pluck - D4@pluck - Bb3@pluck - F4@pluck - D4@pluck - |
+          G#3@pluck ~ - - E3@pluck ~ B3@pluck ~ - - C#4@pluck ~ F#3@pluck ~ ~ ~ |
+          G3@pluck ~ - - Eb3@pluck ~ Bb3@pluck ~ - - C4@pluck ~ F3@pluck ~ ~ ~ |
+          - - - - - - - - - - - - - - - -
+      accel:
+        length: 0.25
+        bars: 4
+        groove: >-
+          C4@pluck ~ - - C4@pluck ~ C4@pluck ~ - - C4@pluck ~ C4@pluck ~ C4@pluck ~ |
+          C#4@pluck ~ - - C#4@pluck ~ C#4@pluck ~ - - C#4@pluck ~ C#4@pluck ~ C#4@pluck ~ |
+          D4@pluck ~ - - D4@pluck ~ D4@pluck ~ - - D4@pluck ~ D4@pluck ~ D4@pluck ~ |
+          D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck
+      b7:
+        length: 0.25
+        bars: 2
+        groove: >-
+          A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck A3@pluck D#4@pluck F#4@pluck A4@pluck |
+          B2@rharm C3@rharm D#3@rharm E3@rharm F#3@rharm G3@rharm A3@rharm B3@rharm C4@rharm D#4@rharm E4@rharm F#4@rharm G4@rharm A4@rharm B4@rharm ~
+      rock_a:
+        length: 0.25
+        bars: 8
+        groove: >-
+          x ~ ~ h E3@pc ~ h E3@pc ~ h h ~ E3@pc ~ o ~ | C3@pc ~ ~ h ~ h C3@pc ~ h ~ C3@pc ~ h h o ~ |
+          A2@pc ~ ~ h ~ h A2@pc ~ h ~ A2@pc ~ h ~ o ~ | F2@pc ~ ~ h ~ h F2@pc ~ B2@pc ~ ~ ~ B2@pc ~ B2@pc ~ |
+          E3@pc ~ ~ h ~ h E3@pc ~ h h E3@pc ~ h ~ o ~ | C3@pc ~ ~ h ~ h C3@pc ~ h ~ C3@pc ~ D3@pc ~ o ~ |
+          A2@pc ~ ~ h ~ h A2@pc ~ h ~ A2@pc ~ h h o ~ | F2@pc ~ ~ h ~ h F2@pc ~ B2@pc ~ ~ ~ B2@pc ~ ~ ~
+      rock_b:
+        length: 0.25
+        bars: 4
+        groove: >-
+          G5@rharm ~ ~ ~ ~ ~ ~ ~ E5@rharm ~ ~ ~ C5@rharm ~ E5@rharm ~ | F#5@rharm ~ ~ ~ ~ ~ D5@rharm ~ ~ ~ A4@rharm ~ C5@rharm ~ D5@rharm ~ |
+          (G4@rharm A4@rharm B4@rharm C5@rharm D#5@rharm E5@rharm F#5@rharm G5@rharm A5@rharm G5@rharm F#5@rharm E5@rharm D#5@rharm C5@rharm B4@rharm D#5@rharm) | B5@rharm ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ B5@rharm ~ G5@rharm ~
+      rock_c:
+        length: 0.25
+        bars: 2
+        groove: >-
+          A5@rharm ~ ~ ~ G5@rharm ~ E5@rharm ~ F#5@rharm ~ ~ ~ D5@rharm ~ A4@rharm ~ | C5@rharm ~ ~ ~ F5@rharm ~ A5@rharm ~ F#5@rharm ~ ~ ~ D#5@rharm ~ B4@rharm ~
+      rock_d:
+        length: 0.25
+        bars: 2
+        groove: >-
+          B2@pc ~ ~ ~ ~ ~ ~ ~ - - - - - - - - | - - - - - - - - - - - - - - - -
+      coda_end:
+        length: 6
+        bars: 3
+        groove: >-
+          - | A3@sh_add9 | -
   - id: 3
-    name: Bass
-    role: bass
-    instrument: anchor
+    name: Bell, leads and high voice
+    role: lead
+    level: 14
+    instrument: voice
     patterns:
-      intro: { length: 1, bars: 4, groove: "- - - - | - - - - | A2 ~ ~ ~ | E2 ~ D2 E2" }
-      verse: { length: 1, bars: 8, groove: "A2 ~ ~ ~ | G2 ~ ~ ~ | F2 ~ ~ ~ | E2 ~ ~ G#2 | A2 ~ ~ ~ | G2 ~ ~ ~ | F2 ~ ~ ~ | E2 ~ D2 E2" }
-      verse2: { length: 1, bars: 8, groove: "A2 ~ ~ ~ | G2 ~ ~ ~ | F2 ~ ~ ~ | E2 ~ ~ G#2 | A2 ~ ~ ~ | G2 ~ ~ B2 | D2 ~ E2 ~ | A2 ~ G2 F2" }
-      lift: { length: 1, bars: 8, groove: "D2@deep ~ ~ A2@deep | G2@deep ~ ~ D2@deep | C2@deep ~ ~ G2@deep | F2@deep ~ ~ D2@deep | B1@deep ~ ~ F2@deep | E2@deep ~ ~ G#2@deep | A2@deep ~ G2@deep ~ | E2@deep ~ ~ ~" }
-      coda: { length: 1, bars: 5, groove: "F2 ~ ~ ~ | E2 ~ ~ ~ | E2 ~ G#2 ~ | A2@anchor_end ~ ~ ~ | ~ ~ ~ ~" }
+      intro:
+        length: 0.25
+        bars: 2
+        groove: >-
+          E5@bell ~ ~ ~ C6@bell ~ B5@bell ~ ~ ~ A5@bell ~ G#5@bell ~ A5@bell ~ B5@bell ~ E5@bell ~ ~ ~ ~ ~ |
+          - - - - - - - - - - - - - - - - - - - - - - - -
+      verse1:
+        length: 0.25
+        bars: 8
+        groove: >-
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ A4 ~ G#4@vgr ~ A4 ~ B4 ~ E4 ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ ~ ~ - - - - - - E4 ~ ~ ~ E5 ~ D5 ~ ~ C5 ~ ~ |
+          B4 ~ ~ ~ ~ ~ ~ ~ A4 ~ G4 ~ A4@vmo ~ ~ ~ C5 ~ B4 ~ ~ ~ ~ ~ |
+          A4 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ G#4 ~ ~ ~ ~ ~ - - - - D4 D#4 |
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ A4 ~ G#4@vgr ~ A4 ~ B4 ~ E5 ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ D5 C5 B4 ~ ~ ~ C5 ~ G4 ~ ~ ~ ~ ~ - - E4 ~ G4 ~ |
+          F4 ~ ~ ~ A4 ~ D5 ~ ~ ~ C5 ~ B4 ~ ~ ~ ~ ~ A4 ~ ~ ~ B4 ~ |
+          C5 ~ ~ ~ ~ B4 G#4 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ - - - - - -
+      verse2:
+        length: 0.25
+        bars: 8
+        groove: >-
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ A4 ~ G#4@vgr ~ A4 ~ B4 ~ E4 ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ ~ ~ - - - - - - E4 ~ ~ ~ /E5 ~ ~ ~ F5 E5 ~ D5 |
+          C5 ~ ~ ~ ~ ~ B4 ~ A4 ~ G4 ~ A4 ~ ~ ~ E5 ~ D5 ~ ~ C5 ~ B4 |
+          A4@vmo ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ G#4 ~ ~ ~ ~ ~ - - - - D4 D#4 |
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ A4 ~ C5 ~ D5 ~ E5 ~ A5 ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ G5 F5 E5 ~ ~ ~ D5 ~ C5 ~ ~ ~ ~ ~ - - B4 ~ C5 ~ |
+          D5 ~ ~ ~ F5 ~ E5 ~ ~ ~ D5 ~ C5@vmo ~ ~ ~ ~ ~ B4 ~ C5 ~ D5 ~ |
+          C5 ~ ~ ~ ~ ~ ~ ~ ~ ~ B4 ~ ~ ~ ~ ~ ~ ~ - - - - - -
+      chorus:
+        length: 0.25
+        bars: 8
+        groove: >-
+          G4@sing ~ ~ ~ E5@sing ~ D5@sing ~ ~ ~ C5@sing ~ B4@sgr ~ C5@sing ~ D5@sing ~ G5@sing ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ F5@sing E5@sing D5@sing ~ ~ ~ ~ ~ B4@sing ~ ~ ~ C5@sing ~ D5@sing ~ ~ ~ ~ ~ |
+          E5@sing ~ ~ ~ C6@sing ~ B5@sing ~ ~ ~ A5@sing ~ G5@sing ~ ~ ~ E5@sing ~ ~ ~ ~ ~ D5@sing C5@sing |
+          A5@sing ~ ~ ~ ~ ~ G5@sing ~ F5@sing ~ E5@sing ~ Ab5@sing ~ ~ ~ ~ ~ G5@sing ~ ~ ~ ~ ~ |
+          C5@sing ~ ~ E5@sing ~ G5@sing ~ A5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ E5@sing ~ G5@sing ~ A5@sing ~ ~ |
+          G5@sing ~ ~ E5@sing ~ D5@sing ~ C5@sing ~ D5@sing ~ E5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ ~ ~ ~ |
+          E5@sing ~ G5@sing ~ C6@sing ~ B5@sing ~ A5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ E5@sing ~ G5@sing ~ ~ ~ |
+          A5@sing ~ G5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ B4@sing ~ G4@sing ~ C5@sing ~ ~ ~ - - - - ~ ~
+      solo:
+        length: 0.25
+        bars: 5
+        groove: >-
+          E5@sing ~ ~ ~ C6@sing ~ B5@sing ~ ~ ~ ~ ~ D5@sing ~ ~ ~ B5@sing ~ A5@sing ~ ~ ~ ~ ~ |
+          C5@sing ~ ~ ~ A5@sing ~ G5@sing ~ ~ ~ F5@sing E5@sing F5@sing ~ E5@sing ~ D5@sing ~ C5@sing ~ D5@sing E5@sing F5@sing G5@sing |
+          A5@sing ~ ~ ~ ~ ~ B5@sing ~ ~ ~ ~ ~ C6@sing ~ ~ ~ ~ ~ D6!@sing ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ C6@sing B5@sing A5@sing ~ ~ ~ F5@sing ~ D5@sing ~ ~ ~ F5@sing ~ A5@sing ~ ~ ~ G#5@sing ~ |
+          A5@sing ~ ~ ~ ~ ~ G#5@sing ~ F5@sing ~ E5@sing ~ D5@sing ~ ~ C5@sing ~ B4@sing C5@sing ~ D5@sing ~ D#5@sing ~
+      held:
+        length: 6
+        bars: 1
+        groove:
+          - { note: E5, inst: sing, vibrato: { depth: 0.6, fade: 90 } }
+      theatre:
+        length: 0.25
+        bars: 10
+        groove: >-
+          G4@highs ~ - - Eb5@highs ~ D5@highs ~ - - - - - - - - |
+          - - - - G#4@highs ~ - - E5@highs ~ D#5@highs ~ - - - - |
+          G4@highs ~ - - Eb5@highs ~ D5@highs ~ - - C5@highs ~ B4@highs ~ ~ ~ |
+          - - - - - - - - - - - - - - - - |
+          G4@highv ~ ~ ~ ~ ~ Eb5@highv ~ D5@highv ~ C5@highv ~ D5@highv ~ Eb5@highv ~ |
+          - - - - - - - - - - - - - - - - |
+          Ab4@highv ~ ~ ~ ~ ~ F5@highv ~ Eb5@highv ~ ~ ~ D5@highv Eb5@highv F5@highv ~ |
+          B4@highs ~ - - G#5@highs ~ F#5@highs ~ - - E5@highs ~ D#5@highs ~ ~ ~ |
+          Bb4@highs ~ - - G5@highs ~ F5@highs ~ - - Eb5@highs ~ D5@highs ~ ~ ~ |
+          Eb5@highv Eb5@highv Eb5@highv ~ F5@highv ~ D5@highv ~ ~ ~ C5@highv B4@highv C5@highv ~ G4@highv ~
+      accel:
+        length: 0.25
+        bars: 4
+        groove: >-
+          Eb4@highs ~ - - C5@highs ~ Bb4@highs ~ - - Eb5@highs ~ C5@highs ~ Bb4@highs ~ |
+          E4@highs ~ - - C#5@highs ~ B4@highs ~ - - E5@highs ~ C#5@highs ~ B4@highs ~ |
+          F4@highs ~ - - D5@highs ~ C5@highs ~ - - F5@highs ~ D5@highs ~ C5@highs ~ |
+          F#4@highv ~ ~ ~ ~ ~ ~ ~ D#5@highv ~ ~ ~ ~ ~ ~ ~
+      b7:
+        length: 0.25
+        bars: 2
+        groove: >-
+          F#5@highv ~ ~ ~ G5@highv F#5@highv ~ ~ A5@highv ~ ~ ~ G5@highv ~ F#5@highv ~ |
+          (B3@rlead C4@rlead D#4@rlead E4@rlead F#4@rlead G4@rlead A4@rlead B4@rlead C5@rlead D#5@rlead E5@rlead F#5@rlead G5@rlead A5@rlead B5@rlead) ~
+      rock_a:
+        length: 0.25
+        bars: 8
+        groove: >-
+          E5@rbend ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ /D5@rbend ~ /E5@rbend ~ | G5@rbend ~ ~ ~ ~ ~ ~ ~ /E5@rbend ~ ~ ~ D5@rbend ~ E5@rbend ~ |
+          C5@rbend ~ ~ ~ ~ ~ ~ ~ ~ ~ B4@rbend ~ A4@rbend ~ B4@rbend ~ | F5@rbend ~ ~ ~ ~ ~ ~ ~ /F#5@rbend ~ ~ ~ ~ ~ - - |
+          B4@rlead G5@rlead F#5@rlead E5@rlead D#5@rlead E5@rlead F#5@rlead B4@rlead G5@rlead ~ ~ ~ F#5@rlead ~ E5@rlead ~ | G4@rlead E5@rlead D5@rlead C5@rlead B4@rlead C5@rlead D5@rlead G4@rlead E5@rlead ~ ~ ~ D5@rlead ~ C5@rlead ~ |
+          E4@rlead C5@rlead B4@rlead A4@rlead G#4@rlead A4@rlead B4@rlead E4@rlead A4@rlead ~ B4@rlead ~ C5@rlead ~ D5@rlead ~ | F5@rlead ~ ~ ~ E5@rlead ~ D5@rlead ~ D#5@rlead ~ ~ ~ F#5@rlead ~ A5@rlead ~
+      rock_b:
+        length: 0.25
+        bars: 4
+        groove: >-
+          B5@rlead ~ ~ ~ ~ ~ ~ ~ G5@rlead ~ ~ ~ E5@rlead ~ G5@rlead ~ | A5@rlead ~ ~ ~ ~ ~ F#5@rlead ~ ~ ~ D5@rlead ~ E5@rlead ~ F#5@rlead ~ |
+          (B4@rlead C5@rlead D#5@rlead E5@rlead F#5@rlead G5@rlead A5@rlead B5@rlead C6@rlead B5@rlead A5@rlead G5@rlead F#5@rlead E5@rlead D#5@rlead F#5@rlead) | E6!@rlead ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ (D6@rlead ~ B5@rlead) ~
+      rock_c:
+        length: 0.25
+        bars: 2
+        groove: >-
+          C6@rlead ~ ~ ~ B5@rlead ~ G5@rlead ~ A5@rlead ~ ~ ~ F#5@rlead ~ D5@rlead ~ | F5@rlead ~ ~ ~ A5@rlead ~ C6@rlead ~ B5@rlead ~ ~ ~ A5@rlead ~ F#5@rlead ~
+      rock_d:
+        length: 4
+        bars: 2
+        groove:
+          - { note: F#5, inst: rbend, bend: { to: G5, frames: 40 } }
+          - "~"
+      ramp:
+        length: 0.25
+        bars: 2
+        groove: >-
+          E5@rlead ~ ~ ~ C6@rlead ~ B5@rlead ~ ~ ~ ~ ~ E5@rlead ~ ~ ~ C6@rlead ~ B5@rlead ~ ~ ~ ~ ~ |
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ G#4 ~ ~ ~ ~ ~
+      coda:
+        length: 0.25
+        bars: 5
+        groove: >-
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ A4 ~ G#4@vgr ~ A4 ~ B4 ~ E4 ~ ~ ~ ~ ~ |
+          ~ ~ ~ ~ ~ ~ - - - - - - E4 ~ ~ ~ E5 ~ D5 ~ ~ C5 ~ A4 |
+          D5 ~ ~ ~ F5 ~ E5 ~ ~ ~ D5 ~ D5 ~ ~ ~ ~ ~ ~ ~ C5 ~ Bb4 ~ |
+          A4 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ G#4 ~ ~ ~ ~ ~ - - - - D4 D#4 |
+          E4 ~ ~ ~ C5 ~ B4 ~ ~ ~ A4 ~ G#4 ~ A4 ~ B4 ~ C#5 ~ ~ ~ ~ ~
+      coda_end:
+        length: 0.25
+        bars: 3
+        groove: >-
+          E4 ~ ~ ~ C#5 ~ B4 ~ ~ ~ A4 ~ G#4@vgr ~ ~ A4 ~ ~ B4 ~ ~ ~ ~ ~ |
+          A4 ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ |
+          - - - - - - - - - - - - - - - - - - - - - - - -
 sections:
-  intro:   { bars: 4, level: p, filter: { cutoff: { from: -150, to: 0 } }, layers: { v1: intro, v3: intro } }
-  verse:   { bars: 8, level: mp, layers: { v1: verse, v2: "a1 a2", v3: verse } }
-  verse2:  { bars: 8, level: mf, layers: { v1: verse2, v2: "a1 a3", v3: verse2 } }
-  lift:    { bars: 8, level: f, filter: { cutoff: { from: 0, to: 260 } }, layers: { v1: lift, v2: b1, v3: lift } }
-  solo:    { bars: 8, level: f, filter: { cutoff: 200 }, layers: { v1: verse2, v2: solo, v3: verse2 } }
-  lift2:   { bars: 8, level: ff, filter: { cutoff: { from: 200, to: 420 }, resonance: 7 }, layers: { v1: shimmer, v2: b1, v3: lift } }
-  return:  { bars: 8, level: mp, filter: { cutoff: { from: 100, to: -60 } }, layers: { v1: verse2, v2: "a1 a3", v3: verse2 } }
-  coda:    { bars: 5, level: { from: mp, to: p }, filter: { cutoff: -60 }, tempo: { to: 66 }, layers: { v1: coda, v2: coda, v3: coda } }
-timeline: [intro, verse, verse2, lift, solo, lift2, return, coda]
+  intro:    { bars: 2, level: p, filter: { cutoff: -120 }, layers: { v1: intro, v2: "-", v3: intro } }
+  verse1:   { bars: 8, level: mp, filter: { cutoff: { from: -100, to: 0 } }, layers: { v1: verse1, v2: "-", v3: verse1 } }
+  verse2:   { bars: 8, level: mf, layers: { v1: verse2, v2: verse2, v3: verse2 } }
+  chorus:   { bars: 8, level: f, filter: { cutoff: { from: 60, to: 200 } }, layers: { v1: chorus, v2: chorus, v3: chorus } }
+  solo:     { bars: 6, level: f, filter: { cutoff: 260 }, layers: { v1: solo, v2: solo, v3: "solo held" } }
+  theatre:  { bars: 10, meter: "4/4", level: ff, levels: { v1: 15 }, layers: { v1: theatre, v2: theatre, v3: theatre } }
+  accel:    { bars: 4, meter: "4/4", level: { from: mf, to: ff }, levels: { v1: 15 }, tempo: { to: 150.37 }, layers: { v1: accel, v2: accel, v3: accel } }
+  b7:       { bars: 2, meter: "4/4", level: mf, tempo: 150.37, layers: { v1: b7, v2: b7, v3: b7 } }
+  rock_a:   { bars: 8, meter: "4/4", level: f, levels: { v1: 15, v2: 13 }, tempo: 150.37, layers: { v1: rock_a, v2: rock_a, v3: rock_a } }
+  rock_b:   { bars: 4, meter: "4/4", level: ff, levels: { v1: 15, v2: 15 }, tempo: 150.37, layers: { v1: rock_b, v2: rock_b, v3: rock_b } }
+  rock_c:   { bars: 2, meter: "4/4", level: ff, levels: { v1: 15, v2: 14 }, tempo: 150.37, layers: { v1: rock_c, v2: rock_c, v3: rock_c } }
+  rock_d:   { bars: 2, meter: "4/4", level: f, tempo: 150.37, layers: { v1: rock_d, v2: rock_d, v3: rock_d } }
+  ramp:     { bars: 2, level: mf, tempo: { to: 107.41 }, layers: { v1: ramp, v2: "-", v3: ramp } }
+  coda:     { bars: 5, level: mp, tempo: 107.41, filter: { cutoff: -60 }, layers: { v1: coda, v2: "-", v3: coda } }
+  coda_end: { bars: 3, level: { from: mp, to: p }, tempo: { to: 84 }, filter: { cutoff: -100 }, layers: { v1: coda_end, v2: coda_end, v3: coda_end } }
+timeline: [intro, verse1, verse2, chorus, solo, theatre, accel, b7, rock_a, rock_b, rock_c, rock_d, ramp, coda, coda_end]
 end: { hold_beats: 0, release: true }

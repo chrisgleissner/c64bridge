@@ -1,6 +1,7 @@
-# Nine-SID ensemble build | 107 BPM | C# minor | 9 SIDs, 27 voices
-# Techniques: Gradual 27-voice build with a distinct role per SID, kit, sub bass and hats on the centred socket SID (a real 6581), lead and bass octaves centred by unison copies on sid1 and sid5, detuned divided high strings across both sides, antiphonal counter-lines, arps and bells, filtered brass swells, twin theme echoes, section levels and chip volume, and a 27-voice final C#-minor chord.
-# Learn: Build with new roles, registers and rhythm instead of copies, keep kick, bass and theme in the middle, and voice the last chord from C#1 upward with wide spacing at the bottom; use configure: true. With 27 voices summed in the Ultimate mixer, keep chip volume at or below 10 in the loud sections: at 13-15 the U64 output clipped by about 4 dB
+# Twenty-Seven Lanterns | nine-SID through-composed suite | 9 SIDs, 27 voices
+# Techniques: Nine-SID orchestration across five movements; 107.41 opening, a 3:2 faster rooftop movement, a broad E-major procession and a ritardando into the lantern cadence. The socket 6581 holds the centered percussion and sub; divided strings and counterlines carry the theme across the stereo field.
+# Learn: The C# pedal opens as a spare beacon, expands into the arcade and rooftop theme, shifts to E major for the procession, then returns as a widely spaced 27-part cadence. Bar 25 starts the quicker rooftop section without preparation; the last held chord transforms the opening pedal into a full sonority.
+# Accepted lint: CLASH (29 brief, low-level echo tails across chord changes); LEVEL-NOOP (5 sustain-zero socket echoes).
 #
 # Form (88 bars, about 3:17): Flame 8 (divided high strings over a C# pedal) / Arcade 16 (theme, kick and snare, low
 # desk, bells) / Rooftops 16 (new theme over A-B-G#m, hats, rhythmic mid desk, arps, bass octaves, counter-line) /
@@ -12,7 +13,7 @@
 # Accepted lint: ONE-SIDE on v1 and v2, which are centred by unison copies on sid5 (v13, v14); all 27 channels are
 # scored, so center: true has no free mirror channel. LEVEL-NOOP: library drums have sustain 0. CLASH: only where an
 # echo tail (sustain 2 of 15) crosses a chord change.
-sidwave: 1.2
+sidwave: 1.3
 title: Twenty-Seven Lanterns
 tempo: 107.41
 mode: PAL
@@ -58,6 +59,7 @@ voices:
     patterns:
       roof: { length: 0.5, groove: "A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | B2 B3 B2 B2 B3 B2 B3 B2 | E2 E3 E2 E2 E3 E2 E3 E2 | E2 E3 E2 E2 E3 E2 E3 E2 | A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | D#2 D#3 D#2 D#2 D#3 D#2 D#3 D#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2" }
       proc: { length: 0.5, groove: "E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | E2 E3 E2 E2 E3 E2 E3 E2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2" }
+      proc_pulse: { length: 0.5, bars: 8, groove: "E1 ~ ~ ~ E1 ~ ~ ~ | B1 ~ ~ ~ B1 ~ ~ ~ | C#2 ~ ~ ~ C#2 ~ ~ ~ | A1 ~ ~ ~ A1 ~ ~ ~ | E1 ~ ~ ~ E1 ~ ~ ~ | B1 ~ ~ ~ B1 ~ ~ ~ | A1 ~ ~ ~ A1 ~ ~ ~ | B1 ~ ~ ~ B1 ~ ~ ~" }
       all: { length: 0.5, groove: "C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | A2 A3 A2 A2 A3 A2 A3 A2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2" }
       hold: { length: 1, groove: "A2 ~ ~ ~ | F#2 ~ ~ ~ | G#2 ~ ~ ~ | ~ ~ ~ ~ | C#2 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
   - id: 3
@@ -270,19 +272,19 @@ voices:
       all: { length: 0.25, groove: "x ~ ~ ~ ~ ~ ~ ~ h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | t - - t - - t - - t - - t - - - | x ~ ~ ~ ~ ~ ~ ~ h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | t - - t - - t - - t - - t - - - | x ~ ~ ~ ~ ~ ~ ~ h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | t - - t - - t - - t - - t - - -" }
       hold: { length: 0.25, groove: "- - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | A6@cymbal ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
 sections:
-  flame: { bars: 8, level: { from: p, to: mp }, volume: { from: 6, to: 7 }, layers: { v10: flame, v22: flame, v26: flame } }
-  arcade: { bars: 16, level: mf, volume: 8,
+  flame: { bars: 8, tempo: 107.41, meter: "4/4", level: { from: p, to: mp }, volume: { from: 6, to: 7 }, layers: { v10: flame, v22: flame, v26: flame } }
+  arcade: { bars: 16, tempo: 107.41, meter: "4/4", level: mf, volume: 8,
             layers: { v1: arcade, v4: arcade, v5: arcade, v6: arcade, v10: arcade, v22: arcade, v12: arcade, v24: arcade, v25: arcade, v26: arcade } }
-  rooftops: { bars: 16, level: { from: mf, to: f, bars: 8 }, volume: 9,
+  rooftops: { bars: 16, tempo: 150.37, meter: "4/4", level: { from: mf, to: f, bars: 8 }, volume: 9,
               layers: { v1: roof, v2: roof, v4: roof, v5: roof, v6: roof, v7: roof, v8: roof, v20: roof, v10: roof, v22: roof, v12: roof, v24: roof,
                         v16: roof, v17: roof, v18: roof, v25: roof, v26: roof, v27: roof } }
-  procession: { bars: 16, level: f, volume: 9,
-                layers: { v1: proc, v2: proc, v4: proc, v5: proc, v6: proc, v7: proc, v19: proc, v8: proc, v20: proc, v9: proc, v21: proc, v10: proc, v22: proc,
+  procession: { bars: 16, tempo: 125.31, meter: "4/4", level: f, volume: 9,
+                layers: { v1: proc, v2: proc_pulse, v4: proc, v5: proc, v6: proc, v7: proc, v19: proc, v8: proc, v20: proc, v9: proc, v21: proc, v10: proc, v22: proc,
                           v12: proc, v24: proc, v16: proc, v17: proc, v18: proc, v25: proc, v26: proc, v27: proc } }
-  all_lanterns: { bars: 24, level: ff, volume: { from: 9, to: 10 },
+  all_lanterns: { bars: 24, tempo: 150.37, meter: "4/4", level: ff, volume: { from: 9, to: 10 },
                   layers: { v1: all, v2: all, v4: all, v5: all, v6: all, v7: all, v19: all, v8: all, v20: all, v9: all, v21: all, v10: all, v22: all,
                             v12: all, v24: all, v16: all, v17: all, v18: all, v25: all, v26: all, v27: all } }
-  hold: { bars: 8, level: { from: f, to: mp }, volume: 9,
+  hold: { bars: 8, tempo: { to: 84 }, meter: "4/4", level: { from: f, to: mp }, volume: 9,
           layers: { v1: hold, v2: hold, v4: hold, v5: hold, v6: hold, v7: hold, v19: hold, v8: hold+12, v20: hold+12, v9: hold, v21: hold, v10: hold, v22: hold,
                     v12: hold, v24: hold, v16: hold, v17: hold, v18: hold, v25: hold, v26: hold, v27: hold } }
 timeline: [flame, arcade, rooftops, procession, all_lanterns, hold]

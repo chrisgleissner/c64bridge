@@ -6,6 +6,45 @@
 
 
 
+
+## 1.3.3 - 2026-11-21
+
+### Features
+
+- restore Luna SIDWAVE 1.3 score drafts (4b4b85d6)
+- follower voices in SIDWAVE 1.3 (d100be60)
+- vibrato fade-in and per-note vibrato in SIDWAVE 1.3 (4078be4a)
+- SIDWAVE 1.3 with a metre per section and x/8 time signatures (8417a9a1)
+- record a SIDWAVE song from an Ultimate to WAV and MP3 (05f3364f)
+- render full-length MP3/YAML pairs for all 13 public SIDWAVE examples and attach the verified assets to tagged releases (0c832706)
+- render `digi_groove` from its standalone PRG so CIA2 NMI samples are present in the release audio (ac9497cb)
+
+### Bug Fixes
+
+- mix reference renders with the Ultimate 64 pan law (578557b8)
+- correct ring-bell source pitches and drum attack staging in the SIDWAVE examples (d30414f3, 166e6ebc)
+- use a pitched harmonic source for generated ambient bells (14d7ca09)
+
+### Compatibility
+
+- preserve generated SIDWAVE 1.1 PRG/PSID output while preventing missing ring-source events in new generated ambient scores (14d7ca09)
+
+### Refactoring
+
+- move the Ultimate audio stream recorder into a shared module (f38286a7)
+
+### Documentation
+
+- hand over SIDWAVE 1.3 checkpoint (3ac95e6c)
+
+### Tests
+
+- cover reference renderer panning (83b00d40)
+- update SIDWAVE 1.3 evidence and compatibility (776cd80a)
+- clarify record mock pacing (782c78f6)
+- record a two-second song in the sidwave-record test (c76913fa)
+- pin the PRG bytes of the 1.3.2 examples on frozen copies (e69421a2)
+
 ## 1.3.2 - 2026-11-21
 
 ### Features

@@ -1,0 +1,18 @@
+ARG BUILDER_IMAGE
+FROM ${BUILDER_IMAGE}
+
+# Reuse the project builder's VICE installation (including its ROM packages) and install only the offline renderers.
+USER root
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ffmpeg sidplayfp && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /opt/c64-open-roms && \
+    curl -fsSL https://raw.githubusercontent.com/MEGA65/open-roms/ad178dbe4d48cd6a317737a8e0e7e662f7e33d32/bin/basic_generic.rom -o /opt/c64-open-roms/basic.rom && \
+    curl -fsSL https://raw.githubusercontent.com/MEGA65/open-roms/ad178dbe4d48cd6a317737a8e0e7e662f7e33d32/bin/kernal_generic.rom -o /opt/c64-open-roms/kernal.rom && \
+    curl -fsSL https://raw.githubusercontent.com/MEGA65/open-roms/ad178dbe4d48cd6a317737a8e0e7e662f7e33d32/bin/chargen_openroms.rom -o /opt/c64-open-roms/chargen.rom && \
+    echo '54a1464b4b27c9dc61bbd62a818fdd12ec99af9089111005a5add0ad0e6bd5ec  /opt/c64-open-roms/basic.rom' | sha256sum -c - && \
+    echo '88e86ed3d0c710edab8f90ad146faa8de1ead11f43494b176c7b54724ca721c6  /opt/c64-open-roms/kernal.rom' | sha256sum -c - && \
+    echo '5e3451466841b93df7e01e4b635b07b8d8633351bae483b1961d96b3131186e7  /opt/c64-open-roms/chargen.rom' | sha256sum -c -
+COPY doc/third-party/MEGA65-Open-ROMs-LICENSE.txt /usr/share/doc/c64bridge/MEGA65-Open-ROMs-LICENSE.txt
+ENV C64BRIDGE_VICE_ROM_DIR=/opt/c64-open-roms
+USER c64bridge

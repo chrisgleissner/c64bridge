@@ -1,0 +1,131 @@
+# Acid house | 125.31 BPM | A minor | 1 SID
+# Techniques: Filter owner on the acid voice with section cutoff and resonance ramps on top of per-note filter tables, slurred 303 slides and accents, four-on-the-floor kick with offbeat open hats, PWM lead with delayed vibrato, play-once ending.
+# Learn: The bass line barely changes; the arrangement lives in the section filter offsets (closed intro, opening build, squelching break) while slides keep the filter envelope running through tied notes
+sidwave: 1.2
+title: Pressure Glass
+tempo: 125.31
+mode: PAL
+accent: 3
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+# Accepted lint: HR-GAP where the kick and the acid line restart on the same beats; the slurred slides keep the
+# line sounding through most beats, so the shared two-frame restart is rare. TABLE-CUT: an open hat choked by
+# the closed hat one sixteenth later in the fill bars, as on a real hi-hat.
+kit:
+  k: kick
+  h: lib:hat
+  o: lib:open_hat
+  s: lib:snare
+  x: lib:clap
+instruments:
+  # The acid voice: a saw through a resonant low-pass whose envelope starts on every attack and keeps running
+  # through slurred notes, so a slide sounds like one long squelch.
+  acid:
+    waveform: saw
+    adsr: [0, 6, 10, 1]
+    filtertable: [{ cutoff: 1.5kHz, resonance: 13, type: lowpass }, { add: -12, frames: 14 }]
+  # Accented steps: louder, brighter and a longer filter decay.
+  accent:
+    waveform: saw
+    adsr: [0, 7, 12, 1]
+    filtertable: [{ cutoff: 2.6kHz, resonance: 15, type: lowpass }, { add: -16, frames: 18 }]
+  kick:
+    waveform: tri
+    adsr: [0, 7, 0, 0]
+    wavetable: [{ note: D4, slide_to: A1, frames: 4 }, { note: A1, frames: 5 }, { gate: false, note: A1 }]
+  lead:
+    waveform: pulse
+    adsr: [1, 6, 10, 6]
+    vibrato: { depth: 0.15, rate: 5.5, delay: 18 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.22 }, { add: 10, frames: 45 }, { add: -10, frames: 45 }] }
+  stab:
+    waveform: pulse
+    adsr: [0, 8, 0, 6]
+    pulse_width: 1638  # 40 %, 12-bit units (see metal_sync)
+voices:
+  - id: 1
+    name: Acid line
+    role: bass
+    instrument: acid
+    patterns:
+      a: { length: 0.25, bars: 1, groove: "A1 A1 A2!@accent (A1 /A2) - C2 A1 (E2!@accent /D2) A1 - G2 (A1 /A2) C3!@accent" }
+      b: { length: 0.25, bars: 1, groove: "A1 - A1 A2!@accent - (A1 /G1) C2 - A1 (D2!@accent /E2) - G2 (A2 /C3)" }
+      c: { length: 0.25, bars: 1, groove: "(A1 /A2 /G2) - E2!@accent A1 (C3!@accent /A2) A1 - A1 (G2 /A2) - D3!@accent C3" }
+      d: { length: 0.25, bars: 1, groove: "A1 A2 - A1 (C3!@accent /D3 /C3) - A1 A2!@accent - (E2 /G2) A1 - E3!@accent" }
+      end: { length: 1, bars: 2, groove: "A1!@accent - - - - - - -" }
+  - id: 2
+    name: Floor
+    role: drums
+    patterns:
+      four: { length: 0.25, bars: 1, groove: "k - h - k - h - k - h - k - h -" }
+      hats: { length: 0.25, bars: 1, groove: "k - h - k - h h k - h - k - h h" }
+      floor: { length: 0.25, bars: 1, groove: "k - o - k - o h k - o - k - o h" }
+      fill: { length: 0.25, bars: 1, groove: "k - o - k - o h k - s - s s s s" }
+      roll: { length: 0.25, bars: 2, groove: "s - - - s - - - s - - - s - s - s - s - s - s - s s s s s s s s" }
+      hatsonly: { length: 0.5, bars: 1, groove: "- o - o - o - o" }
+      last: { length: 1, bars: 2, groove: "k - - - - - - -" }
+  - id: 3
+    name: Skyline lead
+    role: lead
+    instrument: lead
+    patterns:
+      clap: { length: 0.25, bars: 1, groove: "- - - - x - - - - - - - x - - -" }
+      clap2: { length: 0.25, bars: 1, groove: "- - - - x - - - - - - - x - x x" }
+      m1: { length: 0.5, bars: 4, groove: "E5 ~ ~ ~ C5 ~ (D5 E5) | ~ ~ A4 ~ ~ ~ - - | F5 ~ ~ ~ E5 ~ C5 ~ | D5 ~ ~ ~ B4 ~ G4 ~" }
+      m2: { length: 0.5, bars: 4, groove: "E5 ~ ~ ~ C5 ~ (D5 E5) | ~ ~ G5 ~ E5 ~ - - | F5 ~ (E5 D5) ~ C5 ~ ~ | B4 ~ ~ ~ G#4 ~ ~ ~" }
+      m3: { length: 0.5, bars: 4, groove: "A5 ~ ~ G5 ~ E5 ~ ~ | (D5 E5) ~ ~ C5 ~ - - | A5 ~ ~ G5 ~ F5 ~ ~ | (E5 D5) ~ ~ B4 ~ - - " }
+      m4: { length: 0.5, bars: 4, groove: "A5 ~ ~ G5 ~ E5 ~ (G5 | A5) ~ ~ ~ C6 ~ B5 ~ | A5 ~ ~ ~ F5 ~ E5 ~ | E5 ~ ~ ~ ~ ~ - -" }
+      chords: { length: 1, bars: 4, groove: "A4@stab - - E5@stab | - C5@stab - - | F4@stab - - C5@stab | - G4@stab - -" }
+      hold: { length: 1, bars: 2, groove: "A4 ~ ~ ~ ~ ~ ~ ~" }
+sections:
+  # 16 bars: kick and a closed acid line, then hats and claps with the filter beginning to open.
+  intro:
+    bars: 8
+    volume: { from: 11, to: 13 }
+    filter: { cutoff: { from: -120, to: -70 }, resonance: 12 }
+    layers: { v1: "a b a b", v2: "four*7 hats" }
+  intro2:
+    bars: 8
+    volume: 13
+    filter: { cutoff: { from: -70, to: -20 }, resonance: 13 }
+    layers: { v1: "a b a c", v2: "hats*7 fill", v3: "clap*7 clap2" }
+  # 16 bars: the progression starts (Am Am F G), the cutoff keeps rising.
+  build:
+    bars: 16
+    volume: 14
+    filter: { cutoff: { from: -20, to: 80 }, resonance: 14 }
+    layers: { v1: "a b a-4 b-2 a c a-4 d-2", v2: "floor*7 fill", v3: "chords" }
+  # The lead enters over full resonance.
+  drop:
+    bars: 16
+    volume: 15
+    filter: { cutoff: 100, resonance: 15 }
+    layers: { v1: "a b a-4 b-2 a c a-4 d-5", v2: "floor*7 fill", v3: "m1 m2" }
+  # No kick: the acid line alone with a long squelch sweep, then a snare roll.
+  break:
+    bars: 8
+    volume: 14
+    filter: { cutoff: { from: -120, to: 330 }, resonance: 15 }
+    layers: { v1: "c d c d c d c d", v2: "hatsonly*6 roll", v3: "- - - - hold - -" }
+  drop2:
+    bars: 16
+    volume: 15
+    filter: { cutoff: { from: 150, to: 60 }, resonance: 15 }
+    layers: { v1: "c d c-4 d-2 c b c-4 d-5", v2: "floor*7 fill", v3: "m3 m4" }
+  drop3:
+    bars: 16
+    volume: 15
+    filter: { cutoff: { from: 60, to: 180 }, resonance: 15 }
+    layers: { v1: "a b a-4 b-2 c d c-4 d-5", v2: "floor*7 fill", v3: "m1 m4" }
+  outro:
+    bars: 6
+    volume: { from: 14, to: 11 }
+    filter: { cutoff: { from: 0, to: -130 }, resonance: 13 }
+    layers: { v1: "a b", v2: "hats*5 fill", v3: "chords" }
+  final:
+    bars: 2
+    volume: 11
+    filter: { cutoff: -100, resonance: 12 }
+    layers: { v1: end, v2: last }
+timeline: [intro, intro2, build, drop, break, drop2, drop3, outro, final]
+end: { hold_beats: 2, release: true }

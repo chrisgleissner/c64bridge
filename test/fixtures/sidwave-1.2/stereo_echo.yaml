@@ -1,0 +1,94 @@
+# Stereo synth pop | 107 BPM | D minor | 2 SIDs
+# Techniques: Centred bass, kit and lead (unison copies on both pan sides), dotted-eighth stereo echo with a softer echo envelope, kick and snare interleaved with an offbeat filtered bass, PWM lead and arps, section levels and chip volume for the dynamic arc.
+# Learn: Keep kick, bass and lead in the middle with phase-reset unison copies, let one voice per side carry the chords and their echo, then shape the form with level and volume instead of extra notes
+#
+# Outro bass follows the chords: D, Bb, G, A, then the four-bar `end` (D, Bb, G/A, D). Chip volumes are about 2 dB lower than before (library loudness balance).
+# Form (88 bars, about 3:17): Intro 8 / Verse 16 / Chorus 16 / Bridge 8 / Verse 16 / Chorus 16 / Outro 8 with a held Dm(add9).
+# Left SID: bass and kit, lead, chord voice. Right SID: the same bass and lead in unison (so they image centre) and a
+# dotted-eighth echo of the chord voice, so every chord figure and the bridge counter-line answer from the right.
+# Accepted lint: ONE-SIDE on v1/v2. Both parts are centred by unison copies on the right SID (v4, v5); center: true needs an
+# unscored mirror channel, and all six channels are used. LEVEL-NOOP: the library kick and snare have sustain 0; chip volume
+# shapes them. HR-GAP in the second verse: the broken-chord sixteenths re-attack on every beat by design; they use a soft
+# re-gate (hard_restart frames 0), so their release overlaps the next attack and the mix does not drop out.
+sidwave: 1.2
+title: Parallax Letters
+tempo: 107.41
+mode: PAL
+sids:
+  - { id: sid1, address: "$D400", model: "8580", volume: 13, pan: "Left 5" }
+  - { id: sid2, address: "$D420", model: "8580", volume: 13, pan: "Right 5" }
+kit: { k: lib:kick, s: lib:snare }
+instruments:
+  # Offbeat bass: phase reset at each attack keeps the two unison copies in phase, so the bass images centre.
+  bass: { waveform: saw, adsr: [0, 7, 9, 2], hard_restart: { test: true }, filtertable: [{ cutoff: 1.5kHz, resonance: 11, type: lowpass }, { add: -9, frames: 14 }] }
+  # Long bass for intro and bridge; the section filter offset opens it.
+  floor: { waveform: saw, adsr: [3, 6, 11, 6], hard_restart: { test: true }, filtertable: [{ cutoff: 500Hz, resonance: 9, type: lowpass }] }
+  ink: { waveform: pulse, adsr: [1, 6, 11, 5], hard_restart: { test: true }, vibrato: { depth: 0.15, rate: 5.5, delay: 18 },
+         pulsetable: { reset: false, loop: 1, steps: [{ set: 0.28 }, { add: 18, frames: 30 }, { add: -18, frames: 30 }] } }
+  horn: { waveform: saw, adsr: [2, 8, 10, 5], hard_restart: { test: true }, vibrato: { depth: 0.15, rate: 5.5, delay: 18 } }
+  spark: { waveform: pulse, adsr: [0, 8, 6, 4], pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 10, frames: 70 }, { add: -10, frames: 70 }] } }
+  pluck: { waveform: pulse, adsr: [0, 6, 4, 3], hard_restart: { frames: 0 }, pulsetable: { reset: false, loop: 1, steps: [{ set: 0.35 }, { add: 14, frames: 40 }, { add: -14, frames: 40 }] } }
+  letter: { waveform: pulse, adsr: [3, 6, 9, 6], vibrato: { depth: 0.12, rate: 5, delay: 20 },
+            pulsetable: { reset: false, loop: 1, steps: [{ set: 0.4 }, { add: -8, frames: 50 }, { add: 8, frames: 50 }] } }
+  # Final Dm(add9): a slower arp than the chord symbols, through the same pulse sweep.
+  nine: { waveform: pulse, adsr: [2, 8, 8, 9], loop: 0, wavetable: [{ note: "+0", frames: 2 }, { note: "+3", frames: 2 }, { note: "+7", frames: 2 }, { note: "+14", frames: 2 }],
+          pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 10, frames: 70 }, { add: -10, frames: 70 }] } }
+voices:
+  - id: 1
+    name: "Bass and kit (centre with v4)"
+    role: bass
+    instrument: bass
+    patterns:
+      drone: { length: 1, groove: "D2@floor ~ ~ ~" }
+      half: { length: 0.25, groove: "k ~ D2 ~ ~ ~ D2 ~ k ~ D2 ~ ~ ~ D3 ~" }
+      g: { length: 0.25, groove: "k ~ D2 ~ s ~ D2 D3 k ~ D2 ~ s ~ D2 ~" }
+      g2: { length: 0.25, groove: "k ~ D2 D3 s ~ D2 D3 k ~ D2 D3 s ~ D3 D2" }
+      fill: { length: 0.25, groove: "k ~ D2 ~ s ~ D2 D3 k ~ s ~ s ~ s s" }
+      bridge: { length: 0.25, groove: "k ~ G1@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | k ~ Bb1@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | k ~ E2@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | k ~ A1@floor ~ ~ ~ ~ ~ k ~ A1@floor ~ s ~ s s" }
+      end: { length: 0.25, groove: "k ~ D2 ~ s ~ D2 D3 k ~ D2 ~ s ~ D2 ~ | k ~ Bb1 ~ s ~ Bb1 Bb2 k ~ Bb1 ~ s ~ Bb1 ~ | k ~ G1 ~ s ~ G1 G2 k ~ A1 ~ s ~ A1 A2 | k ~ D2@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: "Lead (centre with v5)"
+    role: lead
+    instrument: ink
+    patterns:
+      va: { length: 0.5, groove: "D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ (E5 D5) ~ ~ - - | C5 ~ ~ A4 (C5 D5) E5 ~ | ~ ~ (G5 E5) ~ ~ - - | D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ (G5 F5 ~ D5) ~ ~ | Bb5 ~ ~ (A5 G5 ~ F5) ~ | E5 ~ ~ ~ C#5 ~ - -" }
+      vb: { length: 0.5, groove: "D5 ~ ~ A4 (D5 E5) F5 A5 | ~ ~ (G5 F5 E5 D5) - - | C5 ~ ~ A4 (C5 D5) E5 G5 | ~ ~ (A5 G5 E5 C5) - - | (D5 ~ F5 ~ A5 ~) D6! ~ | ~ ~ (C6 Bb5) ~ ~ F5 ~ | G5 ~ (Bb5 ~ A5 G5 F5 E5) | ~ ~ ~ ~ ~ ~ - -" }
+      ca: { length: 0.5, groove: "D5@horn F5@horn A5!@horn ~ ~ ~ G5@horn F5@horn | ~ ~ ~ ~ C5@horn ~ F5@horn ~ | G5@horn ~ ~ E5@horn ~ ~ D5@horn C5@horn | D5@horn ~ ~ ~ ~ ~ A4@horn C5@horn | D5@horn F5@horn A5!@horn ~ ~ ~ Bb5@horn A5@horn | ~ ~ ~ ~ C6!@horn ~ A5@horn ~ | Bb5@horn ~ ~ A5@horn G5@horn ~ F5@horn ~ | E5@horn ~ ~ ~ ~ ~ C#5@horn ~" }
+      cb: { length: 0.5, groove: "D5@horn F5@horn A5!@horn ~ ~ ~ G5@horn F5@horn | ~ ~ ~ ~ C5@horn ~ F5@horn ~ | G5@horn ~ ~ E5@horn ~ ~ D5@horn C5@horn | D5@horn ~ ~ ~ ~ ~ A4@horn C5@horn | D5@horn F5@horn A5!@horn ~ ~ ~ C6@horn Bb5@horn | A5@horn ~ ~ ~ F5@horn ~ C5@horn ~ | D5@horn ~ G5@horn ~ Bb5@horn ~ A5@horn G5@horn | A5@horn ~ ~ ~ ~ ~ - -" }
+      br: { length: 0.5, groove: "D6 ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ C6 ~ Bb5 ~ | Bb5 ~ ~ ~ ~ ~ ~ ~ | A5 ~ ~ ~ ~ ~ - -" }
+      out: { length: 0.5, groove: "D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ E5 D5 ~ ~ - - | Bb4 ~ ~ ~ D5 ~ G5 ~ | E5 ~ ~ ~ C#5 ~ - - | D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ ~ ~ D5 ~ F5 ~ | G5 ~ ~ ~ E5 ~ C#5 ~ | D5 ~ ~ ~ ~ ~ ~ ~" }
+  - id: 3
+    name: "Chord voice, left (echoed right by v6)"
+    role: arp
+    instrument: spark
+    patterns:
+      # 3+3+2 eighths per bar; the dotted-eighth echo fills the gaps on the right.
+      ia: { length: 0.5, groove: "Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | C@arp ~ ~ C@arp ~ ~ Csus4@arp C@arp" }
+      va: { length: 0.5, groove: "Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | C@arp ~ ~ C@arp ~ ~ C@arp ~ | Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | Gm7@arp ~ ~ Gm7@arp ~ ~ Gm7@arp ~ | Asus4@arp ~ ~ A@arp ~ ~ A7@arp -" }
+      ca: { length: 0.5, groove: "Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | C@arp ~ ~ C@arp ~ ~ C@arp ~ | Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | Gm7@arp ~ ~ Gm7@arp ~ ~ Gm7@arp ~ | Asus4@arp ~ ~ A@arp ~ ~ A7@arp -" }
+      # Second verse: broken chords in sixteenths; the dotted-eighth echo interlocks with them on the right.
+      vb: { length: 0.25, groove: "D4@pluck A4@pluck F4@pluck A4@pluck D5@pluck A4@pluck F4@pluck (A4@pluck D4@pluck) A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck A4@pluck | D4@pluck Bb4@pluck F4@pluck Bb4@pluck D5@pluck Bb4@pluck F4@pluck (Bb4@pluck D4@pluck) Bb4@pluck F4@pluck Bb4@pluck A4@pluck Bb4@pluck F4@pluck D4@pluck | C4@pluck A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck (A4@pluck C4@pluck) A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck A4@pluck | C4@pluck G4@pluck E4@pluck G4@pluck C5@pluck G4@pluck E4@pluck (G4@pluck D4@pluck) G4@pluck E4@pluck G4@pluck B4@pluck G4@pluck E4@pluck C4@pluck" }
+      vc: { length: 0.25, groove: "D4@pluck A4@pluck F4@pluck A4@pluck D5@pluck A4@pluck F4@pluck (A4@pluck D4@pluck) A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck A4@pluck | D4@pluck Bb4@pluck F4@pluck Bb4@pluck D5@pluck Bb4@pluck F4@pluck (Bb4@pluck D4@pluck) Bb4@pluck F4@pluck Bb4@pluck A4@pluck Bb4@pluck F4@pluck D4@pluck | D4@pluck G4@pluck Bb4@pluck G4@pluck D5@pluck G4@pluck Bb4@pluck (G4@pluck F4@pluck) G4@pluck Bb4@pluck G4@pluck D5@pluck Bb4@pluck G4@pluck F4@pluck | E4@pluck A4@pluck C#5@pluck A4@pluck E5@pluck C#5@pluck A4@pluck (E4@pluck C#4@pluck) E4@pluck A4@pluck E4@pluck G4@pluck E4@pluck C#4@pluck A3@pluck" }
+      # Bridge counter-line: the right side answers it a dotted eighth later.
+      cm: { length: 0.5, groove: "G4@letter ~ ~ ~ Bb4@letter ~ D5@letter ~ | F5@letter ~ ~ ~ D5@letter ~ Bb4@letter ~ | G4@letter ~ ~ ~ Bb4@letter ~ E5@letter ~ | C#5@letter ~ ~ ~ ~ ~ - - | G4@letter ~ D5@letter ~ G5@letter ~ F5@letter ~ | D5@letter ~ ~ ~ F5@letter ~ Bb4@letter ~ | E5@letter ~ ~ ~ Bb4@letter ~ G4@letter ~ | A4@letter ~ ~ ~ C#5@letter ~ E5@letter ~" }
+      out: { length: 0.5, groove: "Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | Gm7@arp ~ ~ Gm7@arp ~ ~ Gm7@arp ~ | Asus4@arp ~ ~ A@arp ~ ~ A7@arp ~ | Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | Gm7@arp ~ ~ ~ A7@arp ~ ~ ~ | D3@nine ~ ~ ~ ~ ~ ~ ~" }
+  - id: 4
+    name: "Bass and kit, right unison"
+    unison: { voice: 1, detune: 0 }
+  - id: 5
+    name: "Lead, right unison"
+    unison: { voice: 2, detune: 4 }
+  - id: 6
+    name: "Chord echo, right"
+    echo: { voice: 3, delay_beats: 0.75, volume: 0.5, adsr: [2, 7, 9, 6] }
+sections:
+  intro_a: { bars: 4, level: mp, volume: { from: 8, to: 9 }, filter: { cutoff: { from: 0, to: 220 } }, layers: { v1: "drone drone-4 drone+3 drone-2", v3: ia } }
+  intro_b: { bars: 4, level: mf, volume: 9, layers: { v1: "half half-4 half+3 fill-2", v3: ia } }
+  verse_a: { bars: 16, level: mf, volume: 9, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: va } }
+  chorus_a: { bars: 16, level: f, volume: 11, filter: { cutoff: 60 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
+  bridge: { bars: 8, level: { from: p, to: mf }, volume: 9, filter: { cutoff: { from: 0, to: 300 } }, layers: { v1: "bridge*2", v2: "- - - - br", v3: cm } }
+  verse_b: { bars: 16, level: mf, volume: 10, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: "vb vc" } }
+  chorus_b: { bars: 16, level: ff, volume: 12, filter: { cutoff: 100 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
+  outro: { bars: 8, level: { from: f, to: mp }, volume: { from: 11, to: 9 }, layers: { v1: "g g-4 g-7 g-5 end", v2: out, v3: out } }
+timeline: [intro_a, intro_b, verse_a, chorus_a, bridge, verse_b, chorus_b, outro]
+end: { hold_beats: 4, release: true }

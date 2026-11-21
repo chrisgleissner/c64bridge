@@ -1,0 +1,133 @@
+# Electro digi groove | 107.41 BPM | F minor | 2 SIDs
+# Techniques: Synthesised CIA2 PCM drums (808-style kick, snare, clap, hat and a formant vocal stab) triggered by a digi voice on its own SID, so the volume-register samples never modulate the pitched voices; resonant saw bass under a filter owner, chord-symbol arpeggios, PWM lead with delayed vibrato, section volume and filter dynamics, play-once ending.
+# Learn: Samples are described with synth: and placed with sample:<name> kit keys in an ordinary drum pattern, so they follow sections, sequences and the tempo; the pitched SID carries the harmony (Fm Fm Db Eb | Bbm Fm Db C)
+sidwave: 1.2
+title: Paper Circuit
+tempo: 107.41
+mode: PAL
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+  - { id: sid2, address: "$D420", model: "8580" }
+samples:
+  rate: 5000
+  defs:
+    kick: { synth: { layers: [{ osc: sine, freq: 150, to: 44, ms: 260 }, { osc: triangle, freq: 300, to: 88, ms: 45, gain: 0.4 }, { osc: noise, ms: 5, gain: 0.5 }], env: { a: 0, d: 240, s: 0, r: 20 }, drive: 1.5, seed: 7 } }
+    snare: { synth: { layers: [{ osc: triangle, freq: 220, to: 170, ms: 90, gain: 0.8 }, { osc: noise, ms: 170, gain: 1 }], env: { a: 0, d: 150, s: 0, r: 25 }, hp: 140, seed: 11 } }
+    clap: { synth: { osc: noise, notes: "C4:9 r:7 C4:9 r:7 C4:150", env: { a: 0, d: 110, s: 0, r: 30 }, hp: 650, seed: 3 } }
+    hat: { synth: { osc: noise, ms: 45, env: { a: 0, d: 35, s: 0, r: 8 }, hp: 1800, seed: 5 } }
+    vox: { synth: { layers: [{ osc: saw, freq: F3, ms: 260 }, { osc: saw, freq: C4, ms: 260, gain: 0.5 }], formant: o, env: { a: 8, d: 200, s: 0.2, r: 50 } } }
+instruments:
+  bass:
+    waveform: saw
+    adsr: [0, 6, 8, 2]
+    hard_restart: { test: true }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 13, type: lowpass }, { add: -16, frames: 10 }]
+  arp:
+    waveform: pulse
+    pulse_width: 1433  # 35 %, 12-bit units: a fractional instrument pulse_width is not scaled in 1.2
+    adsr: [0, 4, 7, 6]
+    hard_restart: { frames: 0 }
+  lead:
+    waveform: pulse
+    adsr: [0, 6, 9, 4]
+    vibrato: { depth: 0.15, rate: 5, delay: 15 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 30, frames: 24 }, { add: -30, frames: 24 }] }
+  # Final chord: same sounds with release 9, so the held chord rings out instead of stopping.
+  bass_end:
+    waveform: saw
+    adsr: [0, 6, 8, 9]
+    hard_restart: { test: true }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 13, type: lowpass }, { add: -16, frames: 10 }]
+  arp_end:
+    waveform: pulse
+    pulse_width: 1433
+    adsr: [0, 4, 7, 9]
+    hard_restart: { frames: 0 }
+  lead_end:
+    waveform: pulse
+    adsr: [0, 6, 9, 9]
+    vibrato: { depth: 0.15, rate: 5, delay: 15 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 30, frames: 24 }, { add: -30, frames: 24 }] }
+voices:
+  - id: 1
+    name: Electro bass
+    role: bass
+    instrument: bass
+    patterns:
+      e1: { length: 0.25, bars: 1, groove: "F1 - F2 - - F1 - Ab1 - F1 F2 - C2 - Eb2 -" }
+      e2: { length: 0.25, bars: 1, groove: "F1 - - F1 F2 - Ab1 - F1 - (C2 /Eb2) - F2 - C2" }
+      ec: { length: 0.25, bars: 1, groove: "C2 - C3 - - C2 - E2 - C2 C3 - G2 - Bb2 -" }
+      end: { length: 1, bars: 2, groove: "F1@bass_end ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: Chord arps
+    instrument: arp
+    patterns:
+      a: { length: 0.5, bars: 8, groove: "Fm@arp ~ ~ Fm@arp ~ ~ Fm@arp ~ | Fm@arp ~ ~ Fm@arp ~ Fm@arp ~ - | Db@arp ~ ~ Db@arp ~ ~ Db@arp ~ | Eb@arp ~ ~ Eb@arp ~ Eb@arp ~ - | Bbm@arp ~ ~ Bbm@arp ~ ~ Bbm@arp ~ | Fm@arp ~ ~ Fm@arp ~ Fm@arp ~ - | Db@arp ~ ~ Db@arp ~ ~ Db@arp ~ | C@arp ~ ~ C@arp ~ C7@arp ~ -" }
+      held: { length: 4, bars: 8, groove: "Fm@arp | Fm@arp | Db@arp | Eb@arp | Bbm@arp | Fm@arp | Db@arp | C@arp" }
+      end: { length: 1, bars: 2, groove: [{ chord: Fm, arp: "0,3,7", inst: arp_end, len: 8 }] }
+  - id: 3
+    name: Lead
+    role: lead
+    instrument: lead
+    patterns:
+      hook: { length: 0.5, bars: 8, groove: "C5 ~ ~ Ab4 ~ C5 ~ Eb5 | F5 ~ ~ ~ Eb5 ~ C5 ~ | Db5 ~ ~ ~ F5 ~ Ab5 ~ | G5 ~ ~ ~ ~ ~ - - | F5 ~ ~ Db5 ~ F5 ~ Bb5 | Ab5 ~ ~ ~ G5 ~ F5 ~ | F5 ~ ~ ~ Db5 ~ Ab4 ~ | G4 ~ ~ ~ E5 ~ ~ ~" }
+      hook2: { length: 0.5, bars: 8, groove: "C5 ~ Ab4 ~ C5 Eb5 ~ F5 | ~ ~ ~ ~ (Eb5 C5) ~ - | Db5 ~ F5 ~ Ab5 ~ Bb5 Ab5 | G5 ~ ~ ~ Eb5 ~ G5 ~ | Bb5 ~ ~ ~ Ab5 ~ F5 ~ | C6 ~ ~ ~ Ab5 ~ G5 ~ | Ab5 ~ F5 ~ Db5 ~ F5 ~ | E5 ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "C5@lead_end ~ ~ ~ ~ ~ ~ ~" }
+  - id: d1
+    digi: sid2
+    patterns:
+      intro: { length: 0.25, bars: 1, groove: "k - h - x - h - k - h - x - h h" }
+      beat1: { length: 0.25, bars: 1, groove: "k - h - s - h k - h k - s - h h" }
+      beat2: { length: 0.25, bars: 1, groove: "k - h k s - h - k - h k s - k h" }
+      beat3: { length: 0.25, bars: 1, groove: "k - h - x - h k - h k - x - v -" }
+      fill: { length: 0.25, bars: 1, groove: "k - s - k s - s k - s s x - x x" }
+      breakb: { length: 0.25, bars: 1, groove: "k - - k - - k - - - k - x - - -" }
+      voxb: { length: 0.25, bars: 1, groove: "k - - k v - k - - - k - x - h h" }
+      last: { length: 1, bars: 2, groove: "k - - - - - - -" }
+kit:
+  k: sample:kick
+  s: sample:snare
+  x: sample:clap
+  h: sample:hat
+  v: sample:vox
+sections:
+  intro:
+    bars: 8
+    volume: { sid1: 11 }
+    filter: { cutoff: { from: -200, to: -60 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", d1: "intro*7 fill" }
+  a:
+    bars: 16
+    volume: { sid1: 13 }
+    levels: { v2: mp }
+    filter: { cutoff: { from: -60, to: 60 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", v2: a, d1: "beat1 beat2 beat1 beat2 beat1 beat2 beat3 fill" }
+  b:
+    bars: 16
+    volume: { sid1: 15 }
+    levels: { v2: p, v3: f }
+    filter: { cutoff: 60 }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", v2: held, v3: hook, d1: "beat1 beat2 beat1 beat3 beat1 beat2 beat3 fill" }
+  break:
+    bars: 8
+    volume: { sid1: 12 }
+    filter: { cutoff: { from: -250, to: 0 } }
+    layers: { v1: "e1 e1 e1-4 e1-2 e1+5 e1 e1-4 ec", d1: "breakb voxb breakb voxb breakb voxb breakb fill" }
+  a2:
+    bars: 16
+    volume: { sid1: 15 }
+    levels: { v2: mp, v3: ff }
+    filter: { cutoff: { from: 40, to: 120 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1+5 e2 e1-4 ec", v2: a, v3: "hook hook2", d1: "beat1 beat2 beat3 beat2 beat1 beat2 beat3 fill" }
+  outro:
+    bars: 6
+    volume: { sid1: { from: 14, to: 11 } }
+    levels: { v2: mp }
+    filter: { cutoff: { from: 40, to: -180 } }
+    layers: { v1: "e1 e2 e1-4 e2-2 e1 e2", v2: a, d1: "beat1 beat2 beat1 beat2 beat1 fill" }
+  final:
+    bars: 2
+    volume: { sid1: 11 }
+    layers: { v1: end, v2: end, v3: end, d1: last }
+timeline: [intro, a, b, break, a2, outro, final]
+end: { hold_beats: 2, release: true }

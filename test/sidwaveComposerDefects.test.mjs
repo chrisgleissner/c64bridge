@@ -11,7 +11,7 @@ import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
 import { arrangeSidwave, compileSidwaveStem, compileSidwaveToPrg, hzToSidFrequency } from "../src/sidwaveCompiler.js";
 import { analyseQuality } from "../src/audio/sidwaveQuality.js";
 import { expectedSchedule } from "../src/audio/sidwaveFidelity.js";
-import { readWav, renderReference, restrictToSid } from "../src/audio/sidwaveReference.js";
+import { panGains, readWav, renderReference, restrictToSid } from "../src/audio/sidwaveReference.js";
 
 import { readSidwaveExample } from "../src/sidwaveExamples.js";
 
@@ -336,4 +336,28 @@ test("review masks a compiled wavetable change on any voice, rather than the who
   const { times } = report.checks.glitches.metrics;
   assert.equal(times.length, 1);
   assert.ok(Math.abs(times[0] - 1.13) < 0.002);
+});
+
+test("Ultimate pan settings map to the firmware pan law", () => {
+  assert.deepEqual(panGains("Left 5"), [1, 0]);
+  assert.deepEqual(panGains("Right 5"), [0, 1]);
+  assert.deepEqual(panGains("Left 3"), [243 / 256, 79 / 256]);
+  assert.deepEqual(panGains("Right 3"), [79 / 256, 243 / 256]);
+  assert.deepEqual(panGains("Center"), [181 / 256, 181 / 256]);
+  assert.equal(panGains("Left 6"), undefined);
+});
+
+test("the reference mixes a narrow-panned SID into both channels", { skip: !sidplayfpAvailable }, () => {
+  const doc = parseSidwave(`sidwave: 1.2
+tempo: 120
+sids:
+  - { id: a, address: "$D400", pan: Left 3 }
+voices:
+  - { id: 1, waveform: saw, adsr: [0, 0, 15, 0], patterns: { p: { groove: "A3 ~ ~ ~" } } }
+timeline: [{ bars: 1, layers: { v1: p } }]
+`);
+  const r = renderReference(doc, { model: "8580", sampleRate: 12000, seconds: 1 });
+  const energy = (x) => x.reduce((s, v) => s + v * v, 0);
+  const ratio = Math.sqrt(energy(r.right) / energy(r.left));
+  assert.ok(Math.abs(ratio - 79 / 243) < 0.01, `right/left ${ratio}`);
 });

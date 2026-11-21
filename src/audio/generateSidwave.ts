@@ -105,7 +105,7 @@ export function generateSidwave(options: GenerateOptions) {
     const chordNote = midiToNoteName(48 + chordPitch);
     const arp = `lib:chip_arp_${chord.minor ? "minor" : "major"}`;
     if (style === "ambient") {
-      chordEntries.push({ note: chordNote, len: 2, inst: "lib:pad_slow" }, { note: chordNote, len: 1.5, inst: arp }, `${chordNote}@lib:bell_ring`);
+      chordEntries.push({ note: chordNote, len: 2, inst: "lib:pad_slow" }, { note: chordNote, len: 1.5, inst: arp }, `${chordNote}@ambient_bell`);
     } else {
       chordEntries.push({ note: chordNote, len: 1.5, inst: arp }, "-", { note: chordNote, len: 1, inst: arp }, "-", { note: chordNote, len: 0.5, inst: arp });
     }
@@ -148,7 +148,7 @@ export function generateSidwave(options: GenerateOptions) {
         const cadence = bar === 7 && i === rhythm.length - 1;
         const midi = cadence ? scaleNote(0) : walk(chord, i === 0 || i === rhythm.length - 1);
         const bell = style === "ambient" && i === 0 && bar % 2 === 1 && !options.waveform;
-        return articulation(midi, len, i > 0 && i % 2 === 1 && options.waveform !== "noise", bell ? "lib:bell_ring" : undefined);
+        return articulation(midi, len, i > 0 && i % 2 === 1 && options.waveform !== "noise", bell ? "ambient_bell" : undefined);
       });
       phrase.push("-");
       if (bar < 2) hook.push(phrase);
@@ -156,9 +156,17 @@ export function generateSidwave(options: GenerateOptions) {
     }
   }
 
+  const instruments = {
+    ...(leadInstrument === "custom_lead" ? { custom_lead: { waveform: options.waveform, adsr: [1, 5, 9, 3] } } : {}),
+    ...(style === "ambient" ? { ambient_bell: {
+      waveform: "tri" as const,
+      adsr: [0, 4, 7, 5],
+      wavetable: [{ wave: "tri" as const, note: "+12" }, { wave: "tri" as const }],
+    } } : {}),
+  };
   const score: SidwaveDocument = {
     sidwave: "1.1", title: `Signal ${seed.toString(16).toUpperCase()} | ${style}`, tempo, mode: system, speed,
-    ...(leadInstrument === "custom_lead" ? { instruments: { custom_lead: { waveform: options.waveform, adsr: [1, 5, 9, 3] } } } : {}),
+    ...(Object.keys(instruments).length ? { instruments } : {}),
     voices: [
       { id: 1, name: "Bass and drums", instrument: bass, patterns: { Bass: { length: 0.25, groove: backing } } },
       { id: 2, name: "Harmony", patterns: { Chords: { length: 0.5, groove: chordEntries } } },

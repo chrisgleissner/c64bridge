@@ -37,7 +37,11 @@ test("generate styles set distinct tempos, voices and accents", async () => {
   assert.equal(ambient.tempo, 80);
   assert.match(ambient.key, /^D /);
   assert.match(ambient.sidwave, /lib:pad_slow/);
-  assert.match(ambient.sidwave, /lib:bell_ring/);
+  assert.match(ambient.sidwave, /ambient_bell/);
+  assert.ok(!/lib:bell_ring/.test(ambient.sidwave));
+  assert.deepEqual(ambient.score.instruments.ambient_bell.wavetable.map(({ wave, note }) => [wave, note ?? null]), [["tri", "+12"], ["tri", null]]);
+  assert.equal(ambient.score.instruments.ambient_bell.ring, undefined);
+  assert.ok(ambient.arrangement.voices[1].notes.some((note) => (ambient.arrangement.instruments[note.inst].wave & 0xf0) === 0x10));
   assert.ok(ambient.arrangement.instruments.some((inst) => inst.filtertable));
   const funk = await generate({ style: "funk" });
   assert.equal(funk.tempo, 105);

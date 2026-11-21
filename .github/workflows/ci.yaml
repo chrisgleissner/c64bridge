@@ -93,6 +93,15 @@ jobs:
       ref: ${{ github.sha }}
     secrets: inherit
 
+  sidwave-render:
+    name: Render SIDWAVE sample assets
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/render-sidwave-examples.yaml
+    with:
+      ref: ${{ github.sha }}
+
   package-check:
     name: Package check
     needs:

@@ -99,14 +99,14 @@ test('release workflow publishes only the unchanged artifact tested from its exa
   assert.ok(!steps.some((step) => /release:prepare|git push origin HEAD:main/.test(step.run ?? '')));
   const index = (name) => steps.findIndex((step) => step.name === name);
   const publish = workflow.jobs.publish_npm.steps.find(s => s.name === 'Publish validated artifact to npm');
-  assert.equal(workflow.jobs.publish_npm.needs, 'release');
+  assert.deepEqual(workflow.jobs.publish_npm.needs, ['release', 'render_examples']);
   assert.match(publish.run, /sha256sum --check/);
   assert.match(publish.run, /npm publish "\.\/\$RELEASE_TARBALL" --ignore-scripts/);
   assert.match(publish.run, /--registry https:\/\/registry\.npmjs\.org/);
   assert.ok(index('Verify prepared release tag') < index('Build project'));
   assert.ok(index('Validate exact packed artifact before publishing') < index('Preserve validated npm artifact'));
   assert.ok(index('Validate MCP Registry manifest') < index('Preserve validated npm artifact'));
-  assert.deepEqual(workflow.jobs.verify_published.needs, ['release', 'publish_npm']);
+  assert.deepEqual(workflow.jobs.verify_published.needs, ['release', 'publish_npm', 'render_examples']);
   const visibility = workflow.jobs.verify_published.steps.find(s => s.name === 'Wait for npm package visibility').run;
   assert.match(visibility, /PUBLISHED_INTEGRITY.*EXPECTED_INTEGRITY/);
   assert.match(visibility, /seq 1 120/);

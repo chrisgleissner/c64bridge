@@ -1867,19 +1867,26 @@ function assertDocumentedTechniques(header, doc, arrangement) {
 for (const { name } of SIDWAVE_EXAMPLES) {
   test(`composition ${name} uses its documented techniques within memory and cycle budgets`, { timeout: 120_000 }, () => {
     const source = readSidwaveExample(name);
-    const [overview, techniques, learn] = source.split("\n");
-    const sids = overview.match(/(\d+) SIDs?(?:, (\d+) voices)?$/);
+    const lines = source.split(/\r?\n/);
+    const header = lines.slice(0, lines.findIndex((line) => line.startsWith("sidwave:"))).filter((line) => line.startsWith("#"));
+    const overview = header[0];
+    const sids = overview.match(/\b(\d+) SIDs?(?:, (\d+) voices)?\b/);
     assert.ok(sids);
-    assert.match(overview, /\d+(?:\.\d+)? BPM/);
-    assert.match(techniques, /^# Techniques: .+/);
-    assert.match(learn, /^# Learn: .+/);
+    const bpm = overview.match(/(\d+(?:\.\d+)?) BPM/);
     const doc = parseSidwave(source);
+    if (bpm) assert.equal(doc.song.tempo, Number(bpm[1]));
+    const techniqueIndex = header.findIndex((line) => line.startsWith("# Techniques: "));
+    const techniqueLines = [];
+    for (let i = techniqueIndex; i >= 0 && i < header.length && (i === techniqueIndex || header[i].startsWith("#   ")); i++) {
+      techniqueLines.push(header[i].replace(/^#\s*/, ""));
+    }
+    const techniques = techniqueLines.join(" ");
+    assert.ok(techniques, `${name} header documents its techniques`);
+    assert.ok(header.some((line) => line.startsWith("# Learn: ")), `${name} header documents what to hear`);
     const arrangement = arrangeSidwave(doc);
-    assert.equal(doc.version, "1.2");
+    assert.equal(doc.version, "1.3");
     assert.equal(doc.sids.length, Number(sids[1]));
     if (sids[2]) assert.equal(doc.voices.length, Number(sids[2]));
-    const meter = overview.match(/\b(\d+)\/4\b/)?.[1];
-    if (meter) assert.equal(doc.song.meter, Number(meter));
     assert.ok(new Set(arrangement.clock.sections.map(({ section }) => section.section)).size >= 2);
     assert.ok(doc.end || doc.loopTo !== undefined);
     const compiled = compileSidwaveToPrg(doc);
@@ -1932,7 +1939,7 @@ for (const { name } of SIDWAVE_EXAMPLES) {
       .map(([, comment]) => comment.replaceAll(/\n# /g, " ")).join(" ");
     const { lint } = compileSidwaveToPrg(parseSidwave(source));
     const undocumented = lint.filter(({ code }) => !isInfoCode(code) &&
-      !new RegExp(`\\b${code}\\b[ :]+(?!is avoided\\b)[a-zA-Z0-9]`).test(summary) &&
+      !new RegExp(`\\b${code}\\b(?:[ :]+\\(|[ :]+)(?!is avoided\\b)[a-zA-Z0-9]`).test(summary) &&
       !new RegExp(`^ *# .*\\b${code} accepted\\b`, "m").test(source));
     assert.deepEqual(undocumented, [], undocumented.map(({ code, first }) => `${code} at ${first}`).join(", "));
   });

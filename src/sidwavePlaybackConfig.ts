@@ -1,5 +1,5 @@
 import type { C64Facade, ViceBackend } from "./device.js";
-import type { ParsedSidwave } from "./sidwave.js";
+import { isModern, type ParsedSidwave } from "./sidwave.js";
 import { normalizeConfigInventory } from "./tools/meta/configInventory.js";
 import { ToolValidationError } from "./tools/errors.js";
 
@@ -70,7 +70,7 @@ export function sidwaveSetupWarnings(doc: ParsedSidwave, backend: string): strin
     }
   }
   const models = [...new Set(doc.sids.flatMap((sid) => sid.model ? [sid.model] : []))];
-  if (doc.version === "1.2" && backend !== "vice" && models.length) {
+  if (isModern(doc) && backend !== "vice" && models.length) {
     // data/ultimate/multisid.md, Differences in sound: the curve is set per UltiSID in store UltiSID Configuration.
     warnings.push(`Filter cutoffs in Hz assume the declared SID model. Set the filter curve of each UltiSID (store UltiSID Configuration) to ${models.map((m) => m === "8580" ? "8580 Lo for an 8580" : "6581 for a 6581").join(" and ")}; the player does not change it.`);
   }

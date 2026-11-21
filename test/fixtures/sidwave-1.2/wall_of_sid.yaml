@@ -1,0 +1,289 @@
+# Nine-SID ensemble build | 107 BPM | C# minor | 9 SIDs, 27 voices
+# Techniques: Gradual 27-voice build with a distinct role per SID, kit, sub bass and hats on the centred socket SID (a real 6581), lead and bass octaves centred by unison copies on sid1 and sid5, detuned divided high strings across both sides, antiphonal counter-lines, arps and bells, filtered brass swells, twin theme echoes, section levels and chip volume, and a 27-voice final C#-minor chord.
+# Learn: Build with new roles, registers and rhythm instead of copies, keep kick, bass and theme in the middle, and voice the last chord from C#1 upward with wide spacing at the bottom; use configure: true. With 27 voices summed in the Ultimate mixer, keep chip volume at or below 10 in the loud sections: at 13-15 the U64 output clipped by about 4 dB
+#
+# Form (88 bars, about 3:17): Flame 8 (divided high strings over a C# pedal) / Arcade 16 (theme, kick and snare, low
+# desk, bells) / Rooftops 16 (new theme over A-B-G#m, hats, rhythmic mid desk, arps, bass octaves, counter-line) /
+# Procession 16 (E major: counter-lines answer left and right, brass swells, toms, then the theme returns) /
+# All lanterns 24 (every voice, brighter lead, climax) / Hold 8 (drums out, plagal close, all 27 voices on C# minor).
+# SID roles: sid1 theme, bass octaves, echo L | sid2 low desk | sid3 counter A, arp A, brass A | sid4 high strings A,
+# unison of high strings B, bell A | sid5 unisons of theme and bass, echo R | sid6 mid desk | sid7 counter B, arp B,
+# brass B | sid8 high strings B, unison of high strings A, bell B | sid9 (socket, centre) kick-snare, sub bass, hats.
+# Accepted lint: ONE-SIDE on v1 and v2, which are centred by unison copies on sid5 (v13, v14); all 27 channels are
+# scored, so center: true has no free mirror channel. LEVEL-NOOP: library drums have sustain 0. CLASH: only where an
+# echo tail (sustain 2 of 15) crosses a chord change.
+sidwave: 1.2
+title: Twenty-Seven Lanterns
+tempo: 107.41
+mode: PAL
+cpu: turbo
+sids:
+  layout: ultisid8+socket1
+  pan: wide
+  overrides: { sid1: { model: "8580" }, sid2: { model: "8580" }, sid3: { model: "8580" }, sid4: { model: "8580" }, sid5: { model: "8580" }, sid6: { model: "8580" }, sid7: { model: "8580" }, sid8: { model: "8580" }, sid9: { model: "6581" } }
+kit: { k: lib:kick, s: lib:snare, h: lib:hat, o: lib:open_hat, t: lib:tom, x: lib:crash }
+instruments:
+  flare: { waveform: pulse, adsr: [2, 6, 12, 6], hard_restart: { test: true }, vibrato: { depth: 0.1, rate: 5.5, delay: 18 },
+           pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 14, frames: 36 }, { add: -14, frames: 36 }] } }
+  beacon: { waveform: saw, adsr: [2, 7, 11, 6], hard_restart: { test: true }, vibrato: { depth: 0.1, rate: 5.5, delay: 18 } }
+  ember: { waveform: saw, adsr: [0, 6, 9, 3], hard_restart: { test: true }, filtertable: [{ cutoff: 900Hz, resonance: 10, type: lowpass }, { add: -6, frames: 12 }] }
+  sub: { waveform: tri, adsr: [0, 4, 14, 6], hard_restart: { test: true } }
+  linen: { waveform: pulse, adsr: [7, 6, 10, 8], pulsetable: { reset: false, loop: 1, steps: [{ set: 0.35 }, { add: 5, frames: 100 }, { add: -5, frames: 100 }] } }
+  glint: { waveform: pulse, adsr: [0, 6, 6, 4], pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 8, frames: 60 }, { add: -8, frames: 60 }] } }
+  gossamer: { waveform: pulse, adsr: [9, 6, 11, 9], vibrato: { depth: 0.06, rate: 5, delay: 30 },
+              pulsetable: { reset: false, loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 90 }, { add: 6, frames: 90 }] } }
+  brass: { waveform: saw, adsr: [6, 6, 11, 8], filtertable: [{ cutoff: 500Hz, resonance: 7, type: lowpass }, { add: 6, frames: 40 }, { add: -2, frames: 60 }] }
+  reed: { waveform: pulse, pulse_width: 0.2, adsr: [3, 6, 11, 6], vibrato: { depth: 0.1, rate: 5.5, delay: 20 } }
+  spark: { waveform: pulse, adsr: [0, 7, 5, 5], pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 10, frames: 70 }, { add: -10, frames: 70 }] } }
+  lantern: { waveform: tri, adsr: [0, 9, 4, 9], wavetable: [{ note: "+12", frames: 2 }, { note: "+0" }] }
+  # Final cymbal: plain noise with a long decay that keeps its gate on through the held chord.
+  cymbal: { waveform: noise, adsr: [0, 11, 0, 9] }
+  timp: { waveform: tri, adsr: [0, 9, 0, 9], hard_restart: { test: true }, wavetable: [{ wave: noise, note: C5, frames: 1 }, { wave: tri, note: "+12", frames: 1 }, { wave: tri, note: "+0" }] }
+voices:
+  - id: 1
+    name: "Lantern theme (centre with v13)"
+    role: lead
+    instrument: flare
+    patterns:
+      arcade: { length: 0.5, groove: "G#4 ~ C#5 ~ E5 ~ (D#5 C#5) | ~ ~ ~ ~ E5 ~ A5 ~ | G#5 ~ ~ ~ (F#5 E5) ~ B4 | D#5 ~ ~ ~ ~ ~ - - | G#4 ~ C#5 ~ E5 ~ (F#5 G#5) | ~ ~ ~ ~ A5 ~ E5 ~ | C#6 ~ ~ ~ A5 ~ F#5 ~ | C5 ~ ~ ~ D#5 ~ - - | G#4 ~ C#5 ~ E5 ~ (D#5 C#5) | ~ ~ B4 C#5 E5 ~ A5 ~ | G#5 ~ ~ ~ B5 ~ G#5 ~ | F#5 ~ ~ ~ D#5 ~ - - | E5 ~ A5 ~ C#6 ~ B5 ~ | A5 ~ ~ ~ F#5 ~ C#5 ~ | C#5 ~ ~ ~ ~ ~ D#5 ~ | C5 ~ ~ ~ ~ ~ - -" }
+      roof: { length: 0.5, groove: "C#5 ~ E5 ~ A5 ~ ~ G#5 | F#5 ~ ~ ~ D#5 ~ B4 ~ | D#5 ~ ~ ~ G#5 ~ B5 ~ | C#6 ~ ~ ~ ~ ~ - - | A5 ~ ~ G#5 F#5 ~ C#5 ~ | D#5 ~ ~ ~ F#5 ~ A5 ~ | G#5 ~ ~ ~ ~ ~ E5 ~ | B4 ~ ~ ~ ~ ~ - - | C#5 ~ E5 ~ A5 ~ ~ B5 | ~ ~ A5 F#5 D#5 ~ F#5 ~ | B5 ~ ~ ~ G#5 ~ D#5 ~ | E5 ~ ~ ~ ~ ~ - - | F#5 ~ A5 ~ C#6 ~ ~ B5 | A5 ~ ~ ~ F#5 ~ ~ ~ | D#5 ~ ~ ~ C5 ~ D#5 ~ | F#5 ~ ~ ~ ~ ~ - -" }
+      proc: { length: 0.5, groove: "- - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | E5 ~ G#5 ~ B5 ~ ~ ~ | ~ ~ ~ ~ D#5 ~ G#5 ~ | A5 ~ ~ ~ C#6 ~ ~ ~ | B5 ~ ~ ~ G#5 ~ E5 ~ | F#5 ~ ~ ~ A5 ~ C#6 ~ | B5 ~ ~ ~ A5 ~ F#5 ~ | G#5 ~ ~ ~ C#6 ~ ~ ~ | C6 ~ ~ ~ ~ ~ - -" }
+      all: { length: 0.5, groove: "G#4@beacon ~ C#5@beacon ~ E5@beacon ~ (D#5@beacon C#5@beacon) | ~ ~ ~ ~ E5@beacon ~ A5@beacon ~ | G#5@beacon ~ ~ ~ (F#5@beacon E5@beacon) ~ B4@beacon | D#5@beacon ~ ~ ~ ~ ~ - - | G#4@beacon ~ C#5@beacon ~ E5@beacon ~ (F#5@beacon G#5@beacon) | ~ ~ ~ ~ A5@beacon ~ E5@beacon ~ | C#6@beacon ~ ~ ~ A5@beacon ~ F#5@beacon ~ | C5@beacon ~ ~ ~ D#5@beacon ~ - - | G#4@beacon ~ C#5@beacon ~ E5@beacon ~ (D#5@beacon C#5@beacon) | ~ ~ B4@beacon C#5@beacon E5@beacon ~ A5@beacon ~ | G#5@beacon ~ ~ ~ B5@beacon ~ G#5@beacon ~ | F#5@beacon ~ ~ ~ D#5@beacon ~ - - | E5@beacon ~ A5@beacon ~ C#6@beacon ~ B5@beacon ~ | A5@beacon ~ ~ ~ F#5@beacon ~ C#5@beacon ~ | C#5@beacon ~ ~ ~ ~ ~ D#5@beacon ~ | C5@beacon ~ ~ ~ ~ ~ - - | C#6@beacon ~ ~ ~ B5@beacon ~ A5@beacon ~ | B5@beacon ~ ~ ~ F#5@beacon ~ D#5@beacon ~ | D#6@beacon ~ ~ ~ B5@beacon ~ G#5@beacon ~ | C#6@beacon ~ ~ ~ E5@beacon ~ G#5@beacon ~ | A5@beacon ~ ~ ~ C#6@beacon ~ F#6!@beacon ~ | D#6@beacon ~ ~ ~ B5@beacon ~ A5@beacon ~ | G#5@beacon ~ ~ ~ C#6@beacon ~ ~ ~ | C6@beacon ~ ~ ~ D#6@beacon ~ C6@beacon ~" }
+      hold: { length: 0.5, groove: "C#6 ~ ~ ~ ~ ~ B5 ~ | A5 ~ ~ ~ ~ ~ ~ ~ | G#5 ~ ~ ~ ~ ~ ~ ~ | F#5 ~ ~ ~ ~ ~ ~ ~ | E5 ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: "Bass octaves (centre with v14)"
+    role: bass
+    instrument: ember
+    level: 12
+    patterns:
+      roof: { length: 0.5, groove: "A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | B2 B3 B2 B2 B3 B2 B3 B2 | E2 E3 E2 E2 E3 E2 E3 E2 | E2 E3 E2 E2 E3 E2 E3 E2 | A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | D#2 D#3 D#2 D#2 D#3 D#2 D#3 D#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2" }
+      proc: { length: 0.5, groove: "E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | E2 E3 E2 E2 E3 E2 E3 E2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2" }
+      all: { length: 0.5, groove: "C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | A2 A3 A2 A2 A3 A2 A3 A2 | E2 E3 E2 E2 E3 E2 E3 E2 | B2 B3 B2 B2 B3 B2 B3 B2 | A2 A3 A2 A2 A3 A2 A3 A2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | A2 A3 A2 A2 A3 A2 A3 A2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | C#2 C#3 C#2 C#2 C#3 C#2 C#3 C#2 | F#2 F#3 F#2 F#2 F#3 F#2 F#3 F#2 | B2 B3 B2 B2 B3 B2 B3 B2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2 | G#2 G#3 G#2 G#2 G#3 G#2 G#3 G#2" }
+      hold: { length: 1, groove: "A2 ~ ~ ~ | F#2 ~ ~ ~ | G#2 ~ ~ ~ | ~ ~ ~ ~ | C#2 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 3
+    name: "Theme echo, left (dotted eighth)"
+    echo: { voice: 1, delay_beats: 0.75, volume: 0.35, adsr: [4, 5, 7, 5], detune: -3 }
+  - id: 4
+    name: "Low desk 1, left"
+    role: pad
+    instrument: linen
+    level: 9
+    patterns:
+      arcade: { length: 1, groove: "(C#4 ~ ~ ~ | A3) ~ ~ ~ | (G#3 ~ ~ ~ | B3) ~ ~ ~ | (G#3 ~ ~ ~ | A3) ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | A3 ~ ~ ~ | (G#3 ~ ~ ~ | B3) ~ ~ ~ | A3 ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~" }
+      roof: { length: 1, groove: "(A3 ~ ~ ~ | B3) ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | (C#4 ~ ~ ~ | B3) ~ ~ ~ | ~ ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | D#4 ~ ~ ~ | C4 ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 1, groove: "B3 ~ ~ ~ | ~ ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | B3 ~ ~ ~ | ~ ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | (A3 ~ ~ ~ | G#3) ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | (C#4 ~ ~ ~ | C4) ~ ~ ~" }
+      all: { length: 1, groove: "C#4 ~ ~ ~ | ~ ~ ~ ~ | B3 ~ ~ ~ | ~ ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | C4 ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | B3 ~ ~ ~ | ~ ~ ~ ~ | A3 ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | (C#4 ~ ~ ~ | C4) ~ ~ ~" }
+      hold: { length: 1, groove: "(C#4 ~ ~ ~ | A3) ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 5
+    name: "Low desk 2, left"
+    role: pad
+    instrument: linen
+    level: 9
+    patterns:
+      arcade: { length: 1, groove: "E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | (F#3 ~ ~ ~ | D#3) ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | (E3 ~ ~ ~ | F#3) ~ ~ ~ | D#3 ~ ~ ~ | ~ ~ ~ ~" }
+      roof: { length: 1, groove: "(E3 ~ ~ ~ | D#3) ~ ~ ~ | ~ ~ ~ ~ | E3 ~ ~ ~ | F#3 ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | (A3 ~ ~ ~ | F#3) ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | A3 ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 1, groove: "(G#3 ~ ~ ~ | F#3) ~ ~ ~ | (G#3 ~ ~ ~ | A3) ~ ~ ~ | (G#3 ~ ~ ~ | F#3) ~ ~ ~ | (E3 ~ ~ ~ | D#3) ~ ~ ~ | (E3 ~ ~ ~ | D#3) ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | F#3 ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~" }
+      all: { length: 1, groove: "(G#3 ~ ~ ~ | A3) ~ ~ ~ | (G#3 ~ ~ ~ | F#3) ~ ~ ~ | (G#3 ~ ~ ~ | A3) ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~ | A3 ~ ~ ~ | (G#3 ~ ~ ~ | F#3) ~ ~ ~ | (E3 ~ ~ ~ | F#3) ~ ~ ~ | D#3 ~ ~ ~ | ~ ~ ~ ~ | (E3 ~ ~ ~ | D#3) ~ ~ ~ | ~ ~ ~ ~ | E3 ~ ~ ~ | F#3 ~ ~ ~ | ~ ~ ~ ~ | G#3 ~ ~ ~ | ~ ~ ~ ~" }
+      hold: { length: 1, groove: "(A3 ~ ~ ~ | F#3) ~ ~ ~ | D#3 ~ ~ ~ | ~ ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 6
+    name: "Low desk 3, left"
+    role: pad
+    instrument: linen
+    level: 9
+    patterns:
+      arcade: { length: 1, groove: "C#3 ~ ~ ~ | ~ ~ ~ ~ | B2 ~ ~ ~ | ~ ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | C3 ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | B2 ~ ~ ~ | ~ ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | C3 ~ ~ ~" }
+      roof: { length: 1, groove: "(C#3 ~ ~ ~ | B2) ~ ~ ~ | ~ ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | ~ ~ ~ ~ | E3 ~ ~ ~ | F#3 ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 1, groove: "(E3 ~ ~ ~ | D#3) ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | (C#3 ~ ~ ~ | B2) ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | (C#3 ~ ~ ~ | B2) ~ ~ ~ | (C#3 ~ ~ ~ | D#3) ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+      all: { length: 1, groove: "E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | (F#3 ~ ~ ~ | D#3) ~ ~ ~ | E3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | C3 ~ ~ ~ | (C#3 ~ ~ ~ | B2) ~ ~ ~ | ~ ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | D#3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+      hold: { length: 1, groove: "E3 ~ ~ ~ | ~ ~ ~ ~ | (C#3 ~ ~ ~ | C3) ~ ~ ~ | C#3 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 7
+    name: "Counter-line A, left"
+    instrument: reed
+    level: 12
+    patterns:
+      roof: { length: 1, groove: "E4 ~ C#4 ~ | D#4 ~ F#4 ~ | G#4 ~ D#4 ~ | E4 ~ C#4 ~ | F#4 ~ A4 ~ | F#4 ~ D#4 ~ | E4 ~ G#4 ~ | E4 ~ G#4 ~ | A4 ~ E4 ~ | D#4 ~ F#4 ~ | G#4 ~ D#4 ~ | E4 ~ C#4 ~ | F#4 ~ A4 ~ | F#4 ~ D#4 ~ | G#4 ~ D#4 ~ | F#4 ~ G#4 ~" }
+      all: { length: 1, groove: "(E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | ~ ~ ~ ~ | G#4 ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | A4 ~ ~ ~ | ~ ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | (G#4 ~ ~ ~ | E4) ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~" }
+      hold: { length: 1, groove: "A4 ~ ~ ~ | ~ ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~ | E4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 0.5, groove: "B4 ~ ~ ~ E5 ~ G#5 ~ | F#5 ~ ~ ~ D#5 ~ - - | - - - - - - - - | - - - - - - - - | G#5 ~ ~ ~ B5 ~ G#5 ~ | F#5 ~ ~ ~ D#5 ~ - - | - - - - - - - - | - - - - - - - - | G#4 ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ | (A4 ~ ~ ~ ~ ~ ~ ~ | G#4) ~ ~ ~ ~ ~ ~ ~ | (A4 ~ ~ ~ ~ ~ ~ ~ | B4) ~ ~ ~ ~ ~ ~ ~ | G#4 ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 8
+    name: "Arp A, left"
+    role: arp
+    instrument: spark
+    level: 8
+    patterns:
+      roof: { length: 1, groove: "A@arp ~ - - | B@arp ~ - - | G#m@arp ~ - - | C#m@arp ~ - - | F#m@arp ~ - - | B@arp ~ - - | E@arp ~ - - | E@arp ~ - - | A@arp ~ - - | B@arp ~ - - | G#m@arp ~ - - | C#m@arp ~ - - | F#m@arp ~ - - | D#m7b5@arp ~ - - | G#@arp ~ - - | G#7@arp ~ - -" }
+      proc: { length: 1, groove: "E@arp ~ - - | B@arp ~ - - | C#m@arp ~ - - | A@arp ~ - - | E@arp ~ - - | B@arp ~ - - | A@arp ~ - - | B@arp ~ - - | E@arp ~ - - | G#m@arp ~ - - | A@arp ~ - - | E@arp ~ - - | F#m@arp ~ - - | B@arp ~ - - | G#sus4@arp ~ - - | G#@arp ~ - -" }
+      all: { length: 1, groove: "C#m@arp ~ - - | A@arp ~ - - | E@arp ~ - - | B@arp ~ - - | C#m@arp ~ - - | A@arp ~ - - | F#m@arp ~ - - | G#@arp ~ - - | C#m@arp ~ - - | A@arp ~ - - | E@arp ~ - - | B@arp ~ - - | A@arp ~ - - | F#m@arp ~ - - | G#sus4@arp ~ - - | G#@arp ~ - - | A@arp ~ - - | B@arp ~ - - | G#m@arp ~ - - | C#m@arp ~ - - | F#m@arp ~ - - | B@arp ~ - - | G#sus4@arp ~ - - | G#@arp ~ - -" }
+      hold: { length: 1, groove: "- - - - | - - - - | - - - - | - - - - | C#m@arp ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 9
+    name: "Brass A, left"
+    role: pad
+    instrument: brass
+    level: 10
+    patterns:
+      proc: { length: 1, groove: "(E4 ~ ~ ~ | D#4) ~ ~ ~ | (E4 ~ ~ ~ | C#4) ~ ~ ~ | (E4 ~ ~ ~ | D#4) ~ ~ ~ | (C#4 ~ ~ ~ | D#4) ~ ~ ~ | (E4 ~ ~ ~ | G#4) ~ ~ ~ | (C#4 ~ ~ ~ | E4) ~ ~ ~ | (F#4 ~ ~ ~ | D#4) ~ ~ ~ | (C#4 ~ ~ ~ | G#4) ~ ~ ~" }
+      all: { length: 1, groove: "(E4 ~ ~ ~ | C#4) ~ ~ ~ | (E4 ~ ~ ~ | D#4) ~ ~ ~ | (E4 ~ ~ ~ | C#4) ~ ~ ~ | (F#4 ~ ~ ~ | G#4) ~ ~ ~ | (E4 ~ ~ ~ | C#4) ~ ~ ~ | (E4 ~ ~ ~ | D#4) ~ ~ ~ | (C#4 ~ ~ ~ | F#4) ~ ~ ~ | (C#4 ~ ~ ~ | G#4) ~ ~ ~ | (C#4 ~ ~ ~ | D#4) ~ ~ ~ | (G#4 ~ ~ ~ | E4) ~ ~ ~ | (F#4 ~ ~ ~ | D#4) ~ ~ ~ | (C#4 ~ ~ ~ | G#4) ~ ~ ~" }
+      hold: { length: 1, groove: "(C#4 ~ ~ ~ | F#4) ~ ~ ~ | (C#4 ~ ~ ~ | G#4) ~ ~ ~ | E4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 10
+    name: "High strings A, left (unison v23 on the right)"
+    role: pad
+    instrument: gossamer
+    level: 9
+    patterns:
+      flame: { length: 1, groove: "(E5 ~ ~ ~ | C#5) ~ ~ ~ | (E5 ~ ~ ~ | D#5) ~ ~ ~ | (E5 ~ ~ ~ | C#5) ~ ~ ~ | (F#5 ~ ~ ~ | C#5 ~ G#5) ~" }
+      arcade: { length: 1, groove: "C#5 ~ ~ ~ | ~ ~ ~ ~ | (E5 ~ ~ ~ | D#5) ~ ~ ~ | C#5 ~ ~ ~ | ~ ~ ~ ~ | (A4 ~ ~ ~ | C5) ~ ~ ~ | C#5 ~ ~ ~ | ~ ~ ~ ~ | (E5 ~ ~ ~ | D#5) ~ ~ ~ | (C#5 ~ ~ ~ | A4) ~ ~ ~ | (C#5 ~ ~ ~ | C5) ~ ~ ~" }
+      roof: { length: 1, groove: "(C#5 ~ ~ ~ | D#5) ~ ~ ~ | (B4 ~ ~ ~ | C#5) ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~ | (C#5 ~ ~ ~ | D#5) ~ ~ ~ | (B4 ~ ~ ~ | C#5) ~ ~ ~ | (A4 ~ ~ ~ | D#5) ~ ~ ~ | C5 ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 1, groove: "(E5 ~ ~ ~ | D#5) ~ ~ ~ | C#5 ~ ~ ~ | ~ ~ ~ ~ | (E5 ~ ~ ~ | D#5) ~ ~ ~ | (C#5 ~ ~ ~ | D#5) ~ ~ ~ | (E5 ~ ~ ~ | B4) ~ ~ ~ | (C#5 ~ ~ ~ | E5) ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | (C#5 ~ ~ ~ | C5) ~ ~ ~" }
+      all: { length: 1, groove: "C#5 ~ ~ ~ | ~ ~ ~ ~ | (E5 ~ ~ ~ | D#5) ~ ~ ~ | C#5 ~ ~ ~ | ~ ~ ~ ~ | (A4 ~ ~ ~ | C5) ~ ~ ~ | C#5 ~ ~ ~ | ~ ~ ~ ~ | (E5 ~ ~ ~ | D#5) ~ ~ ~ | (C#5 ~ ~ ~ | A4) ~ ~ ~ | (C#5 ~ ~ ~ | C5) ~ ~ ~ | (C#5 ~ ~ ~ | D#5) ~ ~ ~ | (B4 ~ ~ ~ | C#5) ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | (C#5 ~ ~ ~ | C5) ~ ~ ~" }
+      hold: { length: 1, groove: "(C#5 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | C5) ~ ~ ~ | C#5 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 11
+    name: "High strings B, left unison"
+    unison: { voice: 22, detune: 6 }
+  - id: 12
+    name: "Lantern bell A, left"
+    instrument: lantern
+    level: 10
+    patterns:
+      arcade: { length: 1, groove: "C#6 ~ - - | - - - - | E6 ~ - - | - - - - | C#6 ~ - - | - - - - | F#6 ~ - - | - - - - | C#6 ~ - - | - - - - | E6 ~ - - | - - - - | A5 ~ - - | - - - - | G#5 ~ - - | - - - -" }
+      roof: { length: 1, groove: "A5 ~ - - | - - - - | G#5 ~ - - | - - - - | F#6 ~ - - | - - - - | E6 ~ - - | - - - - | A5 ~ - - | - - - - | G#5 ~ - - | - - - - | F#6 ~ - - | - - - - | G#5 ~ - - | - - - -" }
+      proc: { length: 1, groove: "E6 ~ - - | - - - - | C#6 ~ - - | - - - - | E6 ~ - - | - - - - | A5 ~ - - | - - - - | E6 ~ - - | - - - - | A5 ~ - - | - - - - | F#6 ~ - - | - - - - | G#5 ~ - - | - - - -" }
+      all: { length: 1, groove: "C#6 ~ - - | - - - - | E6 ~ - - | - - - - | C#6 ~ - - | - - - - | F#6 ~ - - | - - - - | C#6 ~ - - | - - - - | E6 ~ - - | - - - - | A5 ~ - - | - - - - | G#5 ~ - - | - - - - | A5 ~ - - | - - - - | G#5 ~ - - | - - - - | F#6 ~ - - | - - - - | G#5 ~ - - | - - - -" }
+      hold: { length: 1, groove: "- - - - | - - - - | - - - - | - - - - | C#6 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 13
+    name: "Lantern theme, right unison"
+    unison: { voice: 1, detune: 4 }
+  - id: 14
+    name: "Bass octaves, right unison"
+    unison: { voice: 2, detune: 0 }
+  - id: 15
+    name: "Theme echo, right (dotted quarter)"
+    echo: { voice: 1, delay_beats: 1.5, volume: 0.25, adsr: [5, 5, 7, 5], detune: 3 }
+  - id: 16
+    name: "Mid desk 1, right"
+    role: pad
+    instrument: glint
+    level: 8
+    patterns:
+      roof: { length: 0.5, groove: "A4 ~ - A4 ~ - A4 - | B4 ~ - B4 ~ - B4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | B4 ~ - B4 ~ - B4 - | B4 ~ - B4 ~ - B4 - | B4 ~ - B4 ~ - B4 - | C#5 ~ - C#5 ~ - C#5 - | B4 ~ - B4 ~ - B4 - | B4 ~ - B4 ~ - B4 - | C#5 ~ - C#5 ~ - C#5 - | A4 ~ - A4 ~ - A4 - | A4 ~ - A4 ~ - A4 - | C5 ~ - C5 ~ - C5 - | C5 ~ - C5 ~ - C5 -" }
+      proc: { length: 0.5, groove: "B4 ~ - B4 ~ - B4 - | B4 ~ - B4 ~ - B4 - | C#5 ~ - C#5 ~ - C#5 - | C#5 ~ - C#5 ~ - C#5 - | B4 ~ - B4 ~ - B4 - | B4 ~ - B4 ~ - B4 - | A4 ~ - A4 ~ - A4 - | B4 ~ - B4 ~ - B4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | B4 ~ - B4 ~ - B4 - | C#5 ~ - C#5 ~ - C#5 - | C5 ~ - C5 ~ - C5 -" }
+      all: { length: 0.5, groove: "C#5 ~ - C#5 ~ - C#5 - | C#5 ~ - C#5 ~ - C#5 - | B4 ~ - B4 ~ - B4 - | B4 ~ - B4 ~ - B4 - | C#5 ~ - C#5 ~ - C#5 - | C#5 ~ - C#5 ~ - C#5 - | A4 ~ - A4 ~ - A4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | G#4 ~ - G#4 ~ - G#4 - | F#4 ~ - F#4 ~ - F#4 - | A4 ~ - A4 ~ - A4 - | A4 ~ - A4 ~ - A4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | B4 ~ - B4 ~ - B4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | B4 ~ - B4 ~ - B4 - | C#5 ~ - C#5 ~ - C#5 - | C5 ~ - C5 ~ - C5 -" }
+      hold: { length: 1, groove: "(C#5 ~ ~ ~ | A4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 17
+    name: "Mid desk 2, right"
+    role: pad
+    instrument: glint
+    level: 8
+    patterns:
+      roof: { length: 0.5, groove: "E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | F#4 ~ - F#4 ~ - F#4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 - | F#4 ~ - F#4 ~ - F#4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 -" }
+      proc: { length: 0.5, groove: "G#4 ~ - G#4 ~ - G#4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | G#4 ~ - G#4 ~ - G#4 - | F#4 ~ - F#4 ~ - F#4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | F#4 ~ - F#4 ~ - F#4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 -" }
+      all: { length: 0.5, groove: "G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | G#4 ~ - G#4 ~ - G#4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | A4 ~ - A4 ~ - A4 - | F#4 ~ - F#4 ~ - F#4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | F#4 ~ - F#4 ~ - F#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | F#4 ~ - F#4 ~ - F#4 - | F#4 ~ - F#4 ~ - F#4 - | G#4 ~ - G#4 ~ - G#4 - | G#4 ~ - G#4 ~ - G#4 -" }
+      hold: { length: 1, groove: "(A4 ~ ~ ~ | F#4) ~ ~ ~ | D#4 ~ ~ ~ | ~ ~ ~ ~ | E4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 18
+    name: "Mid desk 3, right"
+    role: pad
+    instrument: glint
+    level: 8
+    patterns:
+      roof: { length: 0.5, groove: "C#4 ~ - C#4 ~ - C#4 - | B3 ~ - B3 ~ - B3 - | B3 ~ - B3 ~ - B3 - | C#4 ~ - C#4 ~ - C#4 - | C#4 ~ - C#4 ~ - C#4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | C#4 ~ - C#4 ~ - C#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 -" }
+      proc: { length: 0.5, groove: "E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | C#4 ~ - C#4 ~ - C#4 - | B3 ~ - B3 ~ - B3 - | B3 ~ - B3 ~ - B3 - | B3 ~ - B3 ~ - B3 - | C#4 ~ - C#4 ~ - C#4 - | B3 ~ - B3 ~ - B3 - | C#4 ~ - C#4 ~ - C#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 -" }
+      all: { length: 0.5, groove: "E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | D#4 ~ - D#4 ~ - D#4 - | E4 ~ - E4 ~ - E4 - | E4 ~ - E4 ~ - E4 - | C#4 ~ - C#4 ~ - C#4 - | C4 ~ - C4 ~ - C4 - | C#4 ~ - C#4 ~ - C#4 - | C#4 ~ - C#4 ~ - C#4 - | B3 ~ - B3 ~ - B3 - | B3 ~ - B3 ~ - B3 - | C#4 ~ - C#4 ~ - C#4 - | C#4 ~ - C#4 ~ - C#4 - | C#4 ~ - C#4 ~ - C#4 - | C4 ~ - C4 ~ - C4 - | C#4 ~ - C#4 ~ - C#4 - | B3 ~ - B3 ~ - B3 - | B3 ~ - B3 ~ - B3 - | C#4 ~ - C#4 ~ - C#4 - | C#4 ~ - C#4 ~ - C#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 - | D#4 ~ - D#4 ~ - D#4 -" }
+      hold: { length: 1, groove: "E4 ~ ~ ~ | ~ ~ ~ ~ | (C#4 ~ ~ ~ | C4) ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 19
+    name: "Counter-line B, right"
+    instrument: reed
+    level: 12
+    patterns:
+      all: { length: 1, groove: "C#4 ~ ~ ~ | ~ ~ ~ ~ | (E4 ~ ~ ~ | D#4) ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | (F#4 ~ ~ ~ | C4) ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | (E4 ~ ~ ~ | D#4) ~ ~ ~ | (C#4 ~ ~ ~ | F#4) ~ ~ ~ | (C#4 ~ ~ ~ | C4) ~ ~ ~ | (C#4 ~ ~ ~ | D#4) ~ ~ ~ | (B3 ~ ~ ~ | C#4) ~ ~ ~ | (F#4 ~ ~ ~ | D#4) ~ ~ ~ | (C#4 ~ ~ ~ | C4) ~ ~ ~" }
+      hold: { length: 1, groove: "(C#4 ~ ~ ~ | F#4) ~ ~ ~ | (C#4 ~ ~ ~ | C4) ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 0.5, groove: "- - - - - - - - | - - - - - - - - | C#5 ~ ~ ~ E5 ~ G#5 ~ | A5 ~ ~ ~ E5 ~ - - | - - - - - - - - | - - - - - - - - | E5 ~ ~ ~ C#5 ~ A4 ~ | B4 ~ ~ ~ ~ ~ - - | (E4 ~ ~ ~ ~ ~ ~ ~ | B3) ~ ~ ~ ~ ~ ~ ~ | (C#4 ~ ~ ~ ~ ~ ~ ~ | E4) ~ ~ ~ ~ ~ ~ ~ | (F#4 ~ ~ ~ ~ ~ ~ ~ | D#4) ~ ~ ~ ~ ~ ~ ~ | (C#4 ~ ~ ~ ~ ~ ~ ~ | C4) ~ ~ ~ ~ ~ ~ ~" }
+  - id: 20
+    name: "Arp B, right"
+    role: arp
+    instrument: spark
+    level: 8
+    patterns:
+      roof: { length: 1, groove: "- - A@arp ~ | - - B@arp ~ | - - G#m@arp ~ | - - C#m@arp ~ | - - F#m@arp ~ | - - B@arp ~ | - - E@arp ~ | - - E@arp ~ | - - A@arp ~ | - - B@arp ~ | - - G#m@arp ~ | - - C#m@arp ~ | - - F#m@arp ~ | - - D#m7b5@arp ~ | - - G#@arp ~ | - - G#7@arp ~" }
+      proc: { length: 1, groove: "- - E@arp ~ | - - B@arp ~ | - - C#m@arp ~ | - - A@arp ~ | - - E@arp ~ | - - B@arp ~ | - - A@arp ~ | - - B@arp ~ | - - E@arp ~ | - - G#m@arp ~ | - - A@arp ~ | - - E@arp ~ | - - F#m@arp ~ | - - B@arp ~ | - - G#sus4@arp ~ | - - G#@arp ~" }
+      all: { length: 1, groove: "- - C#m@arp ~ | - - A@arp ~ | - - E@arp ~ | - - B@arp ~ | - - C#m@arp ~ | - - A@arp ~ | - - F#m@arp ~ | - - G#@arp ~ | - - C#m@arp ~ | - - A@arp ~ | - - E@arp ~ | - - B@arp ~ | - - A@arp ~ | - - F#m@arp ~ | - - G#sus4@arp ~ | - - G#@arp ~ | - - A@arp ~ | - - B@arp ~ | - - G#m@arp ~ | - - C#m@arp ~ | - - F#m@arp ~ | - - B@arp ~ | - - G#sus4@arp ~ | - - G#@arp ~" }
+      hold: { length: 1, groove: "- - - - | - - - - | - - - - | - - - - | - - C#m@arp ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 21
+    name: "Brass B, right"
+    role: pad
+    instrument: brass
+    level: 10
+    patterns:
+      proc: { length: 1, groove: "(G#3 ~ ~ ~ | B3) ~ ~ ~ | (C#4 ~ ~ ~ | A3) ~ ~ ~ | (G#3 ~ ~ ~ | B3) ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | (G#3 ~ ~ ~ | B3) ~ ~ ~ | (A3 ~ ~ ~ | G#3) ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | (G#3 ~ ~ ~ | C4) ~ ~ ~" }
+      all: { length: 1, groove: "(C#4 ~ ~ ~ | A3) ~ ~ ~ | (G#3 ~ ~ ~ | B3) ~ ~ ~ | (C#4 ~ ~ ~ | A3) ~ ~ ~ | ~ ~ ~ ~ | C4 ~ ~ ~ | (C#4 ~ ~ ~ | A3) ~ ~ ~ | (G#3 ~ ~ ~ | B3) ~ ~ ~ | A3 ~ ~ ~ | ~ ~ ~ ~ | (G#3 ~ ~ ~ | C4) ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | ~ ~ ~ ~ | C#4 ~ ~ ~ | (A3 ~ ~ ~ | B3) ~ ~ ~ | (G#3 ~ ~ ~ | C4) ~ ~ ~" }
+      hold: { length: 1, groove: "A3 ~ ~ ~ | ~ ~ ~ ~ | (G#3 ~ ~ ~ | C4) ~ ~ ~ | C#4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 22
+    name: "High strings B, right (unison v11 on the left)"
+    role: pad
+    instrument: gossamer
+    level: 9
+    patterns:
+      flame: { length: 1, groove: "(C#5 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (C#5 ~ ~ ~ | A4) ~ ~ ~ | ~ ~ ~ ~ | (G#4 ~ C5) ~" }
+      arcade: { length: 1, groove: "(E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | (F#4 ~ ~ ~ | G#4) ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (A4 ~ ~ ~ | F#4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~" }
+      roof: { length: 1, groove: "(A4 ~ ~ ~ | B4) ~ ~ ~ | (G#4 ~ ~ ~ | E4) ~ ~ ~ | (F#4 ~ ~ ~ | D#4) ~ ~ ~ | E4 ~ ~ ~ | ~ ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | (G#4 ~ ~ ~ | E4) ~ ~ ~ | F#4 ~ ~ ~ | ~ ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~" }
+      proc: { length: 1, groove: "(G#4 ~ ~ ~ | B4) ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~ | (A4 ~ ~ ~ | G#4) ~ ~ ~ | (F#4 ~ ~ ~ | D#4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~" }
+      all: { length: 1, groove: "(E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | (F#4 ~ ~ ~ | G#4) ~ ~ ~ | (E4 ~ ~ ~ | A4) ~ ~ ~ | (G#4 ~ ~ ~ | B4) ~ ~ ~ | (A4 ~ ~ ~ | F#4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~ | (A4 ~ ~ ~ | B4) ~ ~ ~ | (G#4 ~ ~ ~ | E4) ~ ~ ~ | (F#4 ~ ~ ~ | D#4) ~ ~ ~ | G#4 ~ ~ ~ | ~ ~ ~ ~" }
+      hold: { length: 1, groove: "(A4 ~ ~ ~ | F#4) ~ ~ ~ | (C#4 ~ ~ ~ | G#4) ~ ~ ~ | E4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 23
+    name: "High strings A, right unison"
+    unison: { voice: 10, detune: -6 }
+  - id: 24
+    name: "Lantern bell B, right"
+    instrument: lantern
+    level: 10
+    patterns:
+      arcade: { length: 1, groove: "- - G#5 ~ | - - - - | - - B5 ~ | - - - - | - - G#5 ~ | - - - - | - - C#6 ~ | - - - - | - - G#5 ~ | - - - - | - - B5 ~ | - - - - | - - E5 ~ | - - - - | - - D#6 ~ | - - - -" }
+      roof: { length: 1, groove: "- - E5 ~ | - - - - | - - D#6 ~ | - - - - | - - C#6 ~ | - - - - | - - B5 ~ | - - - - | - - E5 ~ | - - - - | - - D#6 ~ | - - - - | - - C#6 ~ | - - - - | - - D#6 ~ | - - - -" }
+      proc: { length: 1, groove: "- - B5 ~ | - - - - | - - G#5 ~ | - - - - | - - B5 ~ | - - - - | - - E5 ~ | - - - - | - - B5 ~ | - - - - | - - E5 ~ | - - - - | - - C#6 ~ | - - - - | - - D#6 ~ | - - - -" }
+      all: { length: 1, groove: "- - G#5 ~ | - - - - | - - B5 ~ | - - - - | - - G#5 ~ | - - - - | - - C#6 ~ | - - - - | - - G#5 ~ | - - - - | - - B5 ~ | - - - - | - - E5 ~ | - - - - | - - D#6 ~ | - - - - | - - E5 ~ | - - - - | - - D#6 ~ | - - - - | - - C#6 ~ | - - - - | - - D#6 ~ | - - - -" }
+      hold: { length: 1, groove: "- - - - | - - - - | - - - - | - - - - | - - G#5 ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 25
+    name: "Kick and snare (socket SID, centre)"
+    role: drums
+    patterns:
+      arcade: { length: 0.25, groove: "k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - s - s - s - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - s - s - s - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - s - s - s - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - k - s - - - | k - - - s - - - k - s - s - s -" }
+      roof: { length: 0.25, groove: "k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - s - k - s - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - s - k - s - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - s - k - s - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - - - s - - - | k - - - s - k - k - s - k - s -" }
+      proc: { length: 0.25, groove: "k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - s - s - s - | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - s - s - s - | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - s - s - s - | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - - - s - s s | k - - - s - s - k - s - s - s -" }
+      all: { length: 0.25, groove: "k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - s - s - s - k - s - s - s - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - s - s - s - k - s - s - s - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - s - s - s - k - s - s - s - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - s - s - s - k - s - s - s - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - s - s - s - k - s - s - s - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - - - s - - k - - k - s - k - | k - s - s - s - k - s - s - s -" }
+      hold: { length: 0.25, groove: "- - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp C#2@timp | C#2@timp ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 26
+    name: "Sub bass (socket SID, centre)"
+    role: bass
+    instrument: sub
+    patterns:
+      flame: { length: 1, groove: "C#1 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | G#1 ~ ~ ~" }
+      arcade: { length: 0.5, groove: "C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~" }
+      roof: { length: 0.5, groove: "A1 ~ ~ A1 ~ ~ A1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | D#1 ~ ~ D#1 ~ ~ D#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~" }
+      proc: { length: 0.5, groove: "E1 ~ ~ E1 ~ ~ E1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~" }
+      all: { length: 0.5, groove: "C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | E1 ~ ~ E1 ~ ~ E1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | A1 ~ ~ A1 ~ ~ A1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | C#1 ~ ~ C#1 ~ ~ C#1 ~ | F#1 ~ ~ F#1 ~ ~ F#1 ~ | B1 ~ ~ B1 ~ ~ B1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~ | G#1 ~ ~ G#1 ~ ~ G#1 ~" }
+      hold: { length: 1, groove: "A1 ~ ~ ~ | F#1 ~ ~ ~ | G#1 ~ ~ ~ | ~ ~ ~ ~ | C#1 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 27
+    name: "Hats, toms and crash (socket SID, centre)"
+    role: drums
+    level: 13
+    patterns:
+      roof: { length: 0.25, groove: "h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - t - - t - - t - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - t - - t - - t - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - t - - t - - t - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - h - h - o - - - | h - h - h - h - t - - t - - t -" }
+      proc: { length: 0.25, groove: "x ~ ~ ~ ~ ~ ~ ~ h - h - h - h - | h - h - h - h - h - h - h - h - | h - h - h - h - h - h - h - h - | t - - - t - - - t - - t - - t - | x ~ ~ ~ ~ ~ ~ ~ h - h - h - h - | h - h - h - h - h - h - h - h - | h - h - h - h - h - h - h - h - | t - - - t - - - t - - t - - t - | x ~ ~ ~ ~ ~ ~ ~ h - h - h - h - | h - h - h - h - h - h - h - h - | h - h - h - h - h - h - h - h - | t - - - t - - - t - - t - - t - | x ~ ~ ~ ~ ~ ~ ~ h - h - h - h - | h - h - h - h - h - h - h - h - | h - h - h - h - h - h - h - h - | t - - - t - - - t - - t - - t -" }
+      all: { length: 0.25, groove: "x ~ ~ ~ ~ ~ ~ ~ h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | t - - t - - t - - t - - t - - - | x ~ ~ ~ ~ ~ ~ ~ h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | t - - t - - t - - t - - t - - - | x ~ ~ ~ ~ ~ ~ ~ h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | h h h h h h h h h h h h o - - - | t - - t - - t - - t - - t - - -" }
+      hold: { length: 0.25, groove: "- - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | - - - - - - - - - - - - - - - - | A6@cymbal ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+sections:
+  flame: { bars: 8, level: { from: p, to: mp }, volume: { from: 6, to: 7 }, layers: { v10: flame, v22: flame, v26: flame } }
+  arcade: { bars: 16, level: mf, volume: 8,
+            layers: { v1: arcade, v4: arcade, v5: arcade, v6: arcade, v10: arcade, v22: arcade, v12: arcade, v24: arcade, v25: arcade, v26: arcade } }
+  rooftops: { bars: 16, level: { from: mf, to: f, bars: 8 }, volume: 9,
+              layers: { v1: roof, v2: roof, v4: roof, v5: roof, v6: roof, v7: roof, v8: roof, v20: roof, v10: roof, v22: roof, v12: roof, v24: roof,
+                        v16: roof, v17: roof, v18: roof, v25: roof, v26: roof, v27: roof } }
+  procession: { bars: 16, level: f, volume: 9,
+                layers: { v1: proc, v2: proc, v4: proc, v5: proc, v6: proc, v7: proc, v19: proc, v8: proc, v20: proc, v9: proc, v21: proc, v10: proc, v22: proc,
+                          v12: proc, v24: proc, v16: proc, v17: proc, v18: proc, v25: proc, v26: proc, v27: proc } }
+  all_lanterns: { bars: 24, level: ff, volume: { from: 9, to: 10 },
+                  layers: { v1: all, v2: all, v4: all, v5: all, v6: all, v7: all, v19: all, v8: all, v20: all, v9: all, v21: all, v10: all, v22: all,
+                            v12: all, v24: all, v16: all, v17: all, v18: all, v25: all, v26: all, v27: all } }
+  hold: { bars: 8, level: { from: f, to: mp }, volume: 9,
+          layers: { v1: hold, v2: hold, v4: hold, v5: hold, v6: hold, v7: hold, v19: hold, v8: hold+12, v20: hold+12, v9: hold, v21: hold, v10: hold, v22: hold,
+                    v12: hold, v24: hold, v16: hold, v17: hold, v18: hold, v25: hold, v26: hold, v27: hold } }
+timeline: [flame, arcade, rooftops, procession, all_lanterns, hold]
+end: { hold_beats: 4, release: true }
