@@ -2,6 +2,7 @@
 # Techniques: Centred bass, kit and lead (unison copies on both pan sides), dotted-eighth stereo echo with a softer echo envelope, kick and snare interleaved with an offbeat filtered bass, PWM lead and arps, section levels and chip volume for the dynamic arc.
 # Learn: Keep kick, bass and lead in the middle with phase-reset unison copies, let one voice per side carry the chords and their echo, then shape the form with level and volume instead of extra notes
 #
+# Outro bass follows the chords: D, Bb, G, A, then the four-bar `end` (D, Bb, G/A, D). Chip volumes are about 2 dB lower than before (library loudness balance).
 # Form (88 bars, about 3:17): Intro 8 / Verse 16 / Chorus 16 / Bridge 8 / Verse 16 / Chorus 16 / Outro 8 with a held Dm(add9).
 # Left SID: bass and kit, lead, chord voice. Right SID: the same bass and lead in unison (so they image centre) and a
 # dotted-eighth echo of the chord voice, so every chord figure and the bridge counter-line answer from the right.
@@ -81,13 +82,13 @@ voices:
     name: "Chord echo, right"
     echo: { voice: 3, delay_beats: 0.75, volume: 0.5, adsr: [2, 7, 9, 6] }
 sections:
-  intro_a: { bars: 4, level: mp, volume: { from: 10, to: 12 }, filter: { cutoff: { from: 0, to: 220 } }, layers: { v1: "drone drone-4 drone+3 drone-2", v3: ia } }
-  intro_b: { bars: 4, level: mf, volume: 12, layers: { v1: "half half-4 half+3 fill-2", v3: ia } }
-  verse_a: { bars: 16, level: mf, volume: 12, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: va } }
-  chorus_a: { bars: 16, level: f, volume: 14, filter: { cutoff: 60 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
-  bridge: { bars: 8, level: { from: p, to: mf }, volume: 12, filter: { cutoff: { from: 0, to: 300 } }, layers: { v1: "bridge*2", v2: "- - - - br", v3: cm } }
-  verse_b: { bars: 16, level: mf, volume: 13, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: "vb vc" } }
-  chorus_b: { bars: 16, level: ff, volume: 15, filter: { cutoff: 100 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
-  outro: { bars: 8, level: { from: f, to: mp }, volume: { from: 14, to: 11 }, layers: { v1: "g g-4 end", v2: out, v3: out } }
+  intro_a: { bars: 4, level: mp, volume: { from: 8, to: 9 }, filter: { cutoff: { from: 0, to: 220 } }, layers: { v1: "drone drone-4 drone+3 drone-2", v3: ia } }
+  intro_b: { bars: 4, level: mf, volume: 9, layers: { v1: "half half-4 half+3 fill-2", v3: ia } }
+  verse_a: { bars: 16, level: mf, volume: 9, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: va } }
+  chorus_a: { bars: 16, level: f, volume: 11, filter: { cutoff: 60 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
+  bridge: { bars: 8, level: { from: p, to: mf }, volume: 9, filter: { cutoff: { from: 0, to: 300 } }, layers: { v1: "bridge*2", v2: "- - - - br", v3: cm } }
+  verse_b: { bars: 16, level: mf, volume: 10, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: "vb vc" } }
+  chorus_b: { bars: 16, level: ff, volume: 12, filter: { cutoff: 100 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
+  outro: { bars: 8, level: { from: f, to: mp }, volume: { from: 11, to: 9 }, layers: { v1: "g g-4 g-7 g-5 end", v2: out, v3: out } }
 timeline: [intro_a, intro_b, verse_a, chorus_a, bridge, verse_b, chorus_b, outro]
 end: { hold_beats: 4, release: true }
