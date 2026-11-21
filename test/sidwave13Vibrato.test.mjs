@@ -56,7 +56,10 @@ test("the vibrato depth rises linearly from zero over fade frames after the dela
     assert.ok(ratio >= previousRatio - 0.02, "the depth does not fall during the fade");
     previousRatio = ratio;
   }
-  assert.notDeepEqual(faded.slice(vibratoStart, vibratoStart + fade), full.slice(vibratoStart, vibratoStart + fade));
+  assert.ok(
+    faded.slice(vibratoStart, vibratoStart + fade).some((value, index) => value !== full[vibratoStart + index]),
+    "the vibrato fade interval differs from the full-depth interval",
+  );
 });
 
 test("the fade counts video frames at every speed", () => {
