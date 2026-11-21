@@ -24,12 +24,16 @@ test("sidwave-record records the whole song after it starts and stops the stream
   const mock = await startMockC64Server();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sidwave-record-"));
   try {
-    const wav = path.join(dir, "fanfare.wav");
+    // A two-second song keeps the run short: the mock sends audio in real time from a timer, which a loaded
+    // machine can slow down.
+    const song = path.join(dir, "short.yaml");
+    fs.writeFileSync(song, "sidwave: 1.2\ntitle: Short\ntempo: 120\nvoices:\n  - id: 1\n    patterns: { a: { groove: \"C4 E4 G4 C5\" } }\ntimeline: [{ bars: 1, layers: { v1: a } }]\nend: { hold_beats: 0, release: true }\n");
+    const wav = path.join(dir, "short.wav");
     const host = new URL(mock.baseUrl).host;
-    const r = await run(["--host", host, "--song", "title_fanfare", "--wav", wav, "--tail-seconds", "0.5", "--no-configure"]);
+    const r = await run(["--host", host, "--song", song, "--wav", wav, "--tail-seconds", "0.5", "--no-configure"]);
     assert.equal(r.status, 0, r.stderr.slice(-2000));
     const durationSeconds = Number(/, ([\d.]+) s, PAL/.exec(r.stdout)?.[1]);
-    assert.ok(durationSeconds > 10, r.stdout);
+    assert.ok(durationSeconds >= 2, r.stdout);
     assert.match(r.stdout, /prg \d+ bytes, sha256 [0-9a-f]{64}/);
     const bytes = fs.readFileSync(wav);
     assert.equal(bytes.toString("ascii", 0, 4), "RIFF");
