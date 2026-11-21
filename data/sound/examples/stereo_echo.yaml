@@ -1,10 +1,10 @@
 # Stereo sequencer piece | 93.98 BPM | D Dorian | 2 SIDs (left, right)
 # Techniques: A sequencer ostinato whose dotted-eighth echo on the other SID fills every missing sixteenth, a per-note band-pass blip on each SID with a darker filter on the right, a centred bass mirrored onto the right SID in the same call with TEST restart, a glide lead whose vibrato fades in after its delay (SIDWAVE 1.3), scoops, fall-offs and mordents, hand-written echoes at levels 8, 5 and 3, a five-sixteenth cell against the bar, kick and hat shared with the bass, and a canon at the diatonic fifth two beats behind across the stereo field.
-# Learn: A delay is a compositional device when the source is written for it: an eighth-note line plus a dotted-eighth echo is a complete sixteenth line, a melody with composed gaps is answered by itself, and the same melody two beats later a fifth higher is a canon
+# Learn: A delay is a compositional device when the source leaves space for it: the sixteenth cell D3 - - - A3 - - - F3 - - - C4 - - - has gaps for the dotted-eighth echo; a melody with composed gaps is answered by itself, and the same melody two beats later a fifth higher is a canon.
 # Form (68 bars, 2:55): Sequence 1-8 (0:00; the left plays alone for 4 bars, the right echo enters in bar 5) | Layer 9-20 (0:20; centred bass pedal, the left filter opens, one ostinato note changes every 2 bars) | Theme 21-36 (0:51; lead with composed gaps, right-side echoes) | Shift 37-44 (1:32; Bb Lydian, five-sixteenth cell, the motif augmented) | Canon 45-60 (1:52; kick and hat, the right SID plays the theme two beats later a diatonic fifth higher; climax bars 51-56) | Dissolve 61-68 (2:33; the ostinato loses a note per bar)
 #
-# Motif: ostinato D3 A3 F3 C4 in eighths (degrees 1 5 3 7); its echo 0.75 beat later lands on every odd sixteenth, so the
-# right side completes it as D C A D F A C F. Theme: A4 (h less a sixteenth) glides to C5 (q.), B4 (e.) | G4 (e.), rest, E5
+# Motif: ostinato D3 A3 F3 C4 at sixteenth-grid positions 1, 5, 9, 13 (degrees 1 5 3 7); its echo 0.75 beat later fills
+# positions 4, 8, 12, 16. Theme: A4 (h less a sixteenth) glides to C5 (q.), B4 (e.) | G4 (e.), rest, E5
 # (h, anticipated by a sixteenth) with a fall-off (degrees 5 - 7 6 | 4 - 2'). Characteristic interval: the rising major sixth G4-E5
 # across the rest. Tempo: 93.98 BPM at speed 1 (8 frames per sixteenth, echo 24 frames). The planned 100.25 BPM at speed 2 needs
 # about 12,400 cycles per call for six voices with tables, vibrato and glides against 8,778 available at 1 MHz.
@@ -137,7 +137,7 @@ voices:
     role: arp
     instrument: seq
     patterns:
-      seqB: { length: 0.5, bars: 4, groove: "D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 C4 D3 A3 G3 C4 | D3 A3 F3 C4 D3 E4 C4 A3" }
+      seqB: { length: 0.25, bars: 4, groove: "D3 - - - A3 - - - F3 - - - C4 - - - | D3 - - - A3 - - - F3 - - - C4 - - - | D3 - - - A3 - - - G3 - - - C4 - - - | D3 - - - A3 - - - F3 - - - C4 - - -" }
       layer: { length: 0.5, bars: 12, groove: "D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 D4 D3 A3 F3 D4 | D3 A3 F3 D4 D3 A3 F3 D4 | D3 A3 G3 D4 D3 A3 G3 D4 | D3 A3 G3 D4 D3 A3 G3 D4 | D3 B3 G3 D4 D3 B3 G3 D4 | D3 B3 G3 D4 D3 B3 G3 D4 | E3 B3 G3 D4 E3 B3 G3 D4 | E3 B3 G3 D4 E3 B3 G3 D4 | E3 B3 G3 C#4 E3 B3 G3 C#4 | E3 B3 G3 C#4 E3 B3 G3 C#4" }
       theme: { length: 0.5, bars: 16, groove: "D3 A3 F3 C4 E3 A3 F3 C4 | D3 A3 F3 C4 D3 A3 E3 C4 | G2 D3 B2 F3 G2 D3 B2 F3 | G2 D3 B2 F3 A2 D3 B2 F3 | C3 G3 E3 B3 C3 G3 E3 B3 | C3 G3 E3 B3 D3 G3 E3 B3 | A2 E3 C3 G3 A2 E3 C3 G3 | E3 B3 G#3 D4 E3 B3 G#3 D4 | Bb2 F3 D3 A3 Bb2 F3 D3 A3 | Bb2 F3 D3 A3 C3 F3 D3 A3 | C3 G3 E3 C4 C3 G3 E3 Bb3 | A2 E3 C#3 G3 A2 E3 C#3 G3 | D3 A3 F3 C4 E3 A3 F3 C4 | G2 D3 Bb2 E3 A2 E3 C#3 G3 | D3 A3 F3 C4 D3 A3 F3 A3 | D3 A3 F3 C4 D3 A3 F3 C4" }
       shift: { length: 0.25, bars: 8, groove: "Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 | - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - | F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 | E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 | - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - | Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 | A2@seq5 - E3@seq5 D4@seq5 - C#3@seq5 - G3@seq5 E4@seq5 - A2@seq5 - E3@seq5 D4@seq5 - C#3@seq5 | - G3@seq5 E4@seq5 - A2@seq5 - E3@seq5 D4@seq5 - C#3@seq5 - G3@seq5 E4@seq5 - A2@seq5 -" }
@@ -161,7 +161,7 @@ voices:
     role: lead
     instrument: lead
     patterns:
-      seqA: { length: 0.5, bars: 4, groove: "D3@seqdry A3@seqdry F3@seqdry C4@seqdry D3@seqdry A3@seqdry F3@seqdry C4@seqdry | D3@seqdry A3@seqdry F3@seqdry C4@seqdry D3@seqdry A3@seqdry F3@seqdry C4@seqdry | D3@seqdry A3@seqdry F3@seqdry C4@seqdry D3@seqdry A3@seqdry G3@seqdry C4@seqdry | D3@seqdry A3@seqdry F3@seqdry C4@seqdry D3@seqdry A3@seqdry F3@seqdry - " }
+      seqA: { length: 0.25, bars: 4, groove: "D3@seqdry - - - A3@seqdry - - - F3@seqdry - - - C4@seqdry - - - | D3@seqdry - - - A3@seqdry - - - F3@seqdry - - - C4@seqdry - - - | D3@seqdry - - - A3@seqdry - - - G3@seqdry - - - C4@seqdry - - - | D3@seqdry - - - A3@seqdry - - - F3@seqdry - - - C4@seqdry - - - " }
       teaser:
         length: 0.25
         bars: 12
@@ -467,9 +467,9 @@ sections:
   sequence1: { bars: 4, level: mp, layers: { v3: seqA } }
   sequence2: { bars: 4, level: f, layers: { v1: seqB } }
   layer: { bars: 12, level: mf, filter: { left: { cutoff: { from: -40, to: 260 } }, right: { cutoff: { from: -260, to: -40 } } }, layers: { v1: layer, v2: "lp1 lp2 lp3", v3: teaser, v6: teaser_echo } }
-  theme: { bars: 16, level: f, volume: { left: 13, right: 13 }, filter: { left: { cutoff: 260 }, right: { cutoff: { from: -40, to: 80 } } }, layers: { v1: theme, v2: theme, v3: theme, v6: theme_echo } }
+  theme: { bars: 16, level: f, levels: { v3: mf, v6: ff }, volume: { left: 13, right: 13 }, filter: { left: { cutoff: 260 }, right: { cutoff: { from: -40, to: 80 } } }, layers: { v1: theme, v2: theme, v3: theme, v6: theme_echo } }
   shift: { bars: 8, level: mp, volume: { left: 13, right: 13 }, levels: { v6: 6 }, filter: { left: { cutoff: 100 }, right: { cutoff: -150 } }, layers: { v1: shift, v2: shift, v3: shift, v6: shift } }
-  canon: { bars: 16, level: { from: f, to: ff, bars: 8 }, filter: { left: { cutoff: { from: 200, to: 400 } }, right: { cutoff: { from: 0, to: 200 } } }, layers: { v1: canon, v2: canon, v3: canon, v6: follower } }
+  canon: { bars: 16, level: { from: f, to: ff, bars: 8 }, levels: { v3: f, v6: ff }, filter: { left: { cutoff: { from: 200, to: 400 } }, right: { cutoff: { from: 0, to: 200 } } }, layers: { v1: canon, v2: canon, v3: canon, v6: follower } }
   dissolve: { bars: 8, level: { from: mf, to: p }, filter: { left: { cutoff: { from: 300, to: -100 } }, right: { cutoff: { from: 100, to: -300 } } }, layers: { v1: dis, v2: dis, v3: dissolve, v6: dissolve_echo } }
 timeline: [sequence1, sequence2, layer, theme, shift, canon, dissolve]
 end: { hold_beats: 2, release: true }

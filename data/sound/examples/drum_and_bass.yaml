@@ -7,6 +7,8 @@
 #   warbling arps in the breakdown; a pulse lead whose 0.5-semitone vibrato fades in after 16 frames, with
 #   grace, mordent, octave flick, scoops, turns and a fall-off; a saw lead with a faster, shallower fading
 #   vibrato for the fragments in the second drop; triangle glass bells that foreshadow the theme.
+# Rhythm grid: 176.91 BPM at speed 2 gives 8.5 calls per sixteenth (80/90 ms alternating); this is an intentional
+# 53% long-short shuffle, not a straight 16th grid.
 # Learn: Three voices change jobs by section: voice 1 is bells, then drums; voice 2 is sub, band-pass riser, Reese
 #   oscillator and owner of the filter throughout; voice 3 is chord arps, the second Reese oscillator, the lead
 #   and, in the second drop, both at once (lead fragments in the gaps of the riff).

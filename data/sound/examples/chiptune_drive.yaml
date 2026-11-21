@@ -191,7 +191,7 @@ instruments:
     adsr: [1, 5, 11, 5]
     vibrato: { depth: 0.35, rate: 6.2, delay: 8, fade: 10 }
     loop: 3
-    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse, frames: 17 }, { wave: pulse, note: "+0" }, { note: "+0" }, { note: "-4" }, { note: "-7" }]
+    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse, frames: 25 }, { wave: pulse, note: "+0" }, { note: "+0" }, { note: "-4" }, { note: "-7" }]
     pulsetable: { loop: 2, steps: [{ set: 246 }, { add: 70, frames: 20 }, { add: -14, frames: 50 }, { add: 14, frames: 50 }] }
   bloom1M:   # the root of a major chord (Bb over Dm: Bb F D)
     waveform: pulse
@@ -228,6 +228,7 @@ instruments:
     sync: true
     source_note: "+0"
     adsr: [0, 9, 10, 6]
+    wavetable: [{ wave: pulse, frames: 2 }, { wave: saw }]
   # --- voice 2 melodic instruments ---
   pluck:
     waveform: pulse
@@ -325,8 +326,8 @@ voices:
         groove: >-
           k ~ D2 D3 s ~ D2 A2 k ~ C#2 C#3 s ~ C#2 E2 | k ~ C2 C3 s ~ C2 F2 k ~ B1 B2 s j B1 F2 |
           k ~ Bb1 Bb2 s ~ Bb1 D2 k ~ A1 A2 s ~ A1 D2 | k ~ A1 A2 s ~ E2 G2 A1 q C#2 E2 s j j j |
-          k ~ D2 ~ D3 s ~ A2 C#2 ~ q C#3 s ~ E2 C#2 | k ~ C2 ~ C3 s ~ F2 B1 ~ q B2 s ~ D2 B1 |
-          k ~ Bb1 ~ Bb2 s ~ F2 A1 ~ q A2 s ~ E2 A1 | k ~ A1 A2 s ~ j A1 q E2 j G2 j j s ~
+          k ~ D2 ~ D3 s ~ A2 C#2 ~ q C#3 s ~ E2 C#2 | k ~ C2 ~ C3 s ~ F2 B1 ~ q B2 s ~ D2 k |
+          k ~ Bb1 ~ Bb2 s ~ F2 A1 ~ q s ~ E2 A1 ~ | k ~ A1 A2 s ~ j A1 q E2 j G2 j j s ~
       lament2:
         length: 0.25
         bars: 8
@@ -535,13 +536,13 @@ voices:
         length: 1
         bars: 4
         groove:
-          - { note: D5, inst: sync, len: 2, bend: { to: D6, frames: 40 } }
-          - { note: E5, inst: sync, len: 2, bend: { to: E6, frames: 30 } }
-          - { note: F5, inst: sync, len: 1.5, bend: { to: C6, frames: 24 } }
+          - { note: D5, inst: sync, len: 2, bend: { to: F#6, frames: 40 } }
+          - { note: E5, inst: sync, len: 2, bend: { to: G6, frames: 30 } }
+          - { note: F5, inst: sync, len: 1.5, bend: { to: A6, frames: 24 } }
           - { note: E5, inst: sync, len: 0.5 }
-          - { note: Ab5, inst: sync, len: 2, bend: { to: Ab6, frames: 36 } }
-          - { note: G5, inst: sync, len: 2, bend: { to: G6, frames: 36 } }
-          - { note: A5, inst: sync, len: 1, bend: { to: E6, frames: 16 } }
+          - { note: Ab5, inst: sync, len: 2, bend: { to: B6, frames: 36 } }
+          - { note: G5, inst: sync, len: 2, bend: { to: Bb6, frames: 36 } }
+          - { note: A5, inst: sync, len: 1, bend: { to: C7, frames: 16 } }
           - { note: G5, inst: sync, len: 0.5 }
           - { note: E5, inst: sync, len: 0.5 }
           - { note: A5, inst: sync, len: 4, bend: { to: A6, frames: 80 } }
@@ -558,16 +559,16 @@ voices:
         length: 1
         bars: 4
         groove:
-          - { note: A4, inst: sync, len: 1, bend: { to: A5, frames: 20 } }
-          - { note: D5, inst: sync, len: 1, bend: { to: D6, frames: 20 } }
-          - { note: F5, inst: sync, len: 2, bend: { to: F6, frames: 40 } }
+          - { note: A4, inst: sync, len: 1, bend: { to: C6, frames: 20 } }
+          - { note: D5, inst: sync, len: 1, bend: { to: F#6, frames: 20 } }
+          - { note: F5, inst: sync, len: 2, bend: { to: A6, frames: 40 } }
           - { note: E5, inst: sync, len: 1, bend: { to: C6, frames: 16 } }
-          - { note: F5, inst: sync, len: 1, bend: { to: D6, frames: 16 } }
-          - { note: Ab5, inst: sync, len: 2, bend: { to: Ab6, frames: 40 } }
-          - { note: G5, inst: sync, len: 2, bend: { to: D6, frames: 30 } }
-          - { note: E5, inst: sync, len: 2, bend: { to: E6, frames: 30 } }
-          - { note: C#5, inst: sync, len: 2, bend: { to: C#6, frames: 30 } }
-          - { note: E5, inst: sync, len: 2, bend: { to: A6, frames: 40 } }
+          - { note: F5, inst: sync, len: 1, bend: { to: A6, frames: 16 } }
+          - { note: Ab5, inst: sync, len: 2, bend: { to: B6, frames: 40 } }
+          - { note: G5, inst: sync, len: 2, bend: { to: Bb6, frames: 30 } }
+          - { note: E5, inst: sync, len: 2, bend: { to: G6, frames: 30 } }
+          - { note: C#5, inst: sync, len: 2, bend: { to: E6, frames: 30 } }
+          - { note: E5, inst: sync, len: 2, bend: { to: B5, frames: 40 } }
       brk:
         length: 0.25
         bars: 8
@@ -631,8 +632,8 @@ sections:
     layers: { v1: b, v2: b, v3: b }
   solo:
     bars: 16
-    volume: 13
-    filter: { cutoff: -40 }
+    volume: 15
+    filter: { cutoff: 0 }
     layers: { v1: "lament lament2", v2: "broken - - - - fast - - - -", v3: "solo1 sync1 runs sync2" }
   break:
     bars: 8

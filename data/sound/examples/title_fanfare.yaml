@@ -233,11 +233,14 @@ sections:
   swerve:
     bars: 2
     level: { from: mp, to: ff }
-    volume: { from: 9, to: 12 }
+    # Hit the Bb at full chip volume; the roll and the level change carry the two-bar swell.
+    volume: 12
+    levels: { v1: ff, v2: mf, v3: ff, v4: mf, v5: mp }
     layers: { v1: "m5 m6", v2: "m5 m6", v3: "m5 m6", v4: "m5 m6", v5: "m5 m6" }
   tutti:
     bars: 1
     level: ff
+    levels: { v1: ff, v2: mf, v3: ff, v4: mf, v5: mp }
     filter: { sid1: { cutoff: 80 }, sid2: { cutoff: 80 } }
     layers: { v1: m7, v2: m7, v3: m7, v4: m7, v5: m7 }
   gate:

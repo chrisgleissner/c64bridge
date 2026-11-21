@@ -144,42 +144,41 @@ instruments:
     waveform: pulse
     adsr: [0, 7, 10, 5]
     hard_restart: { frames: 0 }
-    portamento: 3
     vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }
     pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }
     wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
   # Scoop: up from a minor third below in one-frame steps (a relative slide_to would make one instrument per pitch).
-  scp: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-3" }, { wave: pulse, note: "-3" }, { note: "-2" }, { note: "-1" }, { wave: pulse }] }
-  grc: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-1", frames: 3 }, { wave: pulse }] }
-  mrd: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, frames: 3 }, { note: "+2", frames: 3 }, { wave: pulse }] }
-  trl: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 1, steps: [{ set: 0.2 }, { add: 20, frames: 20 }, { add: -20, frames: 20 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, note: "+0", frames: 3 }, { note: "+2", frames: 3 }], loop: 1 }
-  fall: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, frames: 14 }, { note: "-1" }, { note: "-2" }, { note: "-3" }, { note: "-5" }, { note: "-7", frames: 2 }, { note: "-9", gate: false }] }
-  blue: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-1" }, { wave: pulse, note: "-1", frames: 9 }, { wave: pulse }] }
-  lend: { waveform: pulse, adsr: [0, 7, 10, 10], hard_restart: { frames: 0 }, portamento: 3, vibrato: { depth: 0.5, rate: 5.8, delay: 30, fade: 40 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }] }
+  scp: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-3" }, { wave: pulse, note: "-3" }, { note: "-2" }, { note: "-1" }, { wave: pulse }] }
+  # Clean body for the explicitly scored minor-third scoop, with no chromatic staircase in the wavetable.
+  scoop: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, frames: 1 }, { wave: pulse }] }
+  grc: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-1", frames: 3 }, { wave: pulse }] }
+  mrd: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, frames: 3 }, { note: "+2", frames: 3 }, { wave: pulse }] }
+  trl: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 1, steps: [{ set: 0.2 }, { add: 20, frames: 20 }, { add: -20, frames: 20 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, note: "+0", frames: 3 }, { note: "+2", frames: 3 }], loop: 1 }
+  fall: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, frames: 14 }, { note: "-1" }, { note: "-2" }, { note: "-3" }, { note: "-5" }, { note: "-7", frames: 2 }, { note: "-9", gate: false }] }
+  blue: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-1" }, { wave: pulse, note: "-1", frames: 9 }, { wave: pulse }] }
+  lend: { waveform: pulse, adsr: [0, 7, 10, 10], hard_restart: { frames: 0 }, vibrato: { depth: 0.5, rate: 5.8, delay: 30, fade: 40 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }] }
   # Reed lead (solo): one noise frame two octaves up, two saw frames, then a wide pulse narrowing and
   # widening every 20 frames; deeper and faster vibrato that starts earlier and grows over 12 frames.
   rd:
     waveform: pulse
     adsr: [0, 5, 11, 4]
     hard_restart: { frames: 0 }
-    portamento: 2
     vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }
     pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }
     wavetable: [{ wave: noise, note: "+12" }, { wave: saw, frames: 2 }, { wave: pulse }]
-  rscp: { waveform: pulse, adsr: [0, 5, 11, 4], hard_restart: { frames: 0 }, portamento: 2, vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }, pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }, wavetable: [{ wave: noise, note: "+12" }, { wave: saw, note: "-2" }, { wave: saw, note: "-1", frames: 2 }, { wave: pulse }] }
-  rfall: { waveform: pulse, adsr: [0, 5, 11, 4], hard_restart: { frames: 0 }, portamento: 2, vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }, pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }, wavetable: [{ wave: noise, note: "+12" }, { wave: saw, frames: 2 }, { wave: pulse, frames: 14 }, { note: "-1" }, { note: "-3" }, { note: "-5" }, { note: "-7" }, { note: "-10" }, { note: "-12", gate: false }] }
+  rscp: { waveform: pulse, adsr: [0, 5, 11, 4], hard_restart: { frames: 0 }, vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }, pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }, wavetable: [{ wave: noise, note: "+12" }, { wave: saw, note: "-2" }, { wave: saw, note: "-1", frames: 2 }, { wave: pulse }] }
+  rfall: { waveform: pulse, adsr: [0, 5, 11, 4], hard_restart: { frames: 0 }, vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }, pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }, wavetable: [{ wave: noise, note: "+12" }, { wave: saw, frames: 2 }, { wave: pulse, frames: 14 }, { note: "-1" }, { note: "-3" }, { note: "-5" }, { note: "-7" }, { note: "-10" }, { note: "-12", gate: false }] }
   # Glass lead (bridge): noise breath, six triangle frames, then a square wave narrowing slowly; slow attack,
   # gentle late vibrato that swells over 30 frames.
   gl:
     waveform: pulse
     adsr: [2, 6, 11, 6]
-    portamento: 4
     vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }
     pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }
     wavetable: [{ wave: noise, note: "+19" }, { wave: tri, frames: 6 }, { wave: pulse }]
-  gscp: { waveform: pulse, adsr: [2, 6, 11, 6], portamento: 4, vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, note: "-2", frames: 3 }, { wave: tri, note: "-1", frames: 3 }, { wave: pulse }] }
-  gtrl: { waveform: pulse, adsr: [2, 6, 11, 6], portamento: 4, vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, note: "+0", frames: 4 }, { note: "+2", frames: 4 }], loop: 1 }
-  gfall: { waveform: pulse, adsr: [2, 6, 11, 6], portamento: 4, vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, frames: 6 }, { wave: pulse, frames: 20 }, { note: "-1", frames: 2 }, { note: "-2", frames: 2 }, { note: "-3", frames: 2 }, { note: "-5", frames: 3 }, { note: "-7", gate: false }] }
+  gscp: { waveform: pulse, adsr: [2, 6, 11, 6], vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, note: "-2", frames: 3 }, { wave: tri, note: "-1", frames: 3 }, { wave: pulse }] }
+  gtrl: { waveform: pulse, adsr: [2, 6, 11, 6], vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, note: "+0", frames: 4 }, { note: "+2", frames: 4 }], loop: 1 }
+  gfall: { waveform: pulse, adsr: [2, 6, 11, 6], vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, frames: 6 }, { wave: pulse, frames: 20 }, { note: "-1", frames: 2 }, { note: "-2", frames: 2 }, { note: "-3", frames: 2 }, { note: "-5", frames: 3 }, { note: "-7", gate: false }] }
 voices:
   - id: 1
     name: Slap bass and kick/snare
@@ -321,7 +320,12 @@ voices:
       cx1: { length: 0.25, bars: 1, groove: "- - C5@cv - - E5@cv - G5@cv - - C5@cv - - F#5@cv - E5@cv" }
       cx2: { length: 0.25, bars: 1, groove: "- - E5@cv - - C5@cv - A4@cv - - D#5@cv - - A4@cv - F#4@cv" }
       pk: { length: 0.25, bars: 1, groove: "- E5@cv - B4@cv - - G4@cv B4@cv - D#5@cv - A4@cv - - B4 D5" }
-      L1: { length: 0.25, bars: 1, groove: "E5!@scp ~ - G5 F#5 E5 ~ D5 ~ ~ ~ ~ - - - -" }
+      L1:
+        length: 0.25
+        bars: 1
+        groove:
+          - { note: E5, inst: scoop, slide_from: C#5, portamento: 4, accented: true, len: 0.25 }
+          - "~ - G5 F#5 E5 ~ D5 ~ ~ ~ ~ - - - -"
       L2: { length: 0.25, bars: 1, groove: "(Bb4 /B4) ~ A4 G4 ~ E4 ~ - - - - - - E5 G5" }
       L3: { length: 0.25, bars: 1, groove: "A5!@scp ~ - G5 F#5 E5 ~ (F#5 G5) ~ ~ A5 B5! ~ - -" }
       L4: { length: 0.25, bars: 1, groove: "- B5@mrd ~ A5 F#5 ~ D5 E5 ~ ~ G5 ~ (F#5 E5) C#5 A#4" }
