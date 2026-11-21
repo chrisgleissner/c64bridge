@@ -13,7 +13,7 @@ import { digiTriggers, makeTimelineClock, rampValue, timelinePatternPasses, type
 import type { SampleStats } from "./sidwavePcm.js";
 import { addDigiPlayer, digiCyclesPerCall, digiDataAsm, digiPeakCycles, digiPeriod, validateDigiRate } from "./sidwaveDigi.js";
 import { assemblyToPrgDetailed } from "./tools/translation/assembler.js";
-import { patternBeats } from "./sidwave.js";
+import { isModern, patternBeats, sectionBarBeats } from "./sidwave.js";
 import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, SidwavePatternGroove, MotifEntry, SidwaveRegisterTable, FilterModSpec, SidwaveSamples, SidwaveGrooveNote } from "./sidwave.js";
 import {
   SidwaveValidationError,
@@ -115,7 +115,7 @@ function compilePlayer(doc: ParsedSidwave, { loop = true, compress = true }: { l
       loopFrame === previous.loopFrame && sameStreamEvents(v.events, previous.events)) rejectOversize();
     const tokens = encodeVoiceTokens(v.events, part.totalFrames, loopFrame);
     let bytes: StreamByte[];
-    if (doc.version !== "1.2" || !compress) {
+    if (!isModern(doc) || !compress) {
       bytes = [];
       for (const token of tokens) { if (!token.length) loopOffsets[i] = bytes.length; bytes.push(...token); }
     } else {
@@ -534,7 +534,7 @@ function resolveCenterMirrors(doc: ParsedSidwave): Array<[number, number]> {
 }
 
 export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
-  if (doc.version !== "1.2" || !doc.end) return arrangeAll(doc, 0);
+  if (!isModern(doc) || !doc.end) return arrangeAll(doc, 0);
   // The release tail depends on the instruments that sound at the last bar line, so arrange once to find it.
   const probe = arrangeAll(doc, 0);
   if (!doc.end.release) return probe;
@@ -554,14 +554,14 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
 
 function arrangeAll(doc: ParsedSidwave, endTail: number, onPart?: (part: Arrangement, chip: number) => void): Arrangement {
   const first = doc.sids[0]!;
-  const extended = doc.version === "1.2" || doc.sids.length > 1 || first.address !== 0xd400 || first.volume !== 15 ||
+  const extended = isModern(doc) || doc.sids.length > 1 || first.address !== 0xd400 || first.volume !== 15 ||
     first.filter || doc.cpu || doc.voices.some(({ id }) => doc.voiceSlots.get(id) !== id - 1);
   if (!extended) return arrangeChip(doc, createInstrumentPool());
 
   const pool = createInstrumentPool();
   const mirrors = resolveCenterMirrors(doc);
-  const findings = doc.version === "1.2" ? new SidwaveFindings() : undefined;
-  const clock = doc.version === "1.2" ? makeTimelineClock(doc, sidwaveFrameRate(doc.song.mode) * doc.speed) : undefined;
+  const findings = isModern(doc) ? new SidwaveFindings() : undefined;
+  const clock = isModern(doc) ? makeTimelineClock(doc, sidwaveFrameRate(doc.song.mode) * doc.speed) : undefined;
   const parts = doc.sids.map((sid, chip) => {
     const idByChannel = new Map<number, number>();
     const voices = doc.voices.flatMap((voice) => {
@@ -616,7 +616,7 @@ function arrangeAll(doc: ParsedSidwave, endTail: number, onPart?: (part: Arrange
       };
     }),
     turbo: doc.cpu === "turbo",
-    softVolume: doc.version === "1.2",
+    softVolume: isModern(doc),
   };
 }
 
@@ -776,7 +776,7 @@ function arrangeChip(
   volume = 15, sidMod?: FilterModSpec, idByChannel?: ReadonlyMap<number, number>,
   clock?: TimelineClock, findings?: SidwaveFindings, sid?: ParsedSidwave["sids"][number], endTail = 0,
 ): Arrangement {
-  const modern = doc.version === "1.2";
+  const modern = isModern(doc);
   const system: SystemMode = doc.song.mode ?? "PAL";
   const fps = sidwaveFrameRate(system) * doc.speed;
   const framesPerBeat = (fps * 60) / doc.song.tempo;
@@ -784,7 +784,19 @@ function arrangeChip(
   const maxMidi = maxSidwaveMidi(system);
   const totalBars = doc.song.length_bars;
   const beatsPerBar = doc.song.meter;
-  const musicFrames = frameAt(totalBars * beatsPerBar);
+  // Expand the timeline, cycling it when length_bars exceeds it and truncating when shorter. A SIDWAVE 1.3
+  // section counts its bars in its own metre.
+  const sections: Array<{ index: number; startBeat: number; endBeat: number; meter: number }> = [];
+  for (let bar = 0, beat = 0, i = 0; bar < totalBars; i += 1) {
+    const s = doc.timeline[i % doc.timeline.length]!;
+    const bars = Math.min(s.bars, totalBars - bar);
+    const meter = sectionBarBeats(s, beatsPerBar);
+    sections.push({ index: i % doc.timeline.length, startBeat: beat, endBeat: beat + bars * meter, meter });
+    beat += bars * meter;
+    bar += bars;
+  }
+  const barOf = (beat: number) => clock ? clock.barOf(beat) : Math.floor(beat / beatsPerBar) + 1;
+  const musicFrames = frameAt(sections[sections.length - 1]!.endBeat);
   const end = modern ? doc.end : undefined;
   // Notes sounding at the last bar line are held for end.hold_beats; the release tail follows.
   const holdFrames = end && clock ? clock.frameAt(clock.endBeat + end.holdBeats) - musicFrames : 0;
@@ -815,14 +827,6 @@ function arrangeChip(
   const fadeWindows: Array<Array<{ start: number; end: number }>> = [[], [], []];
   const reverb = gfx.reverb_sim as { depth: number; delay_frames: number } | undefined;
 
-  // Expand the timeline, cycling it when length_bars exceeds it and truncating when shorter.
-  const sections: Array<{ index: number; startBeat: number; endBeat: number }> = [];
-  for (let bar = 0, i = 0; bar < totalBars; i += 1) {
-    const s = doc.timeline[i % doc.timeline.length]!;
-    const bars = Math.min(s.bars, totalBars - bar);
-    sections.push({ index: i % doc.timeline.length, startBeat: bar * beatsPerBar, endBeat: (bar + bars) * beatsPerBar });
-    bar += bars;
-  }
 
   for (const sec of sections) {
     const section = doc.timeline[sec.index]!;
@@ -839,7 +843,7 @@ function arrangeChip(
       const patterns = voice.patterns ?? {};
       const legacy = parseLayerRef(ref, Object.keys(patterns));
       const patPath = `${secPath}.layers.v${idByChannel?.get(id) ?? id}`;
-      const passes = modern ? timelinePatternPasses(ref, patterns, sec.startBeat, sec.endBeat, beatsPerBar, patPath)
+      const passes = modern ? timelinePatternPasses(ref, patterns, sec.startBeat, sec.endBeat, sec.meter, patPath)
         : (function* () {
             if (!legacy.pattern) return;
             const length = patternBeats(patterns[legacy.pattern]!);
@@ -860,7 +864,7 @@ function arrangeChip(
           fading.push(id);
           fadeWindows[id - 1]!.push({ start: sf, end: ef });
         }
-        if (pass.sequence && pass.cut) findings?.add("SEQ-CUT", `bar ${Math.floor(cycleStart / beatsPerBar) + 1} v${idByChannel?.get(id) ?? id}`, "Match the sequence length to the section");
+        if (pass.sequence && pass.cut) findings?.add("SEQ-CUT", `bar ${barOf(cycleStart)} v${idByChannel?.get(id) ?? id}`, "Match the sequence length to the section");
         const fxRaw = (pattern.fx ?? {}) as Record<string, any>;
         const filterMod = fxRaw.filter_mod ? parseFilterMod(fxRaw.filter_mod, `${patPath}.fx.filter_mod`) : undefined;
         if (filterMod) filterUsed = hasFilterMod = true;
@@ -877,7 +881,7 @@ function arrangeChip(
         const transpositions = pattern.transpositions ?? [0];
         const tr = transpositions[pass.repetition % transpositions.length]! + pass.transpose + (section.transpose ?? 0);
         if (filterMod) {
-          const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: beatsPerBar * framesPerBeat, frames: modern ? doc.speed : 1 }[filterMod.unit];
+          const unitFrames = { steps: lengthBeats * framesPerBeat, beats: framesPerBeat, bars: sec.meter * framesPerBeat, frames: modern ? doc.speed : 1 }[filterMod.unit];
           const count = Math.max(1, Math.min(0xffff, Math.round(filterMod.amount * unitFrames)));
           // Offset and step are in cutoff x 32 units and signed 24-bit in the player, so the full ±2047 range ramps smoothly.
           const step = Math.round((filterMod.sweep * 32) / count);
@@ -965,7 +969,7 @@ function arrangeChip(
             }
             if (modern && ownerChannel !== undefined && id !== ownerChannel && fx.filtertable) {
               fx.filtertable = undefined;
-              findings?.once("FILTER-IGNORED", String(instrumentName ?? `v${id}`), `bar ${Math.floor(b / beatsPerBar) + 1} v${idByChannel?.get(id) ?? id}`, "Move the filter table to the owner voice or remove it");
+              findings?.once("FILTER-IGNORED", String(instrumentName ?? `v${id}`), `bar ${barOf(b)} v${idByChannel?.get(id) ?? id}`, "Move the filter table to the owner voice or remove it");
             }
             if (modern && !sid?.model && !isLibrary && JSON.stringify(fx.filtertable ?? "").includes('"hz"')) {
               throw new SidwaveValidationError(`${patPath}.instrument`, "declare sids[].model before using a cutoff in Hz");
@@ -1016,14 +1020,14 @@ function arrangeChip(
           const sustain = inst.sr >> 4;
           const centerScale = voice.center ? (voice.center.level ?? 11.25) / 15 : 1;
           const effective = sustain ? Math.min(15, Math.max(1, Math.round(sustain * centerScale * (entry.level ?? voice.level ?? 15) / 15 *
-            rampValue(level, 15, b - sec.startBeat, sec.endBeat - sec.startBeat, beatsPerBar) / 15) +
+            rampValue(level, 15, b - sec.startBeat, sec.endBeat - sec.startBeat, sec.meter) / 15) +
             (entry.accented ? doc.accent ?? 3 : 0))) : 0;
           const percussion = !!entry.kitNote || voice.role === "drums" ||
             (isLibrary && /^(?:kick|snare|hat|tom|clap|open_hat|crash)$/.test(key!));
           const transient = percussion || !!inst.wavetable?.length;
           const targetedLevel = section.levels?.[`v${voiceId}`] !== undefined || voice.level !== undefined ||
             entry.level !== undefined || entry.accented || !!voice.center;
-          if (mark && !sustain && (!transient || targetedLevel)) findings?.once("LEVEL-NOOP", instrumentName ?? `v${voiceId}`, `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`, "Use chip volume or a kit variant for sustain-zero sounds");
+          if (mark && !sustain && (!transient || targetedLevel)) findings?.once("LEVEL-NOOP", instrumentName ?? `v${voiceId}`, `bar ${barOf(b)} v${voiceId}`, "Use chip volume or a kit variant for sustain-zero sounds");
           const sounding = legato ? instruments[previous!.inst]! : inst;
           if (modern) {
             checkDetunedPitch(midi, sounding, voice.detune ?? 0, system, patPath);
@@ -1039,8 +1043,8 @@ function arrangeChip(
             percussion,
             portamento, glideFrom, gateOff,
             ...(modern ? { sustain: mark && !legato ? effective : legato ? previous?.sustain : undefined, beat: b,
-              section: sec.index, path: `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`,
-              volume: rampValue(section.volume?.[sid?.id ?? ""], volume, b - sec.startBeat, sec.endBeat - sec.startBeat, beatsPerBar) } : {}),
+              section: sec.index, path: `bar ${barOf(b)} v${voiceId}`,
+              volume: rampValue(section.volume?.[sid?.id ?? ""], volume, b - sec.startBeat, sec.endBeat - sec.startBeat, sec.meter) } : {}),
 
           };
           out.push(arranged);
@@ -1062,15 +1066,15 @@ function arrangeChip(
     if (modern && sid && (doc.timeline.some((s) => s.volume?.[sid.id] !== undefined))) {
       const ramp = section.volume?.[sid.id];
       const span = sec.endBeat - sec.startBeat;
-      if (typeof ramp === "object" && Math.abs(ramp.to - (ramp.from ?? volume)) > (ramp.bars ?? span / beatsPerBar) * beatsPerBar) {
-        findings?.add("VOL-STEP", `bar ${sec.startBeat / beatsPerBar + 1} ${sid.id}`, "Give each volume step a beat");
+      if (typeof ramp === "object" && Math.abs(ramp.to - (ramp.from ?? volume)) > (ramp.bars ?? span / sec.meter) * sec.meter) {
+        findings?.add("VOL-STEP", `bar ${barOf(sec.startBeat)} ${sid.id}`, "Give each volume step a beat");
       }
       if (doc.samples?.triggers.some((trigger) => doc.sids[trigger.chip]?.id === sid.id) || doc.digiVoices?.some((digi) => doc.sids[digi.chip]?.id === sid.id)) {
         throw new SidwaveValidationError(secPath + ".volume", `cannot change volume on digi SID ${sid.id}`);
       }
       let previous = -1;
       for (let beat = sec.startBeat; beat < sec.endBeat - BEAT_EPS; beat++) {
-        const value = Math.round(rampValue(ramp, volume, beat - sec.startBeat, span, beatsPerBar));
+        const value = Math.round(rampValue(ramp, volume, beat - sec.startBeat, span, sec.meter));
         if (value !== previous) globals.push({ frame: frameAt(beat), kind: "volume", value });
         previous = value;
       }
@@ -1082,7 +1086,7 @@ function arrangeChip(
       const span = sec.endBeat - sec.startBeat;
       let previous = "";
       for (let beat = sec.startBeat; beat < sec.endBeat - BEAT_EPS; beat++) {
-        const offset = Math.round(rampValue(move?.cutoff, 0, beat - sec.startBeat, span, beatsPerBar));
+        const offset = Math.round(rampValue(move?.cutoff, 0, beat - sec.startBeat, span, sec.meter));
         const res = move?.resonance === undefined ? 0 : move.resonance + 1;
         const key = `${offset}:${res}`;
         if (key !== previous) globals.push({ frame: frameAt(beat), kind: "foffset", value: offset * 32, res });
@@ -1130,7 +1134,7 @@ function arrangeChip(
         if (spec === undefined || n.hidden) continue;
         const source = (channel + 2) % 3;
         const midi = /^[+-]/.test(spec) ? n.midi + Number(spec) : noteNameToMidi(spec)!;
-        const label = `bar ${Math.floor((n.beat ?? 0) / beatsPerBar) + 1} v${idByChannel?.get(source + 1) ?? source + 1}`;
+        const label = `bar ${barOf(n.beat ?? 0)} v${idByChannel?.get(source + 1) ?? source + 1}`;
         if (midi < 12 || midi > maxMidi) throw new SidwaveValidationError(`$.voices.v${idByChannel?.get(channel + 1) ?? channel + 1}`, `source_note ${spec} lies outside the playable note range at ${label}`);
         if (notes[source]!.some((m) => !m.hidden && m.start < n.end && m.end > n.start)) {
           throw new SidwaveValidationError(`$.voices.v${idByChannel?.get(source + 1) ?? source + 1}`, `the source channel of a source_note instrument must be unscored while the note sounds (${label})`);

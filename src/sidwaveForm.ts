@@ -1,17 +1,22 @@
-import { parseLayerSequence, patternBeats, type ParsedSidwave, type SidwavePattern, type SidwaveRamp, type SidwaveTimelineSection } from "./sidwave.js";
+import { parseLayerSequence, patternBeats, sectionBarBeats, type ParsedSidwave, type SidwavePattern, type SidwaveRamp, type SidwaveTimelineSection } from "./sidwave.js";
 
 const EPSILON = 1e-9;
 
 export function makeTimelineClock(doc: ParsedSidwave, fps: number) {
   const sections: Array<{ index: number; section: SidwaveTimelineSection; startBeat: number; endBeat: number; at: (beat: number) => number; startTime: number; endTime: number; endTempo: number }> = [];
-  const meter = doc.song.meter;
   let seconds = 0;
+  // Bar lines in beats. Each section counts its bars in its own metre (SIDWAVE 1.3); a beat is a quarter note.
+  const barStarts = [0];
+  let beat = 0;
   for (let bar = 0, i = 0; bar < doc.song.length_bars; i++) {
     const index = i % doc.timeline.length;
     const section = doc.timeline[index]!;
     const bars = Math.min(section.bars, doc.song.length_bars - bar);
-    const startBeat = bar * meter;
-    const endBeat = (bar + bars) * meter;
+    const meter = sectionBarBeats(section, doc.song.meter);
+    const startBeat = beat;
+    const endBeat = beat + bars * meter;
+    for (let b = 1; b <= bars; b++) barStarts.push(startBeat + b * meter);
+    beat = endBeat;
     const tempo = typeof section.tempo === "number" ? section.tempo : doc.song.tempo;
     const slope = typeof section.tempo === "object" ? (section.tempo.to - tempo) / (section.bars * meter) : 0;
     const origin = seconds;
@@ -46,7 +51,18 @@ export function makeTimelineClock(doc: ParsedSidwave, fps: number) {
       ? last.endTime + (delayed - last.endBeat) * 60 / last.endTempo : item.at(delayed);
     return Math.round(time * fps + EPSILON);
   };
-  return { sections, frameAt, totalFrames: frameAt(last.endBeat), endBeat: last.endBeat,
+  /** One-based number of the bar that contains `beat`. */
+  const barOf = (beat: number) => {
+    let lo = 0;
+    let hi = barStarts.length - 2;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >>> 1;
+      if (barStarts[mid]! <= beat) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  };
+  return { sections, frameAt, barStarts, barOf, totalFrames: frameAt(last.endBeat), endBeat: last.endBeat,
     loopFrame: doc.loopTo === undefined ? undefined : frameAt(sections[doc.loopTo]!.startBeat) };
 }
 
@@ -88,12 +104,12 @@ export function rampValue(ramp: SidwaveRamp | undefined, initial: number, beat: 
  */
 export function digiTriggers(doc: ParsedSidwave, clock: TimelineClock): Array<{ chip: number; name: string; beat: number; frame: number; path: string }> {
   const out: Array<{ chip: number; name: string; beat: number; frame: number; path: string }> = [];
-  const meter = doc.song.meter;
   for (const digi of doc.digiVoices ?? []) {
     for (const entry of clock.sections) {
       const ref = entry.section.layers[digi.id];
       if (ref === undefined) continue;
       const path = `$.timeline[${entry.index}].layers.${digi.id}`;
+      const meter = sectionBarBeats(entry.section, doc.song.meter);
       for (const pass of timelinePatternPasses(ref, digi.patterns, entry.startBeat, entry.endBeat, meter, path)) {
         if (!pass.pattern) continue;
         const pattern = digi.patterns[pass.pattern]!;

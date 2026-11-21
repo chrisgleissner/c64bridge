@@ -13,7 +13,7 @@ LLM → SIDWAVE (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VIC
 
 - **Format name:** SIDWAVE
 - **File suffix:** `.sidwave.yaml` (or `.sid.yaml` for brevity)
-- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, or `sidwave: 1.2`
+- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, `sidwave: 1.2`, or `sidwave: 1.3`
 - **Schema file:** `sidwave.schema.json`
 - **Serialization:** YAML 1.2 or JSON
 
@@ -92,11 +92,11 @@ timeline:
 
 | Field | Meaning |
 | --- | --- |
-| `sidwave` | Format version, `1.0` (legacy), `1.1`, or `1.2`. |
+| `sidwave` | Format version, `1.0` (legacy), `1.1`, `1.2`, or `1.3`. |
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
 | `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
-| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. |
+| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. 1.3 also accepts time signatures (see SIDWAVE 1.3). |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
@@ -509,7 +509,8 @@ The final samples map to the SID's 16 volume steps.
 
 **Timing.** `at` still accepts zero-based player call indices. Legacy inline
 entries such as `{ sid: sid1, at: [0, 50], kit: kick }` also work. Bars and beats
-within a bar start at 1, with three or four beats per bar as set by `meter`.
+within a bar start at 1, with three or four beats per bar as set by `meter`
+(in 1.3, bars follow the metre of each section and beats are quarter notes).
 Fractional beats are allowed. For `at_beat`, numbers
 are zero-based beats from the start of the song, and mappings use `{ bar, beat }`.
 Patterns divide each bar by the number of characters in `steps`. A dot is a
@@ -578,13 +579,13 @@ volume changes more audible. [SID specification](sid-spec.md) and
 
 ### Not supported
 
-Time signatures other than 3/4 and 4/4, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than those listed under SIDWAVE 1.3, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
 ## Arrangement, dynamics and long form (1.2)
 
-Everything in this chapter applies to `sidwave: 1.2` documents only. SIDWAVE 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
+Everything in this chapter applies to `sidwave: 1.2` and `sidwave: 1.3` documents only. SIDWAVE 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
 
 ### Time units
 
@@ -760,6 +761,54 @@ The compile operations return `lint` (at most 12 aggregated entries, most severe
 | `RINGSYNC-SRC`, `ONE-SIDE`, `DIGI-SHARED` | see above |
 
 Errors, not warnings: noise combined with another waveform in a wavetable `wave` (it can lock the noise register), a volume change on a digi SID, and a mirror or source channel that another voice scores.
+
+## SIDWAVE 1.3
+
+A `sidwave: 1.3` document accepts everything that 1.2 accepts and compiles it to the same PRG bytes
+(test/sidwave13Meter). The fields below are accepted only in 1.3; a 1.2 document that uses one is rejected with
+an error that names the field and says `requires sidwave: 1.3`.
+
+### Metre per section
+
+`meter` takes `3`, `4` or a time signature: `"2/4"`, `"3/4"`, `"4/4"`, `"5/4"`, `"6/8"`, `"7/8"`, `"9/8"` or
+`"12/8"`. The song `meter` is the default; a timeline entry or named section can set its own `meter`, which
+applies to that entry only.
+
+- A beat is always a quarter note. `length`, `len`, `hold_beats`, `delay_beats`, `swing_unit` and sample beats
+  count quarter notes (an eighth is 0.5), and `tempo` stays quarter notes per minute. A bar of 7/8 lasts 3.5
+  beats, 6/8 lasts 3, 9/8 lasts 4.5 and 12/8 lasts 6.
+- `meter: { sig: "7/8", groups: [2, 2, 3] }` sets the grouping, in units of the denominator (eighths in x/8,
+  quarters in x/4). The groups must add up to the numerator. Defaults: 5/4 is 3+2, 6/8 is 3+3, 7/8 is 2+2+3,
+  9/8 is 3+3+3, 12/8 is 3+3+3+3, and 2/4, 3/4 and 4/4 have one group per beat. Groups do not change playback;
+  the player adds no accents. They appear in the arrangement report.
+- A section's `bars` counts bars of its own metre, and a section without `bars` divides its longest layer pass
+  by its own bar length. Bar numbers in lint findings, note paths, the arrangement report and
+  `expectedSchedule().bars` follow the metre of each section. Level, volume and filter ramps with `bars: N`
+  count bars of the entry's metre; volume ramp steps fall on quarter-note beats counted from the entry start.
+- Every `|` group of a pattern must last one bar of each section that plays it, and `bars: N` must equal N bars
+  of that metre. A pattern played in sections with different metres is checked against each, and the error
+  names the pattern, the section and the metre, for example
+  `pattern riff: group 1 lasts 3.5 beats; section "chorus" ($.timeline[1]) plays it in 4/4, which needs 4 beats per bar`.
+  A pattern that no section plays is checked against the song metre.
+- A sequence rest `-` lasts one bar of the section's metre. Sample `bar`/`beat` positions and sample
+  `pattern` steps use the bar lengths of the sections at those bars.
+- Swing delays every second `swing_unit`, counted from the start of the section as in 1.2. Choose a unit that
+  divides the bar into an even number of parts (0.25 in 7/8, which has 14 sixteenths); with 0.5 in 7/8 the
+  long-short pairs continue across the bar line. Drum `steps` and sequences need no change in any metre.
+
+```yaml
+sidwave: 1.3
+tempo: 132
+meter: "4/4"
+voices:
+  - id: 1
+    patterns:
+      riff: { length: 0.5, groove: "E2 E2 B2 E2 E2 D3 B2 | E2 G2 A2 B2 D3 B2 A2" }
+      rock: { length: 0.5, groove: "E2 E2 E3 E2 G2 E2 A2 B2" }
+timeline:
+  - { section: odd, bars: 4, meter: { sig: "7/8", groups: [2, 2, 3] }, layers: { v1: "riff*2" } }
+  - { section: straight, bars: 4, layers: { v1: rock } }
+```
 
 ## Playable examples
 

@@ -10,12 +10,12 @@
     "then": { "properties": { "voices": { "minItems": 1 } } }
   }],
   "properties": {
-    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, "1.0", "1", "1.1", "1.2"] },
+    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, 1.3, "1.0", "1", "1.1", "1.2", "1.3"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
-    "meter": { "enum": [3, 4], "default": 4, "description": "Quarter-note beats per bar." },
+    "meter": { "$ref": "#/$defs/meter", "default": 4, "description": "Song metre. 3 or 4 quarter notes per bar; 1.3 also takes a time signature." },
     "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
     "cpu": { "type": "string", "enum": ["turbo"] },
     "kit": { "type": "object", "minProperties": 1, "propertyNames": { "pattern": "^[A-Za-z]$" }, "additionalProperties": { "$ref": "#/$defs/instrumentRef" }, "description": "1.2: default kit for drums.steps; the keys are also groove and motif tokens that play the instrument at C3." },
@@ -161,6 +161,22 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "meter": {
+      "description": "3 or 4 (quarter notes per bar). 1.3: a time signature, optionally with groups of the denominator unit that add up to the numerator. A beat stays a quarter note, so a 7/8 bar lasts 3.5 beats.",
+      "oneOf": [
+        { "enum": [3, 4] },
+        { "enum": ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"] },
+        {
+          "type": "object",
+          "required": ["sig"],
+          "properties": {
+            "sig": { "enum": ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"] },
+            "groups": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 1, "description": "Defaults: 5/4 3+2, 6/8 3+3, 7/8 2+2+3, 9/8 3+3+3, 12/8 3+3+3+3, otherwise one per beat." }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "level": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 15 }, { "enum": ["pp", "p", "mp", "mf", "f", "ff"] }], "description": "1.2: scales the sustain nibble written at an attack. pp 4, p 6, mp 8, mf 10, f 12, ff 15." },
     "hz": { "type": "string", "pattern": "^(\\d+(\\.\\d+)?|\\.\\d+)[kK]?[hH][zZ]$", "description": "1.2: a cutoff such as 900Hz or 1.2kHz; needs sids[].model." },
     "ramp": {
@@ -186,6 +202,7 @@
       "properties": {
         "use": { "type": "string", "description": "1.2: a named section whose fields this entry overrides (layers merge per voice)." },
         "section": { "type": "string" },
+        "meter": { "$ref": "#/$defs/meter", "description": "1.3: the metre of this entry; bars and bar lines in the entry follow it." },
         "tempo": { "oneOf": [{ "type": "number", "minimum": 30, "maximum": 220 }, { "type": "object", "required": ["to"], "properties": { "to": { "type": "number", "minimum": 30, "maximum": 220 } }, "additionalProperties": false }], "description": "1.2: BPM for this entry, or { to } for a linear change over the entry." },
         "swing": { "type": "number", "minimum": 0.5, "maximum": 0.75 },
         "bars": { "type": "integer", "minimum": 1, "description": "Optional in 1.2: defaults to the longest layer's single pass." },
