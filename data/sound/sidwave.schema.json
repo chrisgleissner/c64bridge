@@ -10,12 +10,12 @@
     "then": { "properties": { "voices": { "minItems": 1 } } }
   }],
   "properties": {
-    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, "1.0", "1", "1.1", "1.2"] },
+    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, 1.3, "1.0", "1", "1.1", "1.2", "1.3"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
-    "meter": { "enum": [3, 4], "default": 4, "description": "Quarter-note beats per bar." },
+    "meter": { "$ref": "#/$defs/meter", "default": 4, "description": "Song metre. 3 or 4 quarter notes per bar; 1.3 also takes a time signature." },
     "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
     "cpu": { "type": "string", "enum": ["turbo"] },
     "kit": { "type": "object", "minProperties": 1, "propertyNames": { "pattern": "^[A-Za-z]$" }, "additionalProperties": { "$ref": "#/$defs/instrumentRef" }, "description": "1.2: default kit for drums.steps; the keys are also groove and motif tokens that play the instrument at C3." },
@@ -94,6 +94,7 @@
           "detune": { "$ref": "#/$defs/detune" },
           "echo": { "$ref": "#/$defs/echo" },
           "unison": { "$ref": "#/$defs/unison" },
+          "follow": { "$ref": "#/$defs/follow" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },
           "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095, "description": "Fraction (0 < x <= 1) or 12-bit value." },
           "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
@@ -161,6 +162,22 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "meter": {
+      "description": "3 or 4 (quarter notes per bar). 1.3: a time signature, optionally with groups of the denominator unit that add up to the numerator. A beat stays a quarter note, so a 7/8 bar lasts 3.5 beats.",
+      "oneOf": [
+        { "enum": [3, 4] },
+        { "enum": ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"] },
+        {
+          "type": "object",
+          "required": ["sig"],
+          "properties": {
+            "sig": { "enum": ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"] },
+            "groups": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 1, "description": "Defaults: 5/4 3+2, 6/8 3+3, 7/8 2+2+3, 9/8 3+3+3, 12/8 3+3+3+3, otherwise one per beat." }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "level": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 15 }, { "enum": ["pp", "p", "mp", "mf", "f", "ff"] }], "description": "1.2: scales the sustain nibble written at an attack. pp 4, p 6, mp 8, mf 10, f 12, ff 15." },
     "hz": { "type": "string", "pattern": "^(\\d+(\\.\\d+)?|\\.\\d+)[kK]?[hH][zZ]$", "description": "1.2: a cutoff such as 900Hz or 1.2kHz; needs sids[].model." },
     "ramp": {
@@ -186,6 +203,7 @@
       "properties": {
         "use": { "type": "string", "description": "1.2: a named section whose fields this entry overrides (layers merge per voice)." },
         "section": { "type": "string" },
+        "meter": { "$ref": "#/$defs/meter", "description": "1.3: the metre of this entry; bars and bar lines in the entry follow it." },
         "tempo": { "oneOf": [{ "type": "number", "minimum": 30, "maximum": 220 }, { "type": "object", "required": ["to"], "properties": { "to": { "type": "number", "minimum": 30, "maximum": 220 } }, "additionalProperties": false }], "description": "1.2: BPM for this entry, or { to } for a linear change over the entry." },
         "swing": { "type": "number", "minimum": 0.5, "maximum": 0.75 },
         "bars": { "type": "integer", "minimum": 1, "description": "Optional in 1.2: defaults to the longest layer's single pass." },
@@ -214,6 +232,22 @@
         "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4, "description": "1.2: replaces the copy's envelope." },
         "volume": { "type": "number", "minimum": 0, "maximum": 1 },
         "detune": { "$ref": "#/$defs/detune" }
+      },
+      "additionalProperties": false
+    },
+    "follow": {
+      "type": "object",
+      "required": ["voice"],
+      "not": { "required": ["delay", "delay_beats"] },
+      "description": "1.3: plays the source voice's pitched notes, delayed and transposed, with its own instrument and level. Kit and drum notes are not copied. The voice has no patterns, instrument, level, detune, echo or unison of its own.",
+      "properties": {
+        "voice": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "delay": { "type": "integer", "minimum": 0, "maximum": 65535, "description": "Video frames." },
+        "delay_beats": { "type": "number", "minimum": 0, "maximum": 64, "description": "Follows tempo and swing." },
+        "transpose": { "type": "integer", "minimum": -48, "maximum": 48, "default": 0, "description": "Semitones (chromatic)." },
+        "instrument": { "$ref": "#/$defs/instrumentRef" },
+        "level": { "$ref": "#/$defs/level" },
+        "detune": { "$ref": "#/$defs/detune", "default": 0 }
       },
       "additionalProperties": false
     },
@@ -492,6 +526,7 @@
         "loop": { "type": "integer", "minimum": 0, "description": "Zero-based loop index for tables declared as lists; omitted holds the final value." },
         "portamento": { "$ref": "#/$defs/portamento" },
         "legato": { "$ref": "#/$defs/legato" },
+        "vibrato": { "$ref": "#/$defs/vibrato", "required": ["depth", "rate"] },
         "hard_restart": { "$ref": "#/$defs/hardRestart" },
         "source_note": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$", "description": "1.2: pitch of the silent source oscillator under a sync or ring voice." },
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
@@ -589,7 +624,8 @@
         "slide_from": { "$ref": "#/$defs/note" },
         "bend": { "$ref": "#/$defs/bend" },
         "gate_off": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames to release the gate before the end of this note." },
-        "level": { "$ref": "#/$defs/level" }
+        "level": { "$ref": "#/$defs/level" },
+        "vibrato": { "$ref": "#/$defs/vibrato", "description": "1.3: depth, rate, delay or fade for this note, merged over the instrument or pattern vibrato." }
       },
       "additionalProperties": false
     },
@@ -612,21 +648,22 @@
       "additionalProperties": false
     },
     "note": { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]$" },
+    "vibrato": {
+      "type": "object",
+      "properties": {
+        "depth": { "type": "number", "minimum": 0.03, "maximum": 6, "description": "Semitones." },
+        "rate": { "type": "number", "minimum": 0.2, "maximum": 12, "description": "Hz; at most about a quarter of the frame rate." },
+        "delay": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames." },
+        "fade": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.3: frames over which the depth rises linearly from 0 after the delay." }
+      },
+      "additionalProperties": false
+    },
     "length": { "type": "number", "exclusiveMinimum": 0, "maximum": 64, "description": "Beats per entry (default 1)." },
     "transpositions": { "type": "array", "items": { "type": "integer", "minimum": -48, "maximum": 48 }, "minItems": 1 },
     "fx": {
       "type": "object",
       "properties": {
-        "vibrato": {
-          "type": "object",
-          "required": ["depth", "rate"],
-          "properties": {
-            "depth": { "type": "number", "minimum": 0.03, "maximum": 6, "description": "Semitones." },
-            "rate": { "type": "number", "minimum": 0.2, "maximum": 12, "description": "Hz; at most about a quarter of the frame rate." },
-            "delay": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames." }
-          },
-          "additionalProperties": false
-        },
+        "vibrato": { "$ref": "#/$defs/vibrato", "required": ["depth", "rate"] },
         "pwm_sweep": {
           "type": "object",
           "required": ["depth", "speed"],

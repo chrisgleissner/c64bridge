@@ -1,0 +1,136 @@
+# Drum and bass | 176.91 BPM | G minor | 1 SID
+# Techniques: Speed 4 with frame-timed tables; two-step breakbeats with ghost snares, rolls and a noise-led kick; a two-oscillator Reese (saw -6 cents, PWM pulse +6 cents) through one filter whose filter_env sweep wobbles the cutoff; the same third voice turns into a filtered pad and a PWM lead in the breakdown and second drop; play-once ending on a hit.
+# Learn: One voice changes job by section (pad, second Reese oscillator, lead) while the filter sweep keeps the bass moving; section filter offsets open the pad in the intro and the bass in the drops
+sidwave: 1.2
+title: Switchyard
+tempo: 176.91
+mode: PAL
+speed: 4
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { filter_env: { cutoff_base: 500Hz, sweep: 110, speed: 6, resonance: 9, type: lowpass, voices: [2, 3] } } }
+# Accepted lint: TABLE-CUT for the open hat and snare when the next 16th chokes them (as a real hi-hat choke);
+# ARP-FAST is avoided by giving the kick click and the snare body at least four calls (one frame).
+kit:
+  k: kick
+  s: snare
+  q: ghost
+  h: lib:hat
+  o: lib:open_hat
+  z: lib:crash
+instruments:
+  kick:
+    waveform: tri
+    adsr: [0, 8, 0, 0]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: C6, calls: 4 }, { wave: tri, note: G3, slide_to: G1, frames: 4 }, { note: G1, frames: 3 }, { gate: false, note: G1 }]
+  snare:
+    waveform: noise
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: tri, note: D4, calls: 4 }, { wave: noise, note: A6, frames: 3 }, { note: F6, frames: 5 }]
+  ghost:
+    waveform: noise
+    adsr: [0, 5, 0, 0]
+    wavetable: [{ wave: noise, note: G6, frames: 2 }, { note: E6, frames: 2 }]
+  # Reese: oscillator 1 is a saw, oscillator 2 (voice 3) a slowly sweeping pulse; both run through the SID's
+  # filter_env, whose six-beat sweep makes the cutoff wobble under the long notes. A filter table, per-note
+  # vibrato and glides on voice 3 would push the speed-4 player past the 1 MHz budget (4106 of 4139 cycles).
+  reese:
+    waveform: saw
+    adsr: [0, 4, 12, 3]
+    hard_restart: { test: true }
+  reese2:
+    waveform: pulse
+    adsr: [0, 4, 11, 3]
+    hard_restart: { test: true }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 6, frames: 70 }, { add: -6, frames: 70 }] }
+  pad:
+    waveform: pulse
+    adsr: [7, 6, 10, 9]
+    legato: true
+    hard_restart: { frames: 0 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 8, frames: 90 }, { add: -8, frames: 90 }] }
+  lead:
+    waveform: pulse
+    adsr: [2, 6, 13, 7]
+    pulse_width: 1843  # 45 %; a fractional pulse_width on a 1.2 named instrument is not scaled (player defect), so use 12-bit units
+voices:
+  - id: 1
+    name: Breaks
+    role: drums
+    patterns:
+      hats: { length: 0.25, bars: 1, groove: "h - h - h - h q h - h - h - h h" }
+      hats2: { length: 0.25, bars: 1, groove: "h - h - h - o - h - h q h - o h" }
+      half: { length: 0.25, bars: 1, groove: "k - h - h - h - s - h - h - h q" }
+      brkA: { length: 0.25, bars: 1, groove: "k - h - s - h - - - k - s - h q" }
+      brkB: { length: 0.25, bars: 1, groove: "k - h k s - h - - q k - s - h -" }
+      brkC: { length: 0.25, bars: 1, groove: "k - h - s - h q - q k - s - o -" }
+      fill: { length: 0.25, bars: 1, groove: "k - h - s - h q - q k - s q s s" }
+      roll: { length: 0.25, bars: 1, groove: "s - s - s - s - s s s s s s s s" }
+      crash: { length: 0.25, bars: 1, groove: "z - h - s - h - - - k - s - h q" }
+      last: { length: 1, bars: 2, groove: "k - - - - - - -" }
+  - id: 2
+    name: Reese saw
+    role: bass
+    detune: -6
+    instrument: reese
+    patterns:
+      r1: { length: 0.5, bars: 4, groove: "G1 ~ ~ ~ ~ ~ (G1 /Bb1) | Eb1 ~ ~ ~ ~ ~ (Eb2 /D2) | C2 ~ ~ (C2 /Bb1) ~ G1 ~ | D2 ~ ~ ~ A1 ~ (D2 /F#1)" }
+      r2: { length: 0.5, bars: 4, groove: "G1 ~ - G1 ~ - (Bb1 /G1) | Eb1 ~ - Eb1 ~ (Eb2 /D2 /Bb1) | C2 ~ - C2 ~ - (C2 /Eb2) | D2 ~ ~ ~ (D2 /C2 /A1) ~" }
+      sub: { length: 1, bars: 4, groove: "G1 ~ ~ ~ | Eb1 ~ ~ ~ | C2 ~ ~ ~ | D2 ~ ~ ~" }
+      pad: { length: 1, bars: 4, groove: "Bb3@pad ~ ~ ~ | (G3@pad ~ Bb3 ~) | (G3@pad ~ ~ Eb4) | (D4@pad ~ C4 A3)" }
+      end: { length: 1, bars: 2, groove: "G1 - - - - - - -" }
+  - id: 3
+    name: Pad, Reese pulse and lead
+    detune: 6
+    instrument: lead
+    patterns:
+      pad: { length: 1, bars: 4, groove: "D4@pad ~ ~ ~ | (Eb4@pad ~ D4 ~) | (C4@pad ~ ~ G4) | (F#4@pad ~ ~ ~)" }
+      r1: { length: 0.5, bars: 4, groove: "G1@reese2 ~ ~ ~ ~ ~ (G1@reese2 Bb1) | Eb1@reese2 ~ ~ ~ ~ ~ (Eb2@reese2 D2) | C2@reese2 ~ ~ (C2@reese2 Bb1) ~ G1@reese2 ~ | D2@reese2 ~ ~ ~ A1@reese2 ~ (D2@reese2 F#1)" }
+      l1: { length: 0.5, bars: 4, groove: "D5 ~ ~ ~ (Bb4 C5) D5 ~ | G5 ~ ~ ~ F5 ~ Eb5 ~ | Eb5 ~ ~ ~ D5 ~ C5 ~ | A4 ~ ~ ~ ~ ~ - -" }
+      l2: { length: 0.5, bars: 4, groove: "D5 ~ ~ ~ (Bb4 C5) D5 ~ | Bb5 ~ ~ ~ G5 ~ Eb5 ~ | G5 ~ ~ F5 ~ Eb5 ~ C5 | D5 ~ ~ ~ F#5 ~ ~ ~" }
+      l3: { length: 0.5, bars: 4, groove: "G5 ~ ~ ~ ~ ~ (F5 G5) | Bb5 ~ ~ ~ G5 ~ ~ ~ | (Eb5 F5) G5 ~ C6 ~ Bb5 ~ | A5 ~ ~ ~ ~ ~ - -" }
+      l4: { length: 0.5, bars: 4, groove: "G5 ~ ~ ~ ~ ~ (F5 G5) | Bb5 ~ ~ ~ C6 ~ D6 ~ | Eb6 ~ ~ ~ D6 ~ C6 ~ | D6 ~ ~ ~ ~ ~ ~ ~" }
+sections:
+  intro:
+    bars: 8
+    volume: { from: 9, to: 11 }
+    filter: { cutoff: { from: 250, to: 600 }, resonance: 6 }
+    layers: { v1: "hats*7 hats2", v2: pad, v3: pad }
+  intro2:
+    bars: 8
+    volume: 12
+    filter: { cutoff: { from: 600, to: 400 }, resonance: 7 }
+    layers: { v1: "half*3 hats2 half*3 roll", v2: sub, v3: pad }
+  build:
+    bars: 16
+    volume: 13
+    filter: { cutoff: { from: -60, to: 120 }, resonance: 10 }
+    layers: { v1: "crash brkA brkB brkA brkA brkB brkC fill brkA brkB brkA brkC brkA brkB roll roll", v2: r1, v3: pad }
+  drop:
+    bars: 32
+    volume: 15
+    filter: { cutoff: { from: 40, to: 140 }, resonance: 11 }
+    # Bars 33-48: second Reese oscillator. Bars 49-64: voice 3 plays the lead theme an octave below the breakdown pitch while voice 2 keeps the Reese alone.
+    layers: { v1: "crash brkB brkA brkC brkA brkB brkA fill", v2: "r1 r2", v3: "r1 r1 r1 r1 l1-12 l2-12 l3-12 l4-12" }
+  breakdown:
+    bars: 16
+    volume: 12
+    filter: { cutoff: { from: -100, to: 250 }, resonance: 8 }
+    layers: { v1: "- - - - - - - - hats*6 hats2 roll", v2: pad-12, v3: "l1 l2" }
+  drop2:
+    bars: 32
+    volume: 15
+    filter: { cutoff: { from: 40, to: 140 }, resonance: 12 }
+    layers: { v1: "crash brkC brkA brkB brkA brkC brkB fill", v2: "r2 r1", v3: "l3 l4 l1 l2" }
+  outro:
+    bars: 6
+    volume: { from: 14, to: 10 }
+    filter: { cutoff: { from: 100, to: -100 }, resonance: 9 }
+    layers: { v1: "brkA brkB brkA brkC brkA fill", v2: r2, v3: pad }
+  final:
+    bars: 2
+    volume: 10
+    filter: { cutoff: 0, resonance: 8 }
+    layers: { v1: last, v2: end }
+timeline: [intro, intro2, build, drop, breakdown, drop2, outro, final]
+end: { hold_beats: 2, release: true }

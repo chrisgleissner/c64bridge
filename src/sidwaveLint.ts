@@ -118,7 +118,8 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
   const bySlot = slotsOf(doc);
   const speed = doc.speed;
   const fpb = arr.framesPerBeat;
-  const where = (n: Note | undefined, slot: number) => `bar ${barOf(n?.beat, meter)} v${bySlot.get(slot) ?? slot + 1}`;
+  const barAt = (beat: number) => arr.clock ? arr.clock.barOf(beat) : barOf(beat, meter);
+  const where = (n: Note | undefined, slot: number) => `bar ${barAt(n?.beat ?? 0)} v${bySlot.get(slot) ?? slot + 1}`;
   const lowest = (() => {
     let best = -1; let bestMidi = Infinity;
     arr.voices.forEach((v, slot) => { for (const n of v.notes) if (n.midi < bestMidi && !doc.voices.find((x) => x.id === bySlot.get(slot))?.echo) { bestMidi = n.midi; best = slot; } });
@@ -250,12 +251,24 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
 
   // Per-bar content for NO-BASS, REPEAT, DUP, CLASH, HR-GAP and LOOP-TIE.
   const bars = doc.song.length_bars;
-  const barFrames = fpb * meter;
-  const sounding = (bar: number) => arr.voices.filter((v) => v.notes.some((n) => n.end > bar * barFrames && n.start < (bar + 1) * barFrames)).length;
+  // Nominal bar lines in frames (beats x frames per beat), following the metre of each section.
+  const barStarts = arr.clock?.barStarts ?? Array.from({ length: bars + 1 }, (_, i) => i * meter);
+  const barFrame = (bar: number) => barStarts[bar]! * fpb;
+  const barIndex = (frame: number) => {
+    let lo = 0;
+    let hi = bars - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >>> 1;
+      if (barFrame(mid) <= frame) lo = mid;
+      else hi = mid - 1;
+    }
+    return frame < 0 || frame >= barFrame(bars) ? -1 : lo;
+  };
+  const sounding = (bar: number) => arr.voices.filter((v) => v.notes.some((n) => n.end > barFrame(bar) && n.start < barFrame(bar + 1))).length;
   let noBass = 0;
   let noBassStart = 0;
   for (let bar = 0; bar < bars; bar++) {
-    const low = arr.voices.some((v) => v.notes.some((n) => n.midi < 48 && n.end > bar * barFrames && n.start < (bar + 1) * barFrames));
+    const low = arr.voices.some((v) => v.notes.some((n) => n.midi < 48 && n.end > barFrame(bar) && n.start < barFrame(bar + 1)));
     if (!low && sounding(bar) >= 2) { if (noBass++ === 0) noBassStart = bar; if (noBass === 8) findings.add("NO-BASS", `bar ${noBassStart + 1}`, "Add a voice below C3 or transpose the bass down"); }
     else noBass = 0;
   }
@@ -264,8 +277,8 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
   const voiceBars = arr.voices.map(({ notes }) => {
     const onsets: string[][] = Array.from({ length: bars }, () => []);
     for (const n of notes) {
-      const bar = Math.floor((n.start + 1e-6) / barFrames);
-      onsets[bar]?.push(`${Math.round(n.start - bar * barFrames)}:${n.midi}:${n.inst}`);
+      const bar = barIndex(n.start + 1e-6);
+      if (bar >= 0) onsets[bar]!.push(`${Math.round(n.start - barFrame(bar))}:${n.midi}:${n.inst}`);
     }
     return onsets.map((entries) => entries.join(","));
   });
@@ -320,7 +333,7 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
   const pcm = arr.samples ? digiSpans(arr.samples, arr.fps, arr.totalFrames, CLOCK_HZ[arr.system]) : [];
   const cursors = arr.voices.map(() => 0);
   let gap = 0, pcmCursor = 0, pcmEnd = 0;
-  for (let beat = 0; beat < bars * meter; beat++) {
+  for (let beat = 0; beat < barStarts[bars]!; beat++) {
     const frame = arr.clock?.frameAt(beat, true) ?? Math.round(beat * fpb);
     const attacks = attacksAt.get(frame) ?? [];
     const hard = attacks.filter((n) => !n.legato && (arr.instruments[n.inst]!.restart?.frames ?? 2) > 0);
@@ -337,7 +350,7 @@ export function lintArrangement(doc: ParsedSidwave, full: Arrangement, findings:
         return !!notes[index] && notes[index]!.start < frame;
       });
     if (!bridged) {
-      if (++gap === 4) findings.add("HR-GAP", `bar ${Math.floor((beat - 3) / meter) + 1}`, "Stagger attacks or hold one voice with legato so the mix is never silent at once");
+      if (++gap === 4) findings.add("HR-GAP", `bar ${barAt(beat - 3)}`, "Stagger attacks or hold one voice with legato so the mix is never silent at once");
     } else gap = 0;
   }
   // LOOP-TIE: the note spanning the loop target differs from the last note of the loop.
@@ -446,16 +459,19 @@ function clockText(seconds: number): string {
 /** One line per timeline entry: number, name, bars, time span, level, estimated loudness and voices. */
 export function arrangementReport(doc: ParsedSidwave, arr: Arrangement): string[] | undefined {
   if (!arr.clock) return undefined;
-  const meter = doc.song.meter;
+  const clock = arr.clock;
   return sectionStats(doc, arr).map(({ entry, amplitude, voices }, i) => {
     const s = entry.section;
-    const bars = (entry.endBeat - entry.startBeat) / meter;
-    const first = entry.startBeat / meter + 1;
+    const first = clock.barOf(entry.startBeat);
+    const bars = clock.barOf(entry.endBeat - 1e-9) - first + 1;
     const level = s.level === undefined ? "ff" : typeof s.level === "number" ? mark(s.level)
       : `${mark(s.level.from ?? 15)}>${mark(s.level.to)}`;
     const est = amplitude > 0 ? `${(20 * Math.log10(amplitude)).toFixed(1)} dB` : "silent";
     const ids = voices.map((slot) => `v${[...doc.voiceSlots].find(([, v]) => v === slot)?.[0] ?? slot + 1}`);
-    return `${i + 1} ${s.section || "section"} bars ${first}-${first + bars - 1} ${clockText(entry.startTime)}-${clockText(entry.endTime)} level ${level} est ${est} ${ids.join(",")}`;
+    // SIDWAVE 1.3 names the metre of every entry, with its grouping when it is not one group per beat.
+    const meter = s.meter ?? doc.song.meterSig ?? { sig: `${doc.song.meter}/4`, groups: [1] };
+    const metre = doc.version === "1.3" ? ` meter ${meter.sig}${meter.groups.some((g) => g > 1) ? ` (${meter.groups.join("+")})` : ""}` : "";
+    return `${i + 1} ${s.section || "section"} bars ${first}-${first + bars - 1}${metre} ${clockText(entry.startTime)}-${clockText(entry.endTime)} level ${level} est ${est} ${ids.join(",")}`;
   });
 }
 export { rampMid };

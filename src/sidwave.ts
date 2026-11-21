@@ -52,6 +52,8 @@ export interface SidwavePatternGroove extends SidwavePatternCommon {
 
 export interface SidwaveGrooveNote {
   note: string;
+  /** SIDWAVE 1.3: per-note vibrato fields merged over the instrument's or pattern's vibrato. */
+  vibrato?: { depth?: number; rate?: number; delay?: number; fade?: number };
   inst?: string;
   len?: number;
   legato?: boolean;
@@ -84,6 +86,17 @@ export interface SidwaveEcho {
   adsr?: [number, number, number, number];
   volume: number;
   detune?: number;
+}
+
+/** SIDWAVE 1.3: plays the source voice's pitched notes later, transposed, with its own instrument and level. */
+export interface SidwaveFollow {
+  voice: number;
+  delay?: number;
+  delay_beats?: number;
+  transpose: number;
+  instrument?: string;
+  level?: number;
+  detune: number;
 }
 
 export interface SidwaveUnison {
@@ -153,15 +166,25 @@ export interface SidwaveVoice {
   instrument?: string;
   echo?: SidwaveEcho;
   unison?: SidwaveUnison;
+  follow?: SidwaveFollow;
   patterns?: Record<string, SidwavePattern>;
 }
 
 export type SidwaveRamp = number | { from?: number; to: number; bars?: number };
 export interface SidwaveFilterMove { cutoff?: SidwaveRamp; resonance?: number }
 
+/** A time signature. `beats` is the bar length in quarter notes; `groups` count the denominator unit. */
+export interface SidwaveMeter {
+  sig: string;
+  beats: number;
+  groups: number[];
+}
+
 export interface SidwaveTimelineSection {
   section?: string;
   bars: number;
+  /** SIDWAVE 1.3: the section's metre. Without it the section uses the song metre. */
+  meter?: SidwaveMeter;
   tempo?: number | { to: number };
   swing?: number;
   transpose?: number;
@@ -205,7 +228,7 @@ export interface SidwaveDocument {
   length_bars?: number;
   global_fx?: Record<string, unknown>;
   speed?: number;
-  meter?: 3 | 4;
+  meter?: 3 | 4 | string | { sig: string; groups?: number[] };
   cpu?: "turbo";
   samples?: { rate: number; defs?: Record<string, SampleSource>; voices?: SidwaveSampleVoice[]; triggers?: SidwaveSampleVoice[] };
   sids?: Array<{
@@ -231,11 +254,14 @@ export interface SidwaveDocument {
 }
 
 export interface ParsedSidwave {
-  version: "1.0" | "1.1" | "1.2";
+  version: "1.0" | "1.1" | "1.2" | "1.3";
   song: Required<Pick<SidwaveSongMeta, "title" | "tempo" | "mode">> & {
     author?: string;
     length_bars: number;
-    meter: 3 | 4;
+    /** Quarter notes per bar of the song metre. */
+    meter: number;
+    /** SIDWAVE 1.3: the song metre with its signature and grouping. */
+    meterSig?: SidwaveMeter;
     global_fx: Record<string, unknown>;
   };
   voices: SidwaveVoice[];
@@ -256,6 +282,11 @@ export interface ParsedSidwave {
   digiVoices?: Array<{ id: string; chip: number; patterns: Record<string, SidwavePattern> }>;
   /** Fields that a pre-1.2 document may contain but that have no effect before sidwave: 1.2 (JSON paths). */
   ignoredFields?: string[];
+}
+
+/** SIDWAVE 1.2 and 1.3 share the modern compiler path; a 1.2 document compiles to the same bytes under 1.3. */
+export function isModern(doc: Pick<ParsedSidwave, "version">): boolean {
+  return doc.version === "1.2" || doc.version === "1.3";
 }
 
 /** Raised for SIDWAVE documents that cannot be played as written. The message names the offending path. */
@@ -315,11 +346,13 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     checkKeys(obj.song, LEGACY_SONG_KEYS, "$.song");
   } else {
     checkKeys(obj, TOP_LEVEL_KEYS, "$");
-    if (obj.sidwave !== undefined && !["1", "1.0", "1.1", "1.2"].includes(scalarText(obj.sidwave, "$.sidwave"))) {
-      throw new SidwaveValidationError("$.sidwave", `unsupported version ${describeValue(obj.sidwave)}; use 1.0, 1.1 or 1.2`);
+    if (obj.sidwave !== undefined && !["1", "1.0", "1.1", "1.2", "1.3"].includes(scalarText(obj.sidwave, "$.sidwave"))) {
+      throw new SidwaveValidationError("$.sidwave", `unsupported version ${describeValue(obj.sidwave)}; use 1.0, 1.1, 1.2 or 1.3`);
     }
   }
-  const modern = obj.sidwave === 1.2 || obj.sidwave === "1.2";
+  // SIDWAVE 1.3 accepts everything that 1.2 accepts and compiles it to the same bytes.
+  const v13 = obj.sidwave === 1.3 || obj.sidwave === "1.3";
+  const modern = obj.sidwave === 1.2 || obj.sidwave === "1.2" || v13;
   const header = (legacy ? obj.song : obj) as Record<string, unknown>;
   const headerPath = legacy ? "$.song" : "$";
 
@@ -328,7 +361,11 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   const tempo = parseTempo(header.tempo, `${headerPath}.tempo`);
   const mode = parseMode(header.mode, `${headerPath}.mode`);
   const global_fx = parseGlobalFx(header.global_fx, `${headerPath}.global_fx`, modern);
-  const meter = obj.meter === undefined ? 4 : requireNumber(obj.meter, "$.meter", { min: 3, max: 4, integer: true }) as 3 | 4;
+  const meterSig = v13 && obj.meter !== undefined ? parseMeter(obj.meter, "$.meter") : undefined;
+  if (!v13 && (isPlainObject(obj.meter) || (typeof obj.meter === "string" && obj.meter.includes("/")))) {
+    throw new SidwaveValidationError("$.meter", "a time signature requires sidwave: 1.3");
+  }
+  const meter = meterSig ? meterSig.beats : obj.meter === undefined ? 4 : requireNumber(obj.meter, "$.meter", { min: 3, max: 4, integer: true });
   if (meter !== 4 && !modern) throw new SidwaveValidationError("$.meter", "3/4 requires sidwave: 1.2");
   for (const key of ["kit", "sections", "loop_to", "accent", "end", "swing", "swing_unit"]) {
     if (!modern && obj[key] !== undefined) throw new SidwaveValidationError(`$.${key}`, "requires sidwave: 1.2");
@@ -344,7 +381,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   if (obj.voices.filter((v: any) => v?.digi === undefined).length > capacity) {
     throw new SidwaveValidationError("$.voices", `the SID${sids.length > 1 ? " map" : ""} has ${capacity} voices; ${obj.voices.length} were given`);
   }
-  const instruments = normalizeInstruments(obj.instruments, "$.instruments", modern);
+  const instruments = normalizeInstruments(obj.instruments, "$.instruments", modern, v13);
   // SIDWAVE 1.1 (c64bridge 1.3.1) accepted hard_restart in an instrument without using it. Keep accepting
   // it so that such documents still compile, and report it as ignored.
   const ignoredFields = !modern && obj.instruments && typeof obj.instruments === "object"
@@ -366,12 +403,13 @@ export function parseSidwave(input: string | object): ParsedSidwave {
         throw new SidwaveValidationError(path, "need a unique digi ID, a mapped SID and patterns");
       }
       const patterns = Object.fromEntries(Object.entries(raw.patterns).map(([name, pattern]) => [
-        name, validatePattern(pattern, `${path}.patterns.${name}`, true, meter, kit),
+        name, validatePattern(pattern, `${path}.patterns.${name}`, true, v13 ? undefined : meter, kit, v13),
       ]));
       digiVoices.push({ id, chip, patterns });
       return [];
     }
-    checkKeys(raw, modern ? VOICE_KEYS : new Set([...VOICE_KEYS].filter((key) => !["level", "role", "center"].includes(key))), path);
+    if (raw.follow !== undefined && !v13) throw new SidwaveValidationError(`${path}.follow`, "requires sidwave: 1.3");
+    checkKeys(raw, modern ? new Set([...VOICE_KEYS, ...(v13 ? ["follow"] : [])]) : new Set([...VOICE_KEYS].filter((key) => !["level", "role", "center"].includes(key))), path);
     let slot: number | undefined;
     if (raw.sid !== undefined || raw.channel !== undefined) {
       const sidId = scalarText(raw.sid, path + ".sid");
@@ -387,10 +425,11 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     if (occupied.has(slot)) throw new SidwaveValidationError(path, "the SID channel is assigned to more than one voice");
     voiceSlots.set(id, slot);
     occupied.add(slot);
-    const voice = normalizeVoice(raw, path, id, modern, meter, kit);
-    const name = voice.instrument;
-    if (name && !name.startsWith("lib:") && !hasOwn(instruments, name)) {
-      throw new SidwaveValidationError(`${path}.instrument`, `instrument ${describeValue(name)} is not defined`);
+    const voice = normalizeVoice(raw, path, id, modern, v13 ? undefined : meter, kit, v13);
+    for (const [name, at] of [[voice.instrument, `${path}.instrument`], [voice.follow?.instrument, `${path}.follow.instrument`]] as const) {
+      if (name && !name.startsWith("lib:") && !hasOwn(instruments, name)) {
+        throw new SidwaveValidationError(at, `instrument ${describeValue(name)} is not defined`);
+      }
     }
     return [voice];
   });
@@ -403,8 +442,9 @@ export function parseSidwave(input: string | object): ParsedSidwave {
   }
   if (digiVoices.length && obj.samples === undefined) throw new SidwaveValidationError("$.samples", "digi voices need samples.defs for the samples their kits name");
   const timeline = modern
-    ? normalizeForm(obj.timeline, obj.sections, voices, digiVoices, sids, meter)
+    ? normalizeForm(obj.timeline, obj.sections, voices, digiVoices, sids, meter, v13)
     : obj.timeline.map((t: unknown, i: number) => normalizeTimelineSection(t, `$.timeline[${i}]`, voices));
+  if (v13) checkSectionBarLines(timeline, voices, digiVoices, meterSig ?? meterOf(meter));
   if (Number(obj.loop_to !== undefined) + Number(obj.end !== undefined) + Number(obj.length_bars !== undefined) > 1) {
     throw new SidwaveValidationError("$.timeline", "loop_to, end and length_bars are mutually exclusive");
   }
@@ -432,13 +472,13 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     length_bars = requireNumber(header.length_bars, `${headerPath}.length_bars`, { min: 1, max: MAX_SIDWAVE_BARS, integer: true });
   }
 
-  const samples = normalizeSamples(obj.samples, sids, modern, length_bars, meter, digiVoices.length > 0);
-  const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, meter, global_fx };
+  const samples = normalizeSamples(obj.samples, sids, modern, barStartBeats(timeline, length_bars, meter), digiVoices.length > 0);
+  const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, meter, global_fx, ...(meterSig ? { meterSig } : {}) };
   if (author !== undefined) song.author = author;
   const speed = obj.speed === undefined ? 1 : requireNumber(obj.speed, "$.speed", { min: 1, max: 4, integer: true });
   if (obj.cpu !== undefined && obj.cpu !== "turbo") throw new SidwaveValidationError("$.cpu", "expected turbo");
   const declaredVersion = String(obj.sidwave);
-  const version = declaredVersion === "1.1" || declaredVersion === "1.2" ? declaredVersion : "1.0";
+  const version = declaredVersion === "1.1" || declaredVersion === "1.2" || declaredVersion === "1.3" ? declaredVersion : "1.0";
   for (const [chip, sid] of sids.entries()) {
     const owner = sid.filter?.owner;
     if (owner === undefined) continue;
@@ -534,7 +574,9 @@ function parseSidMix(sid: Record<string, unknown>, path: string): { volume: numb
   return { volume, pan };
 }
 
-function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, bars: number, meter: 3 | 4, digiLayers = false): SidwaveSampleSchedule | undefined {
+function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, starts: number[], digiLayers = false): SidwaveSampleSchedule | undefined {
+  const bars = starts.length - 1;
+  const totalBeats = starts[bars]!;
   if (raw === undefined) return;
   const path = "$.samples";
   if (!modern) throw new SidwaveValidationError(path, "samples require sidwave: 1.2");
@@ -567,9 +609,11 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
 
   const triggers: SampleTrigger[] = [];
   const occupied = new Set<string>();
-  const songBeat = (bar: unknown, beat: unknown, here: string) =>
-    meter * (requireNumber(bar, here + ".bar", { min: 1, max: bars, integer: true }) - 1) +
-    requireNumber(beat ?? 1, here + ".beat", { min: 1, max: meter + 1 - 1e-9 }) - 1;
+  // Bars follow the metre of each section; beats within a bar are quarter notes.
+  const songBeat = (bar: unknown, beat: unknown, here: string) => {
+    const index = requireNumber(bar, here + ".bar", { min: 1, max: bars, integer: true }) - 1;
+    return starts[index]! + requireNumber(beat ?? 1, here + ".beat", { min: 1, max: starts[index + 1]! - starts[index]! + 1 - 1e-9 }) - 1;
+  };
   for (const list of ["voices", "triggers"] as const) {
     if (root[list] === undefined) continue;
     const entries = root[list];
@@ -585,7 +629,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
       }
       const pitch = requireNumber(item.pitch ?? 0, here + ".pitch", { min: -48, max: 48 });
       const lengthBeats = item.length_beats === undefined ? undefined :
-        requireNumber(item.length_beats, here + ".length_beats", { min: 0.001, max: bars * meter });
+        requireNumber(item.length_beats, here + ".length_beats", { min: 0.001, max: totalBeats });
       const inline = Object.fromEntries(SAMPLE_SOURCE_KEYS.filter((key) => item[key] !== undefined).map((key) => [key, item[key]]));
       let sample = item.sample;
       if (Object.keys(inline).length) {
@@ -623,7 +667,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
         const map = pat.map;
         for (let bar = from; bar <= to; bar += every) steps.forEach((step, j) => {
           if (step !== ".") schedule(Object.prototype.hasOwnProperty.call(map, step) ? map[step] : undefined,
-            { beat: (bar - 1) * meter + j * meter / steps.length }, `${here}.pattern (bar ${bar}, step ${j + 1})`);
+            { beat: starts[bar - 1]! + j * (starts[bar]! - starts[bar - 1]!) / steps.length }, `${here}.pattern (bar ${bar}, step ${j + 1})`);
         });
       } else if (item.bar !== undefined) {
         schedule(sample, { beat: songBeat(item.bar, item.beat, here) }, here);
@@ -641,7 +685,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
             const pos = requireObject(raw, positionPath, ["bar", "beat"]);
             schedule(sample, { beat: songBeat(pos.bar, pos.beat, positionPath) }, positionPath);
           } else {
-            schedule(sample, { beat: requireNumber(raw, positionPath, { min: 0, max: bars * meter }) }, positionPath);
+            schedule(sample, { beat: requireNumber(raw, positionPath, { min: 0, max: totalBeats }) }, positionPath);
           }
         });
       }
@@ -651,7 +695,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, ba
   return { rate, defs, triggers };
 }
 
-function normalizeInstruments(raw: unknown, path: string, modern: boolean): Record<string, Record<string, any>> {
+function normalizeInstruments(raw: unknown, path: string, modern: boolean, v13 = false): Record<string, Record<string, any>> {
   if (raw === undefined) return Object.create(null);
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping of instrument names to instruments");
   const result: Record<string, Record<string, any>> = Object.create(null);
@@ -677,7 +721,7 @@ function normalizeInstruments(raw: unknown, path: string, modern: boolean): Reco
       if (inst[flag] !== undefined && typeof inst[flag] !== "boolean") throw new SidwaveValidationError(ip + "." + flag, "expected a boolean");
     }
     validatePatternFx({ ...(inst.vibrato !== undefined ? { vibrato: inst.vibrato } : {}),
-      ...(inst.slide !== undefined ? { slide: inst.slide } : {}) }, ip);
+      ...(inst.slide !== undefined ? { slide: inst.slide } : {}) }, ip, v13);
     if (inst.loop !== undefined && inst.wavetable === undefined && !Array.isArray(inst.pulsetable) && !Array.isArray(inst.filtertable)) {
       throw new SidwaveValidationError(ip + ".loop", "needs a wavetable or a step list");
     }
@@ -826,7 +870,7 @@ function parsePulseWidth(raw: unknown, path: string, format: "modern" | "legacyI
   return keepFraction ? pw : register;
 }
 
-function normalizeVoice(v: Record<string, any>, path: string, id: number, modern: boolean, meter: number, kit?: Record<string, string>): SidwaveVoice {
+function normalizeVoice(v: Record<string, any>, path: string, id: number, modern: boolean, meter: number | undefined, kit?: Record<string, string>, v13 = false): SidwaveVoice {
   const wfRaw = v.waveform === undefined ? "pulse" : requireText(v.waveform, path + ".waveform").toLowerCase();
   if (!WAVEFORMS.has(wfRaw)) {
     throw new SidwaveValidationError(`${path}.waveform`, `unknown waveform ${describeValue(v.waveform)}; use pulse, sawtooth, triangle or noise`);
@@ -847,12 +891,34 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
   if (v.patterns !== undefined) {
     if (!isPlainObject(v.patterns)) throw new SidwaveValidationError(`${path}.patterns`, "expected a mapping of pattern names to patterns");
     for (const [name, p] of Object.entries(v.patterns as Record<string, unknown>)) {
-      patterns[name] = validatePattern(p, `${path}.patterns.${name}`, modern, meter, kit);
+      patterns[name] = validatePattern(p, `${path}.patterns.${name}`, modern, meter, kit, v13);
     }
   }
 
   let echo: SidwaveEcho | undefined;
   let unison: SidwaveUnison | undefined;
+  let follow: SidwaveFollow | undefined;
+  if (v.follow !== undefined) {
+    const fp = `${path}.follow`;
+    if (!v13) throw new SidwaveValidationError(fp, "requires sidwave: 1.3");
+    for (const key of ["echo", "unison", "instrument", "level", "detune", "center"]) {
+      if (v[key] !== undefined) throw new SidwaveValidationError(`${path}.${key}`, key === "echo" || key === "unison" ? "choose follow, echo or unison" : `a follower takes ${key} inside follow, or not at all`);
+    }
+    if (Object.keys(patterns).length) throw new SidwaveValidationError(`${path}.patterns`, "a follower plays the source voice's notes and has no patterns");
+    const fx = requireObject(v.follow, fp, ["voice", "delay", "delay_beats", "transpose", "instrument", "level", "detune"]);
+    if (fx.delay !== undefined && fx.delay_beats !== undefined) throw new SidwaveValidationError(fp, "use delay or delay_beats");
+    if (isPlainObject(fx.transpose)) throw new SidwaveValidationError(`${fp}.transpose`, "diatonic transposition is not supported; give the interval in semitones");
+    follow = {
+      voice: requireNumber(fx.voice, `${fp}.voice`, { min: 1, max: 30, integer: true }),
+      ...(fx.delay === undefined ? {} : { delay: requireNumber(fx.delay, `${fp}.delay`, { min: 0, max: 65535, integer: true }) }),
+      ...(fx.delay_beats === undefined ? {} : { delay_beats: requireNumber(fx.delay_beats, `${fp}.delay_beats`, { min: 0, max: 64 }) }),
+      transpose: fx.transpose === undefined ? 0 : requireNumber(fx.transpose, `${fp}.transpose`, { min: -48, max: 48, integer: true }),
+      ...(fx.instrument === undefined ? {} : { instrument: requireText(fx.instrument, `${fp}.instrument`) }),
+      ...(fx.level === undefined ? {} : { level: parseLevel(fx.level, `${fp}.level`) }),
+      detune: fx.detune === undefined ? 0 : requireNumber(fx.detune, `${fp}.detune`, { min: -100, max: 100 }),
+    };
+    if (follow.voice === id) throw new SidwaveValidationError(`${fp}.voice`, "a voice cannot follow itself");
+  }
   if (v.echo !== undefined || v.unison !== undefined) {
     if (!modern) throw new SidwaveValidationError(path, "echo and unison require sidwave: 1.2");
     if (v.echo !== undefined && v.unison !== undefined) throw new SidwaveValidationError(path, "choose echo or unison");
@@ -891,10 +957,12 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
   return {
     id, detune, level, role, center, name: v.name === undefined ? `Voice${id}` : requireText(v.name, path + ".name"), waveform, pulse_width: pulseWidth, adsr,
     instrument: v.instrument === undefined ? undefined : requireText(v.instrument, path + ".instrument"), patterns, echo, unison,
+    ...(follow ? { follow } : {}),
   };
 }
 
-function validatePattern(raw: unknown, path: string, modern: boolean, meter: number, defaultKit?: Record<string, string>): SidwavePattern {
+/** `meter` is the bar length for bar-line checks; without it (SIDWAVE 1.3) the checks wait for the sections that play the pattern. */
+function validatePattern(raw: unknown, path: string, modern: boolean, meter: number | undefined, defaultKit?: Record<string, string>, v13 = false): SidwavePattern {
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a pattern mapping (groove, motif or type: arpeggio)");
   // Copy first: numeric strings are stored as numbers, and the caller's object stays untouched.
   const p = { ...(raw as Record<string, any>) };
@@ -915,7 +983,7 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
     }
     p.transpositions = p.transpositions.map((t: unknown, i: number) => requireNumber(t, `${path}.transpositions[${i}]`, { min: -48, max: 48, integer: true }));
   }
-  if (p.fx !== undefined) validatePatternFx(p.fx, `${path}.fx`);
+  if (p.fx !== undefined) validatePatternFx(p.fx, `${path}.fx`, v13);
 
   if (p.type !== undefined || p.notes !== undefined) {
     if (p.type !== undefined && p.type !== "arpeggio") {
@@ -960,8 +1028,11 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
           checkKeys(entry, new Set(["chord", "arp", "speed", "inst", "len", "legato", "level", "accented", "glide"]), np);
           parseChordArp({ chord: entry.chord, arp: entry.arp, speed: entry.speed }, np);
         } else {
-          checkKeys(entry, new Set(["note", "inst", "len", "legato", "portamento", "slide_from", ...(modern ? ["bend", "gate_off", "level", "accented", "glide", "kitNote"] : [])]), np);
+          if (entry.vibrato !== undefined && !v13) throw new SidwaveValidationError(np + ".vibrato", "requires sidwave: 1.3");
+          checkKeys(entry, new Set(["note", "inst", "len", "legato", "portamento", "slide_from", ...(modern ? ["bend", "gate_off", "level", "accented", "glide", "kitNote"] : []), ...(v13 ? ["vibrato"] : [])]), np);
           requireNote(entry.note, `${np}.note`);
+          // A per-note vibrato merges over the instrument's or pattern's; the compiler checks the result.
+          if (entry.vibrato !== undefined) entry.vibrato = parseVibrato(entry.vibrato, np + ".vibrato", true, false);
         }
         if (entry.inst !== undefined && typeof entry.inst !== "string") throw new SidwaveValidationError(`${path}.groove[${i}].inst`, "expected an instrument name");
         if (entry.level !== undefined) entry.level = parseLevel(entry.level, np + ".level");
@@ -1002,17 +1073,27 @@ function validatePattern(raw: unknown, path: string, modern: boolean, meter: num
   throw new SidwaveValidationError(path, "a pattern needs 'groove', 'drums', 'motif' or 'type: arpeggio' with 'notes'");
 }
 
-function validatePatternFx(raw: unknown, path: string): void {
+/**
+ * Checks a vibrato mapping. `fade` (SIDWAVE 1.3) is the number of frames over which the depth rises from 0 after
+ * the delay. A per-note override may omit depth and rate, which then come from the instrument or pattern.
+ */
+export function parseVibrato(raw: unknown, path: string, v13: boolean, complete = true): Record<string, number> {
+  if (isPlainObject(raw) && raw.fade !== undefined && !v13) throw new SidwaveValidationError(path + ".fade", "requires sidwave: 1.3");
+  const v = requireObject(raw, path, ["depth", "rate", "delay", ...(v13 ? ["fade"] : [])]);
+  const out: Record<string, number> = {};
+  if (complete || v.depth !== undefined) out.depth = requireNumber(v.depth, `${path}.depth`, { min: 0.03, max: 6 });
+  // At about 50 player calls per second, faster rates sample too few points per cycle (25 Hz lands on zero crossings).
+  if (complete || v.rate !== undefined) out.rate = requireNumber(v.rate, `${path}.rate`, { min: 0.2, max: 12 });
+  if (v.delay !== undefined) out.delay = requireNumber(v.delay, `${path}.delay`, { min: 0, max: 255, integer: true });
+  if (v.fade !== undefined) out.fade = requireNumber(v.fade, `${path}.fade`, { min: 1, max: 255, integer: true });
+  return out;
+}
+
+function validatePatternFx(raw: unknown, path: string, v13 = false): void {
   if (!isPlainObject(raw)) throw new SidwaveValidationError(path, "expected a mapping");
   const fx = raw as Record<string, any>;
   checkKeys(fx, PATTERN_FX_KEYS, path);
-  if (fx.vibrato !== undefined) {
-    const v = requireObject(fx.vibrato, `${path}.vibrato`, ["depth", "rate", "delay"]);
-    requireNumber(v.depth, `${path}.vibrato.depth`, { min: 0.03, max: 6 });
-    // At about 50 player calls per second, faster rates sample too few points per cycle (25 Hz lands on zero crossings).
-    requireNumber(v.rate, `${path}.vibrato.rate`, { min: 0.2, max: 12 });
-    if (v.delay !== undefined) requireNumber(v.delay, `${path}.vibrato.delay`, { min: 0, max: 255, integer: true });
-  }
+  if (fx.vibrato !== undefined) parseVibrato(fx.vibrato, `${path}.vibrato`, v13);
   if (fx.pwm_sweep !== undefined) {
     const v = requireObject(fx.pwm_sweep, `${path}.pwm_sweep`, ["depth", "speed"]);
     requireNumber(v.depth, `${path}.pwm_sweep.depth`, { min: 0, max: 2047, exclusiveMin: true });
@@ -1153,27 +1234,134 @@ function compactTokens(text: string, path: string, kit?: Record<string, string>,
   return entries;
 }
 
-function checkPatternBars(pattern: any, groove: any, meter: number, path: string): void {
+/** Beats of each `|` group of a SIDWAVE 1.3 pattern, kept until the sections that play the pattern are known. */
+const barGroups = new WeakMap<object, number[]>();
+/** JSON path of each validated pattern, for errors raised after the timeline is known. */
+const patternPaths = new WeakMap<object, string>();
+
+function checkPatternBars(pattern: any, groove: any, meter: number | undefined, path: string): void {
   const len = Number(pattern.length ?? 1);
   if (Array.isArray(groove)) {
     let beats = 0;
     let total = 0;
     let group = 1;
     const lined = groove.includes("|");
+    const groups: number[] = [];
     for (const entry of [...groove, "|"]) {
       if (entry === "|") {
-        if (lined && Math.abs(beats - meter) > 1e-8) throw new SidwaveValidationError(path, `group ${group} lasts ${beats} beats; expected ${meter}`);
+        if (lined && meter !== undefined && Math.abs(beats - meter) > 1e-8) throw new SidwaveValidationError(path, `group ${group} lasts ${beats} beats; expected ${meter}`);
+        groups.push(beats);
         group++;
         total += beats;
         beats = 0;
       } else beats += Number(entry?.len ?? len);
     }
     if (lined) pattern.groove = groove.filter((entry) => entry !== "|");
-    if (pattern.bars !== undefined && Math.abs(total - meter * pattern.bars) > 1e-8) {
+    if (lined && meter === undefined) barGroups.set(pattern, groups);
+    if (meter === undefined) patternPaths.set(pattern, path);
+    if (meter !== undefined && pattern.bars !== undefined && Math.abs(total - meter * pattern.bars) > 1e-8) {
       throw new SidwaveValidationError(path, `pattern lasts ${total} beats; expected ${meter * pattern.bars}`);
     }
+  } else if (meter === undefined) {
+    patternPaths.set(pattern, path);
   } else if (pattern.bars !== undefined && Math.abs(patternBeats(pattern) - meter * pattern.bars) > 1e-8) {
     throw new SidwaveValidationError(path, `pattern lasts ${patternBeats(pattern)} beats; expected ${meter * pattern.bars}`);
+  }
+}
+
+const METER_GROUPS: Record<string, number[]> = {
+  "2/4": [1, 1], "3/4": [1, 1, 1], "4/4": [1, 1, 1, 1], "5/4": [3, 2],
+  "6/8": [3, 3], "7/8": [2, 2, 3], "9/8": [3, 3, 3], "12/8": [3, 3, 3, 3],
+};
+
+function meterOf(beats: number): SidwaveMeter {
+  const sig = `${beats}/4`;
+  return { sig, beats, groups: METER_GROUPS[sig]! };
+}
+
+/** Parses `3`, `4`, `"7/8"` or `{ sig: "7/8", groups: [2, 2, 3] }`. Groups count eighths in x/8 and quarters in x/4. */
+function parseMeter(raw: unknown, path: string): SidwaveMeter {
+  if (raw === 3 || raw === 4 || raw === "3" || raw === "4") return meterOf(Number(raw));
+  const value = isPlainObject(raw) ? requireObject(raw, path, ["sig", "groups"]) : { sig: raw };
+  const sig = typeof value.sig === "string" ? value.sig.trim() : undefined;
+  if (sig === undefined || !hasOwn(METER_GROUPS, sig)) {
+    throw new SidwaveValidationError(isPlainObject(raw) ? path + ".sig" : path, `expected 3, 4 or one of ${Object.keys(METER_GROUPS).join(", ")}`);
+  }
+  const [num, den] = sig.split("/").map(Number) as [number, number];
+  let groups = METER_GROUPS[sig]!;
+  if (value.groups !== undefined) {
+    if (!Array.isArray(value.groups) || !value.groups.length) throw new SidwaveValidationError(path + ".groups", "expected a list of group sizes");
+    groups = value.groups.map((n: unknown, i: number) => requireNumber(n, `${path}.groups[${i}]`, { min: 1, max: num, integer: true }));
+    if (groups.reduce((a, b) => a + b, 0) !== num) {
+      throw new SidwaveValidationError(path + ".groups", `the groups add up to ${groups.reduce((a, b) => a + b, 0)}; ${sig} needs ${num} ${den === 8 ? "eighths" : "quarters"}`);
+    }
+  }
+  return { sig, beats: num * 4 / den, groups };
+}
+
+/** Quarter notes per bar in a timeline entry. */
+export function sectionBarBeats(section: Pick<SidwaveTimelineSection, "meter">, songMeter: number): number {
+  return section.meter?.beats ?? songMeter;
+}
+
+/**
+ * Beat position of every bar line of the song, from the start of bar 1 to the end of the last bar, following the
+ * metre of each section. The timeline repeats or is cut at `lengthBars` as during playback.
+ */
+export function barStartBeats(timeline: SidwaveTimelineSection[], lengthBars: number, songMeter: number): number[] {
+  const starts = [0];
+  let beat = 0;
+  for (let bar = 0, i = 0; bar < lengthBars; i++) {
+    const section = timeline[i % timeline.length]!;
+    const bars = Math.min(section.bars, lengthBars - bar);
+    const beats = sectionBarBeats(section, songMeter);
+    for (let b = 1; b <= bars; b++) starts.push(beat + b * beats);
+    beat += bars * beats;
+    bar += bars;
+  }
+  return starts;
+}
+
+/** SIDWAVE 1.3: checks the bar lines and `bars` of every pattern against the metre of each section that plays it. */
+function checkSectionBarLines(timeline: SidwaveTimelineSection[], voices: SidwaveVoice[],
+  digis: NonNullable<ParsedSidwave["digiVoices"]>, songMeter: SidwaveMeter): void {
+  const owners = [
+    ...voices.map((voice) => ({ key: `v${voice.id}`, patterns: voice.patterns ?? {} })),
+    ...digis.map((digi) => ({ key: digi.id, patterns: digi.patterns })),
+  ];
+  const seen = new Set<string>();
+  for (const owner of owners) {
+    const used = new Set<string>();
+    timeline.forEach((section, i) => {
+      const ref = section.layers[owner.key];
+      if (ref === undefined) return;
+      const meter = section.meter ?? songMeter;
+      for (const item of parseLayerSequence(ref, Object.keys(owner.patterns), `$.timeline[${i}].layers.${owner.key}`).items) {
+        if (!item.pattern) continue;
+        used.add(item.pattern);
+        const key = `${owner.key}:${item.pattern}:${meter.sig}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        checkBarsInMeter(owner.patterns[item.pattern]!, item.pattern, meter,
+          `section ${JSON.stringify(section.section || `#${i + 1}`)} ($.timeline[${i}]) plays it in ${meter.sig}`);
+      }
+    });
+    for (const [name, pattern] of Object.entries(owner.patterns)) {
+      if (!used.has(name)) checkBarsInMeter(pattern, name, songMeter, `the song metre is ${songMeter.sig}`);
+    }
+  }
+}
+
+function checkBarsInMeter(pattern: SidwavePattern, name: string, meter: SidwaveMeter, context: string): void {
+  const path = patternPaths.get(pattern) ?? "$.voices";
+  const groups = barGroups.get(pattern);
+  const wrong = groups?.findIndex((beats) => Math.abs(beats - meter.beats) > 1e-8) ?? -1;
+  if (wrong >= 0) {
+    throw new SidwaveValidationError(path, `pattern ${name}: group ${wrong + 1} lasts ${groups![wrong]} beats; ${context}, which needs ${meter.beats} beats per bar`);
+  }
+  const total = patternBeats(pattern);
+  if (pattern.bars !== undefined && Math.abs(total - meter.beats * pattern.bars) > 1e-8) {
+    throw new SidwaveValidationError(path, `pattern ${name} lasts ${total} beats; ${context}, which needs ${meter.beats * pattern.bars} beats for ${pattern.bars} bars`);
   }
 }
 
@@ -1220,12 +1408,12 @@ export function parseLayerSequence(ref: string, patterns: string[], path: string
 }
 
 function normalizeForm(raw: unknown[], definitions: unknown, voices: SidwaveVoice[],
-  digis: NonNullable<ParsedSidwave["digiVoices"]>, sids: SidMapEntry[], meter: number): SidwaveTimelineSection[] {
+  digis: NonNullable<ParsedSidwave["digiVoices"]>, sids: SidMapEntry[], meter: number, v13 = false): SidwaveTimelineSection[] {
   const names = definitions === undefined ? {} : definitions;
   if (!isPlainObject(names)) throw new SidwaveValidationError("$.sections", "expected named sections");
   for (const [name, value] of Object.entries(names)) {
     if (!/^[A-Za-z_][\w-]*$/.test(name) || !isPlainObject(value)) throw new SidwaveValidationError("$.sections." + name, "invalid named section");
-    formSection(value, "$.sections." + name, voices, digis, sids, meter);
+    formSection(value, "$.sections." + name, voices, digis, sids, meter, v13);
   }
   const timeline: SidwaveTimelineSection[] = [];
   let bars = 0;
@@ -1255,7 +1443,7 @@ function normalizeForm(raw: unknown[], definitions: unknown, voices: SidwaveVoic
       if (overrides.layers !== undefined && !isPlainObject(overrides.layers)) throw new SidwaveValidationError(path + ".layers", "expected a mapping");
       definition = { ...base, ...overrides, section: name, layers: { ...base.layers, ...overrides.layers } };
     }
-    const section = formSection(definition, path, voices, digis, sids, meter);
+    const section = formSection(definition, path, voices, digis, sids, meter, v13);
     bars += section.bars * count;
     if (bars > MAX_SIDWAVE_BARS) throw new SidwaveValidationError(path, `timeline exceeds ${MAX_SIDWAVE_BARS} bars`);
     for (let j = 0; j < count; j++) timeline.push(section);
@@ -1264,8 +1452,11 @@ function normalizeForm(raw: unknown[], definitions: unknown, voices: SidwaveVoic
 }
 
 function formSection(t: Record<string, any>, path: string, voices: SidwaveVoice[],
-  digis: NonNullable<ParsedSidwave["digiVoices"]>, sids: SidMapEntry[], meter: number): SidwaveTimelineSection {
-  checkKeys(t, new Set([...SECTION_KEYS, "level", "levels", "volume", "filter", "transpose"]), path);
+  digis: NonNullable<ParsedSidwave["digiVoices"]>, sids: SidMapEntry[], songMeter: number, v13 = false): SidwaveTimelineSection {
+  if (t.meter !== undefined && !v13) throw new SidwaveValidationError(path + ".meter", "requires sidwave: 1.3");
+  checkKeys(t, new Set([...SECTION_KEYS, "level", "levels", "volume", "filter", "transpose", ...(v13 ? ["meter"] : [])]), path);
+  const sectionMeter = t.meter === undefined ? undefined : parseMeter(t.meter, path + ".meter");
+  const meter = sectionMeter?.beats ?? songMeter;
   const layers: Record<string, string> = {};
   if (t.layers !== undefined && !isPlainObject(t.layers)) throw new SidwaveValidationError(path + ".layers", "expected a mapping");
   let inferred = 0;
@@ -1309,7 +1500,8 @@ function formSection(t: Record<string, any>, path: string, voices: SidwaveVoice[
     : parseTempo(t.tempo, path + ".tempo");
   const swing = t.swing === undefined ? undefined : requireNumber(t.swing, path + ".swing", { min: 0.5, max: 0.75 });
   const transpose = t.transpose === undefined ? undefined : numberAt(-96, 96)(t.transpose, path + ".transpose");
-  return { section: t.section === undefined ? "" : requireText(t.section, path + ".section"), bars, tempo, swing, transpose, layers, level, levels, volume, filter };
+  return { section: t.section === undefined ? "" : requireText(t.section, path + ".section"), bars, tempo, swing, transpose, layers, level, levels, volume, filter,
+    ...(sectionMeter ? { meter: sectionMeter } : {}) };
 }
 
 function parseCutoff(raw: unknown, path: string, modern: boolean): number | string {

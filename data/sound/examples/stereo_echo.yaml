@@ -1,94 +1,475 @@
-# Stereo synth pop | 107 BPM | D minor | 2 SIDs
-# Techniques: Centred bass, kit and lead (unison copies on both pan sides), dotted-eighth stereo echo with a softer echo envelope, kick and snare interleaved with an offbeat filtered bass, PWM lead and arps, section levels and chip volume for the dynamic arc.
-# Learn: Keep kick, bass and lead in the middle with phase-reset unison copies, let one voice per side carry the chords and their echo, then shape the form with level and volume instead of extra notes
+# Stereo sequencer piece | 93.98 BPM | D Dorian | 2 SIDs (left, right)
+# Techniques: A sequencer ostinato whose dotted-eighth echo on the other SID fills every missing sixteenth, a per-note band-pass blip on each SID with a darker filter on the right, a centred bass mirrored onto the right SID in the same call with TEST restart, a glide lead whose vibrato fades in after its delay (SIDWAVE 1.3), scoops, fall-offs and mordents, hand-written echoes at levels 8, 5 and 3, a five-sixteenth cell against the bar, kick and hat shared with the bass, and a canon at the diatonic fifth two beats behind across the stereo field.
+# Learn: A delay is a compositional device when the source leaves space for it: the sixteenth cell D3 - - - A3 - - - F3 - - - C4 - - - has gaps for the dotted-eighth echo; a melody with composed gaps is answered by itself, and the same melody two beats later a fifth higher is a canon.
+# Form (68 bars, 2:55): Sequence 1-8 (0:00; the left plays alone for 4 bars, the right echo enters in bar 5) | Layer 9-20 (0:20; centred bass pedal, the left filter opens, one ostinato note changes every 2 bars) | Theme 21-36 (0:51; lead with composed gaps, right-side echoes) | Shift 37-44 (1:32; Bb Lydian, five-sixteenth cell, the motif augmented) | Canon 45-60 (1:52; kick and hat, the right SID plays the theme two beats later a diatonic fifth higher; climax bars 51-56) | Dissolve 61-68 (2:33; the ostinato loses a note per bar)
 #
-# Outro bass follows the chords: D, Bb, G, A, then the four-bar `end` (D, Bb, G/A, D). Chip volumes are about 2 dB lower than before (library loudness balance).
-# Form (88 bars, about 3:17): Intro 8 / Verse 16 / Chorus 16 / Bridge 8 / Verse 16 / Chorus 16 / Outro 8 with a held Dm(add9).
-# Left SID: bass and kit, lead, chord voice. Right SID: the same bass and lead in unison (so they image centre) and a
-# dotted-eighth echo of the chord voice, so every chord figure and the bridge counter-line answer from the right.
-# Accepted lint: ONE-SIDE on v1/v2. Both parts are centred by unison copies on the right SID (v4, v5); center: true needs an
-# unscored mirror channel, and all six channels are used. LEVEL-NOOP: the library kick and snare have sustain 0; chip volume
-# shapes them. HR-GAP in the second verse: the broken-chord sixteenths re-attack on every beat by design; they use a soft
-# re-gate (hard_restart frames 0), so their release overlaps the next attack and the mix does not drop out.
-sidwave: 1.2
+# Motif: ostinato D3 A3 F3 C4 at sixteenth-grid positions 1, 5, 9, 13 (degrees 1 5 3 7); its echo 0.75 beat later fills
+# positions 4, 8, 12, 16. Theme: A4 (h less a sixteenth) glides to C5 (q.), B4 (e.) | G4 (e.), rest, E5
+# (h, anticipated by a sixteenth) with a fall-off (degrees 5 - 7 6 | 4 - 2'). Characteristic interval: the rising major sixth G4-E5
+# across the rest. Tempo: 93.98 BPM at speed 1 (8 frames per sixteenth, echo 24 frames). The planned 100.25 BPM at speed 2 needs
+# about 12,400 cycles per call for six voices with tables, vibrato and glides against 8,778 available at 1 MHz.
+# Harmony: Sequence and Layer on a D pedal; the ostinato substitutes one note every 2 bars (C->D, F->G, A->B, D->E, D->C#), so the
+# pedal is coloured Dm7, Dsus4, Dm6, G6/D and A7/D. Theme: Dm9 Dm9 G7 G7 | Cmaj7 Cmaj7 Am7 E7 | Bbmaj7 Bbmaj7 C A7 | Dm9 Gm6-A7 Dm Dm
+# (E7, Bbmaj7, Gm6 and A7 lie outside D Dorian; harmonic rhythm doubles in bars 28, 32 and 34). Shift: Bb Lydian over a Bb-C
+# bass, then A7. Canon: Am9 Am9 Dm9 Dm9 C G F Em F Am C Em Am Dm Em Am. Dissolve: Dm, Bbmaj7, A7sus, D.
+# Signature, bar 5: the ostinato moves to the echoed left voice; from here the right SID sounds on every odd sixteenth.
+# Surprise, bar 37: the cut to Bb Lydian and the five-sixteenth cell (the echo still at 3/16 now drifts against the bar).
+# Layout: left (Left 3) v1 ostinato (filter owner), v2 bass and kit, v3 lead. Right (Right 3) v4 echo of v1 (filter owner, a
+# darker offset in every section), the centred mirror of v2 (channel 2, written with v2 in the same call), v6 scored: hand-written echoes, then the canon follower.
+# Bars 1-4 play the ostinato on v3, so the echo of v1 cannot sound before bar 5.
+# Accepted lint: LEVEL-NOOP on the kick and hat in the canon. The centred bass voice marks every note as level-targeted; the kit
+# has sustain 0 by design and its loudness comes from the attack and decay.
+sidwave: 1.3
 title: Parallax Letters
-tempo: 107.41
+tempo: 93.98
 mode: PAL
+accent: 2
 sids:
-  - { id: sid1, address: "$D400", model: "8580", volume: 13, pan: "Left 5" }
-  - { id: sid2, address: "$D420", model: "8580", volume: 13, pan: "Right 5" }
-kit: { k: lib:kick, s: lib:snare }
+  - { id: left, address: "$D400", model: "8580", volume: 15, pan: "Left 3", filter: { owner: v1, route: [1] } }
+  - { id: right, address: "$D420", model: "8580", volume: 15, pan: "Right 3", filter: { owner: v4, route: [1] } }
+kit: { k: kick, h: hat }
 instruments:
-  # Offbeat bass: phase reset at each attack keeps the two unison copies in phase, so the bass images centre.
-  bass: { waveform: saw, adsr: [0, 7, 9, 2], hard_restart: { test: true }, filtertable: [{ cutoff: 1.5kHz, resonance: 11, type: lowpass }, { add: -9, frames: 14 }] }
-  # Long bass for intro and bridge; the section filter offset opens it.
-  floor: { waveform: saw, adsr: [3, 6, 11, 6], hard_restart: { test: true }, filtertable: [{ cutoff: 500Hz, resonance: 9, type: lowpass }] }
-  ink: { waveform: pulse, adsr: [1, 6, 11, 5], hard_restart: { test: true }, vibrato: { depth: 0.15, rate: 5.5, delay: 18 },
-         pulsetable: { reset: false, loop: 1, steps: [{ set: 0.28 }, { add: 18, frames: 30 }, { add: -18, frames: 30 }] } }
-  horn: { waveform: saw, adsr: [2, 8, 10, 5], hard_restart: { test: true }, vibrato: { depth: 0.15, rate: 5.5, delay: 18 } }
-  spark: { waveform: pulse, adsr: [0, 8, 6, 4], pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 10, frames: 70 }, { add: -10, frames: 70 }] } }
-  pluck: { waveform: pulse, adsr: [0, 6, 4, 3], hard_restart: { frames: 0 }, pulsetable: { reset: false, loop: 1, steps: [{ set: 0.35 }, { add: 14, frames: 40 }, { add: -14, frames: 40 }] } }
-  letter: { waveform: pulse, adsr: [3, 6, 9, 6], vibrato: { depth: 0.12, rate: 5, delay: 20 },
-            pulsetable: { reset: false, loop: 1, steps: [{ set: 0.4 }, { add: -8, frames: 50 }, { add: 8, frames: 50 }] } }
-  # Final Dm(add9): a slower arp than the chord symbols, through the same pulse sweep.
-  nine: { waveform: pulse, adsr: [2, 8, 8, 9], loop: 0, wavetable: [{ note: "+0", frames: 2 }, { note: "+3", frames: 2 }, { note: "+7", frames: 2 }, { note: "+14", frames: 2 }],
-          pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 10, frames: 70 }, { add: -10, frames: 70 }] } }
+  # Sequencer pluck: octave saw click, then a pulse that narrows; a band-pass blip from 2.8 kHz down to about 370 Hz.
+  seq:
+    waveform: pulse
+    pulse_width: 1200
+    adsr: [0, 7, 5, 4]
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 1200 }, { add: -30, frames: 20 }]
+    filtertable: [{ cutoff: 2.8kHz, resonance: 12, type: bandpass }, { add: -70, frames: 5 }, { add: -4, frames: 10 }]
+  seqdry:
+    waveform: pulse
+    pulse_width: 1200
+    adsr: [0, 7, 5, 4]
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 1200 }, { add: -30, frames: 20 }]
+  seq5:
+    waveform: pulse
+    pulse_width: 2600
+    adsr: [0, 8, 4, 5]
+    wavetable: [{ wave: tri, note: "+24" }, { wave: pulse }]
+    pulsetable: [{ set: 2600 }, { add: 40, frames: 12 }]
+    filtertable: [{ cutoff: 1.8kHz, resonance: 14, type: bandpass }, { add: -40, frames: 6 }]
+  bass:
+    waveform: pulse
+    pulse_width: 2048
+    adsr: [0, 6, 12, 4]
+    hard_restart: { test: true }
+    wavetable: [{ note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 2048 }, { add: -86, frames: 16 }]
+  pedal:
+    waveform: pulse
+    pulse_width: 1800
+    adsr: [1, 8, 12, 6]
+    hard_restart: { test: true }
+    wavetable: [{ note: "+12" }, { wave: pulse }]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 1800 }, { add: -8, frames: 120 }, { add: 8, frames: 120 }] }
+  kick:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: A6 }, { wave: pulse, note: A3, slide_to: D2, frames: 3 }, { wave: tri, note: D2, frames: 1 }, { gate: false }]
+  hat:
+    waveform: noise
+    adsr: [0, 4, 0, 0]
+    wavetable: [{ wave: noise, note: G7 }, { gate: false }]
+  # Glide lead: saw click, pulse opening fast then breathing; vibrato 0.35 semitone at 6 Hz after 20 frames.
+  lead:
+    waveform: pulse
+    pulse_width: 400
+    adsr: [1, 5, 10, 5]
+    portamento: 6
+    vibrato: { depth: 0.35, rate: 6, delay: 20, fade: 30 }
+    wavetable: [{ wave: saw }, { wave: pulse }]
+    pulsetable: { loop: 2, steps: [{ set: 400 }, { add: 50, frames: 18 }, { add: -12, frames: 45 }, { add: 12, frames: 45 }] }
+  lead_hi:
+    waveform: pulse
+    pulse_width: 800
+    adsr: [1, 5, 11, 5]
+    vibrato: { depth: 0.5, rate: 6.5, delay: 15, fade: 30 }
+    wavetable: [{ wave: saw }, { wave: pulse }]
+    pulsetable: { loop: 2, steps: [{ set: 800 }, { add: 40, frames: 20 }, { add: -10, frames: 40 }, { add: 10, frames: 40 }] }
+  mord:
+    waveform: pulse
+    pulse_width: 400
+    adsr: [1, 5, 10, 5]
+    vibrato: { depth: 0.35, rate: 6, delay: 20, fade: 30 }
+    wavetable: [{ wave: saw }, { wave: pulse, frames: 3 }, { note: "+2", frames: 3 }, { wave: pulse }]
+    pulsetable: { loop: 2, steps: [{ set: 400 }, { add: 50, frames: 18 }, { add: -12, frames: 45 }, { add: 12, frames: 45 }] }
+  mord1:
+    waveform: pulse
+    pulse_width: 400
+    adsr: [1, 5, 10, 5]
+    vibrato: { depth: 0.35, rate: 6, delay: 20, fade: 30 }
+    wavetable: [{ wave: saw }, { wave: pulse, frames: 3 }, { note: "+1", frames: 3 }, { wave: pulse }]
+    pulsetable: { loop: 2, steps: [{ set: 400 }, { add: 50, frames: 18 }, { add: -12, frames: 45 }, { add: 12, frames: 45 }] }
+  grace:
+    waveform: pulse
+    pulse_width: 400
+    adsr: [1, 5, 10, 5]
+    vibrato: { depth: 0.35, rate: 6, delay: 20, fade: 30 }
+    wavetable: [{ wave: saw, note: "-1", frames: 2 }, { wave: pulse }]
+    pulsetable: { loop: 2, steps: [{ set: 400 }, { add: 50, frames: 18 }, { add: -12, frames: 45 }, { add: 12, frames: 45 }] }
+  lead_soft:
+    waveform: tri
+    adsr: [3, 6, 11, 7]
+    portamento: 8
+    vibrato: { depth: 0.45, rate: 5.5, delay: 25, fade: 45 }
+    wavetable: [{ wave: noise }, { wave: tri }]
+  # Right side: echoes are narrower and softer; the canon follower is a saw with its own vibrato.
+  echo_r:
+    waveform: pulse
+    pulse_width: 700
+    adsr: [2, 6, 9, 5]
+    portamento: 6
+    vibrato: { depth: 0.25, rate: 6, delay: 20 }
+    wavetable: [{ wave: tri }, { wave: pulse }]
+    pulsetable: { loop: 1, steps: [{ set: 700 }, { add: -8, frames: 40 }, { add: 8, frames: 40 }] }
+  canon_r:
+    waveform: saw
+    adsr: [1, 6, 9, 6]
+    portamento: 6
+    vibrato: { depth: 0.3, rate: 5.5, delay: 18, fade: 30 }
+    wavetable: [{ wave: pulse }, { wave: saw }]
 voices:
   - id: 1
-    name: "Bass and kit (centre with v4)"
+    name: Ostinato (left, filter owner)
+    role: arp
+    instrument: seq
+    patterns:
+      seqB: { length: 0.25, bars: 4, groove: "D3 - - - A3 - - - F3 - - - C4 - - - | D3 - - - A3 - - - F3 - - - C4 - - - | D3 - - - A3 - - - G3 - - - C4 - - - | D3 - - - A3 - - - F3 - - - C4 - - -" }
+      layer: { length: 0.5, bars: 12, groove: "D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 D4 D3 A3 F3 D4 | D3 A3 F3 D4 D3 A3 F3 D4 | D3 A3 G3 D4 D3 A3 G3 D4 | D3 A3 G3 D4 D3 A3 G3 D4 | D3 B3 G3 D4 D3 B3 G3 D4 | D3 B3 G3 D4 D3 B3 G3 D4 | E3 B3 G3 D4 E3 B3 G3 D4 | E3 B3 G3 D4 E3 B3 G3 D4 | E3 B3 G3 C#4 E3 B3 G3 C#4 | E3 B3 G3 C#4 E3 B3 G3 C#4" }
+      theme: { length: 0.5, bars: 16, groove: "D3 A3 F3 C4 E3 A3 F3 C4 | D3 A3 F3 C4 D3 A3 E3 C4 | G2 D3 B2 F3 G2 D3 B2 F3 | G2 D3 B2 F3 A2 D3 B2 F3 | C3 G3 E3 B3 C3 G3 E3 B3 | C3 G3 E3 B3 D3 G3 E3 B3 | A2 E3 C3 G3 A2 E3 C3 G3 | E3 B3 G#3 D4 E3 B3 G#3 D4 | Bb2 F3 D3 A3 Bb2 F3 D3 A3 | Bb2 F3 D3 A3 C3 F3 D3 A3 | C3 G3 E3 C4 C3 G3 E3 Bb3 | A2 E3 C#3 G3 A2 E3 C#3 G3 | D3 A3 F3 C4 E3 A3 F3 C4 | G2 D3 Bb2 E3 A2 E3 C#3 G3 | D3 A3 F3 C4 D3 A3 F3 A3 | D3 A3 F3 C4 D3 A3 F3 C4" }
+      shift: { length: 0.25, bars: 8, groove: "Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 | - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - | F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 | E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 | - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - | Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 - A3@seq5 E4@seq5 - Bb2@seq5 - F3@seq5 C4@seq5 - D3@seq5 | A2@seq5 - E3@seq5 D4@seq5 - C#3@seq5 - G3@seq5 E4@seq5 - A2@seq5 - E3@seq5 D4@seq5 - C#3@seq5 | - G3@seq5 E4@seq5 - A2@seq5 - E3@seq5 D4@seq5 - C#3@seq5 - G3@seq5 E4@seq5 - A2@seq5 -" }
+      canon: { length: 0.5, bars: 16, groove: "A2 E3 C3 G3 A2 E3 B2 G3 | A2 E3 C3 G3 A2 E3 C3 B3 | D3 A3 F3 C4 D3 A3 E3 C4 | D3 A3 F3 C4 D3 G3 F3 C4 | C3 G3 E3 B3 C3 G3 E3 B3 | G2 D3 B2 F3 G2 D3 A2 F3 | F2 C3 A2 G3 F2 C3 A2 G3 | E3 B3 G3 D4 E3 B3 G3 D4 | F2 C3 A2 E3 F2 C3 G2 E3 | A2 E3 C3 G3 A2 E3 C3 G3 | C3 G3 E3 B3 C3 G3 E3 D4 | E3 B3 G3 D4 E3 B3 G3 B3 | A2 E3 C3 G3 A2 E3 B2 G3 | D3 A3 F3 C4 D3 A3 E3 C4 | E3 B3 G3 D4 E3 B3 G3 D4 | A2 E3 C3 G3 A2 E3 C#3 G3" }
+      dis: { length: 0.5, bars: 8, groove: "D3 A3 F3 C4 D3 A3 F3 C4 | D3 A3 F3 - D3 A3 F3 - | D3 A3 - - D3 A3 - - | D3 - - - D3 - - - | Bb2 - D3 - A3 - - - | Bb2 - - - A3 - - - | A2 - - - E3 - G3 - | D3 - - - - - - -" }
+  - id: 2
+    name: Bass and kit (centred on right channel 2)
     role: bass
+    center: { sid: right, channel: 2, level: 9 }
     instrument: bass
     patterns:
-      drone: { length: 1, groove: "D2@floor ~ ~ ~" }
-      half: { length: 0.25, groove: "k ~ D2 ~ ~ ~ D2 ~ k ~ D2 ~ ~ ~ D3 ~" }
-      g: { length: 0.25, groove: "k ~ D2 ~ s ~ D2 D3 k ~ D2 ~ s ~ D2 ~" }
-      g2: { length: 0.25, groove: "k ~ D2 D3 s ~ D2 D3 k ~ D2 D3 s ~ D3 D2" }
-      fill: { length: 0.25, groove: "k ~ D2 ~ s ~ D2 D3 k ~ s ~ s ~ s s" }
-      bridge: { length: 0.25, groove: "k ~ G1@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | k ~ Bb1@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | k ~ E2@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ | k ~ A1@floor ~ ~ ~ ~ ~ k ~ A1@floor ~ s ~ s s" }
-      end: { length: 0.25, groove: "k ~ D2 ~ s ~ D2 D3 k ~ D2 ~ s ~ D2 ~ | k ~ Bb1 ~ s ~ Bb1 Bb2 k ~ Bb1 ~ s ~ Bb1 ~ | k ~ G1 ~ s ~ G1 G2 k ~ A1 ~ s ~ A1 A2 | k ~ D2@floor ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
-  - id: 2
-    name: "Lead (centre with v5)"
-    role: lead
-    instrument: ink
-    patterns:
-      va: { length: 0.5, groove: "D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ (E5 D5) ~ ~ - - | C5 ~ ~ A4 (C5 D5) E5 ~ | ~ ~ (G5 E5) ~ ~ - - | D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ (G5 F5 ~ D5) ~ ~ | Bb5 ~ ~ (A5 G5 ~ F5) ~ | E5 ~ ~ ~ C#5 ~ - -" }
-      vb: { length: 0.5, groove: "D5 ~ ~ A4 (D5 E5) F5 A5 | ~ ~ (G5 F5 E5 D5) - - | C5 ~ ~ A4 (C5 D5) E5 G5 | ~ ~ (A5 G5 E5 C5) - - | (D5 ~ F5 ~ A5 ~) D6! ~ | ~ ~ (C6 Bb5) ~ ~ F5 ~ | G5 ~ (Bb5 ~ A5 G5 F5 E5) | ~ ~ ~ ~ ~ ~ - -" }
-      ca: { length: 0.5, groove: "D5@horn F5@horn A5!@horn ~ ~ ~ G5@horn F5@horn | ~ ~ ~ ~ C5@horn ~ F5@horn ~ | G5@horn ~ ~ E5@horn ~ ~ D5@horn C5@horn | D5@horn ~ ~ ~ ~ ~ A4@horn C5@horn | D5@horn F5@horn A5!@horn ~ ~ ~ Bb5@horn A5@horn | ~ ~ ~ ~ C6!@horn ~ A5@horn ~ | Bb5@horn ~ ~ A5@horn G5@horn ~ F5@horn ~ | E5@horn ~ ~ ~ ~ ~ C#5@horn ~" }
-      cb: { length: 0.5, groove: "D5@horn F5@horn A5!@horn ~ ~ ~ G5@horn F5@horn | ~ ~ ~ ~ C5@horn ~ F5@horn ~ | G5@horn ~ ~ E5@horn ~ ~ D5@horn C5@horn | D5@horn ~ ~ ~ ~ ~ A4@horn C5@horn | D5@horn F5@horn A5!@horn ~ ~ ~ C6@horn Bb5@horn | A5@horn ~ ~ ~ F5@horn ~ C5@horn ~ | D5@horn ~ G5@horn ~ Bb5@horn ~ A5@horn G5@horn | A5@horn ~ ~ ~ ~ ~ - -" }
-      br: { length: 0.5, groove: "D6 ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ C6 ~ Bb5 ~ | Bb5 ~ ~ ~ ~ ~ ~ ~ | A5 ~ ~ ~ ~ ~ - -" }
-      out: { length: 0.5, groove: "D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ E5 D5 ~ ~ - - | Bb4 ~ ~ ~ D5 ~ G5 ~ | E5 ~ ~ ~ C#5 ~ - - | D5 ~ ~ A4 (D5 E5) F5 ~ | ~ ~ ~ ~ D5 ~ F5 ~ | G5 ~ ~ ~ E5 ~ C#5 ~ | D5 ~ ~ ~ ~ ~ ~ ~" }
+      lp1: { length: 0.5, bars: 4, groove: "D2@pedal ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ - - D2@pedal ~ | D2@pedal ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ A1@pedal ~ C2@pedal ~" }
+      lp2: { length: 0.5, bars: 4, groove: "D2@pedal ~ ~ ~ ~ ~ D2@pedal ~ | ~ ~ ~ ~ - - D3 C3 | D2@pedal ~ ~ ~ ~ ~ D2@pedal ~ | ~ ~ ~ ~ C2@pedal ~ A1@pedal ~" }
+      lp3: { length: 0.5, bars: 4, groove: "E2@pedal ~ ~ ~ ~ ~ E2@pedal ~ | ~ ~ ~ ~ - - E2 G2 | A1@pedal ~ ~ ~ ~ ~ A1@pedal ~ | ~ ~ ~ ~ A2 ~ C#2 ~" }
+      theme: { length: 0.5, bars: 16, groove: "D2 ~ ~ D2 ~ ~ A1 ~ | D2 ~ ~ D3 ~ ~ C2 ~ | G1 ~ ~ G1 ~ ~ D2 ~ | G1 ~ ~ G2 ~ ~ F2 ~ | C2 ~ ~ C2 ~ ~ G1 ~ | C2 ~ ~ C3 ~ ~ B1 ~ | A1 ~ ~ A1 ~ ~ E2 ~ | E2 ~ ~ E2 ~ D2 ~ B1 | Bb1 ~ ~ Bb1 ~ ~ F2 ~ | Bb1 ~ ~ Bb2 ~ ~ A1 ~ | C2 ~ ~ C2 ~ ~ G1 ~ | A1 ~ ~ A2 ~ G2 E2 C#2 | D2 ~ ~ D2 ~ ~ A1 ~ | G1 ~ ~ G1 A1 ~ ~ A2 | D2 ~ ~ D2 ~ ~ C2 ~ | D2 ~ ~ ~ ~ ~ A1 ~" }
+      shift: { length: 1, bars: 8, groove: "Bb1@pedal ~ ~ ~ | ~ ~ C2@pedal ~ | Bb1@pedal ~ ~ ~ | ~ ~ C2@pedal ~ | G1@pedal ~ ~ ~ | ~ ~ C2@pedal ~ | A1@pedal ~ ~ ~ | ~ ~ A1 E2" }
+      canon: { length: 0.25, bars: 16, groove: "k - h A1 - h A1 h k - h A2 - h A1 h | k - h A1 - A1 h - k h - A1 - h E2 h | k - h D2 - h D2 h k - h D3 - h D2 h | k - h D2 - h D2 h k - k D2 k h k k | k - h C2 - C2 h - k h - C2 - h G2 h | k - h G1 - h D2 h - - h G1 k h G1 h | k - h F1 - F1 h - k h - F1 - h C2 h | k - h E1 - h E1 h k - k E1 k h k k | k - h F1 - h F1 h k - h F2 - h F1 h | k - h A1 - h E2 h - - h A1 k h A1 h | k - h C2 - h C2 h k - h C3 - h C2 h | k - h E2 - h E2 h k - k E2 k h k k | k - - A1 - - A1 - k - - A2 - h A1 - | k - - D2 - - A2 - - - h D2 - - D2 - | k - - E2 - - E2 - k - - E3 - h E2 - | k - - A1 - h A1 - k - - A1 - - - -" }
+      dis: { length: 0.5, bars: 8, groove: "D2@pedal ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ | D2@pedal ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ | Bb1@pedal ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~ | A1@pedal ~ ~ ~ ~ ~ ~ ~ | D2@pedal ~ ~ ~ ~ ~ ~ ~" }
   - id: 3
-    name: "Chord voice, left (echoed right by v6)"
-    role: arp
-    instrument: spark
+    name: Lead (left)
+    role: lead
+    instrument: lead
     patterns:
-      # 3+3+2 eighths per bar; the dotted-eighth echo fills the gaps on the right.
-      ia: { length: 0.5, groove: "Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | C@arp ~ ~ C@arp ~ ~ Csus4@arp C@arp" }
-      va: { length: 0.5, groove: "Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | C@arp ~ ~ C@arp ~ ~ C@arp ~ | Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | Gm7@arp ~ ~ Gm7@arp ~ ~ Gm7@arp ~ | Asus4@arp ~ ~ A@arp ~ ~ A7@arp -" }
-      ca: { length: 0.5, groove: "Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | C@arp ~ ~ C@arp ~ ~ C@arp ~ | Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | F@arp ~ ~ F@arp ~ ~ F@arp ~ | Gm7@arp ~ ~ Gm7@arp ~ ~ Gm7@arp ~ | Asus4@arp ~ ~ A@arp ~ ~ A7@arp -" }
-      # Second verse: broken chords in sixteenths; the dotted-eighth echo interlocks with them on the right.
-      vb: { length: 0.25, groove: "D4@pluck A4@pluck F4@pluck A4@pluck D5@pluck A4@pluck F4@pluck (A4@pluck D4@pluck) A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck A4@pluck | D4@pluck Bb4@pluck F4@pluck Bb4@pluck D5@pluck Bb4@pluck F4@pluck (Bb4@pluck D4@pluck) Bb4@pluck F4@pluck Bb4@pluck A4@pluck Bb4@pluck F4@pluck D4@pluck | C4@pluck A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck (A4@pluck C4@pluck) A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck A4@pluck | C4@pluck G4@pluck E4@pluck G4@pluck C5@pluck G4@pluck E4@pluck (G4@pluck D4@pluck) G4@pluck E4@pluck G4@pluck B4@pluck G4@pluck E4@pluck C4@pluck" }
-      vc: { length: 0.25, groove: "D4@pluck A4@pluck F4@pluck A4@pluck D5@pluck A4@pluck F4@pluck (A4@pluck D4@pluck) A4@pluck F4@pluck A4@pluck C5@pluck A4@pluck F4@pluck A4@pluck | D4@pluck Bb4@pluck F4@pluck Bb4@pluck D5@pluck Bb4@pluck F4@pluck (Bb4@pluck D4@pluck) Bb4@pluck F4@pluck Bb4@pluck A4@pluck Bb4@pluck F4@pluck D4@pluck | D4@pluck G4@pluck Bb4@pluck G4@pluck D5@pluck G4@pluck Bb4@pluck (G4@pluck F4@pluck) G4@pluck Bb4@pluck G4@pluck D5@pluck Bb4@pluck G4@pluck F4@pluck | E4@pluck A4@pluck C#5@pluck A4@pluck E5@pluck C#5@pluck A4@pluck (E4@pluck C#4@pluck) E4@pluck A4@pluck E4@pluck G4@pluck E4@pluck C#4@pluck A3@pluck" }
-      # Bridge counter-line: the right side answers it a dotted eighth later.
-      cm: { length: 0.5, groove: "G4@letter ~ ~ ~ Bb4@letter ~ D5@letter ~ | F5@letter ~ ~ ~ D5@letter ~ Bb4@letter ~ | G4@letter ~ ~ ~ Bb4@letter ~ E5@letter ~ | C#5@letter ~ ~ ~ ~ ~ - - | G4@letter ~ D5@letter ~ G5@letter ~ F5@letter ~ | D5@letter ~ ~ ~ F5@letter ~ Bb4@letter ~ | E5@letter ~ ~ ~ Bb4@letter ~ G4@letter ~ | A4@letter ~ ~ ~ C#5@letter ~ E5@letter ~" }
-      out: { length: 0.5, groove: "Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | Gm7@arp ~ ~ Gm7@arp ~ ~ Gm7@arp ~ | Asus4@arp ~ ~ A@arp ~ ~ A7@arp ~ | Dm7@arp ~ ~ Dm7@arp ~ ~ Dm7@arp ~ | Bbmaj7@arp ~ ~ Bbmaj7@arp ~ ~ Bbmaj7@arp ~ | Gm7@arp ~ ~ ~ A7@arp ~ ~ ~ | D3@nine ~ ~ ~ ~ ~ ~ ~" }
+      seqA: { length: 0.25, bars: 4, groove: "D3@seqdry - - - A3@seqdry - - - F3@seqdry - - - C4@seqdry - - - | D3@seqdry - - - A3@seqdry - - - F3@seqdry - - - C4@seqdry - - - | D3@seqdry - - - A3@seqdry - - - G3@seqdry - - - C4@seqdry - - - | D3@seqdry - - - A3@seqdry - - - F3@seqdry - - - C4@seqdry - - - " }
+      teaser:
+        length: 0.25
+        bars: 12
+        groove:
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: A4, len: 4 }
+          - { note: C5, glide: true, len: 1.5 }
+          - { note: B4, len: 0.5 }
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+      theme:
+        length: 0.25
+        bars: 16
+        groove:
+          - { note: A4, len: 1.75 }
+          - { note: C5, glide: true, len: 1.5 }
+          - { note: B4, len: 0.75 }
+          - { note: G4, len: 0.75 }
+          - "- - - -"
+          - { note: E5, len: 1.75 }
+          - { note: E5, legato: true, bend: { to: B4, frames: 10 }, len: 0.5 }
+          - "- - -"
+          - { note: D5, len: 0.75 }
+          - { note: C5, len: 0.5 }
+          - { note: A4, slide_from: G4, portamento: 4, len: 1 }
+          - { note: G4, len: 0.5 }
+          - { note: E4, len: 0.5 }
+          - { note: F4, len: 1.25 }
+          - { note: E4, len: 0.5 }
+          - { note: D4, inst: mord, len: 1.25 }
+          - "- - - -"
+          - { note: C5, len: 1.75 }
+          - { note: E5, glide: true, len: 1.5 }
+          - { note: D5, len: 0.75 }
+          - { note: B4, len: 0.75 }
+          - "- - - -"
+          - { note: G5, len: 1.75 }
+          - { note: G5, legato: true, bend: { to: D5, frames: 10 }, len: 0.5 }
+          - "- -"
+          - { note: F5, len: 0.5 }
+          - { note: E5, len: 0.5 }
+          - { note: D5 }
+          - { note: C5 }
+          - { note: B4, inst: mord1, len: 1 }
+          - { note: A4, len: 1 }
+          - { note: G#4, inst: grace, len: 1.25 }
+          - { note: A4, len: 0.75 }
+          - "- - - - - - - -"
+          - { note: F5, slide_from: D5, portamento: 5, len: 2 }
+          - { note: E5, len: 0.75 }
+          - { note: D5 }
+          - { note: C5, len: 1 }
+          - { note: D5, len: 1.25 }
+          - { note: A4, len: 0.75 }
+          - "- - - - - - - -"
+          - { note: Bb4, len: 0.75 }
+          - { note: C5, len: 0.75 }
+          - { note: D5, len: 0.75 }
+          - { note: E5, len: 0.75 }
+          - { note: F5, len: 1 }
+          - { note: G5, len: 0.75 }
+          - { note: A5, inst: lead_hi, len: 1.25 }
+          - { note: E5, len: 0.5 }
+          - { note: C#5, len: 1 }
+          - "- -"
+          - { note: A4, len: 2 }
+          - { note: C5, glide: true, len: 1.25 }
+          - { note: B4, len: 0.75 }
+          - { note: G4, len: 0.75 }
+          - "- -"
+          - { note: F5, slide_from: E5, portamento: 4, len: 2.75 }
+          - { note: E5, len: 0.75 }
+          - { note: D5, len: 0.5 }
+          - { note: C#5, inst: grace, len: 0.75 }
+          - { note: D5, len: 2 }
+          - "- - - - - - - - - - - - - - - -"
+      shift: { length: 1, bars: 8, groove: "A4@lead_soft ~ ~ ~ | ~ ~ /C5@lead_soft ~ | ~ Bb4@lead_soft G4@lead_soft ~ | E5@lead_soft ~ ~ ~ | D5@lead_soft ~ ~ C5@lead_soft | A4@lead_soft ~ ~ ~ | G4@lead_soft ~ E4@lead_soft ~ | C#5@lead_soft ~ ~ -" }
+      canon:
+        length: 0.25
+        bars: 16
+        groove:
+          - { note: A4, len: 1.75 }
+          - { note: C5, glide: true, len: 1.5 }
+          - { note: B4, len: 0.75 }
+          - { note: G4, len: 0.75 }
+          - "- - - -"
+          - { note: E5, len: 1.75 }
+          - { note: E5, legato: true, bend: { to: -2, frames: 8 }, len: 0.5 }
+          - "-"
+          - { note: D5, len: 0.75 }
+          - { note: C5, len: 0.5 }
+          - { note: A4, inst: mord, len: 1 }
+          - { note: G4, len: 0.5 }
+          - { note: E4, len: 0.5 }
+          - { note: F4, len: 0.5 }
+          - { note: G4, len: 1.25 }
+          - { note: A4, len: 0.5 }
+          - { note: D4, len: 1.25 }
+          - "- - - -"
+          - { note: C5, len: 1.75 }
+          - { note: E5, glide: true, len: 1.5 }
+          - { note: D5, len: 0.75 }
+          - { note: B4, len: 0.75 }
+          - "- -"
+          - { note: G5, len: 2.25 }
+          - { note: G5, legato: true, bend: { to: -2, frames: 8 }, len: 0.5 }
+          - { note: F5, len: 0.75 }
+          - { note: E5 }
+          - { note: D5, len: 0.5 }
+          - { note: C5, len: 0.5 }
+          - { note: A4, inst: mord, len: 1 }
+          - { note: G4, len: 1 }
+          - { note: G4, len: 1.25 }
+          - { note: A4, len: 0.75 }
+          - "- - - - - - - -"
+          - { note: F5, slide_from: D5, portamento: 5, len: 2 }
+          - { note: E5, len: 0.75 }
+          - { note: D5 }
+          - { note: C5, len: 1 }
+          - { note: D5, len: 1.25 }
+          - { note: A4, len: 0.75 }
+          - "- - - - - - - -"
+          - { note: C5, len: 0.75 }
+          - { note: D5, len: 0.75 }
+          - { note: E5, len: 0.75 }
+          - { note: F5, len: 0.75 }
+          - { note: G5, len: 1 }
+          - { note: A5, inst: lead_hi, len: 1.75 }
+          - { note: G5, len: 0.5 }
+          - { note: E5, len: 0.75 }
+          - { note: D5, len: 1 }
+          - { note: A4, level: 10, len: 2 }
+          - { note: C5, glide: true, level: 10, len: 1.25 }
+          - { note: B4, level: 10, len: 0.75 }
+          - { note: G4, level: 10, len: 0.75 }
+          - "- -"
+          - { note: F5, slide_from: E5, portamento: 4, level: 10, len: 2.75 }
+          - { note: E5, level: 10, len: 0.75 }
+          - { note: D5, level: 10, len: 0.5 }
+          - { note: C5, level: 10, len: 0.75 }
+          - { note: D5, level: 10, len: 2 }
+          - "- - - - - - - - - - - - - - - -"
+      dissolve:
+        length: 0.25
+        bars: 8
+        groove:
+          - { note: A4, len: 2 }
+          - { note: C5, glide: true, len: 1.5 }
+          - { note: B4, len: 0.5 }
+          - { note: G4, len: 1 }
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: E5, inst: lead_soft, len: 1.5 }
+          - { note: D5, inst: lead_soft, len: 0.5 }
+          - { note: F5, inst: lead_soft, slide_from: E5, portamento: 6, len: 2 }
+          - { note: E5, inst: lead_soft, len: 1 }
+          - { note: D5, inst: lead_soft, len: 1 }
+          - { note: A4, inst: lead_soft, len: 4 }
+          - { note: G4, inst: lead_soft, len: 1.5 }
+          - { note: E4, inst: lead_soft, len: 0.5 }
+          - { note: C#5, inst: lead_soft, len: 2 }
+          - { note: D5, inst: lead_soft, len: 4 }
   - id: 4
-    name: "Bass and kit, right unison"
-    unison: { voice: 1, detune: 0 }
-  - id: 5
-    name: "Lead, right unison"
-    unison: { voice: 2, detune: 4 }
+    name: Ostinato echo (right, filter owner)
+    echo: { voice: 1, delay_beats: 0.75, volume: 0.6, adsr: [1, 7, 4, 5] }
   - id: 6
-    name: "Chord echo, right"
-    echo: { voice: 3, delay_beats: 0.75, volume: 0.5, adsr: [2, 7, 9, 6] }
+    name: Echoes and canon follower (right)
+    instrument: echo_r
+    patterns:
+      teaser_echo:
+        length: 0.25
+        bars: 12
+        groove:
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: C5, level: 8, inst: echo_r, len: 1 }
+          - { note: B4, level: 8, inst: echo_r, len: 1 }
+          - "-"
+          - { note: C5, level: 5, inst: echo_r, len: 0.75 }
+          - { note: B4, level: 5, inst: echo_r, len: 1 }
+          - "- -"
+          - { note: C5, level: 3, inst: echo_r, len: 0.75 }
+          - { note: B4, level: 3, inst: echo_r, len: 0.75 }
+          - "- - - - - - - - - - - - - - - -"
+      theme_echo:
+        length: 0.25
+        bars: 16
+        groove:
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: E5, level: 8, inst: echo_r, len: 0.75 }
+          - "-"
+          - { note: E5, level: 5, inst: echo_r, len: 0.75 }
+          - { note: B4, level: 3, inst: echo_r, len: 0.75 }
+          - "- - - - - - - - - - - - - - - - - - - - -"
+          - { note: D4, level: 8, inst: echo_r, len: 0.75 }
+          - { note: D4, level: 5, inst: echo_r, len: 0.5 }
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: G5, level: 8, inst: echo_r, len: 0.5 }
+          - { note: D5, level: 5, inst: echo_r, len: 0.5 }
+          - { note: D5, level: 3, inst: echo_r, len: 0.5 }
+          - "- - - - - - - - - - - - - - - - - - -"
+          - { note: A4, level: 8, inst: echo_r, len: 0.75 }
+          - { note: A4, level: 5, inst: echo_r, len: 0.75 }
+          - { note: A4, level: 3, inst: echo_r }
+          - "- - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: D5, level: 8, inst: echo_r, len: 0.75 }
+          - { note: A4, level: 8, inst: echo_r, len: 0.75 }
+          - { note: D5, level: 5, inst: echo_r, len: 0.5 }
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: B4, level: 5, inst: echo_r, len: 0.5 }
+          - "- -"
+          - { note: C5, level: 3, inst: echo_r, len: 0.5 }
+          - "- - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: D5, level: 8, inst: echo_r, len: 0.75 }
+          - "- -"
+          - { note: D5, level: 5, inst: echo_r, len: 0.75 }
+          - { note: A4, level: 5, inst: echo_r, len: 0.75 }
+          - { note: D5, level: 3, inst: echo_r, len: 0.75 }
+          - { note: A4, level: 3, inst: echo_r, len: 1.75 }
+      shift: { length: 1, bars: 8, groove: "- - - - | - - - - | - - - - | - - E5 ~ | - - - - | - - A4 ~ | - - - - | - - - -" }
+      follower:
+        length: 0.25
+        bars: 16
+        groove:
+          - "- - - - - - - -"
+          - { note: E5, inst: canon_r, len: 1.75 }
+          - { note: G5, inst: canon_r, glide: true, len: 1.5 }
+          - { note: F5, inst: canon_r, len: 0.75 }
+          - { note: D5, inst: canon_r, len: 0.75 }
+          - "- - - -"
+          - { note: B5, inst: canon_r, len: 1.75 }
+          - { note: B5, inst: canon_r, legato: true, bend: { to: -2, frames: 8 }, len: 0.5 }
+          - "-"
+          - { note: A5, inst: canon_r, len: 0.75 }
+          - { note: G5, inst: canon_r, len: 0.5 }
+          - { note: E5, inst: canon_r, len: 1 }
+          - { note: D5, inst: canon_r, len: 0.5 }
+          - { note: B4, inst: canon_r, len: 0.5 }
+          - { note: C5, inst: canon_r, len: 0.5 }
+          - { note: D5, inst: canon_r, len: 1.25 }
+          - { note: E5, inst: canon_r, len: 0.5 }
+          - { note: A4, inst: canon_r, len: 1.25 }
+          - "- - - -"
+          - { note: G5, inst: canon_r, len: 1.75 }
+          - { note: B5, inst: canon_r, glide: true, len: 1.5 }
+          - { note: A5, inst: canon_r, len: 0.75 }
+          - { note: F5, inst: canon_r, len: 0.75 }
+          - "- -"
+          - { note: D6, inst: canon_r, len: 2.25 }
+          - { note: D6, inst: canon_r, legato: true, bend: { to: -2, frames: 8 }, len: 0.5 }
+          - { note: C6, inst: canon_r, len: 0.75 }
+          - { note: B5, inst: canon_r }
+          - { note: A5, inst: canon_r, len: 0.5 }
+          - { note: G5, inst: canon_r, len: 0.5 }
+          - { note: E5, inst: canon_r, len: 1 }
+          - { note: D5, inst: canon_r, len: 1 }
+          - { note: D5, inst: canon_r, len: 1.25 }
+          - { note: E5, inst: canon_r, len: 0.75 }
+          - "- - - - - - - -"
+          - { note: C6, inst: canon_r, slide_from: A5, portamento: 5, len: 2 }
+          - { note: B5, inst: canon_r, len: 0.75 }
+          - { note: A5, inst: canon_r }
+          - { note: G5, inst: canon_r, len: 1 }
+          - { note: A5, inst: canon_r, len: 1.25 }
+          - { note: E5, inst: canon_r, len: 0.75 }
+          - "- - - - - - - -"
+          - { note: G5, inst: canon_r, len: 0.75 }
+          - { note: A5, inst: canon_r, len: 0.75 }
+          - { note: B5, inst: canon_r, len: 0.75 }
+          - { note: C6, inst: canon_r, len: 0.75 }
+          - { note: D6, inst: canon_r, len: 1 }
+          - { note: E6, inst: canon_r, len: 1.75 }
+          - { note: D6, inst: canon_r, len: 0.5 }
+          - { note: B5, inst: canon_r, len: 0.75 }
+          - { note: A5, inst: canon_r, len: 1 }
+          - { note: E5, inst: canon_r, level: 10, len: 2 }
+          - { note: G5, inst: canon_r, glide: true, level: 10, len: 1.25 }
+          - { note: F5, inst: canon_r, level: 10, len: 0.75 }
+          - { note: D5, inst: canon_r, level: 10, len: 0.75 }
+          - "- -"
+          - { note: C6, inst: canon_r, slide_from: B5, portamento: 4, level: 10, len: 2.75 }
+          - { note: B5, inst: canon_r, level: 10, len: 0.75 }
+          - { note: A5, inst: canon_r, level: 10, len: 0.5 }
+          - { note: G5, inst: canon_r, level: 10, len: 0.75 }
+          - { note: A5, inst: canon_r, level: 10, len: 2 }
+          - "- - - - - - - -"
+      dissolve_echo:
+        length: 0.25
+        bars: 8
+        groove:
+          - "- - - - - - - - - - - - - - - - - - -"
+          - { note: G4, level: 5, inst: canon_r, len: 0.75 }
+          - { note: G4, level: 3, inst: canon_r, len: 0.75 }
+          - "- - - - - - - - - - -"
+          - { note: B4, level: 5, inst: canon_r, len: 1 }
+          - { note: G4, level: 3, inst: canon_r, len: 1 }
+          - "- - - - - - - - - - - - - - -"
+          - { note: D5, level: 5, inst: canon_r, len: 0.75 }
+          - "- - - - - - - - - - - - - - - - - - - - - - - -"
+          - { note: D5, level: 5, inst: canon_r, len: 0.75 }
+          - "- - - - - - - - - - - - - - -"
+          - { note: A4, level: 3, inst: canon_r, len: 2 }
+          - "- - - - - - - - - - - -"
+          - { note: A4, level: 3, inst: canon_r, len: 1 }
 sections:
-  intro_a: { bars: 4, level: mp, volume: { from: 8, to: 9 }, filter: { cutoff: { from: 0, to: 220 } }, layers: { v1: "drone drone-4 drone+3 drone-2", v3: ia } }
-  intro_b: { bars: 4, level: mf, volume: 9, layers: { v1: "half half-4 half+3 fill-2", v3: ia } }
-  verse_a: { bars: 16, level: mf, volume: 9, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: va } }
-  chorus_a: { bars: 16, level: f, volume: 11, filter: { cutoff: 60 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
-  bridge: { bars: 8, level: { from: p, to: mf }, volume: 9, filter: { cutoff: { from: 0, to: 300 } }, layers: { v1: "bridge*2", v2: "- - - - br", v3: cm } }
-  verse_b: { bars: 16, level: mf, volume: 10, layers: { v1: "g g-4 g+3 g-2 g g-4 g-7 fill-5", v2: "va vb", v3: "vb vc" } }
-  chorus_b: { bars: 16, level: ff, volume: 12, filter: { cutoff: 100 }, layers: { v1: "g2-4 g2+3 g2-2 g2 g2-4 g2+3 g2-7 fill-5", v2: "ca cb", v3: "ca+12" } }
-  outro: { bars: 8, level: { from: f, to: mp }, volume: { from: 11, to: 9 }, layers: { v1: "g g-4 g-7 g-5 end", v2: out, v3: out } }
-timeline: [intro_a, intro_b, verse_a, chorus_a, bridge, verse_b, chorus_b, outro]
-end: { hold_beats: 4, release: true }
+  sequence1: { bars: 4, level: mp, layers: { v3: seqA } }
+  sequence2: { bars: 4, level: f, layers: { v1: seqB } }
+  layer: { bars: 12, level: mf, filter: { left: { cutoff: { from: -40, to: 260 } }, right: { cutoff: { from: -260, to: -40 } } }, layers: { v1: layer, v2: "lp1 lp2 lp3", v3: teaser, v6: teaser_echo } }
+  theme: { bars: 16, level: f, levels: { v3: mf, v6: ff }, volume: { left: 13, right: 13 }, filter: { left: { cutoff: 260 }, right: { cutoff: { from: -40, to: 80 } } }, layers: { v1: theme, v2: theme, v3: theme, v6: theme_echo } }
+  shift: { bars: 8, level: mp, volume: { left: 13, right: 13 }, levels: { v6: 6 }, filter: { left: { cutoff: 100 }, right: { cutoff: -150 } }, layers: { v1: shift, v2: shift, v3: shift, v6: shift } }
+  canon: { bars: 16, level: { from: f, to: ff, bars: 8 }, levels: { v3: f, v6: ff }, filter: { left: { cutoff: { from: 200, to: 400 } }, right: { cutoff: { from: 0, to: 200 } } }, layers: { v1: canon, v2: canon, v3: canon, v6: follower } }
+  dissolve: { bars: 8, level: { from: mf, to: p }, filter: { left: { cutoff: { from: 300, to: -100 } }, right: { cutoff: { from: 100, to: -300 } } }, layers: { v1: dis, v2: dis, v3: dissolve, v6: dissolve_echo } }
+timeline: [sequence1, sequence2, layer, theme, shift, canon, dissolve]
+end: { hold_beats: 2, release: true }

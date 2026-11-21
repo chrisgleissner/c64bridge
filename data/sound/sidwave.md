@@ -13,7 +13,7 @@ LLM → SIDWAVE (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VIC
 
 - **Format name:** SIDWAVE
 - **File suffix:** `.sidwave.yaml` (or `.sid.yaml` for brevity)
-- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, or `sidwave: 1.2`
+- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, `sidwave: 1.2`, or `sidwave: 1.3`
 - **Schema file:** `sidwave.schema.json`
 - **Serialization:** YAML 1.2 or JSON
 
@@ -92,11 +92,11 @@ timeline:
 
 | Field | Meaning |
 | --- | --- |
-| `sidwave` | Format version, `1.0` (legacy), `1.1`, or `1.2`. |
+| `sidwave` | Format version, `1.0` (legacy), `1.1`, `1.2`, or `1.3`. |
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
 | `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
-| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. |
+| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. 1.3 also accepts time signatures (see SIDWAVE 1.3). |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
@@ -230,7 +230,7 @@ Notes range from C0 to B7. At the PAL clock B7 exceeds the SID's 16-bit frequenc
 
 | Effect | Fields | Behaviour |
 | --- | --- | --- |
-| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth` to within the SID's frequency resolution, about 6 cents at C0 and 3 cents at C1 on PAL), starting `delay` frames after the note. The upward swing must stay within the SID's highest frequency: on PAL a vibrato on A#7 can be at most 0.54 semitones deep, on NTSC B7 at most 0.19; deeper vibratos on such notes (including the highest note of a chord arpeggio) are rejected. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
+| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional), `fade` (1.3, frames, optional; see SIDWAVE 1.3) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth` to within the SID's frequency resolution, about 6 cents at C0 and 3 cents at C1 on PAL), starting `delay` frames after the note. The upward swing must stay within the SID's highest frequency: on PAL a vibrato on A#7 can be at most 0.54 semitones deep, on NTSC B7 at most 0.19; deeper vibratos on such notes (including the highest note of a chord arpeggio) are rejected. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
 | `pwm_sweep` | `depth` (fraction ≤ 1 or 12-bit units), `speed` (cycles per second) | Pulse width moves linearly between `pulse_width − depth` and `pulse_width + depth`, restarting at the base on each note. Pulse waveform only. |
 | `slide` | `depth` (semitones, ±24, non-zero), `speed` (frames, 1–255) | Each note starts `depth` semitones below the target (above when negative) and glides to it linearly in frequency, arriving after `speed` frames. The start note must itself be playable (C0..A#7 on PAL, C0..B7 on NTSC); otherwise the document is rejected. |
 | `filter_mod` | `sweep: "+500 over 8 steps"` (units: `steps`, `beats`, `bars`, `frames`; a step is one entry), or `{ sweep: 500, beats: 8 }` | Routes the voice through the filter while the pattern plays. At each repetition of the pattern the cutoff offset restarts at 0 and ramps to `sweep` (cutoff units, −2047..2047) over the given time, then holds. The resulting cutoff is clamped to 0..2047. The offset is removed when the section ends. |
@@ -509,7 +509,8 @@ The final samples map to the SID's 16 volume steps.
 
 **Timing.** `at` still accepts zero-based player call indices. Legacy inline
 entries such as `{ sid: sid1, at: [0, 50], kit: kick }` also work. Bars and beats
-within a bar start at 1, with three or four beats per bar as set by `meter`.
+within a bar start at 1, with three or four beats per bar as set by `meter`
+(in 1.3, bars follow the metre of each section and beats are quarter notes).
 Fractional beats are allowed. For `at_beat`, numbers
 are zero-based beats from the start of the song, and mappings use `{ bar, beat }`.
 Patterns divide each bar by the number of characters in `steps`. A dot is a
@@ -578,13 +579,13 @@ volume changes more audible. [SID specification](sid-spec.md) and
 
 ### Not supported
 
-Time signatures other than 3/4 and 4/4, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than those listed under SIDWAVE 1.3, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
 ## Arrangement, dynamics and long form (1.2)
 
-Everything in this chapter applies to `sidwave: 1.2` documents only. SIDWAVE 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
+Everything in this chapter applies to `sidwave: 1.2` and `sidwave: 1.3` documents only. SIDWAVE 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
 
 ### Time units
 
@@ -760,6 +761,136 @@ The compile operations return `lint` (at most 12 aggregated entries, most severe
 | `RINGSYNC-SRC`, `ONE-SIDE`, `DIGI-SHARED` | see above |
 
 Errors, not warnings: noise combined with another waveform in a wavetable `wave` (it can lock the noise register), a volume change on a digi SID, and a mirror or source channel that another voice scores.
+
+## SIDWAVE 1.3
+
+A `sidwave: 1.3` document accepts everything that 1.2 accepts and compiles it to the same PRG bytes
+(test/sidwave13Meter), so every statement about 1.2 documents in this file also holds for 1.3 documents. The
+fields below are accepted only in 1.3; a 1.2 document that uses one is rejected with an error that names the
+field and says `requires sidwave: 1.3`.
+
+### Metre per section
+
+`meter` takes `3`, `4` or a time signature: `"2/4"`, `"3/4"`, `"4/4"`, `"5/4"`, `"6/8"`, `"7/8"`, `"9/8"` or
+`"12/8"`. The song `meter` is the default; a timeline entry or named section can set its own `meter`, which
+applies to that entry only.
+
+- A beat is always a quarter note. `length`, `len`, `hold_beats`, `delay_beats`, `swing_unit` and sample beats
+  count quarter notes (an eighth is 0.5), and `tempo` stays quarter notes per minute. A bar of 7/8 lasts 3.5
+  beats, 6/8 lasts 3, 9/8 lasts 4.5 and 12/8 lasts 6.
+- `meter: { sig: "7/8", groups: [2, 2, 3] }` sets the grouping, in units of the denominator (eighths in x/8,
+  quarters in x/4). The groups must add up to the numerator. Defaults: 5/4 is 3+2, 6/8 is 3+3, 7/8 is 2+2+3,
+  9/8 is 3+3+3, 12/8 is 3+3+3+3, and 2/4, 3/4 and 4/4 have one group per beat. Groups do not change playback;
+  the player adds no accents. They appear in the arrangement report.
+- A section's `bars` counts bars of its own metre, and a section without `bars` divides its longest layer pass
+  by its own bar length. Bar numbers in lint findings, note paths, the arrangement report and
+  `expectedSchedule().bars` follow the metre of each section. Level, volume and filter ramps with `bars: N`
+  count bars of the entry's metre; volume ramp steps fall on quarter-note beats counted from the entry start.
+- Every `|` group of a pattern must last one bar of each section that plays it, and `bars: N` must equal N bars
+  of that metre. A pattern played in sections with different metres is checked against each, and the error
+  names the pattern, the section and the metre, for example
+  `pattern riff: group 1 lasts 3.5 beats; section "chorus" ($.timeline[1]) plays it in 4/4, which needs 4 beats per bar`.
+  A pattern that no section plays is checked against the song metre.
+- A sequence rest `-` lasts one bar of the section's metre. Sample `bar`/`beat` positions and sample
+  `pattern` steps use the bar lengths of the sections at those bars.
+- Swing delays every second `swing_unit`, counted from the start of the section as in 1.2. Choose a unit that
+  divides the bar into an even number of parts (0.25 in 7/8, which has 14 sixteenths); with 0.5 in 7/8 the
+  long-short pairs continue across the bar line. Drum `steps` and sequences need no change in any metre.
+
+```yaml
+sidwave: 1.3
+tempo: 132
+meter: "4/4"
+voices:
+  - id: 1
+    patterns:
+      riff: { length: 0.5, groove: "E2 E2 B2 E2 E2 D3 B2 | E2 G2 A2 B2 D3 B2 A2" }
+      rock: { length: 0.5, groove: "E2 E2 E3 E2 G2 E2 A2 B2" }
+timeline:
+  - { section: odd, bars: 4, meter: { sig: "7/8", groups: [2, 2, 3] }, layers: { v1: "riff*2" } }
+  - { section: straight, bars: 4, layers: { v1: rock } }
+```
+
+### Vibrato fade
+
+`vibrato: { depth: 0.5, rate: 5, delay: 12, fade: 40 }` in a pattern's `fx` or an instrument: after `delay`
+frames the depth rises linearly from 0 to `depth` over `fade` frames (1-255), then holds. Like `delay`, `fade`
+counts video frames at any `speed`. The fade restarts with the vibrato at every attack; a legato note continues
+the running vibrato and fade.
+
+The player scales the vibrato triangle by a fade level in steps of 1/256. The level grows by
+`ceil(65536 / (fade x speed))` per player call, so the full depth arrives on call `fade x speed` when that
+product is at most 256; longer fades (only possible at `speed` 2-4) arrive up to 15 calls early, at 1,020 calls.
+
+A groove note object can override the vibrato for one note: `{ note: E5, vibrato: { depth: 0.5, fade: 30 } }`.
+Its fields replace those of the instrument's or pattern's vibrato; without one, the note must give `depth` and
+`rate`. The override needs no player change, but every distinct override is its own instrument variant and
+counts towards the 63 instruments.
+
+Cost: only scores with a fade get the fade code, so other scores keep their player bytes. The player grows by
+66 bytes, plus 2 bytes per instrument and 3 bytes per channel. A fading voice costs up to 165 cycles per call
+(an 8x8 multiply and a 16-bit add) and 25 cycles per attack; `worstCaseCyclesPerCall` adds 170 per voice that
+uses a fade and 16 per other vibrato voice in the same score (test/sidwave13Vibrato measures it in the 6502
+emulator).
+
+```yaml
+sidwave: 1.3
+tempo: 76
+instruments:
+  violin: { waveform: sawtooth, adsr: [3, 4, 11, 6], vibrato: { depth: 0.35, rate: 5.5, delay: 15, fade: 45 } }
+voices:
+  - id: 1
+    instrument: violin
+    patterns:
+      line: { length: 1, groove: ["E5", "~", "D5", "C5", { note: "B4", vibrato: { depth: 0.6, fade: 80 } }, "~", "~", "~"] }
+timeline: [{ bars: 2, layers: { v1: line } }]
+```
+
+### Follower voices
+
+`follow: { voice: 1, delay_beats: 1, transpose: 7, instrument: soft, level: 10 }` on a voice makes it play the
+pitched notes of voice 1, shifted in time and by `transpose` semitones, with its own instrument and level. It
+uses the copy mechanism of `echo` and `unison`. Use it for canons, octave doubling and harmonised twin leads.
+
+| Field | Meaning |
+| --- | --- |
+| `voice` | Source voice (1-30). A follower may follow an echo, unison or another follower; cycles are rejected. |
+| `delay_beats` or `delay` | Time shift in beats (follows tempo and swing, as for `echo`) or in video frames (multiplied by `speed`). Default 0. |
+| `transpose` | Chromatic semitones, -48 to 48. Default 0. Glides, bends and chord-arp roots move with it. |
+| `instrument` | A named or `lib:` instrument for every copied note. Without it the follower uses the source note's instrument. |
+| `level` | 1-15 or a mark. The sustain written at an attack is `clamp(max(1, round(S x level/15 x section/15)) + accent, 1, 15)`, with `S` the instrument sustain, `section` the entry's `levels.v<follower>` or `level`, and the source note's accent. Defaults to the source voice's `level`. |
+| `detune` | Cents (±100), added to the source voice's detune. Default 0. |
+
+- Kit tokens, drum steps, library drum instruments, notes of a `role: drums` voice and the silent notes that
+  drive a `source_note` are not copied.
+- Timing, ties, rests, legato, glides and chord arpeggios come from the source. With its own instrument a
+  follower keeps the source's arpeggio offsets and chord-arp tones but takes waveform, ADSR, pulse, filter and
+  wave tables, vibrato and slide from that instrument. A filter table on a SID with a `filter.owner` runs only on
+  the owner voice.
+- Without `instrument` and `level`, the follower keeps the source note's sustain.
+- A note that the transposition moves outside C0 to the highest playable note is rejected with the path
+  `$.voices.v<id>.follow.transpose`, the note and its bar. A follower instrument whose hard restart does not fit
+  between two copied notes is rejected with the path `$.voices.v<id>.follow.instrument`.
+- A copied note that a delay moves past the end of a song is cut, except after the last notes of a score with
+  `end: { release: true }`, whose tail waits for the copy and its release (the release of the follower's
+  instrument, if it has one).
+- The follower voice takes no `patterns`, `instrument`, `level`, `detune`, `center`, `echo` or `unison` of its own.
+  Diatonic transposition (`transpose: { diatonic: 3, key }`) is not supported: a source note outside the key
+  has no defined diatonic interval.
+- A follower is an ordinary channel for the player and the CPU estimate; it needs no player change.
+
+```yaml
+sidwave: 1.3
+tempo: 112
+instruments:
+  lead: { waveform: sawtooth, adsr: [1, 5, 10, 5] }
+  flute: { waveform: triangle, adsr: [2, 4, 12, 6], vibrato: { depth: 0.2, rate: 5, delay: 10, fade: 30 } }
+voices:
+  - { id: 1, instrument: lead, patterns: { m: { length: 0.5, groove: "E4 G4 A4 B4 (C5 B4) A4 G4" } } }
+  - { id: 2, follow: { voice: 1, delay_beats: 1, transpose: 7, instrument: flute, level: mf } }
+  - { id: 3, follow: { voice: 1, transpose: -12 } }
+timeline: [{ bars: 4, layers: { v1: m } }]
+```
 
 ## Playable examples
 

@@ -1,117 +1,397 @@
-# Funk | 107.4 BPM | E Dorian | 1 SID
-# Techniques: Slap bass with a one-frame octave click and a per-note resonant filter envelope (the bass owns the filter), popped octaves with a brighter accent filter, dead ghost notes, slurred slides; a 16th drum kit on its own voice; chord chops as one-frame chord wavetables on the offbeats; a call-and-answer PWM lead with delayed vibrato; stop-time break with hard-synced sweeps and a ring-modulated stab over silent source notes; ending on an E9 stab.
-# Learn: Funk is in the gaps: kick on 1 and the "and" of 3, snare on 2 and 4, the bass ghosts and pops between them and the chops answer on the 16th offbeats; the arrangement moves by swapping the chops for the lead, a bridge, and a stop-time break
-sidwave: 1.2
+# Jazz-funk | 115.67 BPM | E Dorian (solo in G Dorian) | 1 SID
+# Techniques: Speed 2 and 16th swing 0.56; a slap bass with five articulations (thumb slap with a saw click, popped octave through a noise flick, dead ghost, hammer-on grace, band-pass solo pop) whose pulse width and resonant low-pass close on every note, sharing voice 1 with a kick and three snares that carry their own filter tables; rootless four-tone e-piano voicings as 100 Hz wavetable chords behind a two-octave tine frame, one frame per tone in the solo, broken into single tines in the bridge, and interleaved with three noise hats on voice 2; a clav that becomes the lead on voice 3; three lead colours (copper pulse, reed with noise attack, glass triangle) with scoops, blue-note bends, mordents, trills, fall-offs and one 32nd run.
+# Learn: The motif (pickups 5 b7 into 1, rest, b3 2 1 b7 tied; then b5 sliding to 5, 4 b3 1 and two beats left for the bass) is stated by the copper lead in the head, augmented on the glass lead in the half-time bridge, broken into a three-note cell displaced by five sixteenths in the tag, and recapitulated before the final E13#11. The solo transposes the head harmony up a minor third and alternates two bars of lead with two bars of bass; F13 (the tritone substitute for B7) brings it back to E.
+# Form (bar = 2.07 s): bass alone 1-4 (0:00) | groove 5-12 (0:08) | head 13-20 (0:25) | head with answering stabs 21-28 (0:41) | half-time bridge 29-36 (0:58) | solo, G Dorian, lead and bass trading two bars 37-44 (1:15) | solo peak 45-52 (1:31) | stop time 53-56 (1:48) | last head 57-64 (1:56) | tag 65-76 (2:13), turnaround three times, held E13#11 under a two-octave bass gliss, 2:38.
+# Harmony: head Em9 A13 | Cmaj7 B7#9 | Em9 A13 | Gmaj9 C#m7b5 F#7b9 | Bm11 Bb13 | Am9 D13 | Cmaj7 C#m7b5 | D13 B7#9/D# (bass C C# D D# E chromatic); bridge Am9 | D13 | Gmaj9 | C#m7b5 F#7b9 | Bm11 over a B pedal (2 bars) | Ebmaj7 | D7#9; solo Gm9 C13 | Ebmaj7 D7#9 | Cm9 F13 | Bbmaj7 Am7b5 D7#9 ... F13; tag Em9 A13 | Cmaj7 B7#9 | G13 C9 | F#7#9 B7b9, ending E13#11.
+# Signature: bars 1-4, the slap bass alone; bar 53, unison off-beat hits of bass, e-piano and lead.
+# Surprise: bar 56, three beats of silence and a falling 32nd run on the lead alone into the last head.
+# Phrases: head 2+2+4 bars; the bridge melody is 3 + 5 bars; the tag cell repeats every five sixteenths against the bar.
+# Accepted lint: TABLE-CUT where a bass sixteenth cuts the kick or snare tail on the shared voice (the interleave is the
+# point); LEVEL-NOOP for the sustain-0 hats, whose dynamics come from chip volume; ARP-FAST for the e-piano chords at one
+# call (10 ms) per tone, which fuse into one chord with a buzz at speed 2.
+sidwave: 1.3
 title: Copper Steps
-tempo: 107.4
+tempo: 115.67
+speed: 2
+swing: 0.56
 mode: PAL
 accent: 2
-kit: { k: lib:kick, s: lib:snare, h: lib:hat, o: lib:open_hat, t: lib:tom, x: lib:crash }
 sids:
   - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+kit: { k: kk, s: sn, q: sq, z: sz, h: hc, o: ho, x: hx }
 instruments:
-  # Thumb slap: one frame an octave up as the string click, then a resonant low-pass snapping shut (8580 units).
-  slap:
+  # --- voice 1: bass articulations ---
+  # Thumb slap: one saw frame an octave up as the string click; pulse closes from 50 % to 15 % and the
+  # resonant low-pass from 1.6 kHz to about 470 Hz in 10 frames.
+  sl:
     waveform: pulse
-    pulse_width: 1638
-    adsr: [1, 7, 7, 1]
+    adsr: [0, 8, 9, 1]
     hard_restart: { test: true }
-    wavetable: [{ note: "+12", frames: 1 }, { note: "+0" }]
-    filtertable: [{ cutoff: 420, resonance: 12, type: lowpass }, { add: -20, frames: 10 }]
-  finger:
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 2048 }, { add: -90, frames: 16 }]
+    filtertable: [{ cutoff: 1.6kHz, resonance: 11, type: lowpass }, { add: -18, frames: 10 }]
+  # Popped string: a noise flick three octaves up, two saw frames, then a narrowing pulse; brighter filter.
+  pp:
     waveform: pulse
-    pulse_width: 1638
-    adsr: [1, 7, 7, 1]
+    adsr: [0, 9, 7, 1]
     hard_restart: { test: true }
-    filtertable: [{ cutoff: 340, resonance: 11, type: lowpass }, { add: -14, frames: 10 }]
-  # Dead note: a muted thump with no pitch body.
-  ghost:
+    wavetable: [{ wave: noise, note: "+36" }, { wave: saw }, { wave: pulse }]
+    pulsetable: [{ set: 1600 }, { add: -60, frames: 12 }]
+    filtertable: [{ cutoff: 3kHz, resonance: 13, type: lowpass }, { add: -25, frames: 12 }]
+  # Dead note: noise thump and two muffled pulse frames, no pitch body.
+  gh:
     waveform: pulse
-    pulse_width: 1638
-    adsr: [1, 3, 0, 0]
-    filtertable: [{ cutoff: 200, resonance: 8, type: lowpass }]
-  # Popped string: octave above, brighter and more resonant.
-  pop:
+    pulse_width: 1024
+    adsr: [0, 4, 0, 0]
+    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse, frames: 1 }, { gate: false }]
+    filtertable: [{ cutoff: 600Hz, resonance: 6, type: lowpass }]
+  # Hammer-on: two saw frames a whole tone below, then the slap body.
+  hm:
     waveform: pulse
-    pulse_width: 1638
-    adsr: [1, 8, 8, 1]
+    adsr: [0, 8, 9, 1]
     hard_restart: { test: true }
-    wavetable: [{ note: "+12", frames: 1 }, { note: "+0" }]
-    filtertable: [{ cutoff: 620, resonance: 13, type: lowpass }, { add: -60, frames: 6 }]
-  # Chord chops: the chord tones cycle once per frame inside one damped 16th.
-  maj7: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }, { note: "+11" }] }
-  hdim: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+6" }, { note: "+10" }] }
-  min7: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+7" }, { note: "+10" }] }
-  maj: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }] }
-  six: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }, { note: "+9" }] }
-  e9: { waveform: pulse, pulse_width: 1229, adsr: [1, 9, 6, 9], loop: 0, wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+6" }, { note: "+10" }] }
-  lead:
+    wavetable: [{ wave: saw, note: "-2", frames: 2 }, { wave: pulse }]
+    pulsetable: [{ set: 1800 }, { add: -70, frames: 16 }]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 12, type: lowpass }, { add: -14, frames: 12 }]
+  # Solo pop: a high-resonance low-pass that snaps down and then keeps closing slowly, for the bass's solo bars.
+  sp:
     waveform: pulse
-    adsr: [1, 6, 11, 4]
-    portamento: 3
-    vibrato: { depth: 0.12, rate: 5.5, delay: 16 }
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.22 }, { add: 20, frames: 30 }, { add: -20, frames: 30 }] }
-  # Hard-synced saw: the source on voice 2 holds the written pitch, the bend sweeps the slave's harmonics.
-  syncsweep: { waveform: saw, adsr: [1, 6, 9, 3], source_note: "+0", wavetable: [{ wave: saw, sync: true }] }
-  ringstab: { waveform: tri, adsr: [1, 9, 0, 6], source_note: "+5", wavetable: [{ wave: tri, ring: true }] }
+    adsr: [0, 7, 11, 2]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: "+31" }, { wave: saw, frames: 2 }, { wave: pulse }]
+    pulsetable: { loop: 1, steps: [{ set: 900 }, { add: 30, frames: 20 }, { add: -30, frames: 20 }] }
+    filtertable: [{ cutoff: 2.2kHz, resonance: 14, type: lowpass }, { add: -30, frames: 6 }, { add: -4, frames: 30 }]
+  # Final note: the slap with long release and a slow filter close under the two-octave bend.
+  gls:
+    waveform: pulse
+    adsr: [0, 10, 10, 10]
+    hard_restart: { test: true }
+    wavetable: [{ wave: saw, frames: 2 }, { wave: pulse }]
+    pulsetable: { loop: 1, steps: [{ set: 2048 }, { add: -20, frames: 50 }, { add: 20, frames: 50 }] }
+    filtertable: [{ cutoff: 1.6kHz, resonance: 12, type: lowpass }, { add: -4, frames: 60 }]
+  # --- kit (kick and snares on voice 1, each with its own filter step; hats on voice 2) ---
+  kk:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: A6 }, { wave: pulse, note: A3, slide_to: E1, frames: 4 }, { wave: tri, note: E1 }, { gate: false }]
+    filtertable: [{ cutoff: 2.4kHz, resonance: 4, type: lowpass }]
+  sn:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: tri, note: G#3 }, { wave: noise, note: D6, frames: 2 }, { wave: pulse, note: E3 }, { wave: noise, note: B5, frames: 4 }, { wave: noise, note: G5, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: 2kHz, resonance: 9, type: bandpass }]
+  sq:
+    waveform: pulse
+    adsr: [0, 9, 0, 0]
+    wavetable: [{ wave: tri, note: E3 }, { wave: noise, note: A5, frames: 2 }, { wave: pulse, note: B2 }, { wave: noise, note: F5, frames: 5 }, { wave: noise, note: D5, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 10, type: bandpass }]
+  sz:
+    waveform: noise
+    adsr: [0, 3, 0, 0]
+    wavetable: [{ wave: noise, note: C6, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: bandpass }]
+  hc: { waveform: noise, hard_restart: { frames: 0 }, adsr: [0, 2, 0, 0], wavetable: [{ wave: noise, note: G7 }, { gate: false }] }
+  ho: { waveform: noise, hard_restart: { frames: 0 }, adsr: [0, 7, 0, 0], wavetable: [{ wave: noise, note: G7, frames: 2 }, { wave: noise, note: F7 }] }
+  hx: { waveform: noise, hard_restart: { frames: 0 }, adsr: [0, 5, 0, 3], wavetable: [{ wave: noise, note: D7, frames: 2 }, { gate: false }] }
+  # --- voice 2: e-piano. Rootless four-tone voicings, high to low so the lowest tone lands last; a
+  # triangle tine two octaves up starts each chord; 1 call (10 ms) per tone at speed 2.
+  ma:
+    waveform: pulse
+    adsr: [0, 9, 4, 5]
+    hard_restart: { frames: 0 }
+    loop: 1
+    pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }
+    wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+11", calls: 1 }, { note: "+7", calls: 1 }, { note: "+4", calls: 1 }, { note: "+0", calls: 1 }]
+  mi: { waveform: pulse, adsr: [0, 9, 4, 5], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+10", calls: 1 }, { note: "+7", calls: 1 }, { note: "+3", calls: 1 }, { note: "+0", calls: 1 }] }
+  th: { waveform: pulse, adsr: [0, 9, 4, 5], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+11", calls: 1 }, { note: "+6", calls: 1 }, { note: "+4", calls: 1 }, { note: "+0", calls: 1 }] }
+  sn9: { waveform: pulse, adsr: [0, 9, 4, 5], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+15", calls: 1 }, { note: "+11", calls: 1 }, { note: "+6", calls: 1 }, { note: "+0", calls: 1 }] }
+  hd: { waveform: pulse, adsr: [0, 9, 4, 5], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+10", calls: 1 }, { note: "+6", calls: 1 }, { note: "+3", calls: 1 }, { note: "+0", calls: 1 }] }
+  dm: { waveform: pulse, adsr: [0, 9, 4, 5], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+9", calls: 1 }, { note: "+6", calls: 1 }, { note: "+3", calls: 1 }, { note: "+0", calls: 1 }] }
+  qd: { waveform: pulse, adsr: [0, 9, 4, 5], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+14", calls: 1 }, { note: "+10", calls: 1 }, { note: "+5", calls: 1 }, { note: "+0", calls: 1 }] }
+  # Solo comping: one video frame per tone, the warbling game chord, and a narrower pulse.
+  maw:
+    waveform: pulse
+    adsr: [0, 8, 5, 4]
+    hard_restart: { frames: 0 }
+    loop: 1
+    pulsetable: { loop: 1, steps: [{ set: 0.14 }, { add: 20, frames: 24 }, { add: -20, frames: 24 }] }
+    wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+11" }, { note: "+7" }, { note: "+4" }, { note: "+0" }]
+  miw: { waveform: pulse, adsr: [0, 8, 5, 4], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.14 }, { add: 20, frames: 24 }, { add: -20, frames: 24 }] }, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+10" }, { note: "+7" }, { note: "+3" }, { note: "+0" }] }
+  thw: { waveform: pulse, adsr: [0, 8, 5, 4], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.14 }, { add: 20, frames: 24 }, { add: -20, frames: 24 }] }, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+11" }, { note: "+6" }, { note: "+4" }, { note: "+0" }] }
+  snw: { waveform: pulse, adsr: [0, 8, 5, 4], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.14 }, { add: 20, frames: 24 }, { add: -20, frames: 24 }] }, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+15" }, { note: "+11" }, { note: "+6" }, { note: "+0" }] }
+  hdw: { waveform: pulse, adsr: [0, 8, 5, 4], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.14 }, { add: 20, frames: 24 }, { add: -20, frames: 24 }] }, wavetable: [{ wave: saw, note: "+24" }, { wave: pulse, note: "+10" }, { note: "+6" }, { note: "+3" }, { note: "+0" }] }
+  # E13#11 for the last two bars: two calls per tone and a long release.
+  ly: { waveform: pulse, adsr: [0, 11, 7, 11], hard_restart: { frames: 0 }, loop: 1, pulsetable: { loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 30 }, { add: -14, frames: 30 }] }, wavetable: [{ wave: tri, note: "+24" }, { wave: pulse, note: "+14", calls: 2 }, { note: "+10", calls: 2 }, { note: "+6", calls: 2 }, { note: "+0", calls: 2 }] }
+  # Bridge tines: one tone per note, triangle strike then a slowly narrowing pulse.
+  tn:
+    waveform: pulse
+    adsr: [0, 8, 3, 6]
+    hard_restart: { frames: 0 }
+    wavetable: [{ wave: tri, note: "+24" }, { wave: tri, frames: 2 }, { wave: pulse }]
+    pulsetable: [{ set: 0.32 }, { add: -10, frames: 40 }]
+  # --- voice 3 ---
+  # Clav chop: 10 % pulse opening fast, a saw click, no sustain.
+  cv:
+    waveform: pulse
+    adsr: [0, 5, 0, 2]
+    hard_restart: { frames: 0 }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+    pulsetable: [{ set: 0.10 }, { add: 50, frames: 6 }]
+  # Copper lead (head): saw click an octave up, pulse opening from 8 % to 31 % in 16 frames, then breathing
+  # slowly; vibrato 0.4 semitone at 6.2 Hz that starts after 12 frames and grows over 16.
+  cu:
+    waveform: pulse
+    adsr: [0, 7, 10, 5]
+    hard_restart: { frames: 0 }
+    vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }
+    pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }
+    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
+  # Scoop: up from a minor third below in one-frame steps (a relative slide_to would make one instrument per pitch).
+  scp: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-3" }, { wave: pulse, note: "-3" }, { note: "-2" }, { note: "-1" }, { wave: pulse }] }
+  # Clean body for the explicitly scored minor-third scoop, with no chromatic staircase in the wavetable.
+  scoop: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, frames: 1 }, { wave: pulse }] }
+  grc: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-1", frames: 3 }, { wave: pulse }] }
+  mrd: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, frames: 3 }, { note: "+2", frames: 3 }, { wave: pulse }] }
+  trl: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 1, steps: [{ set: 0.2 }, { add: 20, frames: 20 }, { add: -20, frames: 20 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, note: "+0", frames: 3 }, { note: "+2", frames: 3 }], loop: 1 }
+  fall: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, frames: 14 }, { note: "-1" }, { note: "-2" }, { note: "-3" }, { note: "-5" }, { note: "-7", frames: 2 }, { note: "-9", gate: false }] }
+  blue: { waveform: pulse, adsr: [0, 7, 10, 5], hard_restart: { frames: 0 }, vibrato: { depth: 0.4, rate: 6.2, delay: 12, fade: 16 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "-1" }, { wave: pulse, note: "-1", frames: 9 }, { wave: pulse }] }
+  lend: { waveform: pulse, adsr: [0, 7, 10, 10], hard_restart: { frames: 0 }, vibrato: { depth: 0.5, rate: 5.8, delay: 30, fade: 40 }, pulsetable: { loop: 2, steps: [{ set: 0.08 }, { add: 60, frames: 16 }, { add: -12, frames: 50 }, { add: 12, frames: 50 }] }, wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }] }
+  # Reed lead (solo): one noise frame two octaves up, two saw frames, then a wide pulse narrowing and
+  # widening every 20 frames; deeper and faster vibrato that starts earlier and grows over 12 frames.
+  rd:
+    waveform: pulse
+    adsr: [0, 5, 11, 4]
+    hard_restart: { frames: 0 }
+    vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }
+    pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }
+    wavetable: [{ wave: noise, note: "+12" }, { wave: saw, frames: 2 }, { wave: pulse }]
+  rscp: { waveform: pulse, adsr: [0, 5, 11, 4], hard_restart: { frames: 0 }, vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }, pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }, wavetable: [{ wave: noise, note: "+12" }, { wave: saw, note: "-2" }, { wave: saw, note: "-1", frames: 2 }, { wave: pulse }] }
+  rfall: { waveform: pulse, adsr: [0, 5, 11, 4], hard_restart: { frames: 0 }, vibrato: { depth: 0.55, rate: 7, delay: 8, fade: 12 }, pulsetable: { loop: 1, steps: [{ set: 0.45 }, { add: -40, frames: 20 }, { add: 40, frames: 20 }] }, wavetable: [{ wave: noise, note: "+12" }, { wave: saw, frames: 2 }, { wave: pulse, frames: 14 }, { note: "-1" }, { note: "-3" }, { note: "-5" }, { note: "-7" }, { note: "-10" }, { note: "-12", gate: false }] }
+  # Glass lead (bridge): noise breath, six triangle frames, then a square wave narrowing slowly; slow attack,
+  # gentle late vibrato that swells over 30 frames.
+  gl:
+    waveform: pulse
+    adsr: [2, 6, 11, 6]
+    vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }
+    pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }
+    wavetable: [{ wave: noise, note: "+19" }, { wave: tri, frames: 6 }, { wave: pulse }]
+  gscp: { waveform: pulse, adsr: [2, 6, 11, 6], vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, note: "-2", frames: 3 }, { wave: tri, note: "-1", frames: 3 }, { wave: pulse }] }
+  gtrl: { waveform: pulse, adsr: [2, 6, 11, 6], vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, note: "+0", frames: 4 }, { note: "+2", frames: 4 }], loop: 1 }
+  gfall: { waveform: pulse, adsr: [2, 6, 11, 6], vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 30 }, pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -6, frames: 80 }, { add: 6, frames: 80 }] }, wavetable: [{ wave: noise, note: "+19" }, { wave: tri, frames: 6 }, { wave: pulse, frames: 20 }, { note: "-1", frames: 2 }, { note: "-2", frames: 2 }, { note: "-3", frames: 2 }, { note: "-5", frames: 3 }, { note: "-7", gate: false }] }
 voices:
   - id: 1
-    name: Slap bass
+    name: Slap bass and kick/snare
     role: bass
-    instrument: finger
+    instrument: sl
     patterns:
-      # Em9 | A9: slap on 1, ghosts, a slide, and an octave pop on the last 16th.
-      vamp: { length: 0.25, bars: 2, groove: "E2@slap - E2@ghost G2 - E2 (A2 /B2) - D2 E2@slap - E2@ghost G2 - E3!@pop | A1@slap - A1@ghost C#2 - E2 (G2 /A2) - E2 A1@slap - G1@ghost (A1 /B1) A2!@pop" }
-      vamp2: { length: 0.25, bars: 2, groove: "E2@slap - E2@ghost G2 - E2 (A2 /B2) - D2 E2@slap - E2@ghost E3!@pop D3 B2 | A1@slap - A1@ghost C#2 - E2 (G2 /A2) - E2 A1@slap - G1 G#1 (A1 /D#2)" }
-      bridge: { length: 0.25, bars: 4, groove: "C2@slap - C2@ghost E2 - G2 (A2 /B2) - C2 G1@slap - C2@ghost E2 C3!@pop - | D2@slap - D2@ghost F#2 - A2 (B2 /C3) - D2 A1@slap - D2@ghost F#2 D3!@pop - | B1@slap - B1@ghost D2 - F#2 (A2 /B2) - B1 F#1@slap - B1@ghost D2 B2!@pop - | E2@slap - E2@ghost G#2 - B2 (D3 /E3) - E2 B1@slap - E2@ghost D2 (D#2 /E2)" }
-      stop: { length: 1, bars: 2, groove: "E2!@pop - - - | A1!@slap - - -" }
-      fill: { length: 0.25, bars: 2, groove: "E2@slap - - E2@ghost G2 - A2 - B2 - D3 - E3!@pop - D3 B2 | (A2 /B2) - G2 E2 - D2 (C#2 /D2) D#2 - E2@ghost B1 - D#2 -" }
-      tag: { length: 0.25, bars: 4, groove: "E2@slap - E2@ghost G2 - E2 (A2 /B2) - D2 E2@slap - E2@ghost G2 - E3!@pop | A1@slap - A1@ghost C#2 - E2 (G2 /A2) - E2 A1@slap - G1 G#1 (A1 /D#2) | E2!@slap - - - - - - - - - - - - - - - | E2!@pop - - - - - - - - - - - - - - -" }
-  # One drum voice: a hit chokes the previous one like a closed hat (TABLE-CUT accepted), and kit sounds have
-  # sustain 0, so their loudness follows chip volume rather than level (LEVEL-NOOP accepted). Bass and kick
-  # restart together on downbeats on purpose; the 2-frame gap is part of the accent (HR-GAP accepted).
+      in1: { length: 0.25, bars: 1, groove: "E1 - E1@gh E2!@pp - E1@gh (D2 E2) A1 - A1@gh A2!@pp G2 E2@gh /G#2 A2" }
+      in2: { length: 0.25, bars: 1, groove: "C2 - C2@gh C3!@pp - G2@pp (B2 C3) B1 - B1@gh B2!@pp A2 F#2 D#2 /E2" }
+      in3: { length: 0.25, bars: 1, groove: "E1@hm E1@gh - E2!@pp (G2 A2) G2@pp E2@gh A1 A1@gh C#2 A2!@pp - E2 G2@pp /G#2" }
+      in4: { length: 0.25, bars: 1, groove: "C2 C3!@pp C2@gh G2@pp B1 C2@gh (D2 D#2) B1 - B2!@pp A2 F#2 D2@pp (D#2 E2)" }
+      hb1: { length: 0.25, bars: 1, groove: "k E2@gh E2 E3!@pp s z (D2 E2) k A1 A1@gh A2!@pp s G2 /G#2 A2" }
+      hb2: { length: 0.25, bars: 1, groove: "k C2 C2@gh C3!@pp s z (C2 B1) k B1@gh D#2 B2!@pp s A2 F#2 D#2" }
+      hb3: { length: 0.25, bars: 1, groove: "k z E2 E2@gh s (E2 G2) D2@gh k - A1 A2!@pp s E2@gh A2 F#2" }
+      hb4: { length: 0.25, bars: 1, groove: "k G1 G2@gh G2!@pp s D2 (F#2 G2) k C#2 C#3!@pp C#2@gh s F#1 F#2!@pp A#1" }
+      hb5: { length: 0.25, bars: 1, groove: "k B1 B1@gh B2!@pp s F#2 (A2 B2) k Bb1 Bb1@gh Bb2!@pp s Ab2 F2 /A1" }
+      hb6: { length: 0.25, bars: 1, groove: "k A1 z A2!@pp s E2@gh (G2 A2) k D2 D2@gh D3!@pp s C3 A2 C2" }
+      hb7: { length: 0.25, bars: 1, groove: "k C2 C2@gh G2 s B1 (C2 E2) k C#2 C#2@gh C#3!@pp s B2 G2 E2" }
+      hb8: { length: 0.25, bars: 1, groove: "k D2 D2@gh D3!@pp s A2 (C3 D3) z D#2 z D#3!@pp s q s q" }
+      gb1b: { length: 0.25, bars: 1, groove: "k E2 E2@gh E3!@pp s E2@gh (G2 A2) k - A1@gh A2!@pp s C#2 E2 G2" }
+      gb2b: { length: 0.25, bars: 1, groove: "k C2 - C3!@pp s C2@gh G2 B2 k B1 z B2!@pp s A2 F#2 /D#2" }
+      gb1c: { length: 0.25, bars: 1, groove: "k E2@gh E2 E2@gh s (D2 E2) z k A1 z A2!@pp s (G2 A2) B2" }
+      gx1: { length: 0.25, bars: 1, groove: "k A1 A1@gh A2!@pp s E2 (G2 A2) k D2 D2@gh D3!@pp s C3 A2 F#2" }
+      gx2: { length: 0.25, bars: 1, groove: "k F1 F1@gh F2!@pp s C2 (E2 F2) k B1 z B2!@pp s A2 F#2 D#2" }
+      gb2f: { length: 0.25, bars: 1, groove: "k C2 C2@gh C3!@pp s G2 z s z B1 q s q s s D#2" }
+      bb1: { length: 0.25, bars: 1, groove: "k A1 ~ ~ - A1@gh E2 G2 s - A2!@pp ~ - G2 E2@gh C2" }
+      bb2: { length: 0.25, bars: 1, groove: "k D2 ~ ~ - D2@gh A2 C3 s - D3!@pp ~ B2 A2 F#2 D2" }
+      bb3: { length: 0.25, bars: 1, groove: "k G1 ~ ~ - G1@hm D2 F#2 s - G2!@pp ~ F#2 D2 B1 A1" }
+      bb4: { length: 0.25, bars: 1, groove: "k C#2 ~ C#2@gh E2 G2 (B2 C#3) s F#1 ~ F#2!@pp E2 C#2 A#1 -" }
+      bb5: { length: 0.25, bars: 1, groove: "k B1 ~ ~ B1@gh ~ B1 ~ s B1 ~ B2!@pp B1@gh ~ B1 ~" }
+      bb6: { length: 0.25, bars: 1, groove: "k B1 ~ B1@gh - B1@hm F#2 A2 s B1 ~ B1@gh B2!@pp A2 F#2 E2" }
+      bb7: { length: 0.25, bars: 1, groove: "k Eb2 ~ ~ - Eb2@gh Bb2 D3 s - Eb3!@pp ~ D3 Bb2 G2 Eb2" }
+      bb8: { length: 0.25, bars: 1, groove: "k D2 ~ D2@gh F#2 C3 (A2 D3) s z q s q s q F#2" }
+      sg1: { length: 0.25, bars: 1, groove: "k G1 G1@gh G2!@pp s F2 (G2 Bb2) k C2 C2@gh C3!@pp s Bb2 G2 E2" }
+      sg2: { length: 0.25, bars: 1, groove: "k Eb2 Eb2@gh Eb3!@pp s D3 (Bb2 G2) k D2 D2@gh D3!@pp s C3 A2 F#2" }
+      bs1: { length: 0.25, bars: 1, groove: "G2@sp Bb2@sp D3@sp F3!@sp (G3 F3) D3@sp Bb2@gh C3!@sp ~ E3@sp G3@sp (A3 Bb3) A3@sp G3@sp" }
+      bs2: { length: 0.25, bars: 1, groove: "Eb3!@sp ~ D3@sp Bb2@sp (G2 A2) Bb2@sp ~ D3!@sp C3@gh A2@sp F#2@sp (Eb2 D2) s s" }
+      sc1: { length: 0.25, bars: 1, groove: "k C2 C2@gh C3!@pp s Bb2 (G2 Eb2) k F1 F1@gh F2!@pp s Eb2 C2 A1" }
+      sc2: { length: 0.25, bars: 1, groove: "k Bb1 Bb1@gh Bb2!@pp s A2 F2 D2 k A1 A2!@pp z s D2 D3!@pp C3" }
+      bs3: { length: 0.25, bars: 1, groove: "G2@hm ~ D3!@sp F3@sp (G3 A3) Bb3!@sp A3@sp G3@gh E3@sp C3@sp ~ Bb2@sp G2@sp (A2 Bb2)" }
+      bs4: { length: 0.25, bars: 1, groove: "Eb3@sp G3@sp Bb3!@sp ~ A3@sp G3@sp (F3 Eb3) D3!@sp ~ C3@sp A2@sp F#2@gh D2@sp s s" }
+      sg1b: { length: 0.25, bars: 1, groove: "k G1 z G2!@pp s (F2 G2) Bb2 k C2 z C3!@pp s (Bb2 C3) E2" }
+      sg2b: { length: 0.25, bars: 1, groove: "k Eb2 z Eb3!@pp s (D3 Eb3) Bb2 k D2 z D3!@pp s (C3 D3) F#2" }
+      bs5: { length: 0.25, bars: 1, groove: "C2@hm C3!@sp C2@gh G2@sp Bb2@sp (C3 D3) Eb3@sp F2@sp F3!@sp Eb3@sp C3@sp A2@gh F2@sp A2@sp C3@sp" }
+      bs6: { length: 0.25, bars: 1, groove: "Bb1@hm Bb2!@sp (A2 F2) D2@sp F2@sp A2@sp Bb2@sp A2@sp C3@sp Eb3!@sp G2@gh D2@sp F#2@sp s s" }
+      se2: { length: 0.25, bars: 1, groove: "k Eb2 Eb3!@pp Eb2@gh s Bb2 (G2 Eb2) k D2 D3!@pp D2@gh s C3 A2 F#2" }
+      sf: { length: 0.25, bars: 1, groove: "k F1 F1@gh F2!@pp s Eb2 (F2 A2) k C2 F2!@pp z s Eb2 F2 F#2" }
+      st1: { length: 0.25, bars: 1, groove: "- - E2!@pp - - - E2!@pp - - - - A1!@pp - - - -" }
+      st2: { length: 0.25, bars: 1, groove: "- - C3!@pp - - - C3!@pp - - - - B1!@sl - - - -" }
+      st3: { length: 0.25, bars: 1, groove: "- - - E2!@pp - - E2!@pp - - - A1!@pp - - A2!@pp - -" }
+      t1c: { length: 0.25, bars: 1, groove: "k G1 G1@gh G2!@pp s F2 (D2 F2) k C2 C2@gh C3!@pp s Bb2 G2 E2" }
+      t1d: { length: 0.25, bars: 1, groove: "k F#1 F#2!@pp F#1@gh s E2 (C#2 A#1) k B1 B2!@pp B1@gh s A2 F#2 D#2" }
+      t2c: { length: 0.25, bars: 1, groove: "k G1 z G2!@pp s (F2 G2) D2 k C2 z C3!@pp s (Bb2 C3) G2" }
+      t2d: { length: 0.25, bars: 1, groove: "k F#1 F#2!@pp z s E2 q s k B1 q s q s z D#2" }
+      gl: { length: 0.25, bars: 2, groove: ["k", { note: E3, inst: gls, len: 7.75, bend: { to: E1, frames: 160 } }] }
   - id: 2
-    name: Drums
-    role: drums
+    name: E-piano and hats
+    level: 11
+    instrument: tn
     patterns:
-      pocket: { length: 0.25, bars: 1, groove: "k - h - s - h k - h k - s - h o" }
-      pocket2: { length: 0.25, bars: 1, groove: "k - h - s - h k - h k - s - s s" }
-      ride: { length: 0.25, bars: 1, groove: "k - o - s - o k - o k - s - o h" }
-      crashin: { length: 0.25, bars: 1, groove: "x - h - s - h k - h k - s - h o" }
-      stop: { length: 1, bars: 2, groove: "k - - - | k - - -" }
-      fill: { length: 0.25, bars: 2, groove: "k - h - s - h k - h k - s - h o | k - t t - t s - s s - t t s s s" }
-      tag: { length: 0.25, bars: 4, groove: "x - h - s - h k - h k - s - h o | k - h - s - h k - h k - s s s s | k - - - - - - - - - - - - - - - | x - - - - - - - - - - - - - - -" }
+      g1: { length: 0.25, bars: 1, groove: "h - G3@ma ~ h G3@ma - h h - G3@th ~ G3@th - h o" }
+      g2: { length: 0.25, bars: 1, groove: "E3@mi ~ h E3@mi - h E3@mi h D#3@sn9 ~ h D#3@sn9 D#3@sn9 ~ o -" }
+      g3: { length: 0.25, bars: 1, groove: "h G3@ma - h x G3@ma h - h G3@th - h G3@th ~ - o" }
+      g4: { length: 0.25, bars: 1, groove: "x - h E3@mi ~ h E3@mi - h o D#3@sn9 ~ h D#3@sn9 - h" }
+      g5: { length: 0.25, bars: 1, groove: "C4@ma ~ h C4@ma - h C4@ma h C4@th ~ h C4@th C4@th ~ o -" }
+      g6: { length: 0.25, bars: 1, groove: "h A3@mi - h x A3@mi h - h D#3@sn9 - h D#3@sn9 ~ - o" }
+      g7: { length: 0.25, bars: 1, groove: "h - G3@ma ~ h G3@ma - h h - G3@th ~ G3@th - h o" }
+      g8: { length: 0.25, bars: 1, groove: "h h E3@mi h x h E3@mi x h h D#3@sn9 h x D#3@sn9 x x" }
+      c1: { length: 0.25, bars: 1, groove: "h - G3@ma ~ h G3@ma - h h - G3@th ~ G3@th - h o" }
+      c2: { length: 0.25, bars: 1, groove: "E3@mi ~ h E3@mi - h E3@mi h D#3@sn9 ~ h D#3@sn9 D#3@sn9 ~ o -" }
+      c3: { length: 0.25, bars: 1, groove: "h G3@ma - h x G3@ma h - h G3@th - h G3@th ~ - o" }
+      c4: { length: 0.25, bars: 1, groove: "B3@mi ~ h B3@mi - h B3@mi h C#4@hd ~ h C#4@hd A#3@dm ~ o -" }
+      c5: { length: 0.25, bars: 1, groove: "x - h E3@qd ~ h E3@qd - h o Ab3@th ~ h Ab3@th - h" }
+      c6: { length: 0.25, bars: 1, groove: "h C4@ma - h x C4@ma h - h C4@th - h C4@th ~ - o" }
+      c7: { length: 0.25, bars: 1, groove: "E3@mi ~ h E3@mi - h E3@mi h C#4@hd ~ h C#4@hd C#4@hd ~ o -" }
+      c8: { length: 0.25, bars: 1, groove: "h h C4@th h x h C4@th x h h D#3@sn9 h x D#3@sn9 x x" }
+      d1: { length: 0.25, bars: 1, groove: "h - x - h - x - h - x - G3@th - G3@th G3@th" }
+      d2: { length: 0.25, bars: 1, groove: "h - x - h - o - D#3@sn9 - D#3@sn9 D#3@sn9 - D#3@sn9 h -" }
+      d3: { length: 0.25, bars: 1, groove: "h - x - h - x - h - x - G3@th - G3@th G3@th" }
+      d4: { length: 0.25, bars: 1, groove: "x - h B3@mi ~ h B3@mi - h o C#4@hd ~ h A#3@dm - h" }
+      d5: { length: 0.25, bars: 1, groove: "h - x - h - x - h - x - Ab3@th - Ab3@th Ab3@th" }
+      d6: { length: 0.25, bars: 1, groove: "h - x - h - o - C4@th - C4@th C4@th - C4@th h -" }
+      d7: { length: 0.25, bars: 1, groove: "h E3@mi - h x E3@mi h - h C#4@hd - h C#4@hd ~ - o" }
+      d8: { length: 0.25, bars: 1, groove: "h h C4@th h x h C4@th x h h D#3@sn9 h x D#3@sn9 x x" }
+      e1: { length: 0.25, bars: 1, groove: "h G3@ma - h x G3@ma h - h G3@th - h G3@th ~ - o" }
+      e2: { length: 0.25, bars: 1, groove: "h - E3@mi ~ h E3@mi - h h - D#3@sn9 ~ D#3@sn9 - h o" }
+      e3: { length: 0.25, bars: 1, groove: "x - h G3@ma ~ h G3@ma - h o G3@th ~ h G3@th - h" }
+      e4: { length: 0.25, bars: 1, groove: "h B3@mi - h x B3@mi h - h C#4@hd - h A#3@dm ~ - o" }
+      e5: { length: 0.25, bars: 1, groove: "E3@qd ~ h E3@qd - h E3@qd h Ab3@th ~ h Ab3@th Ab3@th ~ o -" }
+      e6: { length: 0.25, bars: 1, groove: "h - C4@ma ~ h C4@ma - h h - C4@th ~ C4@th - h o" }
+      e7: { length: 0.25, bars: 1, groove: "x - h E3@mi ~ h E3@mi - h o C#4@hd ~ h C#4@hd - h" }
+      e8: { length: 0.25, bars: 1, groove: "C4@th ~ h C4@th - h C4@th h D#3@sn9 ~ h D#3@sn9 D#3@sn9 ~ o -" }
+      s1: { length: 0.25, bars: 1, groove: "h - Bb3@maw - h - - h h - Bb3@thw - Bb3@thw - o -" }
+      s2: { length: 0.25, bars: 1, groove: "h - G3@miw - h - - h h - F#3@snw - F#3@snw - o -" }
+      s3: { length: 0.25, bars: 1, groove: "h Bb3@maw - h x Bb3@maw h - h Bb3@thw - h Bb3@thw ~ - o" }
+      s4: { length: 0.25, bars: 1, groove: "x - h G3@miw ~ h G3@miw - h o F#3@snw ~ h F#3@snw - h" }
+      s5: { length: 0.25, bars: 1, groove: "h - Eb3@maw - h - - h h - Eb3@thw - Eb3@thw - o -" }
+      s6: { length: 0.25, bars: 1, groove: "h - D3@miw - h - - h h - A3@hdw - F#3@snw - o -" }
+      s7: { length: 0.25, bars: 1, groove: "h Bb3@maw - h x Bb3@maw h - h Bb3@thw - h Bb3@thw ~ - o" }
+      s8: { length: 0.25, bars: 1, groove: "h h G3@miw h x h G3@miw x h h F#3@snw h x F#3@snw x x" }
+      u1: { length: 0.25, bars: 1, groove: "h - Bb3@maw - h - - h h - Bb3@thw - Bb3@thw - o -" }
+      u2: { length: 0.25, bars: 1, groove: "h - G3@miw - h - - h h - F#3@snw - F#3@snw - o -" }
+      u3: { length: 0.25, bars: 1, groove: "x - h Eb3@maw ~ h Eb3@maw - h o Eb3@thw ~ h Eb3@thw - h" }
+      u4: { length: 0.25, bars: 1, groove: "h D3@miw - h x D3@miw h - h A3@hdw - h F#3@snw ~ - o" }
+      u5: { length: 0.25, bars: 1, groove: "h - G3@miw - h - - h h - F#3@snw - F#3@snw - o -" }
+      u6: { length: 0.25, bars: 1, groove: "h - Bb3@maw - h - - h h - Bb3@thw - Bb3@thw - o -" }
+      u7: { length: 0.25, bars: 1, groove: "h - G3@miw ~ h G3@miw - h h - F#3@snw ~ F#3@snw - h o" }
+      u8: { length: 0.25, bars: 1, groove: "h h Eb3@thw h x h Eb3@thw x h h Eb3@thw h x Eb3@thw x x" }
+      t1: { length: 0.25, bars: 1, groove: "h - G3@ma ~ h G3@ma - h h - G3@th ~ G3@th - h o" }
+      t2: { length: 0.25, bars: 1, groove: "E3@mi ~ h E3@mi - h E3@mi h D#3@sn9 ~ h D#3@sn9 D#3@sn9 ~ o -" }
+      t3: { length: 0.25, bars: 1, groove: "h F3@th - h x F3@th h - h E3@hd - h E3@hd ~ - o" }
+      t4: { length: 0.25, bars: 1, groove: "h - A#3@sn9 - h - - h h - D#3@dm - D#3@dm - o -" }
+      t5: { length: 0.25, bars: 1, groove: "G3@ma ~ h G3@ma - h G3@ma h G3@th ~ h G3@th G3@th ~ o -" }
+      t6: { length: 0.25, bars: 1, groove: "h E3@mi - h x E3@mi h - h D#3@sn9 - h D#3@sn9 ~ - o" }
+      t7: { length: 0.25, bars: 1, groove: "x - h F3@th ~ h F3@th - h o E3@hd ~ h E3@hd - h" }
+      t8: { length: 0.25, bars: 1, groove: "h h A#3@sn9 h x h A#3@sn9 x h h D#3@dm h x D#3@dm x x" }
+      t9: { length: 0.25, bars: 1, groove: "h G3@ma - h x G3@ma h - h G3@th - h G3@th ~ - o" }
+      t10: { length: 0.25, bars: 1, groove: "h - E3@mi ~ h E3@mi - h h - D#3@sn9 ~ D#3@sn9 - h o" }
+      fin: { length: 1, bars: 2, groove: "G#3@ly ~ ~ ~ | ~ ~ ~ ~" }
+      st1: { length: 0.25, bars: 1, groove: "- - G3@ma - - - G3@ma - - - - G3@th - - - -" }
+      st2: { length: 0.25, bars: 1, groove: "- - E3@mi - - - E3@mi - - - - D#3@sn9 - - - -" }
+      st3: { length: 0.25, bars: 1, groove: "- - - G3@ma - - G3@ma - - - G3@th - - G3@th - -" }
+      br1: { length: 0.25, bars: 1, groove: "C4@tn G4@tn E4@tn B4@tn - G4@tn B4@tn E4@tn C4@tn G4@tn - B4@tn G4@tn E4@tn B4@tn -" }
+      br2: { length: 0.25, bars: 1, groove: "C4@tn E4@tn F#4@tn B4@tn F#4@tn - E4@tn B4@tn - C4@tn F#4@tn B4@tn E4@tn - F#4@tn B4@tn" }
+      br3: { length: 0.25, bars: 1, groove: "A4@tn - F#4@tn B3@tn D4@tn F#4@tn - A4@tn F#4@tn B3@tn D4@tn - A4@tn F#4@tn B3@tn D4@tn" }
+      br4: { length: 0.25, bars: 1, groove: "C#4@tn G4@tn E4@tn B4@tn - G4@tn B4@tn E4@tn A#3@tn E4@tn - G4@tn E4@tn C#4@tn G4@tn -" }
+      br5: { length: 0.25, bars: 1, groove: "D4@tn F#4@tn A4@tn E4@tn A4@tn - F#4@tn E4@tn - D4@tn A4@tn E4@tn F#4@tn - A4@tn E4@tn" }
+      br6: { length: 0.25, bars: 1, groove: "F#4@tn - A4@tn D4@tn E4@tn A4@tn - F#4@tn A4@tn D4@tn E4@tn - F#4@tn A4@tn D4@tn E4@tn" }
+      br7: { length: 0.25, bars: 1, groove: "G3@tn D4@tn Bb3@tn F4@tn - D4@tn F4@tn Bb3@tn G3@tn D4@tn - F4@tn D4@tn Bb3@tn F4@tn -" }
+      br8: { length: 0.25, bars: 1, groove: "F#3@tn C4@tn F4@tn A4@tn F4@tn - C4@tn A4@tn - F#3@tn F4@tn A4@tn C4@tn - F4@tn A4@tn" }
   - id: 3
-    name: Chops and lead
+    name: Clav, then lead
     role: lead
-    instrument: lead
+    level: 13
+    instrument: cu
     patterns:
-      # Em9 = Gmaj7 shape over E, A9 = C#m7b5 shape over A.
-      chops: { length: 0.25, bars: 2, groove: "- G4@maj7 - G4@maj7 - - G4@maj7 - - G4@maj7 - G4@maj7 - - G4@maj7 - | - C#4@hdim - C#4@hdim - - C#4@hdim - - C#4@hdim - C#4@hdim - - C#4@hdim -" }
-      bchops: { length: 0.25, bars: 4, groove: "- E4@min7 - E4@min7 - - E4@min7 - - E4@min7 - E4@min7 - - E4@min7 - | - D4@maj - D4@maj - - D4@maj - - D4@maj - D4@maj - - D4@maj - | - D4@six - D4@six - - D4@six - - D4@six - D4@six - - D4@six - | - G#4@hdim - G#4@hdim - - G#4@hdim - - G#4@hdim - G#4@hdim - - G#4@hdim -" }
-      call: { length: 0.25, bars: 4, groove: "- - B4 ~ D5 ~ E5 ~ ~ ~ D5 B4 - - A4 ~ | B4 ~ ~ ~ ~ ~ - - - - - - - - - - | - - B4 ~ D5 ~ E5 ~ ~ ~ G5 ~ (F#5 /E5) ~ ~ | D5 ~ ~ ~ B4 ~ ~ ~ - - - - - - - -" }
-      answer: { length: 0.25, bars: 4, groove: "- - E5 ~ G5 ~ A5 ~ ~ ~ G5 E5 - - D5 ~ | E5 ~ ~ ~ ~ ~ - - - - B4 ~ D5 ~ E5 ~ | G5 ~ ~ ~ (F#5 /E5) ~ ~ E5 ~ D5 ~ B4 ~ A4 ~ | B4 ~ ~ ~ ~ ~ ~ ~ - - - - - - - -" }
-      # Stop-time: the drums rest after each downbeat, so voice 2 is free to drive the sync and ring sources.
-      licks:
-        length: 1
-        bars: 2
+      cl1: { length: 0.25, bars: 1, groove: "- - B4@cv - - D5@cv - E5@cv - - C#5@cv - - E5@cv - G4@cv" }
+      cl2: { length: 0.25, bars: 1, groove: "- - B4@cv - - G4@cv - E5@cv - - D#5@cv - - A4@cv - F#4@cv" }
+      cl1b: { length: 0.25, bars: 1, groove: "- E5@cv - B4@cv - - D5@cv E5@cv - G4@cv - C#5@cv - - E5@cv -" }
+      cx1: { length: 0.25, bars: 1, groove: "- - C5@cv - - E5@cv - G5@cv - - C5@cv - - F#5@cv - E5@cv" }
+      cx2: { length: 0.25, bars: 1, groove: "- - E5@cv - - C5@cv - A4@cv - - D#5@cv - - A4@cv - F#4@cv" }
+      pk: { length: 0.25, bars: 1, groove: "- E5@cv - B4@cv - - G4@cv B4@cv - D#5@cv - A4@cv - - B4 D5" }
+      L1:
+        length: 0.25
+        bars: 1
         groove:
-          - "-"
-          - { note: E5, inst: syncsweep, bend: { to: E6, frames: 20 } }
-          - { note: D5, inst: syncsweep, bend: { to: D6, frames: 14 } }
-          - B4@ringstab
-          - "-"
-          - { note: G5, inst: syncsweep, bend: { to: G6, frames: 20 } }
-          - E5@ringstab
-          - { note: B4, inst: syncsweep, bend: { to: B5, frames: 12 } }
-      tag: { length: 0.25, bars: 4, groove: "- G4@maj7 - G4@maj7 - - G4@maj7 - - G4@maj7 - G4@maj7 - - G4@maj7 - | - C#4@hdim - C#4@hdim - - C#4@hdim - - C#4@hdim - C#4@hdim - - C#4@hdim - | G#4!@hdim - - - - - - - - - - - - - - - | G#4!@e9 ~ ~ ~ ~ ~ ~ ~ - - - - - - - -" }
+          - { note: E5, inst: scoop, slide_from: C#5, portamento: 4, accented: true, len: 0.25 }
+          - "~ - G5 F#5 E5 ~ D5 ~ ~ ~ ~ - - - -"
+      L2: { length: 0.25, bars: 1, groove: "(Bb4 /B4) ~ A4 G4 ~ E4 ~ - - - - - - E5 G5" }
+      L3: { length: 0.25, bars: 1, groove: "A5!@scp ~ - G5 F#5 E5 ~ (F#5 G5) ~ ~ A5 B5! ~ - -" }
+      L4: { length: 0.25, bars: 1, groove: "- B5@mrd ~ A5 F#5 ~ D5 E5 ~ ~ G5 ~ (F#5 E5) C#5 A#4" }
+      L5: { length: 0.25, bars: 1, groove: "B4!@scp ~ ~ D5 (E5 F#5) A5 ~ ~ ~ Ab5@grc ~ G5 F5 D5 ~" }
+      L6: { length: 0.25, bars: 1, groove: "C5 ~ ~ B5!@scp ~ A5 G5 E5 F#5 ~ (E5 D5) B4 ~ C5 ~" }
+      L7: { length: 0.25, bars: 1, groove: "- E5 G5 B5 ~ (C#6! B5) G5 G5@scp ~ ~ E5 C#5 ~ ~ -" }
+      L8: { length: 0.25, bars: 1, groove: "F#5 E5 D5 B4 ~ A4 ~ ~ D5@blue ~ ~ ~ ~ - B4 D5" }
+      M1: { length: 0.25, bars: 1, groove: "E5!@scp ~ - G5 F#5 E5 ~ D5 ~ ~ - - - - - -" }
+      M2: { length: 0.25, bars: 1, groove: "(Bb4 /B4) ~ A4 G4 ~ E4 ~ - - - - - - B4 D5" }
+      M3: { length: 0.25, bars: 1, groove: "E5!@scp ~ - B5 A5 G5 ~ F#5@fall ~ ~ ~ - - - - -" }
+      M4: { length: 0.25, bars: 1, groove: "- - F#5 G5 (A5 B5) D6!@scp ~ ~ C#6 B5 G5 E5 C#5 A#4 ~" }
+      M5: { length: 0.25, bars: 1, groove: "B4 ~ - D5 E5 ~ F#5 A5 ~ G5@trl ~ ~ F5 D5 ~ -" }
+      M6: { length: 0.25, bars: 1, groove: "E5@scp ~ G5 ~ - A5 C6 B5 ~ A5 F#5 ~ D5 ~ E5 -" }
+      M7: { length: 0.25, bars: 1, groove: "B4 ~ ~ ~ G4 ~ E4 G4 ~ B4 C#5 E5 G5 ~ ~ -" }
+      M8: { length: 0.25, bars: 1, groove: "F#5@fall ~ ~ ~ - - - - D5 ~ ~ C5 B4 A4 F#4 D#4" }
+      N5: { length: 0.25, bars: 1, groove: "F#5!@scp ~ ~ A5 B5 ~ D6 ~ ~ ~ C6@mrd ~ Bb5 Ab5 G5 F5" }
+      N6: { length: 0.25, bars: 1, groove: "E5 ~ G5 A5 (B5 C6) E6!@scp ~ ~ ~ D6 B5 A5 F#5 ~ -" }
+      N7: { length: 0.25, bars: 1, groove: "G5@fall ~ ~ ~ E5 D5 B4 ~ C#5 E5 G5 ~ B5 ~ A5 G5" }
+      N8: { length: 0.25, bars: 1, groove: "F#5 ~ E5 D5 ~ C5 ~ B4 ~ ~ D5@blue ~ ~ ~ - -" }
+      S1: { length: 0.25, bars: 1, groove: "D5!@rscp ~ ~ F5 G5 ~ Bb5 A5 ~ G5 E5 ~ (F5 E5) D5 ~" }
+      S2: { length: 0.25, bars: 1, groove: "G5@rfall ~ ~ ~ - D5 Eb5 F5 F#5! ~ ~ (F5 Eb5) C5 A4 ~" }
+      S5: { length: 0.25, bars: 1, groove: "- - G5 Bb5 C6!@rscp ~ ~ Bb5 G5 ~ A5 ~ D6! ~ C6 A5" }
+      S6: { length: 0.25, bars: 1, groove: "Bb5@rfall ~ ~ ~ A5 F5 D5 ~ Eb5 ~ C5 ~ F#5 ~ A5 C6" }
+      S9: { length: 0.25, bars: 1, groove: "Bb5!@rscp ~ ~ A5 G5 ~ F5 D5 E5 ~ G5 A5 (Bb5 B5 C6) ~" }
+      S10: { length: 0.25, bars: 1, groove: "D6!@rfall ~ ~ ~ C6 Bb5 G5 ~ F#5 ~ F5!@rscp ~ D5 C5 A4 F#4" }
+      S13: { length: 0.25, bars: 1, groove: "G5 ~ Bb5 D6 ~ C6 Bb5 G5 F#5!@rscp ~ ~ A5 C6 ~ Eb6! ~" }
+      S14: { length: 0.25, bars: 1, groove: "F6!@rscp ~ ~ ~ D6 ~ Bb5 ~ A5 G5 E5 ~ F5@rfall ~ ~ -" }
+      S15: { length: 0.25, bars: 1, groove: "G5 ~ - F5 Eb5 ~ D5 Bb4 A4 ~ C5 ~ F#5! ~ ~ -" }
+      S16: { length: 0.25, bars: 1, groove: "- A5 ~ G5 ~ Eb5 ~ D5 ~ C5 ~ A4 ~ G4 ~ -" }
+      T1: { length: 0.25, bars: 1, groove: "- - B5! - - - B5! - - G5 A5 C#6! ~ B5 G5 -" }
+      T2: { length: 0.25, bars: 1, groove: "- - B5! - - - G5! - - - - A5! ~ F#5 D#5 -" }
+      T3: { length: 0.25, bars: 1, groove: "- - - B5! - - B5! - - - C#6! - - E6! - -" }
+      ta1: { length: 0.25, bars: 1, groove: "- - - G5 F#5 E5 ~ - G5 F#5 E5 ~ - G5 F#5 E5" }
+      ta2: { length: 0.25, bars: 1, groove: "~ ~ ~ - (Bb4 /B4) ~ ~ - - - - - - - -" }
+      ta3: { length: 0.25, bars: 1, groove: "E5!@scp ~ - A5 G5 E5 ~ D5 ~ ~ - E5 G5 Bb5 ~ A5" }
+      ta4: { length: 0.25, bars: 1, groove: "(A5 /A#5) ~ ~ C#6 ~ A#5 ~ A5!@mrd ~ F#5 ~ D#5 ~ C5 B4" }
+      tb1: { length: 0.25, bars: 1, groove: "- - - B5 C#6 D6 ~ - B5 C#6 D6 ~ - B5 A5 G5" }
+      tb2: { length: 0.25, bars: 1, groove: "F#5@blue ~ ~ ~ E5 D5 B4 ~ D5 ~ D#5!@scp ~ F#5 ~ A5 ~" }
+      tb3: { length: 0.25, bars: 1, groove: "B5!@scp ~ ~ A5 (G5 F5) E5 ~ D5 ~ E5 G5 Bb5 ~ D6! ~" }
+      tb4: { length: 0.25, bars: 1, groove: "C#6@fall ~ ~ ~ A5 ~ A#5 ~ B5!@mrd ~ A5 F#5 D#5 C5 B4 D5" }
+      tc1: { length: 0.25, bars: 1, groove: "E5!@scp ~ - G5 F#5 E5 ~ B5! ~ ~ A5 G5 (F#5 E5) C#5 ~" }
+      cg1: { length: 0.25, bars: 1, groove: "- - D5@cv - - F5@cv - G5@cv - - E5@cv - - G5@cv - Bb4@cv" }
+      cg2: { length: 0.25, bars: 1, groove: "- - D5@cv - - Bb4@cv - G5@cv - - F#5@cv - - C5@cv - A4@cv" }
+      cg3: { length: 0.25, bars: 1, groove: "- G5@cv - D5@cv - - Eb5@cv G5@cv - A5@cv - Eb5@cv - - D5@cv -" }
+      cg4: { length: 0.25, bars: 1, groove: "- A5@cv - F5@cv - - D5@cv A4@cv - G5@cv - Eb5@cv - F#5@cv - C5@cv" }
+      tc2: { length: 0.25, bars: 1, groove: "(Bb4 /B4) ~ A4 G4 ~ E4 ~ - - D#5 F#5 (A5 B5) ~ ~" }
+      run: { length: 0.125, bars: 1, groove: "- - - - - - - - - - - - - - - - - - (B5 ~ A5 G5 F#5 E5 D5 C#5 B4 A4) B4 ~ D5 ~" }
+      fin: { length: 1, bars: 2, groove: "A#5@lend ~ ~ ~ | ~ ~ ~ ~" }
+      G1: { length: 0.25, bars: 1, groove: "E5!@gscp ~ ~ ~ - - G5@gl ~ F#5@gl ~ E5@gl ~ D5@gl ~ ~ ~" }
+      G2: { length: 0.25, bars: 1, groove: "(F5@gl /F#5) ~ ~ E5@gl ~ D5@gl ~ ~ ~ B4@gl ~ ~ ~ - -" }
+      G3: { length: 0.25, bars: 1, groove: "A5@gl ~ ~ ~ G5@gl ~ F#5!@gscp ~ ~ ~ ~ ~ ~ ~ - -" }
+      G4: { length: 0.25, bars: 1, groove: "- - B4@gl D5@gl E5@gtrl ~ ~ G5@gl B5@gl ~ A#5@gscp ~ G5@gl E5@gl C#5@gl ~" }
+      G5: { length: 0.25, bars: 1, groove: "D5!@gscp ~ ~ ~ ~ ~ ~ ~ ~ ~ E5@gl F#5@gl A5@gl ~ ~ ~" }
+      G6: { length: 0.25, bars: 1, groove: "~ ~ ~ ~ F#5@gl ~ E5@gl ~ D5@gl ~ ~ ~ - - B4@gl D5@gl" }
+      G7: { length: 0.25, bars: 1, groove: "G5@gl ~ ~ F5@gl D5@gl ~ Bb4@gl ~ ~ ~ C5@gl D5@gl Eb5@gl ~ G5@gl ~" }
+      G8: { length: 0.25, bars: 1, groove: "F#5!@gfall ~ ~ ~ ~ ~ - - - - - - A5@gl ~ C6@gl ~" }
 sections:
-  intro:   { bars: 4, level: mf, volume: 13, layers: { v1: vamp, v2: "pocket pocket pocket pocket2" } }
-  vamp:    { bars: 16, level: f, volume: 15, layers: { v1: "vamp vamp vamp vamp2", v2: "crashin pocket pocket pocket2 pocket pocket pocket pocket2", v3: "chops chops call chops chops answer" } }
-  bridge:  { bars: 8, level: f, filter: { cutoff: { from: 0, to: 80 } }, layers: { v1: bridge, v2: "crashin ride ride pocket2", v3: bchops } }
-  solo:    { bars: 16, level: f, layers: { v1: "vamp vamp vamp vamp2", v2: "crashin pocket pocket pocket2 pocket pocket pocket pocket2", v3: "call answer" } }
-  break:   { bars: 4, level: mf, volume: 14, layers: { v1: "stop fill", v2: "stop fill", v3: "licks -*2" } }
-  vamp2:   { bars: 16, level: ff, filter: { cutoff: 40 }, layers: { v1: "vamp vamp vamp vamp2", v2: "crashin pocket pocket pocket2 ride ride ride pocket2", v3: "chops chops call" } }
-  tag:     { bars: 4, level: ff, layers: { v1: tag, v2: tag, v3: tag } }
-timeline: [intro, vamp, bridge, solo, break, vamp2, tag]
+  bass_alone: { bars: 4, level: mf, volume: 13, layers: { v1: "in1 in2 in3 in4", v2: "-", v3: "-" } }
+  groove: { bars: 8, level: f, volume: 13, layers: { v1: "hb1 hb2 gb1b gb2b gx1 gx2 gb1c gb2f", v2: "g1 g2 g3 g4 g5 g6 g7 g8", v3: "cl1 cl2 cl1b cl2 cx1 cx2 cl1b pk" } }
+  head: { bars: 8, level: f, volume: 14, layers: { v1: "hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8", v2: "c1 c2 c3 c4 c5 c6 c7 c8", v3: "L1 L2 L3 L4 L5 L6 L7 L8" } }
+  head_stabs: { bars: 8, level: f, volume: 14, filter: { cutoff: 30 }, layers: { v1: "gb1b gb2b hb3 hb4 hb5 hb6 hb7 hb8", v2: "d1 d2 d3 d4 d5 d6 d7 d8", v3: "M1 M2 M3 M4 M5 M6 M7 M8" } }
+  bridge: { bars: 8, level: { from: mp, to: f }, volume: { from: 10, to: 14 }, filter: { cutoff: { from: 0, to: 60 } }, layers: { v1: "bb1 bb2 bb3 bb4 bb5 bb6 bb7 bb8", v2: "br1 br2 br3 br4 br5 br6 br7 br8", v3: "G1 G2 G3 G4 G5 G6 G7 G8" } }
+  solo: { bars: 8, level: mf, volume: 13, filter: { cutoff: 60 }, layers: { v1: "sg1 sg2 bs1 bs2 sc1 sc2 bs3 bs4", v2: "s1 s2 s3 s4 s5 s6 s7 s8", v3: "S1 S2 cg1 cg2 S5 S6 cg1 cg2" } }
+  solo_peak: { bars: 8, level: ff, volume: 15, filter: { cutoff: { from: 60, to: 140 } }, layers: { v1: "sg1b sg2b bs5 bs6 sg2 sg1 se2 sf", v2: "u1 u2 u3 u4 u5 u6 u7 u8", v3: "S9 S10 cg3 cg4 S13 S14 S15 S16" } }
+  stop_time: { bars: 4, level: f, volume: 14, swing: 0.5, layers: { v1: "st1 st2 st3 -", v2: "st1 st2 st3 -", v3: "T1 T2 T3 run" } }
+  head_last: { bars: 8, level: ff, volume: 15, filter: { cutoff: 80 }, layers: { v1: "gb1c hb2 hb3 hb4 hb5 hb6 hb7 hb8", v2: "e1 e2 e3 e4 e5 e6 e7 e8", v3: "L1 L2 L3 L4 N5 N6 N7 N8" } }
+  tag: { bars: 12, level: f, volume: 14, filter: { cutoff: { from: 40, to: -60 } }, layers: { v1: "hb1 hb2 t1c t1d gb1b gb2b t2c t2d gb1c hb2 gl", v2: "t1 t2 t3 t4 t5 t6 t7 t8 t9 t10 fin", v3: "ta1 ta2 ta3 ta4 tb1 tb2 tb3 tb4 tc1 tc2 fin" } }
+timeline: [bass_alone, groove, head, head_stabs, bridge, solo, solo_peak, stop_time, head_last, tag]
 end: { hold_beats: 0, release: true }
