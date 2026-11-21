@@ -27,6 +27,20 @@ instruments:
     sync: true
     source_note: "+0"
     adsr: [0, 8, 10, 6]
+  # Final chord instruments: release 9 so the held chord rings out for about half a second.
+  end_bass:
+    waveform: saw
+    adsr: [0, 7, 9, 9]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 8, type: lowpass }, { cutoff: 900Hz, frames: 2 }, { cutoff: 600Hz, frames: 2 }, { cutoff: 300Hz, frames: 1 }]
+  end_arp:
+    waveform: pulse
+    adsr: [0, 3, 8, 9]
+    loop: 0
+    wavetable: [{ note: "+0", frames: 2 }, { note: "+3", frames: 2 }, { note: "+7", frames: 2 }, { note: "+12", frames: 2 }]
+  end_lead:
+    waveform: pulse
+    adsr: [1, 4, 10, 9]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 14, frames: 16 }, { add: -14, frames: 16 }] }
 voices:
   - id: 1
     name: Bass and drums
@@ -37,7 +51,7 @@ voices:
       b2: { length: 0.25, bars: 1, groove: "k C2 C3 C2 s C2 C3 G1 k C2 C2 C3 s C3 G2 Bb2" }
       bh: { length: 0.25, bars: 1, groove: "k C2 h C3 s C2 h C2 k C2 h C3 s C2 h C2" }
       fill: { length: 0.25, bars: 1, groove: "k C2 C2 C3 s C2 C3 C2 k C2 s C2 s s s s" }
-      end: { length: 1, bars: 2, groove: "C2 ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "C2@end_bass ~ ~ ~ ~ ~ ~ ~" }
   - id: 2
     name: Chord arps
     instrument: lib:chip_arp_minor
@@ -47,7 +61,7 @@ voices:
       # Ab Bb Gm Cm | Ab Bb G G
       b: { length: 0.5, bars: 8, groove: "Ab3@lib:chip_arp_major ~ ~ ~ Ab3@lib:chip_arp_major ~ Ab3@lib:chip_arp_major ~ | Bb3@lib:chip_arp_major ~ ~ ~ Bb3@lib:chip_arp_major ~ Bb3@lib:chip_arp_major ~ | G3 ~ ~ ~ G3 ~ G3 ~ | C4 ~ ~ ~ C4 ~ C4 ~ | Ab3@lib:chip_arp_major ~ ~ ~ Ab3@lib:chip_arp_major ~ Ab3@lib:chip_arp_major ~ | Bb3@lib:chip_arp_major ~ ~ ~ Bb3@lib:chip_arp_major ~ Bb3@lib:chip_arp_major ~ | G3@lib:chip_arp_major ~ ~ ~ G3@lib:chip_arp_major ~ G3@lib:chip_arp_major ~ | G3@lib:chip_arp_major ~ ~ ~ ~ ~ ~ ~" }
       intro: { length: 4, bars: 4, groove: "C4 | C4 | F3 | G3@lib:chip_arp_major" }
-      end: { length: 1, bars: 2, groove: "C4 ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "C4@end_arp ~ ~ ~ ~ ~ ~ ~" }
   - id: 3
     name: Lead
     role: lead
@@ -68,7 +82,7 @@ voices:
           - { note: Eb4, inst: sync, len: 4, bend: { to: C5, frames: 60 } }
           - { note: G3, inst: sync, len: 4, bend: { to: D5, frames: 60 } }
           - { note: G3, inst: sync, len: 4, bend: { to: G5, frames: 80 } }
-      end: { length: 1, bars: 2, groove: "C5@lib:lead_pwm ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "C5@end_lead ~ ~ ~ ~ ~ ~ ~" }
 sections:
   intro:
     bars: 8
@@ -86,7 +100,7 @@ sections:
     volume: 15
     levels: { v2: mf, v3: { from: mf, to: f } }
     filter: { cutoff: 60 }
-    layers: { v1: "b-4 b-2 b-5 b b-4 b-2 b2-5 fill-5", v2: "b a", v3: "b m1" }
+    layers: { v1: "b-4 b-2 b-5 b b-4 b-2 b2-5 fill-5 b b b+5 b+3 b b b-4 fill-5", v2: "b a", v3: "b m1" }
   break:
     bars: 8
     volume: 13
