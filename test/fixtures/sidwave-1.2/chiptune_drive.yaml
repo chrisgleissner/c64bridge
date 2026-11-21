@@ -1,0 +1,126 @@
+# Chip drive | 136.7 BPM | C minor | 1 SID
+# Techniques: Speed 2; bass and wavetable kick/snare interleaved on one voice under a filter owner with section cutoff offsets; one chord arpeggio per bar (minor and major library arps on the diatonic chords); PWM lead with delayed vibrato, slurs and legato glides; a hard-sync break whose source voice is driven silently by source_note while the lead bends; final held C minor chord.
+# Learn: Follow the eight-bar melody (four-bar question, four-bar answer) through the relative-major B section, the sync break and the octave-lifted return, while the bass sequence transposes one pattern per bar to spell the same chords as the arps
+sidwave: 1.2
+title: Neon Run
+mode: PAL
+tempo: 136.7
+speed: 2
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+# Accepted lint: TABLE-CUT where a bass sixteenth follows the kick on the same voice and cuts its tail; that
+# interleave is the point of sharing the voice.
+kit:
+  k: lib:kick
+  s: lib:snare
+  h: lib:hat
+instruments:
+  lead:
+    waveform: pulse
+    adsr: [1, 6, 10, 5]
+    vibrato: { depth: 0.15, rate: 5.5, delay: 14 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 14, frames: 40 }, { add: -14, frames: 40 }] }
+  # Hard sync to voice 2, which the compiler drives silently at the played pitch; the bend sweeps the
+  # synced oscillator, so the pitch stays put while the timbre screams upwards.
+  sync:
+    waveform: saw
+    sync: true
+    source_note: "+0"
+    adsr: [0, 8, 10, 6]
+  # Final chord instruments: release 9 so the held chord rings out for about half a second.
+  end_bass:
+    waveform: saw
+    adsr: [0, 7, 9, 9]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 8, type: lowpass }, { cutoff: 900Hz, frames: 2 }, { cutoff: 600Hz, frames: 2 }, { cutoff: 300Hz, frames: 1 }]
+  end_arp:
+    waveform: pulse
+    adsr: [0, 3, 8, 9]
+    loop: 0
+    wavetable: [{ note: "+0", frames: 2 }, { note: "+3", frames: 2 }, { note: "+7", frames: 2 }, { note: "+12", frames: 2 }]
+  end_lead:
+    waveform: pulse
+    adsr: [1, 4, 10, 9]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 14, frames: 16 }, { add: -14, frames: 16 }] }
+voices:
+  - id: 1
+    name: Bass and drums
+    role: bass
+    instrument: lib:filter_bass
+    patterns:
+      b: { length: 0.25, bars: 1, groove: "k C2 C2 C3 s C2 C3 C2 k C2 C2 C3 s C2 Bb1 C2" }
+      b2: { length: 0.25, bars: 1, groove: "k C2 C3 C2 s C2 C3 G1 k C2 C2 C3 s C3 G2 Bb2" }
+      bh: { length: 0.25, bars: 1, groove: "k C2 h C3 s C2 h C2 k C2 h C3 s C2 h C2" }
+      fill: { length: 0.25, bars: 1, groove: "k C2 C2 C3 s C2 C3 C2 k C2 s C2 s s s s" }
+      end: { length: 1, bars: 2, groove: "C2@end_bass ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: Chord arps
+    instrument: lib:chip_arp_minor
+    patterns:
+      # One chord per bar: Cm Cm Fm Eb | Cm Cm Ab G
+      a: { length: 0.5, bars: 8, groove: "C4 ~ ~ C4 ~ ~ C4 ~ | C4 ~ ~ C4 ~ ~ C4 ~ | F3 ~ ~ F3 ~ ~ F3 ~ | Eb3@lib:chip_arp_major ~ ~ Eb3@lib:chip_arp_major ~ ~ Eb3@lib:chip_arp_major ~ | C4 ~ ~ C4 ~ ~ C4 ~ | C4 ~ ~ C4 ~ ~ C4 ~ | Ab3@lib:chip_arp_major ~ ~ Ab3@lib:chip_arp_major ~ ~ Ab3@lib:chip_arp_major ~ | G3@lib:chip_arp_major ~ ~ G3@lib:chip_arp_major ~ ~ G3@lib:chip_arp_major ~" }
+      # Ab Bb Gm Cm | Ab Bb G G
+      b: { length: 0.5, bars: 8, groove: "Ab3@lib:chip_arp_major ~ ~ ~ Ab3@lib:chip_arp_major ~ Ab3@lib:chip_arp_major ~ | Bb3@lib:chip_arp_major ~ ~ ~ Bb3@lib:chip_arp_major ~ Bb3@lib:chip_arp_major ~ | G3 ~ ~ ~ G3 ~ G3 ~ | C4 ~ ~ ~ C4 ~ C4 ~ | Ab3@lib:chip_arp_major ~ ~ ~ Ab3@lib:chip_arp_major ~ Ab3@lib:chip_arp_major ~ | Bb3@lib:chip_arp_major ~ ~ ~ Bb3@lib:chip_arp_major ~ Bb3@lib:chip_arp_major ~ | G3@lib:chip_arp_major ~ ~ ~ G3@lib:chip_arp_major ~ G3@lib:chip_arp_major ~ | G3@lib:chip_arp_major ~ ~ ~ ~ ~ ~ ~" }
+      intro: { length: 4, bars: 4, groove: "C4 | C4 | F3 | G3@lib:chip_arp_major" }
+      end: { length: 1, bars: 2, groove: "C4@end_arp ~ ~ ~ ~ ~ ~ ~" }
+  - id: 3
+    name: Lead
+    role: lead
+    instrument: lead
+    patterns:
+      m1: { length: 0.5, bars: 8, groove: "G4 ~ C5 ~ Eb5 ~ (D5 /C5) | D5 ~ ~ ~ ~ ~ - G4 | Ab4 ~ C5 ~ F5 ~ (Eb5 /D5) | Eb5 ~ ~ ~ Bb4 ~ - - | G4 ~ C5 ~ Eb5 ~ (G5 /F5) | Eb5 ~ ~ ~ D5 ~ C5 ~ | C5 ~ Eb5 ~ Ab5 ~ (G5 /F5) | F5 ~ D5 ~ B4 ~ ~ ~" }
+      # The return: the same question and answer, syncopated.
+      m2: { length: 0.5, bars: 8, groove: "G4 C5 ~ Eb5 ~ D5 (C5 /D5) | ~ ~ ~ ~ C5 ~ G4 ~ | Ab4 C5 ~ F5 ~ Eb5 (D5 /Eb5) | ~ ~ ~ ~ Bb4 ~ - - | G4 C5 ~ Eb5 ~ G5 (F5 /G5) | Eb5 ~ ~ D5 ~ ~ C5 ~ | C5 Eb5 ~ Ab5 ~ G5 (F5 /Eb5) | D5 ~ ~ ~ B4 ~ ~ ~" }
+      b: { length: 0.5, bars: 8, groove: "C5 ~ ~ ~ Bb4 ~ Ab4 ~ | Bb4 ~ ~ ~ F4 ~ D4 ~ | G4 ~ Bb4 ~ D5 ~ (C5 /Bb4) | C5 ~ ~ ~ G4 ~ - - | Ab4 ~ C5 ~ Eb5 ~ (D5 /C5) | D5 ~ ~ ~ Bb4 ~ F4 ~ | G4 ~ B4 ~ D5 ~ (C5 /B4) | D5 ~ ~ ~ ~ ~ - -" }
+      sync:
+        length: 4
+        groove:
+          - { note: C4, inst: sync, len: 4, bend: { to: C5, frames: 60 } }
+          - { note: Eb4, inst: sync, len: 4, bend: { to: Eb5, frames: 70 } }
+          - { note: Ab4, inst: sync, len: 4, bend: { to: Eb5, frames: 60 } }
+          - { note: Bb3, inst: sync, len: 4, bend: { to: F5, frames: 80 } }
+          - { note: C4, inst: sync, len: 4, bend: { to: G5, frames: 70 } }
+          - { note: Eb4, inst: sync, len: 4, bend: { to: C5, frames: 60 } }
+          - { note: G3, inst: sync, len: 4, bend: { to: D5, frames: 60 } }
+          - { note: G3, inst: sync, len: 4, bend: { to: G5, frames: 80 } }
+      end: { length: 1, bars: 2, groove: "C5@end_lead ~ ~ ~ ~ ~ ~ ~" }
+sections:
+  intro:
+    bars: 8
+    volume: { from: 10, to: 13 }
+    levels: { v2: p }
+    filter: { cutoff: { from: -160, to: -40 } }
+    layers: { v1: "bh b bh b bh b bh fill", v2: "intro intro" }
+  a:
+    bars: 16
+    volume: 14
+    levels: { v2: mp, v3: mf }
+    layers: { v1: "b b b+5 b+3 b b b-4 b2-5 b b b+5 b+3 b b b-4 fill-5", v2: a, v3: m1 }
+  b:
+    bars: 16
+    volume: 15
+    levels: { v2: mf, v3: { from: mf, to: f } }
+    filter: { cutoff: 60 }
+    layers: { v1: "b-4 b-2 b-5 b b-4 b-2 b2-5 fill-5 b b b+5 b+3 b b b-4 fill-5", v2: "b a", v3: "b m1" }
+  break:
+    bars: 8
+    volume: 13
+    filter: { cutoff: { from: -150, to: 120 } }
+    layers: { v1: "bh bh+3 bh-4 bh-2 bh bh+3 bh-5 fill-5", v3: sync }
+  a2:
+    bars: 16
+    volume: 15
+    levels: { v2: mf, v3: f }
+    filter: { cutoff: 100 }
+    layers: { v1: "b b b+5 b+3 b b b-4 b2-5 b b b+5 b+3 b b b-4 fill-5", v2: a, v3: "m1+12 m2" }
+  outro:
+    bars: 6
+    volume: { from: 14, to: 10 }
+    levels: { v2: mp, v3: mf }
+    filter: { cutoff: { from: 60, to: -100 } }
+    layers: { v1: "b b b+5 b+3 b b-4", v2: a, v3: m2 }
+  final:
+    bars: 2
+    volume: 10
+    layers: { v1: end, v2: end, v3: end }
+timeline: [intro, a, b, break, a2, outro, final]
+end: { hold_beats: 2, release: true }

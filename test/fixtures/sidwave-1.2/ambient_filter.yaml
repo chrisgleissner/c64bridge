@@ -1,0 +1,84 @@
+# Ambient | 68.35 BPM | D minor (Dorian colour) | 1 SID
+# Techniques: Legato pulse pad that owns a resonant low-pass whose looping table sweeps for 6 s while section cutoff offsets open it over minutes, slow PWM, glides between pad chord tones, ring-modulated bells with a hidden source note, a sub triangle bass, a soft heartbeat kick, delayed vibrato on a lead that breathes in long phrases, and a loop point back to the first lead section.
+# Learn: Common tones carry the harmony (A sits through Dm9, Bbmaj7 and Gm9), silence is part of every phrase, and the arrangement grows only by opening the filter, adding a voice and raising the level before ebbing back to bells
+sidwave: 1.2
+title: Blue Current
+tempo: 68.35
+mode: PAL
+accent: 2
+kit: { k: lib:kick }
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+instruments:
+  # The pad never retriggers inside a section: legato with a soft gate, a slow glide, and pulse and filter
+  # tables that keep running across notes. The filter loop rises 2 units per frame for 160 frames and falls back.
+  pad:
+    waveform: pulse
+    adsr: [9, 6, 11, 10]
+    legato: true
+    portamento: 30
+    hard_restart: { frames: 0 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 5, frames: 120 }, { add: -5, frames: 120 }] }
+    filtertable: { reset: false, loop: 1, steps: [{ cutoff: 650Hz, resonance: 11, type: lowpass }, { add: 2, frames: 160 }, { add: -2, frames: 160 }] }
+  # A second, unfiltered triangle layer for the end of the opening.
+  haze: { waveform: tri, adsr: [10, 6, 10, 10], legato: true, portamento: 30, hard_restart: { frames: 0 } }
+  sub: { waveform: tri, adsr: [6, 8, 12, 9] }
+  pulse_sub: { waveform: tri, adsr: [1, 8, 10, 7], hard_restart: { test: true } }
+  # Bell: triangle ring-modulated by a silent source an octave and a fifth above on voice 2; a bright octave for two frames.
+  bell:
+    waveform: tri
+    adsr: [1, 10, 0, 10]
+    source_note: "+19"
+    wavetable: [{ wave: tri, ring: true, note: "+12", frames: 2 }, { wave: tri, ring: true, note: "+0" }]
+  lead:
+    waveform: pulse
+    adsr: [4, 6, 10, 8]
+    portamento: 10
+    vibrato: { depth: 0.2, rate: 3, delay: 30 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 4, frames: 90 }, { add: -4, frames: 90 }] }
+voices:
+  - id: 1
+    name: Pad
+    role: pad
+    instrument: pad
+    patterns:
+      # Dm9 | Bbmaj7 | Gm9 | A7sus4 - A7
+      p1: { length: 1, bars: 4, groove: "A4 ~ ~ ~ | ~ ~ ~ ~ | ~ ~ ~ ~ | D5 ~ C#5 ~" }
+      p2: { length: 1, bars: 4, groove: "A4 ~ ~ ~ | ~ ~ ~ ~ | Bb4 ~ ~ ~ | G4 ~ ~ ~" }
+      # Tide: Bbmaj7 | C | Dm9 | A7
+      p3: { length: 1, bars: 4, groove: "D5 ~ ~ ~ | E5 ~ ~ ~ | F5 ~ ~ ~ | E5 ~ C#5 ~" }
+      # Ebb: Gm9 | Dm9 | Bbmaj7 | A7sus4 - A7
+      p4: { length: 1, bars: 4, groove: "Bb4 ~ ~ ~ | A4 ~ ~ ~ | ~ ~ ~ ~ | D5 ~ C#5 ~" }
+  - id: 2
+    name: Sub bass
+    role: bass
+    instrument: sub
+    patterns:
+      b1: { length: 1, bars: 4, groove: "D2 ~ ~ ~ | Bb1 ~ ~ ~ | G1 ~ ~ ~ | A1 ~ ~ ~" }
+      b2: { length: 1, bars: 4, groove: "D2 ~ ~ A1 | Bb1 ~ ~ F2 | G1 ~ ~ D2 | A1 ~ ~ ~" }
+      # Tide: a 3+3+2 heartbeat, a soft kick every second bar.
+      b3: { length: 0.5, bars: 4, groove: "k Bb1@pulse_sub ~ Bb1@pulse_sub ~ ~ Bb1@pulse_sub ~ | C2@pulse_sub ~ ~ C2@pulse_sub ~ ~ C2@pulse_sub ~ | k D2@pulse_sub ~ D2@pulse_sub ~ ~ D2@pulse_sub ~ | A1@pulse_sub ~ ~ A1@pulse_sub ~ ~ E2@pulse_sub ~" }
+  - id: 3
+    name: Lead and bells
+    role: lead
+    instrument: lead
+    patterns:
+      bells1: { length: 1, bars: 4, groove: "- - A5@bell - | - - - - | - D6@bell - - | - - E5@bell - " }
+      bells2: { length: 1, bars: 4, groove: "- Bb5@bell - D6@bell | - A5@bell - - | - F5@bell - A5@bell | - E5@bell - -" }
+      haze: { length: 1, bars: 4, groove: "F4@haze ~ ~ ~ | D4@haze ~ ~ ~ | ~ ~ ~ ~ | E4@haze ~ ~ ~" }
+      l1: { length: 0.5, bars: 4, groove: "- - A4 ~ D5 ~ ~ ~ | ~ ~ ~ ~ (C5 /A4) ~ ~ | - - - - F4 ~ G4 ~ | A4 ~ ~ ~ ~ ~ - -" }
+      l2: { length: 0.5, bars: 4, groove: "- - A4 ~ D5 ~ E5 ~ | F5 ~ ~ ~ ~ ~ (E5 /D5) | D5 ~ ~ ~ - - Bb4 ~ | A4 ~ ~ ~ (G4 /A4) ~ ~" }
+      l3: { length: 0.5, bars: 4, groove: "- - D5 ~ A5 ~ ~ ~ | ~ ~ G5 ~ (F5 /E5) ~ ~ | D5 ~ ~ ~ (F5 /G5) ~ A5 | ~ ~ ~ ~ ~ ~ - -" }
+      l4: { length: 0.5, bars: 4, groove: "- - C6 ~ ~ ~ A5 ~ | Bb5 ~ ~ ~ ~ ~ (A5 /F5) | G5 ~ ~ ~ D5 ~ ~ ~ | E5 ~ ~ ~ ~ ~ - -" }
+sections:
+  # Bells have sustain 0, so level does not scale them (LEVEL-NOOP accepted); chip volume sets their loudness.
+  drift1:  { bars: 4, level: pp, volume: 9, filter: { cutoff: { from: -60, to: 0 } }, layers: { v1: p1, v3: bells1 } }
+  drift2:  { bars: 4, level: p, volume: { from: 10, to: 13 }, layers: { v1: p1, v2: b1 } }
+  drift3:  { bars: 4, level: p, filter: { cutoff: { from: 0, to: 60 } }, layers: { v1: p2, v2: b1, v3: haze } }
+  current: { bars: 16, level: { from: mp, to: mf }, filter: { cutoff: { from: 60, to: 200 } }, layers: { v1: "p1 p2", v2: b2, v3: "l1 l2 l1 l2" } }
+  tide:    { bars: 16, level: { from: f, to: ff }, filter: { cutoff: { from: 220, to: 520 } }, layers: { v1: p3, v2: b3, v3: "l3 l4 l3 l4" } }
+  # The bass rests for four bars so voice 2 can run the bells' silent ring source.
+  ebb:     { bars: 4, level: mp, volume: { from: 15, to: 10 }, filter: { cutoff: { from: 200, to: 40 } }, layers: { v1: p4, v3: bells2 } }
+  shore:   { bars: 4, level: { from: p, to: mp }, volume: { from: 10, to: 15 }, filter: { cutoff: { from: 40, to: 60 } }, layers: { v1: p2, v2: b1, v3: haze } }
+timeline: [drift1, drift2, drift3, current, tide, ebb, shore]
+loop_to: current

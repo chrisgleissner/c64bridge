@@ -1,0 +1,95 @@
+# Minor synth ballad | 75.19 BPM | A minor | 1 SID
+# Techniques: Broken-chord "harp" with a slow pulse-width drift through a low-pass it owns, fast chord-arpeggio shimmer for the last chorus, section filter offsets that open the harp as the song lifts, slurred PWM lead with glides and delayed vibrato, triangle bass with passing tones and a filtered pulse bass in the choruses, a five-bar coda held on Am(add9).
+# Learn: An eight-bar verse heard twice, a lift to the relative major side (iv-VII-III-VI-ii°-V), an instrumental verse an octave higher, the lift again with shimmering chords, and a quiet return that resolves instead of fading
+sidwave: 1.2
+title: A Window in Rain
+tempo: 75.19
+mode: PAL
+accent: 2
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1, 3] } }
+instruments:
+  # Plucked broken chords; the width drift keeps running across notes (reset: false).
+  harp:
+    waveform: pulse
+    adsr: [1, 7, 5, 6]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.15 }, { add: 10, frames: 60 }, { add: -10, frames: 60 }] }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 5, type: lowpass }]
+  harp_end:
+    waveform: pulse
+    adsr: [1, 9, 6, 11]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.15 }, { add: 10, frames: 60 }, { add: -10, frames: 60 }] }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 5, type: lowpass }]
+  # The singing lead: slow PWM, glides inside slurs, vibrato only after 18 frames.
+  breath:
+    waveform: pulse
+    adsr: [3, 6, 11, 7]
+    portamento: 6
+    vibrato: { depth: 0.18, rate: 4.5, delay: 18 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 12, frames: 50 }, { add: -12, frames: 50 }] }
+  breath_end:
+    waveform: pulse
+    adsr: [3, 6, 11, 11]
+    vibrato: { depth: 0.18, rate: 4.5, delay: 18 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.3 }, { add: 12, frames: 50 }, { add: -12, frames: 50 }] }
+  anchor: { waveform: tri, adsr: [2, 6, 11, 8] }
+  anchor_end: { waveform: tri, adsr: [2, 6, 11, 11] }
+  # Chorus bass: square wave through the harp's low-pass for weight.
+  deep: { waveform: pulse, adsr: [1, 7, 10, 6], pulsetable: [{ set: 2048 }], hard_restart: { test: true } }
+voices:
+  - id: 1
+    name: Rain harp
+    role: arp
+    level: 11
+    instrument: harp
+    patterns:
+      intro: { length: 0.5, bars: 4, groove: "A3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | A3 E4 A4 B4 C5 B4 A4 E4 | E3 B3 D4 E4 A4 E4 D4 B3" }
+      verse: { length: 0.5, bars: 8, groove: "A3 E4 A4 B4 C5 B4 A4 E4 | G3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | G3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 A4 E4 D4 B3" }
+      verse2: { length: 0.5, bars: 8, groove: "A3 E4 A4 B4 C5 B4 A4 E4 | G3 E4 A4 B4 C5 B4 A4 E4 | F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | G3 D4 G4 A4 B4 A4 G4 D4 | D3 A3 C4 F4 E3 B3 D4 G#4 | A3 E4 A4 B4 C5 B4 A4 E4" }
+      lift: { length: 0.5, bars: 8, groove: "D3 A3 C4 F4 A4 F4 C4 A3 | G3 D4 G4 A4 B4 A4 G4 D4 | C3 G3 B3 E4 G4 E4 B3 G3 | F3 C4 E4 G4 A4 G4 E4 C4 | B2 F3 A3 D4 F4 D4 A3 F3 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | E3 B3 D4 E4 G#4 B4 D5 B4" }
+      # Last chorus: whole-bar chord shimmer (one tone every 3 frames), an octave above the chord root.
+      shimmer:
+        length: 4
+        bars: 8
+        groove:
+          - { chord: Dm7, arp: "12,15,19,22", speed: 3 }
+          - { chord: G, arp: "12,16,19,24", speed: 3 }
+          - { chord: Cmaj7, arp: "12,16,19,23", speed: 3 }
+          - { chord: F6, arp: "12,16,19,21", speed: 3 }
+          - { chord: Bm7b5, arp: "12,15,18,22", speed: 3 }
+          - { chord: E7, arp: "12,16,19,22", speed: 3 }
+          - { chord: Am, arp: "12,15,19,24", speed: 3 }
+          - { chord: E7, arp: "12,16,19,22", speed: 3 }
+      coda: { length: 0.5, bars: 5, groove: "F3 C4 E4 G4 A4 G4 E4 C4 | E3 B3 D4 E4 A4 E4 D4 B3 | E3 B3 D4 E4 G#4 E4 D4 B3 | A3 E4 A4 B4 C5 B4 A4 E4 | B4@harp_end ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: Long breath
+    role: lead
+    instrument: breath
+    patterns:
+      a1: { length: 0.5, bars: 4, groove: "E5 ~ ~ (D5 /C5) ~ B4 ~ | C5 ~ ~ ~ ~ ~ - - | A4 ~ ~ (B4 C5) ~ E5 ~ | D5 ~ ~ ~ (C5 /B4) ~ ~" }
+      a2: { length: 0.5, bars: 4, groove: "E5 ~ ~ (D5 /C5) ~ A5 ~ | G5 ~ ~ ~ (F5 /E5) ~ ~ | F5 ~ (E5 D5) C5 ~ ~ ~ | B4 ~ ~ ~ - - - -" }
+      a3: { length: 0.5, bars: 4, groove: "E5 ~ ~ (D5 /C5) ~ B4 ~ | D5 ~ ~ (C5 /B4) ~ G4 ~ | F4 ~ A4 ~ G#4 ~ B4 ~ | A4 ~ ~ ~ ~ ~ - -" }
+      b1: { length: 0.5, bars: 8, groove: "A5 ~ ~ ~ (G5 /F5) ~ ~ | G5 ~ ~ ~ D5 ~ ~ ~ | E5 ~ ~ (D5 E5) ~ G5 ~ | A5 ~ ~ ~ ~ ~ (G5 F5) | F5 ~ ~ ~ (E5 /D5) ~ ~ | D5 ~ ~ ~ B4 ~ G#4 ~ | A4 ~ ~ (B4 C5) ~ E5 ~ | B4 ~ ~ ~ (D5 E5) ~ ~" }
+      solo: { length: 0.5, bars: 8, groove: "E5 ~ (F5 E5) D5 ~ C5 ~ | (B4 C5) ~ E5 ~ ~ G5 ~ | A5 ~ ~ ~ (G5 E5) ~ C5 | B4 ~ ~ (G#4 B4) ~ E5 ~ | C6 ~ ~ ~ (B5 /A5) ~ ~ | B5 ~ ~ ~ (A5 /G5) ~ ~ | F5 ~ (E5 D5) E5 ~ G#5 ~ | A5 ~ ~ ~ ~ ~ - -" }
+      coda: { length: 0.5, bars: 5, groove: "C5 ~ ~ ~ (B4 /A4) ~ ~ | B4 ~ ~ ~ ~ ~ ~ ~ | (G#4 B4) ~ ~ D5 ~ ~ ~ | A4@breath_end ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 3
+    name: Bass
+    role: bass
+    instrument: anchor
+    patterns:
+      intro: { length: 1, bars: 4, groove: "- - - - | - - - - | A2 ~ ~ ~ | E2 ~ D2 E2" }
+      verse: { length: 1, bars: 8, groove: "A2 ~ ~ ~ | G2 ~ ~ ~ | F2 ~ ~ ~ | E2 ~ ~ G#2 | A2 ~ ~ ~ | G2 ~ ~ ~ | F2 ~ ~ ~ | E2 ~ D2 E2" }
+      verse2: { length: 1, bars: 8, groove: "A2 ~ ~ ~ | G2 ~ ~ ~ | F2 ~ ~ ~ | E2 ~ ~ G#2 | A2 ~ ~ ~ | G2 ~ ~ B2 | D2 ~ E2 ~ | A2 ~ G2 F2" }
+      lift: { length: 1, bars: 8, groove: "D2@deep ~ ~ A2@deep | G2@deep ~ ~ D2@deep | C2@deep ~ ~ G2@deep | F2@deep ~ ~ D2@deep | B1@deep ~ ~ F2@deep | E2@deep ~ ~ G#2@deep | A2@deep ~ G2@deep ~ | E2@deep ~ ~ ~" }
+      coda: { length: 1, bars: 5, groove: "F2 ~ ~ ~ | E2 ~ ~ ~ | E2 ~ G#2 ~ | A2@anchor_end ~ ~ ~ | ~ ~ ~ ~" }
+sections:
+  intro:   { bars: 4, level: p, filter: { cutoff: { from: -150, to: 0 } }, layers: { v1: intro, v3: intro } }
+  verse:   { bars: 8, level: mp, layers: { v1: verse, v2: "a1 a2", v3: verse } }
+  verse2:  { bars: 8, level: mf, layers: { v1: verse2, v2: "a1 a3", v3: verse2 } }
+  lift:    { bars: 8, level: f, filter: { cutoff: { from: 0, to: 260 } }, layers: { v1: lift, v2: b1, v3: lift } }
+  solo:    { bars: 8, level: f, filter: { cutoff: 200 }, layers: { v1: verse2, v2: solo, v3: verse2 } }
+  lift2:   { bars: 8, level: ff, filter: { cutoff: { from: 200, to: 420 }, resonance: 7 }, layers: { v1: shimmer, v2: b1, v3: lift } }
+  return:  { bars: 8, level: mp, filter: { cutoff: { from: 100, to: -60 } }, layers: { v1: verse2, v2: "a1 a3", v3: verse2 } }
+  coda:    { bars: 5, level: { from: mp, to: p }, filter: { cutoff: -60 }, tempo: { to: 66 }, layers: { v1: coda, v2: coda, v3: coda } }
+timeline: [intro, verse, verse2, lift, solo, lift2, return, coda]
+end: { hold_beats: 0, release: true }

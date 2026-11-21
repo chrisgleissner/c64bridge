@@ -1,0 +1,172 @@
+# Metal | 150.37 BPM | E minor (Phrygian riffs) | 1 SID
+# Techniques: Palm-muted E2 pulse chugs with a per-note filter envelope against open power chords from a looping 0/7/12 wavetable, a ring-modulated bell intro whose source runs silently from source_note, hard-sync sweeps (bends) over the E pedal, delayed vibrato, galloping and double-kick drums with crashes and tom fills, play-once ending on an E5 hit.
+# Learn: Sync and ring are only stable when their source holds one pitch, so the bell intro drives its source with source_note and the sync solo sits on the constant E2 chug of voice 1
+sidwave: 1.2
+title: Iron Weather
+tempo: 150.37
+mode: PAL
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+# Accepted lint: TABLE-CUT when double-kick sixteenths cut the kick's 5-frame table to 3 frames; HR-GAP where
+# chugs, lead and drums restart on the same beats (the riffs are meant to stop together).
+kit:
+  k: kick
+  s: lib:snare
+  h: lib:hat
+  z: lib:crash
+instruments:
+  # Palm mute: a pulse with a low, fast-closing resonant low-pass and short decay.
+  chug:
+    waveform: pulse
+    pulse_width: 1843  # 45 %; a fractional pulse_width on a 1.2 named instrument is not scaled (player defect), so use 12-bit units
+    adsr: [0, 5, 4, 1]
+    hard_restart: { test: true }
+    filtertable: [{ cutoff: 900Hz, resonance: 10, type: lowpass }, { add: -12, frames: 5 }]
+  # Open power chord: root, fifth and octave cycled every frame, filter open and slowly closing.
+  power:
+    waveform: saw
+    adsr: [0, 8, 10, 5]
+    loop: 0
+    wavetable: [{ note: "+0" }, { note: "+7" }, { note: "+12" }]
+    filtertable: [{ cutoff: 2.4kHz, resonance: 9, type: lowpass }, { add: -5, frames: 40 }]
+  # Final chord and lead: the same voicings with release 9, so the held E rings out instead of stopping.
+  power_end:
+    waveform: saw
+    adsr: [0, 8, 10, 9]
+    loop: 0
+    wavetable: [{ note: "+0" }, { note: "+7" }, { note: "+12" }]
+    filtertable: [{ cutoff: 2.4kHz, resonance: 9, type: lowpass }, { add: -5, frames: 40 }]
+  lead_end:
+    waveform: saw
+    adsr: [0, 6, 11, 9]
+    vibrato: { depth: 0.2, rate: 6, delay: 14 }
+  kick:
+    waveform: tri
+    adsr: [0, 7, 0, 0]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: A6 }, { wave: tri, note: D3, slide_to: E1, frames: 2 }, { note: E1, frames: 3 }, { gate: false, note: E1 }]
+  lead:
+    waveform: saw
+    adsr: [0, 6, 11, 5]
+    vibrato: { depth: 0.2, rate: 6, delay: 14 }
+  # Hard sync to voice 1: the perceived pitch is voice 1's E2, the bend sweeps the overtone. Accepted lint:
+  # RINGSYNC-SRC in the solo, where voice 1 re-attacks but only ever plays E2, so the sync pitch stays fixed.
+  scream:
+    waveform: saw
+    sync: true
+    adsr: [0, 6, 12, 6]
+  # Ring-modulated triangle; its source (voice 1) is driven silently an octave below the played note.
+  bell:
+    waveform: tri
+    ring: true
+    source_note: "-12"
+    adsr: [0, 10, 3, 9]
+    hard_restart: { frames: 0 }
+voices:
+  - id: 1
+    name: Rhythm guitar
+    role: bass
+    instrument: chug
+    patterns:
+      riff1: { length: 0.25, bars: 1, groove: "E2 E2 E2 E2 G2@power - E2 E2 A2@power - E2 E2 F2@power ~ E2 E2" }
+      riff2: { length: 0.25, bars: 1, groove: "E2 E2 - E2 E2 - E2 E2 Bb2@power ~ A2@power ~ G2@power ~ F2@power ~" }
+      gallop: { length: 0.25, bars: 1, groove: "E2 - E2 E2 E2 - E2 E2 E2 - E2 E2 G2@power - F2@power -" }
+      pre: { length: 0.5, bars: 2, groove: "C2@power ~ ~ C2@power ~ ~ C2@power ~ | D2@power ~ ~ D2@power ~ ~ D2@power D2@power" }
+      chorusA: { length: 0.5, bars: 4, groove: "C2@power ~ ~ C2@power ~ ~ E2 E2 | G2@power ~ ~ G2@power ~ ~ E2 E2 | D2@power ~ ~ D2@power ~ ~ E2 E2 | E2@power ~ ~ ~ E2 E2 E2 E2" }
+      chorusB: { length: 0.5, bars: 4, groove: "A2@power ~ ~ A2@power ~ ~ E2 E2 | C2@power ~ ~ C2@power ~ ~ E2 E2 | D2@power ~ ~ ~ D2@power ~ ~ ~ | B1@power ~ ~ ~ ~ ~ ~ ~" }
+      pedal: { length: 0.25, bars: 1, groove: "E2 E2 - E2 E2 - E2 E2 E2 E2 - E2 E2 - E2 E2" }
+      hit: { length: 1, bars: 4, groove: "E2@power_end ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: Lead guitar
+    role: lead
+    instrument: lead
+    patterns:
+      bells: { length: 1, bars: 8, groove: "E4@bell ~ G4@bell F4@bell | E4@bell ~ ~ ~ | B4@bell ~ C5@bell B4@bell | A4@bell ~ G4@bell ~ | E4@bell ~ G4@bell F4@bell | E4@bell ~ ~ B3@bell | C4@bell ~ ~ B3@bell | B3@bell ~ ~ ~" }
+      verse: { length: 0.5, bars: 8, groove: "E4 ~ ~ ~ D4 ~ E4 ~ | G4 ~ ~ F#4 ~ E4 ~ ~ | B3 ~ ~ ~ D4 ~ E4 ~ | ~ ~ ~ ~ - - - - | E4 ~ ~ ~ D4 ~ E4 ~ | G4 ~ ~ A4 ~ B4 ~ ~ | C5 ~ ~ B4 ~ A4 ~ G4 | F#4 ~ ~ ~ - - - -" }
+      verse2: { length: 0.5, bars: 8, groove: "B4 ~ ~ ~ A4 ~ B4 ~ | D5 ~ ~ C5 ~ B4 ~ ~ | G4 ~ ~ ~ A4 ~ B4 ~ | ~ ~ ~ ~ - - (A4 B4) | C5 ~ ~ ~ B4 ~ C5 ~ | E5 ~ ~ D5 ~ C5 ~ ~ | B4 ~ ~ A4 ~ G4 ~ A4 | B4 ~ ~ ~ - - - -" }
+      rise: { length: 0.5, bars: 2, groove: "E4 ~ G4 ~ C5 ~ E5 ~ | F#4 ~ A4 ~ D5 ~ F#5 ~" }
+      chorus: { length: 0.5, bars: 8, groove: "E5 ~ ~ ~ G5 ~ E5 ~ | D5 ~ ~ ~ B4 ~ ~ ~ | A4 ~ ~ ~ D5 ~ F#5 ~ | E5 ~ ~ ~ ~ ~ - - | E5 ~ ~ ~ C5 ~ E5 ~ | G5 ~ ~ ~ E5 ~ G5 ~ | A5 ~ ~ ~ F#5 ~ D5 ~ | D#5 ~ ~ ~ F#5 ~ B4 ~" }
+      solo1:
+        length: 0.5
+        groove:
+          - { note: E5, inst: scream, len: 2, bend: { to: E6, frames: 36 } }
+          - { note: B5, inst: scream, len: 2, bend: { to: -7, frames: 30 } }
+          - B4
+          - D5
+          - E5
+          - G5
+          - A5
+          - G5
+          - E5
+          - D5
+          - { note: G5, inst: scream, len: 2, bend: { to: D6, frames: 24 } }
+          - E5
+          - "~"
+          - D5
+          - B4
+          - { note: E5, inst: scream, len: 2, bend: { to: -12, frames: 30 } }
+          - "-"
+          - "-"
+          - "-"
+          - "-"
+      solo2: { length: 0.25, bars: 2, groove: "E5 G5 A5 B5 D6 B5 A5 G5 E5 G5 A5 B5 D6 E6 D6 B5 | E6 ~ ~ ~ D6 B5 A5 G5 A5 ~ G5 E5 D5 E5 ~ ~" }
+      solo3: { length: 0.5, bars: 2, groove: "B5 ~ ~ ~ A5 ~ G5 ~ | F#5 ~ ~ ~ E5 ~ ~ ~" }
+      last: { length: 1, bars: 4, groove: "E5@lead_end ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 3
+    name: Drums
+    role: drums
+    patterns:
+      toms: { length: 0.5, bars: 2, groove: "E2@lib:tom - - - E2@lib:tom - B1@lib:tom - | E2@lib:tom - - - G2@lib:tom - F2@lib:tom E2@lib:tom" }
+      half: { length: 0.25, bars: 1, groove: "k - h - h - h - s - h - h - k -" }
+      halfz: { length: 0.25, bars: 1, groove: "z - h - h - h - s - h - h - k -" }
+      d8: { length: 0.25, bars: 1, groove: "k - h - s - h - k - k - s - h -" }
+      d8b: { length: 0.25, bars: 1, groove: "k - h k s - h - k - k - s - h s" }
+      d8z: { length: 0.25, bars: 1, groove: "z - h - s - h - k - k - s - h -" }
+      dk: { length: 0.25, bars: 1, groove: "k k k k s k k k k k k k s k k k" }
+      dkz: { length: 0.25, bars: 1, groove: "z k k k s k k k k k k k s k k k" }
+      fill: { length: 0.25, bars: 1, groove: "s - s s G3@lib:tom - E3@lib:tom - C3@lib:tom C3@lib:tom A2@lib:tom - s s s s" }
+      swell: { length: 1, bars: 1, groove: "z - E2@lib:tom -" }
+      end: { length: 1, bars: 4, groove: "z - - - - - - - - - - - - - - -" }
+sections:
+  intro:
+    bars: 8
+    volume: { from: 9, to: 12 }
+    layers: { v2: bells, v3: "toms*3 swell fill" }
+  riff:
+    bars: 8
+    volume: 14
+    layers: { v1: "riff1 riff1 riff1 riff2", v3: "halfz half half fill half half half fill" }
+  verse:
+    bars: 16
+    volume: 14
+    levels: { v2: mf }
+    layers: { v1: "riff1 riff1 riff1 riff2 riff1 riff1 gallop riff2", v2: verse, v3: "d8z d8 d8 d8b d8 d8 d8 fill" }
+  pre:
+    bars: 8
+    volume: 14
+    filter: { cutoff: { from: -150, to: 200 } }
+    layers: { v1: "pre*3 gallop riff2", v2: "rise*4", v3: "d8z d8b d8 d8b d8 d8b dk fill" }
+  chorus:
+    bars: 16
+    volume: 15
+    layers: { v1: "chorusA chorusB", v2: chorus, v3: "dkz dk dk dk dk dk dk fill" }
+  verse2:
+    bars: 16
+    volume: 14
+    levels: { v2: mf }
+    layers: { v1: "riff2 riff1 riff1 riff2 gallop gallop riff1 riff2", v2: verse2, v3: "d8z d8b d8 d8b d8 d8b d8 fill" }
+  solo:
+    bars: 16
+    volume: 15
+    layers: { v1: "pedal", v2: "solo1 solo2 solo3 solo1 solo2 solo2", v3: "d8z d8 dk d8 d8 d8 dk fill" }
+  chorus2:
+    bars: 16
+    volume: 15
+    filter: { cutoff: 120 }
+    layers: { v1: "chorusA chorusB", v2: chorus, v3: "dkz dk dk dk dk dk dk fill" }
+  ending:
+    bars: 4
+    volume: 15
+    layers: { v1: hit, v2: last, v3: end }
+timeline: [intro, riff, verse, pre, chorus, verse2, solo, chorus2, ending]
+end: { hold_beats: 0, release: true }
