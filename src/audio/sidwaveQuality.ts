@@ -23,6 +23,7 @@ export interface QualityThresholds {
   repeatSimilarity: number; repeatWarn: number; repeatFail: number;
   monoLossWarnDb: number; monoLossFailDb: number;
   longNoteSeconds: number; detuneWarnCents: number; detuneFailCents: number;
+  preRollWarnDb: number; preRollFailDb: number;
 }
 
 export const DEFAULT_QUALITY_THRESHOLDS: QualityThresholds = {
@@ -36,6 +37,7 @@ export const DEFAULT_QUALITY_THRESHOLDS: QualityThresholds = {
   repeatSimilarity: 0.95, repeatWarn: 0.75, repeatFail: 0.9,
   monoLossWarnDb: 3, monoLossFailDb: 6,
   longNoteSeconds: 0.3, detuneWarnCents: 15, detuneFailCents: 30,
+  preRollWarnDb: -60, preRollFailDb: -50,
 };
 
 export interface QualityInput {
@@ -119,6 +121,22 @@ export function analyseQuality(input: QualityInput): QualityReport {
   const mono = new Float64Array(signal.left.length).map((_, i) => (signal.left[i]! + signal.right[i]!) / 2);
   const a = Math.round(from * sr), b = Math.round(to * sr);
   const checks: Record<string, Check> = {};
+
+  // ---- pre-roll: anything audible before the song start (setup pops, reset sounds) is outside every other check.
+  {
+    const end = Math.round(Math.max(0, offset - 0.05) * sr);
+    if (end < Math.round(0.05 * sr)) checks.preRoll = mk("SKIP", "no audio before the song start");
+    else {
+      let peak = 0, at = 0;
+      for (let i = 0; i < end; i += 1) {
+        const v = Math.max(Math.abs(signal.left[i]!), Math.abs(signal.right[i]!));
+        if (v > peak) { peak = v; at = i; }
+      }
+      const db = 20 * Math.log10(Math.max(peak, 1e-9));
+      const status: Status = db > th.preRollFailDb ? "FAIL" : db > th.preRollWarnDb ? "WARN" : "PASS";
+      checks.preRoll = mk(status, `peak ${db.toFixed(1)} dBFS before the song start`, { peakDb: +db.toFixed(1), peakAt: +(at / sr).toFixed(3) });
+    }
+  }
 
   // ---- clipping
   {

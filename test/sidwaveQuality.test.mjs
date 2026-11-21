@@ -33,6 +33,19 @@ test("clipping is counted and fails when it is long or frequent", () => {
   assert.strictEqual(analyseQuality({ signal: render(2, bassAndMid(2)) }).checks.clipping.status, "PASS");
 });
 
+test("a pop before the song start fails the pre-roll check", () => {
+  // The song starts at 1 s; a pop at 0.76 s (a socket switch during setup) must not pass unseen.
+  const s = render(3, [{ start: 1, duration: 2, hz: 220, amp: 0.1 }]);
+  const quiet = analyseQuality({ signal: s, offsetSeconds: 1 });
+  assert.strictEqual(quiet.checks.preRoll.status, "PASS");
+  for (let k = 0; k < 8; k += 1) { s.left[Math.round(0.76 * SR) + k] = 0.7; s.right[Math.round(0.76 * SR) + k] = 0.7; }
+  const r = analyseQuality({ signal: s, offsetSeconds: 1 });
+  assert.strictEqual(r.checks.preRoll.status, "FAIL");
+  assert.ok(Math.abs(r.checks.preRoll.metrics.peakAt - 0.76) < 0.01);
+  // Without audio before the start there is nothing to judge.
+  assert.strictEqual(analyseQuality({ signal: s }).checks.preRoll.status, "SKIP");
+});
+
 test("a click is a glitch unless a scheduled onset explains it", () => {
   const notes = [note(0, 3, 220)];
   const base = render(3, [{ start: 0, duration: 3, hz: 220, amp: 0.1 }]);
