@@ -32,6 +32,22 @@ instruments:
     adsr: [0, 6, 9, 4]
     vibrato: { depth: 0.15, rate: 5, delay: 15 }
     pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 30, frames: 24 }, { add: -30, frames: 24 }] }
+  # Final chord: same sounds with release 9, so the held chord rings out instead of stopping.
+  bass_end:
+    waveform: saw
+    adsr: [0, 6, 8, 9]
+    hard_restart: { test: true }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 13, type: lowpass }, { add: -16, frames: 10 }]
+  arp_end:
+    waveform: pulse
+    pulse_width: 1433
+    adsr: [0, 4, 7, 9]
+    hard_restart: { frames: 0 }
+  lead_end:
+    waveform: pulse
+    adsr: [0, 6, 9, 9]
+    vibrato: { depth: 0.15, rate: 5, delay: 15 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.2 }, { add: 30, frames: 24 }, { add: -30, frames: 24 }] }
 voices:
   - id: 1
     name: Electro bass
@@ -41,14 +57,14 @@ voices:
       e1: { length: 0.25, bars: 1, groove: "F1 - F2 - - F1 - Ab1 - F1 F2 - C2 - Eb2 -" }
       e2: { length: 0.25, bars: 1, groove: "F1 - - F1 F2 - Ab1 - F1 - (C2 /Eb2) - F2 - C2" }
       ec: { length: 0.25, bars: 1, groove: "C2 - C3 - - C2 - E2 - C2 C3 - G2 - Bb2 -" }
-      end: { length: 1, bars: 2, groove: "F1 ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "F1@bass_end ~ ~ ~ ~ ~ ~ ~" }
   - id: 2
     name: Chord arps
     instrument: arp
     patterns:
       a: { length: 0.5, bars: 8, groove: "Fm@arp ~ ~ Fm@arp ~ ~ Fm@arp ~ | Fm@arp ~ ~ Fm@arp ~ Fm@arp ~ - | Db@arp ~ ~ Db@arp ~ ~ Db@arp ~ | Eb@arp ~ ~ Eb@arp ~ Eb@arp ~ - | Bbm@arp ~ ~ Bbm@arp ~ ~ Bbm@arp ~ | Fm@arp ~ ~ Fm@arp ~ Fm@arp ~ - | Db@arp ~ ~ Db@arp ~ ~ Db@arp ~ | C@arp ~ ~ C@arp ~ C7@arp ~ -" }
       held: { length: 4, bars: 8, groove: "Fm@arp | Fm@arp | Db@arp | Eb@arp | Bbm@arp | Fm@arp | Db@arp | C@arp" }
-      end: { length: 1, bars: 2, groove: "Fm@arp ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: [{ chord: Fm, arp: "0,3,7", inst: arp_end, len: 8 }] }
   - id: 3
     name: Lead
     role: lead
@@ -56,7 +72,7 @@ voices:
     patterns:
       hook: { length: 0.5, bars: 8, groove: "C5 ~ ~ Ab4 ~ C5 ~ Eb5 | F5 ~ ~ ~ Eb5 ~ C5 ~ | Db5 ~ ~ ~ F5 ~ Ab5 ~ | G5 ~ ~ ~ ~ ~ - - | F5 ~ ~ Db5 ~ F5 ~ Bb5 | Ab5 ~ ~ ~ G5 ~ F5 ~ | F5 ~ ~ ~ Db5 ~ Ab4 ~ | G4 ~ ~ ~ E5 ~ ~ ~" }
       hook2: { length: 0.5, bars: 8, groove: "C5 ~ Ab4 ~ C5 Eb5 ~ F5 | ~ ~ ~ ~ (Eb5 C5) ~ - | Db5 ~ F5 ~ Ab5 ~ Bb5 Ab5 | G5 ~ ~ ~ Eb5 ~ G5 ~ | Bb5 ~ ~ ~ Ab5 ~ F5 ~ | C6 ~ ~ ~ Ab5 ~ G5 ~ | Ab5 ~ F5 ~ Db5 ~ F5 ~ | E5 ~ ~ ~ ~ ~ ~ ~" }
-      end: { length: 1, bars: 2, groove: "C5 ~ ~ ~ ~ ~ ~ ~" }
+      end: { length: 1, bars: 2, groove: "C5@lead_end ~ ~ ~ ~ ~ ~ ~" }
   - id: d1
     digi: sid2
     patterns:
