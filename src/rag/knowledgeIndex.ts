@@ -1,3 +1,4 @@
+import { SIDWAVE_EXAMPLES, SIDWAVE_SCORE_RESOURCES, sidwaveExamplePath } from "../sidwaveExamples.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,7 +88,8 @@ interface BundleResourceDefinition {
   readonly uri: string;
   readonly name: string;
   readonly description: string;
-  readonly relativePath: string;
+  readonly relativePath?: string;
+  readonly mimeType?: KnowledgeResourceDefinition["mimeType"];
   readonly priority: ResourcePriority;
   readonly summary: string;
   readonly prompts: readonly string[];
@@ -126,7 +128,7 @@ export interface KnowledgeResourceDefinition {
   readonly uri: string;
   readonly name: string;
   readonly description: string;
-  readonly mimeType: "text/markdown";
+  readonly mimeType: "text/markdown" | "application/yaml";
   readonly metadata: KnowledgeResourceMetadata;
   readonly relativePath?: string;
   readonly buildContent?: (resources: readonly KnowledgeResourceDefinition[]) => string;
@@ -436,6 +438,28 @@ const KNOWLEDGE_BUNDLES: readonly KnowledgeBundle[] = [
         relatedResources: [RESOURCE_URIS.sound.sid.spec, RESOURCE_URIS.sound.sid.fileFormat],
         tags: ["sid", "format"],
       },
+      {
+        uri: RESOURCE_URIS.sound.examples,
+        name: "Original SIDWAVE Compositions",
+        description: "Choose a playable SIDWAVE example by style or SID technique.",
+        priority: "reference",
+        summary: "Music presets with annotated SIDWAVE scores.",
+        prompts: ["sid-music"],
+        tools: ["c64_sound"],
+        relatedResources: [RESOURCE_URIS.sound.sidwave.spec],
+      },
+      ...SIDWAVE_SCORE_RESOURCES.map(({ name, title, style }): BundleResourceDefinition => ({
+        uri: `${RESOURCE_URIS.sound.examples}/${name}`,
+        name: title,
+        description: style,
+        relativePath: sidwaveExamplePath(name),
+        mimeType: "application/yaml",
+        priority: "supplemental",
+        summary: style,
+        prompts: ["sid-music"],
+        tools: ["c64_sound"],
+        relatedResources: [RESOURCE_URIS.sound.examples, RESOURCE_URIS.sound.sidwave.spec],
+      })),
       {
         uri: RESOURCE_URIS.sound.sid.fileFormat,
         name: "SID File Structure Reference",
@@ -750,7 +774,7 @@ const BASE_RESOURCES: readonly KnowledgeResourceDefinition[] = KNOWLEDGE_BUNDLES
         uri: resource.uri,
         name: resource.name,
         description: resource.description,
-        mimeType: "text/markdown" as const,
+        mimeType: resource.mimeType ?? "text/markdown",
         relativePath: resource.relativePath,
         metadata: {
           domain: bundle.id,
@@ -775,6 +799,24 @@ const BASE_RESOURCES: readonly KnowledgeResourceDefinition[] = KNOWLEDGE_BUNDLES
         return { ...baseResource, buildContent: generateCharsetQuickref };
       }
       
+      if (resource.uri === RESOURCE_URIS.sound.examples) {
+        return {
+          ...baseResource,
+          buildContent: () => [
+            "# Original SIDWAVE compositions",
+            "",
+            'Use `c64_sound` with `op: "play_preset"` and a name below. Read the linked resource for the YAML score.',
+            "",
+            ...SIDWAVE_EXAMPLES.map(({ name, title, style }) =>
+              `- [${name}](${RESOURCE_URIS.sound.examples}/${name}) — **${title}**. ${style}.`),
+            "",
+            `Legacy arrangement: [fuer_elise](${RESOURCE_URIS.sound.examples}/fuer_elise).`,
+            "",
+            'Ultimate: use `configure: true` for stereo routing and turbo. `wall_of_sid` requires it and a fitted SID in socket 1.',
+          ].join("\n"),
+        };
+      }
+
       return baseResource;
     }),
 );

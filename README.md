@@ -778,7 +778,7 @@ This allows agents to inspect the available tools, resources, prompts, and schem
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **38 resources**, and **11 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **53 resources**, and **11 prompts** for controlling your Commodore 64.
 
 See the [hardening behavior guide](doc/hardening-behavior.md) for host path restrictions, argument limits, task retention, cancellation and verification semantics.
 
@@ -963,24 +963,25 @@ Switch the active backend between C64U/U64 hardware, U2-family cartridges, and t
 
 #### c64_sound
 
-Grouped entry point for SID control, playback, composition, and analysis workflows.
+SID control, playback, composition and audio analysis.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `analyze` | Analyze SID playback when verification is requested. | — | `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
-| `capture_samples` | Capture raw stereo PCM samples from the Ultimate audio UDP stream. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
-| `compile_play` | Compile SIDWAVE or CPG source and optionally play it immediately. | — | `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
-| `generate` | Compose and play an eight-bar SIDWAVE song as a PRG, which replaces the program in memory. root: key and register; pattern: lead offsets; steps: lead notes; tempoMs: classic spacing; waveform: lead sound; preset: phrasing; system: PAL/NTSC. | — | `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
-| `note_off` | Release a SID voice by clearing its gate bit. | `voice` | — | ✅ | ✅ | ✅ |
-| `note_on` | Trigger a SID voice with configurable waveform, ADSR, and pitch. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
-| `pipeline` | Compile a SIDWAVE score, play and analyze it. Supports verification. | — | `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
-| `play_mod_file` | Play a MOD tracker module via the Ultimate SID player. | `path` | — | ✅ | ✅ |  |
-| `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
-| `play_sid_file` | Play a SID file stored on the Ultimate filesystem. | `path` | `songnr` | ✅ | ✅ |  |
-| `record_analyze` | Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
-| `reset` | Soft or hard reset of the SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
-| `set_volume` | Set the SID master volume register at $D418 (0-15). | `volume` | `filterMode` | ✅ | ✅ | ✅ |
-| `silence_all` | Silence all SID voices with optional audio verification. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
+| `analyze` | Analyze SID playback or a host WAV. | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
+| `capture_samples` | Capture Ultimate stereo PCM. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
+| `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
+| `generate` | Compose and play a seeded SIDWAVE PRG. Replaces the program in memory. | — | `includeScore`, `configure`, `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
+| `note_off` | Release a SID voice. | `voice` | — | ✅ | ✅ | ✅ |
+| `note_on` | Start a SID voice. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
+| `pipeline` | Compile, play and analyze SIDWAVE. Supports verification. | — | `configure`, `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
+| `play_mod_file` | Play an Ultimate MOD file. | `path` | — | ✅ | ✅ |  |
+| `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
+| `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |
+| `record_analyze` | Analyze a recording from the Ultimate stream or host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
+| `reset` | Reset SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
+| `sample_render` | Render a SIDWAVE sample to WAV. | — | `definition`, `rate=4000`, `outputDir` | ✅ | ✅ | ✅ |
+| `set_volume` | Set SID volume ($D418). | `volume` | `filterMode` | ✅ | ✅ | ✅ |
+| `silence_all` | Silence all SID voices. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
 
 #### c64_stream
 
@@ -1048,6 +1049,21 @@ VICE resources, snapshots.
 | `c64://assembly/6510-spec` | Official opcode matrix, addressing modes, and zero-page strategy for the 6510 CPU. |
 | `c64://sound/sid/spec` | Register map, waveform behaviour, and ADSR envelopes for expressive SID playback. |
 | `c64://sound/sidwave/spec` | Defines the SIDWAVE interchange format used by the SID composer workflow. |
+| `c64://sound/examples` | Music presets with annotated SIDWAVE scores. |
+| `c64://sound/examples/chiptune_drive` | Chip arpeggios, gliding pulse lead and drum break |
+| `c64://sound/examples/ambient_filter` | Slow pads, filtered bass and ring modulated bells |
+| `c64://sound/examples/funk_bass` | Syncopated filter bass, chord chops and sync accents |
+| `c64://sound/examples/acid_line` | Acid bass, resonance accents and slides over a four-on-the-floor kick |
+| `c64://sound/examples/arp_ballad` | Minor ballad with chord arpeggios and a connected PWM lead |
+| `c64://sound/examples/drum_and_bass` | Breakbeats and a pair of detuned Reese bass oscillators |
+| `c64://sound/examples/digi_groove` | CIA2 volume digis with syncopated synth bass and arpeggios |
+| `c64://sound/examples/metal_sync` | Hard sync, ring modulation, double kick and power chords |
+| `c64://sound/examples/stereo_echo` | Two SIDs with stereo echo, ping-pong arpeggios and unison pads |
+| `c64://sound/examples/chamber_waltz` | Three independent voices in 3/4 with no percussion |
+| `c64://sound/examples/title_fanfare` | Short filtered brass fanfare with timpani and a held cadence |
+| `c64://sound/examples/ultisid_orchestra` | Eight SIDs with divided strings, twin echo leads, arps and a drum kit |
+| `c64://sound/examples/wall_of_sid` | Nine SIDs and a gradual build to a 27-voice finale |
+| `c64://sound/examples/fuer_elise` | Legacy three-voice arrangement of Beethoven’s Bagatelle |
 | `c64://sound/sid/file-format` | Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music. |
 | `c64://sound/sid/best-practices` | Captures proven waveforms, ADSR presets, phrasing, and verification workflow for pleasant SID music. |
 | `c64://graphics/vic/spec` | Covers raster timing, sprite control, colour RAM, and bitmap modes on the VIC-II. |

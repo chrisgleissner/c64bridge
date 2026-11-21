@@ -1,0 +1,93 @@
+# Chamber waltz | 150.37 BPM, 3/4 | D minor, trio in Bb major | 1 SID
+# Techniques: Waltz accompaniment (bass on 1, two-note chords on 2 and 3 as 3-frame dyad wavetables), slurred PWM soprano with delayed vibrato, cello countermelody, cadential hemiolas, ritardando and a held, released final cadence; triangle and pulse only, no filter or drums.
+# Learn: A minuet-and-trio form (A A' B A'' | Trio | A coda): the theme returns ornamented, the cello turns from oom-pah bass into a second melody, and every phrase cadence is announced by a two-bar hemiola
+sidwave: 1.2
+title: Gilt Footsteps
+tempo: 150.37
+mode: PAL
+meter: 3
+accent: 2
+sids:
+  - { id: sid1, address: "$D400", model: "8580" }
+instruments:
+  # Soprano: pulse with a slow width drift and vibrato that only starts on held notes; slurs keep the gate on.
+  soprano:
+    waveform: pulse
+    adsr: [3, 6, 10, 7]
+    vibrato: { depth: 0.12, rate: 5, delay: 20 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.45 }, { add: -10, frames: 40 }, { add: 10, frames: 40 }] }
+  soprano_end:
+    waveform: pulse
+    adsr: [3, 6, 10, 11]
+    vibrato: { depth: 0.12, rate: 5, delay: 20 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.45 }, { add: -10, frames: 40 }, { add: 10, frames: 40 }] }
+  # Alto: two-note chords played as a 3-frame dyad (lower note, upper note) on the waltz's second and third beats.
+  m3: { waveform: pulse, adsr: [1, 6, 6, 5], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+3", frames: 3 }] }
+  M3: { waveform: pulse, adsr: [1, 6, 6, 5], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+4", frames: 3 }] }
+  p4: { waveform: pulse, adsr: [1, 6, 6, 5], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+5", frames: 3 }] }
+  tt: { waveform: pulse, adsr: [1, 6, 6, 5], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+6", frames: 3 }] }
+  M6: { waveform: pulse, adsr: [1, 6, 6, 5], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+9", frames: 3 }] }
+  M3end: { waveform: pulse, adsr: [1, 6, 7, 11], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+4", frames: 3 }] }
+  m3end: { waveform: pulse, adsr: [1, 6, 7, 11], loop: 0, pulsetable: [{ set: 0.25 }], wavetable: [{ note: "+0", frames: 3 }, { note: "+3", frames: 3 }] }
+  cello: { waveform: tri, adsr: [1, 8, 10, 8] }
+  cello_end: { waveform: tri, adsr: [1, 8, 10, 11] }
+voices:
+  - id: 1
+    name: Soprano
+    role: lead
+    instrument: soprano
+    patterns:
+      # Theme: rising three-note figure, leap, stepwise fall; half cadence after a hemiola in bars 7-8.
+      a1: { length: 0.5, bars: 8, groove: "D5 ~ ~ (E5 F5) ~ | A5 ~ ~ ~ (G5 F5) | G5 ~ ~ (F5 E5) ~ | C#5 ~ ~ ~ (D5 E5) | F5 ~ ~ (G5 A5) ~ | D6 ~ ~ ~ (C6 A5) | Bb5 ~ ~ ~ G5 ~ | ~ ~ E5 ~ ~ ~" }
+      a2: { length: 0.5, bars: 8, groove: "D5 ~ ~ (E5 F5) ~ | A5 ~ ~ (Bb5 A5 G5) | G5 ~ ~ (A5 Bb5) ~ | C6 ~ ~ ~ (Bb5 G5) | A5 ~ ~ (G5 F5) ~ | D6 ~ ~ ~ Bb5 ~ | ~ ~ E5 ~ C#5 ~ | D5 ~ ~ ~ - -" }
+      # The same phrases with turns and running eighths.
+      a1v: { length: 0.5, bars: 8, groove: "D5 ~ (E5 F5 E5 D5) | A5 ~ ~ ~ (G5 F5) | G5 ~ (A5 G5 F5 E5) | C#5 ~ ~ ~ (D5 E5) | F5 ~ (G5 A5 Bb5 C6) | D6 ~ ~ ~ (C6 A5) | Bb5 ~ ~ ~ G5 ~ | ~ ~ E5 ~ ~ ~" }
+      a2v: { length: 0.5, bars: 8, groove: "D5 ~ (E5 F5 G5 F5) | A5 ~ ~ (Bb5 A5 G5) | G5 ~ (A5 Bb5 C6 Bb5) | C6 ~ ~ ~ (Bb5 G5) | A5 ~ ~ (G5 F5) ~ | D6 ~ ~ ~ Bb5 ~ | ~ ~ E5 ~ C#5 ~ | D5 ~ ~ ~ - -" }
+      # B in F major: dotted figures, appoggiatura on C7, retransition on an A pedal.
+      b1: { length: 0.5, bars: 8, groove: "C6 ~ ~ Bb5 A5 ~ | G5 ~ ~ ~ Bb5 ~ | A5 ~ ~ G5 F5 ~ | F5 ~ ~ ~ D6 ~ | D6 ~ ~ C6 Bb5 ~ | (A5 G5) ~ ~ (E5 G5) | (F5 A5) C6 ~ Bb5 ~ | G5 ~ ~ ~ - -" }
+      b2: { length: 0.5, bars: 8, groove: "C6 ~ ~ Bb5 A5 ~ | G5 ~ ~ ~ E5 ~ | F5 ~ ~ E5 D5 ~ | D5 ~ ~ ~ Bb5 ~ | Bb5 ~ ~ A5 G5 ~ | (G5 F5) ~ ~ (E5 C#5) | E5 ~ ~ ~ (F5 E5) | (D5 C#5) ~ ~ ~ ~" }
+      # Trio in Bb: long notes over a moving cello.
+      t1: { length: 0.5, bars: 8, groove: "F5 ~ ~ ~ ~ ~ | Eb5 ~ ~ ~ (D5 C5) | D5 ~ ~ ~ ~ ~ | G5 ~ ~ ~ (F5 Eb5) | Eb5 ~ ~ (F5 G5) ~ | A5 ~ ~ ~ (C6 A5) | Bb5 ~ ~ ~ ~ ~ | (A5 G5) ~ (F5 Eb5) ~" }
+      t2: { length: 0.5, bars: 8, groove: "D6 ~ ~ ~ (C6 Bb5) | G5 ~ ~ ~ ~ ~ | Bb5 ~ ~ ~ (Ab5 G5) | F5 ~ ~ ~ ~ ~ | G5 ~ ~ (F5 Eb5) ~ | Eb5 ~ ~ ~ (D5 C5) | D5 ~ ~ ~ ~ ~ | ~ ~ ~ ~ - -" }
+      t3: { length: 0.5, bars: 8, groove: "Bb5 ~ ~ ~ (A5 G5) | G5 ~ ~ ~ (F5 Eb5) | Eb5 ~ ~ ~ (D5 C5) | C#5 ~ ~ ~ (D5 E5) | F5 ~ ~ ~ (E5 D5) | F5 ~ ~ ~ (G5 A5) | Bb5 ~ ~ ~ ~ ~ | (A5 G5) ~ (E5 C#5) ~" }
+      coda: { length: 0.5, bars: 6, groove: "A5 ~ ~ ~ (F5 D5) | G5 ~ ~ ~ Bb5 ~ | A5 ~ ~ ~ G5 ~ | E5 ~ ~ ~ C#5 ~ | D5@soprano_end ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: Alto (waltz chords)
+    role: pad
+    patterns:
+      k1: { length: 1, bars: 8, groove: "- F4@M3 F4@M3 | - F4@M3 F4@M3 | - G4@m3 G4@m3 | - G4@tt G4@tt | - F4@M3 F4@M3 | - F4@p4 F4@p4 | G4@m3 ~ E4@m3 | ~ C#4@m3 ~" }
+      k2: { length: 1, bars: 8, groove: "- F4@M3 F4@M3 | - F4@M3 F4@M3 | - G4@m3 G4@m3 | - E4@tt E4@tt | - F4@M3 F4@M3 | F4@p4 ~ G4@m3 | ~ G4@tt ~ | - F4@M3 F4@M3" }
+      kb1: { length: 1, bars: 8, groove: "- A4@m3 A4@m3 | - G4@m3 G4@m3 | - A4@m3 A4@m3 | - F4@p4 F4@p4 | - F4@M6 F4@M6 | - E4@tt E4@tt | - A4@m3 Bb4@M3 | - E4@m3 E4@m3" }
+      kb2: { length: 1, bars: 8, groove: "- A4@m3 A4@m3 | - E4@m3 E4@m3 | - F4@M3 F4@M3 | - F4@p4 F4@p4 | - G4@m3 G4@m3 | - G4@tt G4@tt | - E4@m3 E4@m3 | - G4@tt G4@tt" }
+      kt1: { length: 1, bars: 8, groove: "- F4@p4 F4@p4 | - C4@m3 C4@m3 | - D4@m3 D4@m3 | - Eb4@M3 Eb4@M3 | - Eb4@M3 Eb4@M3 | - Eb4@tt Eb4@tt | - D4@m3 D4@m3 | - Eb4@tt Eb4@tt" }
+      kt2: { length: 1, bars: 8, groove: "- D4@m3 D4@m3 | - Bb3@M3 Bb3@M3 | - Eb4@M3 Eb4@M3 | - D4@m3 D4@m3 | - Eb4@M3 Eb4@M3 | - Eb4@tt Eb4@tt | - D4@m3 D4@m3 | - D4@m3 D4@m3" }
+      kt3: { length: 1, bars: 8, groove: "- Bb3@M3 Bb3@M3 | - Bb3@p4 Bb3@p4 | - C4@m3 C4@m3 | - C#4@m3 C#4@m3 | - D4@m3 D4@m3 | - D4@m3 D4@m3 | - E4@m3 E4@m3 | - C#4@m3 C#4@m3" }
+      kc: { length: 1, bars: 6, groove: "- F4@M3 F4@M3 | - G4@m3 G4@m3 | - G4@tt G4@tt | - G4@tt E4@m3 | F4@M3end ~ ~ | ~ ~ ~" }
+  - id: 3
+    name: Cello
+    role: bass
+    instrument: cello
+    patterns:
+      # Oom-pah bass: one note on the downbeat, hemiola in half notes.
+      w1: { length: 1, bars: 8, groove: "D2 ~ - | A2 ~ - | G2 ~ - | A2 ~ - | D2 ~ - | Bb2 ~ - | G2 ~ Bb2 | ~ A2 ~" }
+      w2: { length: 1, bars: 8, groove: "D2 ~ - | F2 ~ - | G2 ~ - | C2 ~ - | F2 ~ - | Bb2 ~ G2 | ~ A2 ~ | D2 ~ -" }
+      # Countermelody: moves against the soprano's held notes, still anchors every downbeat.
+      c1: { length: 1, bars: 8, groove: "D3 C3 Bb2 | A2 F2 D2 | G2 A2 Bb2 | A2 G2 E2 | D2 F2 A2 | Bb2 A2 G2 | G2 ~ Bb2 | ~ A2 ~" }
+      c2: { length: 1, bars: 8, groove: "D3 C3 Bb2 | F2 E2 D2 | G2 Bb2 D3 | C2 E2 G2 | F2 A2 C3 | Bb2 ~ G2 | ~ A2 ~ | D2 - -" }
+      cb1: { length: 1, bars: 8, groove: "F2 A2 C3 | E2 G2 C3 | F2 C3 A2 | Bb2 D3 F2 | G2 Bb2 D3 | C3 Bb2 G2 | A2 F2 Bb2 | C3 G2 C2" }
+      cb2: { length: 1, bars: 8, groove: "F2 A2 C3 | C#3 E2 A2 | D3 A2 F2 | Bb2 F2 D2 | G2 Bb2 D3 | A2 C#3 E3 | A2 - A2 | A2 ~ ~" }
+      ct1: { length: 1, bars: 8, groove: "Bb2 C3 D3 | A2 ~ ~ | D3 C3 Bb2 | Eb3 ~ ~ | C3 Bb2 G2 | F2 ~ A2 | Bb2 D3 F3 | F3 ~ F2" }
+      ct2: { length: 1, bars: 8, groove: "Bb2 F2 D2 | G2 F2 Eb2 | Eb2 G2 Bb2 | D3 ~ F2 | C3 Bb2 A2 | F2 G2 A2 | Bb2 F2 D2 | Bb2 ~ ~" }
+      ct3: { length: 1, bars: 8, groove: "G2 Bb2 D3 | Eb2 G2 Bb2 | C3 ~ ~ | A2 G2 E2 | D2 F2 A2 | Bb2 A2 G2 | E2 G2 Bb2 | A2 ~ ~" }
+      cc: { length: 1, bars: 6, groove: "D2 A2 D3 | Bb2 ~ G2 | A2 ~ ~ | A2 E2 C#3 | D2@cello_end ~ ~ | ~ ~ ~" }
+sections:
+  A:       { bars: 16, level: p, layers: { v1: "a1 a2", v2: "k1 k2", v3: "w1 w2" } }
+  A2:      { bars: 16, level: mp, layers: { v1: "a1v a2v", v2: "k1 k2", v3: "c1 c2" } }
+  B:       { bars: 16, level: f, layers: { v1: "b1 b2", v2: "kb1 kb2", v3: "cb1 cb2" } }
+  A3:      { bars: 16, level: mf, layers: { v1: "a1 a2", v2: "k1 k2", v3: "c1 c2" } }
+  trio:    { bars: 24, level: { from: pp, to: mp }, layers: { v1: "t1 t2 t3", v2: "kt1 kt2 kt3", v3: "ct1 ct2 ct3" } }
+  recap:   { bars: 16, level: { from: f, to: ff }, layers: { v1: "a1v a2v", v2: "k1 k2", v3: "w1 c2" } }
+  # Ritardando over the coda, then the D-minor chord is held and released.
+  coda:    { bars: 6, level: ff, tempo: { to: 112 }, layers: { v1: coda, v2: kc, v3: cc } }
+timeline: [A, A2, B, A3, trio, recap, coda]
+end: { hold_beats: 0, release: true }

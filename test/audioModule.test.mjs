@@ -55,7 +55,7 @@ test("music_generate reports a seeded score and plays its compiled PRG", async (
     client: { runPrg: async (prg) => { played.push(prg); return { success: true }; } },
     logger: createLogger(),
   };
-  const result = await audioModule.invoke("music_generate", {}, ctx);
+  const result = await audioModule.invoke("music_generate", { includeScore: true }, ctx);
   assert.equal(result.isError, undefined);
   assert.equal(result.metadata.style, "chiptune");
   assert.equal(result.metadata.tempo, 130);
@@ -742,4 +742,13 @@ test("record_analyze descriptions state host microphone use on non-C64U backends
   assert.ok(text.includes("host microphone on other backends"));
   const tool = audioModule.describeTools().find((t) => t.name === "record_and_analyze_audio");
   assert.ok(/host default input device \(microphone\)/.test(tool.description));
+});
+
+test("music_generate returns a style resource and omits the score by default", async () => {
+  const ctx = { client: { runPrg: async () => ({ success: true }) }, logger: createLogger() };
+  const result = await audioModule.invoke("music_generate", { style: "ambient", steps: 16 }, ctx);
+  assert.equal(result.isError, undefined);
+  assert.equal(result.metadata.styleExampleUri, "c64://sound/examples/ambient_filter");
+  assert.equal(result.metadata.sidwave, undefined);
+  assert.equal(result.metadata.timeline, undefined);
 });

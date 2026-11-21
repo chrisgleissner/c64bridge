@@ -1,0 +1,42 @@
+# Chip drive | 132 BPM | C minor | 1 SID
+# Techniques: Wavetable arpeggios, filter bass, drums, vibrato and legato portamento.
+# Learn: Compare Launch's transposed bass phrase to Sprint's drum break.
+sidwave: 1.1
+title: Neon Run
+mode: PAL
+tempo: 132
+speed: 2
+voices:
+  - id: 1
+    instrument: lib:filter_bass
+    patterns:
+      launch:
+        length: 0.5
+        groove: [C2, C2@lib:hat, G1, C2@lib:snare, Bb1, C2@lib:hat, G1, C2@lib:kick]
+        transpositions: [0, 0, 5, 3]
+      sprint:
+        length: 0.25
+        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.h.s.h.k.khsh.h" }
+  - id: 2
+    instrument: lib:chip_arp_major
+    patterns:
+      lights:
+        groove: [C4, Bb3, F4, Eb4@lib:chip_arp_minor]
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns:
+      hook:
+        length: 0.5
+        groove:
+          - G4
+          - { note: C5, legato: true, portamento: 4 }
+          - D5
+          - { note: Bb4, legato: true, portamento: 3 }
+          - F5@lib:sync_lead
+          - "-"
+          - Eb5
+          - { note: G4, legato: true, portamento: 5 }
+        fx: { vibrato: { depth: 0.32, rate: 6, delay: 3 } }
+timeline:
+  - { section: Launch, bars: 4, layers: { v1: launch, v2: lights, v3: hook } }
+  - { section: Sprint, bars: 2, layers: { v1: sprint, v2: lights+12, v3: hook } }

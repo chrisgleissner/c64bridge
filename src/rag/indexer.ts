@@ -19,6 +19,7 @@ const DOC_ROOT = path.join(ASSET_ROOT, "doc");
 // Curated reference specs (memory map, VIC-II, SID, game development, Ultimate devices ...).
 // Example sources and the context files are indexed through their own paths.
 const DATA_ROOT = path.join(ASSET_ROOT, "data");
+const SIDWAVE_EXAMPLES_DIR = path.join(DATA_ROOT, "sound/examples");
 const DATA_DOC_EXCLUDE_DIRS = new Set(["context", "basic/examples", "assembly/examples"]);
 // Plans and reviews are internal engineering notes, not C64 reference material.
 const DOC_EXCLUDE_DIRS = new Set(["plans", "reviews"]);
@@ -610,6 +611,7 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
         }
       }
     } catch {}
+    docCandidates.push(...await collectFiles(SIDWAVE_EXAMPLES_DIR, [".yaml", ".yml"]));
     for (const f of ENV_DOC_FILES) {
       if (!shouldExcludeDocFile(f)) {
         docCandidates.push(f);
@@ -692,6 +694,8 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
         (absoluteFile.startsWith(path.resolve(DATA_ROOT) + path.sep) && isCuratedDataDoc(absoluteFile)));
     const isExternalFile = externalRoots.some((root) => absoluteFile === root || absoluteFile.startsWith(root + path.sep));
     const isPlainText = ext === ".txt" || ext === ".text";
+    const isSidwaveExample = (ext === ".yaml" || ext === ".yml") &&
+      absoluteFile.startsWith(SIDWAVE_EXAMPLES_DIR + path.sep);
 
     if (isDocFile) {
       const chunks = chunkMarkdownSections(text, source.file);
@@ -713,6 +717,17 @@ export async function buildAllIndexes({ model, embeddingsDir: overrideDir, basic
           origin: chunk.origin,
         });
       }
+      continue;
+    }
+
+    if (isSidwaveExample) {
+      // Index the annotated header and a short source excerpt. Large scores
+      // are available in full through their file-backed knowledge resource.
+      const excerpt = text.split(/\r?\n/).slice(0, 24).join("\n");
+      preparedByCategory.other.push({
+        file: source.file, root: source.root, text: excerpt, mtimeMs: stat.mtimeMs,
+        ...provenance, license: provenance.licenseLabel,
+      });
       continue;
     }
 

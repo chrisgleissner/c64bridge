@@ -1,0 +1,40 @@
+# Funk | 118 BPM | E minor | 1 SID
+# Techniques: Filter bass, short arps, sync, ring modulation and drum fills.
+# Learn: Listen for the lead leaving space for syncopated bass accents.
+sidwave: 1.1
+title: Copper Steps
+mode: PAL
+tempo: 118
+voices:
+  - id: 1
+    instrument: lib:filter_bass
+    patterns:
+      pocket:
+        length: 0.25
+        groove: [E2, "-", E3@lib:hat, B1, E3@lib:snare, G2, D2, E3@lib:hat, E2, "-", E3@lib:kick, F#2, E3@lib:snare, G2, B1, "-"]
+        transpositions: [0, 0, 5, 0]
+      break:
+        length: 0.25
+        drums: { kit: { k: lib:kick, s: lib:snare, h: lib:hat }, steps: "k.hhs.h.k.khs.hh" }
+  - id: 2
+    instrument: lib:chip_arp_minor
+    patterns:
+      chops: { length: 0.5, groove: ["-", E3, "-", G3@lib:chip_arp_major, "-", A3@lib:chip_arp_major, B3, "-"] }
+  - id: 3
+    instrument: lib:lead_pwm
+    patterns:
+      answer:
+        length: 0.5
+        groove:
+          - B4
+          - { note: D5, legato: true, portamento: 3 }
+          - "-"
+          - G4@lib:sync_lead
+          - E5
+          - { note: B4, legato: true, portamento: 4 }
+          - D5@lib:bell_ring
+          - "-"
+        fx: { vibrato: { depth: 0.38, rate: 7, delay: 3 } }
+timeline:
+  - { section: Pocket, bars: 4, layers: { v1: pocket, v2: chops, v3: answer } }
+  - { section: Break, bars: 2, layers: { v1: break, v2: chops, v3: answer } }

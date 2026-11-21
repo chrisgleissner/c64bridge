@@ -17,6 +17,9 @@ test("HIL F2b note_on reports restoring muted master volume", async () => {
   client.facadePromise = Promise.resolve(facade);
   client.sidControl = new WeakMap();
   client.sidVolume = new WeakMap();
+  client.sidwaveSessions = new Map();
+  client.sidwaveQueue = new WeakMap();
+  client.pendingSidwave = 0;
   const result = await audioModule.invoke("sid_note_on", { voice: 1, note: "A4" }, {
     client, logger, platform: platform("c64u"),
   });

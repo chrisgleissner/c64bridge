@@ -4,16 +4,59 @@
   "title": "SIDWAVE Composition Schema",
   "description": "See sidwave.md for the meaning of every field. The compiler also checks note ranges after transposition and minimum note durations.",
   "type": "object",
-  "required": ["sidwave", "title", "tempo", "mode", "voices", "timeline"],
+  "required": ["sidwave", "title", "tempo", "voices", "timeline"],
+  "allOf": [{
+    "if": { "not": { "required": ["samples"] } },
+    "then": { "properties": { "voices": { "minItems": 1 } } }
+  }],
   "properties": {
-    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, "1.0", "1", "1.1"] },
+    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, "1.0", "1", "1.1", "1.2"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
+    "meter": { "enum": [3, 4], "default": 4, "description": "Quarter-note beats per bar." },
     "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
+    "cpu": { "type": "string", "enum": ["turbo"] },
+    "kit": { "type": "object", "minProperties": 1, "propertyNames": { "pattern": "^[A-Za-z]$" }, "additionalProperties": { "$ref": "#/$defs/instrumentRef" }, "description": "1.2: default kit for drums.steps; the keys are also groove and motif tokens that play the instrument at C3." },
+    "sections": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$" }, "additionalProperties": { "$ref": "#/$defs/section" }, "description": "1.2: named sections used by the timeline." },
+    "loop_to": { "type": ["string", "integer"], "minimum": 1, "description": "1.2: section name or 1-based timeline index the song loops to. Exclusive with end and length_bars." },
+    "accent": { "type": "integer", "minimum": 0, "maximum": 8, "default": 3, "description": "1.2: sustain levels added by a ! accent." },
+    "end": { "oneOf": [{ "const": true }, { "type": "object", "properties": { "hold_beats": { "type": "number", "minimum": 0, "maximum": 64 }, "release": { "type": "boolean", "default": true } }, "additionalProperties": false }], "description": "1.2: hold the notes sounding at the last bar line, release them and stop writing." },
+    "swing": { "type": "number", "minimum": 0.5, "maximum": 0.75, "description": "1.2: delays every second swing_unit." },
+    "swing_unit": { "type": "number", "minimum": 0.015625, "maximum": 1, "default": 0.25 },
+    "samples": { "$ref": "#/$defs/samples" },
+    "sids": {
+      "description": "Defaults to one SID at $D400. List order determines numeric voice placement.",
+      "oneOf": [
+        { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/sid" } },
+        {
+          "type": "object",
+          "required": ["layout"],
+          "properties": {
+            "layout": { "enum": ["ultisid8", "ultisid8+socket1", "ultisid8+sockets"] },
+            "pan": { "enum": ["wide", "narrow"], "description": "1.2: UltiSID 1 Left 5 / UltiSID 2 Right 5 (wide) or Left 3 / Right 3 (narrow); a socket SID is Center." },
+            "overrides": {
+              "type": "object",
+              "propertyNames": { "pattern": "^sid([1-9]|10)$" },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "volume": { "type": "integer", "minimum": 0, "maximum": 15 },
+                  "pan": { "type": "string", "pattern": "^(Center|(Left|Right) [1-5])$" },
+                  "model": { "enum": ["6581", "8580"] },
+                  "filter": { "$ref": "#/$defs/sidFilter" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "instruments": { "type": "object", "additionalProperties": { "$ref": "#/$defs/instrument" } },
-    "length_bars": { "type": "integer", "minimum": 1, "description": "Truncates or repeats the timeline to this many 4/4 bars." },
+    "length_bars": { "type": "integer", "minimum": 1, "description": "Truncates or repeats the timeline to this many bars." },
     "global_fx": {
       "type": "object",
       "properties": {
@@ -26,33 +69,31 @@
           },
           "additionalProperties": false
         },
-        "filter_env": {
-          "type": "object",
-          "required": ["cutoff_base"],
-          "properties": {
-            "cutoff_base": { "type": "number", "minimum": 0, "maximum": 2047 },
-            "sweep": { "type": "number", "minimum": -2047, "maximum": 2047 },
-            "speed": { "type": "number", "exclusiveMinimum": 0, "maximum": 1024, "description": "Beats per one-way sweep." },
-            "resonance": { "type": "integer", "minimum": 0, "maximum": 15 },
-            "type": { "type": "string", "enum": ["lowpass", "bandpass", "highpass"] },
-            "voices": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 3 } }
-          },
-          "additionalProperties": false
-        }
+        "filter_env": { "$ref": "#/$defs/filterEnv" }
       },
       "additionalProperties": false
     },
     "voices": {
       "type": "array",
-      "minItems": 1,
-      "maxItems": 3,
+      "maxItems": 30,
       "items": {
         "type": "object",
-        "required": ["id"],
+        "anyOf": [{ "required": ["id"] }, { "required": ["sid", "channel"] }],
+        "dependentRequired": { "sid": ["channel"], "channel": ["sid"] },
+        "not": { "required": ["echo", "unison"] },
         "properties": {
-          "id": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "id": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 30 }, { "type": "string", "pattern": "^d[1-9][0-9]*$", "description": "1.2 digi voice ID, for example d1." }] },
+          "digi": { "$ref": "#/$defs/sidId", "description": "1.2: SID that plays this voice's kit entries named sample:<name> as CIA2 digis." },
+          "sid": { "$ref": "#/$defs/sidId" },
+          "channel": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "level": { "$ref": "#/$defs/level" },
+          "role": { "enum": ["bass", "lead", "drums", "pad", "arp"], "description": "1.2: used only by the lint." },
+          "center": { "oneOf": [{ "type": "boolean" }, { "type": "object", "properties": { "sid": { "$ref": "#/$defs/sidId" }, "channel": { "type": "integer", "minimum": 1, "maximum": 3 }, "level": { "$ref": "#/$defs/level" } }, "additionalProperties": false }], "description": "1.2: mirror the voice onto the paired SID on the other pan side." },
           "name": { "type": "string" },
           "instrument": { "$ref": "#/$defs/instrumentRef" },
+          "detune": { "$ref": "#/$defs/detune" },
+          "echo": { "$ref": "#/$defs/echo" },
+          "unison": { "$ref": "#/$defs/unison" },
           "waveform": { "type": "string", "enum": ["pulse", "sawtooth", "triangle", "noise", "saw", "tri"] },
           "pulse_width": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 4095, "description": "Fraction (0 < x <= 1) or 12-bit value." },
           "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
@@ -66,6 +107,7 @@
                   "properties": {
                     "type": { "const": "arpeggio" },
                     "notes": { "type": "array", "items": { "$ref": "#/$defs/note" }, "minItems": 1 },
+                    "bars": { "type": "integer", "minimum": 1 },
                     "frame_rate": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Frames per chord tone; makes the notes a fast chord arpeggio." },
                     "length": { "$ref": "#/$defs/length" },
                     "transpositions": { "$ref": "#/$defs/transpositions" },
@@ -77,7 +119,8 @@
                   "type": "object",
                   "required": ["motif"],
                   "properties": {
-                    "motif": { "type": "string", "description": "Notes, semitone offsets from root, chord symbols, '-' rests and '~' ties." },
+                    "motif": { "type": "string", "description": "Notes, semitone offsets from root, chord symbols, '-' rests and '~' ties. 1.2 also accepts '|' bar lines, ( ) slurs, ! accents and / glides, and rejects unknown words." },
+                    "bars": { "type": "integer", "minimum": 1, "description": "1.2: checked against the pattern length." },
                     "root": { "$ref": "#/$defs/note" },
                     "length": { "$ref": "#/$defs/length" },
                     "transpositions": { "$ref": "#/$defs/transpositions" },
@@ -89,7 +132,8 @@
                   "type": "object",
                   "oneOf": [{ "required": ["groove"] }, { "required": ["drums"] }],
                   "properties": {
-                    "groove": { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]@[^@]+$" }, { "enum": ["-", ".", "~", "_", "r", "rest", null] }, { "$ref": "#/$defs/grooveEntry" }] }, "minItems": 1 },
+                    "bars": { "type": "integer", "minimum": 1, "description": "1.2: checked against the pattern length." },
+                    "groove": { "oneOf": [{ "type": "string", "description": "1.2: space-separated tokens [/]NOTE[!][@inst], kit keys, - ~ | and ( ) slurs." }, { "type": "array", "items": { "anyOf": [{ "$ref": "#/$defs/note" }, { "type": "string", "pattern": "^[A-Ga-g][#b]?[0-7]@[^@]+$" }, { "enum": ["-", ".", "~", "_", "r", "rest", null] }, { "$ref": "#/$defs/grooveEntry" }, { "$ref": "#/$defs/chordArp" }, { "type": "string", "pattern": "^[A-G][#b]?[A-Za-z0-9+]*@arp$" }, { "type": "string", "description": "1.2 compact token run, for example \"(A4 C5) | D5!\"." }] }, "minItems": 1 }] },
                     "drums": { "$ref": "#/$defs/drums" },
                     "length": { "$ref": "#/$defs/length" },
                     "transpositions": { "$ref": "#/$defs/transpositions" },
@@ -108,25 +152,336 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "type": "object",
-        "required": ["bars", "layers"],
-        "properties": {
-          "section": { "type": "string" },
-          "tempo": { "type": "number", "minimum": 30, "maximum": 220 },
-          "swing": { "type": "number", "minimum": 0, "maximum": 0.5 },
-          "bars": { "type": "integer", "minimum": 1 },
-          "layers": {
-            "type": "object",
-            "propertyNames": { "pattern": "^(v|voice)?[1-3]$" },
-            "additionalProperties": { "type": ["string", "null"], "description": "Pattern name with optional ↑ ↓ +N -N modifiers and a trailing – for fade; \"-\" is silence." }
-          }
-        },
-        "additionalProperties": false
+        "oneOf": [
+          { "$ref": "#/$defs/section" },
+          { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]*([+-][0-9]+)?(\\*[0-9]+)?$", "description": "1.2: name[+N|-N][*count] of a named section." }
+        ]
       }
     }
   },
   "additionalProperties": false,
   "$defs": {
+    "level": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 15 }, { "enum": ["pp", "p", "mp", "mf", "f", "ff"] }], "description": "1.2: scales the sustain nibble written at an attack. pp 4, p 6, mp 8, mf 10, f 12, ff 15." },
+    "hz": { "type": "string", "pattern": "^(\\d+(\\.\\d+)?|\\.\\d+)[kK]?[hH][zZ]$", "description": "1.2: a cutoff such as 900Hz or 1.2kHz; needs sids[].model." },
+    "ramp": {
+      "description": "A number, or a linear ramp over the section (or over bars: N and then held).",
+      "oneOf": [
+        { "type": "number" },
+        { "type": "object", "required": ["to"], "properties": { "from": { "type": "number" }, "to": { "type": "number" }, "bars": { "type": "integer", "minimum": 1 } }, "additionalProperties": false }
+      ]
+    },
+    "levelRamp": {
+      "oneOf": [
+        { "$ref": "#/$defs/level" },
+        { "type": "object", "required": ["to"], "properties": { "from": { "$ref": "#/$defs/level" }, "to": { "$ref": "#/$defs/level" }, "bars": { "type": "integer", "minimum": 1 } }, "additionalProperties": false }
+      ]
+    },
+    "filterMove": {
+      "type": "object",
+      "properties": { "cutoff": { "$ref": "#/$defs/ramp", "description": "Offset in register units." }, "resonance": { "type": "integer", "minimum": 0, "maximum": 15 } },
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "properties": {
+        "use": { "type": "string", "description": "1.2: a named section whose fields this entry overrides (layers merge per voice)." },
+        "section": { "type": "string" },
+        "tempo": { "oneOf": [{ "type": "number", "minimum": 30, "maximum": 220 }, { "type": "object", "required": ["to"], "properties": { "to": { "type": "number", "minimum": 30, "maximum": 220 } }, "additionalProperties": false }], "description": "1.2: BPM for this entry, or { to } for a linear change over the entry." },
+        "swing": { "type": "number", "minimum": 0.5, "maximum": 0.75 },
+        "bars": { "type": "integer", "minimum": 1, "description": "Optional in 1.2: defaults to the longest layer's single pass." },
+        "transpose": { "type": "integer", "minimum": -96, "maximum": 96, "description": "1.2: semitones; drums, kit tokens and absolute table notes are exempt." },
+        "level": { "$ref": "#/$defs/levelRamp", "description": "1.2: section level, a mark, number or ramp." },
+        "levels": { "type": "object", "propertyNames": { "pattern": "^v[1-9][0-9]?$" }, "additionalProperties": { "$ref": "#/$defs/levelRamp" }, "description": "1.2: per-voice level replacing the section level." },
+        "volume": { "description": "1.2: chip volume 0-15 (slewed one step per two frames), a ramp, or per SID.", "anyOf": [{ "$ref": "#/$defs/ramp" }, { "type": "object", "propertyNames": { "$ref": "#/$defs/sidId" }, "additionalProperties": { "$ref": "#/$defs/ramp" } }] },
+        "filter": { "description": "1.2: cutoff offset and resonance for this entry; address a SID by ID.", "anyOf": [{ "$ref": "#/$defs/filterMove" }, { "type": "object", "propertyNames": { "$ref": "#/$defs/sidId" }, "additionalProperties": { "$ref": "#/$defs/filterMove" } }] },
+        "layers": {
+          "type": "object",
+          "propertyNames": { "pattern": "^([vV]([oO][iI][cC][eE])?)?([1-9]|[12][0-9]|30)$|^d[1-9][0-9]*$" },
+          "additionalProperties": { "type": ["string", "null"], "description": "Pattern name with optional ↑ ↓ +N -N modifiers and a trailing – for fade; \"-\" is silence. 1.2: a sequence such as \"a*3 f (b a)*2 -\"." }
+        }
+      },
+      "additionalProperties": false
+    },
+    "detune": { "type": "number", "minimum": -100, "maximum": 100, "description": "Cents relative to the source voice." },
+    "echo": {
+      "type": "object",
+      "required": ["voice", "volume"],
+      "oneOf": [{ "required": ["delay"] }, { "required": ["delay_beats"] }],
+      "properties": {
+        "voice": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "delay": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Video frames in 1.2 (player calls in 1.0 and 1.1)." },
+        "delay_beats": { "type": "number", "minimum": 0.015625, "maximum": 64, "description": "1.2: follows tempo and swing." },
+        "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4, "description": "1.2: replaces the copy's envelope." },
+        "volume": { "type": "number", "minimum": 0, "maximum": 1 },
+        "detune": { "$ref": "#/$defs/detune" }
+      },
+      "additionalProperties": false
+    },
+    "unison": {
+      "type": "object",
+      "required": ["voice"],
+      "properties": {
+        "voice": { "type": "integer", "minimum": 1, "maximum": 30 },
+        "detune": { "$ref": "#/$defs/detune", "default": 5 }
+      },
+      "additionalProperties": false
+    },
+    "chordArp": {
+      "type": "object",
+      "required": ["chord"],
+      "properties": {
+        "chord": { "type": "string", "pattern": "^[A-G][#b]?[A-Za-z0-9+]*$" },
+        "arp": { "type": "string", "description": "Comma-separated semitone offsets, e.g. 0,3,7,10." },
+        "speed": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1 },
+        "inst": { "$ref": "#/$defs/instrumentRef" },
+        "len": { "$ref": "#/$defs/length" }
+      },
+      "additionalProperties": false
+    },
+    "bend": {
+      "type": "object",
+      "required": ["to", "frames"],
+      "properties": {
+        "to": { "anyOf": [
+          { "$ref": "#/$defs/note" },
+          { "type": "integer", "minimum": -48, "maximum": 48 },
+          { "type": "string", "pattern": "^[+-]?[0-9]+$" }
+        ] },
+        "frames": { "type": "integer", "minimum": 1, "maximum": 255 }
+      },
+      "additionalProperties": false
+    },
+    "hardRestart": {
+      "type": "object",
+      "properties": {
+        "frames": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
+        "test": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false
+    },
+    "samples": {
+      "type": "object",
+      "required": ["rate"],
+      "properties": {
+        "rate": {"type": "integer", "minimum": 16, "maximum": 8000},
+        "defs": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"},
+          "maxProperties": 255,
+          "additionalProperties": {"$ref": "#/$defs/sampleDefinition"}
+        },
+        "voices": {"type": "array", "minItems": 1, "maxItems": 255, "items": {"$ref": "#/$defs/sampleTrigger"}},
+        "triggers": {"type": "array", "minItems": 1, "maxItems": 255, "items": {"$ref": "#/$defs/sampleTrigger"}}
+      },
+      "additionalProperties": false
+    },
+    "sampleDefinition": {
+      "type": "object",
+      "properties": {
+        "synth": {"$ref": "#/$defs/sampleSynth"},
+        "file": {"type": "string", "minLength": 1},
+        "file_rate": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "b64": {"type": "string", "minLength": 1},
+        "base64": {"type": "string", "minLength": 1},
+        "hex": {"type": "string", "minLength": 1},
+        "kit": {"enum": ["kick", "snare", "clap", "hat", "tom", "zap"]},
+        "loop": {"type": "boolean"},
+        "dither": {"enum": ["none", "tpdf", "shaped"]},
+        "gain_db": {"type": "number", "minimum": -96, "maximum": 48},
+        "trim": {"type": "boolean"}
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {"required": ["synth"]},
+        {"required": ["file"]},
+        {"required": ["b64"]},
+        {"required": ["base64"]},
+        {"required": ["hex"]},
+        {"required": ["kit"]}
+      ]
+    },
+    "sampleTrigger": {
+      "type": "object",
+      "properties": {
+        "synth": {"$ref": "#/$defs/sampleSynth"},
+        "file": {"type": "string", "minLength": 1},
+        "file_rate": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+        "b64": {"type": "string", "minLength": 1},
+        "base64": {"type": "string", "minLength": 1},
+        "hex": {"type": "string", "minLength": 1},
+        "kit": {"enum": ["kick", "snare", "clap", "hat", "tom", "zap"]},
+        "loop": {"type": "boolean"},
+        "dither": {"enum": ["none", "tpdf", "shaped"]},
+        "gain_db": {"type": "number", "minimum": -96, "maximum": 48},
+        "trim": {"type": "boolean"},
+        "sid": {"$ref": "#/$defs/sidId"},
+        "sample": {"type": "string", "minLength": 1},
+        "at": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "items": {"type": "integer", "minimum": 0, "maximum": 16777215},
+          "uniqueItems": true
+        },
+        "bar": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "beat": {"type": "number", "minimum": 1, "maximum": 4.999999999},
+        "at_beat": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "items": {
+            "anyOf": [
+              {"type": "number", "minimum": 0, "maximum": 16384},
+              {
+                "type": "object",
+                "required": ["bar"],
+                "properties": {"bar": {"type": "integer", "minimum": 1, "maximum": 4096}, "beat": {"type": "number", "minimum": 1, "maximum": 4.999999999}},
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "pattern": {"$ref": "#/$defs/samplePattern"},
+        "pitch": {"type": "number", "minimum": -48, "maximum": 48},
+        "length_beats": {"type": "number", "minimum": 0.001, "maximum": 16384}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "oneOf": [{"required": ["at"]}, {"required": ["bar"]}, {"required": ["at_beat"]}, {"required": ["pattern"]}]
+        },
+        {
+          "oneOf": [
+            {"required": ["sample"]},
+            {"required": ["pattern"]},
+            {"required": ["synth"]},
+            {"required": ["file"]},
+            {"required": ["b64"]},
+            {"required": ["base64"]},
+            {"required": ["hex"]},
+            {"required": ["kit"]}
+          ]
+        }
+      ]
+    },
+    "samplePattern": {
+      "type": "object",
+      "required": ["steps", "map"],
+      "properties": {
+        "steps": {"type": "string", "pattern": "^[A-Za-z0-9.]{1,256}$"},
+        "map": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+        "from_bar": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "to_bar": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "every": {"type": "integer", "minimum": 1, "maximum": 4096}
+      },
+      "additionalProperties": false
+    },
+    "sampleSynth": {
+      "type": "object",
+      "properties": {
+        "osc": {"enum": ["sine", "triangle", "square", "saw", "noise"]},
+        "freq": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "to": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "ms": {"type": "number", "minimum": 0.1, "maximum": 120000},
+        "gain": {"type": "number", "minimum": 0, "maximum": 16},
+        "duty": {"type": "number", "minimum": 0.01, "maximum": 0.99},
+        "layers": {"type": "array", "minItems": 1, "maxItems": 16, "items": {"$ref": "#/$defs/sampleLayer"}},
+        "notes": {"type": "string", "minLength": 1},
+        "formant": {"enum": ["a", "e", "i", "o", "u"]},
+        "env": {
+          "type": "object",
+          "properties": {
+            "a": {"type": "number", "minimum": 0, "maximum": 120000},
+            "d": {"type": "number", "minimum": 0, "maximum": 120000},
+            "s": {"type": "number", "minimum": 0, "maximum": 1},
+            "r": {"type": "number", "minimum": 0, "maximum": 120000}
+          },
+          "additionalProperties": false
+        },
+        "lp": {"type": "number", "minimum": 1, "maximum": 100000},
+        "hp": {"type": "number", "minimum": 1, "maximum": 100000},
+        "drive": {"type": "number", "minimum": 0, "maximum": 32},
+        "crush": {
+          "anyOf": [
+            {"type": "integer", "minimum": 1, "maximum": 16},
+            {
+              "type": "object",
+              "properties": {"bits": {"type": "integer", "minimum": 1, "maximum": 16}, "rate": {"type": "number", "minimum": 1, "maximum": 100000}},
+              "additionalProperties": false
+            }
+          ]
+        },
+        "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      },
+      "additionalProperties": false
+    },
+    "sampleLayer": {
+      "type": "object",
+      "properties": {
+        "osc": {"enum": ["sine", "triangle", "square", "saw", "noise"]},
+        "freq": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "to": {"anyOf": [{"type": "number", "minimum": 0.01, "maximum": 100000}, {"type": "string", "pattern": "^[A-Ga-g][#b]?-?[0-9]$"}]},
+        "ms": {"type": "number", "minimum": 0.1, "maximum": 120000},
+        "gain": {"type": "number", "minimum": 0, "maximum": 16},
+        "duty": {"type": "number", "minimum": 0.01, "maximum": 0.99}
+      },
+      "additionalProperties": false
+    },
+    "sidId": { "type": ["string", "integer"], "minLength": 1 },
+    "sid": {
+      "type": "object",
+      "required": ["id", "address"],
+      "properties": {
+        "id": { "$ref": "#/$defs/sidId" },
+        "address": { "type": "string", "pattern": "^[$][Dd][4-7][02468AaCcEe]0$" },
+        "model": { "enum": ["6581", "8580"] },
+        "pan": { "type": "string", "pattern": "^(Center|(Left|Right) [1-5])$" },
+        "volume": { "type": "integer", "minimum": 0, "maximum": 15, "default": 15 },
+        "filter": { "$ref": "#/$defs/sidFilter" }
+      },
+      "additionalProperties": false
+    },
+    "sidFilter": {
+      "anyOf": [
+        { "$ref": "#/$defs/filterEnv" },
+        {
+          "type": "object",
+          "properties": {
+            "filter_env": { "$ref": "#/$defs/filterEnv" },
+            "filter_mod": { "$ref": "#/$defs/filterMod" },
+            "owner": { "description": "1.2: the voice (ID or vN) whose filter tables run; routing is static.", "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 30 }, { "type": "string", "pattern": "^[vV]?[0-9]+$" }] },
+            "route": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 3 }, "uniqueItems": true, "description": "1.2: local channels that pass through the filter." }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "filterEnv": {
+      "type": "object",
+      "required": ["cutoff_base"],
+      "properties": {
+        "cutoff_base": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 2047 }, { "$ref": "#/$defs/hz" }] },
+        "sweep": { "type": "number", "minimum": -2047, "maximum": 2047 },
+        "speed": { "type": "number", "exclusiveMinimum": 0, "maximum": 1024, "description": "Beats per one-way sweep." },
+        "resonance": { "type": "integer", "minimum": 0, "maximum": 15 },
+        "type": { "type": "string", "enum": ["lowpass", "bandpass", "highpass"] },
+        "voices": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 3 } }
+      },
+      "additionalProperties": false
+    },
+    "filterMod": {
+      "type": "object",
+      "required": ["sweep"],
+      "properties": {
+        "sweep": { "type": ["string", "number"], "description": "e.g. \"+500 over 8 steps\" (steps, beats, bars or frames)." },
+        "steps": { "type": "number", "exclusiveMinimum": 0 },
+        "beats": { "type": "number", "exclusiveMinimum": 0 },
+        "bars": { "type": "number", "exclusiveMinimum": 0 },
+        "frames": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
     "instrument": {
       "type": "object",
       "properties": {
@@ -137,13 +492,17 @@
         "loop": { "type": "integer", "minimum": 0, "description": "Zero-based loop index for tables declared as lists; omitted holds the final value." },
         "portamento": { "$ref": "#/$defs/portamento" },
         "legato": { "$ref": "#/$defs/legato" },
+        "hard_restart": { "$ref": "#/$defs/hardRestart" },
+        "source_note": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$", "description": "1.2: pitch of the silent source oscillator under a sync or ring voice." },
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
         "filtertable": { "$ref": "#/$defs/filtertable" },
         "wavetable": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": {
           "wave": { "type": "string", "enum": ["tri", "saw", "pulse", "noise", "tri+pulse", "saw+pulse", "tri+saw", "tri+saw+pulse"] },
           "test": { "type": "boolean" }, "gate": { "type": "boolean", "default": true }, "ring": { "type": "boolean" }, "sync": { "type": "boolean" },
           "note": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$" },
-          "frames": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1 }
+          "frames": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1, "description": "Video frames in 1.2." },
+          "calls": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.2: player calls instead of frames." },
+          "slide_to": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$", "description": "1.2: linear pitch slide reaching the target on the last call of the step." }
         }, "additionalProperties": false } }
       },
       "additionalProperties": true
@@ -156,7 +515,8 @@
           "required": ["steps"],
           "properties": {
             "steps": { "type": "array", "minItems": 1, "maxItems": 255, "items": { "$ref": "#/$defs/pulsetableStep" } },
-            "loop": { "type": "integer", "minimum": 0, "maximum": 254 }
+            "loop": { "type": "integer", "minimum": 0, "maximum": 254 },
+            "reset": { "type": "boolean", "default": true, "description": "1.2: false keeps the table running across attacks." }
           },
           "additionalProperties": false
         }
@@ -169,7 +529,8 @@
       "properties": {
         "set": { "anyOf": [{ "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, { "type": "integer", "minimum": 1, "maximum": 4094 }] },
         "add": { "type": "integer", "minimum": -2048, "maximum": 2047 },
-        "frames": { "type": "integer", "minimum": 1, "maximum": 255 }
+        "frames": { "type": "integer", "minimum": 1, "maximum": 255, "description": "Video frames in 1.2." },
+        "calls": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.2: player calls instead of frames." }
       },
       "additionalProperties": false
     },
@@ -181,7 +542,8 @@
           "required": ["steps"],
           "properties": {
             "steps": { "type": "array", "minItems": 1, "maxItems": 255, "items": { "$ref": "#/$defs/filtertableStep" } },
-            "loop": { "type": "integer", "minimum": 0, "maximum": 254 }
+            "loop": { "type": "integer", "minimum": 0, "maximum": 254 },
+            "reset": { "type": "boolean", "default": true, "description": "1.2: false keeps the table running across attacks." }
           },
           "additionalProperties": false
         }
@@ -191,9 +553,10 @@
       "type": "object",
       "oneOf": [{ "required": ["cutoff"] }, { "required": ["add"] }],
       "properties": {
-        "cutoff": { "type": "integer", "minimum": 0, "maximum": 2047 },
+        "cutoff": { "oneOf": [{ "type": "integer", "minimum": 0, "maximum": 2047 }, { "$ref": "#/$defs/hz" }] },
         "add": { "type": "integer", "minimum": -2048, "maximum": 2047 },
-        "frames": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "frames": { "type": "integer", "minimum": 1, "maximum": 255, "description": "Video frames in 1.2." },
+        "calls": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.2: player calls instead of frames." },
         "resonance": { "type": "integer", "minimum": 0, "maximum": 15 },
         "type": { "enum": ["lowpass", "bandpass", "highpass", "lowpass+highpass", "bandpass+highpass", "all"] }
       },
@@ -223,7 +586,10 @@
         "len": { "$ref": "#/$defs/length" },
         "legato": { "$ref": "#/$defs/legato" },
         "portamento": { "$ref": "#/$defs/portamento" },
-        "slide_from": { "$ref": "#/$defs/note" }
+        "slide_from": { "$ref": "#/$defs/note" },
+        "bend": { "$ref": "#/$defs/bend" },
+        "gate_off": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Frames to release the gate before the end of this note." },
+        "level": { "$ref": "#/$defs/level" }
       },
       "additionalProperties": false
     },
@@ -279,18 +645,7 @@
           },
           "additionalProperties": false
         },
-        "filter_mod": {
-          "type": "object",
-          "required": ["sweep"],
-          "properties": {
-            "sweep": { "type": ["string", "number"], "description": "e.g. \"+500 over 8 steps\" (steps, beats, bars or frames)." },
-            "steps": { "type": "number", "exclusiveMinimum": 0 },
-            "beats": { "type": "number", "exclusiveMinimum": 0 },
-            "bars": { "type": "number", "exclusiveMinimum": 0 },
-            "frames": { "type": "number", "exclusiveMinimum": 0 }
-          },
-          "additionalProperties": false
-        }
+        "filter_mod": { "$ref": "#/$defs/filterMod" }
       },
       "additionalProperties": false
     }

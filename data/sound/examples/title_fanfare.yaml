@@ -1,0 +1,122 @@
+# Heroic title fanfare | 125.31 BPM | Eb major | 2 SIDs, 5 voices
+# Techniques: Saw brass through one filter owner per SID (attack "blat" sweep, then a section cutoff swell), a centred pulse contrabass mirrored on both SIDs, pitch-sliding wavetable timpani with a 16th roll into a crash, chip volume crescendo, delayed vibrato on the held chord and a released, ringing ending.
+# Learn: Call (I), answer (IV-V), drop back and build (vi-IV-ii6-V7) with a timpani roll, then land on a root-position tonic held for a full bar and let it ring out
+sidwave: 1.2
+title: The Gate Opens
+tempo: 125.31
+mode: PAL
+accent: 2
+sids:
+  # Trumpets left, trombone and drums right, contrabass centred on both chips. ONE-SIDE on the trumpets is
+  # accepted: orchestral seating with a narrow pan (Left 2 / Right 2); the trombone answers on the right.
+  # Timpani and crash have sustain 0, so section level does not scale them (LEVEL-NOOP accepted).
+  - { id: sid1, address: "$D400", model: "8580", volume: 11, pan: "Left 2", filter: { owner: v1, route: [1, 2] } }
+  - { id: sid2, address: "$D420", model: "8580", volume: 11, pan: "Right 2", filter: { owner: v4, route: [1] } }
+instruments:
+  # Trumpet 1 owns the SID1 filter: every attack opens the low-pass from about 1 kHz to 3 kHz in 6 frames
+  # and settles near 2 kHz, the brass "blat". Trumpet 2 is routed through the same filter without a table.
+  trumpet:
+    waveform: saw
+    adsr: [1, 6, 11, 4]
+    vibrato: { depth: 0.12, rate: 5.5, delay: 22 }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 6, type: lowpass }, { add: 70, frames: 6 }, { add: -5, frames: 30 }]
+  trumpet2:
+    waveform: saw
+    adsr: [1, 6, 10, 4]
+    vibrato: { depth: 0.1, rate: 5.2, delay: 26 }
+  # The held final chord rings for about 1.5 s after the gate opens (release 10).
+  trumpet_ring:
+    waveform: saw
+    adsr: [1, 6, 11, 10]
+    vibrato: { depth: 0.12, rate: 5.5, delay: 22 }
+    filtertable: [{ cutoff: 1.4kHz, resonance: 6, type: lowpass }, { add: 70, frames: 6 }, { add: -5, frames: 30 }]
+  trumpet2_ring:
+    waveform: saw
+    adsr: [1, 6, 10, 10]
+    vibrato: { depth: 0.1, rate: 5.2, delay: 26 }
+  trombone:
+    waveform: saw
+    adsr: [2, 6, 11, 5]
+    filtertable: [{ cutoff: 400Hz, resonance: 8, type: lowpass }, { add: 45, frames: 8 }, { add: -5, frames: 36 }]
+  trombone_ring:
+    waveform: saw
+    adsr: [2, 6, 11, 10]
+    filtertable: [{ cutoff: 400Hz, resonance: 8, type: lowpass }, { add: 45, frames: 8 }, { add: -5, frames: 36 }]
+  contrabass:
+    waveform: pulse
+    pulse_width: 2048   # 12-bit value: an instrument fraction compiles to width 0 (see report)
+    adsr: [1, 6, 12, 10]
+    hard_restart: { test: true }
+  # Kettle drum: one noise frame, then a triangle that falls a semitone onto the note and decays.
+  timp:
+    waveform: tri
+    adsr: [1, 10, 0, 10]
+    wavetable: [{ wave: noise, note: "+12" }, { wave: tri, note: "+1", slide_to: "+0", frames: 5 }, { note: "+0" }]
+  roll:
+    waveform: tri
+    adsr: [1, 6, 0, 6]
+    wavetable: [{ wave: noise, note: "+12" }, { wave: tri, note: "+1", slide_to: "+0", frames: 2 }, { note: "+0" }]
+voices:
+  - id: 1
+    name: Trumpet 1
+    role: lead
+    instrument: trumpet
+    patterns:
+      call:   { length: 0.25, bars: 1, groove: "Bb4 Bb4 Eb5! ~ ~ ~ Bb4 ~ Eb5 ~ G5! ~ ~ ~ ~ ~" }
+      answer: { length: 0.25, bars: 1, groove: "C5 ~ ~ Ab4 C5 ~ Eb5 ~ D5 ~ ~ Bb4 F5! ~ ~ ~" }
+      build:  { length: 0.25, bars: 2, groove: "G5 ~ ~ ~ ~ ~ F5 Eb5 Eb5 ~ ~ ~ C5 ~ Eb5 ~ | C5 ~ F5 ~ Ab5 ~ ~ ~ G5 ~ ~ ~ F5! ~ ~ ~" }
+      arrive: { length: 0.25, bars: 2, groove: "Eb5! ~ ~ Bb4 Eb5 ~ G5 ~ Bb5! ~ ~ ~ ~ ~ ~ ~ | G5!@trumpet_ring ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 2
+    name: Trumpet 2
+    instrument: trumpet2
+    patterns:
+      call:   { length: 0.25, bars: 1, groove: "G4 G4 Bb4 ~ ~ ~ G4 ~ Bb4 ~ Eb5 ~ ~ ~ ~ ~" }
+      answer: { length: 0.25, bars: 1, groove: "Ab4 ~ ~ Eb4 Ab4 ~ C5 ~ Bb4 ~ ~ F4 D5 ~ ~ ~" }
+      build:  { length: 0.25, bars: 2, groove: "Eb5 ~ ~ ~ ~ ~ D5 C5 C5 ~ ~ ~ Ab4 ~ C5 ~ | Ab4 ~ C5 ~ F5 ~ ~ ~ Eb5 ~ ~ ~ D5 ~ ~ ~" }
+      arrive: { length: 0.25, bars: 2, groove: "Bb4 ~ ~ G4 Bb4 ~ Eb5 ~ G5 ~ ~ ~ F5 ~ ~ ~ | Eb5@trumpet2_ring ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 3
+    name: Contrabass
+    role: bass
+    level: 12
+    instrument: contrabass
+    center: { sid: sid2, channel: 3 }
+    patterns:
+      call:   { length: 1, bars: 1, groove: "Eb2 ~ ~ ~" }
+      answer: { length: 1, bars: 1, groove: "Ab1 ~ Bb1 ~" }
+      build:  { length: 1, bars: 2, groove: "C2 ~ Ab1 ~ | Ab1 ~ Bb1 ~" }
+      arrive: { length: 1, bars: 2, groove: "Eb2! ~ ~ ~ | ~ ~ ~ ~" }
+  - id: 4
+    name: Trombone
+    instrument: trombone
+    patterns:
+      call:   { length: 0.25, bars: 1, groove: "Eb3 ~ ~ ~ ~ ~ Eb3 ~ Bb3 ~ ~ ~ ~ ~ ~ ~" }
+      answer: { length: 0.25, bars: 1, groove: "Ab3 ~ ~ ~ ~ ~ C4 ~ Bb3 ~ ~ ~ ~ ~ D4 ~" }
+      build:  { length: 0.25, bars: 2, groove: "G3 ~ ~ ~ ~ ~ ~ ~ Ab3 ~ ~ ~ ~ ~ ~ ~ | F3 ~ ~ ~ ~ ~ ~ ~ Ab3 ~ ~ ~ ~ ~ ~ ~" }
+      arrive: { length: 0.25, bars: 2, groove: "G3! ~ ~ ~ ~ ~ ~ ~ Bb3 ~ ~ ~ ~ ~ ~ ~ | Bb3@trombone_ring ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
+  - id: 5
+    name: Kettle drums and cymbal
+    role: drums
+    instrument: timp
+    patterns:
+      call:   { length: 0.25, bars: 1, groove: "Eb2 - - - - - - - Bb1 - - - Eb2 - - -" }
+      answer: { length: 0.25, bars: 1, groove: "Eb2 - - - - - - - Bb1 - - - - - Bb1 -" }
+      build:  { length: 0.25, bars: 2, groove: "Eb2 - - - - - - - - - - - Eb2 - - - | Bb1 - - - - - - - Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll" }
+      arrive: { length: 0.25, bars: 2, groove: "C3@lib:crash - - - - - - - - - - - Eb2 - Bb1 - | Eb2 - - - - - - - - - - - - - - -" }
+sections:
+  summons: { bars: 1, level: ff, layers: { v1: call, v2: call, v3: call, v4: call, v5: call } }
+  answer:  { bars: 1, level: f, layers: { v1: answer, v2: answer, v3: answer, v4: answer, v5: answer } }
+  # The second build drops back and swells: lower sustain at each attack, chip volume back up one step per beat,
+  # and the trombone filter opening on top of its own table.
+  build:
+    bars: 2
+    level: { from: mp, to: ff }
+    volume: { from: 5, to: 11 }
+    filter: { sid2: { cutoff: { from: -40, to: 120 } } }
+    layers: { v1: build, v2: build, v3: build, v4: build, v5: build }
+  arrival:
+    bars: 2
+    level: ff
+    filter: { sid1: { cutoff: { from: 0, to: 140 } }, sid2: { cutoff: { from: 120, to: 220 } } }
+    layers: { v1: arrive, v2: arrive, v3: arrive, v4: arrive, v5: arrive }
+timeline: [summons, answer, build, arrival]
+end: { hold_beats: 0, release: true }

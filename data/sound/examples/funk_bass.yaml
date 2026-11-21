@@ -1,0 +1,117 @@
+# Funk | 107.4 BPM | E Dorian | 1 SID
+# Techniques: Slap bass with a one-frame octave click and a per-note resonant filter envelope (the bass owns the filter), popped octaves with a brighter accent filter, dead ghost notes, slurred slides; a 16th drum kit on its own voice; chord chops as one-frame chord wavetables on the offbeats; a call-and-answer PWM lead with delayed vibrato; stop-time break with hard-synced sweeps and a ring-modulated stab over silent source notes; ending on an E9 stab.
+# Learn: Funk is in the gaps: kick on 1 and the "and" of 3, snare on 2 and 4, the bass ghosts and pops between them and the chops answer on the 16th offbeats; the arrangement moves by swapping the chops for the lead, a bridge, and a stop-time break
+sidwave: 1.2
+title: Copper Steps
+tempo: 107.4
+mode: PAL
+accent: 2
+kit: { k: lib:kick, s: lib:snare, h: lib:hat, o: lib:open_hat, t: lib:tom, x: lib:crash }
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+instruments:
+  # Thumb slap: one frame an octave up as the string click, then a resonant low-pass snapping shut (8580 units).
+  slap:
+    waveform: pulse
+    pulse_width: 1638
+    adsr: [1, 7, 7, 1]
+    hard_restart: { test: true }
+    wavetable: [{ note: "+12", frames: 1 }, { note: "+0" }]
+    filtertable: [{ cutoff: 420, resonance: 12, type: lowpass }, { add: -20, frames: 10 }]
+  finger:
+    waveform: pulse
+    pulse_width: 1638
+    adsr: [1, 7, 7, 1]
+    hard_restart: { test: true }
+    filtertable: [{ cutoff: 340, resonance: 11, type: lowpass }, { add: -14, frames: 10 }]
+  # Dead note: a muted thump with no pitch body.
+  ghost:
+    waveform: pulse
+    pulse_width: 1638
+    adsr: [1, 3, 0, 0]
+    filtertable: [{ cutoff: 200, resonance: 8, type: lowpass }]
+  # Popped string: octave above, brighter and more resonant.
+  pop:
+    waveform: pulse
+    pulse_width: 1638
+    adsr: [1, 8, 8, 1]
+    hard_restart: { test: true }
+    wavetable: [{ note: "+12", frames: 1 }, { note: "+0" }]
+    filtertable: [{ cutoff: 620, resonance: 13, type: lowpass }, { add: -60, frames: 6 }]
+  # Chord chops: the chord tones cycle once per frame inside one damped 16th.
+  maj7: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }, { note: "+11" }] }
+  hdim: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+6" }, { note: "+10" }] }
+  min7: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+7" }, { note: "+10" }] }
+  maj: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }] }
+  six: { waveform: pulse, pulse_width: 1229, adsr: [1, 6, 0, 4], loop: 0, wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }, { note: "+9" }] }
+  e9: { waveform: pulse, pulse_width: 1229, adsr: [1, 9, 6, 9], loop: 0, wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+6" }, { note: "+10" }] }
+  lead:
+    waveform: pulse
+    adsr: [1, 6, 11, 4]
+    portamento: 3
+    vibrato: { depth: 0.12, rate: 5.5, delay: 16 }
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.22 }, { add: 20, frames: 30 }, { add: -20, frames: 30 }] }
+  # Hard-synced saw: the source on voice 2 holds the written pitch, the bend sweeps the slave's harmonics.
+  syncsweep: { waveform: saw, adsr: [1, 6, 9, 3], source_note: "+0", wavetable: [{ wave: saw, sync: true }] }
+  ringstab: { waveform: tri, adsr: [1, 9, 0, 6], source_note: "+5", wavetable: [{ wave: tri, ring: true }] }
+voices:
+  - id: 1
+    name: Slap bass
+    role: bass
+    instrument: finger
+    patterns:
+      # Em9 | A9: slap on 1, ghosts, a slide, and an octave pop on the last 16th.
+      vamp: { length: 0.25, bars: 2, groove: "E2@slap - E2@ghost G2 - E2 (A2 /B2) - D2 E2@slap - E2@ghost G2 - E3!@pop | A1@slap - A1@ghost C#2 - E2 (G2 /A2) - E2 A1@slap - G1@ghost (A1 /B1) A2!@pop" }
+      vamp2: { length: 0.25, bars: 2, groove: "E2@slap - E2@ghost G2 - E2 (A2 /B2) - D2 E2@slap - E2@ghost E3!@pop D3 B2 | A1@slap - A1@ghost C#2 - E2 (G2 /A2) - E2 A1@slap - G1 G#1 (A1 /D#2)" }
+      bridge: { length: 0.25, bars: 4, groove: "C2@slap - C2@ghost E2 - G2 (A2 /B2) - C2 G1@slap - C2@ghost E2 C3!@pop - | D2@slap - D2@ghost F#2 - A2 (B2 /C3) - D2 A1@slap - D2@ghost F#2 D3!@pop - | B1@slap - B1@ghost D2 - F#2 (A2 /B2) - B1 F#1@slap - B1@ghost D2 B2!@pop - | E2@slap - E2@ghost G#2 - B2 (D3 /E3) - E2 B1@slap - E2@ghost D2 (D#2 /E2)" }
+      stop: { length: 1, bars: 2, groove: "E2!@pop - - - | A1!@slap - - -" }
+      fill: { length: 0.25, bars: 2, groove: "E2@slap - - E2@ghost G2 - A2 - B2 - D3 - E3!@pop - D3 B2 | (A2 /B2) - G2 E2 - D2 (C#2 /D2) D#2 - E2@ghost B1 - D#2 -" }
+      tag: { length: 0.25, bars: 4, groove: "E2@slap - E2@ghost G2 - E2 (A2 /B2) - D2 E2@slap - E2@ghost G2 - E3!@pop | A1@slap - A1@ghost C#2 - E2 (G2 /A2) - E2 A1@slap - G1 G#1 (A1 /D#2) | E2!@slap - - - - - - - - - - - - - - - | E2!@pop - - - - - - - - - - - - - - -" }
+  # One drum voice: a hit chokes the previous one like a closed hat (TABLE-CUT accepted), and kit sounds have
+  # sustain 0, so their loudness follows chip volume rather than level (LEVEL-NOOP accepted). Bass and kick
+  # restart together on downbeats on purpose; the 2-frame gap is part of the accent (HR-GAP accepted).
+  - id: 2
+    name: Drums
+    role: drums
+    patterns:
+      pocket: { length: 0.25, bars: 1, groove: "k - h - s - h k - h k - s - h o" }
+      pocket2: { length: 0.25, bars: 1, groove: "k - h - s - h k - h k - s - s s" }
+      ride: { length: 0.25, bars: 1, groove: "k - o - s - o k - o k - s - o h" }
+      crashin: { length: 0.25, bars: 1, groove: "x - h - s - h k - h k - s - h o" }
+      stop: { length: 1, bars: 2, groove: "k - - - | k - - -" }
+      fill: { length: 0.25, bars: 2, groove: "k - h - s - h k - h k - s - h o | k - t t - t s - s s - t t s s s" }
+      tag: { length: 0.25, bars: 4, groove: "x - h - s - h k - h k - s - h o | k - h - s - h k - h k - s s s s | k - - - - - - - - - - - - - - - | x - - - - - - - - - - - - - - -" }
+  - id: 3
+    name: Chops and lead
+    role: lead
+    instrument: lead
+    patterns:
+      # Em9 = Gmaj7 shape over E, A9 = C#m7b5 shape over A.
+      chops: { length: 0.25, bars: 2, groove: "- G4@maj7 - G4@maj7 - - G4@maj7 - - G4@maj7 - G4@maj7 - - G4@maj7 - | - C#4@hdim - C#4@hdim - - C#4@hdim - - C#4@hdim - C#4@hdim - - C#4@hdim -" }
+      bchops: { length: 0.25, bars: 4, groove: "- E4@min7 - E4@min7 - - E4@min7 - - E4@min7 - E4@min7 - - E4@min7 - | - D4@maj - D4@maj - - D4@maj - - D4@maj - D4@maj - - D4@maj - | - D4@six - D4@six - - D4@six - - D4@six - D4@six - - D4@six - | - G#4@hdim - G#4@hdim - - G#4@hdim - - G#4@hdim - G#4@hdim - - G#4@hdim -" }
+      call: { length: 0.25, bars: 4, groove: "- - B4 ~ D5 ~ E5 ~ ~ ~ D5 B4 - - A4 ~ | B4 ~ ~ ~ ~ ~ - - - - - - - - - - | - - B4 ~ D5 ~ E5 ~ ~ ~ G5 ~ (F#5 /E5) ~ ~ | D5 ~ ~ ~ B4 ~ ~ ~ - - - - - - - -" }
+      answer: { length: 0.25, bars: 4, groove: "- - E5 ~ G5 ~ A5 ~ ~ ~ G5 E5 - - D5 ~ | E5 ~ ~ ~ ~ ~ - - - - B4 ~ D5 ~ E5 ~ | G5 ~ ~ ~ (F#5 /E5) ~ ~ E5 ~ D5 ~ B4 ~ A4 ~ | B4 ~ ~ ~ ~ ~ ~ ~ - - - - - - - -" }
+      # Stop-time: the drums rest after each downbeat, so voice 2 is free to drive the sync and ring sources.
+      licks:
+        length: 1
+        bars: 2
+        groove:
+          - "-"
+          - { note: E5, inst: syncsweep, bend: { to: E6, frames: 20 } }
+          - { note: D5, inst: syncsweep, bend: { to: D6, frames: 14 } }
+          - B4@ringstab
+          - "-"
+          - { note: G5, inst: syncsweep, bend: { to: G6, frames: 20 } }
+          - E5@ringstab
+          - { note: B4, inst: syncsweep, bend: { to: B5, frames: 12 } }
+      tag: { length: 0.25, bars: 4, groove: "- G4@maj7 - G4@maj7 - - G4@maj7 - - G4@maj7 - G4@maj7 - - G4@maj7 - | - C#4@hdim - C#4@hdim - - C#4@hdim - - C#4@hdim - C#4@hdim - - C#4@hdim - | G#4!@hdim - - - - - - - - - - - - - - - | G#4!@e9 ~ ~ ~ ~ ~ ~ ~ - - - - - - - -" }
+sections:
+  intro:   { bars: 4, level: mf, volume: 13, layers: { v1: vamp, v2: "pocket pocket pocket pocket2" } }
+  vamp:    { bars: 16, level: f, volume: 15, layers: { v1: "vamp vamp vamp vamp2", v2: "crashin pocket pocket pocket2 pocket pocket pocket pocket2", v3: "chops chops call chops chops answer" } }
+  bridge:  { bars: 8, level: f, filter: { cutoff: { from: 0, to: 80 } }, layers: { v1: bridge, v2: "crashin ride ride pocket2", v3: bchops } }
+  solo:    { bars: 16, level: f, layers: { v1: "vamp vamp vamp vamp2", v2: "crashin pocket pocket pocket2 pocket pocket pocket pocket2", v3: "call answer" } }
+  break:   { bars: 4, level: mf, volume: 14, layers: { v1: "stop fill", v2: "stop fill", v3: "licks -*2" } }
+  vamp2:   { bars: 16, level: ff, filter: { cutoff: 40 }, layers: { v1: "vamp vamp vamp vamp2", v2: "crashin pocket pocket pocket2 ride ride ride pocket2", v3: "chops chops call" } }
+  tag:     { bars: 4, level: ff, layers: { v1: tag, v2: tag, v3: tag } }
+timeline: [intro, vamp, bridge, solo, break, vamp2, tag]
+end: { hold_beats: 0, release: true }

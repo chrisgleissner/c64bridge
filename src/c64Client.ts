@@ -15,7 +15,10 @@ import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrgDetailed, prgEntryAddress } from "./tools/translation/assembler.js";
 import { stripHexByteSeparators } from "./tools/hex.js";
-import { SIDWAVE_PLAY_ADDRESS } from "./sidwaveCompiler.js";
+import { SIDWAVE_PLAY_ADDRESS, type CompileResult } from "./sidwaveCompiler.js";
+import type { ParsedSidwave } from "./sidwave.js";
+import { BASIC_IRQ, basicReady, dmaStartSidwave, irqVector, isSidwaveIrq, keyboardIdle } from "./sidwaveUltimateStart.js";
+import { clearUltimateSidWindows, readUltimateSidWindows, prepareSidwaveSetup, sidwaveNeedsMap, type SidwaveSetup } from "./sidwavePlaybackConfig.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
 import { resolveAddressSymbol } from "./knowledge.js";
 import { assertNotBareHex, parseNumericLiteral } from "./numericArg.js";
@@ -388,6 +391,15 @@ function validateMemoryRange(address: number, length: number): void {
 /** Capability probes use a short timeout so an offline device does not hold the request queue for a full request timeout. */
 const CAPABILITY_PROBE_TIMEOUT_MS = 2_000;
 
+interface SidwaveSession {
+  compiled: CompileResult;
+  bases: number[];
+  setup?: SidwaveSetup;
+  attachment: boolean;
+  stopped: boolean;
+  needsMute?: boolean;
+}
+
 export class C64Client {
   private readonly baseUrl: string;
   private readonly http: HttpClient<unknown>;
@@ -403,6 +415,10 @@ export class C64Client {
   private readonly initPromise: Promise<void>;
   private activeType: DeviceType = "c64u";
   private facadePromise: Promise<C64Facade>;
+  private readonly sidwaveSessions = new Map<C64Facade, SidwaveSession>();
+  private readonly sidwaveQueue = new WeakMap<C64Facade, Promise<unknown>>();
+  private pendingSidwave = 0;
+  private sidwaveSwitch?: Promise<void>;
 
   constructor(baseUrl: string, options: C64ClientOptions = {}) {
     this.baseUrl = baseUrl;
@@ -523,18 +539,133 @@ export class C64Client {
     });
   }
 
-  switchBackend(type: DeviceType): void {
+  switchBackend(type: DeviceType): void | Promise<void> {
     const nextFacade = this.allFacades.get(type);
-    if (!nextFacade) {
-      throw new Error(`Backend '${type}' is not configured`);
+    if (!nextFacade) throw new Error(`Backend '${type}' is not configured`);
+    const select = () => {
+      // Platform state is owned by the caller, which updates global routing.
+      this.facadePromise = nextFacade;
+      this.activeType = type;
+      if (type !== "c64u" && this.c64uVideoCaptureSession) {
+        void this.releaseVideoCapture().catch(() => {});
+      }
+      writeDiagnosticEvent("client_switch_backend", { backend: type });
+    };
+    if (this.sidwaveSwitch || (type !== this.activeType && (this.pendingSidwave || this.sidwaveSessions.size))) {
+      const previous = this.sidwaveSwitch;
+      const switching = (async () => {
+        await previous;
+        if (type !== this.activeType) {
+          const facade = await this.facadePromise;
+          await this.withSidwaveQueue(facade, async () => {
+            await this.releaseManagedSidwave(facade);
+            select();
+          });
+        }
+      })();
+      this.sidwaveSwitch = switching;
+      return switching.finally(() => {
+        if (this.sidwaveSwitch === switching) this.sidwaveSwitch = undefined;
+      });
     }
-    // Platform state is owned by the caller so tool-level flows can update global routing explicitly.
-    this.facadePromise = nextFacade;
-    this.activeType = type;
-    if (type !== "c64u" && this.c64uVideoCaptureSession) {
-      void this.releaseVideoCapture().catch(() => {});
+    select();
+  }
+
+  private async withSidwaveQueue<T>(facade: C64Facade, operation: () => Promise<T>): Promise<T> {
+    const previous = this.sidwaveQueue.get(facade);
+    const running = (previous ?? Promise.resolve()).catch(() => {}).then(operation);
+    this.sidwaveQueue.set(facade, running);
+    try {
+      return await running;
+    } finally {
+      if (this.sidwaveQueue.get(facade) === running) this.sidwaveQueue.delete(facade);
     }
-    writeDiagnosticEvent("client_switch_backend", { backend: type });
+  }
+
+  private async replaceSidwave<T>(facade: C64Facade, operation: () => Promise<T>): Promise<T> {
+    return this.withSidwaveQueue(facade, async () => {
+      await this.releaseManagedSidwave(facade);
+      return operation();
+    });
+  }
+
+  async playSidwave(
+    doc: ParsedSidwave, compiled: CompileResult,
+    options: { configure?: boolean; sid?: Uint8Array; facade?: C64Facade } = {},
+  ): Promise<RunBasicResult> {
+    this.pendingSidwave++;
+    try {
+      // Pin before queuing; a completed concurrent switch must not retarget a score.
+      const selected = this.facadePromise;
+      const facade = options.facade ?? await selected;
+      if (this.sidwaveSwitch || selected !== this.facadePromise || facade !== await selected) {
+        throw new Error("The backend changed before SIDWAVE playback could start");
+      }
+      return await this.withSidwaveQueue(facade, async () => {
+        const ultimatePrg = facade.type !== "vice" && !options.sid;
+        const oldSession = this.sidwaveSessions.get(facade);
+        const start = ultimatePrg ? await this.sidwaveStartKind(facade, oldSession) : "reset";
+        await this.releaseManagedSidwave(facade);
+        if (start === "legacy") await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
+        if (doc.cpu === "turbo" && compiled.requiresTurbo && facade.type === "vice") {
+          throw new Error("This SIDWAVE score needs Ultimate turbo. VICE runs the player at stock CPU speed.");
+        }
+        if (compiled.requiresTurbo && options.sid) {
+          throw new Error("This SIDWAVE score needs turbo. Use PRG playback to enable the turbo register.");
+        }
+        const setup = await prepareSidwaveSetup(facade, doc, options.configure === true);
+        const session: SidwaveSession = {
+          compiled, setup, bases: doc.sids.map((sid) => sid.address), attachment: !!options.sid, stopped: true,
+        };
+        const managed = ultimatePrg || setup || sidwaveNeedsMap(doc) || doc.cpu || doc.samples;
+        if (managed) this.sidwaveSessions.set(facade, session);
+        try {
+          await setup?.apply();
+          session.stopped = false;
+          const result = options.sid ? await facade.sidplayAttachment(options.sid)
+            : start === "reset" ? await facade.runPrg(compiled.prg)
+            : await this.withKeyboardLock(facade, async () => {
+                if (!await keyboardIdle(facade)) return facade.runPrg(compiled.prg);
+                if (!setup?.clearsUltimateSidWindows) {
+                  const mapped = await readUltimateSidWindows(facade);
+                  await clearUltimateSidWindows(facade, [...mapped, ...(oldSession?.bases ?? []), ...session.bases]);
+                }
+                await dmaStartSidwave(facade, compiled.prg, compiled.entryAddress);
+                return { success: true, details: { launch: "dma_sys" } };
+              });
+          if (!result.success) await this.releaseManagedSidwave(facade);
+          return result;
+        } catch (error) {
+          try {
+            await this.releaseManagedSidwave(facade);
+          } catch (cleanup) {
+            throw new Error(`${(error as Error).message}; SIDWAVE cleanup failed: ${(cleanup as Error).message}`);
+          }
+          throw error;
+        }
+      });
+    } finally {
+      this.pendingSidwave--;
+    }
+  }
+
+  private async sidwaveStartKind(facade: C64Facade, session?: SidwaveSession): Promise<"reset" | "ready" | "owned" | "legacy"> {
+    if (this.pauseStates.get(facade)?.explicit) return "reset";
+    try {
+      const handler = await irqVector(facade);
+      if (handler === BASIC_IRQ) return await basicReady(facade) ? "ready" : "reset";
+      if (!await keyboardIdle(facade)) return "reset";
+      if (session && !session.stopped && !session.attachment && handler === session.compiled.irqAddress) return "owned";
+      // An unmanaged digi player could still own CIA2. Only recognize the legacy
+      // IRQ stub when no custom NMI vector needs to be detached.
+      if (await isSidwaveIrq(facade, handler)) {
+        const nmi = await facade.readMemory(0x0318, 2);
+        if (nmi[0] === 0x47 && nmi[1] === 0xfe) return "legacy";
+      }
+    } catch {
+      // A missing or unreadable editor state cannot establish a safe DMA launch.
+    }
+    return "reset";
   }
 
   private async withViceMonitor<T>(fn: (client: ViceClient) => Promise<T>): Promise<T> {
@@ -886,7 +1017,7 @@ export class C64Client {
         };
       }
       const facade = await this.facadePromise;
-      const loadResult = await facade.loadPrg(prg);
+      const loadResult = await this.replaceSidwave(facade, () => facade.loadPrg(prg));
       if (!loadResult.success) {
         return { success: false, details: loadResult.details };
       }
@@ -925,7 +1056,7 @@ export class C64Client {
   async runPrg(prg: Uint8Array | Buffer, pinnedFacade?: C64Facade): Promise<RunBasicResult> {
     try {
       const facade = pinnedFacade ?? await this.facadePromise;
-      const res = await facade.runPrg(prg);
+      const res = await this.replaceSidwave(facade, () => facade.runPrg(prg));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -935,7 +1066,7 @@ export class C64Client {
   async loadPrg(prg: Uint8Array | Buffer): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.loadPrg(prg);
+      const res = await this.replaceSidwave(facade, () => facade.loadPrg(prg));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -946,7 +1077,7 @@ export class C64Client {
   async sidplayAttachment(sid: Uint8Array | Buffer, options?: { songnr?: number; songlengths?: Uint8Array | Buffer }): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.sidplayAttachment(sid, options);
+      const res = await this.replaceSidwave(facade, () => facade.sidplayAttachment(sid, options));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -956,7 +1087,7 @@ export class C64Client {
   async loadPrgFile(path: string): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.loadPrgFile(path);
+      const res = await this.replaceSidwave(facade, () => facade.loadPrgFile(path));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -966,7 +1097,7 @@ export class C64Client {
   async runPrgFile(path: string): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.runPrgFile(path);
+      const res = await this.replaceSidwave(facade, () => facade.runPrgFile(path));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -976,7 +1107,7 @@ export class C64Client {
   async runCrtFile(path: string): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.runCrtFile(path);
+      const res = await this.replaceSidwave(facade, () => facade.runCrtFile(path));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -988,7 +1119,7 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       if (!facade.runCrt) throw new Error("Uploading a CRT image is not supported by the selected backend");
-      const res = await facade.runCrt(crt);
+      const res = await this.replaceSidwave(facade, () => facade.runCrt!(crt));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -998,7 +1129,7 @@ export class C64Client {
   async sidplayFile(path: string, songnr?: number): Promise<RunBasicResult> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.sidplayFile(path, songnr);
+      const res = await this.replaceSidwave(facade, () => facade.sidplayFile(path, songnr));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1009,7 +1140,7 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       if (!facade.modplayFile) throw new Error("modplay not supported by selected backend");
-      const res = await facade.modplayFile(path);
+      const res = await this.replaceSidwave(facade, () => facade.modplayFile!(path));
       return { success: res.success, details: res.details };
     } catch (error) {
       return { success: false, details: this.normaliseError(error) };
@@ -1059,7 +1190,7 @@ export class C64Client {
   async reset(): Promise<{ success: boolean; details?: unknown }> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.reset();
+      const res = await this.replaceSidwave(facade, () => facade.reset());
       if (!res.success) return { success: res.success, details: res.details };
       if (facade.type === "vice" || !this.pauseStateFor(facade).explicit) {
         this.clearExplicitPause(facade);
@@ -1110,7 +1241,7 @@ export class C64Client {
   async reboot(): Promise<{ success: boolean; details?: unknown }> {
     try {
       const facade = await this.facadePromise;
-      const res = await facade.reboot();
+      const res = await this.replaceSidwave(facade, () => facade.reboot());
       if (res.success) this.clearExplicitPause(facade);
       return { success: res.success, details: res.details };
     } catch (error) {
@@ -1234,7 +1365,8 @@ export class C64Client {
     try {
       const facade = await this.facadePromise;
       // Unhooking a running SIDWAVE player is best-effort: a failed read must not stop the SID being silenced.
-      const stoppedSidwavePlayer = await this.stopSidwaveIrqPlayer(facade).catch(() => false);
+      const stoppedSidwavePlayer = await this.withSidwaveQueue(facade, async () =>
+        await this.releaseManagedSidwave(facade) || await this.stopSidwaveIrqPlayer(facade).catch(() => false));
       this.sidControl.delete(facade);
       if (hard) {
         const span = 0x19;
@@ -1280,12 +1412,59 @@ export class C64Client {
     return true;
   }
 
-  /** Release a SIDWAVE PRG when another operation needs the SID or its memory. */
+  private async releaseManagedSidwave(facade: C64Facade): Promise<boolean> {
+    const session = this.sidwaveSessions.get(facade);
+    if (!session) return false;
+    if (!session.stopped) {
+      if (session.attachment) {
+        // Ultimate's attachment player has no separate stop operation.
+        const reset = await facade.reset();
+        if (!reset.success) throw new Error("Could not stop the SID attachment player");
+      } else {
+        const { irqAddress, digiNmiAddress, digiChainAddress } = session.compiled;
+        const vectorAt = async (address: number) => {
+          const bytes = await facade.readMemory(address, 2);
+          return (bytes[0] ?? 0) | ((bytes[1] ?? 0) << 8);
+        };
+        const irqOwned = await vectorAt(0x0314) === irqAddress;
+        const nmiOwned = digiNmiAddress !== undefined && await vectorAt(0x0318) === digiNmiAddress;
+        session.needsMute ||= irqOwned || nmiOwned;
+        if (irqOwned) await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
+        if (nmiOwned && digiChainAddress !== undefined) {
+          const chain = await facade.readMemory(digiChainAddress + 1, 2);
+          await this.writeBlocks(facade, [
+            { address: 0xdd0d, bytes: Uint8Array.of(1) },
+            { address: 0xdd0e, bytes: Uint8Array.of(0) },
+            { address: 0x0318, bytes: chain },
+          ]);
+        }
+        if (session.needsMute) {
+          await this.writeBlocks(facade, session.bases.flatMap((base) =>
+            [4, 11, 18, 23, 24].map((offset) => ({ address: base + offset, bytes: Uint8Array.of(0) }))));
+        }
+      }
+      session.stopped = true;
+    }
+    await session.setup?.restore();
+    this.sidwaveSessions.delete(facade);
+    this.sidControl.delete(facade);
+    return true;
+  }
+
+  async stopManagedSidwavePlayback(): Promise<void> {
+    const facade = await this.facadePromise;
+    await this.withSidwaveQueue(facade, () => this.releaseManagedSidwave(facade));
+  }
+
+  /** Release a SIDWAVE player when another operation needs the SID or its memory. */
   async stopSidwavePlayback(pinnedFacade?: C64Facade): Promise<void> {
     const facade = pinnedFacade ?? await this.facadePromise;
-    if (!await this.stopSidwaveIrqPlayer(facade)) return;
-    this.sidControl.delete(facade);
-    await this.writeBlocks(facade, [0xd404, 0xd40b, 0xd412, 0xd417].map((address) => ({ address, bytes: Uint8Array.of(0) })));
+    await this.withSidwaveQueue(facade, async () => {
+      if (await this.releaseManagedSidwave(facade)) return;
+      if (!await this.stopSidwaveIrqPlayer(facade)) return;
+      this.sidControl.delete(facade);
+      await this.writeBlocks(facade, [0xd404, 0xd40b, 0xd412, 0xd417].map((address) => ({ address, bytes: Uint8Array.of(0) })));
+    });
   }
 
   async sidNoteOn(options: {

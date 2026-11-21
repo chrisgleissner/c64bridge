@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
+import { renderSample, sampleWav } from "../../sidwavePcm.js";
 import { Buffer } from "node:buffer";
 import {
   cancelledResult,
@@ -38,18 +42,18 @@ const metaDescriptorIndex = buildDescriptorIndex(metaModule);
 const MAX_SAMPLE_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
 const captureSamplesArgsSchema = objectSchema({
-  description: "Capture raw stereo PCM samples from the Ultimate audio UDP stream.",
+  description: "Capture Ultimate stereo PCM.",
   properties: {
     op: literalSchema("capture_samples"),
     count: optionalSchema(numberSchema({
-      description: "Stereo sample pairs to capture; at most 65536 (about 1.37 s).",
+      description: "Stereo pairs (max 65536).",
       integer: true,
       minimum: 1,
       maximum: 65536,
       default: 256,
     }), 256),
     encoding: optionalSchema(stringSchema({
-      description: "Encoding used for the PCM sample payload.",
+      description: "PCM encoding.",
       enum: ["base64", "hex"],
       default: "base64",
     }), "base64"),
@@ -58,7 +62,38 @@ const captureSamplesArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+const sampleRenderArgsSchema = objectSchema({
+  description: "Render a SIDWAVE sample to WAV.",
+  properties: {
+    op: literalSchema("sample_render"),
+    definition: optionalSchema(objectSchema({ properties: {}, additionalProperties: true })),
+    rate: optionalSchema(numberSchema({ integer: true, minimum: 16, maximum: 8000 }), 4000),
+    outputDir: optionalSchema(stringSchema({ minLength: 1 })),
+  },
+  required: ["op"],
+});
+
 const soundOperations: GroupedOperationConfig[] = [
+  {
+    op: "sample_render",
+    schema: sampleRenderArgsSchema.jsonSchema,
+    handler: async (rawArgs, ctx) => {
+      try {
+        const { definition, rate, outputDir } = sampleRenderArgsSchema.parse(rawArgs);
+        if (ctx.signal?.aborted) return cancelledResult();
+        const sample = renderSample(definition ?? { kit: "kick" }, rate ?? 4000);
+        const dir = outputDir ? resolveHostPath(outputDir, { purpose: "write" }) : defaultHostOutputDir("artifacts", "samples");
+        await mkdir(dir, { recursive: true });
+        const outputPath = resolveHostChildPath(dir, `sample-${randomUUID()}.wav`);
+        await writeFile(outputPath, sampleWav(sample), { flag: "wx", signal: ctx.signal });
+        return jsonResult({ outputPath, stats: sample.stats });
+      } catch (error) {
+        if (ctx.signal?.aborted) return cancelledResult();
+        return toolErrorResult(error instanceof ToolError ? error :
+          new ToolValidationError(error instanceof Error ? error.message : String(error)));
+      }
+    },
+  },
   {
     op: "capture_samples",
     schema: captureSamplesArgsSchema.jsonSchema,
@@ -122,7 +157,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "set_volume",
       ensureDescriptor(audioDescriptorIndex, "sid_volume").inputSchema,
-      { description: "Set the SID master volume register at $D418 (0-15)." },
+      { description: "Set SID volume ($D418)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sid_volume", rawArgs, ctx),
   },
@@ -131,7 +166,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "reset",
       ensureDescriptor(audioDescriptorIndex, "sid_reset").inputSchema,
-      { description: "Soft or hard reset of the SID registers." },
+      { description: "Reset SID registers." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sid_reset", rawArgs, ctx),
   },
@@ -140,7 +175,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "note_on",
       ensureDescriptor(audioDescriptorIndex, "sid_note_on").inputSchema,
-      { description: "Trigger a SID voice with configurable waveform, ADSR, and pitch." },
+      { description: "Start a SID voice." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sid_note_on", rawArgs, ctx),
   },
@@ -149,7 +184,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "note_off",
       ensureDescriptor(audioDescriptorIndex, "sid_note_off").inputSchema,
-      { description: "Release a SID voice by clearing its gate bit." },
+      { description: "Release a SID voice." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sid_note_off", rawArgs, ctx),
   },
@@ -158,7 +193,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "silence_all",
       ensureDescriptor(audioDescriptorIndex, "sid_silence_all").inputSchema,
-      { description: "Silence all SID voices with optional audio verification." },
+      { description: "Silence all SID voices." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sid_silence_all", rawArgs, ctx),
   },
@@ -167,7 +202,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "play_sid_file",
       ensureDescriptor(audioDescriptorIndex, "sidplay_file").inputSchema,
-      { description: "Play a SID file stored on the Ultimate filesystem." },
+      { description: "Play an Ultimate SID file." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "sidplay_file", rawArgs, ctx),
   },
@@ -176,7 +211,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "play_mod_file",
       ensureDescriptor(audioDescriptorIndex, "modplay_file").inputSchema,
-      { description: "Play a MOD tracker module via the Ultimate SID player." },
+      { description: "Play an Ultimate MOD file." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "modplay_file", rawArgs, ctx),
   },
@@ -194,7 +229,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "compile_play",
       ensureDescriptor(audioDescriptorIndex, "music_compile_and_play").inputSchema,
-      { description: "Compile SIDWAVE or CPG source and optionally play it immediately." },
+      { description: "Compile and optionally play SIDWAVE." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "music_compile_and_play", rawArgs, ctx),
   },
@@ -212,7 +247,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "pipeline",
       ensureDescriptor(metaDescriptorIndex, "music_compile_play_analyze").inputSchema,
-      { description: "Compile a SIDWAVE score, play and analyze it." },
+      { description: "Compile, play and analyze SIDWAVE." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "music_compile_play_analyze", rawArgs, ctx),
   },
@@ -221,7 +256,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "analyze",
       ensureDescriptor(audioDescriptorIndex, "analyze_audio").inputSchema,
-      { description: "Analyze SID playback when verification is requested." },
+      { description: "Analyze SID playback or a host WAV." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "analyze_audio", rawArgs, ctx),
   },
@@ -230,7 +265,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "record_analyze",
       ensureDescriptor(audioDescriptorIndex, "record_and_analyze_audio").inputSchema,
-      { description: "Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends)." },
+      { description: "Analyze a recording from the Ultimate stream or host microphone on other backends." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "record_and_analyze_audio", rawArgs, ctx),
   },
@@ -252,14 +287,14 @@ export const soundModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_sound",
-      description: "Grouped entry point for SID control, playback, composition, and analysis workflows.",
+      description: "SID control, playback, composition and audio analysis.",
       summary: "Adjusts SID registers, plays files, composes music, and runs verification captures.",
       inputSchema: discriminatedUnionSchema({
-        description: "Sound operations available via the c64_sound tool.",
+        description: "Sound operations.",
         variants: soundOperations.map((operation) => operation.schema),
       }),
       operationEffects: {
-        capture_samples: "read", set_volume: "write", reset: "write", note_on: "write", note_off: "write",
+        sample_render: "write", capture_samples: "read", set_volume: "write", reset: "write", note_on: "write", note_off: "write",
         silence_all: "write", play_sid_file: "write", play_mod_file: "write", generate: "write",
         compile_play: "write", play_preset: "write", pipeline: "write", analyze: "read", record_analyze: "read",
       },

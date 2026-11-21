@@ -4,6 +4,7 @@
     "op": {
       "type": "string",
       "enum": [
+        "sample_render",
         "capture_samples",
         "set_volume",
         "reset",
@@ -21,12 +22,36 @@
       ],
       "description": "Selects the operation."
     },
+    "definition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {},
+      "additionalProperties": true
+    },
+    "rate": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 16,
+      "maximum": 8000,
+      "default": 4000
+    },
+    "outputDir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
     "count": {
       "type": [
         "integer",
         "null"
       ],
-      "description": "Stereo sample pairs to capture; at most 65536 (about 1.37 s).",
+      "description": "Stereo pairs (max 65536).",
       "minimum": 1,
       "maximum": 65536,
       "default": 256
@@ -36,7 +61,7 @@
         "string",
         "null"
       ],
-      "description": "Encoding used for the PCM sample payload.",
+      "description": "PCM encoding.",
       "enum": [
         "base64",
         "hex"
@@ -165,6 +190,19 @@
       "description": "Song number within the SID file (0-based index).",
       "minimum": 0
     },
+    "includeScore": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "configure": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Set up SID playback."
+    },
     "root": {
       "type": "string",
       "description": "Tonic and lead register.",
@@ -202,7 +240,25 @@
         "string",
         "null"
       ],
-      "description": "Classic or varied lead phrasing. Limits depend on op."
+      "description": "Classic or varied lead phrasing. Limits depend on op.",
+      "enum": [
+        "classic",
+        "expression",
+        "chiptune_drive",
+        "ambient_filter",
+        "funk_bass",
+        "acid_line",
+        "arp_ballad",
+        "drum_and_bass",
+        "digi_groove",
+        "metal_sync",
+        "stereo_echo",
+        "chamber_waltz",
+        "title_fanfare",
+        "ultisid_orchestra",
+        "wall_of_sid",
+        "fuer_elise"
+      ]
     },
     "style": {
       "type": "string",
@@ -297,7 +353,7 @@
         "number",
         "null"
       ],
-      "description": "Length of the verification recording on analyzable backends. Limits depend on op.",
+      "description": "Verification seconds. Limits depend on op.",
       "minimum": 0.5,
       "maximum": 20
     },
@@ -306,7 +362,7 @@
         "number",
         "null"
       ],
-      "description": "Delay between starting playback and beginning verification capture. Limits depend on op.",
+      "description": "Verification delay in ms. Limits depend on op.",
       "minimum": 0,
       "maximum": 5000
     },
@@ -315,7 +371,7 @@
         "boolean",
         "null"
       ],
-      "description": "Restore the backend that was active before the workflow started.",
+      "description": "Return to the starting backend.",
       "default": true
     },
     "expectedSidwave": {
@@ -324,14 +380,14 @@
         "null",
         "object"
       ],
-      "description": "Optional expected SIDWAVE used to refine analysis comparisons. Limits depend on op."
+      "description": "Reference SIDWAVE. Limits depend on op."
     },
     "verifySilenceBefore": {
       "type": [
         "boolean",
         "null"
       ],
-      "description": "Record a quiet baseline before playback (adds the silence duration). Default false.",
+      "description": "Measure silence before playback.",
       "default": false
     },
     "verifySilenceAfter": {
@@ -339,7 +395,7 @@
         "boolean",
         "null"
       ],
-      "description": "Record after playback to confirm the voices were released (adds the silence duration). Default false.",
+      "description": "Measure silence after playback.",
       "default": false
     },
     "silenceDurationSeconds": {
@@ -347,7 +403,7 @@
         "number",
         "null"
       ],
-      "description": "Audio capture length used for silence verification.",
+      "description": "Silence capture seconds.",
       "minimum": 0.5,
       "maximum": 10,
       "default": 1.5
@@ -357,7 +413,7 @@
         "number",
         "null"
       ],
-      "description": "RMS threshold applied to silence verification captures.",
+      "description": "Silence RMS threshold.",
       "minimum": 0,
       "maximum": 1,
       "default": 0.02
@@ -367,7 +423,7 @@
         "number",
         "null"
       ],
-      "description": "Delay between main analysis capture and the post-playback silence check (milliseconds).",
+      "description": "Post-capture delay in ms.",
       "minimum": 0,
       "maximum": 5000,
       "default": 200
@@ -377,10 +433,17 @@
         "number",
         "null"
       ],
-      "description": "Delay between silencing the SID and recording during pre/post checks (milliseconds).",
+      "description": "Delay before silence capture in ms.",
       "minimum": 0,
       "maximum": 5000,
       "default": 150
+    },
+    "wavPath": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
     },
     "request": {
       "type": [
@@ -404,6 +467,6 @@
   "required": [
     "op"
   ],
-  "description": "Sound operations available via the c64_sound tool.\n\nOperations:\n- capture_samples [c64u]: Capture raw stereo PCM samples from the Ultimate audio UDP stream. Optional inputs: count, encoding.\n- set_volume [write]: Set the SID master volume register at $D418 (0-15). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Soft or hard reset of the SID registers. Optional inputs: hard.\n- note_on [write]: Trigger a SID voice with configurable waveform, ADSR, and pitch. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice by clearing its gate bit. Required inputs: voice.\n- silence_all [write]: Silence all SID voices with optional audio verification. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play a SID file stored on the Ultimate filesystem. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play a MOD tracker module via the Ultimate SID player. Required inputs: path.\n- generate [write]: Compose and play an eight-bar SIDWAVE song as a PRG, which replaces the program in memory. root: key and register; pattern: lead offsets; steps: lead notes; tempoMs: classic spacing; waveform: lead sound; preset: phrasing; system: PAL/NTSC. Optional inputs: root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile SIDWAVE or CPG source and optionally play it immediately. Optional inputs: sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile a SIDWAVE score, play and analyze it. Optional inputs: sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback when verification is requested. Optional inputs: request, durationSeconds, expectedSidwave.\n- record_analyze: Record audio for a fixed duration and return SID analysis metrics (Ultimate stream on c64u, host microphone on other backends). Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+  "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG. Replaces the program in memory. Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
   "additionalProperties": false
 }
