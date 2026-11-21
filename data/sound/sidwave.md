@@ -406,8 +406,9 @@ For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo R
 
 The SIDWAVE 1.2 player clears each SID at init, then raises its master volume
 from zero by one step per video frame (about 20 ms on PAL or 17 ms on NTSC),
-even with a multispeed score. At the end of a play-once score it releases
-the voice gates and lowers the master volume at the same rate before stopping.
+even with a multispeed score. At the end of a play-once score without `end`
+it releases the voice gates and lowers the master volume at the same rate before
+stopping; with `end` it leaves the master volume as it is (see End of the song).
 The volume changes preserve each SID's filter mode bits. Active digi samples
 temporarily write their raw four-bit values to the volume register on their SID.
 
