@@ -13,13 +13,11 @@
  * --host is mandatory; there is no default device. This script touches the device: it starts the audio stream, runs a
  * PRG and stops the stream. It does not change any configuration (--configure only prints what the song needs).
  */
-import dgram from "node:dgram";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadModules as loadRepoModules, recordAudioStream, writeWav } from "./lib/ultimateAudioStream.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SAMPLE_RATE = { PAL: 47982.89, NTSC: 47983.0 };
 const PITCHED_MIN = 0.9;
 const PERCUSSION_MIN = 0.8;
@@ -58,18 +56,7 @@ function parseArgs(argv) {
 const MODULES = ["c64Client", "sidwave", "sidwaveCompiler", "audio/sidwaveFidelity", "audio/generateSidwave", "audio/sidwaveSimilarity", "audio/sidwaveReference"];
 
 async function loadModules() {
-  const dist = [path.join(root, "dist"), path.join(root, "dist", "src")].find((dir) =>
-    MODULES.every((name) => fs.existsSync(path.join(dir, `${name}.js`))));
-  if (dist) {
-    const mods = await Promise.all(MODULES.map((m) => import(pathToFileURL(path.join(dist, `${m}.js`)).href)));
-    return Object.assign({}, ...mods);
-  }
-  if (!globalThis.Bun) {
-    const { register } = await import("tsx/esm/api");
-    register();
-  }
-  const src = (m) => import(pathToFileURL(path.join(root, "src", `${m}.ts`)).href);
-  return Object.assign({}, ...(await Promise.all(MODULES.map(src))));
+  return loadRepoModules(MODULES);
 }
 
 function loadSong(spec, m) {
@@ -113,76 +100,6 @@ function parsePan(text, count) {
   return pan;
 }
 
-function writeWav(file, pcm, sampleRate) {
-  const header = Buffer.alloc(44);
-  header.write("RIFF", 0); header.writeUInt32LE(36 + pcm.length * 2, 4); header.write("WAVEfmt ", 8);
-  header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(2, 22);
-  header.writeUInt32LE(Math.round(sampleRate), 24); header.writeUInt32LE(Math.round(sampleRate) * 4, 28);
-  header.writeUInt16LE(4, 32); header.writeUInt16LE(16, 34); header.write("data", 36); header.writeUInt32LE(pcm.length * 2, 40);
-  fs.writeFileSync(file, Buffer.concat([header, Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength)]));
-}
-
-/** Local address the OS would use to reach the device (connect on a UDP socket sends nothing). */
-function localAddressFor(host) {
-  return new Promise((resolve, reject) => {
-    const s = dgram.createSocket("udp4");
-    s.once("error", reject);
-    s.connect(80, host, () => { const { address } = s.address(); s.close(); resolve(address); });
-  });
-}
-
-async function rest(base, headers, method, route, body) {
-  const res = await fetch(`${base}${route}`, { method, headers: { ...headers, ...(body ? { "Content-Type": "application/octet-stream" } : {}) }, body });
-  const text = await res.text();
-  let json; try { json = JSON.parse(text); } catch { /* not JSON */ }
-  if (!res.ok || (json?.errors?.length ?? 0) > 0) throw new Error(`${method} ${route} failed: HTTP ${res.status} ${text.slice(0, 300)}`);
-  return json;
-}
-
-async function record(host, base, headers, seconds, sampleRate, startSong) {
-  const local = await localAddressFor(new URL(base).hostname);
-  const socket = dgram.createSocket("udp4");
-  await new Promise((res, rej) => { socket.once("error", rej); socket.bind(0, "0.0.0.0", res); });
-  const port = socket.address().port;
-  const wanted = Math.ceil(seconds * sampleRate) * 2;
-  const chunks = []; let values = 0; let lastSeq = null; let first = false;
-  let onFirst; const firstSeen = new Promise((r) => { onFirst = r; });
-  let done; const finished = new Promise((r) => { done = r; });
-  socket.on("message", (msg) => {
-    // The device sends a 2-byte packet without samples when the stream starts; it carries no audio and
-    // its sequence number is not part of the sample sequence.
-    if (msg.length <= 2) return;
-    const seq = msg.readUInt16LE(0);
-    if (lastSeq !== null) {
-      const gap = ((seq - lastSeq - 1) & 0xffff);
-      if (gap > 0 && gap < 1000) { const z = new Int16Array(gap * 384); chunks.push(z); values += z.length; }
-    }
-    lastSeq = seq;
-    const n = (msg.length - 2) >> 1;
-    const s = new Int16Array(n);
-    for (let i = 0; i < n; i += 1) s[i] = msg.readInt16LE(2 + 2 * i);
-    chunks.push(s); values += n;
-    if (!first) { first = true; onFirst(); }
-    if (values >= wanted) done();
-  });
-  let started = false;
-  try {
-    await rest(base, headers, "PUT", `/v1/streams/audio:start?ip=${encodeURIComponent(`${local}:${port}`)}`);
-    started = true;
-    const timeout = (ms, what) => new Promise((_, rej) => setTimeout(() => rej(new Error(what)), ms));
-    await Promise.race([firstSeen, timeout(5000, "no audio datagram within 5 s; check that UDP from the device reaches this host")]);
-    await startSong();
-    await Promise.race([finished, timeout((seconds + 5) * 1000, "capture timed out")]);
-  } finally {
-    socket.close();
-    if (started) await rest(base, headers, "PUT", "/v1/streams/audio:stop").catch((e) => console.error(`warning: ${e.message}`));
-  }
-  const all = new Int16Array(Math.min(values, wanted));
-  let o = 0;
-  for (const c of chunks) { if (o >= all.length) break; const k = Math.min(c.length, all.length - o); all.set(c.subarray(0, k), o); o += k; }
-  return all;
-}
-
 const opts = parseArgs(process.argv.slice(2));
 const m = await loadModules();
 const doc = m.parseSidwave(loadSong(opts.song, m));
@@ -211,10 +128,10 @@ if (opts.replay) {
   pcm = Int16Array.from(w.samples, (v) => Math.round(v * 32768));
 } else {
   const client = new m.C64Client(base, { networkPassword: headers["X-Password"] });
-  pcm = await record(opts.host, base, headers, seconds, sampleRate, async () => {
+  ({ pcm } = await recordAudioStream({ base, headers, seconds, sampleRate, startSong: async () => {
     const playback = await client.playSidwave(doc, compiled);
     if (!playback.success) throw new Error("The Ultimate could not start the SIDWAVE PRG");
-  });
+  } }));
   writeWav(path.join(opts.out, "capture.wav"), pcm, sampleRate);
 }
 const report = m.analyse(pcm, sampleRate, schedule, { latencySearchMs: opts.latencyMs });
