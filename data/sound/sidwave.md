@@ -765,8 +765,9 @@ Errors, not warnings: noise combined with another waveform in a wavetable `wave`
 ## SIDWAVE 1.3
 
 A `sidwave: 1.3` document accepts everything that 1.2 accepts and compiles it to the same PRG bytes
-(test/sidwave13Meter). The fields below are accepted only in 1.3; a 1.2 document that uses one is rejected with
-an error that names the field and says `requires sidwave: 1.3`.
+(test/sidwave13Meter), so every statement about 1.2 documents in this file also holds for 1.3 documents. The
+fields below are accepted only in 1.3; a 1.2 document that uses one is rejected with an error that names the
+field and says `requires sidwave: 1.3`.
 
 ### Metre per section
 
@@ -843,6 +844,52 @@ voices:
     patterns:
       line: { length: 1, groove: ["E5", "~", "D5", "C5", { note: "B4", vibrato: { depth: 0.6, fade: 80 } }, "~", "~", "~"] }
 timeline: [{ bars: 2, layers: { v1: line } }]
+```
+
+### Follower voices
+
+`follow: { voice: 1, delay_beats: 1, transpose: 7, instrument: soft, level: 10 }` on a voice makes it play the
+pitched notes of voice 1, shifted in time and by `transpose` semitones, with its own instrument and level. It
+uses the copy mechanism of `echo` and `unison`. Use it for canons, octave doubling and harmonised twin leads.
+
+| Field | Meaning |
+| --- | --- |
+| `voice` | Source voice (1-30). A follower may follow an echo, unison or another follower; cycles are rejected. |
+| `delay_beats` or `delay` | Time shift in beats (follows tempo and swing, as for `echo`) or in video frames (multiplied by `speed`). Default 0. |
+| `transpose` | Chromatic semitones, -48 to 48. Default 0. Glides, bends and chord-arp roots move with it. |
+| `instrument` | A named or `lib:` instrument for every copied note. Without it the follower uses the source note's instrument. |
+| `level` | 1-15 or a mark. The sustain written at an attack is `clamp(max(1, round(S x level/15 x section/15)) + accent, 1, 15)`, with `S` the instrument sustain, `section` the entry's `levels.v<follower>` or `level`, and the source note's accent. Defaults to the source voice's `level`. |
+| `detune` | Cents (±100), added to the source voice's detune. Default 0. |
+
+- Kit tokens, drum steps, library drum instruments, notes of a `role: drums` voice and the silent notes that
+  drive a `source_note` are not copied.
+- Timing, ties, rests, legato, glides and chord arpeggios come from the source. With its own instrument a
+  follower keeps the source's arpeggio offsets and chord-arp tones but takes waveform, ADSR, pulse, filter and
+  wave tables, vibrato and slide from that instrument. A filter table on a SID with a `filter.owner` runs only on
+  the owner voice.
+- Without `instrument` and `level`, the follower keeps the source note's sustain.
+- A note that the transposition moves outside C0 to the highest playable note is rejected with the path
+  `$.voices.v<id>.follow.transpose`, the note and its bar. A follower instrument whose hard restart does not fit
+  between two copied notes is rejected with the path `$.voices.v<id>.follow.instrument`.
+- A copied note that a delay moves past the end of a song is cut, except after the last notes of a score with
+  `end: { release: true }`, whose tail waits for the copy and its release (the release of the follower's
+  instrument, if it has one).
+- The follower voice takes no `patterns`, `instrument`, `level`, `detune`, `center`, `echo` or `unison` of its own.
+  Diatonic transposition (`transpose: { diatonic: 3, key }`) is not supported: a source note outside the key
+  has no defined diatonic interval.
+- A follower is an ordinary channel for the player and the CPU estimate; it needs no player change.
+
+```yaml
+sidwave: 1.3
+tempo: 112
+instruments:
+  lead: { waveform: sawtooth, adsr: [1, 5, 10, 5] }
+  flute: { waveform: triangle, adsr: [2, 4, 12, 6], vibrato: { depth: 0.2, rate: 5, delay: 10, fade: 30 } }
+voices:
+  - { id: 1, instrument: lead, patterns: { m: { length: 0.5, groove: "E4 G4 A4 B4 (C5 B4) A4 G4" } } }
+  - { id: 2, follow: { voice: 1, delay_beats: 1, transpose: 7, instrument: flute, level: mf } }
+  - { id: 3, follow: { voice: 1, transpose: -12 } }
+timeline: [{ bars: 4, layers: { v1: m } }]
 ```
 
 ## Playable examples

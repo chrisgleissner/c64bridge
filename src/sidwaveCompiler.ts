@@ -434,6 +434,9 @@ export interface ArrangedNote {
   release?: number;
   /** Fade window applied to this note's sustain level, if any. */
   fade?: { start: number; end: number };
+  /** SIDWAVE 1.3: a chord-arp entry and the accent flag, which a follower with its own instrument needs. */
+  chord?: { offsets: number[]; speed: number };
+  accented?: boolean;
 }
 
 type GlobalEvent =
@@ -547,11 +550,16 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   // to the last player call, which cut the echo before its release. Extend the tail by the delay plus the release.
   let tail = probe.endTail ?? 0;
   for (const voice of doc.voices) {
-    if (!voice.echo) continue;
+    const copy = voice.echo ?? voice.follow;
+    if (!copy) continue;
     const slot = doc.voiceSlots.get(voice.id);
     if (slot === undefined || !probe.voices[slot]?.notes.some((n) => n.end >= probe.totalFrames - 1)) continue;
-    const shift = voice.echo.delay_beats !== undefined ? voice.echo.delay_beats * probe.framesPerBeat : (voice.echo.delay ?? 0) * doc.speed;
-    const release = voice.echo.adsr ? Math.min(RELEASE_MS[voice.echo.adsr[3]!]!, 4000) / 1000 * probe.fps : probe.endTail ?? 0;
+    const shift = copy.delay_beats !== undefined ? copy.delay_beats * probe.framesPerBeat : (copy.delay ?? 0) * doc.speed;
+    // A follower with its own instrument releases with that instrument's release rate.
+    const own = voice.follow?.instrument === undefined ? undefined : voice.follow.instrument.startsWith("lib:")
+      ? MODERN_LIBRARY[voice.follow.instrument.slice(4)] : doc.instruments[voice.follow.instrument];
+    const adsr = voice.echo?.adsr ?? (own ? own.adsr ?? [2, 2, 10, 3] : undefined);
+    const release = adsr ? Math.min(RELEASE_MS[adsr[3]!]!, 4000) / 1000 * probe.fps : probe.endTail ?? 0;
     tail = Math.max(tail, Math.ceil(shift + release));
   }
   return tail ? arrangeAll(doc, tail) : probe;
@@ -701,16 +709,16 @@ function arrangeSamples(doc: ParsedSidwave, timing: Arrangement, voices: Arrange
 function arrangeDoubles(
   doc: ParsedSidwave, voices: Arrangement["voices"], pool: ReturnType<typeof createInstrumentPool>, timing: Arrangement,
 ): number[] | undefined {
-  if (!doc.voices.some((voice) => voice.echo || voice.unison || voice.detune)) return;
+  if (!doc.voices.some((voice) => voice.echo || voice.unison || voice.detune || voice.follow)) return;
   const byId = new Map(doc.voices.map((voice) => [voice.id, voice]));
   const tuning = voices.map(() => 0);
   for (const voice of doc.voices) tuning[doc.voiceSlots.get(voice.id)!] = voice.detune ?? 0;
   const visiting = new Set<number>();
   const resolved = new Set<number>();
   const resolve = (voice: SidwaveVoice) => {
-    const fx = voice.echo ?? voice.unison;
+    const fx = voice.echo ?? voice.unison ?? voice.follow;
     if (!fx || resolved.has(voice.id)) return;
-    const path = `$.voices.v${voice.id}.${voice.echo ? "echo" : "unison"}`;
+    const path = `$.voices.v${voice.id}.${voice.echo ? "echo" : voice.unison ? "unison" : "follow"}`;
     if (visiting.has(voice.id)) throw new SidwaveValidationError(path, "voice copies form a cycle");
     const source = byId.get(fx.voice);
     if (!source) throw new SidwaveValidationError(path, `source voice ${fx.voice} is not declared`);
@@ -730,6 +738,13 @@ function arrangeDoubles(
     const env = sid.filter?.filter_env ?? (chip === 0 ? doc.song.global_fx.filter_env as Record<string, unknown> | undefined : undefined);
     const channels = (env?.voices ?? [1, 2, 3]) as number[];
     const target = voices[slot]!;
+    if (voice.follow) {
+      target.notes = followNotes(doc, voice, voice.follow, voices[sourceSlot]!.notes, pool, timing, { path, slot, cents, sameChip, sid, channels, hasEnv: !!env });
+      target.events.push(...buildVoiceEvents(target.notes, pool.instruments, timing.totalFrames, timing.framesPerBeat, [], cents, timing.clock?.loopFrame, doc.end ? timing.totalFrames : undefined));
+      visiting.delete(voice.id);
+      resolved.add(voice.id);
+      return;
+    }
     // The play-once player stops writing at totalFrames. Leave a call for
     // a delayed copy's gate-off if the end of the piece truncates its tail.
     const lastGateOff = doc.end && voice.echo ? timing.totalFrames - 1 : timing.totalFrames;
@@ -758,6 +773,111 @@ function arrangeDoubles(
   };
   doc.voices.forEach(resolve);
   return tuning.some(Boolean) ? tuning : undefined;
+}
+
+/**
+ * SIDWAVE 1.3 follower: the source voice's pitched notes, shifted by delay or delay_beats (as an echo) and by
+ * transpose semitones, with the follower's own instrument and level when it sets them. Kit and drum notes and the
+ * silent notes that drive a sync or ring source are not copied.
+ */
+function followNotes(
+  doc: ParsedSidwave, voice: SidwaveVoice, follow: NonNullable<SidwaveVoice["follow"]>, source: ArrangedNote[],
+  pool: ReturnType<typeof createInstrumentPool>, timing: Arrangement,
+  { path, slot, cents, sameChip, sid, channels, hasEnv }: { path: string; slot: number; cents: number; sameChip: boolean;
+    sid: ParsedSidwave["sids"][number]; channels: number[]; hasEnv: boolean },
+): ArrangedNote[] {
+  const clock = timing.clock!;
+  const maxMidi = maxSidwaveMidi(timing.system);
+  const lastGateOff = doc.end && (follow.delay || follow.delay_beats) ? timing.totalFrames - 1 : timing.totalFrames;
+  const filter = (inst: Instrument) => sameChip ? inst.filter : Number(hasEnv ? channels.map(Number).includes(slot % 3 + 1) : !!sid.filter?.filter_mod);
+  const named = follow.instrument === undefined ? undefined : follow.instrument.startsWith("lib:")
+    ? MODERN_LIBRARY[follow.instrument.slice(4)] : doc.instruments[follow.instrument];
+  if (follow.instrument !== undefined && !named) throw new SidwaveValidationError(`${path}.instrument`, `instrument ${JSON.stringify(follow.instrument)} is not defined`);
+  if (named && !sid.model && !follow.instrument!.startsWith("lib:") && JSON.stringify(named.filtertable ?? "").includes('"hz"')) {
+    throw new SidwaveValidationError(`${path}.instrument`, "declare sids[].model before using a cutoff in Hz");
+  }
+  const owner = sid.filter?.owner === undefined ? undefined : doc.voiceSlots.get(sid.filter.owner);
+  const sourceLevel = doc.voices.find((v) => v.id === follow.voice)?.level ?? 15;
+  const level = follow.level ?? sourceLevel;
+  const shapes = new Map<string, number>();
+  // Section level for the follower: levels.v<id> of the follower, else the section level.
+  const sectionLevel = (beat: number) => {
+    let lo = 0;
+    let hi = clock.sections.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >>> 1;
+      if (clock.sections[mid]!.startBeat <= beat + BEAT_EPS) lo = mid;
+      else hi = mid - 1;
+    }
+    const entry = clock.sections[lo]!;
+    const ramp = entry.section.levels?.[`v${voice.id}`] ?? entry.section.level;
+    return rampValue(ramp, 15, beat - entry.startBeat, entry.endBeat - entry.startBeat, sectionBarBeats(entry.section, doc.song.meter)) / 15;
+  };
+  const out: ArrangedNote[] = [];
+  for (const note of source) {
+    if (note.hidden || note.percussion) continue;
+    const shift = follow.delay_beats !== undefined && note.beat !== undefined
+      ? clock.frameAt(note.beat + follow.delay_beats, true) - note.start : (follow.delay ?? 0) * doc.speed;
+    const start = note.start + shift;
+    const end = Math.min(note.end + shift, lastGateOff);
+    if (end - start < 2) continue;
+    const midi = note.midi + follow.transpose;
+    const glideFrom = note.glideFrom === undefined ? undefined : note.glideFrom + follow.transpose;
+    for (const pitch of [midi, glideFrom]) {
+      if (pitch !== undefined && (pitch < 12 || pitch > maxMidi)) {
+        throw new SidwaveValidationError(`${path}.transpose`, `${midiToNoteName(pitch - follow.transpose)} at ${note.path ?? `voice ${follow.voice}`} becomes ${midiToNoteName(pitch)}, outside the playable range C0..${midiToNoteName(maxMidi)} on ${timing.system}`);
+      }
+    }
+    const previous = out[out.length - 1];
+    const legato = !!note.legato && previous?.end === start;
+    const sourceInst = pool.instruments[note.inst]!;
+    let inst: Instrument;
+    let index = -1;
+    if (legato) {
+      inst = pool.instruments[previous!.inst]!;
+    } else if (named) {
+      const key = `${midi}:${JSON.stringify(note.chord ?? null)}`;
+      index = shapes.get(key) ?? -1;
+      if (index < 0) {
+        const fx: Record<string, any> = { ...named };
+        if (note.chord) {
+          fx.wavetable = note.chord.offsets.map((offset) => ({ note: offset < 0 ? String(offset) : `+${offset}`, frames: note.chord!.speed }));
+          fx.loop = 0;
+        }
+        if (owner !== undefined && owner !== slot) fx.filtertable = undefined;
+        const built = buildInstrument({ id: voice.id, waveform: (named.waveform ?? named.wave ?? "pulse") as any,
+          pulse_width: named.pulse_width, adsr: named.adsr ?? [2, 2, 10, 3] }, fx, [], 0, 0, timing.fps, true, doc.speed, midi, sid.model);
+        index = pool.instIndex({ ...built, arp: sourceInst.arp, arpSpeed: sourceInst.arpSpeed, filter: filter(built) });
+        shapes.set(key, index);
+      }
+      inst = pool.instruments[index]!;
+    } else {
+      inst = sourceInst;
+    }
+    checkDetunedPitch(midi, inst, cents, timing.system, path);
+    if (glideFrom !== undefined) checkDetunedPitch(glideFrom, inst, cents, timing.system, path);
+    const sustainNibble = inst.sr >> 4;
+    // Without its own instrument or level, a follower keeps the source note's sustain like an echo of volume 1.
+    const sustain = legato ? previous!.sustain
+      : !named && follow.level === undefined ? (note.sustain ?? sustainNibble)
+      : sustainNibble ? Math.min(15, Math.max(1, Math.round(sustainNibble * level / 15 * sectionLevel(note.beat ?? 0)) + (note.accented ? doc.accent ?? 3 : 0))) : 0;
+    const fade = note.fade ? { start: note.fade.start + shift, end: note.fade.end + shift } : undefined;
+    const beat = note.beat === undefined ? undefined : note.beat + (follow.delay_beats ?? 0);
+    const copy: ArrangedNote = { ...note, start, end, midi, glideFrom, legato, fade, sustain, beat,
+      path: beat === undefined ? note.path : `bar ${clock.barOf(beat)} v${voice.id}`,
+      volume: sameChip ? note.volume : undefined,
+      inst: legato ? previous!.inst : named ? index
+        : pool.instIndex({ ...inst, sr: ((sustain ?? sustainNibble) << 4) | (inst.sr & 15), filter: filter(inst) }) };
+    out.push(copy);
+  }
+  // A longer hard restart in the follower's instrument must still fit between its notes.
+  for (let i = 1; i < out.length; i++) {
+    const restart = pool.instruments[out[i]!.inst]!.restart;
+    if (!out[i]!.legato && restart?.frames && out[i]!.start - out[i - 1]!.start <= restart.frames) {
+      throw new SidwaveValidationError(`${path}.instrument`, `${out[i]!.path ?? "a note"} follows the previous note after ${out[i]!.start - out[i - 1]!.start} calls; the instrument's hard restart needs more than ${restart.frames}`);
+    }
+  }
+  return out;
 }
 
 function checkDetunedPitch(midi: number, inst: Instrument, cents: number, system: SystemMode, path: string): void {
@@ -1062,6 +1182,8 @@ function arrangeChip(
             ...(modern ? { sustain: mark && !legato ? effective : legato ? previous?.sustain : undefined, beat: b,
               section: sec.index, path: `bar ${barOf(b)} v${voiceId}`,
               volume: rampValue(section.volume?.[sid?.id ?? ""], volume, b - sec.startBeat, sec.endBeat - sec.startBeat, sec.meter) } : {}),
+            ...(doc.version === "1.3" && entry.chord ? { chord: { offsets, speed: entry.chord.speed } } : {}),
+            ...(doc.version === "1.3" && entry.accented ? { accented: true } : {}),
 
           };
           out.push(arranged);

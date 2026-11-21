@@ -88,6 +88,17 @@ export interface SidwaveEcho {
   detune?: number;
 }
 
+/** SIDWAVE 1.3: plays the source voice's pitched notes later, transposed, with its own instrument and level. */
+export interface SidwaveFollow {
+  voice: number;
+  delay?: number;
+  delay_beats?: number;
+  transpose: number;
+  instrument?: string;
+  level?: number;
+  detune: number;
+}
+
 export interface SidwaveUnison {
   voice: number;
   detune: number;
@@ -155,6 +166,7 @@ export interface SidwaveVoice {
   instrument?: string;
   echo?: SidwaveEcho;
   unison?: SidwaveUnison;
+  follow?: SidwaveFollow;
   patterns?: Record<string, SidwavePattern>;
 }
 
@@ -396,7 +408,8 @@ export function parseSidwave(input: string | object): ParsedSidwave {
       digiVoices.push({ id, chip, patterns });
       return [];
     }
-    checkKeys(raw, modern ? VOICE_KEYS : new Set([...VOICE_KEYS].filter((key) => !["level", "role", "center"].includes(key))), path);
+    if (raw.follow !== undefined && !v13) throw new SidwaveValidationError(`${path}.follow`, "requires sidwave: 1.3");
+    checkKeys(raw, modern ? new Set([...VOICE_KEYS, ...(v13 ? ["follow"] : [])]) : new Set([...VOICE_KEYS].filter((key) => !["level", "role", "center"].includes(key))), path);
     let slot: number | undefined;
     if (raw.sid !== undefined || raw.channel !== undefined) {
       const sidId = scalarText(raw.sid, path + ".sid");
@@ -413,9 +426,10 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     voiceSlots.set(id, slot);
     occupied.add(slot);
     const voice = normalizeVoice(raw, path, id, modern, v13 ? undefined : meter, kit, v13);
-    const name = voice.instrument;
-    if (name && !name.startsWith("lib:") && !hasOwn(instruments, name)) {
-      throw new SidwaveValidationError(`${path}.instrument`, `instrument ${describeValue(name)} is not defined`);
+    for (const [name, at] of [[voice.instrument, `${path}.instrument`], [voice.follow?.instrument, `${path}.follow.instrument`]] as const) {
+      if (name && !name.startsWith("lib:") && !hasOwn(instruments, name)) {
+        throw new SidwaveValidationError(at, `instrument ${describeValue(name)} is not defined`);
+      }
     }
     return [voice];
   });
@@ -883,6 +897,28 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
 
   let echo: SidwaveEcho | undefined;
   let unison: SidwaveUnison | undefined;
+  let follow: SidwaveFollow | undefined;
+  if (v.follow !== undefined) {
+    const fp = `${path}.follow`;
+    if (!v13) throw new SidwaveValidationError(fp, "requires sidwave: 1.3");
+    for (const key of ["echo", "unison", "instrument", "level", "detune", "center"]) {
+      if (v[key] !== undefined) throw new SidwaveValidationError(`${path}.${key}`, key === "echo" || key === "unison" ? "choose follow, echo or unison" : `a follower takes ${key} inside follow, or not at all`);
+    }
+    if (Object.keys(patterns).length) throw new SidwaveValidationError(`${path}.patterns`, "a follower plays the source voice's notes and has no patterns");
+    const fx = requireObject(v.follow, fp, ["voice", "delay", "delay_beats", "transpose", "instrument", "level", "detune"]);
+    if (fx.delay !== undefined && fx.delay_beats !== undefined) throw new SidwaveValidationError(fp, "use delay or delay_beats");
+    if (isPlainObject(fx.transpose)) throw new SidwaveValidationError(`${fp}.transpose`, "diatonic transposition is not supported; give the interval in semitones");
+    follow = {
+      voice: requireNumber(fx.voice, `${fp}.voice`, { min: 1, max: 30, integer: true }),
+      ...(fx.delay === undefined ? {} : { delay: requireNumber(fx.delay, `${fp}.delay`, { min: 0, max: 65535, integer: true }) }),
+      ...(fx.delay_beats === undefined ? {} : { delay_beats: requireNumber(fx.delay_beats, `${fp}.delay_beats`, { min: 0, max: 64 }) }),
+      transpose: fx.transpose === undefined ? 0 : requireNumber(fx.transpose, `${fp}.transpose`, { min: -48, max: 48, integer: true }),
+      ...(fx.instrument === undefined ? {} : { instrument: requireText(fx.instrument, `${fp}.instrument`) }),
+      ...(fx.level === undefined ? {} : { level: parseLevel(fx.level, `${fp}.level`) }),
+      detune: fx.detune === undefined ? 0 : requireNumber(fx.detune, `${fp}.detune`, { min: -100, max: 100 }),
+    };
+    if (follow.voice === id) throw new SidwaveValidationError(`${fp}.voice`, "a voice cannot follow itself");
+  }
   if (v.echo !== undefined || v.unison !== undefined) {
     if (!modern) throw new SidwaveValidationError(path, "echo and unison require sidwave: 1.2");
     if (v.echo !== undefined && v.unison !== undefined) throw new SidwaveValidationError(path, "choose echo or unison");
@@ -921,6 +957,7 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
   return {
     id, detune, level, role, center, name: v.name === undefined ? `Voice${id}` : requireText(v.name, path + ".name"), waveform, pulse_width: pulseWidth, adsr,
     instrument: v.instrument === undefined ? undefined : requireText(v.instrument, path + ".instrument"), patterns, echo, unison,
+    ...(follow ? { follow } : {}),
   };
 }
 
