@@ -1,71 +1,48 @@
-# SIDWAVE 1.3 handover
+# SIDWAVE 1.3.3 release handover
 
-This PR is a review checkpoint for SIDWAVE 1.3. Package metadata remains at 1.3.2. Do not tag, publish, merge, or prepare a release from this checkpoint. Actual listening acceptance and the full CI gates remain outstanding.
+This branch prepares package version 1.3.3 from published 1.3.2. The release has not been merged or tagged. PR #190 remains the review and CI checkpoint: https://github.com/chrisgleissner/c64bridge/pull/190
 
-## Candidate score hashes
+## Candidate score sources
 
-The four entries marked **recapture** changed after their saved hardware recording. Their existing WAVs and quality reports are hash-bound to the earlier score and are stale for the current candidate. `metal_sync` did not change and its capture/report remain current.
+These SHA-256 values match the YAML assets in the verified 14d7ca09 CI artifact. Durations are the compiled full score lengths, including release tails.
 
-| Example | Current score SHA-256 | Hardware capture status |
-| --- | --- | --- |
-| `acid_line` | `6ec81fced37eef5420112bb71b44fee2dbdb2a5f31bb863a57a4b706d5bf5cdf` | Current capture; quality review pending |
-| `ambient_filter` | `72cccef13fe35e19fbdfeb4aba51bfd25ea82a44cba0f26442b420522bc99f8a` | Current capture; WARN: one unexplained high-frequency spike at 84.341 s |
-| `arp_ballad` | `1c6298e249020aaf1ca61189e09c1ead0614115755eebbde687c6ca3a569606e` | **Recapture**; saved capture is for `f1d031944c0c79d2424d32780620e34c4212fb6ca96155af1cb0e5b216889afa` |
-| `chamber_waltz` | `c54d67af50c26cf64ebe4809dac906394f83c63660294505f89aa14b3be7e6e7` | **Recapture**; saved capture is for `95b07f45d8d795156b34538270564876a03954eae132b24e2c9b492562162e42` |
-| `chiptune_drive` | `13e58ed20f69ba6a82b3fc9643cd56162b2af7836fac6de5b268c52d23093aef` | Current capture; WARN: three unexplained high-frequency spikes at 1.183, 2.060, 104.766 s |
-| `digi_groove` | `72acc1cac3d5effae405b72923fb74351685452575749ab47e7212295529bcf7` | Current capture and quality report; sample activity measured in sample-only intro bars 1–2 |
-| `drum_and_bass` | `d1c58e5278f25ae9381492642cf993fa17dd8d947d87141506fa82c2458e30b5` | Current capture; quality review pending |
-| `funk_bass` | `79c3532770e94a06d45e88c24802b5ca2f4b15f7ce02909c0c79c8f333658d3e` | Current capture; quality review pending |
-| `metal_sync` | `96231e8e56209b81c3d9e63b3120c42182effee93b788dc15f147f80c0ddf79b` | Current capture and quality report |
-| `stereo_echo` | `a48514793bc3910ac8b5c6314e4f06cc3dae3f587f71e499a5c1476dc2eac909` | Current capture; PASS |
-| `title_fanfare` | `a7571917fb456704310c8cd217376ecbf615f3bf04df8c1493a10f7a836828b0` | Current capture; PASS |
-| `ultisid_orchestra` | `24e23b0cd5940a5e11b496edd572accbafff8e0b794b13f463e873c96aad5371` | **Recapture**; saved capture is for `d7482ba3e3b4752c7e0d8aae0c217b027ce2bb7322ca3b4f7434a8aa10bec16f` |
-| `wall_of_sid` | `2a6a718e0752e22d414d29ff5232a55183d781fc74fa2773f8c0a9424e3f3f0d` | **Recapture**; saved capture is for `9d1be562bd47bb3c30bd01436447cf4238afa5b5d0ee055931444aadec34165f` |
+| Example | YAML SHA-256 | Duration (s) | Renderer |
+| --- | --- | ---: | --- |
+| `acid_line` | `6ec81fced37eef5420112bb71b44fee2dbdb2a5f31bb863a57a4b706d5bf5cdf` | 154.176 | SIDPlayFP per SID |
+| `ambient_filter` | `335010cfb29d41f4ad1e40b6fb44a19ba3ee516b508b8ca9ae7674c063149a74` | 171.553 | SIDPlayFP per SID |
+| `arp_ballad` | `1a26713b58cd0ae7a41b2ba76147a403d1de6030919dff16f339e3569fa81ee9` | 182.625 | SIDPlayFP per SID |
+| `chamber_waltz` | `c54d67af50c26cf64ebe4809dac906394f83c63660294505f89aa14b3be7e6e7` | 139.034 | SIDPlayFP per SID |
+| `chiptune_drive` | `13e58ed20f69ba6a82b3fc9643cd56162b2af7836fac6de5b268c52d23093aef` | 154.495 | SIDPlayFP per SID |
+| `digi_groove` | `72acc1cac3d5effae405b72923fb74351685452575749ab47e7212295529bcf7` | 163.293 | VICE PRG with CIA2 samples |
+| `drum_and_bass` | `e4e2ec6d52d2e298bc0783313d922a001a9fc49cd74e630ad0fa90564bf27e0c` | 163.722 | SIDPlayFP per SID |
+| `funk_bass` | `79c3532770e94a06d45e88c24802b5ca2f4b15f7ce02909c0c79c8f333658d3e` | 160.091 | SIDPlayFP per SID |
+| `metal_sync` | `6954a8f195713132f47564a3f2341fb55d2f39e0ef0eb5646ce438929aca9e68` | 157.817 | SIDPlayFP per SID |
+| `stereo_echo` | `a48514793bc3910ac8b5c6314e4f06cc3dae3f587f71e499a5c1476dc2eac909` | 175.184 | SIDPlayFP per SID |
+| `title_fanfare` | `a7571917fb456704310c8cd217376ecbf615f3bf04df8c1493a10f7a836828b0` | 18.753 | SIDPlayFP per SID |
+| `ultisid_orchestra` | `24e23b0cd5940a5e11b496edd572accbafff8e0b794b13f463e873c96aad5371` | 146.695 | SIDPlayFP per SID |
+| `wall_of_sid` | `2a6a718e0752e22d414d29ff5232a55183d781fc74fa2773f8c0a9424e3f3f0d` | 172.151 | SIDPlayFP per SID |
 
-## Local hardware evidence
+## Concrete corrections and prevention
 
-The WAVs, MP3s, JSON quality reports, and transcripts are outside Git in `~/.c64bridge/recovery/`. Filenames use `<example>-1.3.{wav,mp3,log}` and `<example>-1.3-quality.json`; `digi_groove` uses `digi-groove-candidate-72acc1.*`.
+- `arp_ballad` and three `metal_sync` ring bells use an octave source; the metal intro was also retimbred. Resolved arrangement/render spectral checks found the intended B4 energy without the false A4 sideband.
+- `ambient_filter`'s Water bell source moved from a major seventh to an octave. In the prior render the out-of-key F5 ring sideband dominated the intended G5 carrier by about 35 dB; the corrected render restored the 784 Hz carrier and its 2352 Hz harmonic.
+- `drum_and_bass` kick and early snare stages were shortened. At the same scheduled bar-25 hit, the full render's 40–250 Hz attack energy rose 2.39× at +30–40 ms and 1.76× at +40–50 ms.
+- Generated ambient music now uses a pitched triangle bell. The previous 1.1 generated score is frozen in a fixture to preserve its PRG/PSID fingerprints. `test/sidwaveRingSource.test.mjs` checks resolved source notes across the 13 examples; the focused tests passed 13/13. The SID music skill now documents harmonic source selection.
 
-The recordings were made serially on the U64 bench. The capture script reported no lost-packet warnings. Before and after each run, the 206-item configuration snapshot diff was empty, IRQ vector `$0314` remained `$31EA`, and the machine returned to BASIC READY. These checks prove capture and restoration, not artistic acceptance.
+## Verification evidence
 
-Current, hash-bound quality reports at checkpoint:
+- On PR head `14d7ca09bb18b29f8c91f9503a7ec80b956c8e74`, required CI passed: build/test, package check, Node compatibility, and 13-example render. The downloaded render artifact contained 13 manifest entries and exactly 26 MP3/YAML assets; all asset SHA-256 values matched the manifest. The manifest and MP3 files are CI artifacts, not committed here.
+- The renderer pins open MEGA65 ROMs by commit and SHA-256 in its image, sets VICE's 8580 model explicitly, verifies both configured SIDs, and checks the sample PRG started before accepting the cycle-limited capture.
+- Fresh U64 captures were made for the four changed scores. Clean WAV hashes and detailed HIL/quality JSONs are in `~/.c64bridge/recovery/`. Post-capture configuration matched the saved 19-category baseline; IRQ bytes at `$0314` remained `$31,$EA` (vector `$EA31`) and BASIC returned to READY. One ambient take lost a UDP packet and is retained only as failed evidence; the clean retry is the accepted capture.
+- Exact changed-candidate HIL primary checks passed: arp chroma/onset `.962/.515`; metal `.958/.601`; ambient `.987/.819`; DnB `.894/.601`. HIL schedule-presence rates are secondary, model-sensitive diagnostics, not the primary verdict.
+- Quality review passed without clipping or dropouts for all four. Ambient remains WARN for high-frequency spikes at 84.335, 140.527, and 146.232 s. DnB remains WARN for one unexplained spike at 159.002 s. Earlier ambient/chiptune quality warnings are recorded with their unchanged captures in the local recovery reports.
+- Raw `stereo_echo` HIL remains a FAIL: onset `.471`, drift `−67.7 ms`. A single calibrated working copy, using the median `−0.0540%` offset slope from ten other score captures and `asetrate=47974,aresample=48000`, passes unchanged primary thresholds (onset `.887`, chroma `.950`, control margin `.258`, drift `−2.2 ms`). The raw capture and failure remain preserved; the calibration indicates shared sample-clock bias, not an altered score.
+- `digi_groove`'s U64 capture measured all 15 sample triggers non-silent during its sample-only intro. The CI VICE render includes its CIA2 samples and both SIDs. `wall_of_sid` has no valid single-model SIDPlayFP fidelity comparison because it mixes eight 8580s and one 6581; its full render duration and source hashes are still checked.
+- Audio-input listening was unavailable to the agents. The corrections above address the user's specific heard bell and drum-timing reports using resolved-score renders, spectrum/attack measurements, and U64 captures; they do not claim an independent subjective listening sign-off.
 
-- `digi_groove` (`72acc1ca…`): PASS; 568 ms measured onset; no clipping, unexplained spikes, or dropouts; RMS -21.4 dBFS, loudness range 10.1 dB. Its first two bars are sample-only: hardware capture RMS L/R 1055/1055 against pre-roll 5.8/5.6, and all 15 scheduled sample triggers measured non-silent.
-- `metal_sync` (`96231e8e…`): PASS; no clipping, unexplained spikes, or dropouts; 100% fullness; RMS -19.4 dBFS, loudness range 7.0 dB.
-- `title_fanfare` (`a7571917…`): PASS; no clipping, unexplained spikes, or dropouts; RMS -19.9 dBFS, loudness range 8.5 dB.
-- `stereo_echo` (`a4851479…`): PASS; no clipping, unexplained spikes, or dropouts; RMS -20.7 dBFS, loudness range 12.4 dB.
-- `ambient_filter` (`72cccef1…`): WARN for one unexplained high-frequency spike at 84.341 s; otherwise no clipping or dropouts, RMS -25.9 dBFS, loudness range 15.7 dB.
-- `chiptune_drive` (`13e58ed2…`): WARN for three unexplained high-frequency spikes at 1.183, 2.060, and 104.766 s; otherwise no clipping or dropouts, RMS -20.0 dBFS, loudness range 8.6 dB.
+## Release steps
 
-Four earlier multipart reports are stale after the one-pass score edits: `arp_ballad` and `chamber_waltz` had PASS reviews; `ultisid_orchestra` had PASS with 107 long notes and p95 pitch deviation 10 cents; `wall_of_sid` had PASS with three samples at or above 0.99 full scale (maximum 32682/32767, below full-scale clipping). Their reports remain beside the old WAVs, but do not validate the current hashes above. `wall_of_sid` uses eight 8580 UltiSIDs plus the installed socket 6581; its old score-only report must not be confused with an actual listening review.
-
-Sol 6.2’s pre-pass multipart rubric totals were 88, 82, 87, 84, and 80 across the five pieces. The assessment was score-only: that session did not receive audio input. No actual listening acceptance is available yet.
-
-## Remaining work
-
-1. Recapture and review the four changed multipart scores above, serially. Reuse the `metal_sync` capture because its score hash is unchanged. Keep all captures under `~/.c64bridge/recovery/`; never commit audio artifacts. For U64 recordings, compare configuration snapshots and IRQ `$0314` before/after and confirm BASIC READY.
-2. Investigate the objective spike warnings for `ambient_filter` and `chiptune_drive`; finish `sidwave-review.mjs` checks for the current single-tempo captures (`acid_line`, `drum_and_bass`, `funk_bass`). Check existing report hash against the table before reusing it.
-3. Run the local gates from the repository root:
-
-   ```sh
-   npm ci
-   npm run build
-   git diff --exit-code -- README.md mcp mcp.json server.json
-   npm run test:node
-   npm run check:node-compat
-   bun install --frozen-lockfile --omit=optional
-   bun run build
-   CI=1 FORCE_XVFB=1 VICE_VISIBLE=false VICE_WARP=true VICE_DEVICE_TEST_DEBUG=1 npm_config_loglevel=verbose npm run coverage
-   ```
-
-   The CI package-check job must also pass on the PR. The archived suite log is historical and has no reliable HEAD metadata; do not treat its 9 reported failures as the current result.
-4. Obtain real listening review on the exact final candidate scores, address concrete findings, and rerun score-hash-bound captures/reviews for any changed file. Only then decide release version and prepare a separate release change.
-
-No release metadata was bumped in this PR. The original dirty drafts remain preserved in the local archive `examples2-dirty-2026-11-21.tar`; this PR uses the recovered score files from that archive and the later committed revisions.
-
-## Verification at checkpoint
-
-- `npm run check:package`: passed.
-- Initial full `npm test`: 2,235 passed and 14 failed because the composed-score test still expected SIDWAVE 1.2 headers/version. The assertions now parse the 1.3 comment block and retain the separate 1.2 fixture checks. The focused `test/sidwavePlayer.test.mjs` rerun passed all 105 tests; `test/sidwave13Vibrato.test.mjs` passed all 7 tests after replacing an assertion helper unavailable in Bun 1.3.1.
-- The full suite and CI coverage must pass on the follow-up PR SHA. Earlier CI reported the Bun 1.3.1 helper incompatibility, now fixed; rerun the PR checks before treating it as resolved.
-- No audio-input-capable listening review has been completed. Sol 6.2 did not receive audio and its multipart scores (88, 82, 87, 84, 80) were score-only, pre-pass assessments.
+1. Confirm PR #190 checks on the release-prepared head, then merge it.
+2. Confirm `main` CI is green and `1.3.3` remains unused on npm and GitHub.
+3. Create tag `1.3.3` from the verified `main` release-prepared commit. The release workflow renders from that tag, verifies the 13-pair artifact, publishes npm/MCP after render success, and attaches the 26 MP3/YAML files.
+4. Verify npm `1.3.3`, the GitHub release tag, and all 26 release assets against the final manifest hashes.
