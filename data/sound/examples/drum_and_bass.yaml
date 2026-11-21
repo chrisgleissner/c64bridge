@@ -140,14 +140,14 @@ instruments:
     waveform: saw
     pulse_width: 2048
     adsr: [0, 3, 11, 3]
-    hard_restart: { test: true }
+    hard_restart: { frames: 0 }
     wavetable: [{ wave: pulse, note: "+12", calls: 1 }, { wave: saw }]
     filtertable: { reset: false, loop: 1, steps: [{ cutoff: 1.5kHz, resonance: 12, type: lowpass }, { add: 6, frames: 36 }, { add: -6, frames: 36 }] }
   reese3:
     waveform: saw
     pulse_width: 2048
     adsr: [0, 3, 10, 3]
-    hard_restart: { test: true }
+    hard_restart: { frames: 0 }
     wavetable: [{ wave: pulse, note: "+12", calls: 1 }, { wave: saw }]
   # 100 Hz chord arps: two calls per tone, top tone first so the root lands last.
   a1:
@@ -278,7 +278,7 @@ voices:
   - id: 2
     name: Sub, riser, Reese oscillator 1
     role: bass
-    detune: -7
+    detune: -18
     instrument: reese
     patterns:
       pG: { length: 0.5, bars: 8, groove: "G1@sub ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ D2@sub ~ | G1@sub ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ Bb1@sub ~ | G1@sub ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ ~ ~ G2@sub ~ | G1@sub ~ ~ ~ ~ ~ ~ ~ | ~ ~ ~ ~ A1@sub ~ F#1@sub ~" }
@@ -299,7 +299,7 @@ voices:
       fin: { length: 1, bars: 2, groove: "D2@sub ~ ~ ~ | G1@sub ~ ~ ~" }
   - id: 3
     name: Arps, Reese oscillator 2, lead
-    detune: 7
+    detune: 18
     instrument: reese3
     patterns:
       iA: { length: 0.5, bars: 8, groove: "Bb3@a1 ~ ~ Bb3@a1 ~ ~ Bb3@a1 ~ | ~ ~ ~ ~ Bb3@a1 ~ ~ ~ | Eb3@a2 ~ ~ Eb3@a2 ~ ~ Eb3@a2 ~ | ~ ~ ~ ~ Eb3@a2 ~ ~ ~ | C3@a4 ~ ~ C3@a4 ~ ~ C3@a4 ~ | ~ ~ ~ ~ C3@a4 ~ ~ ~ | D3@a3 ~ ~ D3@a3 ~ ~ D3@a3 ~ | ~ ~ ~ ~ D3@a3 ~ D3@a3 ~" }
@@ -310,6 +310,7 @@ voices:
       R3: { length: 0.25, bars: 2, groove: "(G1 ~ ~ ~ /D1) ~ - - Bb1 - G1 ~ - D2 (F2 /G2) | (Eb1 ~ ~ ~ ~ ~ /F1) ~ ~ ~ - - (Ab1 /G1) ~ -" }
       E1: { length: 0.25, bars: 2, groove: "(G1 ~ ~ ~ /D1) ~ - - Bb1 - G1 ~ - - G2 ~ | Eb1 - Eb1 - Eb1 Eb2 - Eb1 F1 - F1 F2 - (F1 /G1) ~" }
       E2: { length: 0.25, bars: 2, groove: "G1 - G1 G2 - G1 - Bb1 - Bb1 Bb2 - - (D2 /D1) ~ | (Eb1 ~ ~ ~ ~ ~ /F1) ~ ~ ~ - - Bb1 - G1 ~" }
+      high_answer: { length: 0.25, bars: 2, groove: ["-", "-", "-", "-", { note: D5, inst: ld }, "~", "~", "~", { note: Eb5, inst: ld }, "~", { note: D5, inst: ld }, "~", { note: Bb4, inst: ld }, "~", "~", "~", "-", "-", "-", "-", { note: C5, inst: ld }, "~", "~", "~", { note: D5, inst: ld }, "~", { note: C5, inst: ld }, "~", { note: G4, inst: ld }, "~", "~", "~"] }
       bd: { length: 0.25, bars: 16, groove: [D5@ldg, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: Eb5, inst: ld, legato: true }, { note: D5, inst: ld, legato: true }, { note: C5, inst: ld, legato: true }, Bb4@ld, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: A5, inst: lds, slide_from: G5, portamento: 3 }, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", G5@ldm, "~", "~", "~", "~", "~", "~", "~", A3@w2, "~", "~", "~", "~", "~", "~", "~", G5@ld, "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: F#5, inst: ld, legato: true }, { note: G5, inst: ld, legato: true }, { note: A5, inst: ld, legato: true }, Bb4@ldf, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: D5, inst: lds, slide_from: C5, portamento: 3 }, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: D5, inst: lds, legato: true, bend: {to: -2, frames: 10} }, "~", "~", "~", Bb3@w1, "~", "~", "~", "~", "~", "~", "~", F5@ld, "~", "~", "~", "~", "~", "~", "~", { note: G5, inst: ld, legato: true }, { note: F5, inst: ld, legato: true }, { note: Eb5, inst: ld, legato: true }, D5@ldm, "~", "~", "~", "~", "~", "~", "~", "~", Bb4@ld, "~", "~", "~", { note: F5, inst: lds, slide_from: Eb5, portamento: 3 }, "~", "~", "~", "~", "~", "~", "~", G5@ldg, "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: F5, inst: ld, legato: true }, { note: Eb5, inst: ld, legato: true }, C5@ld, "~", "~", "~", Eb3@w1, "~", "~", "~", "~", "~", C5@ld, "~", C6@ldf, "~", "~", "~", "~", "~", "~", "~", A5@ld, "~", "~", "~", "~", "~", { note: Bb5, inst: ld, legato: true }, { note: A5, inst: ld, legato: true }, { note: G5, inst: ld, legato: true }, F5@ld, "~", "~", "~", "~", "~", "~", D5@ldg, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", { note: Eb5, inst: ld, legato: true }, { note: D5, inst: ld, legato: true }, { note: C5, inst: ld, legato: true }, Bb4@ld, "~", "~", "~", "~", "~", "~", "~", "~", { note: D5, inst: lds, slide_from: A4, portamento: 3 }, "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"] }
       b2: { length: 0.25, bars: 7, groove: [G5@ld, "~", "~", "~", "~", "~", { note: Ab5, inst: ld, legato: true }, { note: G5, inst: ld, legato: true }, { note: F5, inst: ld, legato: true }, Eb5@ld, "~", "~", "~", "~", "~", "~", F#5@ld, "~", "~", "~", "~", "~", { note: G5, inst: ld, legato: true }, { note: F#5, inst: ld, legato: true }, { note: E5, inst: ld, legato: true }, D5@ld, "~", "~", "~", "~", "~", "~", F5@ld, "~", "~", "~", "~", "~", { note: G5, inst: ld, legato: true }, { note: F5, inst: ld, legato: true }, { note: Eb5, inst: ld, legato: true }, C5@ld, "~", "~", "~", "~", "~", "~", Eb5@ldg, "~", "~", "~", "~", "~", { note: F5, inst: ld, legato: true }, { note: Eb5, inst: ld, legato: true }, { note: D5, inst: ld, legato: true }, Bb5@ldf, "~", "~", "~", "~", "~", "~", D3@a3, "~", "~", "~", "~", "~", "~", "~", D3@a3, "~", "~", "~", "~", "~", "~", "~", D3@a3, "~", "~", "~", D3@a3, "~", "~", "~", D3@a3, "~", "~", "~", D3@a3, "~", "~", "~", D3@a3, "~", D3@a3, "~", D3@a3, "~", D3@a3, "~", D3@a3, "~", D3@a3, "~", D3@a3, "~", D3@a3, "~"] }
       N: { length: 0.25, bars: 2, groove: "G1 ~ ~ ~ (G1 /Ab1) ~ G1 - G2 - F2 (Eb2 /D2) - Bb1 | C2 ~ ~ ~ (C2 /Bb1) - Eb1 ~ ~ (Eb1 /D1) ~ - F1 G1" }
@@ -347,7 +348,7 @@ sections:
     bars: 16
     volume: 14
     filter: { cutoff: { from: 200, to: -60 }, resonance: 13 }
-    layers: { v1: "bA1 bA2 bB1 bB2 bA1 bA2 bB3 ed3 bA1 bA2 bB1 bB2 bA1 bB3 bB1 ed4", v2: "R2 R R+5 E1+5 R R2 R3 E2", v3: "R2 R R+5 E1+5 R R2 R3 E2" }
+    layers: { v1: "bA1 bA2 bB1 bB2 bA1 bA2 bB3 ed3 bA1 bA2 bB1 bB2 bA1 bB3 bB1 ed4", v2: "R2 R R+5 E1+5 R R2 R3 E2", v3: "R2 high_answer R+5 high_answer R2 high_answer R3 high_answer" }
   breakdown:
     bars: 16
     volume: { from: 8, to: 10 }

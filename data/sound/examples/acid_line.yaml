@@ -103,14 +103,14 @@ instruments:
     adsr: [0, 5, 10, 1]
     hard_restart: { test: true }
     wavetable: [{ wave: pulse }, { wave: saw }]
-    filtertable: [{ cutoff: 500Hz, resonance: 15, type: lowpass }, { add: 14, frames: 5 }]
+    filtertable: [{ cutoff: 600Hz, resonance: 15, type: bandpass }, { add: 24, frames: 8 }]
   sca:
     waveform: saw
     pulse_width: 2048
     adsr: [0, 6, 12, 1]
     hard_restart: { test: true }
     wavetable: [{ wave: pulse }, { wave: saw }]
-    filtertable: [{ cutoff: 1.3kHz, resonance: 15, type: lowpass }, { add: 20, frames: 4 }, { add: -16, frames: 8 }]
+    filtertable: [{ cutoff: 1.2kHz, resonance: 15, type: bandpass }, { add: 30, frames: 6 }, { add: -18, frames: 10 }]
   # Second line on voice 3: a hollow pulse that narrows on each phrase and breathes, through the owner's filter.
   line2:
     waveform: pulse
@@ -323,27 +323,27 @@ sections:
   line:
     bars: 12
     volume: 11
-    filter: { cutoff: { from: -60, to: 90 }, resonance: 12 }
+    filter: { cutoff: { from: -20, to: 220 }, resonance: 13 }
     layers: { v1: "l0 l0 l0 l0t l1 l1 l1 l1t l2 l2 l2 l2t", v2: "a1 a2 a1 f1 a1 a3 a1 f1 a2 a1 a3 f2", v3: "s1 s1b s1" }
   mutA:
     bars: 8
     volume: 12
-    filter: { cutoff: { from: 90, to: 240 }, resonance: 13 }
+    filter: { cutoff: { from: 220, to: 500 }, resonance: 14 }
     layers: { v1: "m1 m1 m1 m1 m2 m2 m2 m2", v2: "a1 a3 a1 f1 a2 a1 a3 f2", v3: "- - - - s3" }
   mutB:
     bars: 8
     volume: { from: 13, to: 14 }
-    filter: { cutoff: { from: 240, to: 420 }, resonance: 14 }
+    filter: { cutoff: { from: 500, to: 800 }, resonance: 15 }
     layers: { v1: "m3 m3 m3 m3 m4 m4 m4 m4t", v2: "a1 a2 a1 f1 a3 a1 a3 f2", v3: "s2 s3" }
   break:
     bars: 7
     volume: { from: 11, to: 14 }
-    filter: { cutoff: { from: -70, to: 700 }, resonance: 15 }
+    filter: { cutoff: { from: 0, to: 450 }, resonance: 15 }
     layers: { v1: cell, v2: "- - b1 b1 b2 b3 b4" }
   gap:
     bars: 1
     volume: 15
-    filter: { cutoff: 780, resonance: 15 }
+    filter: { cutoff: 600, resonance: 15 }
     layers: { v1: gap, v2: bgap }
   drop1:
     bars: 8

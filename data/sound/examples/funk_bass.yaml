@@ -35,7 +35,7 @@ instruments:
     waveform: pulse
     adsr: [0, 9, 7, 1]
     hard_restart: { test: true }
-    wavetable: [{ wave: noise, note: "+36" }, { wave: saw, frames: 2 }, { wave: pulse }]
+    wavetable: [{ wave: noise, note: "+36" }, { wave: saw }, { wave: pulse }]
     pulsetable: [{ set: 1600 }, { add: -60, frames: 12 }]
     filtertable: [{ cutoff: 3kHz, resonance: 13, type: lowpass }, { add: -25, frames: 12 }]
   # Dead note: noise thump and two muffled pulse frames, no pitch body.
@@ -74,7 +74,7 @@ instruments:
     waveform: pulse
     adsr: [0, 8, 0, 0]
     hard_restart: { test: true }
-    wavetable: [{ wave: noise, note: A6 }, { wave: pulse, note: A3, slide_to: E1, frames: 4 }, { wave: tri, note: E1, frames: 3 }, { gate: false }]
+    wavetable: [{ wave: noise, note: A6 }, { wave: pulse, note: A3, slide_to: E1, frames: 4 }, { wave: tri, note: E1 }, { gate: false }]
     filtertable: [{ cutoff: 2.4kHz, resonance: 4, type: lowpass }]
   sn:
     waveform: pulse
@@ -388,7 +388,7 @@ sections:
   head: { bars: 8, level: f, volume: 14, layers: { v1: "hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8", v2: "c1 c2 c3 c4 c5 c6 c7 c8", v3: "L1 L2 L3 L4 L5 L6 L7 L8" } }
   head_stabs: { bars: 8, level: f, volume: 14, filter: { cutoff: 30 }, layers: { v1: "gb1b gb2b hb3 hb4 hb5 hb6 hb7 hb8", v2: "d1 d2 d3 d4 d5 d6 d7 d8", v3: "M1 M2 M3 M4 M5 M6 M7 M8" } }
   bridge: { bars: 8, level: { from: mp, to: f }, volume: { from: 10, to: 14 }, filter: { cutoff: { from: 0, to: 60 } }, layers: { v1: "bb1 bb2 bb3 bb4 bb5 bb6 bb7 bb8", v2: "br1 br2 br3 br4 br5 br6 br7 br8", v3: "G1 G2 G3 G4 G5 G6 G7 G8" } }
-  solo: { bars: 8, level: f, volume: 14, filter: { cutoff: 60 }, layers: { v1: "sg1 sg2 bs1 bs2 sc1 sc2 bs3 bs4", v2: "s1 s2 s3 s4 s5 s6 s7 s8", v3: "S1 S2 cg1 cg2 S5 S6 cg1 cg2" } }
+  solo: { bars: 8, level: mf, volume: 13, filter: { cutoff: 60 }, layers: { v1: "sg1 sg2 bs1 bs2 sc1 sc2 bs3 bs4", v2: "s1 s2 s3 s4 s5 s6 s7 s8", v3: "S1 S2 cg1 cg2 S5 S6 cg1 cg2" } }
   solo_peak: { bars: 8, level: ff, volume: 15, filter: { cutoff: { from: 60, to: 140 } }, layers: { v1: "sg1b sg2b bs5 bs6 sg2 sg1 se2 sf", v2: "u1 u2 u3 u4 u5 u6 u7 u8", v3: "S9 S10 cg3 cg4 S13 S14 S15 S16" } }
   stop_time: { bars: 4, level: f, volume: 14, swing: 0.5, layers: { v1: "st1 st2 st3 -", v2: "st1 st2 st3 -", v3: "T1 T2 T3 run" } }
   head_last: { bars: 8, level: ff, volume: 15, filter: { cutoff: 80 }, layers: { v1: "gb1c hb2 hb3 hb4 hb5 hb6 hb7 hb8", v2: "e1 e2 e3 e4 e5 e6 e7 e8", v3: "L1 L2 L3 L4 N5 N6 N7 N8" } }
