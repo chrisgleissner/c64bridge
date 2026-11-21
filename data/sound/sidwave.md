@@ -668,7 +668,7 @@ sections:
 
 ### End of the song
 
-`end: { hold_beats: 2, release: true }` (`end: true` means 0 beats and release). Notes sounding at the last bar line are held for `hold_beats`, then the gate is released. With `release: true` the player keeps running for the longest nominal release time of those instruments (6 ms to 24 s, capped at 4 s; the table is the datasheet's decay/release time, 3 x the attack times of reSID `rate_counter_period`, and approximate). Tables, vibrato and echo copies run during the hold. The player never writes `$D418` at the end and writes nothing after the tail; the PSID `play` routine becomes a no-op. `durationSeconds` includes the tail. A document without `end` keeps the previous behaviour.
+`end: { hold_beats: 2, release: true }` (`end: true` means 0 beats and release). Notes sounding at the last bar line are held for `hold_beats`, then the gate is released. With `release: true` the player keeps running for the longest nominal release time of those instruments (6 ms to 24 s, capped at 4 s; the table is the datasheet's decay/release time, 3 x the attack times of reSID `rate_counter_period`, and approximate). Tables, vibrato and echo copies run during the hold. When an echo copies a note that sounds at the end, the tail lasts at least the echo delay plus the copy's release (the echo `adsr` release, or else the source tail), so the last echo note is not cut. The player never writes `$D418` at the end and writes nothing after the tail; the PSID `play` routine becomes a no-op. `durationSeconds` includes the tail. A document without `end` keeps the previous behaviour.
 
 ### Articulation and hard restart
 

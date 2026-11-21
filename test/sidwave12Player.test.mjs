@@ -391,6 +391,29 @@ timeline: [s]
   assert.equal(calls[copy].regs[0x20 + 6] >> 4, 3, "sustain 6 x 0.5");
 });
 
+test("end: the release tail waits for an echo copy of the final note", () => {
+  const src = `sidwave: 1.2
+title: Echo end
+tempo: 120
+sids: [{ id: sid1, address: "$D400", model: "8580" }, { id: sid2, address: "$D420", model: "8580" }]
+instruments: { p: { waveform: triangle, adsr: [0, 4, 12, 4] } }
+voices:
+  - { id: 1, instrument: p, patterns: { a: { length: 4, groove: "C4" } } }
+  - { id: 4, sid: sid2, channel: 1, echo: { voice: 1, delay_beats: 1, volume: 0.5, adsr: [3, 6, 6, 6] } }
+sections: { s: { bars: 1, layers: { v1: a } } }
+timeline: [s]
+end: { hold_beats: 0, release: true }
+`;
+  const arr = arrangeSidwave(parseSidwave(src));
+  const fpb = sidwaveFrameRate("PAL") * 60 / 120;
+  const [source] = arr.voices[0].notes, [copy] = arr.voices[3].notes;
+  // The copy keeps its full length: its gate-off is one beat after the source's, not clamped to the last call.
+  assert.ok(Math.abs((copy.end - copy.start) - (source.end - source.start)) <= 1, `copy ${copy.start}-${copy.end}, source ${source.start}-${source.end}`);
+  assert.ok(Math.abs(copy.start - source.start - fpb) <= 1);
+  // Release 6 is 204 ms nominal: the song runs at least that long after the copy's gate-off.
+  assert.ok(arr.totalFrames >= copy.end + Math.floor(0.204 * arr.fps), `totalFrames ${arr.totalFrames}, copy gate-off ${copy.end}`);
+});
+
 test("swing delays every second sixteenth; section tempo changes the bar length", () => {
   const base = (extra, section) => `sidwave: 1.2
 title: Swing

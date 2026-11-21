@@ -537,7 +537,19 @@ export function arrangeSidwave(doc: ParsedSidwave): Arrangement {
   if (doc.version !== "1.2" || !doc.end) return arrangeAll(doc, 0);
   // The release tail depends on the instruments that sound at the last bar line, so arrange once to find it.
   const probe = arrangeAll(doc, 0);
-  return doc.end.release && probe.endTail ? arrangeAll(doc, probe.endTail) : probe;
+  if (!doc.end.release) return probe;
+  // An echo copy of a note that sounds at the end starts its release one echo delay later. Its gate-off was clamped
+  // to the last player call, which cut the echo before its release. Extend the tail by the delay plus the release.
+  let tail = probe.endTail ?? 0;
+  for (const voice of doc.voices) {
+    if (!voice.echo) continue;
+    const slot = doc.voiceSlots.get(voice.id);
+    if (slot === undefined || !probe.voices[slot]?.notes.some((n) => n.end >= probe.totalFrames - 1)) continue;
+    const shift = voice.echo.delay_beats !== undefined ? voice.echo.delay_beats * probe.framesPerBeat : (voice.echo.delay ?? 0) * doc.speed;
+    const release = voice.echo.adsr ? Math.min(RELEASE_MS[voice.echo.adsr[3]!]!, 4000) / 1000 * probe.fps : probe.endTail ?? 0;
+    tail = Math.max(tail, Math.ceil(shift + release));
+  }
+  return tail ? arrangeAll(doc, tail) : probe;
 }
 
 function arrangeAll(doc: ParsedSidwave, endTail: number, onPart?: (part: Arrangement, chip: number) => void): Arrangement {

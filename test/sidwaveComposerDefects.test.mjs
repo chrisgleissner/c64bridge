@@ -169,7 +169,12 @@ test("a play-once echo releases before the final boundary without replaying its 
   const compiled = compileSidwaveToPrg(parseSidwave(song));
   const { calls } = runPrg(compiled, compiled.totalFrames + 1);
   const gate = (frame) => calls[frame].regs[11] & 1;
-  assert.equal(gate(compiled.totalFrames - 2), 1);
+  const frames = [...Array(compiled.totalFrames).keys()];
+  const opens = frames.filter((f) => gate(f) && (f === 0 || !gate(f - 1)));
+  const lastOpen = frames.filter(gate).at(-1);
+  // One gate-on for the copy, then a gate-off that leaves room for the release before the song ends.
+  assert.equal(opens.length, 1);
+  assert.ok(lastOpen < compiled.totalFrames - 2, `copy gate open until ${lastOpen} of ${compiled.totalFrames}`);
   assert.equal(gate(compiled.totalFrames - 1), 0);
   assert.deepEqual(calls[compiled.totalFrames].writes, []);
 });
