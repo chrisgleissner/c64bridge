@@ -202,7 +202,7 @@ A bar lasts four beats by default. A score with `meter: 3` has three beats to a 
 | `id` | SID voice 1, 2 or 3. |
 | `name` | Label only. |
 | `waveform` | `pulse`, `sawtooth` (`saw`), `triangle` (`tri`) or `noise`. Default `pulse`. |
-| `pulse_width` | Pulse duty cycle: a fraction (0 < x ≤ 1, e.g. `0.3`) or a 12-bit value 1–4094. Default 2048 (50 %). |
+| `pulse_width` | Pulse duty cycle: a fraction (0 < x ≤ 1, e.g. `0.3`) or a 12-bit value 1–4094. In 1.2 voices and instruments scale, round and clamp fractions the same way as a pulse table `set`. Default 2048 (50 %). |
 | `adsr` | `[attack, decay, sustain, release]`, each 0–15 (SID register nibbles). Default `[2, 2, 10, 3]`. |
 | `instrument` | Default named instrument or `lib:<name>` recipe. |
 | `patterns` | Named patterns used by the timeline. |
@@ -670,7 +670,7 @@ sections:
 
 ### Articulation and hard restart
 
-Use slurs for phrases: attack at the start, legato inside. `lib:pad_slow` and `lib:wide_pwm_pad` default to `legato: true` and `hard_restart: { frames: 0 }` in 1.2. A hard restart now counts video frames (default 2) so it lasts the same at every `speed`: after the restart ADSR is written the envelope rate counter can need up to 32768 CPU cycles before the envelope moves (33.3 ms PAL), which 2 calls at `speed: 4` do not cover. A gate-off shorter than 32768 cycles is accepted with `HR-SHORT`; `frames: 0` is the explicit soft re-gate. The minimum note length is the hard-restart frames plus 1 frame. `hard_restart: { test: true }` on bass and kick resets the oscillator phase at every attack.
+Use slurs for phrases: attack at the start, legato inside. `lib:pad_slow` and `lib:wide_pwm_pad` default to `legato: true` and `hard_restart: { frames: 0 }` in 1.2. A hard restart now counts video frames (default 2) so it lasts the same at every `speed`: after the restart ADSR is written the envelope rate counter can need up to 32768 CPU cycles before the envelope moves (33.3 ms PAL), which 2 calls at `speed: 4` do not cover. The 1.2 player changes the gate before writing ADSR, so the restart rates still govern the rate counter when the gate rises. A gate-off shorter than 32768 cycles is accepted with `HR-SHORT`; `frames: 0` is the explicit soft re-gate. The minimum note length is the hard-restart frames plus 1 frame. `hard_restart: { test: true }` on bass and kick resets the oscillator phase at every attack.
 
 ### Centre placement
 

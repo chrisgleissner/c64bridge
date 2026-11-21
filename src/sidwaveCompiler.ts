@@ -91,7 +91,12 @@ export interface CompileResult {
  * streams once per frame and runs the per-note modulation itself: hard restart, fast arpeggio,
  * pitch slide, vibrato, pulse-width sweep, and per-SID filters with sweep and per-pattern ramp.
  */
-export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress = true }: { loop?: boolean; compress?: boolean } = {}): CompileResult {
+export function compileSidwaveToPrg(doc: ParsedSidwave, options: { loop?: boolean; compress?: boolean } = {}): CompileResult {
+  return compilePlayer(doc, options);
+}
+
+function compilePlayer(doc: ParsedSidwave, { loop = true, compress = true }: { loop?: boolean; compress?: boolean },
+  planned?: Arrangement): CompileResult {
   loop = loop && !doc.end;
   const loopOffsets: number[] = [];
   let streamCalls = 0;
@@ -125,11 +130,11 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress 
   };
   // Plain multi-SID scores can be packed and checked one chip at a time. A
   // score with a release tail or generated voices/samples needs the final arrangement.
-  const independent = doc.sids.length > 1 && !doc.end && !doc.samples &&
+  const independent = !planned && doc.sids.length > 1 && !doc.end && !doc.samples &&
     !doc.voices.some(({ echo, unison, center }) => echo || unison || center);
   const arrangement = independent
     ? arrangeAll(doc, 0, (part, chip) => part.voices.forEach((voice, channel) => packVoice(voice, chip * 3 + channel, part)))
-    : arrangeSidwave(doc);
+    : planned ?? arrangeSidwave(doc);
   if (!independent) arrangement.voices.forEach((voice, i) => packVoice(voice, i, arrangement));
   arrangement.loopOffsets = loopOffsets;
   arrangement.streamCalls = streamCalls;
@@ -176,7 +181,7 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress 
   if (arrangement.chips) {
     const availableCycles = budgetAt(arrangement.system);
     const required = worstCaseCyclesPerCall / availableCycles;
-    if (requiresTurbo(arrangement.system) && !doc.cpu) {
+    if (!planned && requiresTurbo(arrangement.system) && !doc.cpu) {
       throw new SidwaveValidationError("$.cpu",
         `the player needs up to ${worstCaseCyclesPerCall} cycles per call at speed ${doc.speed}${digiCycles ? ` including ${digiCycles} for the CIA2 digi NMI` : ""} (${availableCycles} available at 1 MHz ${arrangement.system}); use cpu: turbo for a CPU speed of at least ${Math.ceil(required)} MHz`);
     }
@@ -222,7 +227,7 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress 
     streamBytes: streams.map((s) => s.length),
     durationSeconds: arrangement.totalFrames / arrangement.fps,
     loopTo: doc.loopTo === undefined ? undefined : doc.loopTo + 1,
-    arrangement: arrangementReport(doc, arrangement),
+    arrangement: planned ? undefined : arrangementReport(doc, arrangement),
     lint: arrangement.findings?.list(),
 
     basicFreeBytes,
@@ -238,6 +243,31 @@ export function compileSidwaveToPrg(doc: ParsedSidwave, { loop = true, compress 
     digiNmiAddress: assembled.symbols.get("digi_nmi"),
     digiChainAddress: assembled.symbols.get("digi_chain"),
   };
+}
+
+/** Export one arranged SID stem as a PSID for offline reference rendering. */
+export function compileSidwaveStem(doc: ParsedSidwave, arrangement: Arrangement, chip: number): Buffer {
+  const sid = doc.sids[chip];
+  if (!sid) throw new RangeError(`SID ${chip} is not declared`);
+  const first = chip * 3;
+  const voices = arrangement.voices.slice(first, first + 3).map((voice, channel) => {
+    const source = arrangement.mirrors?.find(([, target]) => target === first + channel)?.[0];
+    const events = source === undefined ? voice.events : [
+      ...voice.events,
+      ...arrangement.voices[source]!.events.filter(({ bytes }) =>
+        bytes[0] !== OP.SAMPLE && bytes[0] !== OP.SETVOL && bytes[0] !== OP.FILTERMOD && bytes[0] !== OP.FILTEROFFSET),
+    ];
+    return { ...voice, events: events.filter(({ bytes }) => bytes[0] !== OP.SAMPLE) };
+  });
+  const original = arrangement.chips?.[chip];
+  const projected: Arrangement = {
+    ...arrangement, voices, findings: undefined, tuning: arrangement.tuning?.slice(first, first + 3),
+    chips: original ? [{ ...original, address: 0xd400, owner: original.owner === undefined ? undefined : original.owner - first }] : undefined,
+    filter: original?.filter ?? arrangement.filter,
+    samples: undefined, mirrors: undefined, turbo: false,
+  };
+  const metadata: ParsedSidwave = { ...doc, samples: undefined, sids: [{ ...sid, address: 0xd400 }] };
+  return compileSidwaveToSid(metadata, compilePlayer(metadata, {}, projected).prg).sid;
 }
 
 export function validateSidwavePsidMap(doc: ParsedSidwave): void {
@@ -382,6 +412,7 @@ export interface ArrangedNote {
   sustain?: number;
   /** Silent note that only drives a sync or ring source oscillator (source_note). */
   hidden?: boolean;
+  percussion?: boolean;
   beat?: number;
   path?: string;
   volume?: number;
@@ -674,11 +705,14 @@ function arrangeDoubles(
     const env = sid.filter?.filter_env ?? (chip === 0 ? doc.song.global_fx.filter_env as Record<string, unknown> | undefined : undefined);
     const channels = (env?.voices ?? [1, 2, 3]) as number[];
     const target = voices[slot]!;
+    // The play-once player stops writing at totalFrames. Leave a call for
+    // a delayed copy's gate-off if the end of the piece truncates its tail.
+    const lastGateOff = doc.end && voice.echo ? timing.totalFrames - 1 : timing.totalFrames;
     target.notes = voices[sourceSlot]!.notes.flatMap((note) => {
       const shift = voice.echo?.delay_beats !== undefined && note.beat !== undefined
         ? timing.clock!.frameAt(note.beat + voice.echo.delay_beats, true) - note.start : delay;
       const start = note.start + shift;
-      const end = Math.min(note.end + shift, timing.totalFrames);
+      const end = Math.min(note.end + shift, lastGateOff);
       if (end - start < 2) return [];
       const inst = pool.instruments[note.inst]!;
       checkDetunedPitch(note.midi, inst, cents, timing.system, path);
@@ -976,6 +1010,8 @@ function arrangeChip(
             start: f0, end: f1, midi,
             inst: legato ? previous!.inst : instIndex(inst),
             legato,
+            percussion: !!entry.kitNote || voice.role === "drums" ||
+              (isLibrary && /^(?:kick|snare|hat|tom|clap|open_hat|crash)$/.test(key!)),
             portamento, glideFrom, gateOff,
             ...(modern ? { sustain: mark && !legato ? effective : legato ? previous?.sustain : undefined, beat: b,
               section: sec.index, path: `bar ${Math.floor(b / beatsPerBar) + 1} v${voiceId}`,
@@ -1217,7 +1253,7 @@ function buildInstrument(voice: SidwaveVoice, fx: Record<string, any>, arp: numb
   const adsr = voice.adsr ?? [2, 2, 10, 3];
   const wave = waveformToCtrl(voice.waveform ?? "pulse");
   const baseWidth = voice.pulse_width ?? 0x800;
-  const pw = fx.pulsetable && baseWidth > 0 && baseWidth <= 1
+  const pw = fx.pulsetable && baseWidth > 0 && (modern ? baseWidth < 1 : baseWidth <= 1)
     ? Math.min(4094, Math.max(1, Math.round(baseWidth * 4095))) : baseWidth;
   let pwStep = 0;
   let pwMin = pw;
@@ -2173,6 +2209,33 @@ mirror_hi: .byte ${hi.join(", ")}
 `;
 }
 
+/** Keep the restart ADSR until GATE changes, on both ordinary and mirrored voices. */
+function gateBeforeEnvelope(code: string): string {
+  // reSID envelope.cc writeCONTROL_REG/writeSUSTAIN_RELEASE and envelope.h clock:
+  // writing the new release rate while GATE is low can let the rate counter
+  // run past attack 0's match. GATE must rise while the restart rates are
+  // still in place. At GATE off the new release rate takes effect afterwards.
+  return code.split(`  iny
+  iny
+  lda v_ad,x
+  sta (sid_io),y
+  iny
+  lda v_sr,x
+  sta (sid_io),y
+  dey
+  dey
+  lda v_ctrl,x
+  sta (sid_io),y`).join(`  iny
+  lda v_ctrl,x
+  sta (sid_io),y
+  iny
+  lda v_ad,x
+  sta (sid_io),y
+  iny
+  lda v_sr,x
+  sta (sid_io),y`);
+}
+
 function stockPlayerBudget(system: SystemMode, speed: number): number {
   // Allow for VIC badlines and the host IRQ. Speed increases the call rate.
   return Math.floor((CYCLES_PER_FRAME[system] - 1_100) / speed) - 500;
@@ -2799,7 +2862,7 @@ c_ret:
     playerCode = omitUnusedVoiceEffects(playerCode, insts, hasPortamento);
     playerCode = multiplexSids(playerCode, arr.chips, Boolean(hasFilterTable), stateBytes);
     if (arr.mirrors) playerCode = addCenterMirrors(playerCode, arr);
-    if (arr.softVolume) playerCode = addSoftVolume(playerCode, arr.chips.length, arr.speed, loop || !!arr.explicitEnd);
+    if (arr.softVolume) playerCode = gateBeforeEnvelope(addSoftVolume(playerCode, arr.chips.length, arr.speed, loop || !!arr.explicitEnd));
     if (arr.turbo) {
       playerCode = addTurboInit(playerCode, arr.speed, turboOnly, arr.softVolume);
       if (arr.softVolume) playerCode = measureTurboStartup(playerCode);

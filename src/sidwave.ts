@@ -670,7 +670,7 @@ function normalizeInstruments(raw: unknown, path: string, modern: boolean): Reco
     if (inst.portamento !== undefined) inst.portamento = requireNumber(inst.portamento, `${path}.${name}.portamento`, { min: 0, max: 255, integer: true });
     const ip = `${path}.${name}`;
     if (inst.adsr !== undefined) inst.adsr = parseAdsr(inst.adsr, ip + ".adsr");
-    if (inst.pulse_width !== undefined) inst.pulse_width = parsePulseWidth(inst.pulse_width, ip + ".pulse_width", true);
+    if (inst.pulse_width !== undefined) inst.pulse_width = parsePulseWidth(inst.pulse_width, ip + ".pulse_width", modern ? "modern" : "legacyInstrument");
     for (const key of ["waveform", "wave"]) {
       if (inst[key] === undefined) continue;
       const wave = requireText(inst[key], ip + "." + key).toLowerCase();
@@ -788,7 +788,7 @@ function normalizeRegisterTable(
       if (set === 0 || (set > 1 && !Number.isInteger(set))) {
         throw new SidwaveValidationError(`${sp}.set`, "expected fraction 0 < x <= 1 or integer 1..4094");
       }
-      value = set <= 1 ? Math.max(1, Math.min(4094, Math.round(set * 4095))) : set;
+      value = set <= 1 ? fractionToPulseWidth(set) : set;
     }
     const resonance = step.resonance === undefined ? undefined
       : requireNumber(step.resonance, `${sp}.resonance`, { min: 0, max: 15, integer: true });
@@ -816,8 +816,14 @@ function parseMode(value: unknown, path: string): SystemMode {
   return m;
 }
 
-function parsePulseWidth(raw: unknown, path: string, keepFraction = false): number {
+function fractionToPulseWidth(fraction: number): number {
+  return Math.max(1, Math.min(4094, Math.round(fraction * 4095)));
+}
+
+function parsePulseWidth(raw: unknown, path: string, format: "modern" | "legacyInstrument" | "legacyVoice"): number {
   const pw = requireNumber(raw, path, { min: 0, max: 4095 });
+  if (format === "modern" && pw > 0 && pw <= 1) return fractionToPulseWidth(pw);
+  const keepFraction = format === "legacyInstrument";
   const register = pw > 0 && pw <= 1 ? Math.round(pw * 4095) : Math.floor(pw);
   if (register <= 0 || (register >= 4095 && !(keepFraction && pw === 1))) {
     throw new SidwaveValidationError(path, "a pulse width of 0% or 100% is silent; use a fraction between 0 and 1 or 1..4094");
@@ -832,7 +838,7 @@ function normalizeVoice(v: Record<string, any>, path: string, id: number, modern
   }
   const waveform = normalizeWaveform(wfRaw as Waveform);
 
-  const pulseWidth = v.pulse_width === undefined ? undefined : parsePulseWidth(v.pulse_width, path + ".pulse_width");
+  const pulseWidth = v.pulse_width === undefined ? undefined : parsePulseWidth(v.pulse_width, path + ".pulse_width", modern ? "modern" : "legacyVoice");
 
   let adsr: [number, number, number, number] = [2, 2, 10, 3];
   if (v.adsr !== undefined) {

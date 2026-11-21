@@ -1,5 +1,5 @@
 import type { ParsedSidwave } from "../sidwave.js";
-import { fft, type ExpectedSchedule } from "./sidwaveFidelity.js";
+import { expectedSchedule, fft, type ExpectedSchedule } from "./sidwaveFidelity.js";
 import { chromaSequence, type Stereo } from "./sidwaveSimilarity.js";
 
 /**
@@ -59,18 +59,6 @@ const quantile = (v: number[], q: number) => { const s = [...v].sort((a, b) => a
 const mk = (status: Status, summary: string, metrics: Record<string, unknown> = {}): Check => ({ status, summary, metrics });
 const worst = (list: Status[]): Status => (list.includes("FAIL") ? "FAIL" : list.includes("WARN") ? "WARN" : list.every((s) => s === "SKIP") ? "SKIP" : "PASS");
 
-function sections(doc: ParsedSidwave): Array<{ name: string; start: number; end: number }> {
-  const barS = 240 / doc.song.tempo;
-  const out: Array<{ name: string; start: number; end: number }> = [];
-  for (let bar = 0, i = 0; bar < doc.song.length_bars; i += 1) {
-    const sec = doc.timeline[i % doc.timeline.length]!;
-    const bars = Math.min(sec.bars, doc.song.length_bars - bar);
-    out.push({ name: sec.section ?? `section ${i + 1}`, start: bar * barS, end: (bar + bars) * barS });
-    bar += bars;
-  }
-  return out;
-}
-
 function stft(x: Float64Array, sr: number, size: number, hopS: number, from: number, to: number) {
   const hop = Math.round(hopS * sr);
   const hann = new Float64Array(size).map((_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / size));
@@ -122,7 +110,10 @@ export function analyseQuality(input: QualityInput): QualityReport {
   const sr = signal.sampleRate;
   const total = signal.left.length / sr;
   const offset = input.offsetSeconds ?? 0;
-  const songSeconds = schedule?.durationSeconds ?? (doc ? doc.song.length_bars * 240 / doc.song.tempo : total - offset);
+  const timing = doc && (!schedule?.bars || !schedule.sections) ? expectedSchedule(doc) : schedule;
+  const boundaries = timing?.bars ?? [];
+  const bars = Math.max(0, boundaries.length - 1);
+  const songSeconds = timing?.durationSeconds ?? total - offset;
   const from = Math.max(0, offset), to = Math.min(total, offset + songSeconds);
   const stereo = signal.left.some((v, i) => v !== signal.right[i]);
   const mono = new Float64Array(signal.left.length).map((_, i) => (signal.left[i]! + signal.right[i]!) / 2);
@@ -146,8 +137,12 @@ export function analyseQuality(input: QualityInput): QualityReport {
   // ---- glitches
   if (!schedule) checks.glitches = mk("SKIP", "needs the score to exclude scheduled onsets");
   else {
-    const bright = schedule.notes.filter((n) => n.bright).map((n) => [n.start + offset - 0.015, n.start + n.duration + offset + 0.3] as const);
-    const events = [...schedule.notes.flatMap((n) => [n.start, n.start + n.duration]), ...schedule.percussion.flatMap((p) => [p.start, p.start + (p.duration ?? 0) + 0.04])].map((t) => t + offset).sort((x, y) => x - y);
+    const exclude = th.glitchExcludeMs / 1000;
+    const transients = [
+      ...schedule.notes.filter((n) => n.bright).map((n) => [n.start - exclude, n.start + n.duration + 0.3] as const),
+      ...schedule.percussion.map((p) => [p.start - exclude, p.start + (p.duration ?? 0) + 0.04 + exclude] as const),
+    ];
+    const events = schedule.notes.flatMap((n) => [n.start, n.start + n.duration]);
     const block = Math.round(0.001 * sr);
     const nBlocks = Math.floor((b - a) / block);
     const peaks = new Float64Array(nBlocks);
@@ -159,8 +154,9 @@ export function analyseQuality(input: QualityInput): QualityReport {
     for (let i = 0; i < nBlocks; i += 1) {
       const t = from + (i + 0.5) * 0.001;
       if (peaks[i]! < th.glitchFloor || t < from + 0.06) continue; // the first 60 ms are the player start-up
-      if (events.some((e) => Math.abs(e - t) <= th.glitchExcludeMs / 1000)) continue;
-      if (bright.some(([x, y]) => t >= x && t <= y)) continue;
+      const songTime = t - offset;
+      if (events.some((event) => Math.abs(event - songTime) <= exclude)) continue;
+      if (transients.some(([start, end]) => songTime >= start && songTime <= end)) continue;
       const win = Array.from(peaks.subarray(Math.max(0, i - 100), Math.min(nBlocks, i + 101)));
       const local = Math.max(median(win), 1e-6);
       if (peaks[i]! > th.glitchRatio * local) found.push({ t, ratio: peaks[i]! / local, peak: peaks[i]! });
@@ -216,11 +212,10 @@ export function analyseQuality(input: QualityInput): QualityReport {
     const fstatus: Status = fraction < th.fullnessFail ? "FAIL" : fraction < th.fullnessWarn ? "WARN" : "PASS";
     const metrics: Record<string, unknown> = { fractionOfFramesWithThreeBandsWithin15Db: +fraction.toFixed(3) };
     let bassStatus: Status = "PASS", barNote = "";
-    if (doc) {
-      const barS = 240 / doc.song.tempo, bars = doc.song.length_bars;
+    if (bars) {
       let withBass = 0;
       for (let i = 0; i < bars; i += 1) {
-        const inBar = frames.filter((f) => f.t >= from + i * barS && f.t < from + (i + 1) * barS);
+        const inBar = frames.filter((f) => f.t >= offset + boundaries[i]! && f.t < offset + boundaries[i + 1]!);
         const p = Math.max(0, ...inBar.map((f) => rangePower(f.power, sr, 40, 250)));
         if (db(p) > th.bassBarFloorDb) withBass += 1;
       }
@@ -246,14 +241,13 @@ export function analyseQuality(input: QualityInput): QualityReport {
     const problems: string[] = [];
     let status: Status = "PASS";
     if (rmsDb < th.rmsLowDb || rmsDb > th.rmsHighDb) { status = "WARN"; problems.push(`integrated level ${rmsDb.toFixed(1)} dBFS outside ${th.rmsLowDb}..${th.rmsHighDb}`); }
-    if (doc) {
-      let list = sections(doc);
+    if (timing?.sections) {
+      let list = timing.sections;
       if (new Set(list.map((x) => x.name)).size < 2) {
         // One named section: judge 4-bar blocks instead.
-        const barS = 240 / doc.song.tempo;
-        list = Array.from({ length: Math.ceil(doc.song.length_bars / 4) }, (_, i) => ({ name: `bars ${4 * i + 1}-${Math.min(doc.song.length_bars, 4 * i + 4)}`, start: 4 * i * barS, end: Math.min(doc.song.length_bars, 4 * i + 4) * barS }));
+        list = Array.from({ length: Math.ceil(bars / 4) }, (_, i) => ({ name: `bars ${4 * i + 1}-${Math.min(bars, 4 * i + 4)}`, start: boundaries[4 * i]!, end: boundaries[Math.min(bars, 4 * i + 4)]! }));
       }
-      const secs = list.map((s) => { let en = 0, n = 0; for (let i = Math.round((from + s.start) * sr); i < Math.min(b, Math.round((from + s.end) * sr)); i += 1) { en += mono[i]! ** 2; n += 1; } return { ...s, rmsDb: db(en / Math.max(1, n)) }; });
+      const secs = list.map((s) => { let en = 0, n = 0; for (let i = Math.max(a, Math.round((offset + s.start) * sr)); i < Math.min(b, Math.round((offset + s.end) * sr)); i += 1) { en += mono[i]! ** 2; n += 1; } return { ...s, rmsDb: db(en / Math.max(1, n)) }; });
       const per = new Map<string, number[]>();
       for (const s of secs) per.set(s.name, [...(per.get(s.name) ?? []), s.rmsDb]);
       const means = [...per].map(([name, v]) => [name, v.reduce((x, y) => x + y, 0) / v.length] as const);
@@ -266,10 +260,12 @@ export function analyseQuality(input: QualityInput): QualityReport {
   }
 
   // ---- repetition
-  if (!doc) checks.repetition = mk("SKIP", "needs the score for the bar length");
+  if (!bars) checks.repetition = mk("SKIP", "needs the score for the bar length");
   else {
-    const barS = 240 / doc.song.tempo, bars = doc.song.length_bars, step = 0.2, per = Math.floor((barS - 0.3) / step);
-    const seq = Array.from({ length: bars }, (_, i) => chromaSequence(signal, Array.from({ length: per }, (_, k) => from + i * barS + k * step)));
+    const durations = boundaries.slice(1).map((end, i) => Math.max(0, end - boundaries[i]! - 0.3));
+    const per = Math.floor(Math.min(...durations) / 0.2);
+    const seq = durations.map((duration, i) => chromaSequence(signal,
+      Array.from({ length: per }, (_, k) => offset + boundaries[i]! + k * duration / per)));
     const sim = (x: number, y: number) => { let s = 0, n = 0; for (let k = 0; k < per; k += 1) { const p = seq[x]![k], q = seq[y]![k]; if (!p || !q) continue; let d = 0; for (let j = 0; j < 12; j += 1) d += p[j]! * q[j]!; s += d; n += 1; } return n ? s / n : 0; };
     let repeated = 0;
     const firsts: number[] = [];
@@ -286,8 +282,8 @@ export function analyseQuality(input: QualityInput): QualityReport {
     for (let i = a; i < b; i += 1) { const l = signal.left[i]!, r = signal.right[i]!; el += l * l; er += r * r; em += ((l + r) / 2) ** 2; es += ((l - r) / 2) ** 2; }
     const loss = db(em / ((el + er) / 2 + 1e-30));
     const metrics: Record<string, unknown> = { monoCompatibilityDb: +loss.toFixed(2), width: +Math.sqrt(es / (em + 1e-30)).toFixed(3) };
-    if (doc) {
-      metrics.widthPerSection = sections(doc).map((s) => { let m = 0, d = 0; for (let i = Math.round((from + s.start) * sr); i < Math.min(b, Math.round((from + s.end) * sr)); i += 1) { m += ((signal.left[i]! + signal.right[i]!) / 2) ** 2; d += ((signal.left[i]! - signal.right[i]!) / 2) ** 2; } return { section: s.name, width: +Math.sqrt(d / (m + 1e-30)).toFixed(3) }; });
+    if (timing?.sections) {
+      metrics.widthPerSection = timing.sections.map((s) => { let m = 0, d = 0; for (let i = Math.max(a, Math.round((offset + s.start) * sr)); i < Math.min(b, Math.round((offset + s.end) * sr)); i += 1) { m += ((signal.left[i]! + signal.right[i]!) / 2) ** 2; d += ((signal.left[i]! - signal.right[i]!) / 2) ** 2; } return { section: s.name, width: +Math.sqrt(d / (m + 1e-30)).toFixed(3) }; });
     }
     const status: Status = -loss > th.monoLossFailDb ? "FAIL" : -loss > th.monoLossWarnDb ? "WARN" : "PASS";
     checks.stereo = mk(status, `mono sum keeps ${loss.toFixed(1)} dB of the average channel energy; side/mid width ${metrics.width}`, metrics);

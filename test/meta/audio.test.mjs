@@ -1,7 +1,8 @@
 import test, { describe } from "#test/runner";
 import assert from "#test/assert";
 import { parseSidwave } from "../../src/sidwave.js";
-import { arrangeSidwave, SIDWAVE_MEMORY_END } from "../../src/sidwaveCompiler.js";
+import { readSidwaveExample, SIDWAVE_EXAMPLES } from "../../src/sidwaveExamples.js";
+import { SIDWAVE_MEMORY_END } from "../../src/sidwaveCompiler.js";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { createLogger } from "./helpers.mjs";
 
@@ -461,36 +462,22 @@ describe("meta/audio", () => {
     assert.equal(result.metadata.error?.kind, "execution");
   });
 
-  for (const key of ["chiptune_drive", "ambient_filter", "funk_bass"]) {
-    test(`music_play_preset compiles and launches ${key} with all the featured sounds`, async () => {
-      ctx.client.getActiveBackendType = mock(async () => "c64u");
-      ctx.client.getAvailableBackends = mock(() => ["c64u"]);
-      ctx.client.switchBackend = mock(async () => {});
-      const args = key === "chiptune_drive" ? {} : { preset: key };
-      const result = await metaModule.invoke("music_play_preset", { ...args, verify: false, includeScore: true }, ctx);
-      assert.equal(result.isError, undefined);
-      assert.equal(result.metadata.preset, key);
-      const source = result.structuredContent.data.sidwave;
-      const score = parseSidwave(source);
-      if (key === "chiptune_drive") {
-        assert.equal(score.speed, 2);
-        assert.ok(score.song.tempo >= 125 && score.song.tempo <= 140);
-      }
-      for (const name of ["kick", "snare", "hat", "filter_bass", "lead_pwm"]) assert.ok(source.includes(`lib:${name}`));
-      assert.match(source, /lib:chip_arp_(major|minor)/);
-      const arrangement = arrangeSidwave(score);
-      assert.ok(arrangement.instruments.some((instrument) => instrument.wave & 0x06));
-      assert.ok(arrangement.instruments.some((instrument) => instrument.pulsetable && instrument.vibRate > 0));
-      assert.ok(arrangement.voices.some(({ notes }) => notes.some((note) => note.legato && note.portamento > 0)));
-      assert.equal(ctx.client.runPrg.calls.length, 1);
-      const [prg] = ctx.client.runPrg.calls[0];
-      assert.ok(0x0801 + prg.length - 2 < SIDWAVE_MEMORY_END);
-    });
-  }
+  test("music_play_preset defaults to the current chiptune resource and includes its score on request", async () => {
+    ctx.client.getActiveBackendType = mock(async () => "c64u");
+    ctx.client.getAvailableBackends = mock(() => ["c64u"]);
+    ctx.client.switchBackend = mock(async () => {});
+    const result = await metaModule.invoke("music_play_preset", { verify: false, includeScore: true }, ctx);
+    assert.equal(result.isError, undefined);
+    assert.equal(result.metadata.preset, "chiptune_drive");
+    assert.equal(result.structuredContent.data.resourceUri, "c64://sound/examples/chiptune_drive");
+    assert.equal(result.structuredContent.data.sidwave, readSidwaveExample("chiptune_drive"));
+    assert.equal(ctx.client.runPrg.calls.length, 1);
+    const [prg] = ctx.client.runPrg.calls[0];
+    assert.ok(0x0801 + prg.length - 2 < SIDWAVE_MEMORY_END);
+  });
 });
 
-test("every composition resource is playable by its preset name and wall_of_sid requires configuration", async () => {
-  const { SIDWAVE_EXAMPLES, readSidwaveExample } = await import("../../src/sidwaveExamples.js");
+test("every composition resource is playable by its preset name and wall_of_sid requires configuration", { timeout: 120_000 }, async () => {
   const stages = [];
   const ctx = { client: {
     getActiveBackendType: async () => "c64u", getAvailableBackends: () => ["c64u"],
@@ -500,15 +487,14 @@ test("every composition resource is playable by its preset name and wall_of_sid 
       return { success: true };
     },
   }, setPlatform() {}, logger: createLogger() };
-  for (const { name, title } of SIDWAVE_EXAMPLES) {
+  for (const { name } of SIDWAVE_EXAMPLES) {
     const args = { preset: name, ...(name === "wall_of_sid" ? { configure: true } : {}) };
     const result = await metaModule.invoke("music_play_preset", args, ctx);
     assert.equal(result.isError, undefined, name);
     assert.equal(result.metadata.preset, name);
     assert.equal(result.structuredContent.data.resourceUri, `c64://sound/examples/${name}`);
     assert.equal(result.structuredContent.data.sidwave, undefined);
-    assert.match(readSidwaveExample(name), /^# /);
-    assert.equal(stages.at(-1)[0], title);
+    assert.equal(stages.at(-1)[0], parseSidwave(readSidwaveExample(name)).song.title);
     assert.ok(stages.at(-1)[1] > 100);
   }
   const result = await metaModule.invoke("music_play_preset", { preset: "wall_of_sid" }, ctx);

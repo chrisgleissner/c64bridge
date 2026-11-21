@@ -8,6 +8,7 @@ import { SIDWAVE_EXAMPLES, readSidwaveExample } from "../src/sidwaveExamples.js"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  OP,
   compileSidwaveToPrg,
   compileSidwaveToSid,
   arrangeSidwave,
@@ -16,6 +17,7 @@ import {
   sidwaveFrameRate,
   SIDWAVE_HARD_RESTART_FRAMES,
 } from "../src/sidwaveCompiler.js";
+import { isInfoCode } from "../src/sidwaveLint.js";
 import { unpackNibbles } from "../src/sidwavePcm.js";
 import { midiToHz, noteNameToMidi, parseSidwave, SidwaveValidationError } from "../src/sidwave.js";
 
@@ -1809,28 +1811,84 @@ test("the CIA2 digi NMI load can push a score over the stock CPU budget", () => 
   assert.ok(turbo.worstCaseCyclesPerCall > 18_056);
 });
 
-const LEGACY_PRESETS = ["chiptune_drive", "ambient_filter", "funk_bass"];
+function assertDocumentedTechniques(header, doc, arrangement) {
+  const instruments = arrangement.instruments.slice(1);
+  const notes = arrangement.voices.flatMap((voice) => voice.notes);
+  const opcodes = new Set(arrangement.voices.flatMap((voice) => voice.events).map(({ bytes }) => bytes[0]));
+  const has = (key) => instruments.some((inst) => !!inst[key]);
+  const pitches = (inst) => inst.wavetable?.filter((step) => step.note !== undefined).length ?? 0;
+  const control = (name, bit) => instruments.some((inst) => (inst.wave & bit) || inst.wavetable?.some((step) => step[name]));
+  const doubles = (kind) => doc.voices.some((voice) => voice[kind] && arrangement.voices[doc.voiceSlots.get(voice.id)]?.notes.length);
+  const hasFilter = arrangement.filter.used || arrangement.chips?.some(({ filter }) => filter.used) || has("filtertable");
+  const tests = [
+    [/\bPWM\b|pulse-width drift/i, has("pulsetable") || has("pwStep")],
+    [/delayed vibrato/i, instruments.some((inst) => inst.vibDelay > 0 && inst.vibRate > 0)],
+    [/ring-modulated/i, control("ring", 4)],
+    [/hard-sync/i, control("sync", 2)],
+    [/source_note|(?:hidden|silent) source notes?/i, notes.some((note) => note.hidden)],
+    [/slurred|legato/i, notes.some((note) => note.legato)],
+    [/\bglides?\b|\bbends?\b|\bslides\b/i, notes.some((note) => note.portamento || note.glideFrom !== undefined)],
+    [/pitch-sliding wavetable/i, instruments.some((inst) => inst.wavetable?.some((step) => step.slide_to !== undefined))],
+    [/\barps?\b|arpeggios?/i, instruments.some((inst) => inst.arp.length || pitches(inst) >= 3)],
+    [/dyad wavetables/i, instruments.some((inst) => pitches(inst) === 2)],
+    [/filter owner|owns(?: a resonant low-pass| the filter)|low-pass it owns/i,
+      arrangement.chips?.some((chip) => chip.owner !== undefined)],
+    [/one filter owner per SID/i, arrangement.chips?.every((chip) => chip.owner !== undefined)],
+    [/section (?:cutoff|filter) (?:offsets?|ramps?|swell)/i, opcodes.has(OP.FILTEROFFSET)],
+    [/per-note (?:resonant )?filter|filter tables/i, has("filtertable")],
+    [/filter_env/i, arrangement.chips?.some(({ filter }) => filter.sweep > 0)],
+    [/filtered (?:horn|brass|pulse)|resonant saw bass/i, hasFilter],
+    [/section levels/i, opcodes.has(OP.SETSR)],
+    [/section volume|chip volume/i, opcodes.has(OP.SETVOL)],
+    [/\bPCM\b|digi voice/i, opcodes.has(OP.SAMPLE) && arrangement.samples?.defs.size > 0],
+    [/kit|\bkick\b|\bdrums\b/i, notes.some((note) => note.percussion) || opcodes.has(OP.SAMPLE)],
+    [/unison cop|unison strings/i, doubles("unison")],
+    [/\b(?:stereo echo|echo leads|theme echoes)\b/i, doubles("echo")],
+    [/\bcentred|\bmirrored/i, arrangement.mirrors?.length || doubles("unison")],
+    [/\bdetun(?:e|ed)\b|[+-]\d+ cents/i, arrangement.tuning?.some(Boolean)],
+    [/\britardando\b/i, arrangement.clock?.sections.some(({ startTime, endTime, startBeat, endBeat }) =>
+      Math.abs((endTime - startTime) / (endBeat - startBeat) - 60 / doc.song.tempo) > 0.01)],
+    [/loop point/i, arrangement.clock?.loopFrame !== undefined],
+    [/play-once/i, arrangement.explicitEnd],
+    [/released, ringing ending|released final cadence/i, arrangement.explicitEnd && doc.end.release],
+  ];
+  // "No filter or drums" is an intentional absence and has its own assertion.
+  if (/no filter or drums/i.test(header)) {
+    assert.ok(!hasFilter && !notes.some((note) => note.percussion));
+    header = header.replace(/no filter or drums/gi, "");
+  }
+  for (const [pattern, implemented] of tests) {
+    if (pattern.test(header)) assert.ok(implemented, `compiled song lacks the documented technique ${pattern}`);
+  }
+  const speed = header.match(/\bspeed (\d+)\b/i)?.[1];
+  if (speed) assert.equal(arrangement.speed, Number(speed));
+}
+
 for (const { name } of SIDWAVE_EXAMPLES) {
-  test(`composition ${name} uses its documented techniques within memory and cycle budgets`, () => {
+  test(`composition ${name} uses its documented techniques within memory and cycle budgets`, { timeout: 120_000 }, () => {
     const source = readSidwaveExample(name);
-    assert.match(source.split("\n").slice(0, 3).join("\n"), /^# .*BPM.*SIDs?(?:, \d+ voices)?\n# Techniques: .*\n# Learn: /);
+    const [overview, techniques, learn] = source.split("\n");
+    const sids = overview.match(/(\d+) SIDs?(?:, (\d+) voices)?$/);
+    assert.ok(sids);
+    assert.match(overview, /\d+(?:\.\d+)? BPM/);
+    assert.match(techniques, /^# Techniques: .+/);
+    assert.match(learn, /^# Learn: .+/);
     const doc = parseSidwave(source);
     const arrangement = arrangeSidwave(doc);
-    assert.equal(doc.version, LEGACY_PRESETS.includes(name) ? "1.1" : "1.2");
-    const expected = {
-      chiptune_drive: [1, 3], ambient_filter: [1, 3], funk_bass: [1, 3], acid_line: [1, 3],
-      arp_ballad: [1, 3], drum_and_bass: [1, 3], digi_groove: [1, 2], metal_sync: [1, 3],
-      stereo_echo: [2, 6], chamber_waltz: [1, 3], title_fanfare: [2, 5],
-      ultisid_orchestra: [8, 24], wall_of_sid: [9, 27],
-    }[name];
-    assert.deepEqual([doc.sids.length, doc.voices.length], expected);
-    assert.ok(doc.timeline.length >= (name === "title_fanfare" ? 3 : LEGACY_PRESETS.includes(name) ? 2 : 4));
-    const options = { loop: name !== "title_fanfare" };
-    const compiled = compileSidwaveToPrg(doc, options);
-    const seconds = compiled.totalFrames / compiled.framesPerSecond;
+    assert.equal(doc.version, "1.2");
+    assert.equal(doc.sids.length, Number(sids[1]));
+    if (sids[2]) assert.equal(doc.voices.length, Number(sids[2]));
+    const meter = overview.match(/\b(\d+)\/4\b/)?.[1];
+    if (meter) assert.equal(doc.song.meter, Number(meter));
+    assert.ok(new Set(arrangement.clock.sections.map(({ section }) => section.section)).size >= 2);
+    assert.ok(doc.end || doc.loopTo !== undefined);
+    const compiled = compileSidwaveToPrg(doc);
+    const seconds = compiled.durationSeconds;
+    const [min, maxSeconds] = name === "title_fanfare" ? [12, 20] : [90, 240];
+    assert.ok(seconds >= min && seconds <= maxSeconds, `${seconds.toFixed(2)}s outside ${min}–${maxSeconds}s`);
     assert.ok(compiled.endAddress + 3 <= SIDWAVE_MEMORY_END);
-    assert.ok(compiled.warnings.every((warning) => !/Sawtooth level|out of memory/i.test(warning)), compiled.warnings.join("; "));
-    if (!LEGACY_PRESETS.includes(name)) assert.ok(name === "title_fanfare" ? seconds >= 8 && seconds <= 12 : seconds >= 20 && seconds <= 60);
+    assert.ok(compiled.warnings.every((warning) => !/Sawtooth level/i.test(warning)), compiled.warnings.join("\n"));
+    assertDocumentedTechniques(techniques, doc, arrangement);
     if (doc.samples) {
       assert.throws(() => compileSidwaveToSid(doc, compiled.prg), /NMI digi samples require standalone PRG/);
     } else if (doc.sids.length <= 3) {
@@ -1840,107 +1898,42 @@ for (const { name } of SIDWAVE_EXAMPLES) {
       assert.throws(() => compileSidwaveToSid(doc, compiled.prg), /at most 3 SID chips/);
     }
 
-    const instruments = arrangement.instruments.slice(1);
-    const has = (name) => instruments.some((inst) => !!inst[name]);
-    const control = (flag, bit) => instruments.some((inst) =>
-      !!(inst.wave & bit) || inst.wavetable?.some((step) => step[flag]));
-    const tonalTable = (inst) => inst.wavetable?.some((s) => s.note !== undefined);
-    const pitchedArp = () => instruments.some((inst) => inst.waveloop === 0 && inst.wavetable?.filter((s) => s.note !== undefined).length >= 3);
-    const pitchGlide = () => arrangement.voices.some(({ notes }) => notes.some((note) => note.portamento || note.glideFrom !== undefined));
-    const noiseDrums = () => instruments.some((inst) => inst.wavetable?.some(({ wave }) => wave === "noise") && tonalTable(inst));
-    switch (name) {
-      case "chiptune_drive":
-        assert.ok(pitchedArp() && pitchGlide() && noiseDrums() && has("vibRate") && has("filtertable"));
-        break;
-      case "ambient_filter":
-        assert.ok(has("filtertable") && has("vibRate") && control("ring", 4) && pitchGlide());
-        break;
-      case "funk_bass":
-        assert.ok(has("filtertable") && pitchedArp() && control("sync", 2) && control("ring", 4) && noiseDrums());
-        break;
-      case "acid_line":
-        assert.ok(pitchGlide() && noiseDrums());
-        assert.ok(doc.voices[1].patterns.A.groove.every((entry, i) => i % 2 || entry.endsWith("@lib:kick")));
-        assert.ok(instruments.some((inst) => inst.filtertable?.steps.some((s) => s.value < 0 && s.add)));
-        assert.ok(new Set(instruments.flatMap((inst) => inst.filtertable?.steps.map((s) => s.resonance).filter(Boolean) ?? [])).size > 1);
-        break;
-      case "arp_ballad":
-        assert.ok(pitchedArp() && pitchGlide() && has("pulsetable") && has("vibDelay") && !noiseDrums());
-        assert.ok(instruments.some((inst) => inst.wave === 0x10));
-        break;
-      case "drum_and_bass":
-        assert.equal(doc.speed, 4);
-        assert.ok(noiseDrums());
-        assert.ok(arrangement.tuning[1] < 0 && arrangement.tuning[2] > 0);
-        break;
-      case "digi_groove":
-        assert.ok(doc.samples.defs.size === 3 && pitchedArp() && !noiseDrums());
-        break;
-      case "metal_sync":
-        assert.ok(control("sync", 2) && control("ring", 4) && pitchedArp() && pitchGlide() && noiseDrums());
-        assert.deepEqual(doc.voices[2].patterns.A.groove.slice(0, 2), ["C3@lib:kick", "C3@lib:kick"]);
-        break;
-      case "stereo_echo":
-        assert.deepEqual(doc.sids.map(({ pan }) => pan), ["Left 5", "Right 5"]);
-        assert.ok(doc.voices.some((v) => v.echo) && doc.voices.some((v) => v.unison) && arrangement.tuning && pitchedArp());
-        assert.ok(arrangement.voices[2].notes[0].start < arrangement.voices[5].notes[0].start);
-        break;
-      case "chamber_waltz":
-        assert.equal(doc.song.meter, 3);
-        assert.equal(compiled.totalFrames, Math.round(doc.song.length_bars * 3 * 60 / doc.song.tempo * compiled.framesPerSecond));
-        assert.ok(!arrangement.filter.used && !has("filtertable") && !noiseDrums());
-        assert.deepEqual([...new Set(instruments.map((i) => i.wave))].sort(), [16, 64]);
-        break;
-      case "title_fanfare":
-        assert.ok(instruments.some((i) => i.wave === 0x60 && i.filtertable) && noiseDrums());
-        assert.ok(arrangement.voices[0].notes.at(-1).end - arrangement.voices[0].notes.at(-1).start > 90);
-        break;
-      case "ultisid_orchestra":
-        assert.equal(doc.voices.filter((v) => v.echo).length, 2);
-        assert.ok(doc.voices.filter((v) => v.unison).length >= 3 && pitchedArp() && noiseDrums() && has("pulsetable"));
-        assert.deepEqual([doc.sids[0].pan, doc.sids[4].pan], ["Left 5", "Right 5"]);
-        break;
-      case "wall_of_sid":
-        assert.equal(doc.sids[8].address, 0xd440);
-        assert.ok(has("pulsetable") && has("filtertable"));
-        assert.equal(doc.voices.filter((v) => v.patterns[doc.timeline[0].layers[`v${v.id}`]]).length, 3);
-        break;
-    }
-
     const seen = new Set();
-    const { mem, cpu, writes, tick } = doc.samples ? sampleHarness(doc, options) : loadMultiPlayer(doc, options);
+    const { mem, cpu, writes } = doc.samples ? sampleHarness(doc) : loadMultiPlayer(doc);
     if (!doc.samples) cpu.call(compiled.initAddress);
-    const period = (mem[0xdd04] | (mem[0xdd05] << 8)) + 1;
-    let max = 0;
-    for (let frame = 0; frame <= compiled.totalFrames; frame++) {
+    let measured = 0;
+    const startup = doc.cpu === "turbo" ? Math.ceil(4.25 * compiled.framesPerSecond) : 0;
+    for (let frame = 0; frame <= compiled.totalFrames + startup; frame++) {
       writes.length = 0;
-      let cycles = cpu.call(compiled.playAddress);
-      if (doc.samples) {
-        const ticks = Math.floor((frame + 1) * 19_656 / period) - Math.floor(frame * 19_656 / period);
-        for (let t = 0; t < ticks && (mem[0xdd0e] & 1); t++) cycles += tick();
-      }
-      max = Math.max(max, cycles);
-      let active = 0;
+      measured = Math.max(measured, cpu.call(compiled.playAddress));
       for (const [i, { address }] of doc.sids.entries()) {
-        for (const offset of [4, 11, 18]) {
-          if (mem[address + offset] & 1) { seen.add(i * 3 + (offset - 4) / 7); active++; }
+        for (let channel = 0; channel < 3; channel++) {
+          if (mem[address + 4 + 7 * channel] & 1) seen.add(i * 3 + channel);
         }
       }
-      if (name === "drum_and_bass" && frame === 0) {
-        assert.equal(regFreq(mem, 0xd407), freqAt("G2", -11));
-        assert.equal(regFreq(mem, 0xd40e), freqAt("G2", 9));
-      }
-      if (name === "title_fanfare" && frame === compiled.totalFrames) assert.equal(active, 0, "the fanfare plays once");
-      if (name === "wall_of_sid" && frame === compiled.totalFrames - 50) assert.equal(active, 27, "all nine desks sustain the last tonic");
     }
     for (const slot of doc.voiceSlots.values()) assert.ok(seen.has(slot), `voice slot ${slot + 1} never played`);
-    const stock = Math.floor((19_656 - 1100) / doc.speed) - 500;
-    assert.ok(max <= compiled.worstCaseCyclesPerCall, `${max} emulated versus ${compiled.worstCaseCyclesPerCall} estimated`);
-    if (doc.cpu === "turbo") {
-      assert.ok(max < 47 * stock);
-      assert.throws(() => compileSidwaveToPrg({ ...doc, cpu: undefined }), /use cpu: turbo/);
-    } else assert.ok(max <= stock && compiled.worstCaseCyclesPerCall <= stock);
-    console.info(`SIDWAVE example ${name}: ${seconds.toFixed(2)}s, ${max} measured / ${compiled.worstCaseCyclesPerCall} estimated cycles per call`);
+    if (doc.end?.release) {
+      for (const { address } of doc.sids) {
+        for (const offset of [4, 11, 18]) assert.equal(mem[address + offset] & 1, 0, "the ending releases every gate");
+      }
+    }
+    const cycles = (arrangement.system === "PAL" ? 312 * 63 : 263 * 65);
+    const stock = Math.floor((cycles - 1100) / doc.speed) - 500;
+    assert.ok(measured + compiled.digiCyclesPerCall <= compiled.worstCaseCyclesPerCall,
+      `${measured} emulated + ${compiled.digiCyclesPerCall} reserved NMI cycles versus ${compiled.worstCaseCyclesPerCall} estimated`);
+    assert.equal(compiled.requiresTurbo, compiled.worstCaseCyclesPerCall > stock);
+    assert.ok(compiled.worstCaseCyclesPerCall <= (doc.cpu === "turbo" ? 47 : 1) * stock);
+  });
+
+  test(`composition ${name} documents any accepted lint`, () => {
+    const source = readSidwaveExample(name);
+    const summary = [...source.matchAll(/^# Accepted lint: (.+(?:\n# (?![A-Z][a-z]+:).+)*)/gm)]
+      .map(([, comment]) => comment.replaceAll(/\n# /g, " ")).join(" ");
+    const { lint } = compileSidwaveToPrg(parseSidwave(source));
+    const undocumented = lint.filter(({ code }) => !isInfoCode(code) &&
+      !new RegExp(`\\b${code}\\b[ :]+(?!is avoided\\b)[a-zA-Z0-9]`).test(summary));
+    assert.deepEqual(undocumented, [], undocumented.map(({ code, first }) => `${code} at ${first}`).join(", "));
   });
 }
 

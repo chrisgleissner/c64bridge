@@ -47,10 +47,11 @@ if (opts.song) {
     source = m.generateSidwave({ root: "C3", preset: "classic", style, seed: m.DEFAULT_MUSIC_SEED, system: "PAL" }).score;
   } else source = fs.readFileSync(opts.song, "utf8");
   doc = m.parseSidwave(source);
-  schedule = m.expectedSchedule(doc);
+  const arrangement = m.arrangeSidwave(doc);
+  schedule = m.expectedSchedule(doc, { arrangement });
   if (opts.offsetMs === undefined) {
-    const reference = m.renderReference(doc, { model: opts.model, sampleRate: 48000 });
-    const cmp = m.compareToReference(reference, signal, { latencySearchMs: 4000, halfBarSeconds: 120 / doc.song.tempo });
+    const reference = m.renderReference(doc, { model: opts.model, sampleRate: 48000, arrangement });
+    const cmp = m.compareToReference(reference, signal, { latencySearchMs: 4000, halfBarSeconds: (schedule.bars[1] - schedule.bars[0]) / 2 });
     offsetSeconds = cmp.offsetMs / 1000;
     console.error(`song start found at ${cmp.offsetMs.toFixed(0)} ms (chroma ${cmp.real.chromaMedian.toFixed(2)} against the reference)`);
   }

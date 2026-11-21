@@ -540,7 +540,10 @@ export function emulate(doc, compiled, { loop, maxCalls }, fault, stats = {}) {
           cycles += nmiCycles;
           ciaElapsed -= period;
         }
-      } else ciaElapsed = previousPeriod = 0;
+      }
+      // If the NMI stopped the timer, unused cycles in this call don't carry
+      // to a new hit that starts the same timer period on the next call.
+      if (!(mem[0xdd0e] & 1)) ciaElapsed = previousPeriod = 0;
       maxCycles = Math.max(maxCycles, cycles);
       if (!loop && i >= total + tail && sidWrites > w0) lateWrites++;
       stats.calls = i + 1;

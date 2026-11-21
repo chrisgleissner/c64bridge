@@ -1,5 +1,5 @@
 import { midiToHz, type ParsedSidwave } from "../sidwave.js";
-import { arrangeSidwave, SIDWAVE_HARD_RESTART_FRAMES } from "../sidwaveCompiler.js";
+import { arrangeSidwave, OP, type Arrangement } from "../sidwaveCompiler.js";
 
 /**
  * Fidelity analysis of a captured Ultimate audio stream against the SIDWAVE schedule.
@@ -38,38 +38,61 @@ export interface ExpectedSchedule {
   durationSeconds: number;
   voiceCount: number;
   sidCount: number;
+  /** Bar boundaries in seconds, including the end of the last bar. */
+  bars?: number[];
+  sections?: Array<{ name: string; start: number; end: number }>;
 }
 
 export interface ScheduleOptions {
+  arrangement?: Arrangement;
   /** Pan side per SID index, for SIDs whose pan is set in the Audio Mixer. Overrides a `pan` field on the SID entry. */
   pan?: Record<number, PanSide>;
 }
 
-/**
- * Lists every pitched note and every percussion onset the player will produce.
- * A note sounds from its start frame until its gate-off frame, which is the earlier of the arranged end and the
- * hard restart frame (SIDWAVE_HARD_RESTART_FRAMES before the next note on the same voice). Times are
- * frame / fps, where fps is the video frame rate times `speed` (player calls per second).
- * Instruments with a noise waveform are percussion; the schedule keeps only their onsets.
- */
+/** Lists pitched notes and percussion onsets from the compiled note and gate events. */
 export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = {}): ExpectedSchedule {
-  const arr = arrangeSidwave(doc);
+  const arr = options.arrangement ?? arrangeSidwave(doc);
+  const atBeat = (beat: number) => (arr.clock?.frameAt(beat) ?? Math.round(beat * arr.framesPerBeat)) / arr.fps;
+  const meter = doc.song.meter;
+  const bars = Array.from({ length: doc.song.length_bars + 1 }, (_, i) => atBeat(i * meter));
+  const sections: NonNullable<ExpectedSchedule["sections"]> = [];
+  if (arr.clock) {
+    for (const { section, startBeat, endBeat } of arr.clock.sections) {
+      sections.push({ name: section.section ?? `section ${sections.length + 1}`, start: atBeat(startBeat), end: atBeat(endBeat) });
+    }
+  } else {
+    for (let bar = 0, i = 0; bar < doc.song.length_bars; i += 1) {
+      const section = doc.timeline[i % doc.timeline.length]!;
+      const end = Math.min(bar + section.bars, doc.song.length_bars);
+      sections.push({ name: section.section ?? `section ${i + 1}`, start: bars[bar]!, end: bars[end]! });
+      bar = end;
+    }
+  }
   const notes: ScheduledNote[] = [];
   const percussion: PercussionOnset[] = [];
   arr.voices.forEach((voice, v) => {
     const sid = Math.floor(v / 3);
-    const pan = options.pan?.[sid] ?? ((doc.sids[sid] as { pan?: PanSide } | undefined)?.pan);
-    for (let i = 0; i < voice.notes.length; i += 1) {
-      const n = voice.notes[i]!;
+    const setting = doc.sids[sid]?.pan?.toLowerCase();
+    const pan = options.pan?.[sid] ?? (setting?.startsWith("left") ? "left" : setting?.startsWith("right") ? "right" : "center");
+    const gates = voice.events.filter(({ bytes: [op] }) => op === OP.GATEOFF || op === OP.HARDRESTART || op === OP.RESTART)
+      .sort((a, b) => a.frame - b.frame);
+    let gate = 0;
+    for (const n of voice.notes) {
+      if (n.hidden) continue;
       const inst = arr.instruments[n.inst]!;
       const start = n.start / arr.fps;
-      const next = voice.notes[i + 1];
-      const nextStart = next?.start ?? voice.notes[0]!.start + arr.totalFrames;
-      const hr = Math.max(n.start + 1, nextStart - SIDWAVE_HARD_RESTART_FRAMES);
-      const continues = next?.legato && next.start === n.end;
-      const gateOff = continues ? n.end : Math.min(n.end, hr);
-      if ((inst.wave & 0xf0) === 0x80) {
-        percussion.push({ voice: v, sid, start, duration: (gateOff - n.start) / arr.fps });
+      while (gate < gates.length && gates[gate]!.frame <= n.start) gate++;
+      const gateOff = Math.min(n.end, gates[gate]?.frame ?? n.end);
+      if (n.percussion || (inst.wave & 0xf0) === 0x80) {
+        const table = inst.wavetable;
+        let elapsed = 0, lastGate = 0;
+        for (const step of table ?? []) {
+          elapsed += Number(step.frames ?? 1);
+          if (step.gate !== false) lastGate = elapsed;
+        }
+        const closes = inst.waveloop === undefined && table?.[table.length - 1]?.gate === false;
+        const duration = Math.min(gateOff - n.start, closes ? lastGate : Infinity) / arr.fps;
+        percussion.push({ voice: v, sid, start, duration });
         continue;
       }
       const alternates = inst.arp.length > 0 ? inst.arp.map((o) => midiToHz(n.midi + o)) : [];
@@ -77,9 +100,16 @@ export function expectedSchedule(doc: ParsedSidwave, options: ScheduleOptions = 
       notes.push({ voice: v, sid, pan, start, duration: (gateOff - n.start) / arr.fps, hz: midiToHz(n.midi), alternates, modulated, bright: !!inst.ring || !!inst.sync || !!inst.wavetable?.length });
     }
   });
+  const samples = arr.samples;
+  for (const command of samples?.commands ?? []) {
+    if (!command.name) continue;
+    const sample = samples!.defs.get(command.name)!;
+    const duration = sample.sampleCount / (sample.stats.rate * 2 ** (command.pitch / 12));
+    for (const frame of command.at) percussion.push({ voice: command.chip * 3, sid: command.chip, start: frame / arr.fps, duration });
+  }
   notes.sort((a, b) => a.start - b.start);
   percussion.sort((a, b) => a.start - b.start);
-  return { notes, percussion, durationSeconds: arr.totalFrames / arr.fps, voiceCount: arr.voices.length, sidCount: Math.ceil(arr.voices.length / 3) };
+  return { notes, percussion, durationSeconds: arr.totalFrames / arr.fps, voiceCount: arr.voices.length, sidCount: Math.ceil(arr.voices.length / 3), bars, sections };
 }
 
 // ---------------------------------------------------------------------------
