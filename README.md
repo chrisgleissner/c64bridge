@@ -1,10 +1,12 @@
 # C64 Bridge
 
-**Build C64 games, compose for the SID, and put the C64 Ultimate’s extra hardware to work.**
+**Run and verify C64 code from your AI coding agent.**
 
-C64 Bridge connects your AI coding agent to VICE or an Ultimate device through the Model Context Protocol (MCP). The agent can look up C64 programming and hardware details in the bundled manuals as it works.
+An AI model can draft 6510 code and suggest tests. C64 Bridge adds a connection to VICE or Ultimate hardware through the Model Context Protocol (MCP). An agent such as Claude Code or Codex can load and run the program, read the screen or memory, and use the result to debug the next revision. You can follow the whole test from the same session.
 
-[Quick start](#quick-start) · [Browse the bundled manuals](#bundled-manuals)
+The bridge also supplies [C64 manuals](#bundled-manuals) your agent can consult as it works, from VIC-II timing and SID registers to Ultimate features such as REU and UCI.
+
+[Start the Hello World tour](#quick-start)
 
 ![Logo](./doc/img/logo.png)
 
@@ -20,10 +22,8 @@ Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [
 
 <!-- AUTO-GENERATED:TOC-START -->
 
-- [Develop a game](#develop-a-game)
-- [Compose for the SID](#compose-for-the-sid)
-- [Use Ultimate hardware](#use-ultimate-hardware)
 - [Quick start](#quick-start)
+- [Project showcases](#project-showcases)
 - [Configuration](#configuration)
 - [Other MCP clients](#other-mcp-clients)
 - [HTTP invocation](#http-invocation)
@@ -34,39 +34,9 @@ Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [
 
 <!-- AUTO-GENERATED:TOC-END -->
 
-## Develop a game
-
-Tell your agent whether you’re targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout, and asset loading.
-
-Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input, and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
-
-> Run my PRG in VICE with its symbol file. Break at the player update routine, then resume and check whether pressing fire spawns a projectile.
-
-## Compose for the SID
-
-Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. [Sound tools](#c64_sound)
-
-Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
-
-> Play Stereo Echo on my Ultimate, then show me how the score places its lead and echoes across the two SIDs.
-
-Listen to **Arp Ballad**, **Drum and Bass**, or **Stereo Echo** and open the matching YAML to see how each was built. [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases) · [Example scores](data/sound/examples/)
-
-## Use Ultimate hardware
-
-Tell your agent what you want the machine to do. It can use the hardware manuals to check what your program needs to detect and which settings to inspect before a run. [Configuration tools](#c64_config)
-
-| Feature | What you can build |
-| --- | --- |
-| Turbo and REU | Use more CPU time per frame or transfer level data and graphics into C64 RAM. |
-| Ultimate Command Interface (UCI) | Load files, save high scores, or use the network from your C64 program. |
-| UPIC | Draw full-colour graphics into the border with timed colour changes. |
-
-> Add REU level loading to my game. Check for the REU at startup and test the loader on my C64 Ultimate.
-
-You can also upload PRGs, launch CRTs, mount disks, and capture video or stereo audio on C64U/U64. Check the tool tables for platform support. [Programs](#c64_program) · [Disks](#c64_disk) · [Streaming](#c64_stream)
-
 ## Quick start
+
+This Hello World tour takes you from setup to a verified result on the C64 screen. Use VICE if you’re starting without hardware.
 
 Install Node.js 24 or later with npm, then confirm your MCP client can find `npx` on its PATH. [Node.js downloads](https://nodejs.org/en/download)
 
@@ -84,15 +54,9 @@ For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` for your p
 
 ### 2. Connect your MCP client
 
-The VS Code, Visual Studio, and Cursor buttons register C64 Bridge with `c64u` selected. For VICE or U2, use the environment settings from the target table.
+Choose your client. [Codex CLI](#codex-cli) · [Claude Code](#claude-code) · [Claude Desktop or Cursor](#claude-desktop-and-cursor)
 
-[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
-[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
-[![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
-
-For **VS Code with GitHub Copilot**, you can also add this entry to `.vscode/mcp.json` and start **c64bridge** from the editor.
+For **VS Code with GitHub Copilot**, you can add this entry to `.vscode/mcp.json` and start **c64bridge** from the editor.
 
 ```json
 {
@@ -109,19 +73,67 @@ For **VS Code with GitHub Copilot**, you can also add this entry to `.vscode/mcp
 
 If you're working in a checkout of this repository, its [VS Code configuration](.vscode/mcp.json) starts the local source. Select the [C64 custom agent](.github/agents/c64.agent.md) in Copilot Chat to use the project's C64 workflows. [VS Code MCP setup](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
 
-For **Claude Code**, **Claude Desktop**, or **Cursor**, see [Other MCP clients](#other-mcp-clients).
+<details>
+<summary>Install buttons for C64 Ultimate and Ultimate 64</summary>
 
-### 3. Check the connection
+These shortcuts select the `c64u` profile and use `c64u` as the hostname. Edit the client configuration if your device uses a different address.
 
-If you have a PRG ready, ask your agent to run it on the selected backend. For a quick check on VICE, ask it to run this BASIC line and read the text screen.
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
+[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
 
-```basic
-10 PRINT CHR$(147);"HELLO VICE"
-```
+</details>
+
+### 3. Run Hello World
+
+Open your coding agent and give it a target, a task, and a result to check.
+
+> Use C64 Bridge on VICE. Run a short BASIC program that clears the screen, prints HELLO VICE, and reads the text screen back to confirm it.
+
+For a C64 Ultimate or Ultimate 64, ask for the `c64u` backend. For a U2-family cartridge, ask for `u2`. You can change the greeting to match.
 
 ![VICE text screen displaying HELLO VICE](doc/img/backend-switch/hello-vice.png)
 
-If tools are missing, check that the client started the server and can find Node.js 24+. If a call fails, read `c64://platform/status` to see which backend is active. [Troubleshooting](doc/troubleshooting-mcp.md)
+The agent should report seeing `HELLO VICE` on the emulated screen. The bridge runs the program and returns the observed text. The same run-and-check loop lets the agent catch a wrong value in RAM or confirm that a game reacts to input.
+
+If the tools are missing, check that your client has enabled `c64bridge` and can find Node.js 24 or later. If a call fails, check the active backend in `c64://platform/status`. [Troubleshooting](doc/troubleshooting-mcp.md)
+
+## Project showcases
+
+Try one of these after the tour. Each example gives the agent a concrete task and a way to inspect the result.
+
+### Develop a game
+
+Tell your agent whether you’re targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout, and asset loading.
+
+Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input, and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
+
+> Run my PRG in VICE with its symbol file. Break at the player update routine, then resume and check whether pressing fire spawns a projectile.
+
+### Compose for the SID
+
+Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. [Sound tools](#c64_sound)
+
+Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
+
+> Play Stereo Echo on my Ultimate, then show me how the score places its lead and echoes across the two SIDs.
+
+Listen to **Arp Ballad**, **Drum and Bass**, or **Stereo Echo** and open the matching YAML to see how each was built. [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases) · [Example scores](data/sound/examples/)
+
+### Use Ultimate hardware
+
+Tell your agent what you want the machine to do. It can use the hardware manuals to check what your program needs to detect and which settings to inspect before a run. [Configuration tools](#c64_config)
+
+| Feature | What you can build |
+| --- | --- |
+| Turbo and REU | Use more CPU time per frame or transfer level data and graphics into C64 RAM. |
+| Ultimate Command Interface (UCI) | Load files, save high scores, or use the network from your C64 program. |
+| UPIC | Draw full-colour graphics into the border with timed colour changes. |
+
+> Add REU level loading to my game. Check for the REU at startup and test the loader on my C64 Ultimate.
+
+You can also upload PRGs, launch CRTs, mount disks, and capture video or stereo audio on C64U/U64. Check the tool tables for platform support. [Programs](#c64_program) · [Disks](#c64_disk) · [Streaming](#c64_stream)
 
 ## Configuration
 
@@ -207,6 +219,17 @@ After `poweroff` on C64U/U64, restore power at the outlet. The machine starts au
 ## Other MCP clients
 
 All local clients launch the same stdio command, `npx -y c64bridge@latest`. A manual terminal launch waits for MCP input on stdin and writes logs to stderr. Use Ctrl+C to stop a manual session.
+
+### Codex CLI
+
+Register the server for VICE. For hardware, set the variables from the [target table](#1-choose-a-target) with one `--env` per variable.
+
+```bash
+codex mcp add c64bridge --env C64_MODE=vice -- npx -y c64bridge@latest
+codex mcp get c64bridge
+```
+
+Start a new Codex session and try [the greeting](#3-run-hello-world). [Codex MCP setup](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
 
 ### Claude Code
 
