@@ -31,7 +31,7 @@ C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents 
 
 You need Node.js 24 or later with npm, an MCP client, and either VICE or a reachable Ultimate device. [Node.js downloads](https://nodejs.org/en/download)
 
-Install C64 Bridge by registering it with your client. The client launches `npx -y c64bridge@latest`, which checks npm for the latest release when the server starts, downloads it as needed, and starts the server over stdio.
+Install C64 Bridge by registering it with your client. The client launches `npx -y c64bridge@latest`, which fetches the npm package as needed and starts the local server over stdio.
 
 ### 1. Choose a target
 
