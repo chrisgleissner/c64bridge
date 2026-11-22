@@ -4,7 +4,7 @@
 
 C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents such as Claude Code and Codex to VICE or Ultimate hardware. Your agent can run a PRG, read the screen or RAM, and use the results to debug.
 
-A built-in, searchable knowledge base of C64 programming and hardware reference material provides the technical context it needs as it works.
+A built-in, searchable knowledge base gives it access to C64 programming and hardware expertise.
 
 ![Logo](./doc/img/logo.png)
 
