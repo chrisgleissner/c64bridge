@@ -284,22 +284,20 @@ The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code projec
 
 C64 Bridge uses the official TypeScript MCP SDK. [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
 
-- [Troubleshooting](doc/troubleshooting-mcp.md) covers startup, backend connectivity, and diagnostic logs. Logs default to `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail.
-- [Agent integration guide](AGENTS.md) explains tool discovery, operation routing, and bundled skills. [Agent primer](data/context/bootstrap.md)
-- [Static MCP interface](mcp/) contains tools, resources, prompts, and schemas for inspection without a running server. [MCP manifest](mcp.json)
-- [Ultimate REST specifications](doc/c64u/c64-openapi.yaml) describe the C64U/U64 API. [U2 REST specification](doc/u2/u2-openapi.yaml)
-- [DeepWiki](https://deepwiki.com/chrisgleissner/c64bridge) provides an architecture and implementation overview.
+- **Troubleshooting** covers startup, connectivity, and diagnostic logs. Logs default to `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail. [Troubleshooting guide](doc/troubleshooting-mcp.md)
+- **Agent integration** covers tool discovery, operation routing, and bundled skills. [Integration guide](AGENTS.md) · [Agent primer](data/context/bootstrap.md)
+- **Static MCP interface** lists tools, resources, prompts, and schemas. [Interface files](mcp/) · [MCP manifest](mcp.json)
+- **Ultimate REST APIs** cover the endpoints used by the hardware backends. [C64U/U64 specification](doc/c64u/c64-openapi.yaml) · [U2 specification](doc/u2/u2-openapi.yaml)
+- **Architecture and implementation** · [DeepWiki](https://deepwiki.com/chrisgleissner/c64bridge)
 
 ### Bundled manuals
 
 Your agent can retrieve these manuals through MCP as it writes, debugs, or tests. Pick a target and describe your project to get started. Open the manuals here whenever you want the technical details yourself.
 
-| Topic | Browse on GitHub |
-| --- | --- |
-| Game development | [Game development index](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md) |
-| SID composition | [SIDWAVE format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md) |
-| Ultimate hardware | [Turbo and board settings](data/ultimate/hardware.md) · [REU](data/ultimate/reu.md) · [UCI](data/ultimate/uci.md) · [UPIC](data/ultimate/upic.md) |
-| VICE debugging | [Binary Monitor](data/vice/vice-binary-monitor-spec.md) |
+- **Game development** · [Game development index](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
+- **SID composition** · [SIDWAVE format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md)
+- **Ultimate hardware** · [Turbo and board settings](data/ultimate/hardware.md) · [REU](data/ultimate/reu.md) · [UCI](data/ultimate/uci.md) · [UPIC](data/ultimate/upic.md)
+- **VICE debugging** · [Binary Monitor](data/vice/vice-binary-monitor-spec.md)
 
 ## Runtime environment variable reference
 
