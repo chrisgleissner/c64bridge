@@ -1,6 +1,10 @@
 # C64 Bridge
 
-**Write a BASIC program in chat and watch it run on your Commodore 64.** C64 Bridge connects an AI client to real hardware or the VICE emulator through the Model Context Protocol (MCP). Use it to run 6510 assembly, inspect RAM, draw PETSCII art, or compose SID music, then check the result on screen or in memory.
+**Build C64 games, compose for the SID, and put the C64 Ultimate’s extra hardware to work.**
+
+C64 Bridge connects your coding tools to a Commodore 64 through MCP. Run a host-built PRG, debug it in VICE using your own labels, then switch to the Ultimate and check how it plays on hardware.
+
+[Set up your target](#quick-start) · [Develop a game](#develop-a-game) · [Compose for the SID](#compose-for-the-sid) · [Use Ultimate hardware](#use-ultimate-hardware)
 
 ![Logo](./doc/img/logo.png)
 
@@ -16,16 +20,16 @@
 [![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
 [![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
-![HELLO VICE on the VICE screen](doc/img/backend-switch/hello-vice.png)
-
-C64 Bridge runs on Linux, macOS, and Windows. It uses the official TypeScript MCP SDK and is listed in the [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge).
+Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
 
 ## Contents
 
 <!-- AUTO-GENERATED:TOC-START -->
 
+- [Develop a game](#develop-a-game)
+- [Compose for the SID](#compose-for-the-sid)
+- [Use Ultimate hardware](#use-ultimate-hardware)
 - [Quick start](#quick-start)
-- [What you can do](#what-you-can-do)
 - [Configuration](#configuration)
 - [Other MCP clients](#other-mcp-clients)
 - [HTTP invocation](#http-invocation)
@@ -35,6 +39,39 @@ C64 Bridge runs on Linux, macOS, and Windows. It uses the official TypeScript MC
 - [MCP API Reference](#mcp-api-reference)
 
 <!-- AUTO-GENERATED:TOC-END -->
+
+## Develop a game
+
+Choose a stock PAL/NTSC C64 or an Ultimate target up front. That decision shapes your frame budget, memory map, and asset loading. The game development guide has reading paths for scrolling games, single-screen action, adventures, and more. [Game development guide](data/gamedev/index.md)
+
+1. **Build one playable screen.** Start with a frame loop, one sprite you can move, and joystick input. Use the built-in 6510 assembler for a small routine, or bring a PRG and symbol file from your own build. [Architecture](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
+2. **Debug the PRG in VICE.** Pass `symbolsFile` to `c64_program` with `op: "run_prg"`. Set a breakpoint at a label from your build, step through the update routine, and inspect registers or RAM. [VICE debugger](#c64_debug) · [Binary Monitor guide](data/vice/vice-binary-monitor-spec.md)
+3. **Check what the player sees.** Send joystick input, then read game state or capture a frame. Switch backends to check raster timing and Ultimate-dependent code on the target hardware. [Input](#c64_input) · [Graphics](#c64_graphics) · [Switching backends](#initial-target-and-runtime-switching)
+
+For an existing build, try asking your agent:
+
+> VICE: run my PRG with its symbol file. Break at the player-update label and inspect the game state. Then resume, press fire, and check whether a projectile spawned.
+
+## Compose for the SID
+
+Start with a score you can hear and edit. Compare the PWM lead in **Arp Ballad**, the drum patterns in **Drum and Bass**, and the stereo arrangement in **Stereo Echo**. The releases include audio renders and YAML scores. [Example scores](data/sound/examples/) · [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases)
+
+1. **Arrange in SIDWAVE.** Define instruments and reusable patterns in YAML, then assemble them into sections. SIDWAVE supports pulse-width modulation, wavetables, filter sweeps, ring modulation, and multi-SID layouts. [SIDWAVE format](data/sound/sidwave.md)
+2. **Compile and inspect.** Use `c64_sound` with `op: "compile_play"` and `dryRun: true` to check lint and the arrangement report before playback. Set `outputPath` to save a PRG or PSID. Use PRG for layouts with more than three SIDs. [Sound operations](#c64_sound)
+3. **Audition on your target.** One SID gives you three voices. Compatible Ultimate configurations can address up to ten SIDs, depending on the board and fitted chips. Check addressing and mixer pans, then use audio capture on C64U/U64 to inspect playback. [Ultimate SID layouts](data/ultimate/multisid.md)
+
+## Use Ultimate hardware
+
+Use `c64_config` to inspect and change supported settings over REST. From your program, use the hardware references to detect the features it needs and decide how it should behave when they are unavailable.
+
+| If you want to… | Start here |
+| --- | --- |
+| Give a game more CPU time or load larger levels | Use turbo registers for extra CPU time and REU DMA to move assets into C64 RAM. [Turbo and board settings](data/ultimate/hardware.md) · [REU recipes](data/ultimate/reu.md) |
+| Load files or use networking from 6510 code | Use the Ultimate Command Interface (UCI) for file and network operations. [UCI programming guide](data/ultimate/uci.md) |
+| Draw beyond the usual VIC-II picture area | Use UPIC’s timed border-colour writes for full-colour graphics. [UPIC technique](data/ultimate/upic.md) |
+| Test builds on the machine | Upload a host PRG, launch a CRT, mount a disk image, or capture video and stereo audio on C64U/U64. [Program tools](#c64_program) · [Disk tools](#c64_disk) · [Streaming](#c64_stream) |
+
+The hardware guide also covers LED controls. The API reference lists support for PETSCII and bitmap rendering, printer workflows, and the shared U2-family operations. [Hardware guide](data/ultimate/hardware.md) · [MCP API reference](#mcp-api-reference)
 
 ## Quick start
 
@@ -73,27 +110,17 @@ If you're working in a checkout of this repository, its [VS Code configuration](
 
 For **Claude Code**, **Claude Desktop**, or **Cursor**, see [Other MCP clients](#other-mcp-clients).
 
-### 3. Run your first program
+### 3. Check the connection
 
-Ask your client to run this on VICE, or change the prefix to `c64u:` or `u2:`.
+If you have a PRG ready, ask your agent to run it on the selected backend. For a quick check on VICE, ask it to run this BASIC line and read the text screen.
 
-> vice: Write and run a short BASIC program that clears the screen and prints HELLO VICE. Read the screen to confirm the result.
+```basic
+10 PRINT CHR$(147);"HELLO VICE"
+```
 
-The agent can upload and run the BASIC program, then read the 40×25 text screen through the same connection. If the tools are missing, check that the MCP server is running and that its process can find Node.js 24+. If the tools are present but the command fails, check the active backend in `c64://platform/status` and consult the [troubleshooting guide](doc/troubleshooting-mcp.md).
+![VICE text screen displaying HELLO VICE](doc/img/backend-switch/hello-vice.png)
 
-## What you can do
-
-| Try asking | What C64 Bridge can do |
-| --- | --- |
-| “Assemble a 6510 routine that changes the border colour. Run it and read back the register.” | Tokenize BASIC v2, assemble 6502/6510 source, load or run PRGs, and inspect or disassemble memory. Ultimate hardware also supports launching CRT images. |
-| “Draw a PETSCII title screen and capture a frame.” | Render text graphics, work with sprites and character sets, and capture frames on C64U/U64 or VICE. |
-| “Play the chiptune_drive preset.” | Play or compose SID music, compile SIDWAVE scores, and analyze recorded audio. Listen to the example arrangements or open the scores. [SIDWAVE format](data/sound/sidwave.md) · [Release downloads](https://github.com/chrisgleissner/c64bridge/releases) |
-| “Mount this disk image and list the drives.” | Manage disk images and drives, with additional Ultimate tools for configuration, streaming, and Commodore or Epson printer workflows. Check the [operation tables](#tools) for platform support. |
-| “Use VICE to stop at this address and show me the CPU registers.” | Use the Binary Monitor for breakpoints, stepping, registers, and snapshots. [VICE support matrix](doc/vice/support-matrix.md) |
-
-See a worked example that starts with a [song prompt](doc/img/prompts/duck_song.png) and adds a [matching PETSCII screen](doc/img/prompts/duck_petscii.png).
-
-The server bundles C64 programming references, guided workflows, and searchable documentation. For game development, start with the MCP resource `c64://gamedev/index`. Its reading plan covers stock C64 techniques and Ultimate features such as REU, CPU turbo, UCI networking, multi-SID audio with up to 10 SIDs, LED control, and UPIC full-colour border graphics. [Game development skill](.github/skills/game-development/SKILL.md)
+If tools are missing, check that the client started the server and can find Node.js 24+. If a call fails, read `c64://platform/status` to see which backend is active. [Troubleshooting](doc/troubleshooting-mcp.md)
 
 ## Configuration
 
@@ -106,7 +133,9 @@ The bridge uses the first readable, parseable JSON configuration in this order:
 3. `~/.c64bridge.json`.
 4. A legacy `.c64bridge.json` next to the package or source checkout.
 
-Keep all JSON backend profiles in the same file. An explicitly named file must exist and parse, or startup fails. Environment variables override their corresponding JSON settings, with built-in defaults filling in the rest. See the [runtime environment variable reference](#runtime-environment-variable-reference) for the available settings.
+Keep all JSON backend profiles in the same file. An explicitly named file must exist and parse, or startup fails.
+
+Environment variables override their corresponding JSON settings, with built-in defaults filling in the rest. See the [runtime environment variable reference](#runtime-environment-variable-reference) for the available settings.
 
 The following config makes both Ultimate profiles and VICE available. Omit any unused profile. Replace the hosts as needed, and add `"networkPassword": "your-password"` to a hardware profile only if network protection is enabled.
 
@@ -118,7 +147,9 @@ The following config makes both Ultimate profiles and VICE available. Omit any u
 }
 ```
 
-Hardware settings can also come from `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD`, or their `U2_` counterparts. Give each device its own profile when using both hardware families. Without a `u2` section, the U2 backend can use C64U settings. If you supply a separate `U2_HOST`, supply that device’s password with `U2_PASSWORD` as needed.
+Hardware settings can also come from `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD`, or their `U2_` counterparts. Give each device its own profile when using both hardware families.
+
+Without a `u2` section, the U2 backend can use C64U settings. If you supply a separate `U2_HOST`, supply that device’s password with `U2_PASSWORD` as needed.
 
 ### Initial target and runtime switching
 
@@ -126,13 +157,17 @@ Hardware settings can also come from `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWOR
 
 Use `c64_select_backend` to switch among the available backends without restarting. Include the target in each prompt when switching, for example `u2: list drives` or `c64u: run this PRG`. The `c64://platform/status` resource shows which backend is active and which are available.
 
-![HELLO C64U on a C64 Ultimate](doc/img/backend-switch/hello-c64u.png)
+The same screen check can run on hardware. [C64 Ultimate greeting screenshot](doc/img/backend-switch/hello-c64u.png)
 
 ### VICE setup
 
 C64 Bridge reuses a running Binary Monitor at the configured endpoint if one is available. For a local endpoint, it can launch VICE itself. The default Binary Monitor address is `127.0.0.1:6502`. VICE starts or connects on first use by default. Set `VICE_PREWARM=1` to do that in the background during startup.
 
-For managed launches, the bridge looks for `x64sc` or `x64` and tries to discover the resource directory. Set `VICE_BINARY` and `VICE_DIRECTORY` (or `vice.exe` and `vice.directory` in JSON) when using a custom install. If an explicit executable cannot be found, managed startup reports an error. Use `VICE_HOST` and `VICE_PORT` to select an existing monitor at another address. The Binary Monitor accepts one client at a time. [VICE Binary Monitor guide](data/vice/vice-binary-monitor-spec.md)
+For managed launches, the bridge looks for `x64sc` or `x64` and tries to discover the resource directory.
+
+Set `VICE_BINARY` and `VICE_DIRECTORY` (or `vice.exe` and `vice.directory` in JSON) when using a custom install. If an explicit executable cannot be found, managed startup reports an error.
+
+Use `VICE_HOST` and `VICE_PORT` to select an existing monitor at another address. The Binary Monitor accepts one client at a time. [VICE Binary Monitor guide](data/vice/vice-binary-monitor-spec.md)
 
 | Window mode | Environment settings |
 | --- | --- |
@@ -152,9 +187,19 @@ Read `c64://platform/status` before relying on a native firmware endpoint. The s
 
 ### Operation and file access
 
-Set `C64BRIDGE_ACCESS=read-only` to inspect a target, `no-destructive` to permit regular writes while blocking destructive operations, or `full` to allow every operation. The default is `full`. Unknown values fall back to read-only. Batch commands are checked individually, and background task operations are checked when started. The current access mode appears in `c64://platform/status`.
+Set `C64BRIDGE_ACCESS` to control which operations a client can call.
 
-Tools that read or write host files use paths on the machine running C64 Bridge. Allowed roots include the working directory (except the home directory or filesystem root), `~/.c64bridge`, the configured state directory, and the system temporary directory. The bridge checks resolved paths, including symlinks. Hidden path components are blocked by default, and internal configuration and state files have their own protections. Most host file reads are capped at 16 MiB, with 64 MiB for disk images. Use `C64BRIDGE_ALLOWED_DIRS` to add roots, separated by `:` on Linux/macOS or `;` on Windows. A lone `*` disables the root restriction. [Hardening behavior](doc/hardening-behavior.md)
+- `full` (default) allows every operation.
+- `no-destructive` allows regular writes and blocks destructive operations.
+- `read-only` limits calls to read operations. Unknown values fall back to this mode.
+
+The server checks each batch command and checks a background task’s operation when it starts. The active mode appears in `c64://platform/status`.
+
+Host paths refer to files on the machine running C64 Bridge. Tools can use the server working directory (except the home or filesystem root), `~/.c64bridge`, the configured state directory, and the system temporary directory.
+
+- Most reads are capped at 16 MiB, with 64 MiB for disk images.
+- The server resolves symlinks, blocks hidden path components by default, and protects internal configuration and state files.
+- Add roots with `C64BRIDGE_ALLOWED_DIRS`. Separate entries with `:` on Linux/macOS or `;` on Windows. A lone `*` disables the root restriction. [Hardening behavior](doc/hardening-behavior.md)
 
 After `poweroff` on C64U/U64, restore power at the outlet. The machine starts automatically only if its power-restoration setting allows it.
 
@@ -171,7 +216,9 @@ claude mcp add --transport stdio c64bridge -e C64_MODE=vice -- npx -y c64bridge@
 claude mcp list
 ```
 
-Add `--scope user` to register across projects or `--scope project` to write a shared `.mcp.json`. The CLI and the VS Code plugin both read project `.mcp.json` and user-scope registrations. In this repository, approve the [checked-in project server](.mcp.json) to launch from the checkout. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
+Add `--scope user` to register across projects or `--scope project` to write a shared `.mcp.json`.
+
+The CLI and the VS Code plugin both read project `.mcp.json` and user-scope registrations. In this repository, approve the [checked-in project server](.mcp.json) to launch from the checkout. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
 
 ### Claude Desktop and Cursor
 
@@ -194,7 +241,11 @@ Both clients use the `mcpServers` key. This example selects C64U/U64 explicitly.
 
 ## HTTP invocation
 
-Use the optional loopback HTTP transport for manual inspection. Start it with `npx -y c64bridge@latest --http 3000` or `npm start -- --http 3000` from a checkout. The default HTTP port is 3000, and the bridge listens on `127.0.0.1` with loopback-only Host and Origin checks. Set `C64BRIDGE_HTTP_TOKEN` and send `Authorization: Bearer <token>` to require authentication. Without a token, local processes that can reach the port can call the tools allowed by the access mode.
+Use the optional loopback HTTP transport for manual inspection. Start it with `npx -y c64bridge@latest --http 3000` or `npm start -- --http 3000` from a checkout.
+
+The default HTTP port is 3000, and the bridge listens on `127.0.0.1` with loopback-only Host and Origin checks.
+
+Set `C64BRIDGE_HTTP_TOKEN` and send `Authorization: Bearer <token>` to require authentication. Without a token, local processes that can reach the port can call the tools allowed by the access mode.
 
 Send MCP JSON-RPC requests to `/mcp`. Pass the operation as `params.arguments.op` in a `tools/call` request. Responses arrive as server-sent events.
 
@@ -216,7 +267,14 @@ From a checkout with Bun 1.3 or later, use the build wrapper to install dependen
 npm start             # launch the local stdio server
 ```
 
-Run `./build` for install, build, and the full test matrix. Use `./build test` for mock-backed tests, `./build test --platform vice --target mock` for a single leg, or `./build test --real --base-url http://c64u` for real hardware. See `./build --help` for coverage, RAG rebuilds, package checks, and release commands. To run an installed npm copy directly, use `npx c64bridge` from the project where you installed it.
+| Task | Command |
+| --- | --- |
+| Install, build, and run the full test matrix | `./build` |
+| Run mock-backed tests | `./build test` |
+| Run the VICE mock test leg | `./build test --platform vice --target mock` |
+| Test against Ultimate hardware | `./build test --real --base-url http://c64u` |
+
+See `./build --help` for coverage, RAG rebuilds, package checks, and release commands. To run a local npm installation, use `npx c64bridge` from the project where you installed it.
 
 `npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit updated generated files alongside MCP server changes. The package check in CI rebuilds and fails if the committed files are stale. [Developer guide](doc/developer.md)
 
