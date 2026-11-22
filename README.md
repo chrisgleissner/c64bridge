@@ -282,22 +282,26 @@ The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code projec
 
 ## Documentation
 
-C64 Bridge uses the official TypeScript MCP SDK. [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
+### Setup and troubleshooting
 
-- **Troubleshooting** covers startup, connectivity, and diagnostic logs. Logs default to `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail. [Troubleshooting guide](doc/troubleshooting-mcp.md)
-- **Agent integration** covers tool discovery, operation routing, and bundled skills. [Integration guide](AGENTS.md) · [Agent primer](data/context/bootstrap.md)
-- **Static MCP interface** lists tools, resources, prompts, and schemas. [Interface files](mcp/) · [MCP manifest](mcp.json)
-- **Ultimate REST APIs** cover the endpoints used by the hardware backends. [C64U/U64 specification](doc/c64u/c64-openapi.yaml) · [U2 specification](doc/u2/u2-openapi.yaml)
-- **Architecture and implementation** · [DeepWiki](https://deepwiki.com/chrisgleissner/c64bridge)
+- **First run** · Choose a target, connect your client, and run a greeting. [Hello World tour](#quick-start)
+- **Startup and connection issues** · Check the session logs in `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail. [Troubleshooting guide](doc/troubleshooting-mcp.md)
 
 ### Bundled manuals
 
-Your agent can retrieve these manuals through MCP as it writes, debugs, or tests. Pick a target and describe your project to get started. Open the manuals here whenever you want the technical details yourself.
+Your agent can consult these manuals through MCP while it works. The links below are there for when you want to look up a detail yourself.
 
-- **Game development** · [Game development index](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
+- **Game development** · [Reading plan by game type](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
 - **SID composition** · [SIDWAVE format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md)
 - **Ultimate hardware** · [Turbo and board settings](data/ultimate/hardware.md) · [REU](data/ultimate/reu.md) · [UCI](data/ultimate/uci.md) · [UPIC](data/ultimate/upic.md)
 - **VICE debugging** · [Binary Monitor](data/vice/vice-binary-monitor-spec.md)
+
+### Integration and internals
+
+- **Agent setup** · Tool discovery, workflow routing, and skills. [Integration guide](AGENTS.md) · [Agent primer](data/context/bootstrap.md)
+- **MCP interface** · Tools, resources, prompts, and schemas. [Interface files](mcp/) · [MCP manifest](mcp.json) · [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
+- **Ultimate REST APIs** · [C64U/U64 specification](doc/c64u/c64-openapi.yaml) · [U2 specification](doc/u2/u2-openapi.yaml)
+- **Server architecture** · Built with the official TypeScript MCP SDK. [DeepWiki overview](https://deepwiki.com/chrisgleissner/c64bridge)
 
 ## Runtime environment variable reference
 
