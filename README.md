@@ -1,8 +1,10 @@
 # C64 Bridge
 
-![Logo](./doc/img/logo.png)
+**Give your coding agent a C64 it can test on.**
 
-Your AI Command Bridge for the Commodore 64.
+C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents such as Claude Code and Codex to VICE or Ultimate hardware. Your agent can run a PRG, read the screen or RAM, and use the result to debug. The bundled C64 manuals give it the details it needs as it works.
+
+![Logo](./doc/img/logo.png)
 
 [![npm](https://img.shields.io/npm/v/c64bridge.svg)](https://www.npmjs.com/package/c64bridge)
 [![Build](https://img.shields.io/github/actions/workflow/status/chrisgleissner/c64bridge/ci.yaml)](https://github.com/chrisgleissner/c64bridge/actions/workflows/ci.yaml)
@@ -10,561 +12,308 @@ Your AI Command Bridge for the Commodore 64.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
 
+## Contents
+
+<!-- AUTO-GENERATED:TOC-START -->
+
+- [Quick start](#quick-start)
+- [Project showcases](#project-showcases)
+- [Configuration](#configuration)
+- [HTTP invocation](#http-invocation)
+- [Build and test](#build-and-test)
+- [Documentation](#documentation)
+- [Runtime environment variable reference](#runtime-environment-variable-reference)
+- [MCP API Reference](#mcp-api-reference)
+
+<!-- AUTO-GENERATED:TOC-END -->
+
+## Quick start
+
+You need Node.js 24 or later with npm, an MCP client, and either VICE or a reachable Ultimate device. [Node.js downloads](https://nodejs.org/en/download)
+
+Install C64 Bridge by registering it with your client. The client launches `npx -y c64bridge@latest`, which fetches the npm package as needed and starts the local server over stdio.
+
+### 1. Choose a target
+
+Use VICE for the tour if you’re starting without hardware. The examples below select VICE. For hardware, use the variables in the matching row and substitute your device’s IP address or hostname.
+
+| Target | Client environment | What you need |
+| --- | --- | --- |
+| VICE | `C64_MODE=vice` | VICE with its C64 ROMs installed on the machine running the bridge, or an existing Binary Monitor endpoint. [VICE](https://vice-emu.sourceforge.io/) |
+| C64 Ultimate or Ultimate 64 | `C64_MODE=c64u`, `C64U_HOST=192.168.1.99` | A reachable Ultimate REST endpoint. Default port is 80. [C64 Ultimate](https://www.commodore.net/) · [Ultimate 64](https://ultimate64.com/) |
+| U2, U2+, or U2+L | `C64_MODE=u2`, `U2_HOST=192.168.1.99` | A reachable cartridge with Ultimate REST support. [U2-family quick guide](https://1541u-documentation.readthedocs.io/en/latest/quick_guide.html) |
+
+For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` in your own client configuration. The bridge sends it as the `X-Password` header.
+
+### 2. Install and start
+
+Choose your client. [Terminal commands](#terminal-clients) · [VS Code](#editor-and-desktop-clients) · [Claude Desktop, Cursor, and Visual Studio](#other-desktop-clients)
+
 [![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
 [![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
 [![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
 [![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
-C64 Bridge is an MCP server for controlling and working with a Commodore 64 from an AI client.
+The editor badges select the C64 Ultimate profile with hostname `c64u`. Change the server’s environment to match your target before starting it.
 
-It lets you run programs, read and write memory, render graphics, and play sound on a [C64 Ultimate](https://www.commodore.net/), [Ultimate 64](https://ultimate64.com/), or [U2](https://1541u-documentation.readthedocs.io/en/latest/quick_guide.html)-family cartridge. You can also switch to a [VICE](https://vice-emu.sourceforge.io/) emulator session, so one MCP conversation can span hardware and emulation.
+#### Terminal clients
 
-Built-in resources, skills, and RAG give your AI coding agent a head start with classic C64 programming and modern Ultimate features, including REU, CPU turbo, 10 SIDs, LED control, UCI networking, and UPIC full-colour border graphics.
-
-It is built on the official TypeScript `@modelcontextprotocol/sdk` and supports both `stdio` for local AI integration and an optional HTTP bridge for manual inspection.
-
-C64 Bridge is listed in the [Official MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge).
-
-## Contents
-
-- [C64 Bridge](#c64-bridge)
-  - [Contents](#contents)
-  - [Overview](#overview)
-  - [Features](#features)
-  - [Quick Start](#quick-start)
-    - [1. Install Node.js 24+ and npm](#1-install-nodejs-24-and-npm)
-    - [2. Start the Server](#2-start-the-server)
-    - [3. Add Backend Configuration](#3-add-backend-configuration)
-    - [4. Connect from an MCP Client](#4-connect-from-an-mcp-client)
-  - [Configuration](#configuration)
-    - [Configuration File Order](#configuration-file-order)
-    - [Configuration Merge Rules](#configuration-merge-rules)
-    - [Backend Configuration: C64 Ultimate](#backend-configuration-c64-ultimate)
-    - [Backend Configuration: U2-family](#backend-configuration-u2-family)
-    - [Backend Configuration: VICE](#backend-configuration-vice)
-      - [VICE Window Modes](#vice-window-modes)
-      - [Recommended VICE Configurations](#recommended-vice-configurations)
-    - [Runtime Backend Switching](#runtime-backend-switching)
-  - [VS Code MCP Setup](#vs-code-mcp-setup)
-    - [Enable the C64 Agent](#enable-the-c64-agent)
-    - [Optional Overrides](#optional-overrides)
-    - [Environment Variables in MCP Client Configs](#environment-variables-in-mcp-client-configs)
-    - [Runtime Environment Variable Reference](#runtime-environment-variable-reference)
-      - [Server Runtime](#server-runtime)
-      - [C64 Ultimate](#c64-ultimate)
-      - [VICE Runtime](#vice-runtime)
-      - [VICE Audio Capture](#vice-audio-capture)
-      - [SID Playback](#sid-playback)
-      - [RAG](#rag)
-      - [Testing](#testing)
-  - [Claude Code](#claude-code)
-  - [Example Workflow](#example-workflow)
-  - [HTTP Invocation](#http-invocation)
-  - [Build and Test](#build-and-test)
-  - [Documentation](#documentation)
-  - [Static MCP Interface](#static-mcp-interface)
-  - [MCP API Reference](#mcp-api-reference)
-    - [Tools](#tools)
-      - [c64\_batch](#c64_batch)
-      - [c64\_config](#c64_config)
-      - [c64\_debug](#c64_debug)
-      - [c64\_disk](#c64_disk)
-      - [c64\_drive](#c64_drive)
-      - [c64\_extract](#c64_extract)
-      - [c64\_graphics](#c64_graphics)
-      - [c64\_input](#c64_input)
-      - [c64\_memory](#c64_memory)
-      - [c64\_printer](#c64_printer)
-      - [c64\_program](#c64_program)
-      - [c64\_rag](#c64_rag)
-      - [c64\_select\_backend](#c64_select_backend)
-      - [c64\_sound](#c64_sound)
-      - [c64\_stream](#c64_stream)
-      - [c64\_system](#c64_system)
-      - [c64\_vice](#c64_vice)
-    - [Resources](#resources)
-    - [Prompts](#prompts)
-
-## Overview
-
-C64 Bridge gives an AI agent one place to drive program execution, memory access, graphics, sound, storage, printer workflows, and knowledge retrieval for a Commodore 64 environment.
-
-The core workflow is simple:
-
-1. Start the MCP server.
-2. Point it at C64U/U64 hardware, a U2-family cartridge, VICE, or any configured combination.
-3. Let the client call grouped MCP tools such as `c64_program`, `c64_memory`, `c64_graphics`, and `c64_sound`.
-4. Switch backends at runtime with `c64_select_backend` when both are configured.
-
-## Features
-
-- Program runners for BASIC, 6510 assembly, and PRG or CRT execution
-- Full memory access, including raw reads and writes plus screen polling
-- System integration for drives, files, printers, and task orchestration
-- SID music tools for playback, composition, generation, and verification
-- Built-in knowledge resources and prompts for safer LLM workflows
-- Mixed runtime support for `c64u` (C64U/U64), `u2` (U2/U2+/U2+L), and `vice`
-
-## Quick Start
-
-If you want the shortest path, do these four things:
-
-1. Install Node.js 24+ and npm.
-2. Start the server.
-3. Add backend configuration for C64U/U64, U2-family, VICE, or any combination.
-4. Connect from VS Code or another MCP client.
-
-### 1. Install Node.js 24+ and npm
-
-Linux (Ubuntu or Debian):
-
-Recommended:
+##### Codex CLI
 
 ```bash
-sudo apt update
-sudo apt install -y curl ca-certificates
-curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-sudo apt install -y nodejs
+codex mcp add c64bridge --env C64_MODE=vice -- npx -y c64bridge@latest
 ```
 
-Fallback:
+Start a new Codex session and use `/mcp` to check that `c64bridge` is active. For hardware, replace `--env C64_MODE=vice` with one `--env KEY=VALUE` per setting from the target table. [Codex MCP setup](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+
+##### Claude Code
 
 ```bash
-sudo apt install -y nodejs npm
+claude mcp add --transport stdio c64bridge -e C64_MODE=vice -- npx -y c64bridge@latest
 ```
 
-macOS:
+Run `claude mcp list` from the same project to check the connection, then open Claude Code there. For hardware, replace `-e C64_MODE=vice` with one `-e KEY=VALUE` per setting from the target table. Use `--scope user` to register the server across projects, or `--scope project` to save a shared `.mcp.json`. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
 
-```bash
-brew install node@24
-brew link --overwrite node@24
+#### Editor and desktop clients
+
+For **VS Code**, add this to your project’s `.vscode/mcp.json`. If the file already has a `servers` object, add just the `c64bridge` entry.
+
+```json
+{
+  "servers": {
+    "c64bridge": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": { "C64_MODE": "vice" }
+    }
+  }
+}
 ```
 
-Windows:
+Run **MCP: List Servers** from the Command Palette, select **c64bridge**, and choose **Start Server**. Review the trust prompt if one appears.
 
-```powershell
-# winget
-winget install OpenJS.NodeJS.LTS
-# or Chocolatey
-choco install nodejs-lts -y
+For guided setup, use **MCP: Add Server → Command (stdio)**, enter `npx -y c64bridge@latest`, and set the target in the resulting server entry. [VS Code MCP setup](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
+
+##### Other desktop clients
+
+Use this JSON for Claude Desktop or Cursor. If your config already has an `mcpServers` object, add just the `c64bridge` entry.
+
+```json
+{
+  "mcpServers": {
+    "c64bridge": {
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": { "C64_MODE": "vice" }
+    }
+  }
+}
 ```
 
-Verify the installation:
+- **Claude Desktop** · Open **Settings → Developer → Edit Config**. Add the entry under `mcpServers` in `claude_desktop_config.json`, then restart Claude Desktop. [Claude Desktop setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers)
+- **Cursor** · Add the entry under `mcpServers` in `.cursor/mcp.json` for this project or `~/.cursor/mcp.json` for all projects. [Cursor MCP setup](https://cursor.com/docs/mcp)
+- **Visual Studio** · Use the VS Code example above in the solution’s `.mcp.json`. Enable the tools in Copilot’s Agent mode tool picker. [Visual Studio MCP setup](https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers?view=visualstudio)
 
-```bash
-node --version
-```
+If the client can’t find `npx`, use its absolute path in the `command` field.
 
-Expected result: `v24.x`
+### 3. Run Hello World
 
-### 2. Start the Server
+Open your coding agent and give it a target, a task, and a result to check.
 
-Use one of the following entry points.
+> Use C64 Bridge on VICE. Run a short BASIC program that clears the screen, prints HELLO VICE, and reads the text screen back to confirm it.
 
-Run from `npx` with zero setup:
+For a C64 Ultimate or Ultimate 64, ask for the `c64u` backend. For a U2-family cartridge, ask for `u2`. You can change the greeting to match.
 
-```bash
-npx -y c64bridge@latest
-```
+![VICE text screen displaying HELLO VICE](doc/img/backend-switch/hello-vice.png)
 
-Run from a local npm install:
+The agent should report seeing `HELLO VICE` on the emulated screen. The bridge runs the program and returns the observed text. The same run-and-check loop lets the agent catch a wrong value in RAM or confirm that a game reacts to input.
 
-```bash
-mkdir -p ~/c64bridge && cd ~/c64bridge
-npm init -y
-npm install c64bridge
-node ./node_modules/c64bridge/dist/index.js
-```
+If the tools are missing, check that your client has enabled `c64bridge` and can find Node.js 24 or later. If a call fails, check the active backend in `c64://platform/status`. [Troubleshooting](doc/troubleshooting-mcp.md)
 
-Run from source for development or testing:
+## Project showcases
 
-```bash
-git clone https://github.com/chrisgleissner/c64bridge.git
-cd c64bridge
-./build install
-npm start
-```
+Try one of these after the tour. Each example gives the agent a concrete task and a way to inspect the result.
 
-On startup, the server probes the selected target, performs connectivity checks, and then announces that it is running on stdio.
+### Develop a game
 
-### 3. Add Backend Configuration
+Tell your agent whether you’re targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout, and asset loading.
 
-The server can run against one or more of:
+Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input, and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
 
-- C64U/U64 hardware (`c64u`)
-- U2, U2+, or U2+L (`u2`)
-- VICE (`vice`)
+> Run my PRG in VICE with its symbol file. Break at the player update routine, then resume and check whether pressing fire spawns a projectile.
 
-The detailed lookup order, merge rules, backend examples, and override model are in the [Configuration](#configuration) section below.
+### Compose for the SID
 
-### 4. Connect from an MCP Client
+Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. [Sound tools](#c64_sound)
 
-C64 Bridge ships a single canonical `stdio` entry point that every MCP client uses:
+Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
 
-- **VS Code (GitHub Copilot)** — see [VS Code MCP Setup](#vs-code-mcp-setup).
-- **Claude Code (CLI and VS Code plugin)** — see [Claude Code](#claude-code).
-- **Cursor, Visual Studio, VS Code Insiders** — use the install badges at the top of this README.
-- **Any other MCP client** — point it at the same `stdio` server, with the environment variables documented in [Runtime Environment Variable Reference](#runtime-environment-variable-reference) and the registry manifest in [mcp.json](./mcp.json).
+> Play Stereo Echo on my Ultimate, then show me how the score places its lead and echoes across the two SIDs.
 
-The startup command is the same across clients: `npx -y c64bridge@latest` for the published package, or `node scripts/start.mjs` from a local checkout. Select `c64u`, `u2`, or `vice` in the shared [Configuration](#configuration); clients only need the command.
+Listen to **Arp Ballad**, **Drum and Bass**, or **Stereo Echo** and open the matching YAML to see how each was built. [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases) · [Example scores](data/sound/examples/)
+
+### Use Ultimate hardware
+
+Tell your agent what you want the machine to do. It can use the hardware manuals to check what your program needs to detect and which settings to inspect before a run. [Configuration tools](#c64_config)
+
+| Feature | What you can build |
+| --- | --- |
+| Turbo and REU | Use more CPU time per frame or transfer level data and graphics into C64 RAM. |
+| Ultimate Command Interface (UCI) | Load files, save high scores, or use the network from your C64 program. |
+| UPIC | Draw full-colour graphics into the border with timed colour changes. |
+
+> Add REU level loading to my game. Check for the REU at startup and test the loader on my C64 Ultimate.
+
+You can also upload PRGs, launch CRTs, mount disks, and capture video or stereo audio on C64U/U64. Check the tool tables for platform support. [Programs](#c64_program) · [Disks](#c64_disk) · [Streaming](#c64_stream)
 
 ## Configuration
 
-### Configuration File Order
+### Configuration files and overrides
 
-The server reads configuration in this order:
+The bridge uses the first readable, parseable JSON configuration in this order:
 
-1. `C64BRIDGE_CONFIG`, if it points to a config file
-2. `.c64bridge.json` in the project root
-3. `~/.c64bridge.json` in the home directory
+1. The file named by `C64BRIDGE_CONFIG`.
+2. `.c64bridge.json` in the server process's working directory.
+3. `~/.c64bridge.json`.
+4. A legacy `.c64bridge.json` next to the package or source checkout.
 
-### Configuration Merge Rules
+Keep all JSON backend profiles in the same file. An explicitly named file must exist and parse, or startup fails.
 
-Configuration is merged per backend section while scanning those files in order.
+Environment variables override their corresponding JSON settings, with built-in defaults filling in the rest. See the [runtime environment variable reference](#runtime-environment-variable-reference) for the available settings.
 
-- The first file that contains each backend section (`c64u`, `u2`, or `vice`) supplies that backend's configuration.
-- This allows a project-local `.c64bridge.json` to define `c64u` while `~/.c64bridge.json` defines `u2` or `vice`.
-
-### Backend Configuration: C64 Ultimate
-
-Use this for a C64 Ultimate or Ultimate 64:
+The following config makes both Ultimate profiles and VICE available. Omit any unused profile. Replace the hosts as needed, and add `"networkPassword": "your-password"` to a hardware profile only if network protection is enabled.
 
 ```json
 {
-  "c64u": {
-    "host": "c64u",
-    "port": 80,
-    "networkPassword": "secret"
-  }
+  "c64u": { "host": "c64u", "port": 80 },
+  "u2": { "host": "u2", "port": 80 },
+  "vice": {}
 }
 ```
 
-- If no file is found, the default target is `c64u:80` with no network password.
-- `networkPassword` is only needed when you enabled a password in the C64 Ultimate network settings.
-- `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD` override the configured host, port, and network password.
+Hardware settings can also come from `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD`, or their `U2_` counterparts. Give each device its own profile when using both hardware families.
 
-### Firmware Requirements for Native Input and Menu Screens
+Without a `u2` section, the U2 backend can use C64U settings. If you supply a separate `U2_HOST`, supply that device’s password with `U2_PASSWORD` as needed.
 
-The following operations require recently added Ultimate REST endpoints. C64 Bridge detects or explains unavailable endpoints without exposing a raw firmware error.
+### Initial target and runtime switching
 
-Before choosing an endpoint-dependent operation, read `c64://platform/status`. It probes `machine:input` safely and reports whether it is available. When native input is unavailable, use `key` or `write_text` for ordinary C64 input instead of physical matrix events. `machine:menu_screen` can only be confirmed after an Ultimate menu is visible; its tool returns fallback guidance rather than a transport error when no matrix can be read.
+`C64_MODE` pins the initial target. Without it, the server prefers configured backends in this order: `c64u`, `u2`, `vice`. With none configured, it probes the default Ultimate endpoint at `c64u:80` and selects VICE if the probe fails.
 
-- `c64_input` `keyboard`, `release_all`, and `state`, plus hardware `joystick`, use `machine:input`. They require a C64U firmware version that provides this endpoint, or U64 firmware 3.15 or later. `machine:input` is not available on U2-family cartridges.
-- `c64_system` `read_menu_screen` uses `machine:menu_screen`; it requires a C64U firmware version that provides this endpoint, or U64/U2 firmware 3.15 or later.
-- On C64U/U64, `c64_system` `power_cycle` verifies Tool Menu navigation with `machine:menu_screen`, so it has the same firmware requirement. U2-family `power_cycle` uses REST reboot instead.
+Use `c64_select_backend` to switch among the available backends without restarting. Include the target in each prompt when switching, for example `u2: list drives` or `c64u: run this PRG`. The `c64://platform/status` resource shows which backend is active and which are available.
 
-### Backend Configuration: U2-family
+The same screen check can run on hardware. [C64 Ultimate greeting screenshot](doc/img/backend-switch/hello-c64u.png)
 
-Use this profile for U2, U2+, and U2+L cartridges:
+### VICE setup
 
-```json
-{
-  "u2": {
-    "host": "u2",
-    "port": 80,
-    "networkPassword": "secret"
-  }
-}
-```
+C64 Bridge reuses a running Binary Monitor at the configured endpoint if one is available. For a local endpoint, it can launch VICE itself. The default Binary Monitor address is `127.0.0.1:6502`. VICE starts or connects on first use by default. Set `VICE_PREWARM=1` to do that in the background during startup.
 
-Set `C64_MODE=u2` to make this the initial backend. `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override this profile. U2-family firmware exposes the shared REST subset; it does not provide machine input, debug-register access, power-off, or streaming. `read_menu_screen` requires U2 firmware 3.15 or later.
+For managed launches, the bridge looks for `x64sc` or `x64` and tries to discover the resource directory.
 
-### Backend Configuration: VICE
+Set `VICE_BINARY` and `VICE_DIRECTORY` (or `vice.exe` and `vice.directory` in JSON) when using a custom install. If an explicit executable cannot be found, managed startup reports an error.
 
-C64 Bridge can either connect to an already running VICE Binary Monitor or manage a local VICE process for you. The usual managed setup only needs the emulator binary and, when auto-detection cannot find it, the VICE resource directory:
+Use `VICE_HOST` and `VICE_PORT` to select an existing monitor at another address. The Binary Monitor accepts one client at a time. [VICE Binary Monitor guide](data/vice/vice-binary-monitor-spec.md) · [Supported operations](doc/vice/support-matrix.md)
 
-```json
-{
-  "vice": {
-    "exe": "/usr/bin/x64sc",
-    "directory": "/usr/local/share/vice"
-  }
-}
-```
-
-- `exe` is optional when `x64sc` or `x64` is on `PATH`. If no explicit binary is configured, the runtime prefers `/usr/local/bin/x64sc` when present, then falls back to `x64sc` or `x64` on `PATH`.
-- `directory` is optional. When omitted, C64 Bridge auto-detects a VICE resource directory by looking for the standard C64 ROM set near the emulator binary and in common system locations.
-- `host` and `port` are optional and default to `127.0.0.1:6502`, the Binary Monitor endpoint C64 Bridge starts for managed local sessions. On local endpoints, C64 Bridge first tries to reuse an already running monitor before starting its own process.
-- `visible`, `warp`, and `args` are optional runtime controls. They can live in JSON config, but most users set their environment-variable equivalents from the MCP client because they are per-session preferences.
-- By default, VICE is started lazily on first access. When setting the environment variable `VICE_PREWARM=1`, C64 Bridge starts or connects VICE in the background during MCP startup.
-- `VICE_BINARY`, `VICE_DIRECTORY`, `VICE_HOST`, `VICE_PORT`, `VICE_VISIBLE`, `VICE_WARP`, `VICE_ARGS`, and `VICE_PREWARM` override the JSON values without editing config files.
-
-#### VICE Window Modes
-
-Choose the window mode based on where the MCP server runs:
-
-| Mode | Configuration | What happens | Use when |
-| --- | --- | --- | --- |
-| Visible | `VICE_VISIBLE=true` | VICE opens a normal desktop window. Warp defaults to off. | You are developing locally and want to watch or interact with the emulator. |
-| Minimized | `VICE_VISIBLE=true`, `VICE_ARGS="-minimized"` | VICE still runs as a normal desktop app, but its window starts iconified. Binary Monitor operations, screen reads, frame capture, and keyboard input continue to work. | You are using an agent locally and do not want the emulator stealing focus, but still want the option to restore the window. |
-| Headless/Xvfb | `VICE_VISIBLE=false` | C64 Bridge launches VICE without a user-facing desktop window, using Xvfb unless disabled. Warp defaults to on. | CI, unattended tests, servers, or any session where no one needs to inspect the emulator window. |
-
-Minimized and headless are not the same thing. Minimized is still a visible desktop session with a real VICE window; it is simply hidden by the window manager at startup. Headless/Xvfb has no user-facing window, so it is better for automation but less convenient when you need to debug by looking at the emulator.
-
-For normal local MCP use, prefer minimized VICE. It avoids focus stealing while preserving the ability to restore the window for visual inspection. Prefer headless/Xvfb for CI and remote or display-less environments.
-
-`FORCE_XVFB=1` forces the Xvfb path even if a graphical session is available. `DISABLE_XVFB=1` disables that fallback and uses the current display, which is mainly useful for troubleshooting display detection.
-
-#### Recommended VICE Configurations
-
-Local agent session, VICE starts minimized:
-
-```json
-{
-  "servers": {
-    "c64bridge": {
-      "command": "npx",
-      "args": ["-y", "c64bridge@latest"],
-      "env": {
-        "C64_MODE": "vice",
-        "VICE_VISIBLE": "true",
-        "VICE_ARGS": "-minimized",
-        "VICE_WARP": "false"
-      }
-    }
-  }
-}
-```
-
-Headless automation, VICE runs without a visible desktop window:
-
-```json
-{
-  "servers": {
-    "c64bridge": {
-      "command": "npx",
-      "args": ["-y", "c64bridge@latest"],
-      "env": {
-        "C64_MODE": "vice",
-        "VICE_VISIBLE": "false",
-        "VICE_WARP": "true"
-      }
-    }
-  }
-}
-```
-
-If VICE is installed outside the usual search paths, add `VICE_BINARY` and, if ROM/resource auto-detection fails, `VICE_DIRECTORY` to either example.
-
-> [!NOTE]
-> VICE supports only the operations marked with a VICE checkmark in the [MCP API Reference](#mcp-api-reference). Unsupported operations return `unsupported_platform`.
-
-### Runtime Backend Switching
-
-Configure any combination of `c64u`, `u2`, and `vice`. C64 Bridge starts on `C64_MODE` (default `c64u`) and keeps every configured backend ready for `c64_select_backend`.
-
-| Profile | Targets | Key limits |
-| --- | --- | --- |
-| `c64u` | C64 Ultimate, Ultimate 64 | Full Ultimate REST surface, including machine input and streaming. |
-| `u2` | U2, U2+, U2+L | Shared REST subset; no machine input, debug registers, power-off, or streaming. |
-| `vice` | VICE emulator | Binary Monitor-backed emulator controls; no Ultimate REST API. |
-
-Use `c64://platform/status` to inspect the active backend and available tools. State the target in the same prompt, for example `u2: list drives`, `c64u: run this PRG`, or `vice: write HELLO`. On U2-family cartridges, `c64_system` `power_cycle` uses REST reboot; C64U/U64 uses verified Tool Menu navigation, and VICE starts fresh.
-
-Prompt illustration (issued via Copilot in VS Code, using GPT 5.4 Medium):
-
-```text
-c64u: write a small BASIC program that clears the screen and prints HELLO C64U
-```
-
-```text
-vice: write a small BASIC program that clears the screen and prints HELLO VICE
-```
-
-The screenshots below are available for the two backends that provide frame capture. C64U uses streamed video frames; VICE captures and normalizes its display. U2-family cartridges do not provide firmware streaming, so they intentionally have no screenshot row.
-
-| Backend | Screenshot |
+| Window mode | Environment settings |
 | --- | --- |
-| C64 Ultimate | ![C64 Ultimate backend switch example](doc/img/backend-switch/hello-c64u.png) |
-| U2-family | Frame capture unavailable (no firmware streaming). |
-| VICE | ![VICE backend switch example](doc/img/backend-switch/hello-vice.png) |
+| Desktop window | `VICE_VISIBLE=true`. Warp defaults to off. |
+| Minimized desktop window | `VICE_VISIBLE=true` and `VICE_ARGS=-minimized`. Restore the window whenever you want to inspect it. |
+| Headless | `VICE_VISIBLE=false`. On Linux, the managed launch uses Xvfb when available. Warp defaults to on. |
 
-### Host File Access
+`VICE_WARP` overrides the default for any mode. On Linux, `FORCE_XVFB=1` forces Xvfb and `DISABLE_XVFB=1` disables the Xvfb fallback.
 
-Tool arguments that name a file or directory on the machine running C64 Bridge (memory dumps, configuration snapshots, sprite and charset exports, run artifacts, symbol files, and VICE PRG or disk image paths) are confined to a set of allowed directories:
+### Ultimate firmware support
 
-- the working directory of the server, unless it is the user's home directory or `/`
-- `~/.c64bridge`
-- the system temporary directory (`os.tmpdir()`)
+Read `c64://platform/status` before relying on a native firmware endpoint. The server can probe `machine:input` safely. It can confirm `machine:menu_screen` while the Ultimate menu is visible.
 
-Paths are resolved to their real location before the check, so `..` segments and symbolic links cannot leave these directories. A rejected path produces a validation error that lists the allowed directories, and nothing is written. Files read through these arguments are limited to 16 MiB (64 MiB for disk images).
+- **Physical input** uses `machine:input` for keyboard matrix events, held-input state, release, and hardware joystick. It needs supporting C64U firmware or U64 firmware 3.15+. For ordinary text input on other firmware, use `c64_input` with `key` or `write_text`.
+- **Menu capture** uses `machine:menu_screen` and needs supporting C64U firmware or U64/U2 firmware 3.15+. C64U/U64 `power_cycle` uses this endpoint to verify Tool Menu navigation. The U2 operation uses REST reboot, and VICE starts a fresh emulator session.
+- **U2-family cartridges** expose the shared REST subset. The [MCP API reference](#mcp-api-reference) shows availability per operation. Physical input, debug registers, power-off, and streaming are unavailable on U2.
 
-Set `C64BRIDGE_ALLOWED_DIRS` to add directories. Separate entries with the platform path delimiter (`:` on Linux and macOS, `;` on Windows). The single value `*` disables the confinement.
+### Operation and file access
 
-```json
-"env": { "C64BRIDGE_ALLOWED_DIRS": "/home/you/c64:/home/you/disks" }
+Set `C64BRIDGE_ACCESS` to control which operations a client can call.
+
+- `full` (default) allows every operation.
+- `no-destructive` allows regular writes and blocks destructive operations.
+- `read-only` limits calls to read operations. Unknown values fall back to this mode.
+
+The server checks each batch command and checks a background task’s operation when it starts. The active mode appears in `c64://platform/status`.
+
+Host paths refer to files on the machine running C64 Bridge. Tools can use the server working directory (except the home or filesystem root), `~/.c64bridge`, the configured state directory, and the system temporary directory.
+
+- Most reads are capped at 16 MiB, with 64 MiB for disk images.
+- The server resolves symlinks, blocks hidden path components by default, and protects internal configuration and state files.
+- Add roots with `C64BRIDGE_ALLOWED_DIRS`. Separate entries with `:` on Linux/macOS or `;` on Windows. A lone `*` disables the root restriction. [Hardening behavior](doc/hardening-behavior.md)
+
+After `poweroff` on C64U/U64, restore power at the outlet. The machine starts automatically only if its power-restoration setting allows it.
+
+## HTTP invocation
+
+Use the optional loopback HTTP transport for manual inspection. Start it with `npx -y c64bridge@latest --http 3000` or `npm start -- --http 3000` from a checkout.
+
+The default HTTP port is 3000, and the bridge listens on `127.0.0.1` with loopback-only Host and Origin checks.
+
+Set `C64BRIDGE_HTTP_TOKEN` and send `Authorization: Bearer <token>` to require authentication. Without a token, local processes that can reach the port can call the tools allowed by the access mode.
+
+Send MCP JSON-RPC requests to `/mcp`. Pass the operation as `params.arguments.op` in a `tools/call` request. Responses arrive as server-sent events.
+
+```bash
+curl -s http://127.0.0.1:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"c64_memory","arguments":{"op":"read_screen"}}}'
 ```
 
-Earlier versions accepted any path. Clients that pass paths outside these directories must now add them through `C64BRIDGE_ALLOWED_DIRS`.
+To discover tools, send `{"jsonrpc":"2.0","id":2,"method":"tools/list"}` with the same headers. Set `C64BRIDGE_VERBOSE_SCHEMA=1` to include the full per-operation schemas.
 
-### Access Mode
+## Build and test
 
-Every operation has an effect: `read` (no change), `write` (changes machine or emulator state that a reset undoes, or writes a host file) or `destructive` (survives a reset or interrupts availability, for example power off, power cycle, reboot, flash save, load or reset to defaults, drive ROM load, disk image creation, debug register write, and config restore with `applyToFlash`). `tools/list` publishes MCP annotations derived from these effects, and each operation line in a tool description names its effect when it is not `read`.
+From a checkout with Bun 1.3 or later, use the build wrapper to install dependencies, compile, and run the test suite.
 
-Set `C64BRIDGE_ACCESS` to restrict what a client may call:
-
-- `full` (default): all operations are allowed.
-- `no-destructive`: `destructive` operations are rejected.
-- `read-only`: only `read` operations are allowed.
-
-The variable is read on every call. An unknown value is treated as `read-only` and logged to stderr once. A rejected call returns a validation error that names the operation, its effect and the active mode. `c64_batch` checks each command separately, and `c64_system` `start_task` checks the effect of its task operation when the task starts. `c64://platform/status` shows the active mode.
-
-After `c64_system` `poweroff` on C64U/U64, power must be restored at the outlet. The machine starts by itself only if automatic startup on power restoration is enabled in its configuration.
-
-```json
-"env": { "C64BRIDGE_ACCESS": "no-destructive" }
+```bash
+./build --skip-tests  # install and build
+npm start             # launch the local stdio server
 ```
 
-### Operator Environment Variables
+| Task | Command |
+| --- | --- |
+| Install, build, and run the full test matrix | `./build` |
+| Run mock-backed tests | `./build test` |
+| Run the VICE mock test leg | `./build test --platform vice --target mock` |
+| Test against Ultimate hardware | `./build test --real --base-url http://c64u` |
 
-These variables are read by the server itself and are set in the `env` block of the MCP client configuration. `C64BRIDGE_ALLOWED_DIRS` and `C64BRIDGE_ACCESS` are described above.
+See `./build --help` for coverage, RAG rebuilds, package checks, and release commands. To run a local npm installation, use `npx c64bridge` from the project where you installed it.
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `C64BRIDGE_ALLOWED_DIRS` | unset | Additional directories for host file paths in tool arguments. Separate entries with the platform path delimiter; `*` disables the confinement. |
-| `C64BRIDGE_ACCESS` | `full` | `full`, `no-destructive` or `read-only`. Limits which operations a client may call. |
-| `C64BRIDGE_HTTP_TOKEN` | unset | When set, the optional HTTP transport (`--http`) requires `Authorization: Bearer <token>`. The transport binds to 127.0.0.1 and accepts only loopback `Host` and `Origin` headers regardless of this setting. Without a token, any process that can reach 127.0.0.1 on that port can call every tool. An invalid `--http` port is a startup error. |
-| `C64BRIDGE_DIAGNOSTICS_KEEP` | `200` | Number of diagnostics files kept in the diagnostics directory. At startup the server deletes older files beyond this count and files older than 30 days. An invalid value is ignored with a warning on stderr. Diagnostics files are created with mode 0600 in a directory created with mode 0700. |
-| `C64BRIDGE_VERBOSE_SCHEMA` | unset | Set to `1` to include the full per-operation schemas in `tools/list`. By default they are omitted to keep the listing small. |
+The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code project configuration](.mcp.json) launch the source checkout. In VS Code, the [C64 custom agent](.github/agents/c64.agent.md) is available for the project’s C64 workflows. In Claude Code, approve the project server when prompted. To start a stdio session by hand, run `npm start` from the checkout or `npx -y c64bridge@latest` for the published package. It waits for MCP requests on stdin.
 
-## VS Code MCP Setup
+`npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit updated generated files alongside MCP server changes. The package check in CI rebuilds and fails if the committed files are stale. [Developer guide](doc/developer.md)
 
-This section covers the GitHub Copilot integration that ships with VS Code. For the Claude Code VS Code plugin, see [Claude Code](#claude-code) — it reads `.mcp.json`, not `.vscode/mcp.json`.
+## Documentation
 
-If this repository is checked out locally, open the prepared [.vscode/mcp.json](./.vscode/mcp.json).
+### Setup and troubleshooting
 
-Otherwise, put the following into your own `.vscode/mcp.json`:
+- **First run** · Choose a target, connect your client, and run a greeting. [Hello World tour](#quick-start)
+- **Startup and connection issues** · Check the session logs in `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail. [Troubleshooting guide](doc/troubleshooting-mcp.md)
 
-```json
-{
-  "servers": {
-    "c64bridge": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "c64bridge@latest"
-      ]
-    }
-  }
-}
-```
+### Bundled manuals
 
-Then click the start button shown above the `c64bridge` entry.
+Your agent can consult these manuals through MCP while it works. The links below are there for when you want to look up a detail yourself.
 
-Your MCP server should now be running:
+- **Game development** · [Reading plan by game type](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
+- **SID composition** · [SIDWAVE format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md)
+- **Ultimate hardware** · [Turbo and board settings](data/ultimate/hardware.md) · [REU](data/ultimate/reu.md) · [UCI](data/ultimate/uci.md) · [UPIC](data/ultimate/upic.md)
+- **VICE debugging** · [Binary Monitor](data/vice/vice-binary-monitor-spec.md)
 
-![VS Code Started MCP server](./doc/img/vscode/vscode-started-mcp-server.png)
+### Integration and internals
 
-For more details, see the official [VS Code MCP Server documentation](https://code.visualstudio.com/docs/copilot/customization/mcp-servers).
+- **Agent setup** · Tool discovery, workflow routing, and skills. [Integration guide](AGENTS.md) · [Agent primer](data/context/bootstrap.md)
+- **MCP interface** · Tools, resources, prompts, and schemas. [Interface files](mcp/) · [MCP manifest](mcp.json) · [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
+- **Ultimate REST APIs** · [C64U/U64 specification](doc/c64u/c64-openapi.yaml) · [U2 specification](doc/u2/u2-openapi.yaml)
+- **Server architecture** · Built with the official TypeScript MCP SDK. [DeepWiki overview](https://deepwiki.com/chrisgleissner/c64bridge)
 
-### Enable the C64 Agent
-
-After the server is running, switch to the `C64` agent in VS Code.
-
-This agent is preconfigured for Commodore 64 work. It steers Copilot toward `c64bridge` workflows for BASIC, 6502 assembly, SID audio, VIC-II graphics, memory inspection, disk operations, printing, streaming, and device control.
-
-![VS Code C64 agent](./doc/img/vscode/vscode-copilot-c64-agent.png)
-
-### Optional Overrides
-
-You can add `env` entries in `.vscode/mcp.json` to select a config file, override C64 Ultimate connection details, or force an initial backend:
-
-```json
-{
-  "servers": {
-    "c64bridge": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "c64bridge@latest"
-      ],
-      "env": {
-        "C64BRIDGE_CONFIG": "/home/you/.c64bridge.json",
-        "C64U_HOST": "192.168.1.99",
-        "C64U_PORT": "80",
-        "C64U_PASSWORD": "secret",
-        "C64_MODE": "c64u",
-        "LOG_LEVEL": "debug"
-      }
-    }
-  }
-}
-```
-
-- `C64BRIDGE_CONFIG` points to a specific config file
-- `C64U_HOST`, `C64U_PORT`, and `C64U_PASSWORD` override the C64 Ultimate connection without editing config files
-- `C64_MODE` forces the initial backend to `c64u`, `u2`, or `vice`; `U2_HOST`, `U2_PORT`, and `U2_PASSWORD` override the selected U2 profile. `C64U_*` variables apply to the U2 profile only when the configuration has no `u2` section.
-- `LOG_LEVEL=debug` enables verbose logging
-
-For VICE-specific overrides such as `VICE_ARGS=-minimized`, `VICE_VISIBLE=false`, or custom VICE paths, use the patterns in [Backend Configuration: VICE](#backend-configuration-vice).
-
-### Environment Variables in MCP Client Configs
-
-Every runtime environment variable documented in the root [mcp.json](./mcp.json) can be supplied by your MCP client configuration, including `.vscode/mcp.json` under `servers.c64bridge.env`.
-
-When an environment variable maps to a JSON config field, the override order is always:
-
-1. the explicit environment variable from your MCP client config or shell
-2. the merged JSON config section loaded from `C64BRIDGE_CONFIG`, the repo `.c64bridge.json`, then `~/.c64bridge.json`
-3. the built-in default compiled into the server
-
-When an environment variable has no JSON config equivalent, the order is:
-
-1. the explicit environment variable from your MCP client config or shell
-2. the built-in default
-
-That rule applies uniformly across the documented runtime environment variables below.
-
-Example: start on minimized VICE with a specific ROM or resource directory, plus a hardware fallback that can still be selected instantly at runtime:
-
-```json
-{
-  "servers": {
-    "c64bridge": {
-      "command": "node",
-      "args": ["${workspaceFolder}/scripts/start.mjs"],
-      "type": "stdio",
-      "env": {
-        "C64_MODE": "vice",
-        "C64U_HOST": "c64u",
-        "C64U_PORT": "80",
-        "VICE_BINARY": "/usr/local/bin/x64sc",
-        "VICE_DIRECTORY": "/usr/local/share/vice",
-        "VICE_VISIBLE": "true",
-        "VICE_ARGS": "-minimized",
-        "VICE_WARP": "false"
-      }
-    }
-  }
-}
-```
-
-Example: keep JSON config files for backend endpoints, but override diagnostics, polling, and RAG behavior from VS Code:
-
-```json
-{
-  "servers": {
-    "c64bridge": {
-      "command": "node",
-      "args": ["${workspaceFolder}/scripts/start.mjs"],
-      "type": "stdio",
-      "env": {
-        "C64BRIDGE_CONFIG": "/home/you/.c64bridge.json",
-        "LOG_LEVEL": "debug",
-        "C64BRIDGE_POLL_MAX_MS": "8000",
-        "C64BRIDGE_POLL_INTERVAL_MS": "200",
-        "RAG_BUILD_ON_START": "1",
-        "RAG_EMBEDDINGS_DIR": "/home/you/c64bridge-data"
-      }
-    }
-  }
-}
-```
-
-### Runtime Environment Variable Reference
+## Runtime environment variable reference
 
 <!-- AUTO-GENERATED:ENV-VARS-START -->
 
@@ -574,12 +323,12 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 
 | Variable | Default | JSON Config Key | Description |
 | --- | --- | --- | --- |
-| `C64_MODE` | c64u | — | Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator) |
+| `C64_MODE` | auto | — | Pin the initial backend to c64u, u2, or vice. When unset, select from configuration or probe the default hardware endpoint |
 | `C64_TASK_STATE_FILE` | auto | — | Override the path used to persist MCP background-task state |
 | `C64BRIDGE_ACCESS` | full | — | Access mode limiting which operations may be called (full, no-destructive, read-only) |
 | `C64BRIDGE_ALLOW_HIDDEN_PATHS` |  | — | Set to 1 to allow hidden host path components; protected configuration and task-state files remain inaccessible |
 | `C64BRIDGE_ALLOWED_DIRS` |  | — | Additional directories allowed for host file paths in tool arguments, separated by the path delimiter; * disables the check |
-| `C64BRIDGE_CONFIG` | ~/.c64bridge.json | config path | Path to configuration JSON |
+| `C64BRIDGE_CONFIG` |  | config path | Explicit configuration JSON path. When unset, search the working directory, home directory, then package directory |
 | `C64BRIDGE_DIAGNOSTICS_DIR` | ~/.c64bridge/diagnostics | — | Override the directory where persistent MCP diagnostics files are written |
 | `C64BRIDGE_DIAGNOSTICS_KEEP` | 200 | — | Number of diagnostics files kept at startup; files older than 30 days are always removed |
 | `C64BRIDGE_DISABLE_DIAGNOSTICS` | 0 | — | Set to 1 to disable persistent diagnostics logging |
@@ -603,9 +352,9 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 
 | Variable | Default | JSON Config Key | Description |
 | --- | --- | --- | --- |
-| `U2_HOST` |  | u2.host | Override the U2/U2+/U2+L host name or IP address when C64_MODE=u2 |
-| `U2_PASSWORD` |  | u2.networkPassword | Override the U2-family network password sent as X-Password when C64_MODE=u2 |
-| `U2_PORT` |  | u2.port | Override the U2-family REST port when C64_MODE=u2 |
+| `U2_HOST` |  | u2.host | Override the U2/U2+/U2+L host name or IP address |
+| `U2_PASSWORD` |  | u2.networkPassword | Override the U2-family network password sent as X-Password |
+| `U2_PORT` |  | u2.port | Override the U2-family REST port |
 
 #### VICE Runtime
 
@@ -614,7 +363,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `DISABLE_XVFB` | 0 | — | Set to 1 to disable Xvfb fallback and use the current display only |
 | `FORCE_XVFB` | 0 | — | Set to 1 to force managed VICE launches to use Xvfb even when a graphical session is detected |
 | `VICE_ARGS` |  | vice.args | Extra command-line arguments forwarded to managed VICE launches, such as -minimized for a visible window that starts iconified |
-| `VICE_BINARY` | x64sc | vice.exe | VICE binary to launch for managed emulator sessions and audio capture; automatic search is used only when this override is missing or invalid |
+| `VICE_BINARY` | x64sc | vice.exe | VICE executable for managed sessions and audio capture. A missing executable at an explicit setting prevents a managed launch |
 | `VICE_DIRECTORY` | auto-detect | vice.directory | Override the VICE resource directory used for ROM and UI asset discovery; automatic search is used only when this override is missing or invalid |
 | `VICE_HOST` | 127.0.0.1 | vice.host | Override the VICE Binary Monitor host |
 | `VICE_PORT` | 6502 | vice.port | Override the VICE Binary Monitor port |
@@ -658,121 +407,6 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64_TEST_TARGET` |  | — | Overrides integration tests to hit mock or real hardware (mock\|real) |
 
 <!-- AUTO-GENERATED:ENV-VARS-END -->
-
-## Claude Code
-
-[Claude Code](https://docs.claude.com/en/docs/claude-code/mcp) is supported as a first-class MCP client. It uses the same canonical start command and the same backend [Configuration](#configuration) files and environment variables as every other client — only the discovery file differs.
-
-**Claude Code CLI** — register the published server in one command:
-
-```bash
-claude mcp add c64bridge -- npx -y c64bridge@latest
-```
-
-Use `--scope user` to make it available across all your projects, or `--scope project` to write a `.mcp.json` next to the current repo. Backend selection (`c64u`, `u2`, or `vice`), host, port, and password come from the same files documented in [Configuration](#configuration); per-shell overrides come from the variables in [Runtime Environment Variable Reference](#runtime-environment-variable-reference).
-
-**Project-scoped discovery** — this repository ships a checked-in [.mcp.json](./.mcp.json) that points Claude Code at the local source via `node scripts/start.mjs`. When you open the repo with `claude` (CLI or VS Code plugin), Claude Code prompts to enable the project-scoped server on first run. Approve it once and the `c64_*` tools become discoverable in that workspace.
-
-**Claude Code VS Code plugin** — the plugin reads the same `.mcp.json` and the same user-scope `claude mcp add` registrations as the CLI. No extra setup is required beyond installing the plugin and approving the project server prompt. The existing [.vscode/mcp.json](./.vscode/mcp.json) is read by GitHub Copilot, not by Claude Code; the two files coexist without conflict because they target different clients with different config schemas.
-
-**Verify it works** — after registration, run `claude mcp list` (CLI) or open the MCP panel (plugin) and look for `c64bridge`. Then ask Claude Code something like *“use vice: write a small BASIC program that clears the screen and prints HELLO CLAUDE”* — it should call `c64_select_backend` and `c64_program` directly. If tools do not appear, confirm Node 24+ is on `PATH`, that the server was approved at the requested scope, and that the backend is reachable per the [Configuration](#configuration) section.
-
-### Claude Desktop and Cursor
-
-Both clients use the same `mcpServers` shape (checked against the official [MCP quickstart for Claude Desktop](https://modelcontextprotocol.io/quickstart/user) and the [Cursor MCP documentation](https://cursor.com/docs/context/mcp)):
-
-```json
-{
-  "mcpServers": {
-    "c64bridge": {
-      "command": "npx",
-      "args": ["-y", "c64bridge@latest"],
-      "env": {
-        "C64U_HOST": "192.168.1.99"
-      }
-    }
-  }
-}
-```
-
-- **Claude Desktop**: Settings, Developer, Edit Config opens `claude_desktop_config.json` (macOS `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows `%APPDATA%\Claude\claude_desktop_config.json`). Restart Claude Desktop completely after saving. Claude Desktop starts the server with its own `PATH`; if `npx` is not found or is too old, use the absolute path of a Node 24 `npx` as `command`.
-- **Cursor**: `.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for all projects.
-- Replace `192.168.1.99` with the IP address of your Ultimate (the default host name `c64u` only works when it resolves on your network). For VICE use `"C64_MODE": "vice"` instead.
-- The server writes its log to stderr and then waits for the client on stdin. Started by hand in a terminal it appears to hang; that is expected, stop it with Ctrl-C.
-- Claude Code sets the same variable with `-e` (`--env`), placed before the `--` that starts the server command: `claude mcp add c64bridge -e C64U_HOST=192.168.1.99 -- npx -y c64bridge@latest`.
-
-## Example Workflow
-
-Compose a children’s song with ChatGPT and VS Code:
-
-![duck song](./doc/img/prompts/duck_song.png)
-
-Then render PETSCII art for it:
-
-![duck petscii](./doc/img/prompts/duck_petscii.png)
-
-This is representative of the intended workflow:
-
-1. Ask the MCP client to generate or refine C64-oriented content.
-2. Use grouped tools such as `c64_program`, `c64_graphics`, and `c64_sound` to execute it.
-3. Verify the result via screen reads, frame capture, memory inspection, or audio analysis.
-
-## HTTP Invocation
-
-- Preferred transport is `stdio`.
-- The HTTP bridge is disabled by default and is intended only for manual testing. Start it with `npx -y c64bridge@latest --http 3000` (from a checkout: `npm start -- --http 3000`). The port defaults to 3000; the server binds to 127.0.0.1 only. Set `C64BRIDGE_HTTP_TOKEN` and send `Authorization: Bearer <token>` to require a token.
-- The single endpoint is `http://127.0.0.1:<port>/mcp` and speaks MCP JSON-RPC. Every request needs `Content-Type: application/json` and `Accept: application/json, text/event-stream`; the answer arrives as one server-sent event (`data: {...}`).
-- There are no per-tool REST routes. A grouped tool is called with `tools/call`, and `op` goes inside `arguments`.
-
-```bash
-# Read the current screen (PETSCII to ASCII)
-curl -s -X POST http://127.0.0.1:3000/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"c64_memory","arguments":{"op":"read_screen"}}}'
-
-# List the tools
-curl -s -X POST http://127.0.0.1:3000/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
-```
-
-## Build and Test
-
-The [`./build`](./build) script at the project root wraps all development tasks behind a single, self-documented interface:
-
-```bash
-./build --help                                       # full command reference
-./build                                              # install + build + test matrix (full CI run)
-./build --skip-tests                                 # install + build only
-./build build                                        # TypeScript compile + doc generation
-./build test                                         # integration tests (mock backend)
-./build test --real                                  # test against real hardware
-./build test --platform vice --target mock           # single test leg
-./build test:matrix                                  # full matrix (c64u/mock · vice/mock · vice/device)
-./build coverage                                     # merged coverage report
-./build coverage:single --platform c64u --target mock
-./build check                                        # build + test matrix (no install)
-./build rag:rebuild                                  # rebuild RAG embeddings
-./build release --version 1.2.3                      # prepare a release
-```
-
-> **Starting the MCP server** is not managed by `./build`. Use `npm start` (from source) or `npx -y c64bridge@latest` (published package) as shown in the [Quick Start](#quick-start) section above.
-
-## Documentation
-
-- [DeepWiki](https://deepwiki.com/chrisgleissner/c64bridge) - architecture and implementation overview
-- [doc/developer.md](doc/developer.md) - development workflow and RAG details
-- [data/context/bootstrap.md](data/context/bootstrap.md) - primer injected ahead of prompts
-- [doc/c64u/c64-openapi.yaml](doc/c64u/c64-openapi.yaml) - REST surface (OpenAPI 3.1)
-- [AGENTS.md](AGENTS.md) - LLM-facing quick setup, usage, and personas
-
-## Static MCP Interface
-
-The repository contains an auto-generated static mirror of the MCP server interface in the [./mcp](./mcp) folder.
-
-This allows agents to inspect the available tools, resources, prompts, and schemas without connecting to the server.
 
 ## MCP API Reference
 

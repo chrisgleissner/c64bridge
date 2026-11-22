@@ -1,210 +1,34 @@
-# MCP Troubleshooting Guide
+# MCP troubleshooting
 
-Field notes for the stdio-based Model Context Protocol server. Use these checks when the C64 Bridge surface does not respond or CI fails the connectivity probe.
+## The client cannot see the tools
 
-## Quick Diagnosis Checklist
+- Check that the client has enabled the C64 Bridge server and can find Node.js 24+ and `npx` on its PATH. A desktop app can have a different PATH from your terminal.
+- For stdio, let the client launch the server. A separate terminal launch waits for input on that terminal's stdin. Server logs go to stderr.
+- In VS Code with Copilot, check the `c64bridge` entry in `.vscode/mcp.json` and open its output. The Claude Code plugin uses Claude Code's `.mcp.json` or CLI registration. [Client setup](../README.md#quick-start)
 
-```bash
-# 1. Is the MCP server running?
-ps -ef | grep "c64bridge" | grep -v grep
+## The tools are visible but the target does not respond
 
-# 2. Do startup logs show the diagnostics file and connectivity probe?
-tail -n20 ~/.c64bridge.log  # or the terminal running npm start
+Read `c64://platform/status` for the active backend, configured backends, and native endpoint availability. Set `C64_MODE` in the MCP client to pin the initial target. A manually configured hardware profile can remain selected while the device is offline. [Backend configuration](../README.md#configuration)
 
-# 3. Inspect the persistent MCP diagnostics trail
-ls -1t ~/.c64bridge/diagnostics | head
-tail -n50 ~/.c64bridge/diagnostics/<latest-file>.ndjson
-
-# 4. Can we reach the configured REST endpoint directly?
-curl -s http://<your-c64-host>/v1/info | jq .version
-
-# 5. When using the mock server
-npm test -- --mock
-```
-
-## Persistent Diagnostics
-
-The MCP server now writes a newline-delimited JSON diagnostics file for each session.
-
-- Default location: `~/.c64bridge/diagnostics/`
-- Override location: set `C64BRIDGE_DIAGNOSTICS_DIR=/path/to/dir`
-- Disable only if necessary: set `C64BRIDGE_DISABLE_DIAGNOSTICS=1`
-
-Each file records:
-
-- MCP startup and readiness
-- tool, prompt, and resource request lifecycle events
-- unhandled rejections, warnings, and uncaught exceptions
-- VICE/Xvfb startup failures with captured stderr and stdout tails
-
-When VS Code or Copilot appears to crash, preserve the newest `.ndjson` file before restarting. It is the fastest way to tell whether the MCP server was failing, hanging, or repeatedly restarting.
-
-## Common Issues & Fixes
-
-### 1. Server Starts Without Connectivity Logs
-
-**Symptoms:**
-
-- `npm start` prints the banner but omits `Connectivity check succeeded`.
-- CI job `Validate MCP server logs` fails.
-
-**Resolution:**
-
-1. Confirm the REST base URL in `.c64bridge.json` or `C64BRIDGE_CONFIG` matches a reachable device.
-2. Run `curl -I http://<host>/v1/info` to confirm HTTP reachability.
-3. Review `src/mcp-server.ts` connectivity logging; ensure no local edits suppressed `logConnectivity`.
-4. If hardware is offline, expect `Skipping direct REST connectivity probe` in the logs—CI treats this as success.
-
-### 2. VS Code (Copilot Chat) Cannot See Tools
-
-**Symptoms:**
-
-- Copilot Chat shows "No MCP server" messages.
-- Tool invocations fail silently.
-
-**Resolution:**
-
-1. Restart VS Code after changing MCP settings.
-2. Verify the settings JSON matches the snippet in `AGENTS.md` (`command`, `args`, `type: "stdio"`).
-3. Keep `npm start` (or `npx c64bridge`) running; Copilot terminates the stdio process when the chat closes.
-4. Inspect the Copilot output channel for connection errors and ensure the stdio server entry is configured and running.
-5. Correlate the VS Code/Copilot timestamp with the newest file under `~/.c64bridge/diagnostics/`.
-
-If the entire VS Code window crashes rather than just the MCP session, also collect:
-
-- VS Code logs from `Help` -> `Open Logs Folder`
-- extension host logs and crash dumps from the same time window
-- the matching `.ndjson` file from `~/.c64bridge/diagnostics/`
-
-### 3. Tests Fail Because Mock Server Is Missing
-
-**Symptoms:**
-
-- `npm test` exits with ENOENT for `test/mockC64Server.mjs` or cannot bind to port 18064.
-
-**Resolution:**
-
-1. Ensure dev dependencies are installed (`npm install`).
-2. Verify nothing else occupies the mock server port: `lsof -i :18064`.
-3. Run `npm test -- --verbose` to see which suite fails; the harness spins up the mock server automatically.
-
-### 4. C64 Hardware Connection Issues
-
-**Check C64 Configuration:**
+For an Ultimate device, try the firmware REST endpoint from the machine running C64 Bridge. Replace the example IP address with your device's address.
 
 ```bash
-# Verify config file exists and has correct IP
-cat .c64bridge.json
+curl -i --connect-timeout 3 http://192.168.1.99/v1/info
 ```
 
-Expected structure:
+With network protection enabled, supply the same `X-Password` header the bridge uses. A 401 or 403 indicates that the endpoint is reachable and rejected the request. Check the matching hardware profile's password, including any client environment overrides. In the bridge logs, `Connectivity check succeeded` confirms a successful REST probe.
 
-```json
-{
-  "c64u": {
-    "host": "c64u",
-    "port": 80,
-    "networkPassword": "secret"
-  }
-}
-```
+For VICE, check the configured Binary Monitor address and port. With a managed launch, verify that `x64sc` or `x64` can start and locate its C64 ROMs. Use `VICE_BINARY` and `VICE_DIRECTORY` for a custom install. If another debugger or bridge is attached to the Binary Monitor, disconnect it before retrying. [VICE setup](../README.md#vice-setup)
 
-Example with explicit host:
+## Find diagnostics
 
-```json
-{
-  "c64u": {
-    "host": "192.168.1.13",
-    "port": 80,
-    "networkPassword": "secret"
-  }
-}
-```
+The server writes newline-delimited JSON diagnostics under `~/.c64bridge/diagnostics/` by default. The files record MCP startup, tool and resource requests, unexpected errors, and output tails from failed VICE or Xvfb launches. If the client crashes, inspect the newest file and compare timestamps with the client's MCP output.
 
-If your Ultimate firmware has a network password configured, `networkPassword` must match it exactly or the REST API returns `403 Forbidden`.
+- `C64BRIDGE_DIAGNOSTICS_DIR` sets a different diagnostics directory.
+- `C64BRIDGE_DIAGNOSTICS_KEEP` sets the retention count. Startup also removes files older than 30 days.
+- `C64BRIDGE_DISABLE_DIAGNOSTICS=1` disables persistent diagnostics.
+- `LOG_LEVEL=debug` increases log verbosity.
 
-**Test C64 Connectivity:**
+## Check a source checkout
 
-Please note that the following IP address is just given as an example.
-
-```bash
-# Test Ultimate 64 REST API directly
-curl -s http://192.168.1.13/v1/info
-curl -s http://c64u/v1/info
-
-# If both fail, check network/Ultimate 64 power
-ping 192.168.1.13
-```
-
-### 5. Missing Dependencies
-
-**Symptoms:**
-
-- Server fails to start
-- TypeScript compilation errors
-- Missing modules
-
-**Solutions:**
-
-```bash
-# Reinstall dependencies
-npm install
-
-# Verify TypeScript can compile (optional check)
-npx tsc --noEmit src/index.ts
-```
-
-### 6. Transport
-
-Only stdio transport is supported for MCP. HTTP transport is not supported.
-
-## Working Test Sequence
-
-Use these checks to validate the full stack:
-
-1. `npm test` — run the mock suite end-to-end via stdio MCP.
-2. `npm test -- --real --base-url=$C64_BASE` — exercise real hardware (override `C64_BASE` to match your device).
-3. `curl -s "$C64_BASE"/v1/info | jq .version` — confirm the Ultimate 64 REST endpoint responds (hardware connectivity; unrelated to MCP transport).
-4. `npm run start-mock` — optional mock C64 server for local experiments.
-
-## VS Code MCP Setup Checklist
-
-- [ ] GitHub Copilot extension installed and active
-- [ ] MCP experimental feature enabled (Copilot Chat ≥ v1.214)
-- [ ] Settings JSON matches `AGENTS.md`
-- [ ] `npm start` (or packaged CLI) running in a terminal
-- [ ] Connectivity logs confirm the REST endpoint is reachable
-- [ ] Hardware (or mock server) is online and accessible
-
-## Key Lessons Learned
-
-1. Connectivity logs are the fastest signal—watch the console during startup.
-2. The diagnostics `.ndjson` file is now the authoritative crash trail for MCP sessions.
-3. Keep configuration files small and explicit; mismatched hosts cause silent timeouts.
-4. Automated tests cover most workflows; run `npm test` before suspecting hardware.
-5. Copilot Chat terminates the stdio server when the session ends—restart `npm start` as needed.
-
-## Emergency Recovery
-
-If nothing works:
-
-```bash
-# Nuclear option: kill everything and restart
-pkill -f npm
-pkill -f node
-pkill -f c64bridge
-
-# Wait a few seconds
-sleep 3
-
-# Clean restart
-cd /path/to/c64bridge
-npm start
-
-# If using HTTP mode, test immediately
-curl -s http://localhost:8000/tools/info
-```
-
----
-
-*Keep this guide updated whenever new MCP workflows or diagnostics land in the project.*
+Run `./build --skip-tests` to install and compile, then `./build test` to run against the mock backend. For transport debugging, the optional local HTTP listener accepts MCP JSON-RPC POSTs to `/mcp`. [HTTP invocation](../README.md#http-invocation) · [Developer guide](developer.md)

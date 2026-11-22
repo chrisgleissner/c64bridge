@@ -233,10 +233,22 @@ describe("update-readme grouped operations", () => {
     const minimalReadme = [
       "# Test README",
       "",
+      "## Contents",
+      "<!-- AUTO-GENERATED:TOC-START -->",
+      "stale contents",
+      "<!-- AUTO-GENERATED:TOC-END -->",
+      "",
+      "## Quick start",
+      "```bash",
+      "## Ignore this shell comment",
+      "```",
+      "",
+      "## Runtime environment variable reference",
       "<!-- AUTO-GENERATED:ENV-VARS-START -->",
       "stale env",
       "<!-- AUTO-GENERATED:ENV-VARS-END -->",
       "",
+      "## MCP API Reference",
       "<!-- AUTO-GENERATED:MCP-DOCS-START -->",
       "stale",
       "<!-- AUTO-GENERATED:MCP-DOCS-END -->",
@@ -251,6 +263,12 @@ describe("update-readme grouped operations", () => {
     expect(updated).toBe(true);
     expect(nextReadme).toContain("### Tools");
     expect(nextReadme).toContain("#### C64 Ultimate");
+    expect(nextReadme).toContain([
+      "- [Quick start](#quick-start)",
+      "- [Runtime environment variable reference](#runtime-environment-variable-reference)",
+      "- [MCP API Reference](#mcp-api-reference)",
+    ].join("\n"));
+    expect(nextReadme).not.toContain("#ignore-this-shell-comment");
     expect(nextReadme).not.toContain("stale");
     // "$1E" in a tool description must be copied literally, not read as a "$1" capture reference.
     expect(nextReadme).toContain("port 2 reads $1E for up");
