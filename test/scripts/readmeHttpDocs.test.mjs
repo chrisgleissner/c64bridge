@@ -39,7 +39,8 @@ test("PACKAGE-11/12 client setup snippets use the documented formats and no Linu
   const badges = [...readme.matchAll(/(?:config=|mcp-install\?)([^)&\s]+)/g)].map((match) => match[1]);
   assert.ok(badges.length >= 4);
   for (const badge of badges) {
-    const text = badge.startsWith("eyJ") ? Buffer.from(badge, "base64").toString("utf8") : decodeURIComponent(badge);
+    const decoded = decodeURIComponent(badge);
+    const text = decoded.startsWith("eyJ") ? Buffer.from(decoded, "base64").toString("utf8") : decoded;
     assert.ok(!text.includes("/usr/local"), text);
     assert.ok(JSON.parse(text).command === "npx");
   }
