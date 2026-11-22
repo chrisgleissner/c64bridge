@@ -25,7 +25,6 @@ Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [
 - [Quick start](#quick-start)
 - [Project showcases](#project-showcases)
 - [Configuration](#configuration)
-- [Other MCP clients](#other-mcp-clients)
 - [HTTP invocation](#http-invocation)
 - [Build and test](#build-and-test)
 - [Documentation](#documentation)
@@ -36,13 +35,13 @@ Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [
 
 ## Quick start
 
-This Hello World tour takes you from setup to a verified result on the C64 screen. Use VICE if you’re starting without hardware.
+You need Node.js 24 or later with npm, an MCP client, and either VICE or a reachable Ultimate device. [Node.js downloads](https://nodejs.org/en/download)
 
-Install Node.js 24 or later with npm, then confirm your MCP client can find `npx` on its PATH. [Node.js downloads](https://nodejs.org/en/download)
+Install C64 Bridge by registering it with your client. The client launches `npx -y c64bridge@latest`, which fetches the npm package as needed and starts the local server over stdio.
 
 ### 1. Choose a target
 
-Set the variables for your target in the MCP client's `env` block. The VS Code example below starts with VICE. For either hardware profile, replace the example IP address with your device's IP address or hostname.
+Use VICE for the tour if you’re starting without hardware. The examples below select VICE. For hardware, use the variables in the matching row and substitute your device’s IP address or hostname.
 
 | Target | Client environment | What you need |
 | --- | --- | --- |
@@ -50,13 +49,46 @@ Set the variables for your target in the MCP client's `env` block. The VS Code e
 | C64 Ultimate or Ultimate 64 | `C64_MODE=c64u`, `C64U_HOST=192.168.1.99` | A reachable Ultimate REST endpoint. Default port is 80. [C64 Ultimate](https://www.commodore.net/) · [Ultimate 64](https://ultimate64.com/) |
 | U2, U2+, or U2+L | `C64_MODE=u2`, `U2_HOST=192.168.1.99` | A reachable cartridge with Ultimate REST support. [U2-family quick guide](https://1541u-documentation.readthedocs.io/en/latest/quick_guide.html) |
 
-For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` for your profile. C64 Bridge sends the password as the `X-Password` header on REST requests.
+For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` in your own client configuration. The bridge sends it as the `X-Password` header.
 
-### 2. Connect your MCP client
+### 2. Install and start
 
-Choose your client. [Codex CLI](#codex-cli) · [Claude Code](#claude-code) · [Claude Desktop or Cursor](#claude-desktop-and-cursor)
+Choose one setup for your client. [Terminal commands](#terminal-clients) · [Editor configuration](#editor-and-desktop-clients)
 
-For **VS Code with GitHub Copilot**, you can add this entry to `.vscode/mcp.json` and start **c64bridge** from the editor.
+<details>
+<summary>Install shortcuts for VS Code, Visual Studio, and Cursor</summary>
+
+The editor install buttons set `C64_MODE=c64u` and `C64U_HOST=c64u`. If your device uses a different hostname or IP address, edit the registered server’s environment before starting it. The Claude Code badge links to its terminal command.
+
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
+[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
+[![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
+
+</details>
+
+#### Terminal clients
+
+##### Codex CLI
+
+```bash
+codex mcp add c64bridge --env C64_MODE=vice -- npx -y c64bridge@latest
+```
+
+Start a new Codex session and use `/mcp` to check that `c64bridge` is active. For hardware, replace `--env C64_MODE=vice` with one `--env KEY=VALUE` per setting from the target table. [Codex MCP setup](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+
+##### Claude Code
+
+```bash
+claude mcp add --transport stdio c64bridge -e C64_MODE=vice -- npx -y c64bridge@latest
+```
+
+Run `claude mcp list` from the same project to check the connection, then open Claude Code there. For hardware, replace `-e C64_MODE=vice` with one `-e KEY=VALUE` per setting from the target table. Use `--scope user` to register the server across projects, or `--scope project` to save a shared `.mcp.json`. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
+
+#### Editor and desktop clients
+
+For **VS Code**, add this to your project’s `.vscode/mcp.json`. If the file already has a `servers` object, add just the `c64bridge` entry.
 
 ```json
 {
@@ -71,17 +103,22 @@ For **VS Code with GitHub Copilot**, you can add this entry to `.vscode/mcp.json
 }
 ```
 
-If you're working in a checkout of this repository, its [VS Code configuration](.vscode/mcp.json) starts the local source. Select the [C64 custom agent](.github/agents/c64.agent.md) in Copilot Chat to use the project's C64 workflows. [VS Code MCP setup](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
+Run **MCP: List Servers** from the Command Palette, select **c64bridge**, and choose **Start Server**. Review the trust prompt if one appears.
+
+For guided setup, use **MCP: Add Server → Command (stdio)**, enter `npx -y c64bridge@latest`, and set the target in the resulting server entry. [VS Code MCP setup](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
 
 <details>
-<summary>Install buttons for C64 Ultimate and Ultimate 64</summary>
+<summary>Manual setup for Claude Desktop, Cursor, and Visual Studio</summary>
 
-These shortcuts select the `c64u` profile and use `c64u` as the hostname. Edit the client configuration if your device uses a different address.
+Use the JSON above and the location for your client.
 
-[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
-[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
+| Client | Where to put the server configuration |
+| --- | --- |
+| Claude Desktop | In **Settings → Developer → Edit Config**, add the `c64bridge` entry under `mcpServers` in `claude_desktop_config.json`. Restart the app. [Local server setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers) |
+| Cursor | Add the entry under `mcpServers` in `.cursor/mcp.json` for this project or `~/.cursor/mcp.json` for all projects. [Cursor MCP setup](https://cursor.com/docs/mcp) |
+| Visual Studio | Add the entry under `servers` in `.mcp.json` in the solution folder. In Copilot Agent mode, enable the tools in the tool picker. [Visual Studio MCP setup](https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers?view=visualstudio) |
+
+If an editor or desktop client cannot find `npx`, use its absolute path in the `command` field.
 
 </details>
 
@@ -216,53 +253,6 @@ Host paths refer to files on the machine running C64 Bridge. Tools can use the s
 
 After `poweroff` on C64U/U64, restore power at the outlet. The machine starts automatically only if its power-restoration setting allows it.
 
-## Other MCP clients
-
-All local clients launch the same stdio command, `npx -y c64bridge@latest`. A manual terminal launch waits for MCP input on stdin and writes logs to stderr. Use Ctrl+C to stop a manual session.
-
-### Codex CLI
-
-Register the server for VICE. For hardware, set the variables from the [target table](#1-choose-a-target) with one `--env` per variable.
-
-```bash
-codex mcp add c64bridge --env C64_MODE=vice -- npx -y c64bridge@latest
-codex mcp get c64bridge
-```
-
-Start a new Codex session and try [the greeting](#3-run-hello-world). [Codex MCP setup](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
-
-### Claude Code
-
-Register and check the server from the CLI. This example selects VICE. For hardware, change `C64_MODE` and supply the appropriate host with another `-e`.
-
-```bash
-claude mcp add --transport stdio c64bridge -e C64_MODE=vice -- npx -y c64bridge@latest
-claude mcp list
-```
-
-Add `--scope user` to register across projects or `--scope project` to write a shared `.mcp.json`.
-
-The CLI and the VS Code plugin both read project `.mcp.json` and user-scope registrations. In this repository, approve the [checked-in project server](.mcp.json) to launch from the checkout. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
-
-### Claude Desktop and Cursor
-
-Both clients use the `mcpServers` key. This example selects C64U/U64 explicitly. Use the appropriate settings from the [target table](#1-choose-a-target) for your machine.
-
-```json
-{
-  "mcpServers": {
-    "c64bridge": {
-      "command": "npx",
-      "args": ["-y", "c64bridge@latest"],
-      "env": { "C64_MODE": "c64u", "C64U_HOST": "192.168.1.99" }
-    }
-  }
-}
-```
-
-- **Claude Desktop** opens `claude_desktop_config.json` from **Settings → Developer → Edit Config**. Restart the app after saving. If the app cannot find Node.js 24+, check its PATH and use the absolute path to the appropriate `npx` if needed. [Claude Desktop MCP quickstart](https://modelcontextprotocol.io/quickstart/user)
-- **Cursor** reads `.cursor/mcp.json` in a project or `~/.cursor/mcp.json` for a user-wide setup. [Cursor MCP setup](https://cursor.com/docs/context/mcp)
-
 ## HTTP invocation
 
 Use the optional loopback HTTP transport for manual inspection. Start it with `npx -y c64bridge@latest --http 3000` or `npm start -- --http 3000` from a checkout.
@@ -299,6 +289,8 @@ npm start             # launch the local stdio server
 | Test against Ultimate hardware | `./build test --real --base-url http://c64u` |
 
 See `./build --help` for coverage, RAG rebuilds, package checks, and release commands. To run a local npm installation, use `npx c64bridge` from the project where you installed it.
+
+The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code project configuration](.mcp.json) launch the source checkout. In VS Code, the [C64 custom agent](.github/agents/c64.agent.md) is available for the project’s C64 workflows. In Claude Code, approve the project server when prompted. To start a stdio session by hand, run `npm start` from the checkout or `npx -y c64bridge@latest` for the published package. It waits for MCP requests on stdin.
 
 `npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit updated generated files alongside MCP server changes. The package check in CI rebuilds and fails if the committed files are stale. [Developer guide](doc/developer.md)
 
