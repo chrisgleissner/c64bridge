@@ -1,10 +1,8 @@
 # C64 Bridge
 
-**Run and verify C64 code from your AI coding agent.**
+**Give your coding agent a C64 it can test on.**
 
-An AI model can draft 6510 code and suggest tests. C64 Bridge adds a connection to VICE or Ultimate hardware through the Model Context Protocol (MCP). An agent such as Claude Code or Codex can load and run the program, read the screen or memory, and use the result to debug the next revision. You can follow the whole test from the same session.
-
-The bridge also supplies [C64 manuals](#bundled-manuals) your agent can consult as it works, from VIC-II timing and SID registers to Ultimate features such as REU and UCI.
+C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents such as Claude Code and Codex to VICE or Ultimate hardware. Your agent can run a PRG, read the screen or RAM, and use the result to debug. The bundled C64 manuals give it the details it needs as it works.
 
 [Start the Hello World tour](#quick-start)
 
@@ -15,8 +13,6 @@ The bridge also supplies [C64 manuals](#bundled-manuals) your agent can consult 
 [![codecov](https://codecov.io/github/chrisgleissner/c64bridge/graph/badge.svg?token=AS9D41Y5EG)](https://codecov.io/github/chrisgleissner/c64bridge)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
-
-Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
 
 ## Contents
 
@@ -53,12 +49,7 @@ For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` in your ow
 
 ### 2. Install and start
 
-Choose one setup for your client. [Terminal commands](#terminal-clients) · [Editor configuration](#editor-and-desktop-clients)
-
-<details>
-<summary>Install shortcuts for VS Code, Visual Studio, and Cursor</summary>
-
-The editor install buttons set `C64_MODE=c64u` and `C64U_HOST=c64u`. If your device uses a different hostname or IP address, edit the registered server’s environment before starting it. The Claude Code badge links to its terminal command.
+Choose your client. [Terminal commands](#terminal-clients) · [VS Code](#editor-and-desktop-clients) · [Claude Desktop, Cursor, and Visual Studio](#other-desktop-clients)
 
 [![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
@@ -66,7 +57,7 @@ The editor install buttons set `C64_MODE=c64u` and `C64U_HOST=c64u`. If your dev
 [![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
 [![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
-</details>
+The editor badges select the C64 Ultimate profile with hostname `c64u`. Change the server’s environment to match your target before starting it.
 
 #### Terminal clients
 
@@ -107,20 +98,15 @@ Run **MCP: List Servers** from the Command Palette, select **c64bridge**, and ch
 
 For guided setup, use **MCP: Add Server → Command (stdio)**, enter `npx -y c64bridge@latest`, and set the target in the resulting server entry. [VS Code MCP setup](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
 
-<details>
-<summary>Manual setup for Claude Desktop, Cursor, and Visual Studio</summary>
+##### Other desktop clients
 
-Use the JSON above and the location for your client.
+Copy the `c64bridge` entry from the JSON above into the file for your client.
 
-| Client | Where to put the server configuration |
-| --- | --- |
-| Claude Desktop | In **Settings → Developer → Edit Config**, add the `c64bridge` entry under `mcpServers` in `claude_desktop_config.json`. Restart the app. [Local server setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers) |
-| Cursor | Add the entry under `mcpServers` in `.cursor/mcp.json` for this project or `~/.cursor/mcp.json` for all projects. [Cursor MCP setup](https://cursor.com/docs/mcp) |
-| Visual Studio | Add the entry under `servers` in `.mcp.json` in the solution folder. In Copilot Agent mode, enable the tools in the tool picker. [Visual Studio MCP setup](https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers?view=visualstudio) |
+- **Claude Desktop** · Open **Settings → Developer → Edit Config**. Add the entry under `mcpServers` in `claude_desktop_config.json`, then restart Claude Desktop. [Claude Desktop setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers)
+- **Cursor** · Add the entry under `mcpServers` in `.cursor/mcp.json` for this project or `~/.cursor/mcp.json` for all projects. [Cursor MCP setup](https://cursor.com/docs/mcp)
+- **Visual Studio** · Add the entry under `servers` in the solution’s `.mcp.json`. Enable the tools in Copilot’s Agent mode tool picker. [Visual Studio MCP setup](https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers?view=visualstudio)
 
-If an editor or desktop client cannot find `npx`, use its absolute path in the `command` field.
-
-</details>
+If the client can’t find `npx`, use its absolute path in the `command` field.
 
 ### 3. Run Hello World
 
@@ -295,6 +281,8 @@ The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code projec
 `npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit updated generated files alongside MCP server changes. The package check in CI rebuilds and fails if the committed files are stale. [Developer guide](doc/developer.md)
 
 ## Documentation
+
+C64 Bridge uses the official TypeScript MCP SDK. [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
 
 - [Troubleshooting](doc/troubleshooting-mcp.md) covers startup, backend connectivity, and diagnostic logs. Logs default to `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail.
 - [Agent integration guide](AGENTS.md) explains tool discovery, operation routing, and bundled skills. [Agent primer](data/context/bootstrap.md)
