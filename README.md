@@ -51,10 +51,10 @@ For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` in your ow
 
 Choose your client. [Terminal commands](#terminal-clients) · [VS Code](#editor-and-desktop-clients) · [Claude Desktop, Cursor, and Visual Studio](#other-desktop-clients)
 
-[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
-[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%40latest%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%40latest%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
+[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22name%22%3A%22c64bridge%22%2C%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%40latest%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZUBsYXRlc3QiXSwiZW52Ijp7IkM2NF9NT0RFIjoiYzY0dSIsIkM2NFVfSE9TVCI6ImM2NHUifX0%3D)
 [![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
 The editor badges select the C64 Ultimate profile with hostname `c64u`. Change the server’s environment to match your target before starting it.
@@ -75,6 +75,8 @@ Start a new Codex session and use `/mcp` to check that `c64bridge` is active. Fo
 claude mcp add --transport stdio c64bridge -e C64_MODE=vice -- npx -y c64bridge@latest
 ```
 
+If Claude Code reports that `c64bridge` already exists, use `claude mcp get c64bridge` to check its scope and settings. Update the launch command in its configuration, or remove and re-add the entry in the same scope with its original environment.
+
 Run `claude mcp list` from the same project to check the connection, then open Claude Code there. For hardware, replace `-e C64_MODE=vice` with one `-e KEY=VALUE` per setting from the target table. Use `--scope user` to register the server across projects, or `--scope project` to save a shared `.mcp.json`. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
 
 #### Editor and desktop clients
@@ -94,7 +96,7 @@ For **VS Code**, add this to your project’s `.vscode/mcp.json`. If the file al
 }
 ```
 
-Run **MCP: List Servers** from the Command Palette, select **c64bridge**, and choose **Start Server**. Review the trust prompt if one appears.
+Run **MCP: List Servers** from the Command Palette, select **io.github.chrisgleissner/c64bridge** for a badge install or **c64bridge** for the manual configuration above, and choose **Start Server**. Review the trust prompt if one appears.
 
 For guided setup, use **MCP: Add Server → Command (stdio)**, enter `npx -y c64bridge@latest`, and set the target in the resulting server entry. [VS Code MCP setup](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
 
