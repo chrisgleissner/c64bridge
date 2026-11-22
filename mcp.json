@@ -33,8 +33,8 @@
       "default": "info"
     },
     "C64BRIDGE_CONFIG": {
-      "description": "Path to configuration JSON",
-      "default": "~/.c64bridge.json"
+      "description": "Explicit configuration JSON path. When unset, search the working directory, home directory, then package directory",
+      "default": ""
     },
     "C64BRIDGE_ALLOWED_DIRS": {
       "description": "Additional directories allowed for host file paths in tool arguments, separated by the path delimiter; * disables the check",
@@ -57,8 +57,8 @@
       "default": ""
     },
     "C64_MODE": {
-      "description": "Select active backend (c64u/U64 hardware, u2/U2-family cartridge, or vice emulator)",
-      "default": "c64u"
+      "description": "Pin the initial backend to c64u, u2, or vice. When unset, select from configuration or probe the default hardware endpoint",
+      "default": "auto"
     },
     "C64U_HOST": {
       "description": "Override the C64 Ultimate host name or IP address",
@@ -73,15 +73,15 @@
       "default": ""
     },
     "U2_HOST": {
-      "description": "Override the U2/U2+/U2+L host name or IP address when C64_MODE=u2",
+      "description": "Override the U2/U2+/U2+L host name or IP address",
       "default": ""
     },
     "U2_PORT": {
-      "description": "Override the U2-family REST port when C64_MODE=u2",
+      "description": "Override the U2-family REST port",
       "default": ""
     },
     "U2_PASSWORD": {
-      "description": "Override the U2-family network password sent as X-Password when C64_MODE=u2",
+      "description": "Override the U2-family network password sent as X-Password",
       "default": ""
     },
     "C64BRIDGE_DIAGNOSTICS_DIR": {
@@ -145,7 +145,7 @@
       "default": "120000000"
     },
     "VICE_BINARY": {
-      "description": "VICE binary to launch for managed emulator sessions and audio capture; automatic search is used only when this override is missing or invalid",
+      "description": "VICE executable for managed sessions and audio capture. A missing executable at an explicit setting prevents a managed launch",
       "default": "x64sc"
     },
     "VICE_DIRECTORY": {

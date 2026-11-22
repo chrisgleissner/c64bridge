@@ -77,13 +77,13 @@ Subsequent `./build build` invocations reuse the incremental cache stored in `di
 - **Tools**: Implement under `src/tools/<domain>/`, export from [`src/tools/registry/index.ts`](../src/tools/registry/index.ts). Share helpers via [`src/tools/registry/utils.ts`](../src/tools/registry/utils.ts). Add coverage in [`test/`](../test/).
 - **Prompts**: Author in [`src/prompts/`](../src/prompts/), register via [`src/prompts/registry.ts`](../src/prompts/registry.ts), mirror description updates in [AGENTS.md](../AGENTS.md) and `.github/prompts/`.
 - **REST surface**: Keep [`doc/c64u/c64-openapi.yaml`](c64u/c64-openapi.yaml) current. Regenerate the typed client with `./build api:generate` when endpoints change.
-- **Docs**: `./build build` calls [`scripts/update-readme.ts`](../scripts/update-readme.ts); never hand-edit the `<!-- AUTO-GENERATED:MCP-DOCS-* -->` block in the README.
+- **Docs**: `npm run build` regenerates the README contents and both reference sections via [`scripts/update-readme.ts`](../scripts/update-readme.ts). The package check in CI verifies the generated output is committed.
 
 ## 5. Configuration & Backends
 
-Resolution order: `C64BRIDGE_CONFIG` → `./.c64bridge.json` → `~/.c64bridge.json` → defaults (`host=c64u`, `port=80`). Supports hardware (`c64u`) and phase-one VICE. For secured Ultimate firmware, set `c64u.networkPassword` in the config file to send `X-Password` on every REST request.
+The server uses the first readable JSON configuration from `C64BRIDGE_CONFIG`, the working directory, the home directory, or the package directory. An invalid explicit path fails at startup. Keep the `c64u`, `u2`, and `vice` profiles together in that file. For secured Ultimate firmware, set `networkPassword` in the matching hardware profile to send `X-Password` on REST requests. [Backend configuration](../README.md#configuration)
 
-The authoritative VICE contract lives in [doc/vice/support-matrix.md](vice/support-matrix.md). Treat that file plus the generated README compatibility tables as release-blocking artifacts: if runtime, tests, and docs disagree, the contract is broken.
+The [VICE support guide](vice/support-matrix.md) points to the generated compatibility tables. Update platform declarations in the tool registry and regenerate the tables when the runtime contract changes.
 
 Key env flags:
 

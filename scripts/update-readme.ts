@@ -12,6 +12,8 @@ const START_MARKER = "<!-- AUTO-GENERATED:MCP-DOCS-START -->";
 const END_MARKER = "<!-- AUTO-GENERATED:MCP-DOCS-END -->";
 const ENV_START_MARKER = "<!-- AUTO-GENERATED:ENV-VARS-START -->";
 const ENV_END_MARKER = "<!-- AUTO-GENERATED:ENV-VARS-END -->";
+const TOC_START_MARKER = "<!-- AUTO-GENERATED:TOC-START -->";
+const TOC_END_MARKER = "<!-- AUTO-GENERATED:TOC-END -->";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -463,6 +465,18 @@ export function buildEnvironmentDocumentation(): string {
   return renderEnvironmentSection().join("\n").trim();
 }
 
+function buildContents(readme: string): string {
+  // The README uses plain-text section headings and fenced command examples.
+  const sections = readme.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[\t ]*$/gm, "");
+  return Array.from(sections.matchAll(/^## (.+)$/gm), ([, title]) => title.trim())
+    .filter((title) => title !== "Contents")
+    .map((title) => {
+      const anchor = title.toLowerCase().replace(/[^\p{L}\p{N}_ -]/gu, "").replaceAll(" ", "-");
+      return `- [${title}](#${anchor})`;
+    })
+    .join("\n");
+}
+
 export async function updateReadme(): Promise<boolean> {
   const readme = await readFile(README_PATH, "utf8");
   const docsPattern = new RegExp(
@@ -471,6 +485,7 @@ export async function updateReadme(): Promise<boolean> {
   const envPattern = new RegExp(
     `${ENV_START_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([\\s\\S]*?)${ENV_END_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
   );
+  const tocPattern = new RegExp(`${TOC_START_MARKER}[\\s\\S]*?${TOC_END_MARKER}`);
   if (!docsPattern.test(readme)) {
     throw new Error(
       `Could not find auto-generated section markers (${START_MARKER} / ${END_MARKER}) in README.md`,
@@ -481,13 +496,21 @@ export async function updateReadme(): Promise<boolean> {
       `Could not find auto-generated section markers (${ENV_START_MARKER} / ${ENV_END_MARKER}) in README.md`,
     );
   }
+  if (!tocPattern.test(readme)) {
+    throw new Error(
+      `Could not find auto-generated section markers (${TOC_START_MARKER} / ${TOC_END_MARKER}) in README.md`,
+    );
+  }
 
   const generatedDocs = `\n\n${buildDocumentation()}\n\n`;
   const generatedEnv = `\n\n${buildEnvironmentDocumentation()}\n\n`;
-  const nextReadme = readme
+  const readmeWithReferences = readme
     // Replacement functions, not strings: generated text such as "$1E" must not be read as "$1".
     .replace(docsPattern, () => `${START_MARKER}${generatedDocs}${END_MARKER}`)
     .replace(envPattern, () => `${ENV_START_MARKER}${generatedEnv}${ENV_END_MARKER}`);
+  const contents = buildContents(readmeWithReferences);
+  const nextReadme = readmeWithReferences
+    .replace(tocPattern, () => `${TOC_START_MARKER}\n\n${contents}\n\n${TOC_END_MARKER}`);
 
   if (nextReadme === readme) {
     return false;
