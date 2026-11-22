@@ -4,8 +4,6 @@
 
 C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents such as Claude Code and Codex to VICE or Ultimate hardware. Your agent can run a PRG, read the screen or RAM, and use the result to debug. The bundled C64 manuals give it the details it needs as it works.
 
-[Start the Hello World tour](#quick-start)
-
 ![Logo](./doc/img/logo.png)
 
 [![npm](https://img.shields.io/npm/v/c64bridge.svg)](https://www.npmjs.com/package/c64bridge)
@@ -100,11 +98,23 @@ For guided setup, use **MCP: Add Server → Command (stdio)**, enter `npx -y c64
 
 ##### Other desktop clients
 
-Copy the `c64bridge` entry from the JSON above into the file for your client.
+Use this JSON for Claude Desktop or Cursor. If your config already has an `mcpServers` object, add just the `c64bridge` entry.
+
+```json
+{
+  "mcpServers": {
+    "c64bridge": {
+      "command": "npx",
+      "args": ["-y", "c64bridge@latest"],
+      "env": { "C64_MODE": "vice" }
+    }
+  }
+}
+```
 
 - **Claude Desktop** · Open **Settings → Developer → Edit Config**. Add the entry under `mcpServers` in `claude_desktop_config.json`, then restart Claude Desktop. [Claude Desktop setup](https://modelcontextprotocol.io/docs/develop/connect-local-servers)
 - **Cursor** · Add the entry under `mcpServers` in `.cursor/mcp.json` for this project or `~/.cursor/mcp.json` for all projects. [Cursor MCP setup](https://cursor.com/docs/mcp)
-- **Visual Studio** · Add the entry under `servers` in the solution’s `.mcp.json`. Enable the tools in Copilot’s Agent mode tool picker. [Visual Studio MCP setup](https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers?view=visualstudio)
+- **Visual Studio** · Use the VS Code example above in the solution’s `.mcp.json`. Enable the tools in Copilot’s Agent mode tool picker. [Visual Studio MCP setup](https://learn.microsoft.com/en-us/visualstudio/ide/mcp-servers?view=visualstudio)
 
 If the client can’t find `npx`, use its absolute path in the `command` field.
 
