@@ -2,9 +2,9 @@
 
 **Build C64 games, compose for the SID, and put the C64 Ultimate’s extra hardware to work.**
 
-C64 Bridge connects your coding tools to a Commodore 64 through MCP. Run a host-built PRG, debug it in VICE using your own labels, then switch to the Ultimate and check how it plays on hardware.
+C64 Bridge connects your AI coding agent to VICE or an Ultimate device through the Model Context Protocol (MCP). The agent can look up C64 programming and hardware details in the bundled manuals as it works.
 
-[Set up your target](#quick-start) · [Develop a game](#develop-a-game) · [Compose for the SID](#compose-for-the-sid) · [Use Ultimate hardware](#use-ultimate-hardware)
+[Quick start](#quick-start) · [Browse the bundled manuals](#bundled-manuals)
 
 ![Logo](./doc/img/logo.png)
 
@@ -13,12 +13,6 @@ C64 Bridge connects your coding tools to a Commodore 64 through MCP. Run a host-
 [![codecov](https://codecov.io/github/chrisgleissner/c64bridge/graph/badge.svg?token=AS9D41Y5EG)](https://codecov.io/github/chrisgleissner/c64bridge)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
-
-[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
-[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
-[![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
 
 Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
 
@@ -42,36 +36,35 @@ Runs on Linux, macOS, and Windows. Built with the official TypeScript MCP SDK. [
 
 ## Develop a game
 
-Choose a stock PAL/NTSC C64 or an Ultimate target up front. That decision shapes your frame budget, memory map, and asset loading. The game development guide has reading paths for scrolling games, single-screen action, adventures, and more. [Game development guide](data/gamedev/index.md)
+Tell your agent whether you’re targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout, and asset loading.
 
-1. **Build one playable screen.** Start with a frame loop, one sprite you can move, and joystick input. Use the built-in 6510 assembler for a small routine, or bring a PRG and symbol file from your own build. [Architecture](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
-2. **Debug the PRG in VICE.** Pass `symbolsFile` to `c64_program` with `op: "run_prg"`. Set a breakpoint at a label from your build, step through the update routine, and inspect registers or RAM. [VICE debugger](#c64_debug) · [Binary Monitor guide](data/vice/vice-binary-monitor-spec.md)
-3. **Check what the player sees.** Send joystick input, then read game state or capture a frame. Switch backends to check raster timing and Ultimate-dependent code on the target hardware. [Input](#c64_input) · [Graphics](#c64_graphics) · [Switching backends](#initial-target-and-runtime-switching)
+Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input, and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
 
-For an existing build, try asking your agent:
-
-> VICE: run my PRG with its symbol file. Break at the player-update label and inspect the game state. Then resume, press fire, and check whether a projectile spawned.
+> Run my PRG in VICE with its symbol file. Break at the player update routine, then resume and check whether pressing fire spawns a projectile.
 
 ## Compose for the SID
 
-Start with a score you can hear and edit. Compare the PWM lead in **Arp Ballad**, the drum patterns in **Drum and Bass**, and the stereo arrangement in **Stereo Echo**. The releases include audio renders and YAML scores. [Example scores](data/sound/examples/) · [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases)
+Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. [Sound tools](#c64_sound)
 
-1. **Arrange in SIDWAVE.** Define instruments and reusable patterns in YAML, then assemble them into sections. SIDWAVE supports pulse-width modulation, wavetables, filter sweeps, ring modulation, and multi-SID layouts. [SIDWAVE format](data/sound/sidwave.md)
-2. **Compile and inspect.** Use `c64_sound` with `op: "compile_play"` and `dryRun: true` to check lint and the arrangement report before playback. Set `outputPath` to save a PRG or PSID. Use PRG for layouts with more than three SIDs. [Sound operations](#c64_sound)
-3. **Audition on your target.** One SID gives you three voices. Compatible Ultimate configurations can address up to ten SIDs, depending on the board and fitted chips. Check addressing and mixer pans, then use audio capture on C64U/U64 to inspect playback. [Ultimate SID layouts](data/ultimate/multisid.md)
+Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
+
+> Play Stereo Echo on my Ultimate, then show me how the score places its lead and echoes across the two SIDs.
+
+Listen to **Arp Ballad**, **Drum and Bass**, or **Stereo Echo** and open the matching YAML to see how each was built. [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases) · [Example scores](data/sound/examples/)
 
 ## Use Ultimate hardware
 
-Use `c64_config` to inspect and change supported settings over REST. From your program, use the hardware references to detect the features it needs and decide how it should behave when they are unavailable.
+Tell your agent what you want the machine to do. It can use the hardware manuals to check what your program needs to detect and which settings to inspect before a run. [Configuration tools](#c64_config)
 
-| If you want to… | Start here |
+| Feature | What you can build |
 | --- | --- |
-| Give a game more CPU time or load larger levels | Use turbo registers for extra CPU time and REU DMA to move assets into C64 RAM. [Turbo and board settings](data/ultimate/hardware.md) · [REU recipes](data/ultimate/reu.md) |
-| Load files or use networking from 6510 code | Use the Ultimate Command Interface (UCI) for file and network operations. [UCI programming guide](data/ultimate/uci.md) |
-| Draw beyond the usual VIC-II picture area | Use UPIC’s timed border-colour writes for full-colour graphics. [UPIC technique](data/ultimate/upic.md) |
-| Test builds on the machine | Upload a host PRG, launch a CRT, mount a disk image, or capture video and stereo audio on C64U/U64. [Program tools](#c64_program) · [Disk tools](#c64_disk) · [Streaming](#c64_stream) |
+| Turbo and REU | Use more CPU time per frame or transfer level data and graphics into C64 RAM. |
+| Ultimate Command Interface (UCI) | Load files, save high scores, or use the network from your C64 program. |
+| UPIC | Draw full-colour graphics into the border with timed colour changes. |
 
-The hardware guide also covers LED controls. The API reference lists support for PETSCII and bitmap rendering, printer workflows, and the shared U2-family operations. [Hardware guide](data/ultimate/hardware.md) · [MCP API reference](#mcp-api-reference)
+> Add REU level loading to my game. Check for the REU at startup and test the loader on my C64 Ultimate.
+
+You can also upload PRGs, launch CRTs, mount disks, and capture video or stereo audio on C64U/U64. Check the tool tables for platform support. [Programs](#c64_program) · [Disks](#c64_disk) · [Streaming](#c64_stream)
 
 ## Quick start
 
@@ -91,7 +84,15 @@ For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` for your p
 
 ### 2. Connect your MCP client
 
-For **VS Code with GitHub Copilot**, add this entry to `.vscode/mcp.json` and start **c64bridge** from the editor. The install badges above also register the server and initially select `c64u`.
+The VS Code, Visual Studio, and Cursor buttons register C64 Bridge with `c64u` selected. For VICE or U2, use the environment settings from the target table.
+
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
+[![Install in Visual Studio](https://img.shields.io/badge/Install_in-Visual_Studio-C16FDE?style=flat-square&logo=visualstudio&logoColor=white)](https://vs-open.link/mcp-install?%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Install_in-Cursor-000000?style=flat-square&logoColor=white)](https://cursor.com/en/install-mcp?name=io.github.chrisgleissner%2Fc64bridge&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImM2NGJyaWRnZSJdLCJlbnYiOnsiQzY0X01PREUiOiJjNjR1IiwiQzY0VV9IT1NUIjoiYzY0dSJ9fQ==)
+[![Use with Claude Code](https://img.shields.io/badge/Use_with-Claude_Code-D97757?style=flat-square&logo=anthropic&logoColor=white)](#claude-code)
+
+For **VS Code with GitHub Copilot**, you can also add this entry to `.vscode/mcp.json` and start **c64bridge** from the editor.
 
 ```json
 {
@@ -167,7 +168,7 @@ For managed launches, the bridge looks for `x64sc` or `x64` and tries to discove
 
 Set `VICE_BINARY` and `VICE_DIRECTORY` (or `vice.exe` and `vice.directory` in JSON) when using a custom install. If an explicit executable cannot be found, managed startup reports an error.
 
-Use `VICE_HOST` and `VICE_PORT` to select an existing monitor at another address. The Binary Monitor accepts one client at a time. [VICE Binary Monitor guide](data/vice/vice-binary-monitor-spec.md)
+Use `VICE_HOST` and `VICE_PORT` to select an existing monitor at another address. The Binary Monitor accepts one client at a time. [VICE Binary Monitor guide](data/vice/vice-binary-monitor-spec.md) · [Supported operations](doc/vice/support-matrix.md)
 
 | Window mode | Environment settings |
 | --- | --- |
@@ -285,6 +286,17 @@ See `./build --help` for coverage, RAG rebuilds, package checks, and release com
 - [Static MCP interface](mcp/) contains tools, resources, prompts, and schemas for inspection without a running server. [MCP manifest](mcp.json)
 - [Ultimate REST specifications](doc/c64u/c64-openapi.yaml) describe the C64U/U64 API. [U2 REST specification](doc/u2/u2-openapi.yaml)
 - [DeepWiki](https://deepwiki.com/chrisgleissner/c64bridge) provides an architecture and implementation overview.
+
+### Bundled manuals
+
+Your agent can retrieve these manuals through MCP as it writes, debugs, or tests. Pick a target and describe your project to get started. Open the manuals here whenever you want the technical details yourself.
+
+| Topic | Browse on GitHub |
+| --- | --- |
+| Game development | [Game development index](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md) |
+| SID composition | [SIDWAVE format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md) |
+| Ultimate hardware | [Turbo and board settings](data/ultimate/hardware.md) · [REU](data/ultimate/reu.md) · [UCI](data/ultimate/uci.md) · [UPIC](data/ultimate/upic.md) |
+| VICE debugging | [Binary Monitor](data/vice/vice-binary-monitor-spec.md) |
 
 ## Runtime environment variable reference
 
