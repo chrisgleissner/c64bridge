@@ -74,7 +74,7 @@ Copy the command matching your client and target:
 
 Verify with `claude mcp list`, `codex mcp list`, or `copilot mcp list`.
 
-Claude Code commands use `--scope user` for availability across projects. Omit it for the current project only. If `c64bridge` is already registered, inspect its configuration before replacing it.
+Claude Code commands use `--scope user` for availability across projects. Omit it for the current project only.
 
 This repository's `.mcp.json` launches the local checkout and takes precedence over Copilot CLI's user-level configuration.
 
