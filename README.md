@@ -305,10 +305,10 @@ Your agent can consult these manuals through MCP while it works. The links below
 
 ### Integration and internals
 
-- **Agent setup** · Tool discovery, workflow routing, and skills. [Integration guide](AGENTS.md) · [Agent primer](data/context/bootstrap.md)
-- **MCP interface** · Tools, resources, prompts, and schemas. [Interface files](mcp/) · [MCP manifest](mcp.json) · [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
+- **Agent setup** · [Integration guide](AGENTS.md) · [Agent primer](data/context/bootstrap.md)
+- **MCP interface** · [Interface files](mcp/) · [MCP manifest](mcp.json) · [MCP Registry](https://registry.modelcontextprotocol.io/?q=c64bridge)
 - **Ultimate REST APIs** · [C64U/U64 specification](doc/c64u/c64-openapi.yaml) · [U2 specification](doc/u2/u2-openapi.yaml)
-- **Server architecture** · Built with the official TypeScript MCP SDK. [DeepWiki overview](https://deepwiki.com/chrisgleissner/c64bridge)
+- **Server architecture** · [DeepWiki overview](https://deepwiki.com/chrisgleissner/c64bridge)
 
 ## Runtime environment variable reference
 
