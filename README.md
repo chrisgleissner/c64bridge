@@ -49,7 +49,7 @@ For password-protected hardware, set `C64U_PASSWORD` or `U2_PASSWORD` in your ow
 
 ### 2. Install and start
 
-Choose your client. [Terminal commands](#terminal-clients) · [VS Code](#editor-and-desktop-clients) · [Claude Desktop, Cursor, and Visual Studio](#other-desktop-clients)
+Choose your client. [Terminal commands](#terminal-clients) · [VS Code](#editor-and-desktop-clients) · [GitHub Copilot app](#github-copilot-app) · [Claude Desktop, Cursor, and Visual Studio](#other-desktop-clients)
 
 [![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%40latest%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=io.github.chrisgleissner%2Fc64bridge&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22c64bridge%40latest%22%5D%2C%22env%22%3A%7B%22C64_MODE%22%3A%22c64u%22%2C%22C64U_HOST%22%3A%22c64u%22%7D%7D&quality=insiders)
@@ -79,6 +79,16 @@ If Claude Code reports that `c64bridge` already exists, use `claude mcp get c64b
 
 Run `claude mcp list` from the same project to check the connection, then open Claude Code there. For hardware, replace `-e C64_MODE=vice` with one `-e KEY=VALUE` per setting from the target table. Use `--scope user` to register the server across projects, or `--scope project` to save a shared `.mcp.json`. [Claude Code MCP setup](https://code.claude.com/docs/en/mcp)
 
+##### GitHub Copilot CLI
+
+```bash
+copilot mcp add c64bridge --env C64_MODE=vice -- npx -y c64bridge@latest
+```
+
+Run `copilot mcp list` to verify the registration, then start Copilot CLI with `copilot`. For hardware, replace `--env C64_MODE=vice` with one `--env KEY=VALUE` per setting from the target table.
+
+The registration is stored in `~/.copilot/mcp-config.json` and is available across projects. This repository also contains a development `.mcp.json` that launches the local checkout and takes precedence over the user-level registration when working inside this repository. [Copilot CLI MCP setup](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers)
+
 #### Editor and desktop clients
 
 For **VS Code**, add this to your project’s `.vscode/mcp.json`. If the file already has a `servers` object, add just the `c64bridge` entry.
@@ -99,6 +109,12 @@ For **VS Code**, add this to your project’s `.vscode/mcp.json`. If the file al
 Run **MCP: List Servers** from the Command Palette, select **io.github.chrisgleissner/c64bridge** for a badge install or **c64bridge** for the manual configuration above, and choose **Start Server**. Review the trust prompt if one appears.
 
 For guided setup, use **MCP: Add Server → Command (stdio)**, enter `npx -y c64bridge@latest`, and set the target in the resulting server entry. [VS Code MCP setup](https://code.visualstudio.com/docs/agent-customization/mcp-servers)
+
+##### GitHub Copilot app
+
+C64 Bridge is automatically available in the GitHub Copilot desktop app when configured for Copilot CLI or the current repository. Alternatively, open **Customize → MCP → Add custom server** to install it directly.
+
+Use `npx` as the command, `-y` and `c64bridge@latest` as arguments, and `C64_MODE=vice` as the environment setting. Select the appropriate target variables for hardware. [GitHub Copilot app setup](https://docs.github.com/en/copilot/how-tos/github-copilot-app/customize-github-copilot-app)
 
 ##### Other desktop clients
 
