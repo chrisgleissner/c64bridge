@@ -34,7 +34,7 @@ S0 done (commits 32cf57e2, d50cdd95). S1 in progress in worktree sidwave-s1; doc
 
 ## Cost rule (user, 2026-11-26)
 
-Watch remaining tokens and burn rate; favour cheaper models where defensible: Haiku for mechanical edits and runs, Sonnet only to supervise packages needing judgement, top tier only for the final review and calibration design. Keep subagent briefs and returns short.
+Check quota with `llm-usage` (13:42: Claude 5h 48 % left, weekly 93 % "conserve"; later 2026-11-26 the user reset Codex quota and asked to use codex more; codex exec -m gpt-6-luna verified working; llm-usage showed a stale 0 %). Watch remaining tokens and burn rate; favour cheaper models where defensible: codex exec (gpt-6-luna) and Haiku for implementation, mechanical edits and runs, Sonnet only to supervise packages needing judgement, top tier only for the final review and calibration design. Keep subagent briefs and returns short.
 
 ## Hardware and VICE coordination
 
