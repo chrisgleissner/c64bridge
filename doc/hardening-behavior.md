@@ -18,6 +18,8 @@ Task status changes are persisted immediately; repeated iteration snapshots and 
 
 Wait and workload limits appear in the schemas. MCP cancellation stops further work at supported boundaries and returns a cancellation result. An operation already sent to the device may have taken effect; cancellation does not undo a launched program or completed writes. Temporary capture cleanup restores the user's previous stream, including when requests overlap or are cancelled. Captures serialize with stream changes.
 
+Over the HTTP transport, a pre-2026 client that closes its connection also cancels its running call. This needs the server to run under Node, the supported runtime: Bun's `node:http` server does not report the disconnect, so under Bun the call runs until its own timeout, and the server prints a warning at startup.
+
 ## Tasks
 
 One task engine serves two kinds of task. Interval tasks are the `c64_system` `start_task` operations that repeat a fixed operation (`read`, `write`, `read_screen`, `menu_button`); they are persisted as described above. Call tasks are single detached runs of an allowlisted operation. Only these operations can become call tasks: `c64_memory` `wait_until` and `wait_for_text`, `c64_debug` `wait_for_state`, `c64_sound` `capture_samples` and `pipeline`, `c64_graphics` `capture_frame`, `c64_program` `batch_run` and `bundle_run`. Other operations are not allowlisted because they are short, or because their work runs on the server's event loop and a detached run would not move it (`c64_sound` `sample_render`, `analyze` and `record_analyze`).
