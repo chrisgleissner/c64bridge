@@ -79,7 +79,7 @@ async function startupStderr(serverArgs, readyText) {
     'import { registerHooks } from "node:module";',
     "registerHooks({ resolve(specifier, context, next) {",
     "  const resolved = next(specifier, context);",
-    `  if (/server\\/streamableHttp\\.js$/.test(resolved.url)) process.stderr.write(${JSON.stringify(HTTP_TRANSPORT_MARKER + "\n")});`,
+    `  if (/@modelcontextprotocol\\/node\\/dist\\/index\\.(mjs|cjs)$/.test(resolved.url)) process.stderr.write(${JSON.stringify(HTTP_TRANSPORT_MARKER + "\n")});`,
     "  return resolved;",
     "} });",
   ].join("\n"), "utf8");

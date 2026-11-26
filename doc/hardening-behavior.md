@@ -144,7 +144,7 @@ The built-in assembler accepts the spellings of ACME, 64tass, ca65 and Kick Asse
 
 Raw graphics/audio output is capped at 2 MiB, PNG captures at four images, including aggregate batch output. Artifact snapshots accept at most 256 memory ranges and 2 MiB of aggregate raw memory before reading the device. SIDWAVE input is limited to 4096 bars. Regex waits on runtimes without interruptible evaluation enforce a conservative repetition budget. Knowledge queries (`c64_rag` operations `basic`, `asm`, `docs`) are limited to 500 characters and lexical ranking to 32 distinct terms.
 
-Unknown resource URIs return MCP resource-not-found (`-32002`). The knowledge index refers to public grouped operations. Developer maintenance prompts are excluded from distributed packages and RAG indexes. Node launchers preserve the caller's working directory and configuration resolution, handle installation paths containing URL metacharacters, and forward termination signals.
+Unknown resource URIs return MCP resource-not-found: JSON-RPC `-32602` with `data: { uri }` (the SDK maps the earlier `-32002` to this code on every protocol era). The knowledge index refers to public grouped operations. Developer maintenance prompts are excluded from distributed packages and RAG indexes. Node launchers preserve the caller's working directory and configuration resolution, handle installation paths containing URL metacharacters, and forward termination signals.
 
 ## Validation limits
 
