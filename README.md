@@ -641,9 +641,10 @@ Grouped entry point for power, reset, menu, and background task control.
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ | ✅ |
-| `start_task` | Start a named interval task. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
+| `start_task` | Start a named interval or one-shot task. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
 | `stop_all_tasks` | Stop all running tasks and persist state. | — | — | ✅ | ✅ | ✅ |
 | `stop_task` | Stop a background task. | `name` | — | ✅ | ✅ | ✅ |
+| `task_result` | Status and result of a task. | `name` | `waitMs=0` | ✅ | ✅ | ✅ |
 
 #### c64_vice
 
