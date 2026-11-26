@@ -176,7 +176,7 @@ if (args[0] === 'view') {
 test('release validation installs the tarball into a consumer project, because the bundled workspace packages are not on the registry', () => {
   const { jobs } = YAML.parse(fs.readFileSync('.github/workflows/release.yaml', 'utf8'));
   const run = jobs.release.steps.find(s => s.name === 'Validate exact packed artifact before publishing').run;
-  assert.doesNotMatch(run, /cd "\$PACKAGE_DIR\/package" && npm install/);
+  assert.ok(!/cd "\$PACKAGE_DIR\/package" && npm install/.test(run));
   assert.match(run, /npm install --omit=dev --ignore-scripts --no-fund "\$GITHUB_WORKSPACE\/\$RELEASE_TARBALL"/);
   assert.match(run, /validate-release-artifact\.mjs "\$CONSUMER_DIR\/node_modules\/c64bridge"/);
 });
