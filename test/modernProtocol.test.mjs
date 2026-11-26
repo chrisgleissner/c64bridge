@@ -117,7 +117,8 @@ function assertDiscover(message) {
   assert.ok(message.result.capabilities.tools, "tools capability advertised");
   assert.ok(message.result.capabilities.resources, "resources capability advertised");
   assert.ok(message.result.capabilities.prompts, "prompts capability advertised");
-  assert.ok(message.result.serverInfo?.name);
+  const serverInfo = message.result._meta?.["io.modelcontextprotocol/serverInfo"] ?? message.result.serverInfo;
+  assert.ok(serverInfo?.name, JSON.stringify(message.result));
 }
 
 function assertTools(message) {

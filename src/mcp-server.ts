@@ -5,19 +5,7 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ListResourceTemplatesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-  ErrorCode,
-  McpError,
-} from "@modelcontextprotocol/sdk/types.js";
+import { ProtocolError, ProtocolErrorCode, Server, type CallToolResult, type Tool } from "@modelcontextprotocol/server";
 import { loadConfig } from "./config.js";
 import { C64Client } from "./c64Client.js";
 import {
@@ -281,7 +269,7 @@ async function main() {
   );
 
   // RESOURCES: Expose C64 knowledge base
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  server.setRequestHandler("resources/list", async () => {
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_list_resources_start");
     try {
@@ -333,9 +321,9 @@ async function main() {
   });
 
   // No resource templates; answering keeps clients that ask from logging a method-not-found error.
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
+  server.setRequestHandler("resources/templates/list", async () => ({ resourceTemplates: [] }));
 
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  server.setRequestHandler("resources/read", async (request) => {
     // c64_rag returns links with a #fragment (a section); the resource is the document.
     const uri = request.params.uri.split("#")[0]!;
     const startedAt = Date.now();
@@ -356,7 +344,7 @@ async function main() {
         const skill = readSkillResource(uri);
         const result = skill ?? readKnowledgeResource(uri, PROJECT_ROOT);
         if (!result) {
-          throw new McpError(-32002, `Unknown resource: ${request.params.uri}`);
+          throw new ProtocolError(-32002, `Unknown resource: ${request.params.uri}`);
         }
         // Knowledge text names skills by repository path; clients read them as c64://skills/<name>.
         const text = (result as { text?: unknown }).text;
@@ -396,7 +384,7 @@ async function main() {
     }
   });
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
+  server.setRequestHandler("tools/list", async () => {
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_list_tools_start");
     try {
@@ -405,7 +393,7 @@ async function main() {
           name: tool.name,
           title: tool.metadata.summary,
           description: tool.description,
-          inputSchema: publishedInputSchema(tool.inputSchema),
+          inputSchema: publishedInputSchema(tool.inputSchema) as Tool["inputSchema"],
           ...(tool.annotations ? { annotations: tool.annotations } : {}),
           _meta: publishedToolMeta(tool.metadata),
         })),
@@ -437,7 +425,7 @@ async function main() {
     }
   });
 
-  server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  server.setRequestHandler("prompts/list", async () => {
     const startedAt = Date.now();
     writeDiagnosticEvent("mcp_list_prompts_start");
     try {
@@ -494,7 +482,7 @@ async function main() {
     }
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+  server.setRequestHandler("tools/call", async (request, ctx) => {
     const { name } = request.params;
     const args = request.params.arguments ?? {};
     const startedAt = Date.now();
@@ -511,8 +499,8 @@ async function main() {
     }
 
     const progressToken = (request.params as { _meta?: { progressToken?: ProgressToken } })._meta?.progressToken;
-    const progress = progressToken !== undefined && extra?.sendNotification
-      ? createProgressReporter(progressToken, (notification) => extra.sendNotification(notification))
+    const progress = progressToken !== undefined && ctx?.mcpReq?.notify
+      ? createProgressReporter(progressToken, (notification) => ctx.mcpReq.notify(notification))
       : undefined;
 
     try {
@@ -522,7 +510,7 @@ async function main() {
         logger: toolLogger,
         platform: getPlatformStatus(),
         setPlatform,
-        signal: extra?.signal,
+        signal: ctx?.mcpReq?.signal,
         ...(progress ? { reportProgress: progress.report } : {}),
       }).finally(() => progress?.stop());
       await progress?.flush();
@@ -547,7 +535,7 @@ async function main() {
         isError: result.isError === true,
       });
 
-      return response;
+      return response as unknown as CallToolResult;
     } catch (error) {
       const latency = Date.now() - startedAt;
       const fallback = unknownErrorResult(error);
@@ -570,11 +558,11 @@ async function main() {
         error,
       });
 
-      return response;
+      return response as unknown as CallToolResult;
     }
   });
 
-  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  server.setRequestHandler("prompts/get", async (request) => {
     const { name } = request.params;
     const args = request.params.arguments ?? {};
     const startedAt = Date.now();
@@ -642,7 +630,7 @@ async function main() {
         error,
       });
       if (error instanceof ToolValidationError) {
-        throw new McpError(ErrorCode.InvalidParams, error.message);
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, error.message);
       }
       throw error;
     }
@@ -654,12 +642,18 @@ async function main() {
   const cli = parseCliOptions(process.argv.slice(2));
   if (cli.mode === "http") {
     // Imported only in HTTP mode: stdio startup does not pay for the HTTP transport.
-    const { StreamableHTTPServerTransport } = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
+    const [{ createMcpHandler }, { toNodeHandler }] = await Promise.all([
+      import("@modelcontextprotocol/server"),
+      import("@modelcontextprotocol/node"),
+    ]);
     const port = cli.port ?? 3000;
     const httpToken = process.env.C64BRIDGE_HTTP_TOKEN || undefined;
     if (httpToken) {
       registerSecret(httpToken);
     }
+    // Serves both protocol eras: 2026-07-28 requests carry their version and capabilities in each
+    // request; pre-2026 clients send initialize and get a fresh stateless Server per request.
+    const mcpHandler = toNodeHandler(createMcpHandler(createMcpServer, { legacy: "stateless" }));
     const httpServer = createServer((request, response) => {
       const rejection = checkHttpRequestAccess(request.headers, port, httpToken);
       if (rejection) {
@@ -681,20 +675,10 @@ async function main() {
         response.end("Method not allowed: this stateless MCP endpoint accepts POST only");
         return;
       }
-      // Stateless mode: one Server and one transport per request.
-      const server = createMcpServer();
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      response.once("close", () => {
-        void transport.close().catch(() => {});
-        void server.close().catch(() => {});
+      mcpHandler(request, response).catch((error) => {
+        if (!response.headersSent) response.statusCode = 500;
+        response.end(error instanceof Error ? error.message : "MCP transport error");
       });
-      void server
-        .connect(transport)
-        .then(() => transport.handleRequest(request, response))
-        .catch((error) => {
-          if (!response.headersSent) response.statusCode = 500;
-          response.end(error instanceof Error ? error.message : "MCP transport error");
-        });
     });
     await new Promise<void>((resolve, reject) => httpServer.listen(port, "127.0.0.1", resolve).once("error", reject));
     installShutdown(client, "http");
@@ -704,9 +688,10 @@ async function main() {
     }
     console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
   } else {
-    const server = createMcpServer();
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    // The first message decides the era: initialize selects the pre-2026 protocol, a
+    // 2026-07-28 request (server/discover or an enveloped call) selects the modern one.
+    const { serveStdio } = await import("@modelcontextprotocol/server/stdio");
+    serveStdio(createMcpServer, { legacy: "serve" });
     installShutdown(client, "stdio");
     writeDiagnosticEvent("mcp_transport_connected", { mode: "stdio" });
     console.error("c64bridge MCP server running on stdio");
