@@ -15,6 +15,7 @@ import {
   saveMemoryArgsSchema,
 } from "../memory.js";
 import { metaModule } from "../meta/index.js";
+import { executeWaitUntil, waitUntilArgsJsonSchema, WAIT_UNTIL_DESCRIPTION } from "../../monitor/waitUntil.js";
 import {
   buildDescriptorIndex,
   ensureDescriptor,
@@ -64,6 +65,11 @@ const memoryOperations: GroupedOperationConfig[] = [
       { description: "Poll the screen until a substring or regex appears, or timeout elapses." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "wait_for_screen_text", rawArgs, ctx),
+  },
+  {
+    op: "wait_until",
+    schema: extendSchemaWithOp("wait_until", waitUntilArgsJsonSchema, { description: WAIT_UNTIL_DESCRIPTION }),
+    handler: async (rawArgs, ctx) => executeWaitUntil(rawArgs, ctx),
   },
   {
     op: "list_basic",
@@ -146,14 +152,14 @@ export const memoryModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_memory",
-      description: "Grouped entry point for memory I/O, screen reads, and screen polling.",
+      description: "Grouped entry point for memory I/O, screen reads, screen polling, and conditional waits on memory, the screen or a VICE checkpoint (wait_until).",
       summary: "Reads or writes RAM, captures the screen, or waits for text matches in one tool.",
       inputSchema: discriminatedUnionSchema({
         description: "Memory operations available via the c64_memory tool.",
         variants: memoryOperations.map((operation) => operation.schema),
       }),
       operationEffects: {
-        read: "read", write: "write", read_screen: "read", wait_for_text: "read", list_basic: "read", disassemble: "read",
+        read: "read", write: "write", read_screen: "read", wait_for_text: "read", wait_until: "read", list_basic: "read", disassemble: "read",
         copy_memory: "write", fill_memory: "write", search_memory: "read", compare_memory: "read",
         save_memory: "write",
       },
@@ -168,6 +174,11 @@ export const memoryModuleGroup = defineToolModule({
           name: "Wait for READY prompt",
           description: "Poll until the READY. prompt appears",
           arguments: { op: "wait_for_text", pattern: "READY." },
+        },
+        {
+          name: "Wait for a memory value",
+          description: "Wait up to 10 s until the byte at $C000 is $01",
+          arguments: { op: "wait_until", condition: { type: "equals", address: "$C000", bytes: "01" }, timeoutMs: 10000 },
         },
         {
           name: "Disassemble entry point",
