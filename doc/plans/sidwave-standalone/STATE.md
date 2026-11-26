@@ -42,6 +42,7 @@ S0 done (commits 32cf57e2, d50cdd95). S1 in progress in worktree sidwave-s1; doc
 
 ## Pre-existing failures
 
+- 2026-11-27: Bun 1.3.1 on CI aborted (exit 134) with a JavaScriptCore assertion, "DFG ASSERTION FAILED: Edge verification error ... BytecodeDouble|DoubleImpureNaN", during sidwave tests (run 45910557906, PR 9). It is an engine bug, not a test failure; the failed job is rerun. If it recurs, try a newer Bun or report upstream. The local split-proof SIGABRTs (exit 134) are probably the same bug.
 - `npm run test:node` at 43f775ba: 6 failures, none SIDWAVE (task-owner fixture, meta/backgroundState, meta/taskOwnership, meta/taskRetention, updateReadme, start.test 'imports src entry under Bun'). Not a CI gate. `npm test` (Bun) is clean.
 
 ## Cost rule (user, 2026-11-26)
