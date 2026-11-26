@@ -1,6 +1,16 @@
-# Manual client checklist (unverified)
+# Manual client checklist
 
-None of these checks has been run. They need an interactive Claude Code session that supports MCP 2026-07-28, MCP skills and tasks, and a backend that can be reached (VICE is enough). Record the Claude Code version and the result of each item.
+These checks need an interactive Claude Code session that supports MCP 2026-07-28, MCP skills and tasks, and a backend that can be reached (VICE is enough). Record the Claude Code version and the result of each item.
+
+## Results (2026-11-26)
+
+Items 1 to 3 were run in an interactive Claude Code 2.1.332 session (model Haiku 5.5) driven through `tmux`, against the mock C64U device (`scripts/mockC64Server.mjs`) and this branch at 1a8815e1. A stdio proxy logged every JSON-RPC message. Item 4 had already passed with `claude -p` and Codex CLI 0.171.0.
+
+1. Skills: the session listed 13 skills with the `c64bridge:` prefix and no `pr-converge`. Asking for `c64bridge:hello-world` loaded the skill (the client sent `skills/list` at startup and `resources/read` for `skill://hello-world/SKILL.md`) and ran the greeting.
+2. Long call: the `wait_until` call returned `resultType: "task"` one second after it started. Claude Code moved it to the background at once, not after two minutes, and accepted new input. It polled `tasks/get` about once per second; at the 180 s timeout the result `met: false`, `reason: "timeout"` (709 iterations) arrived and was reported.
+3. Cancellation: after `TaskStop` on the background task, the client sent `tasks/cancel`, which the server acknowledged within 2 ms. A `c64_memory` `write` to `$C000` two seconds later succeeded with no `resource_conflict`. `list_tasks` showed no running task; native call tasks are not listed there.
+
+Not checked: whether a client that does not background a task at once still moves it after two minutes.
 
 Setup: start Claude Code in a checkout of this branch, approve the project `c64bridge` server (from `.mcp.json`), and select the VICE backend (`use vice`). Run `/mcp` and confirm `c64bridge` is connected.
 
