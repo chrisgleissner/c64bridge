@@ -440,3 +440,15 @@ test("a non-Error rejection while removing the checkpoint is stringified into th
   const result = await run(makeCtx(stubClient({ facade })), { condition: { type: "checkpoint", address: "$0810" }, timeoutMs: 500 });
   assert.deepEqual(data(result).warnings, ["Temporary checkpoint 8 could not be removed: plain text"]);
 });
+
+test("wait_until reports an unexpected internal error as an error result instead of throwing", async () => {
+  const { executeWaitUntil } = await import("../src/monitor/waitUntil.js");
+  const ctx = {
+    client: { pinFacade: async () => { throw new TypeError("facade exploded"); } },
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+    platform: { id: "c64u" },
+  };
+  const result = await executeWaitUntil({ condition: { type: "equals", address: "$C000", bytes: "$01" }, timeoutMs: 1000 }, ctx);
+  assert.equal(result.isError, true);
+  assert.match(JSON.stringify(result.content), /facade exploded/);
+});
