@@ -32,6 +32,10 @@ S0 done (commits 32cf57e2, d50cdd95). S1 in progress in worktree sidwave-s1; doc
 
 - `npm run test:node` at 43f775ba: 6 failures, none SIDWAVE (task-owner fixture, meta/backgroundState, meta/taskOwnership, meta/taskRetention, updateReadme, start.test 'imports src entry under Bun'). Not a CI gate. `npm test` (Bun) is clean.
 
+## Cost rule (user, 2026-11-26)
+
+Watch remaining tokens and burn rate; favour cheaper models where defensible: Haiku for mechanical edits and runs, Sonnet only to supervise packages needing judgement, top tier only for the final review and calibration design. Keep subagent briefs and returns short.
+
 ## Hardware and VICE coordination
 
 - 2026-11-26: user asked to coordinate machine use with the modern-mcp session (peer `c64bridge-64`). It proposed: it uses the U64, this session the C64U. Brief section 2 forbids this session to contact the C64U, so the reply was: no C64U unless the user confirms; time-share the U64, each session asks the other for an all-clear before a session. This session's VICE: monitor ports 6520-6529, Xvfb displays :120-:129 (set VICE_XVFB_DISPLAY=:121 for `test:vice:device`). Attach only to own VICE instances.
