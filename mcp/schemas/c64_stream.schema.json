@@ -27,6 +27,6 @@
   "required": [
     "op"
   ],
-  "description": "Streaming operations available via the c64_stream tool.\n\nOperations:\n- start [write]: Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
+  "description": "Streaming operations.\n\nOperations:\n- start [write]: Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
   "additionalProperties": false
 }

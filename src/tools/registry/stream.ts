@@ -55,7 +55,7 @@ export const streamModule = defineToolModule({
       description: "Grouped entry point for starting and stopping Ultimate streaming sessions.",
       summary: "Start or stop audio/video/debug streaming in a single tool.",
       inputSchema: discriminatedUnionSchema({
-        description: "Streaming operations available via the c64_stream tool.",
+        description: "Streaming operations.",
         variants: streamOperations.map((operation) => operation.schema),
       }),
       operationEffects: { start: "write", stop: "write" },

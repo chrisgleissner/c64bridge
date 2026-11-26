@@ -61,7 +61,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "poweroff",
       ensureDescriptor(machineDescriptorIndex, "poweroff").inputSchema,
-      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 software cannot restart it: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled." },
+      { description: "Shut down C64U/U64 or quit VICE. U2-family cannot power off. On C64U/U64 power must be restored at the outlet; it starts by itself only if automatic startup on power restoration is enabled." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
@@ -97,7 +97,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "start_task",
       ensureDescriptor(metaDescriptorIndex, "start_background_task").inputSchema,
-      { description: "Start a named interval task." },
+      { description: "Start a named interval or one-shot task." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "start_background_task", rawArgs, ctx),
   },
@@ -135,6 +135,15 @@ const systemOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "list_background_tasks", rawArgs, ctx),
   },
   {
+    op: "task_result",
+    schema: extendSchemaWithOp(
+      "task_result",
+      ensureDescriptor(metaDescriptorIndex, "get_background_task_result").inputSchema,
+      { description: "Status and result of a task." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "get_background_task_result", rawArgs, ctx),
+  },
+  {
     op: "performance_report",
     schema: extendSchemaWithOp(
       "performance_report",
@@ -164,13 +173,13 @@ export const systemModuleGroup = defineToolModule({
       description: "Grouped entry point for power, reset, menu, and background task control.",
       summary: "Manages machine state (pause, reset, power) and schedules recurring background tasks.",
       inputSchema: discriminatedUnionSchema({
-        description: "System operations available via the c64_system tool.",
+        description: "System operations.",
         variants: systemOperations.map((operation) => operation.schema),
       }),
       operationEffects: {
         pause: "write", resume: "write", reset: "write", reboot: "destructive", poweroff: "destructive",
         power_cycle: "destructive", menu: "write", read_menu_screen: "read", start_task: "write",
-        stop_task: "read", stop_all_tasks: "read", delete_task: "write", list_tasks: "read", performance_report: "read",
+        stop_task: "read", stop_all_tasks: "read", delete_task: "write", list_tasks: "read", task_result: "read", performance_report: "read",
       },
       effectOf: (op, args) => (op === "start_task" ? taskOperationEffect((args as { operation?: unknown }).operation) : undefined),
       tags: ["system", "control", "grouped"],

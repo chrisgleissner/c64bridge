@@ -1,6 +1,6 @@
 ---
 name: printer-job
-description: Execute Commodore and Epson printing workflows through c64bridge.
+description: Use when the user wants to print text or bitmaps, or define custom characters, on a Commodore (MPS) or Epson printer from a C64U or U2.
 ---
 
 ## Intent
@@ -10,6 +10,7 @@ Use this skill for printer text output, bitmap output, and custom character defi
 ## Inputs
 
 - Printer family: Commodore or Epson.
+- Backend: `c64_printer` is available on `c64u` and `u2` only, not on `vice`.
 - Desired output type: text, bitmap row, or custom character definition.
 - Any device or secondary-address requirements.
 

@@ -209,7 +209,7 @@ const sidSilenceArgsSchema = objectSchema({
   description: "Silence all SID voices with an optional verification capture.",
   properties: {
     verify: optionalSchema(booleanSchema({
-      description: "When true, record audio after silencing to confirm the SID output is quiet.",
+      description: "Record audio after silencing to confirm the output is quiet.",
       default: false,
     }), false),
   },
@@ -217,7 +217,7 @@ const sidSilenceArgsSchema = objectSchema({
 });
 
 const sidFileSchema = stringSchema({
-  description: "Absolute or Ultimate filesystem path to the SID, PRG, or audio file.",
+  description: "SID, PRG or audio file path (absolute or Ultimate).",
   minLength: 1,
 });
 
@@ -244,7 +244,7 @@ const modplayFileArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
-export const MUSIC_GENERATE_DESCRIPTION = "Compose and play a seeded SIDWAVE PRG. Replaces the program in memory.";
+export const MUSIC_GENERATE_DESCRIPTION = "Compose and play a seeded SIDWAVE PRG (replaces the program in memory).";
 
 const musicGenerateArgsSchema = objectSchema({
   description: "Compose and play a seeded SIDWAVE piece.",
@@ -301,11 +301,11 @@ const musicCompileArgsSchema = objectSchema({
       default: "prg",
     }), "prg"),
     dryRun: optionalSchema(booleanSchema({
-      description: "Skip playback and return only compilation metadata (use outputPath to export).",
+      description: "Skip playback; return only compilation metadata.",
       default: false,
     }), false),
     outputPath: optionalSchema(stringSchema({
-      description: "Host file for the compiled PRG or SID, inside the allowed directories. Works with dryRun.",
+      description: "Host file for the compiled PRG or SID (allowed directories only). Works with dryRun.",
       minLength: 1,
     })),
   },

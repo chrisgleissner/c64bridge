@@ -159,7 +159,7 @@ export const writeTextArgsSchema = objectSchema({
   properties: {
     op: literalSchema("write_text"),
     text: stringSchema({
-      description: "Text to type: printable ASCII (letters are sent as PETSCII upper case), \\n for RETURN, and {TOKEN}s such as {RETURN}, {CLR}, {F1}…{F8}, {UP}, {DOWN}, {LEFT}, {RIGHT}, colour names, or {$1D}/{29} codes. Characters with no PETSCII mapping and unknown tokens are rejected.",
+      description: "Text to type: printable ASCII (letters sent as PETSCII upper case), \\n for RETURN, and {TOKEN}s such as {RETURN}, {CLR}, {F1}…{F8}, {UP}, colour names, {$1D}/{29}. Unmappable characters and unknown tokens are rejected.",
       minLength: 1,
       maxLength: 512,
     }),
@@ -204,7 +204,7 @@ export const keyArgsSchema = objectSchema({
 });
 
 export const joystickArgsSchema = objectSchema({
-  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which also pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
+  description: "Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4.",
   properties: {
     op: literalSchema("joystick"),
     port: numberSchema({

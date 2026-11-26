@@ -43,6 +43,7 @@
     "test:matrix": "npm run test -- --platform=c64u --target=mock && npm run test:vice:mock && npm run test:vice:device",
     "mcp:generate": "node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
     "check:package": "node scripts/check-package.mjs",
+    "check:skills": "node scripts/check-skills.mjs",
     "check:package:install": "node scripts/check-package.mjs --install",
     "check:sidwave-consumer": "node packages/scripts/check-consumer.mjs --baseline evidence/baseline/sidwave-baseline.json",
     "check:run-local": "bash scripts/run-mcp-check.sh local 5",
@@ -81,14 +82,16 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "axios": "^1.20.0",
     "c64-asm6502": "0.1.0",
     "jimp": "^1.6.1",
     "meyda": "5.6.2",
     "pitchfinder": "^2.3.4",
     "sidwave": "0.1.0",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.6.6"
   },
   "optionalDependencies": {
     "naudiodon": "^2.3.6"
@@ -98,6 +101,8 @@
     "hono": "^4.13.16"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/node": "^25.9.5",
     "octokit": "^5.0.5",
     "tsx": "^4.23.11",

@@ -65,7 +65,7 @@ export const ragModuleGroup = defineToolModule({
       description: "Grouped entry point for BASIC, assembly and curated-docs RAG lookups.",
       summary: "Returns knowledge references for BASIC (basic), 6502/6510 assembly (asm) or all curated docs including game development and Ultimate features (docs).",
       inputSchema: discriminatedUnionSchema({
-        description: "RAG operations available via the c64_rag tool.",
+        description: "RAG operations.",
         variants: ragOperations.map((operation) => operation.schema),
       }),
       operationEffects: { basic: "read", asm: "read", docs: "read" },

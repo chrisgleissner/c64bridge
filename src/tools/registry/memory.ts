@@ -15,6 +15,7 @@ import {
   saveMemoryArgsSchema,
 } from "../memory.js";
 import { metaModule } from "../meta/index.js";
+import { executeWaitUntil, waitUntilArgsJsonSchema, WAIT_UNTIL_DESCRIPTION } from "../../monitor/waitUntil.js";
 import {
   buildDescriptorIndex,
   ensureDescriptor,
@@ -34,7 +35,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "read",
       ensureDescriptor(memoryDescriptorIndex, "read").inputSchema,
-      { description: "Read a range of bytes and return a hex dump with address metadata." },
+      { description: "Read a range of bytes with address metadata." },
     ),
     handler: groupedMemoryHandlers.read,
   },
@@ -43,7 +44,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "write",
       ensureDescriptor(memoryDescriptorIndex, "write").inputSchema,
-      { description: "Write a hexadecimal byte sequence into RAM." },
+      { description: "Write hex bytes into RAM." },
     ),
     handler: groupedMemoryHandlers.write,
   },
@@ -52,7 +53,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "read_screen",
       ensureDescriptor(memoryDescriptorIndex, "read_screen").inputSchema,
-      { description: "Return the current 40x25 text screen converted to ASCII." },
+      { description: "Return the 40x25 text screen as ASCII." },
     ),
     handler: groupedMemoryHandlers.read_screen,
   },
@@ -61,16 +62,21 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "wait_for_text",
       ensureDescriptor(metaDescriptorIndex, "wait_for_screen_text").inputSchema,
-      { description: "Poll the screen until a substring or regex appears, or timeout elapses." },
+      { description: "Poll the screen for a substring or regex." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "wait_for_screen_text", rawArgs, ctx),
+  },
+  {
+    op: "wait_until",
+    schema: extendSchemaWithOp("wait_until", waitUntilArgsJsonSchema, { description: WAIT_UNTIL_DESCRIPTION }),
+    handler: async (rawArgs, ctx) => executeWaitUntil(rawArgs, ctx),
   },
   {
     op: "list_basic",
     schema: extendSchemaWithOp(
       "list_basic",
       listBasicArgsSchema.jsonSchema,
-      { description: "List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises." },
+      { description: "List the BASIC program in memory as text." },
     ),
     handler: groupedMemoryHandlers.list_basic,
   },
@@ -79,7 +85,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "disassemble",
       disassembleArgsSchema.jsonSchema,
-      { description: "Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing." },
+      { description: "Disassemble memory into 6502/6510 instructions, with loaded labels." },
     ),
     handler: groupedMemoryHandlers.disassemble,
   },
@@ -106,7 +112,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "search_memory",
       searchMemoryArgsSchema.jsonSchema,
-      { description: "Search for a byte pattern within a memory range and return matching addresses." },
+      { description: "Search a memory range for a byte pattern." },
     ),
     handler: groupedMemoryHandlers.search_memory,
   },
@@ -115,7 +121,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "compare_memory",
       compareMemoryArgsSchema.jsonSchema,
-      { description: "Compare two memory regions byte-by-byte and report differences." },
+      { description: "Compare two memory regions and report differences." },
     ),
     handler: groupedMemoryHandlers.compare_memory,
   },
@@ -124,7 +130,7 @@ const memoryOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "save_memory",
       saveMemoryArgsSchema.jsonSchema,
-      { description: "Dump a memory range to a local file, with an optional PRG load-address header." },
+      { description: "Dump a memory range to a local file (optional PRG header)." },
     ),
     handler: groupedMemoryHandlers.save_memory,
   },
@@ -149,11 +155,11 @@ export const memoryModuleGroup = defineToolModule({
       description: "Grouped entry point for memory I/O, screen reads, and screen polling.",
       summary: "Reads or writes RAM, captures the screen, or waits for text matches in one tool.",
       inputSchema: discriminatedUnionSchema({
-        description: "Memory operations available via the c64_memory tool.",
+        description: "Memory operations.",
         variants: memoryOperations.map((operation) => operation.schema),
       }),
       operationEffects: {
-        read: "read", write: "write", read_screen: "read", wait_for_text: "read", list_basic: "read", disassemble: "read",
+        read: "read", write: "write", read_screen: "read", wait_for_text: "read", wait_until: "read", list_basic: "read", disassemble: "read",
         copy_memory: "write", fill_memory: "write", search_memory: "read", compare_memory: "read",
         save_memory: "write",
       },
@@ -168,6 +174,11 @@ export const memoryModuleGroup = defineToolModule({
           name: "Wait for READY prompt",
           description: "Poll until the READY. prompt appears",
           arguments: { op: "wait_for_text", pattern: "READY." },
+        },
+        {
+          name: "Wait for a memory value",
+          description: "Wait up to 10 s until the byte at $C000 is $01",
+          arguments: { op: "wait_until", condition: { type: "equals", address: "$C000", bytes: "01" }, timeoutMs: 10000 },
         },
         {
           name: "Disassemble entry point",

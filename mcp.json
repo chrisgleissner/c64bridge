@@ -56,6 +56,18 @@
       "description": "Set to 1 to include full per-operation schemas in tools/list",
       "default": ""
     },
+    "C64BRIDGE_TASK_INLINE_MS": {
+      "description": "Time in ms a task-capable call waits for its result before it moves to the background (0-600000)",
+      "default": "1000"
+    },
+    "C64BRIDGE_TASK_TTL_MS": {
+      "description": "Time in ms a finished task and its result are kept (0-86400000)",
+      "default": "600000"
+    },
+    "C64BRIDGE_SKILLS_PAGE_SIZE": {
+      "description": "Skills returned per skills/list page (integer, 1 or more)",
+      "default": "100"
+    },
     "C64_MODE": {
       "description": "Pin the initial backend to c64u, u2, or vice. When unset, select from configuration or probe the default hardware endpoint",
       "default": "auto"

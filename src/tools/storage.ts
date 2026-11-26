@@ -75,7 +75,7 @@ const driveIdentifierSchema = stringSchema({
 });
 
 const diskImagePathSchema = stringSchema({
-  description: "Absolute or Ultimate filesystem path to the disk image to mount or manage.",
+  description: "Disk image path (absolute or Ultimate).",
   minLength: 1,
 });
 

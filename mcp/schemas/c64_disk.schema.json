@@ -21,7 +21,7 @@
     },
     "image": {
       "type": "string",
-      "description": "Absolute or Ultimate filesystem path to the disk image.",
+      "description": "Disk image path (absolute or Ultimate).",
       "minLength": 1
     },
     "type": {
@@ -29,7 +29,7 @@
         "string",
         "null"
       ],
-      "description": "Override detected image type when firmware guesses incorrectly.",
+      "description": "Override the detected image type.",
       "enum": [
         "d64",
         "g64",
@@ -43,7 +43,7 @@
         "string",
         "null"
       ],
-      "description": "Attachment mode controlling how the firmware treats the mounted image.",
+      "description": "How the firmware attaches the mounted image.",
       "enum": [
         "readwrite",
         "readonly",
@@ -75,36 +75,36 @@
     },
     "verify": {
       "type": "boolean",
-      "description": "When true, power on/reset/verify using the reliability workflow.",
+      "description": "Power on, reset and verify via the reliability workflow.",
       "default": false
     },
     "powerOnIfNeeded": {
       "type": "boolean",
-      "description": "Power on the drive automatically before mounting when verify=true.",
+      "description": "Power on the drive before mounting (verify=true).",
       "default": true
     },
     "resetAfterMount": {
       "type": "boolean",
-      "description": "Issue a drive reset after mounting when verify=true.",
+      "description": "Reset the drive after mounting (verify=true).",
       "default": true
     },
     "maxRetries": {
       "type": "integer",
-      "description": "Maximum number of mount retries when verify=true.",
+      "description": "Mount retries (verify=true).",
       "minimum": 0,
       "maximum": 5,
       "default": 2
     },
     "retryDelayMs": {
       "type": "integer",
-      "description": "Delay between mount retry attempts when verify=true.",
+      "description": "Delay between mount retries (verify=true).",
       "minimum": 0,
       "maximum": 5000,
       "default": 500
     },
     "path": {
       "type": "string",
-      "description": "Absolute or Ultimate filesystem path to the disk image to mount or manage.",
+      "description": "Disk image path (absolute or Ultimate).",
       "minLength": 1
     },
     "format": {
@@ -122,7 +122,7 @@
         "string",
         "null"
       ],
-      "description": "Optional disk label (1-16 characters, converted to PETSCII).",
+      "description": "Disk label (1-16 characters).",
       "minLength": 1,
       "maxLength": 16
     },
@@ -215,6 +215,6 @@
   "required": [
     "op"
   ],
-  "description": "Disk operations available via the c64_disk tool.\n\nOperations:\n- list_drives: List drive slots and mounted images.\n- mount [write]: Mount a disk image with optional verification/retries. Required inputs: drive, image. Optional inputs: type, attachmentMode, location, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Unmount the image from a drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Search for a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Search Ultimate storage for paths containing a name substring, without running anything. Required inputs: nameContains. Optional inputs: root, extensions, maxResults, caseInsensitive.",
+  "description": "Disk operations.\n\nOperations:\n- list_drives: List drive slots and mounted images.\n- mount [write]: Mount a disk image, optionally verifying. Required inputs: drive, image. Optional inputs: type, attachmentMode, location, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Unmount the image from a drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image. Fails if the file already exists. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Find a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Find Ultimate storage paths containing a name substring; runs nothing. Required inputs: nameContains. Optional inputs: root, extensions, maxResults, caseInsensitive.",
   "additionalProperties": false
 }

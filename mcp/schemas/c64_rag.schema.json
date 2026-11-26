@@ -12,7 +12,7 @@
     },
     "q": {
       "type": "string",
-      "description": "Natural-language query describing the desired BASIC or assembly guidance.",
+      "description": "Natural-language query.",
       "minLength": 3,
       "maxLength": 500
     },
@@ -21,7 +21,7 @@
         "integer",
         "null"
       ],
-      "description": "Maximum number of references to return (1-12).",
+      "description": "Maximum references (1-12).",
       "minimum": 1,
       "maximum": 12,
       "default": 3
@@ -30,6 +30,6 @@
   "required": [
     "op"
   ],
-  "description": "RAG operations available via the c64_rag tool.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.\n- docs: Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. Required inputs: q. Optional inputs: k.",
+  "description": "RAG operations.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.\n- docs: Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. Required inputs: q. Optional inputs: k.",
   "additionalProperties": false
 }

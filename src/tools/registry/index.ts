@@ -1,6 +1,7 @@
 import type { ToolDescriptor, ToolExecutionContext, ToolModule, ToolRunResult } from "../types.js";
 import { ToolValidationError } from "../errors.js";
 import { assertAccess } from "../access.js";
+import { assertForegroundAllowed, noLeasesHeld } from "../../tasks/resources.js";
 import { getPlatformStatus, setPlatform } from "../../platform.js";
 import { programModule } from "./program.js";
 import { memoryModuleGroup as memoryModule } from "./memory.js";
@@ -87,14 +88,32 @@ export const toolRegistry = {
 
     // Single enforcement point for C64BRIDGE_ACCESS. Batch commands and background task starts
     // also arrive here (the batch tool and c64_system start_task declare their effect per call).
+    const op = getOperation(args);
     const effect = entry.module.effectOf ? entry.module.effectOf(name, args) : "destructive";
     if (effect) {
-      assertAccess(name, getOperation(args), effect);
+      assertAccess(name, op, effect);
+    }
+
+    // Backend selection checks leases at the point of the switch, after any playback cleanup.
+    if (name !== "c64_select_backend" && !noLeasesHeld()) {
+      const taskOperation = op === "start_task" ? (args as Record<string, unknown>).operation : undefined;
+      const backendId = enrichedCtx.taskFacade?.type ?? await activeBackendType(enrichedCtx);
+      assertForegroundAllowed({ tool: name, op, effect, backendId, taskOperation }, enrichedCtx.taskLease);
     }
 
     return entry.module.invoke(name, args, enrichedCtx);
   },
 };
+
+async function activeBackendType(ctx: ToolExecutionContext): Promise<string | undefined> {
+  try {
+    const client = ctx.client as { getActiveBackendType?: () => Promise<string> | string } | undefined;
+    const type = await client?.getActiveBackendType?.();
+    return typeof type === "string" ? type : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function getOperation(args: unknown): string | undefined {
   const op = typeof args === "object" && args !== null ? (args as Record<string, unknown>).op : undefined;

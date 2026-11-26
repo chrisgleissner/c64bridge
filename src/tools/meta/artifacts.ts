@@ -28,10 +28,10 @@ const bundleRunArtifactsArgsSchema = objectSchema({
       required: ["address", "length"],
       additionalProperties: false,
     }), {
-      description: "Memory snapshots, at most 256 ranges and 2 MiB of requested memory in total.",
+      description: "Memory snapshots (at most 256 ranges, 2 MiB in total).",
       maxItems: MAX_BUNDLE_MEMORY_RANGES,
     })),
-    captureDebugReg: optionalSchema(booleanSchema({ description: "Capture Ultimate debug registers (C64U/U64 only). Defaults to true on C64U/U64 and false on U2/VICE." })),
+    captureDebugReg: optionalSchema(booleanSchema({ description: "Capture Ultimate debug registers (C64U/U64 only; default true there, false on U2/VICE)." })),
   },
   required: ["runId", "outputPath"],
   additionalProperties: false,

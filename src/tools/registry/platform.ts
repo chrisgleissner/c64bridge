@@ -1,3 +1,4 @@
+import { backendSwitchGuard } from "../backendSwitch.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { describePlatformCapabilities, type PlatformId } from "../../platform.js";
 import { cancelGeneratedSidPlayback } from "../audio.js";
@@ -65,11 +66,21 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
     const active = typeof ctx.client.getActiveBackendType === "function"
       ? await ctx.client.getActiveBackendType()
       : ctx.platform?.id;
-    const alreadyActive = active === backend;
+    const guard = backendSwitchGuard(ctx);
+    const checkSwitch = (backendId: PlatformId | undefined) => {
+      if (backendId !== backend) guard(backendId);
+    };
+    let alreadyActive = (ctx.client.getSelectedBackendType?.() ?? active) === backend;
     if (!alreadyActive) {
+      checkSwitch(ctx.client.getSelectedBackendType?.() ?? active);
       await cancelGeneratedSidPlayback(ctx.client);
-      await ctx.client.switchBackend(backend);
-      clearViceSymbols(); // labels belong to one program on one backend
+      const current = ctx.client.getSelectedBackendType?.() ?? await ctx.client.getActiveBackendType?.() ?? ctx.platform?.id;
+      alreadyActive = current === backend;
+      if (!alreadyActive) {
+        checkSwitch(current);
+        await ctx.client.switchBackend(backend, checkSwitch);
+        clearViceSymbols(); // labels belong to one program on one backend
+      }
     }
     ctx.setPlatform(backend);
 

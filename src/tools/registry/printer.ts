@@ -114,7 +114,7 @@ const printerOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "print_bitmap",
       printBitmapArgsSchema.jsonSchema as JsonSchema,
-      { description: "Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows." },
+      { description: "Print a bitmap row (Commodore BIM or Epson ESC/P)." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -183,7 +183,7 @@ export const printerModuleGroup = defineToolModule({
       description: "Grouped entry point for Commodore and Epson printing helpers.",
       summary: "Print text or bitmaps and define custom characters for Commodore or Epson printers.",
       inputSchema: discriminatedUnionSchema({
-        description: "Printer operations available via the c64_printer tool.",
+        description: "Printer operations.",
         variants: printerOperations.map((operation) => operation.schema),
       }),
       operationEffects: { print_text: "write", print_bitmap: "write", define_chars: "write" },

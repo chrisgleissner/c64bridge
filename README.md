@@ -21,6 +21,7 @@ A built-in, searchable knowledge base gives it access to C64 programming and har
 - [Quick start](#quick-start)
 - [Project showcases](#project-showcases)
 - [Configuration](#configuration)
+- [Protocol support, skills and tasks](#protocol-support-skills-and-tasks)
 - [HTTP invocation](#http-invocation)
 - [Build and test](#build-and-test)
 - [Documentation](#documentation)
@@ -246,6 +247,21 @@ Host paths refer to files on the machine running C64 Bridge. Tools can use the s
 
 After `poweroff` on C64U/U64, restore power at the outlet. The machine starts automatically only if its power-restoration setting allows it.
 
+## Protocol support, skills and tasks
+
+The server speaks MCP 2026-07-28 and earlier revisions (2025-11-25 and older) on stdio and on the stateless HTTP transport. Each request is served according to the protocol version it carries. Pre-2026 clients receive the same tools, resources and results as before.
+
+**Skills.** The packaged skills are served through the MCP Skills extension (`skills/list`, `skills/get`, `skill://<name>/SKILL.md`) and as the resources `c64://skills/<name>`, from one catalogue. Clients that do not implement the extension read the resources. Claude Code documents MCP skills; VS Code Copilot documents them as an experimental setting without naming the wire protocol; Codex CLI does not document them.
+
+**Long operations.** A call to `c64_memory` (`wait_until`, `wait_for_text`), `c64_debug` (`wait_for_state`), `c64_sound` (`capture_samples`, `pipeline`), `c64_graphics` (`capture_frame`) or `c64_program` (`batch_run`, `bundle_run`) that does not finish within one second can run as a task.
+
+- With native Tasks support (the `io.modelcontextprotocol/tasks` extension, which a client declares on each request), the server returns a task handle and the client polls `tasks/get` or cancels with `tasks/cancel`. Claude Code documents MCP 2026-07-28 and tasks; Codex CLI and VS Code Copilot do not document them.
+- Any client can use the fallback: `c64_system` `start_task` with `operation: "c64_memory.wait_until"` (or another allowlisted `tool.op`) and `arguments`, then `task_result` with `waitMs` to collect the result.
+
+Tasks are held in memory only. They are not resumed after a restart. See [hardening behavior](doc/hardening-behavior.md).
+
+**Waiting for a condition.** `c64_memory` `wait_until` waits for a memory value, a screen text change or a VICE checkpoint, with a mandatory `timeoutMs`. Use it instead of polling `read` in a loop.
+
 ## HTTP invocation
 
 Use the optional loopback HTTP transport for manual inspection. Start it with `npx -y c64bridge@latest --http 3000` or `npm start -- --http 3000` from a checkout.
@@ -333,7 +349,10 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64BRIDGE_POLL_INTERVAL_MS` | 200 | — | Interval between screen polls during program-output validation in normal runtime mode |
 | `C64BRIDGE_POLL_MAX_MS` | 2000 | — | Maximum time to poll for program-output validation before timing out in normal runtime mode |
 | `C64BRIDGE_POLL_STABILIZE_MS` | 100 | — | Extra settle time after a successful poll match before considering output stable |
+| `C64BRIDGE_SKILLS_PAGE_SIZE` | 100 | — | Skills returned per skills/list page (integer, 1 or more) |
 | `C64BRIDGE_STATE_DIR` | ~/.c64bridge | — | Root directory for task state, run artifacts and diagnostics |
+| `C64BRIDGE_TASK_INLINE_MS` | 1000 | — | Time in ms a task-capable call waits for its result before it moves to the background (0-600000) |
+| `C64BRIDGE_TASK_TTL_MS` | 600000 | — | Time in ms a finished task and its result are kept (0-86400000) |
 | `C64BRIDGE_VERBOSE_SCHEMA` |  | — | Set to 1 to include full per-operation schemas in tools/list |
 | `LOG_LEVEL` | info | — | Logger verbosity (debug, info, warn, error) |
 
@@ -437,10 +456,10 @@ Grouped entry point for configuration reads/writes, diagnostics, and snapshots.
 | `load_flash` | Load configuration from flash. | — | `category` | ✅ | ✅ |  |
 | `read_debugreg` | Read the Ultimate debug register ($D7FF). | — | — | ✅ |  |  |
 | `reset_defaults` | Reset configuration to factory defaults. | — | `category` | ✅ | ✅ |  |
-| `restore` | Restore configuration from a snapshot file. Writes only items that differ from the device; if the device refuses a category (e.g. 403 for a wrong network password), the others are still restored and the error names the failed categories. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
+| `restore` | Restore configuration from a snapshot file. Writes only items that differ; a category the device refuses (e.g. 403 for a wrong network password) does not stop the others and is named in the error. | `path` | `applyToFlash=false` | ✅ | ✅ | ✅ |
 | `save_flash` | Persist the configuration to flash. | — | `category` | ✅ | ✅ |  |
 | `set` | Write a configuration value in the selected category. | `category`, `item`, `value` | — | ✅ | ✅ | ✅ |
-| `shuffle` | Discover PRG/CRT files and run each, optionally capturing the screen. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ |  |
+| `shuffle` | Run each PRG/CRT found, optionally capturing the screen. | — | `root="/"`, `extensions=["prg","crt"]`, `durationMs=5000`, `captureScreen=true`, `maxPrograms=10`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ |  |
 | `snapshot` | Snapshot configuration to disk. | `path` | — | ✅ | ✅ | ✅ |
 | `version` | Fetch firmware version details. | — | — | ✅ | ✅ | ✅ |
 | `write_debugreg` | Write a hex value to the Ultimate debug register ($D7FF). | `value` | — | ✅ |  |  |
@@ -465,7 +484,7 @@ Grouped entry point for VICE debugger operations (breakpoints, registers, steppi
 | `step` | Single-step CPU execution. | — | `count=1`, `mode` |  |  | ✅ |
 | `step_return` | Continue execution until the current routine returns. | — | — |  |  | ✅ |
 | `toggle_checkpoint` | Enable or disable a checkpoint by id. | `id`, `enabled` | — |  |  | ✅ |
-| `wait_for_state` | Wait until the CPU is stopped (checkpoint hit or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` |  |  | ✅ |
+| `wait_for_state` | Wait until the CPU is stopped (checkpoint or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled. | — | `expectedPC`, `timeoutMs=5000`, `pollMs=100` |  |  | ✅ |
 
 #### c64_disk
 
@@ -473,12 +492,12 @@ Grouped entry point for disk mounts, listings, image creation, and program disco
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `create_image` | Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
+| `create_image` | Create a blank disk image. Fails if the file already exists. | `format`, `path` | `diskname`, `tracks` | ✅ | ✅ |  |
 | `file_info` | Inspect a file on the Ultimate filesystem. | `path` | — | ✅ | ✅ |  |
-| `find_and_run` | Search for a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
-| `find_paths` | Search Ultimate storage for paths containing a name substring, without running anything. | `nameContains` | `root="/"`, `extensions`, `maxResults=100`, `caseInsensitive=true` | ✅ | ✅ |  |
+| `find_and_run` | Find a PRG/CRT by name substring and run the first match. | `nameContains` | `root="/"`, `extensions`, `caseInsensitive=true`, `sort="discovered"`, `waitMs=0`, `captureCandidates=10` | ✅ | ✅ |  |
+| `find_paths` | Find Ultimate storage paths containing a name substring; runs nothing. | `nameContains` | `root="/"`, `extensions`, `maxResults=100`, `caseInsensitive=true` | ✅ | ✅ |  |
 | `list_drives` | List drive slots and mounted images. | — | — | ✅ | ✅ | ✅ |
-| `mount` | Mount a disk image with optional verification/retries. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `location`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
+| `mount` | Mount a disk image, optionally verifying. Supports verification. | `drive`, `image` | `type`, `attachmentMode`, `location`, `driveMode`, `verify=false`, `powerOnIfNeeded=true`, `resetAfterMount=true`, `maxRetries=2`, `retryDelayMs=500` | ✅ | ✅ | ✅ |
 | `unmount` | Unmount the image from a drive slot. | `drive` | — | ✅ | ✅ |  |
 
 #### c64_drive
@@ -501,9 +520,9 @@ Grouped entry point for sprite/charset extraction, memory dumps, filesystem stat
 | --- | --- | --- | --- | --- | --- | --- |
 | `charset` | Locate and extract 2KB character sets from RAM. | — | `address`, `scanRange="common"`, `outputPath`, `pauseDuringRead=true`, `minNonEmptyChars=32`, `minEntropy=0.3` | ✅ | ✅ | ✅ |
 | `firmware_health` | Run firmware readiness checks and report status metrics. | — | — | ✅ | ✅ | ✅ |
-| `fs_stats` | Per-extension size statistics for one directory (no recursion); the firmware returns at most one file per extension. | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ | ✅ |  |
-| `memory_dump` | Dump a RAM range to hex or binary files with manifest metadata. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize`, `pauseDuringRead=true`, `retries=1` | ✅ | ✅ | ✅ |
-| `sprites` | Scan RAM for sprites and optionally export .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=false`, `includeRows=false`, `outputDir`, `pauseDuringRead=true` | ✅ | ✅ | ✅ |
+| `fs_stats` | Per-extension size statistics for one directory (no recursion; at most one file per extension). | — | `root="/"`, `extensions`, `includeContainers=true`, `maxSamplesPerExtension=3` | ✅ | ✅ |  |
+| `memory_dump` | Dump a RAM range to hex or binary files with a manifest. | `address`, `length`, `outputPath` | `format="hex"`, `chunkSize`, `pauseDuringRead=true`, `retries=1` | ✅ | ✅ | ✅ |
+| `sprites` | Scan RAM for sprites, optionally exporting .spr files. | `address`, `length` | `stride=64`, `maxSprites=16`, `minNonZeroRows=4`, `minSetBits=12`, `includeBase64=false`, `includeRows=false`, `outputDir`, `pauseDuringRead=true` | ✅ | ✅ | ✅ |
 
 #### c64_graphics
 
@@ -513,10 +532,10 @@ Grouped entry point for frame capture and graphics rendering workflows.
 | --- | --- | --- | --- | --- | --- | --- |
 | `capture_frame` | Capture one or more complete video frames from the active backend. | — | `count=1`, `includePixels=false`, `format`, `encoding="base64"` | ✅ |  | ✅ |
 | `get_display_state` | Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout. | — | — | ✅ | ✅ | ✅ |
-| `render_bitmap` | Convert an image file to VIC-II bitmap memory, write it to RAM and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | ✅ | ✅ | ✅ |
-| `render_petscii_art` | Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | ✅ | ✅ | ✅ |
+| `render_bitmap` | Convert an image to VIC-II bitmap, write it to RAM and display it. | `imagePath`, `format` | `bitmapAddress=8192`, `screenAddress=1024`, `borderColor=0`, `backgroundColor=0`, `preserveAspect=true` | ✅ | ✅ | ✅ |
+| `render_petscii_art` | Create PETSCII art from a prompt, text or bitmap, optionally displaying it. | — | `prompt`, `text`, `maxWidth`, `maxHeight`, `borderColor`, `backgroundColor`, `foregroundColor`, `dryRun=false`, `bitmap` | ✅ | ✅ | ✅ |
 | `render_petscii_text` | Display PETSCII text with optional border and background colours. | `text` | `borderColor`, `backgroundColor` | ✅ | ✅ | ✅ |
-| `render_sprite` | Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. | `sprite` | `index=0`, `x=100`, `y=100`, `color=1`, `multicolour=false`, `dataAddress` | ✅ | ✅ | ✅ |
+| `render_sprite` | Display 63-byte sprite data at a position and colour (writes memory and VIC-II registers). | `sprite` | `index=0`, `x=100`, `y=100`, `color=1`, `multicolour=false`, `dataAddress` | ✅ | ✅ | ✅ |
 
 #### c64_input
 
@@ -524,7 +543,7 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which also pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
+| `joystick` | Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. | `port`, `controls`, `action` | `durationMs=80` | ✅ |  | ✅ |
 | `key` | Press one key one or more times, optionally with a delay. | `key` | `durationMs=0`, `count=1` | ✅ | ✅ | ✅ |
 | `keyboard` | Send physical C64 keyboard matrix events through machine:input (needs firmware support; U64 3.15+). | `inputs`, `transition` | — | ✅ |  |  |
 | `release_all` | Release every key and joystick control injected through machine:input. | — | — | ✅ |  |  |
@@ -537,17 +556,18 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | `maxDiffs=10`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `compare_memory` | Compare two memory regions and report differences. | `address1`, `address2`, `length` | `maxDiffs=10`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | `includeIo=false` | ✅ | ✅ | ✅ |
-| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
+| `disassemble` | Disassemble memory into 6502/6510 instructions, with loaded labels. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ | ✅ |
-| `list_basic` | List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. | — | — | ✅ | ✅ | ✅ |
-| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"`, `bank` | ✅ | ✅ | ✅ |
-| `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ | ✅ |
-| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
-| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
-| `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | ✅ | ✅ | ✅ |
-| `write` | Write a hexadecimal byte sequence into RAM. Supports verification. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | ✅ | ✅ | ✅ |
+| `list_basic` | List the BASIC program in memory as text. | — | — | ✅ | ✅ | ✅ |
+| `read` | Read a range of bytes with address metadata. | `address` | `length=256`, `format="hex"`, `bank` | ✅ | ✅ | ✅ |
+| `read_screen` | Return the 40x25 text screen as ASCII. | — | — | ✅ | ✅ | ✅ |
+| `save_memory` | Dump a memory range to a local file (optional PRG header). | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `search_memory` | Search a memory range for a byte pattern. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `wait_for_text` | Poll the screen for a substring or regex. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | ✅ | ✅ | ✅ |
+| `wait_until` | Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with a communication_failure error carrying the data so far. Addresses and backend are fixed at the start. | `condition`, `timeoutMs` | `pollIntervalMs=250`, `maxIterations=10000`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `write` | Write hex bytes into RAM. Supports verification. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | ✅ | ✅ | ✅ |
 
 #### c64_printer
 
@@ -556,7 +576,7 @@ Grouped entry point for Commodore and Epson printing helpers.
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `define_chars` | Define custom printer characters (Commodore DLL mode). | `firstChar`, `chars` | `secondaryAddress` | ✅ | ✅ |  |
-| `print_bitmap` | Print a bitmap row via Commodore (BIM) or Epson ESC/P workflows. | `printer="commodore"`, `columns` | `repeats`, `useSubRepeat`, `secondaryAddress`, `ensureMsb=true`, `mode`, `density`, `timesPerLine` | ✅ | ✅ |  |
+| `print_bitmap` | Print a bitmap row (Commodore BIM or Epson ESC/P). | `printer="commodore"`, `columns` | `repeats`, `useSubRepeat`, `secondaryAddress`, `ensureMsb=true`, `mode`, `density`, `timesPerLine` | ✅ | ✅ |  |
 | `print_text` | Generate BASIC that prints text to device 4. | `text` | `target="commodore"`, `secondaryAddress`, `formFeed=false` | ✅ | ✅ |  |
 
 #### c64_program
@@ -567,11 +587,11 @@ Grouped entry point for program upload, execution, and batch workflows.
 | --- | --- | --- | --- | --- | --- | --- |
 | `batch_run` | Run multiple PRG/CRT programs with post-run assertions. | `programs` | `continueOnError=false`, `durationMs=2000`, `outputPath`, `resetDelayMs=100` | ✅ | ✅ | ✅ |
 | `bundle_run` | Capture screen, memory and debug registers into a bundle. | `runId`, `outputPath` | `captureScreen=true`, `memoryRanges`, `captureDebugReg` | ✅ | ✅ | ✅ |
-| `cross_platform_greeting` | Show a platform-specific greeting on configured backends, capture screenshots and verify. Supports verification. | — | `platforms`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
+| `cross_platform_greeting` | Greet on the configured backends with screenshots and verification. Supports verification. | — | `platforms`, `messageTemplate="HAVE A GREAT DAY, {PLATFORM}!"`, `verify=true`, `captureScreenshot=true`, `outputPath`, `restoreActiveBackend=true`, `timeoutMs=1500`, `pollIntervalMs=100` | ✅ | ✅ | ✅ |
 | `load_prg` | Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host). | `path` | `location`, `symbolsFile` | ✅ | ✅ | ✅ |
 | `run_crt` | Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2). | `path` | `location` | ✅ | ✅ |  |
 | `run_prg` | Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE. | `path` | `location`, `symbolsFile` | ✅ | ✅ | ✅ |
-| `upload_run_asm` | Assemble 6502/6510 source (ACME, ca65 and 64tass directive spellings; .include/.incbin read host files), upload and run it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
+| `upload_run_asm` | Assemble 6502/6510 source (ACME, ca65, 64tass syntax; .include/.incbin read host files), upload and run it. Supports verification. | `program` | `verify=false` | ✅ | ✅ | ✅ |
 | `upload_run_basic` | Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line. Supports verification. | `program` | `verify=false`, `autoFix=true` | ✅ | ✅ | ✅ |
 
 #### c64_rag
@@ -601,7 +621,7 @@ SID control, playback, composition and audio analysis.
 | `analyze` | Analyze SID playback or a host WAV. | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture Ultimate stereo PCM. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
-| `generate` | Compose and play a seeded SIDWAVE PRG. Replaces the program in memory. | — | `includeScore`, `configure`, `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
+| `generate` | Compose and play a seeded SIDWAVE PRG (replaces the program in memory). | — | `includeScore`, `configure`, `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Start a SID voice. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile, play and analyze SIDWAVE. Supports verification. | — | `configure`, `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
@@ -635,14 +655,15 @@ Grouped entry point for power, reset, menu, and background task control.
 | `pause` | Pause the machine until resumed. | — | — | ✅ | ✅ | ✅ |
 | `performance_report` | Summarize diagnostics spans and tool latencies of the current or latest session. | — | `scope="current"`, `includeTimeline=true`, `maxEntries=25` | ✅ | ✅ | ✅ |
 | `power_cycle` | Return the backend to a fresh state. C64U/U64 Tool Menu verification needs machine:menu_screen (U64 3.15+ or supporting C64U firmware); U2-family reboots through REST. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
-| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 software cannot restart it: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled. | — | — | ✅ |  | ✅ |
+| `poweroff` | Shut down C64U/U64 or quit VICE. U2-family cannot power off. On C64U/U64 power must be restored at the outlet; it starts by itself only if automatic startup on power restoration is enabled. | — | — | ✅ |  | ✅ |
 | `read_menu_screen` | Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (needs firmware support; U64/U2 3.15+). | — | — | ✅ | ✅ |  |
 | `reboot` | Trigger a firmware reboot to recover from faults. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `reset` | Issue a soft reset without cutting power. | — | `waitForReady=false`, `readyTimeoutMs=15000` | ✅ | ✅ | ✅ |
 | `resume` | Resume CPU execution after a pause. | — | — | ✅ | ✅ | ✅ |
-| `start_task` | Start a named interval task. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
+| `start_task` | Start a named interval or one-shot task. | `name`, `operation` | `arguments={}`, `intervalMs=1000`, `maxIterations` | ✅ | ✅ | ✅ |
 | `stop_all_tasks` | Stop all running tasks and persist state. | — | — | ✅ | ✅ | ✅ |
 | `stop_task` | Stop a background task. | `name` | — | ✅ | ✅ | ✅ |
+| `task_result` | Status and result of a task. | `name` | `waitMs=0` | ✅ | ✅ | ✅ |
 
 #### c64_vice
 

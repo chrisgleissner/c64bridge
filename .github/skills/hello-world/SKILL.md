@@ -1,6 +1,6 @@
 ---
 name: hello-world
-description: Run the fastest greeting or smoke-test path across VICE and C64U.
+description: Use when the user asks for the fastest hello-world, greeting or smoke test, for example 'print HELLO WORLD on VICE' or 'run this on hardware'.
 ---
 
 ## Intent

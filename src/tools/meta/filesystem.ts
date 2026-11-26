@@ -46,7 +46,7 @@ const filesystemStatsArgsSchema = objectSchema({
   properties: {
     root: optionalSchema(stringSchema({ description: "Root path to scan", minLength: 1 }), "/"),
     extensions: optionalSchema(arraySchema(stringSchema({ description: "Limit to these extensions (without dot)", minLength: 1 }), { maxItems: MAX_EXTENSIONS })),
-    includeContainers: optionalSchema(booleanSchema({ description: "Include container images (d64/d81/etc.) in extension stats", default: true }), true),
+    includeContainers: optionalSchema(booleanSchema({ description: "Include container images in extension stats", default: true }), true),
     maxSamplesPerExtension: optionalSchema(numberSchema({ description: "Number of sample paths to keep per extension", integer: true, minimum: 1, maximum: 10, default: 3 }), 3),
   },
   required: [],
@@ -553,7 +553,7 @@ export const tools: ToolDefinition[] = [
     },
     {
       name: "drive_mount_and_verify",
-      description: "Mount a disk image with retry logic and verification. Powers on drive if needed, mounts image, resets drive, and verifies state.",
+      description: "Mount a disk image with retries and verification. Powers on drive if needed, mounts image, resets drive, and verifies state.",
       summary: "Reliably mount and verify disk images with retry logic.",
       inputSchema: objectSchema({
         description: "Mount image with optional retries and verification.",

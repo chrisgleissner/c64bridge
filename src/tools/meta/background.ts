@@ -3,12 +3,11 @@ import { assertAccess, taskOperationEffect } from "../access.js";
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
 import type { C64Facade } from "../../device.js";
-import { screenCodesToAscii } from "../../petscii.js";
-import { screenLayoutFromRegisters } from "../../device.js";
+import { readScreenThroughFacade } from "../../monitor/screenRead.js";
 import { resolveAddressSymbol } from "../../knowledge.js";
 import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../../numericArg.js";
 import { stripHexByteSeparators } from "../hex.js";
@@ -18,13 +17,22 @@ import { stateRootDir } from "../../hostPaths.js";
 
 import { randomUUID } from "node:crypto";
 import { processIsAlive, withTaskStateLock } from "../../taskStateLock.js";
+import {
+  MAX_WORKING_TASKS, type CallTask, type LegacyTaskStatus, type TaskCore, cancelTask as cancelCallTask, clearEngineTimer,
+  countWorkingTasks, deleteTask as deleteCallTask, engineNow, findByName as findCallTask, fromLegacyStatus,
+  listCallTasks, registerTaskSource, runWithInlineWindow, startEngineTimer, stopAllTasks, toLegacyStatus,
+  transition, waitForTask,
+} from "../../tasks/engine.js";
+import { assertForegroundAllowed } from "../../tasks/resources.js";
+import { allowlistKey, listAllowlistKeys, lookupAllowlist, looksLikeAllowlistKey } from "../../tasks/allowlist.js";
 
 const SESSION_ID = randomUUID();
 let nextTaskId = 0;
 const deletedTaskIds = new Set<string>();
 
-type TaskStatus = "running" | "completed" | "stopped" | "error";
-interface BackgroundTask {
+type TaskStatus = LegacyTaskStatus;
+interface BackgroundTask extends TaskCore {
+  readonly kind: "interval";
   ownerPid?: number;
   ownerSession?: string;
   id: string; // e.g. 0001_read
@@ -35,7 +43,6 @@ interface BackgroundTask {
   intervalMs: number;
   maxIterations?: number;
   iterations: number;
-  status: TaskStatus;
   startedAt: Date;
   updatedAt: Date;
   stoppedAt?: Date | null;
@@ -45,20 +52,22 @@ interface BackgroundTask {
   folder: string; // e.g. tasks/background/0001_read
   backendId?: string | null; // backend the task was pinned to at start
   _lastPersistedAt?: number;
-  _timer?: NodeJS.Timeout | null; // transient, not persisted
+  _timer?: unknown; // transient engine timer handle, not persisted
   _facade?: C64Facade; // transient: facade pinned at start, so a later backend switch cannot retarget the task
 }
 
 const TASKS: Map<string, BackgroundTask> = new Map();
+const pendingStarts = new Set<BackgroundTask>();
 const logger = loggerFor("background");
 
 export const MIN_INTERVAL_MS = 100;
-export const MAX_RUNNING_TASKS = 16;
+export const MAX_RUNNING_TASKS = MAX_WORKING_TASKS;
 export const MAX_ITERATIONS_LIMIT = 100_000;
 /** One day. A larger value cannot be a setTimeout delay (Node runs a delay above 2^31-1 ms after 1 ms). */
 export const MAX_INTERVAL_MS = 86_400_000;
 const MAX_FINISHED_TASKS = 200;
 const MAX_LOG_BYTES = 256 * 1024;
+const MAX_TASK_RESULT_WAIT_MS = 60_000;
 
 // Operations runOperation implements, including the *_memory aliases.
 const SUPPORTED_OPERATIONS = ["read", "write", "read_screen", "menu_button", "read_memory", "write_memory"] as const;
@@ -122,7 +131,7 @@ function toPersistedTask(t: BackgroundTask): PersistedTask {
     intervalMs: t.intervalMs,
     maxIterations: t.maxIterations,
     iterations: t.iterations,
-    status: t.status,
+    status: toLegacyStatus(t.state),
     startedAt: formatTimestampSpec(t.startedAt),
     updatedAt: formatTimestampSpec(t.updatedAt),
     stoppedAt: t.stoppedAt ? formatTimestampSpec(t.stoppedAt) : null,
@@ -134,8 +143,18 @@ function toPersistedTask(t: BackgroundTask): PersistedTask {
   };
 }
 
+function newIntervalTask(fields: Omit<BackgroundTask, "kind" | "controller" | "lease" | "cleanup">): BackgroundTask {
+  const task: BackgroundTask = { ...fields, kind: "interval", controller: new AbortController(), lease: null };
+  // The terminal transition clears the pending timer.
+  task.cleanup = () => {
+    if (task._timer) clearEngineTimer(task._timer);
+    task._timer = null;
+  };
+  return task;
+}
+
 function fromPersistedTask(p: PersistedTask): BackgroundTask {
-  return {
+  return newIntervalTask({
     ownerPid: p.ownerPid, ownerSession: p.ownerSession,
     id: p.id,
     name: p.name,
@@ -145,7 +164,7 @@ function fromPersistedTask(p: PersistedTask): BackgroundTask {
     intervalMs: p.intervalMs,
     maxIterations: p.maxIterations,
     iterations: p.iterations,
-    status: p.status,
+    state: fromLegacyStatus(p.status),
     startedAt: parseTimestampSpec(p.startedAt) ?? new Date(),
     updatedAt: parseTimestampSpec(p.updatedAt) ?? new Date(),
     stoppedAt: parseTimestampSpec(p.stoppedAt ?? null),
@@ -155,7 +174,7 @@ function fromPersistedTask(p: PersistedTask): BackgroundTask {
     folder: p.folder,
     backendId: p.backendId ?? null,
     _timer: null,
-  };
+  });
 }
 
 function getTasksHomeDir(): string {
@@ -191,7 +210,7 @@ let tasksLoadedPromise: Promise<void> | null = null;
 // Every caller awaits the same load, so a concurrent first call never sees an empty registry.
 function ensureTasksLoaded(): Promise<void> {
   if (!tasksLoadedPromise) {
-    tasksLoadedPromise = loadTasks();
+    tasksLoadedPromise = loadTasks().then(() => {});
   }
   return tasksLoadedPromise;
 }
@@ -216,7 +235,7 @@ function ownerIsLive(pid: unknown, session: unknown): boolean {
   return processIsAlive(pid);
 }
 
-function isOwned(task: BackgroundTask): boolean {
+function isOwned(task: Pick<BackgroundTask, "ownerPid" | "ownerSession">): boolean {
   return task.ownerPid === process.pid && task.ownerSession === SESSION_ID;
 }
 
@@ -224,11 +243,17 @@ function requireOwnership(task: BackgroundTask): void {
   if (!isOwned(task)) throw new ToolValidationError("Task is owned by another live MCP process", { path: "$.name" });
 }
 
-async function loadTasks(): Promise<void> {
-  await withTaskStateLock(getTaskStateFilePath(), readTasks);
+function assertNoForeignRunningTask(name: string, tasks: readonly PersistedTask[]): void {
+  if (tasks.some((task) => task.name === name && task.status === "running" && !isOwned(task) && ownerIsLive(task.ownerPid, task.ownerSession))) {
+    throw new ToolValidationError(`Task "${name}" is already running in another MCP process`, { path: "$.name" });
+  }
 }
 
-async function readTasks(): Promise<void> {
+async function loadTasks(): Promise<readonly PersistedTask[]> {
+  return withTaskStateLock(getTaskStateFilePath(), readTasks);
+}
+
+async function readTasks(): Promise<readonly PersistedTask[]> {
   const path = getTaskStateFilePath();
   let text: string;
   try {
@@ -240,18 +265,18 @@ async function readTasks(): Promise<void> {
     } else {
       logger.error(`Unable to read background task state file ${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return;
+    return [];
   }
   let parsed: any;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
     await moveCorruptStateAside(path, error instanceof Error ? error.message : String(error));
-    return;
+    return [];
   }
   if (!parsed || !Array.isArray(parsed.tasks)) {
     await moveCorruptStateAside(path, "missing tasks array");
-    return;
+    return [];
   }
   const diskIds = new Set((parsed.tasks as PersistedTask[]).map((task) => task.id));
   for (const [name, task] of TASKS) {
@@ -261,8 +286,8 @@ async function readTasks(): Promise<void> {
     const t = fromPersistedTask(pt);
     const liveOwner = ownerIsLive(t.ownerPid, t.ownerSession);
     if (!liveOwner) { t.ownerPid = process.pid; t.ownerSession = SESSION_ID; }
-    if (t.status === "running" && !liveOwner) {
-      t.status = "stopped";
+    if (t.state === "working" && !liveOwner) {
+      transition(t, "cancelled");
       t.stoppedAt = new Date();
       t.updatedAt = new Date();
       t.lastError = "Interrupted by MCP server restart; start the task again to resume monitoring.";
@@ -283,6 +308,7 @@ async function readTasks(): Promise<void> {
   if (JSON.stringify(data) !== JSON.stringify(parsed.tasks)) {
     await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
   }
+  return data;
 }
 
 let tempFileCounter = 0;
@@ -317,7 +343,7 @@ async function ensureResultAndLog(task: BackgroundTask): Promise<void> {
   await writeFileAtomic(resultPath, JSON.stringify({
     id: task.id, type: "task", name: task.operation,
     created: formatTimestampSpec(task.startedAt), updatedAt: formatTimestampSpec(task.updatedAt),
-    status: task.status, iterations: task.iterations, lastResult: task.lastResult ?? null,
+    status: toLegacyStatus(task.state), iterations: task.iterations, lastResult: task.lastResult ?? null,
     lastError: task.lastError ?? null,
   }, null, 2));
   try {
@@ -354,7 +380,7 @@ async function capTaskLog(logPath: string): Promise<void> {
 }
 
 async function pruneFinishedTasks(): Promise<void> {
-  const finished = [...TASKS.values()].filter((task) => task.status !== "running")
+  const finished = [...TASKS.values()].filter((task) => task.state !== "working")
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   for (const task of finished.slice(MAX_FINISHED_TASKS)) {
     TASKS.delete(task.name);
@@ -368,7 +394,7 @@ async function pruneFinishedTasks(): Promise<void> {
 // Persistence is serialised so two writers never rename over each other.
 let persistChain: Promise<void> = Promise.resolve();
 
-function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = false): Promise<void> {
+function persistTasks(changedTasks: readonly BackgroundTask[] = [], startingTask?: BackgroundTask): Promise<void> {
   const run = persistChain.then(async () => {
     try {
       const path = getTaskStateFilePath();
@@ -376,11 +402,12 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         let disk: PersistedTask[] = [];
         try { disk = JSON.parse(await fs.readFile(path, "utf8")).tasks ?? []; }
         catch (error: any) { if (error?.code !== "ENOENT") throw error; }
-        const owned = [...TASKS.values()].filter(isOwned);
-        for (const task of changedTasks) {
-          if (task.status === "running" && disk.some((other) => other.name === task.name && other.id !== task.id && other.status === "running" && ownerIsLive(other.ownerPid, other.ownerSession))) {
-            throw new ToolValidationError("Task with this name is already running in another MCP process", { path: "$.name" });
-          }
+        // Only a start's own persistence step can publish its pending running entry.
+        const owned = [...TASKS.values()].filter((task) => isOwned(task) && (
+          task === startingTask || task.state !== "working" || !pendingStarts.has(task)
+        ));
+        if (startingTask?.state === "working" && TASKS.get(startingTask.name) === startingTask) {
+          assertNoForeignRunningTask(startingTask.name, disk);
         }
         const ownedIds = new Set(owned.map((task) => task.id));
         const merged = disk.filter((task) => !(task.ownerPid === process.pid && task.ownerSession === SESSION_ID) && !ownedIds.has(task.id) && !deletedTaskIds.has(task.id));
@@ -389,6 +416,7 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         const retained = new Set(finished.slice(0, MAX_FINISHED_TASKS).map((task) => task.id));
         const data = merged.filter((task) => task.status === "running" || retained.has(task.id));
         await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
+        if (startingTask) pendingStarts.delete(startingTask);
         deletedTaskIds.clear();
         await pruneFinishedTasks();
       });
@@ -401,31 +429,12 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         t._lastPersistedAt = Date.now();
       }
     } catch (error) {
-      if (strict || error instanceof ToolValidationError) throw error;
+      if (startingTask || error instanceof ToolValidationError) throw error;
       logger.warn(`Unable to persist background task state: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
   persistChain = run.catch(() => {});
   return run;
-}
-
-/** Reads the text screen where the VIC-II shows it (screen base and character set from $D018/$DD00) through the pinned facade. */
-async function readPinnedScreen(ctx: Parameters<ToolDefinition["execute"]>[1], facade: C64Facade): Promise<string> {
-  if (facade.readScreenState) {
-    const state = await facade.readScreenState();
-    return screenCodesToAscii(state.bytes, { columns: 40, rows: 25, charset: state.charset });
-  }
-  let d018: number | undefined;
-  let dd00: number | undefined;
-  try {
-    d018 = (await ctx.client.readMemoryRaw(0xd018, 1, facade))[0];
-    dd00 = (await ctx.client.readMemoryRaw(0xdd00, 1, facade))[0];
-  } catch {
-    // Keep the defaults ($0400, upper case) when the registers cannot be read.
-  }
-  const layout = screenLayoutFromRegisters(d018, dd00);
-  const bytes = await ctx.client.readMemoryRaw(layout.baseAddress, Math.min(0x03e8, 0x10000 - layout.baseAddress), facade);
-  return screenCodesToAscii(bytes, { columns: 40, rows: 25, charset: layout.charset });
 }
 
 function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]) {
@@ -443,7 +452,7 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
       return ctx.client.writeMemory(address, bytes, facade);
     }
     case "read_screen": {
-      if (facade) return readPinnedScreen(ctx, facade);
+      if (facade) return readScreenThroughFacade(ctx, facade);
       return ctx.client.readScreen();
     }
     case "menu_button": {
@@ -454,16 +463,32 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
   }
 }
 
+function assertIntervalAllowed(task: BackgroundTask): void {
+  assertForegroundAllowed({
+    tool: "c64_system", op: "start_task", taskOperation: task.operation, backendId: task.backendId ?? undefined,
+  });
+}
+
 function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]): void {
-  if (task.status !== "running") return;
+  if (task.state !== "working") return;
   const delay = Math.min(MAX_INTERVAL_MS, Math.max(0, task.intervalMs));
-  task.nextRunAt = new Date(Date.now() + delay);
-  task._timer = setTimeout(async () => {
-    if (task.status !== "running") return;
+  task.nextRunAt = new Date(engineNow() + delay);
+  task._timer = startEngineTimer(async () => {
+    if (task.state !== "working") return;
     try {
+      try {
+        assertIntervalAllowed(task);
+      } catch (error) {
+        if (!(error instanceof ToolExecutionError) || error.code !== "resource_conflict") throw error;
+        await appendTaskLog(task, `skipped iteration: ${error.message}`).catch((logError) => {
+          logger.warn(`Unable to log the skipped iteration of background task ${task.name}: ${String(logError)}`);
+        });
+        scheduleNextRun(task, ctx);
+        return;
+      }
       const result = await runOperation(task, ctx);
       // A stop that arrived while the operation was in flight wins: never turn it into completed/error.
-      if (task.status !== "running") return;
+      if (task.state !== "working") return;
       if (result && typeof result === "object" && "success" in result && (result as { success?: unknown }).success === false) {
         throw new Error(`Operation returned failure: ${JSON.stringify((result as { details?: unknown }).details ?? result)}`);
       }
@@ -471,9 +496,8 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
       task.lastResult = summariseResult(result);
       task.updatedAt = new Date();
       if (task.maxIterations && task.iterations >= task.maxIterations) {
-        task.status = "completed";
+        transition(task, "completed");
         task.stoppedAt = new Date();
-        task._timer = null;
         await appendTaskLog(task, `completed iterations=${task.iterations}`);
         await persistTasks([task]);
         return;
@@ -484,11 +508,11 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
       }
       scheduleNextRun(task, ctx);
     } catch (err) {
-      if (task.status !== "running") return;
-      task.status = "error";
-      task.lastError = err instanceof Error ? err.message : String(err);
+      if (task.state !== "working") return;
+      const message = err instanceof Error ? err.message : String(err);
+      transition(task, "failed", { error: message });
+      task.lastError = message;
       task.stoppedAt = new Date();
-      task._timer = null;
       // Nothing may escape this timer callback: an unhandled rejection ends the process when no handler is installed.
       try {
         await appendTaskLog(task, `error: ${task.lastError}`);
@@ -498,30 +522,37 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
       }
     }
   }, delay);
-  // A pending task timer must never keep the process alive on its own.
-  task._timer.unref?.();
 }
 
 function stopTask(task: BackgroundTask): void {
-  if (task._timer) {
-    clearTimeout(task._timer);
-  }
-  task._timer = null;
-  task.status = task.status === "completed" ? task.status : "stopped";
-  task.stoppedAt = new Date();
+  // A task that already finished keeps its state (a completed task stays completed).
+  if (transition(task, "cancelled")) task.stoppedAt = new Date();
 }
 
-/** Stops every running task (used at process shutdown) and persists the state. */
+/** Stops every running task of every kind (used at process shutdown) and persists the state. */
 export async function stopAllBackgroundTasks(): Promise<void> {
+  await stopAllTasks();
+}
+
+async function stopAllIntervalTasks(): Promise<void> {
   const stopped: BackgroundTask[] = [];
   for (const task of TASKS.values()) {
-    if (task.status === "running" && isOwned(task)) {
+    if (task.state === "working" && isOwned(task)) {
       stopTask(task);
       stopped.push(task);
     }
   }
   await persistTasks(stopped);
 }
+
+registerTaskSource("interval", {
+  countWorking: () => Array.from(TASKS.values()).filter((task) => isOwned(task) && task.state === "working").length,
+  hasWorkingName: (name) => {
+    const task = TASKS.get(name);
+    return task !== undefined && isOwned(task) && task.state === "working";
+  },
+  stopAll: stopAllIntervalTasks,
+});
 
 function validateTaskOperation(operation: string, args: Record<string, unknown>): void {
   if (!(SUPPORTED_OPERATIONS as readonly string[]).includes(operation)) {
@@ -582,7 +613,7 @@ const startBackgroundTaskArgsSchema = objectSchema({
       minLength: 1,
       pattern: /^[A-Za-z0-9_][A-Za-z0-9_. -]*$/,
     }),
-    operation: stringSchema({ description: "Operation name: read, write, read_screen or menu_button (read_memory and write_memory are aliases). write requires arguments.address and arguments.bytes.", minLength: 1 }),
+    operation: stringSchema({ description: "read, write (needs arguments.address and bytes), read_screen, menu_button, or an allowlisted tool.op such as c64_memory.wait_for_text.", minLength: 1 }),
     arguments: optionalSchema(objectSchema({ description: "Operation-specific arguments", properties: {}, additionalProperties: true }), {} as any),
     intervalMs: optionalSchema(numberSchema({ description: `Interval milliseconds (${MIN_INTERVAL_MS} to ${MAX_INTERVAL_MS})`, integer: true, minimum: MIN_INTERVAL_MS, maximum: MAX_INTERVAL_MS, default: 1000 }), 1000),
     maxIterations: optionalSchema(numberSchema({ description: `Maximum number of iterations (1 to ${MAX_ITERATIONS_LIMIT}; omit for indefinite)`, integer: true, minimum: 1, maximum: MAX_ITERATIONS_LIMIT }), undefined),
@@ -605,6 +636,105 @@ function supersededStartResult(task: BackgroundTask) {
   return jsonResult({ started: false, superseded: true, name: task.name }, { success: true });
 }
 
+const taskResultArgsSchema = objectSchema({
+  description: "Task status and result.",
+  properties: {
+    name: stringSchema({ description: "Task name", minLength: 1 }),
+    waitMs: optionalSchema(numberSchema({ description: "Max wait in ms (0-60000)", integer: true, minimum: 0, maximum: MAX_TASK_RESULT_WAIT_MS, default: 0 }), 0),
+  },
+  required: ["name"],
+  additionalProperties: false,
+});
+
+async function startCallTask(
+  parsed: { name: string; operation: string; arguments?: unknown },
+  rawArgs: Record<string, unknown>,
+  ctx: Parameters<ToolDefinition["execute"]>[1],
+) {
+  const entry = lookupAllowlist(parsed.operation);
+  if (!entry) {
+    throw new ToolValidationError(
+      `Unsupported background task operation '${parsed.operation}'. Operations that can run as detached tasks: ${listAllowlistKeys().join(", ")}; interval operations: ${SUPPORTED_OPERATIONS.join(", ")}.`,
+      { path: "$.operation" },
+    );
+  }
+  for (const key of ["intervalMs", "maxIterations"] as const) {
+    if (rawArgs[key] !== undefined) {
+      throw new ToolValidationError(`${key} applies to interval tasks only; ${parsed.operation} runs once.`, { path: `$.${key}` });
+    }
+  }
+  const callArgs = { ...((parsed.arguments as Record<string, unknown> | undefined) ?? {}) };
+  if ("op" in callArgs) {
+    if (callArgs.op !== entry.op) throw new ToolValidationError(`arguments.op must be "${entry.op}" or omitted for ${parsed.operation}`, { path: "$.arguments.op" });
+    delete callArgs.op;
+  }
+  // The effect of the allowlisted operation is checked here; the inner invoke checks it again.
+  assertAccess("c64_system", "start_task", taskOperationEffect(parsed.operation));
+  const existing = TASKS.get(parsed.name);
+  if (existing?.state === "working" && isOwned(existing)) {
+    throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
+  }
+  const outcome = await runWithInlineWindow(
+    { tool: entry.tool, op: entry.op, args: callArgs, ctx, name: parsed.name, requestSignal: ctx.signal },
+    { keepCompleted: true },
+  );
+  if (outcome.kind === "result") return outcome.result;
+  const task = outcome.task;
+  if (existing) await removeIntervalTask(existing);
+  return jsonResult({
+    started: true,
+    task: { id: task.id, name: task.name, operation: allowlistKey(task.tool, task.op), backendId: task.backendId, kind: "call" },
+  }, { success: true });
+}
+
+async function removeIntervalTask(task: BackgroundTask): Promise<void> {
+  if (TASKS.get(task.name) !== task || task.state === "working") return;
+  if (!(isOwned(task) || !ownerIsLive(task.ownerPid, task.ownerSession))) return;
+  deletedTaskIds.add(task.id);
+  TASKS.delete(task.name);
+  await persistTasks();
+  await fs.rm(getBackgroundTaskFolderAbsolute(task.id), { recursive: true, force: true });
+}
+
+function findNamedTask(name: string): BackgroundTask | CallTask | undefined {
+  const interval = TASKS.get(name);
+  if (interval?.state === "working" && isOwned(interval)) return interval;
+  return findCallTask(name) ?? interval;
+}
+
+function listNamedCallTasks(): CallTask[] {
+  return listCallTasks().filter((task) => task.name !== undefined);
+}
+
+function callTaskListEntry(task: CallTask) {
+  return {
+    id: task.id,
+    name: task.name ?? null,
+    type: "call",
+    kind: "call",
+    operation: allowlistKey(task.tool, task.op),
+    backendId: task.backendId,
+    status: toLegacyStatus(task.state),
+    statusMessage: task.statusMessage ?? null,
+    startedAt: formatTimestampSpec(task.createdAt),
+    updatedAt: formatTimestampSpec(task.updatedAt),
+    stoppedAt: task.finishedAt ? formatTimestampSpec(task.finishedAt) : null,
+    lastError: task.error ?? null,
+  };
+}
+
+function waitForIntervalTask(task: BackgroundTask, waitMs: number, signal?: AbortSignal): Promise<void> {
+  if (task.state !== "working" || waitMs <= 0 || signal?.aborted) return Promise.resolve();
+  const deadline = engineNow() + waitMs;
+  return new Promise((resolve) => {
+    const poll = (): void => {
+      if (task.state !== "working" || signal?.aborted || engineNow() >= deadline) { resolve(); return; }
+      startEngineTimer(poll, Math.min(50, Math.max(1, deadline - engineNow())));
+    };
+    poll();
+  });
+}
+
 export const tools: ToolDefinition[] = [
   {
     name: "start_background_task",
@@ -615,35 +745,41 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         await ensureTasksLoaded();
-        await loadTasks();
+        const disk = await loadTasks();
         const parsed = startBackgroundTaskArgsSchema.parse(args ?? {});
+        assertNoForeignRunningTask(parsed.name, disk);
+        if (looksLikeAllowlistKey(parsed.operation)) return await startCallTask(parsed, (args ?? {}) as Record<string, unknown>, ctx);
         validateTaskOperation(parsed.operation, (parsed.arguments as Record<string, unknown> | undefined) ?? {});
         // The effect of the task operation is checked once, at start; a running task is not re-checked.
         assertAccess("c64_system", "start_task", taskOperationEffect(parsed.operation));
         const now = new Date();
         const existing = TASKS.get(parsed.name);
-        if (existing) getBackgroundTaskFolderAbsolute(existing.id);
-        if (existing && existing.status === "running") {
+        const ownedInterval = existing && isOwned(existing) ? existing : undefined;
+        if (ownedInterval) getBackgroundTaskFolderAbsolute(ownedInterval.id);
+        if (ownedInterval?.state === "working") {
           throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
         }
-        const runningCount = Array.from(TASKS.values()).filter((t) => t.status === "running").length;
-        if (runningCount >= MAX_RUNNING_TASKS) {
+        const sameNameCall = findCallTask(parsed.name);
+        if (sameNameCall?.state === "working") {
+          throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
+        }
+        if (countWorkingTasks() >= MAX_RUNNING_TASKS) {
           throw new ToolValidationError(`Too many running background tasks (limit ${MAX_RUNNING_TASKS}); stop one first.`, { path: "$.name" });
         }
 
         const newId = `${SESSION_ID}_${++nextTaskId}_${parsed.name}`;
 
-        const task: BackgroundTask = {
+        const task = newIntervalTask({
           id: newId,
           ownerPid: process.pid, ownerSession: SESSION_ID,
           name: parsed.name,
           type: "background",
           operation: parsed.operation,
           args: (parsed.arguments as Record<string, unknown>) ?? {},
-          intervalMs: parsed.intervalMs ?? (existing?.intervalMs ?? 1000),
+          intervalMs: parsed.intervalMs ?? ownedInterval?.intervalMs ?? 1000,
           maxIterations: parsed.maxIterations,
           iterations: 0,
-          status: "running",
+          state: "working",
           startedAt: now,
           updatedAt: now,
           stoppedAt: null,
@@ -653,22 +789,24 @@ export const tools: ToolDefinition[] = [
           backendId: null,
           _timer: null,
           _facade: undefined,
-        };
+        });
 
         // Reserve the name and id before the first await below. Everything above is synchronous,
         // so a concurrent start sees this task as running and cannot reuse its name or id.
         TASKS.set(task.name, task);
+        pendingStarts.add(task);
         // While this start awaits, the task may be stopped and its name reused by another start.
         // Only the task that is still the running registry entry may write its files or start its timer.
-        const superseded = (): boolean => TASKS.get(task.name) !== task || task.status !== "running";
+        const superseded = (): boolean => TASKS.get(task.name) !== task || task.state !== "working";
         try {
-          await persistTasks([task], true);
-          if (superseded()) return supersededStartResult(task);
           // Pin the facade now: a later c64_select_backend must not retarget a running task.
           const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
           if (superseded()) return supersededStartResult(task);
           task._facade = pinnedFacade;
           task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
+          if (superseded()) return supersededStartResult(task);
+          assertIntervalAllowed(task);
+          await persistTasks([task], task);
           if (superseded()) return supersededStartResult(task);
           // Ensure per-task structure and seed files
           await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
@@ -679,10 +817,11 @@ export const tools: ToolDefinition[] = [
           if (superseded()) return supersededStartResult(task);
           await appendTaskLog(task, "started");
           if (superseded()) return supersededStartResult(task);
+          if (sameNameCall) deleteCallTask(sameNameCall.id);
           scheduleNextRun(task, ctx);
         } catch (startError) {
           // Undo the reservation so the failed start neither blocks its name nor holds a running slot.
-          if (task._timer) clearTimeout(task._timer);
+          if (task._timer) clearEngineTimer(task._timer);
           task._timer = null;
           if (TASKS.get(task.name) === task) {
             if (existing) TASKS.set(existing.name, existing);
@@ -690,6 +829,8 @@ export const tools: ToolDefinition[] = [
           }
           await persistTasks();
           throw startError;
+        } finally {
+          pendingStarts.delete(task);
         }
         await persistTasks([task]);
         if (existing && existing.id !== task.id && (isOwned(existing) || !ownerIsLive(existing.ownerPid, existing.ownerSession))) {
@@ -713,16 +854,20 @@ export const tools: ToolDefinition[] = [
         await ensureTasksLoaded();
         await loadTasks();
         const parsed = stopBackgroundTaskArgsSchema.parse(args ?? {});
-        const task = TASKS.get(parsed.name);
+        const task = findNamedTask(parsed.name);
         if (!task) {
           // Idempotent stop: report success even if task does not exist anymore
           return jsonResult({ stopped: false, name: parsed.name, notFound: true }, { success: true });
+        }
+        if (task.kind === "call") {
+          cancelCallTask(task.id);
+          return jsonResult({ stopped: true, name: parsed.name, status: toLegacyStatus(task.state) }, { success: true });
         }
         requireOwnership(task);
         stopTask(task);
         await appendTaskLog(task, "stopped");
         await persistTasks([task]);
-        return jsonResult({ stopped: true, name: task.name, status: task.status }, { success: true });
+        return jsonResult({ stopped: true, name: task.name, status: toLegacyStatus(task.state) }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
@@ -740,8 +885,12 @@ export const tools: ToolDefinition[] = [
         await ensureTasksLoaded();
         await loadTasks();
         const parsed = stopBackgroundTaskArgsSchema.parse(args ?? {});
-        const task = TASKS.get(parsed.name);
-        if (task?.status === "running") throw new ToolValidationError("Stop the running task before deleting it", { path: "$.name" });
+        const task = findNamedTask(parsed.name);
+        if (task?.state === "working") throw new ToolValidationError("Stop the running task before deleting it", { path: "$.name" });
+        if (task?.kind === "call") {
+          deleteCallTask(task.id);
+          return jsonResult({ deleted: true, name: parsed.name }, { success: true });
+        }
         if (task) {
           requireOwnership(task);
           deletedTaskIds.add(task.id);
@@ -773,7 +922,8 @@ export const tools: ToolDefinition[] = [
           name: t.name,
           type: t.type,
           backendId: t.backendId ?? null,
-          status: t.status,
+          kind: "interval",
+          status: toLegacyStatus(t.state),
           iterations: t.iterations,
           intervalMs: t.intervalMs,
           maxIterations: t.maxIterations ?? null,
@@ -785,7 +935,46 @@ export const tools: ToolDefinition[] = [
           lastResult: t.lastResult ?? null,
           folder: t.folder,
         }));
-        return jsonResult({ tasks }, { success: true, count: tasks.length });
+        const all = [...tasks, ...listNamedCallTasks().map(callTaskListEntry)];
+        return jsonResult({ tasks: all }, { success: true, count: all.length });
+      } catch (error) {
+        if (error instanceof ToolError) return toolErrorResult(error);
+        return unknownErrorResult(error);
+      }
+    },
+  },
+  {
+    name: "get_background_task_result",
+    description: "Read the status and result of a named background task, optionally waiting (bounded) for it to finish.",
+    summary: "Returns status, done flag and the result or error of a task.",
+    inputSchema: taskResultArgsSchema.jsonSchema,
+    tags: ["background", "scheduler"],
+    async execute(args, ctx) {
+      try {
+        await ensureTasksLoaded();
+        await loadTasks();
+        const parsed = taskResultArgsSchema.parse(args ?? {});
+        const waitMs = parsed.waitMs ?? 0;
+        const found = findNamedTask(parsed.name);
+        if (!found) throw new ToolValidationError(`No task named "${parsed.name}"`, { path: "$.name" });
+        if (found.kind === "interval") {
+          const interval = found;
+          await waitForIntervalTask(interval, waitMs, ctx.signal);
+          return jsonResult({
+            name: interval.name, id: interval.id, kind: "interval", status: toLegacyStatus(interval.state),
+            statusMessage: null, done: interval.state !== "working",
+            ...(interval.lastResult !== undefined && interval.lastResult !== null ? { result: interval.lastResult } : {}),
+            ...(interval.lastError ? { error: interval.lastError } : {}),
+          }, { success: true });
+        }
+        const call = (await waitForTask(found.id, waitMs, ctx.signal)) ?? found;
+        const done = call.state !== "working";
+        return jsonResult({
+          name: call.name ?? parsed.name, id: call.id, kind: "call", status: toLegacyStatus(call.state),
+          statusMessage: call.statusMessage ?? null, done,
+          ...(done && call.result ? { result: call.result } : {}),
+          ...(done && call.error ? { error: call.error } : {}),
+        }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);
@@ -806,13 +995,20 @@ export const tools: ToolDefinition[] = [
         const stoppedTasks: BackgroundTask[] = [];
         for (const task of TASKS.values()) {
           // Tasks that already finished or were stopped are left as they are.
-          if (task.status !== "running" || !isOwned(task)) continue;
+          if (task.state !== "working" || !isOwned(task)) continue;
           stopTask(task);
           stoppedTasks.push(task);
           await appendTaskLog(task, "stopped");
         }
         await persistTasks(stoppedTasks);
-        return jsonResult({ stoppedAll: true, count: stoppedTasks.length, totalTasks: TASKS.size }, { success: true });
+        let stoppedCalls = 0;
+        const namedCalls = listNamedCallTasks();
+        for (const call of namedCalls) {
+          if (call.state !== "working") continue;
+          cancelCallTask(call.id);
+          stoppedCalls += 1;
+        }
+        return jsonResult({ stoppedAll: true, count: stoppedTasks.length + stoppedCalls, totalTasks: TASKS.size + namedCalls.length }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

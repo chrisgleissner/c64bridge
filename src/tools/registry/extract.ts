@@ -22,7 +22,7 @@ const extractOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "sprites",
       ensureDescriptor(metaDescriptorIndex, "extract_sprites_from_ram").inputSchema,
-      { description: "Scan RAM for sprites and optionally export .spr files." },
+      { description: "Scan RAM for sprites, optionally exporting .spr files." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "extract_sprites_from_ram", rawArgs, ctx),
   },
@@ -40,7 +40,7 @@ const extractOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "memory_dump",
       ensureDescriptor(metaDescriptorIndex, "memory_dump_to_file").inputSchema,
-      { description: "Dump a RAM range to hex or binary files with manifest metadata." },
+      { description: "Dump a RAM range to hex or binary files with a manifest." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "memory_dump_to_file", rawArgs, ctx),
   },
@@ -49,7 +49,7 @@ const extractOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "fs_stats",
       ensureDescriptor(metaDescriptorIndex, "filesystem_stats_by_extension").inputSchema,
-      { description: "Per-extension size statistics for one directory (no recursion); the firmware returns at most one file per extension." },
+      { description: "Per-extension size statistics for one directory (no recursion; at most one file per extension)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "filesystem_stats_by_extension", rawArgs, ctx),
   },
@@ -82,7 +82,7 @@ export const extractModule = defineToolModule({
       description: "Grouped entry point for sprite/charset extraction, memory dumps, filesystem stats, and firmware health checks.",
       summary: "Export sprites or charsets, dump RAM, compute filesystem stats, or run firmware health checks.",
       inputSchema: discriminatedUnionSchema({
-        description: "Extraction operations available via the c64_extract tool.",
+        description: "Extraction operations.",
         variants: extractOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

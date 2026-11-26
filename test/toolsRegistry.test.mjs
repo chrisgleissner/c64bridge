@@ -92,3 +92,30 @@ test("MCP metadata exposes implementation and project details", () => {
   assert.ok(Array.isArray(project.transports));
   assert.ok(project.transports.includes("stdio"));
 });
+
+test("with a task lease held, a foreground call runs when the client cannot report its backend type", async () => {
+  const { acquireLease, __resetLeasesForTests } = await import("../src/tasks/resources.js");
+  const logger = { debug() {}, info() {}, warn() {}, error() {} };
+  const clients = {
+    throwing: { getActiveBackendType: async () => { throw new Error("backend probe failed"); } },
+    nonString: { getActiveBackendType: async () => 42 },
+    missing: {},
+  };
+  __resetLeasesForTests();
+  try {
+    acquireLease({ taskId: "observer-1", backendId: "c64u", mode: "observe", tool: "c64_memory", op: "wait_for_text", pinned: false });
+    for (const [label, client] of Object.entries(clients)) {
+      const ctx = { client, rag: {}, logger, platform: { id: "c64u", features: [], limitedFeatures: [] }, setPlatform: () => ({ id: "c64u", features: [], limitedFeatures: [] }) };
+      // c64_memory.read_screen needs a lease check; with no known backend the observe lease does not block it,
+      // and the failure (if any) comes from the missing readMemoryRaw, not from the backend probe.
+      let thrown;
+      let result;
+      try { result = await toolRegistry.invoke("c64_memory", { op: "read", address: "$0400", length: 1 }, ctx); } catch (error) { thrown = error; }
+      const message = thrown ? String(thrown.message) : JSON.stringify(result);
+      assert.ok(!/backend probe failed/.test(message), `${label}: ${message}`);
+      assert.ok(!/resource_conflict|holds the exclusive lease/.test(message), `${label}: an observe lease never blocks a foreground call`);
+    }
+  } finally {
+    __resetLeasesForTests();
+  }
+});

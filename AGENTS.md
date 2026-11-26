@@ -46,6 +46,9 @@ Tool arguments that become host file paths (memory dumps, config snapshots, spri
 | `C64BRIDGE_HTTP_TOKEN` | Bearer token required (`Authorization: Bearer <token>`) by the optional HTTP transport (`--http`), which also accepts only loopback Host and Origin headers. Without a token, any local process that can reach 127.0.0.1 on the port can call every tool. |
 | `C64BRIDGE_DIAGNOSTICS_KEEP` | Number of diagnostics files kept at startup (default 200; files older than 30 days are always removed). |
 | `C64BRIDGE_VERBOSE_SCHEMA` | Set to `1` to include the full per-operation schemas in `tools/list` (omitted by default to keep it small). |
+| `C64BRIDGE_TASK_INLINE_MS` | Milliseconds a task-capable call waits for its result before moving to the background (0-600000, default 1000). |
+| `C64BRIDGE_TASK_TTL_MS` | Milliseconds a finished task and its result are kept (0-86400000, default 600000). |
+| `C64BRIDGE_SKILLS_PAGE_SIZE` | Skills per `skills/list` page (default 100). |
 
 ### Runtime Backend Switching
 
@@ -104,8 +107,8 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 
 - Program runners: `c64_program` (`upload_run_basic`, `upload_run_asm`, `load_prg`, `run_prg`, `run_crt`, `bundle_run`, `batch_run`). `upload_run_basic` observes the run, and repairs a missing closing quote or parenthesis and reruns once, only with `verify: true`; pass `autoFix: false` for programs with side effects. `run_crt`, `run_prg`, `load_prg` and disk mount take `location: "host"` to upload a host file to an Ultimate. `upload_run_asm` reads `.include`/`.incbin` host files and reports assembler `warnings`.
 - Fast demo workflow: `c64_program` (`cross_platform_greeting`) for one-call greetings on VICE and/or C64U with screenshot capture and verification
-- Screen & memory: `c64_memory` (`read`, `write`, `read_screen` (graphics characters appear as U+2592), `wait_for_text`, `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory`; on Ultimate these skip or refuse `$D000-$DFFF` unless `includeIo: true`). `read` accepts `bank` (VICE only) and `format: "hex"` (default) or `"dump"` (addresses plus a PETSCII column); `list_basic` lists the BASIC program in memory as text.
-- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks). `reset`, `reboot` and `power_cycle` accept `waitForReady` and `readyTimeoutMs` to wait for the BASIC READY. prompt. `pause` and `resume` also work on VICE: `pause` holds the binary monitor connection open, which stops the CPU, until `resume`. `reset`, `reboot`, `power_cycle` and `poweroff` end the pause.
+- Screen & memory: `c64_memory` (`read`, `write`, `read_screen` (graphics characters appear as U+2592), `wait_for_text`, `wait_until` (waits until a typed condition on memory, the screen or a VICE checkpoint holds; `timeoutMs` is required; the cap and a read failure end the wait with a result, see the tool description), `list_basic`, `disassemble`, `copy_memory`, `fill_memory`, `search_memory`, `compare_memory`, `save_memory`; on Ultimate these skip or refuse `$D000-$DFFF` unless `includeIo: true`). `read` accepts `bank` (VICE only) and `format: "hex"` (default) or `"dump"` (addresses plus a PETSCII column); `list_basic` lists the BASIC program in memory as text.
+- System control: `c64_system` (`pause`, `resume`, `reset`, `reboot`, `poweroff`, `power_cycle`, `menu`, tasks: `start_task`, `task_result`, `stop_task`, `list_tasks`, `delete_task`). `reset`, `reboot` and `power_cycle` accept `waitForReady` and `readyTimeoutMs` to wait for the BASIC READY. prompt. `pause` and `resume` also work on VICE: `pause` holds the binary monitor connection open, which stops the CPU, until `resume`. `reset`, `reboot`, `power_cycle` and `poweroff` end the pause.
 - Input: `c64_input` (`write_text`, `key`, `keyboard`, `joystick`, `release_all`, `state`)
 - Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`, `load_flash`, `save_flash`, `reset_defaults`). The flash operations take an optional `category`.
 - Drives & files: `c64_disk` (including `find_paths`, which returns `results` and `truncated`; limit with `maxResults`), `c64_drive`
@@ -125,6 +128,12 @@ Change C64U/U64/U2 configuration through `c64_config` REST operations; do not na
 `c64_input` `key` is PETSCII/KERNAL-queue input, while `keyboard` sends physical key combinations through Ultimate REST input.
 Keyboard menu navigation is reserved for device features with no REST equivalent, for example the machine code monitor, visual SID editor, or Tool Menu.
 `power_cycle` is the deliberate Tool Menu exception on C64U/U64: it reads `machine:menu_screen` after every navigation step and stops rather than blindly selecting an unverified item. It uses REST reboot on U2-family cartridges and a fresh VICE start on VICE.
+
+## Skills and Tasks
+
+Skills are served through the MCP Skills extension (`skills/list`, `skills/get`, `skill://<name>/SKILL.md`) and as `c64://skills/<name>` resources, from one catalogue. Read the resource when the client does not surface the extension.
+
+Long operations (`c64_memory` `wait_until` and `wait_for_text`, `c64_debug` `wait_for_state`, `c64_sound` `capture_samples` and `pipeline`, `c64_graphics` `capture_frame`, `c64_program` `batch_run` and `bundle_run`) can run as tasks. A client that declares the Tasks extension gets a task handle after the inline window and uses `tasks/get` and `tasks/cancel`. Any other client calls `c64_system` `start_task` with `operation` set to the key (for example `c64_memory.wait_until`) and `arguments`, then `task_result` with `waitMs`. Tasks live in memory only and do not survive a restart. Details: [hardening behavior guide](doc/hardening-behavior.md).
 
 ## Skill Routing
 

@@ -1,6 +1,6 @@
 ---
 name: cross-platform-demo
-description: Run the shortest visible demo path across VICE and C64U.
+description: Use when the user wants a quick visible greeting or smoke test on VICE and/or C64U with screenshot or text verification.
 ---
 
 ## Intent

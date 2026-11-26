@@ -113,9 +113,27 @@ async function main() {
     'data/assembly/assembly-spec.md',
     'data/embeddings_basic.json',
     'dist/index.js',
+    'dist/mcp/skillsAdapter.js',
+    'dist/mcp/tasksAdapter.js',
+    'dist/tasks/engine.js',
+    'dist/tasks/allowlist.js',
+    'dist/tasks/resources.js',
+    'dist/monitor/waitUntil.js',
+    'dist/monitor/conditions.js',
+    'dist/monitor/poller.js',
     'dist/rag/discover.config.json',
     'dist/rag/sources.csv',
   ];
+
+  // Every served skill ships in the tarball; the developer-only pr-converge skill does not.
+  const skillDirs = (await fs.readdir(path.join(root, '.github', 'skills'), { withFileTypes: true }))
+    .filter((e) => e.isDirectory() && e.name !== 'pr-converge')
+    .map((e) => e.name);
+  for (const name of skillDirs) required.push(`.github/skills/${name}/SKILL.md`);
+  if (skillDirs.length === 0) throw new Error('No skills found under .github/skills');
+  if (files.some((f) => f.startsWith('.github/skills/pr-converge/'))) {
+    throw new Error('Package must not contain the developer-only pr-converge skill');
+  }
 
   await assertIncludes(files, required);
   await assertNoDuplicates(files);

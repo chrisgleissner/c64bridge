@@ -219,7 +219,7 @@ export const viceModuleGroup = defineToolModule({
       description: "VICE resources, snapshots.",
       summary: "Reads or updates selected VICE resources that are safe to expose through MCP.",
       inputSchema: discriminatedUnionSchema({
-        description: "VICE emulator operations available via the c64_vice tool.",
+        description: "VICE emulator operations.",
         variants: viceOperationSchemas.map((schema) => schema.jsonSchema),
       }),
       operationEffects: { resource_get: "read", resource_set: "write", snapshot_save: "write", snapshot_restore: "destructive", version: "read" },

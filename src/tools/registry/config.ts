@@ -47,7 +47,7 @@ const configSnapshotArgsSchema = objectSchema<ConfigSnapshotArgs>({
   description: "Snapshot all configuration categories to a JSON file.",
   properties: {
     path: stringSchema({
-      description: "Absolute or workspace-relative path where the snapshot file will be written.",
+      description: "Snapshot file path (absolute or workspace-relative).",
       minLength: 1,
     }),
   },
@@ -234,7 +234,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "restore",
       configRestoreArgsSchema.jsonSchema as JsonSchema,
-      { description: "Restore configuration from a snapshot file. Writes only items that differ from the device; if the device refuses a category (e.g. 403 for a wrong network password), the others are still restored and the error names the failed categories." },
+      { description: "Restore configuration from a snapshot file. Writes only items that differ; a category the device refuses (e.g. 403 for a wrong network password) does not stop the others and is named in the error." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -274,7 +274,7 @@ const configOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "shuffle",
       ensureDescriptor(metaDescriptorIndex, "program_shuffle").inputSchema,
-      { description: "Discover PRG/CRT files and run each, optionally capturing the screen." },
+      { description: "Run each PRG/CRT found, optionally capturing the screen." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "program_shuffle", rawArgs, ctx),
   },
@@ -300,7 +300,7 @@ export const configModuleGroup = defineToolModule({
       description: "Grouped entry point for configuration reads/writes, diagnostics, and snapshots.",
       summary: "List or update settings, access firmware info, take snapshots, and run program shuffle workflows.",
       inputSchema: discriminatedUnionSchema({
-        description: "Configuration operations available via the c64_config tool.",
+        description: "Configuration operations.",
         variants: configOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

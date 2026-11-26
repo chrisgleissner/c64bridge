@@ -314,11 +314,11 @@ export async function waitForScreenText(
 const waitForScreenTextArgsSchema = objectSchema({
   description: "Poll screen until text or regex matches, or timeout elapses.",
   properties: {
-    pattern: stringSchema({ description: "Substring or regex to find (^ and $ match at row boundaries; max 200 characters; backreferences and nested quantifiers may be rejected)", minLength: 1, maxLength: 200 }),
-    isRegex: optionalSchema(booleanSchema({ description: "Interpret pattern as regular expression", default: false }), false),
+    pattern: stringSchema({ description: "Substring or regex to find (max 200 chars; ^ and $ match at row boundaries)", minLength: 1, maxLength: 200 }),
+    isRegex: optionalSchema(booleanSchema({ description: "Pattern is a regex", default: false }), false),
     caseInsensitive: optionalSchema(booleanSchema({ description: "Case-insensitive search", default: true }), true),
-    timeoutMs: optionalSchema(numberSchema({ description: "Overall timeout in milliseconds (1-120000)", integer: true, minimum: 1, maximum: 120000, default: 3000 }), 3000),
-    intervalMs: optionalSchema(numberSchema({ description: "Poll interval in milliseconds (minimum 20; values above 5000 are clamped to 5000)", integer: true, minimum: 20, default: 100 }), 100),
+    timeoutMs: optionalSchema(numberSchema({ description: "Timeout ms (wait_for_text 1-120000)", integer: true, minimum: 1, maximum: 120000, default: 3000 }), 3000),
+    intervalMs: optionalSchema(numberSchema({ description: "Poll interval ms (min 20, capped at 5000)", integer: true, minimum: 20, default: 100 }), 100),
   },
   required: ["pattern"],
   additionalProperties: false,

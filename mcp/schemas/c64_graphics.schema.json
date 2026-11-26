@@ -28,7 +28,7 @@
         "boolean",
         "null"
       ],
-      "description": "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected, so lower count).",
+      "description": "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected).",
       "default": false
     },
     "format": {
@@ -60,7 +60,7 @@
         "string",
         "null"
       ],
-      "description": "Natural language prompt describing the desired PETSCII art.",
+      "description": "Natural language prompt for the PETSCII art.",
       "minLength": 1
     },
     "text": {
@@ -68,7 +68,7 @@
         "string",
         "null"
       ],
-      "description": "Exact text to render in PETSCII (overrides prompt derivation). Limits depend on op.",
+      "description": "Exact PETSCII text (overrides prompt). Limits depend on op.",
       "minLength": 1
     },
     "maxWidth": {
@@ -216,7 +216,7 @@
       "minLength": 1
     },
     "bitmapAddress": {
-      "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+      "description": "C64 address (integer or hex string like $2000).",
       "type": [
         "integer",
         "string",
@@ -225,7 +225,7 @@
       "default": 8192
     },
     "screenAddress": {
-      "description": "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+      "description": "C64 address (integer or hex string like $2000).",
       "type": [
         "integer",
         "string",
@@ -235,13 +235,13 @@
     },
     "preserveAspect": {
       "type": "boolean",
-      "description": "Preserve the source image aspect ratio and pad with the background colour.",
+      "description": "Keep the image aspect ratio, padding with the background colour.",
       "default": true
     }
   },
   "required": [
     "op"
   ],
-  "description": "Graphics operations available via the c64_graphics tool.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap data, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers. Required inputs: sprite. Optional inputs: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image file to VIC-II bitmap memory, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
+  "description": "Graphics operations.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour (writes memory and VIC-II registers). Required inputs: sprite. Optional inputs: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image to VIC-II bitmap, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
   "additionalProperties": false
 }

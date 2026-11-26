@@ -123,7 +123,7 @@ function parseAddressValue(value: string): number | null {
 
 const addressSchema: Schema<number> = {
   jsonSchema: {
-    description: "Absolute C64 memory address, provided as an integer or hex string such as $2000.",
+    description: "C64 address (integer or hex string like $2000).",
     type: ["integer", "string"],
   },
   parse(value: unknown, path?: string): number {
@@ -284,11 +284,11 @@ const petsciiImageArgsSchema = objectSchema<PetsciiImageArgs>({
   description: "Generate PETSCII art from text, prompts, or explicit bitmap data.",
   properties: {
     prompt: optionalSchema(stringSchema({
-      description: "Natural language prompt describing the desired PETSCII art.",
+      description: "Natural language prompt for the PETSCII art.",
       minLength: 1,
     })),
     text: optionalSchema(stringSchema({
-      description: "Exact text to render in PETSCII (overrides prompt derivation).",
+      description: "Exact PETSCII text (overrides prompt).",
       minLength: 1,
     })),
     maxWidth: optionalSchema(numberSchema({
@@ -395,7 +395,7 @@ const generateBitmapArgsSchema = objectSchema<GenerateBitmapArgs>({
       maximum: 15,
     }), 0),
     preserveAspect: booleanSchema({
-      description: "Preserve the source image aspect ratio and pad with the background colour.",
+      description: "Keep the image aspect ratio, padding with the background colour.",
       default: true,
     }),
   },
