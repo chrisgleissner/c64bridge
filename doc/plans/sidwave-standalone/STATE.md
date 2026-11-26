@@ -54,6 +54,7 @@ No quota worries. No codex. All implementation by Sonnet subagents (model sonnet
 
 - 2026-11-26: user asked to coordinate machine use with the modern-mcp session (peer `c64bridge-64`). It proposed: it uses the U64, this session the C64U. Brief section 2 forbids this session to contact the C64U, so the reply was: no C64U unless the user confirms; time-share the U64, each session asks the other for an all-clear before a session. This session's VICE: monitor ports 6520-6529, Xvfb displays :120-:129 (set VICE_XVFB_DISPLAY=:121 for `test:vice:device`). Attach only to own VICE instances.
 - 15:44 peer asked for a 20-minute quiet window (load < 4) for its gate run; agreed: no local VICE/test/build jobs from this session until the peer says the run ended.
+- 2026-11-26 ~17:50 peer c64bridge-64 asked for a 25-minute quiet window (load < 4) for its #194 gate; agreed: after the running split proof ends, no new local test/build jobs until the peer reports its gate run done.
 - Agreed with peer: U64 time-shared, nobody uses the C64U. Peer holds the U64 until it sends an explicit release; afterwards each side asks for an all-clear before U64 use. Peer VICE: ports 6510-6519, displays :110-:119.
 
 ## Backlog (user additions)
