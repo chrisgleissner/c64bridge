@@ -50,11 +50,11 @@ function createWaitSchema(description: string) {
     description,
     properties: {
       waitForReady: optionalSchema(booleanSchema({
-        description: "Wait for the BASIC READY. prompt before returning; a timeout gives ready=false, not an error.",
+        description: "Wait for the BASIC READY. prompt; a timeout gives ready=false, not an error.",
         default: false,
       }), false),
       readyTimeoutMs: optionalSchema(numberSchema({
-        description: "Maximum time to wait for READY. when waitForReady is true (1-120000 ms).",
+        description: "Maximum READY. wait (1-120000 ms).",
         integer: true,
         minimum: 1,
         maximum: MAX_WAIT_TIMEOUT_MS,

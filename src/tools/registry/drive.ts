@@ -82,7 +82,7 @@ export const driveModuleGroup = defineToolModule({
       description: "Grouped entry point for drive power, mode, reset, and ROM operations.",
       summary: "Power cycle drive slots, reset IEC state, switch emulation modes, or load custom ROMs.",
       inputSchema: discriminatedUnionSchema({
-        description: "Drive operations available via the c64_drive tool.",
+        description: "Drive operations.",
         variants: driveOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

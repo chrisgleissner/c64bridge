@@ -56,20 +56,20 @@ const flashCategoryArgsSchema = objectSchema<{ category?: string }>({
 });
 
 const categorySchema = stringSchema({
-  description: "Configuration category reported by the Ultimate firmware (e.g. 'Audio').",
+  description: "Configuration category (e.g. 'Audio').",
   minLength: 1,
 });
 
 const itemSchema = optionalSchema(
   stringSchema({
-    description: "Specific configuration item inside the selected category (e.g. 'Volume').",
+    description: "Configuration item (e.g. 'Volume').",
     minLength: 1,
   }),
 );
 
 const primitiveValueSchema: Schema<PrimitiveValue> = {
   jsonSchema: {
-    description: "Primitive configuration value (string, number, or boolean).",
+    description: "Configuration value (string, number or boolean).",
     type: ["string", "number", "boolean"],
   },
   parse(value: unknown, path?: string): PrimitiveValue {

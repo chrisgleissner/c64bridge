@@ -45,7 +45,7 @@ const captureFrameArgsSchema = objectSchema({
       default: 1,
     }), 1),
     includePixels: optionalSchema(booleanSchema({
-      description: "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected, so lower count).",
+      description: "Include raw pixel bytes (about 100 KB per frame; responses above 2 MiB are rejected).",
       default: false,
     }), false),
     format: optionalSchema(stringSchema({
@@ -283,7 +283,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_petscii_art",
       ensureDescriptor(graphicsDescriptorIndex, "render_petscii_art").inputSchema,
-      { description: "Create PETSCII art from a prompt, text or bitmap data, optionally displaying it." },
+      { description: "Create PETSCII art from a prompt, text or bitmap, optionally displaying it." },
     ),
     handler: groupedGraphicsHandlers.render_petscii_art,
   },
@@ -301,7 +301,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_sprite",
       ensureDescriptor(graphicsDescriptorIndex, "render_sprite").inputSchema,
-      { description: "Display 63-byte sprite data at a position and colour by writing memory and VIC-II registers." },
+      { description: "Display 63-byte sprite data at a position and colour (writes memory and VIC-II registers)." },
     ),
     handler: groupedGraphicsHandlers.render_sprite,
   },
@@ -310,7 +310,7 @@ const graphicsOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "render_bitmap",
       ensureDescriptor(graphicsDescriptorIndex, "render_bitmap").inputSchema,
-      { description: "Convert an image file to VIC-II bitmap memory, write it to RAM and display it." },
+      { description: "Convert an image to VIC-II bitmap, write it to RAM and display it." },
     ),
     handler: groupedGraphicsHandlers.render_bitmap,
   },
@@ -363,7 +363,7 @@ export const graphicsModuleGroup = defineToolModule({
       description: "Grouped entry point for frame capture and graphics rendering workflows.",
       summary: "Captures frames, renders PETSCII text or art, previews sprites, and displays bitmap images from one tool.",
       inputSchema: discriminatedUnionSchema({
-        description: "Graphics operations available via the c64_graphics tool.",
+        description: "Graphics operations.",
         variants: graphicsOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

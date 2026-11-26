@@ -174,12 +174,12 @@
         "boolean",
         "null"
       ],
-      "description": "When true, record audio after silencing to confirm the SID output is quiet.",
+      "description": "Record audio after silencing to confirm the output is quiet.",
       "default": false
     },
     "path": {
       "type": "string",
-      "description": "Absolute or Ultimate filesystem path to the SID, PRG, or audio file.",
+      "description": "SID, PRG or audio file path (absolute or Ultimate).",
       "minLength": 1
     },
     "songnr": {
@@ -321,7 +321,7 @@
         "boolean",
         "null"
       ],
-      "description": "Skip playback and return only compilation metadata (use outputPath to export).",
+      "description": "Skip playback; return only compilation metadata.",
       "default": false
     },
     "outputPath": {
@@ -329,7 +329,7 @@
         "string",
         "null"
       ],
-      "description": "Host file for the compiled PRG or SID, inside the allowed directories. Works with dryRun.",
+      "description": "Host file for the compiled PRG or SID (allowed directories only). Works with dryRun.",
       "minLength": 1
     },
     "platforms": {
@@ -467,6 +467,6 @@
   "required": [
     "op"
   ],
-  "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG. Replaces the program in memory. Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+  "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
   "additionalProperties": false
 }

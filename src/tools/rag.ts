@@ -20,13 +20,13 @@ const ragRetrieveArgsSchema = objectSchema<RagRetrieveArgs>({
   description: "Retrieve domain-specific references from the local C64 knowledge base using embeddings.",
   properties: {
     q: stringSchema({
-      description: "Natural-language query describing the desired BASIC or assembly guidance.",
+      description: "Natural-language query.",
       minLength: 3,
       maxLength: 500,
     }),
     k: optionalSchema(
       numberSchema({
-        description: "Maximum number of references to return (1-12).",
+        description: "Maximum references (1-12).",
         integer: true,
         minimum: 1,
         maximum: 12,

@@ -27,7 +27,7 @@
         "boolean",
         "null"
       ],
-      "description": "Wait for the BASIC READY. prompt before returning; a timeout gives ready=false, not an error.",
+      "description": "Wait for the BASIC READY. prompt; a timeout gives ready=false, not an error.",
       "default": false
     },
     "readyTimeoutMs": {
@@ -35,7 +35,7 @@
         "integer",
         "null"
       ],
-      "description": "Maximum time to wait for READY. when waitForReady is true (1-120000 ms).",
+      "description": "Maximum READY. wait (1-120000 ms).",
       "minimum": 1,
       "maximum": 120000,
       "default": 15000
@@ -106,7 +106,7 @@
         "boolean",
         "null"
       ],
-      "description": "Include the tail of the event timeline.",
+      "description": "Include the event timeline tail.",
       "default": true
     },
     "maxEntries": {
@@ -114,7 +114,7 @@
         "integer",
         "null"
       ],
-      "description": "Maximum number of span and timeline entries to return.",
+      "description": "Maximum span and timeline entries.",
       "minimum": 1,
       "maximum": 200,
       "default": 25
@@ -123,6 +123,6 @@
   "required": [
     "op"
   ],
-  "description": "System operations available via the c64_system tool.\n\nOperations:\n- pause [write]: Pause the machine until resumed.\n- resume [write]: Resume CPU execution after a pause.\n- reset [write]: Issue a soft reset without cutting power. Optional inputs: waitForReady, readyTimeoutMs.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Optional inputs: waitForReady, readyTimeoutMs.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 software cannot restart it: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled.\n- power_cycle [destructive]: Return the backend to a fresh state. C64U/U64 Tool Menu verification needs machine:menu_screen (U64 3.15+ or supporting C64U firmware); U2-family reboots through REST. Optional inputs: waitForReady, readyTimeoutMs.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (needs firmware support; U64/U2 3.15+).\n- start_task [write]: Start a named interval or one-shot task. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a background task. Required inputs: name.\n- stop_all_tasks: Stop all running tasks and persist state.\n- delete_task [write]: Delete a finished task and its artifacts; stop running tasks first. Required inputs: name.\n- list_tasks: List background tasks with status.\n- task_result: Status and result of a task. Required inputs: name. Optional inputs: waitMs.\n- performance_report: Summarize diagnostics spans and tool latencies of the current or latest session. Optional inputs: scope, includeTimeline, maxEntries.",
+  "description": "System operations.\n\nOperations:\n- pause [write]: Pause the machine until resumed.\n- resume [write]: Resume CPU execution after a pause.\n- reset [write]: Issue a soft reset without cutting power. Optional inputs: waitForReady, readyTimeoutMs.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Optional inputs: waitForReady, readyTimeoutMs.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family cannot power off. On C64U/U64 power must be restored at the outlet; it starts by itself only if automatic startup on power restoration is enabled.\n- power_cycle [destructive]: Return the backend to a fresh state. C64U/U64 Tool Menu verification needs machine:menu_screen (U64 3.15+ or supporting C64U firmware); U2-family reboots through REST. Optional inputs: waitForReady, readyTimeoutMs.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (needs firmware support; U64/U2 3.15+).\n- start_task [write]: Start a named interval or one-shot task. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a background task. Required inputs: name.\n- stop_all_tasks: Stop all running tasks and persist state.\n- delete_task [write]: Delete a finished task and its artifacts; stop running tasks first. Required inputs: name.\n- list_tasks: List background tasks with status.\n- task_result: Status and result of a task. Required inputs: name. Optional inputs: waitMs.\n- performance_report: Summarize diagnostics spans and tool latencies of the current or latest session. Optional inputs: scope, includeTimeline, maxEntries.",
   "additionalProperties": false
 }

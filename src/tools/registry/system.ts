@@ -61,7 +61,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "poweroff",
       ensureDescriptor(machineDescriptorIndex, "poweroff").inputSchema,
-      { description: "Shut down C64U/U64 or quit VICE. U2-family hardware cannot power off. On C64U/U64 software cannot restart it: power must be restored at the outlet, and it starts by itself only if automatic startup on power restoration is enabled." },
+      { description: "Shut down C64U/U64 or quit VICE. U2-family cannot power off. On C64U/U64 power must be restored at the outlet; it starts by itself only if automatic startup on power restoration is enabled." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(machineControlModule, "poweroff", rawArgs, ctx),
   },
@@ -173,7 +173,7 @@ export const systemModuleGroup = defineToolModule({
       description: "Grouped entry point for power, reset, menu, and background task control.",
       summary: "Manages machine state (pause, reset, power) and schedules recurring background tasks.",
       inputSchema: discriminatedUnionSchema({
-        description: "System operations available via the c64_system tool.",
+        description: "System operations.",
         variants: systemOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

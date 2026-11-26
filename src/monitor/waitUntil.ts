@@ -36,7 +36,7 @@ export const MAX_MAX_ITERATIONS = 100_000;
 const TOP_LEVEL_KEYS = new Set(["op", "condition", "pollIntervalMs", "timeoutMs", "maxIterations", "includeIo"]);
 
 export const WAIT_UNTIL_DESCRIPTION =
-  "Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with an error result (communication_failure) carrying the data so far. Addresses and backend are fixed at the start.";
+  "Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with a communication_failure error carrying the data so far. Addresses and backend are fixed at the start.";
 
 const conditionSchema: JsonSchema = {
   type: "object",

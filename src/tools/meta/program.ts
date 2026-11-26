@@ -295,7 +295,7 @@ const programShuffleArgsSchema = objectSchema({
     captureScreen: optionalSchema(booleanSchema({ description: "Capture screen after each run", default: true }), true),
     maxPrograms: optionalSchema(numberSchema({ description: "Maximum number of programs to run", integer: true, minimum: 1, default: 10 }), 10),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for run logs and captures", minLength: 1 })),
-    resetDelayMs: optionalSchema(numberSchema({ description: "Delay after reset operations to allow the platform to settle.", integer: true, minimum: 0, maximum: 1000, default: 100 }), 100),
+    resetDelayMs: optionalSchema(numberSchema({ description: "Delay after reset operations.", integer: true, minimum: 0, maximum: 1000, default: 100 }), 100),
   },
   required: [],
   additionalProperties: false,
@@ -326,7 +326,7 @@ const batchRunWithAssertionsArgsSchema = objectSchema({
     continueOnError: optionalSchema(booleanSchema({ description: "Continue running programs after assertion failure", default: false }), false),
     durationMs: optionalSchema(numberSchema({ description: "Duration to run each program before assertions", integer: true, minimum: 1, maximum: 600000, default: 2000 }), 2000),
     outputPath: optionalSchema(stringSchema({ description: "Output directory for test results", minLength: 1 })),
-    resetDelayMs: optionalSchema(numberSchema({ description: "Delay after reset operations to allow the platform to settle.", integer: true, minimum: 0, maximum: 1000, default: 100 }), 100),
+    resetDelayMs: optionalSchema(numberSchema({ description: "Delay after reset operations.", integer: true, minimum: 0, maximum: 1000, default: 100 }), 100),
   },
   required: ["programs"],
   additionalProperties: false,
@@ -349,7 +349,7 @@ const crossPlatformGreetingArgsSchema = objectSchema({
       default: true,
     }), true),
     captureScreenshot: optionalSchema(booleanSchema({
-      description: "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips it by default; requesting it on U2 fails before execution.",
+      description: "Capture a framebuffer screenshot on C64U/U64 or VICE. U2 skips it; requesting it there fails before execution.",
       default: true,
     }), true),
     outputPath: optionalSchema(stringSchema({
@@ -361,14 +361,14 @@ const crossPlatformGreetingArgsSchema = objectSchema({
       default: true,
     }), true),
     timeoutMs: optionalSchema(numberSchema({
-      description: "Maximum time to wait for each greeting to appear on screen.",
+      description: "Maximum wait for each greeting.",
       integer: true,
       minimum: 100,
       maximum: 5000,
       default: 1500,
     }), 1500),
     pollIntervalMs: optionalSchema(numberSchema({
-      description: "Delay between screen polls while verifying the greeting.",
+      description: "Delay between screen polls.",
       integer: true,
       minimum: 50,
       maximum: 1000,

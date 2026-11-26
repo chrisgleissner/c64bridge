@@ -75,15 +75,15 @@ const diskMountArgsSchema = objectSchema<DiskMountArgs>({
       minLength: 1,
     }),
     image: stringSchema({
-      description: "Absolute or Ultimate filesystem path to the disk image.",
+      description: "Disk image path (absolute or Ultimate).",
       minLength: 1,
     }),
     type: optionalSchema(stringSchema({
-      description: "Override detected image type when firmware guesses incorrectly.",
+      description: "Override the detected image type.",
       enum: ["d64", "g64", "d71", "g71", "d81"],
     })),
     attachmentMode: optionalSchema(stringSchema({
-      description: "Attachment mode controlling how the firmware treats the mounted image.",
+      description: "How the firmware attaches the mounted image.",
       enum: ["readwrite", "readonly", "unlinked"],
     })),
     location: optionalSchema(stringSchema({
@@ -95,26 +95,26 @@ const diskMountArgsSchema = objectSchema<DiskMountArgs>({
       enum: ["1541", "1571", "1581"],
     })),
     verify: booleanSchema({
-      description: "When true, power on/reset/verify using the reliability workflow.",
+      description: "Power on, reset and verify via the reliability workflow.",
       default: false,
     }),
     powerOnIfNeeded: booleanSchema({
-      description: "Power on the drive automatically before mounting when verify=true.",
+      description: "Power on the drive before mounting (verify=true).",
       default: true,
     }),
     resetAfterMount: booleanSchema({
-      description: "Issue a drive reset after mounting when verify=true.",
+      description: "Reset the drive after mounting (verify=true).",
       default: true,
     }),
     maxRetries: numberSchema({
-      description: "Maximum number of mount retries when verify=true.",
+      description: "Mount retries (verify=true).",
       integer: true,
       minimum: 0,
       maximum: 5,
       default: 2,
     }),
     retryDelayMs: numberSchema({
-      description: "Delay between mount retry attempts when verify=true.",
+      description: "Delay between mount retries (verify=true).",
       integer: true,
       minimum: 0,
       maximum: 5000,
@@ -126,7 +126,7 @@ const diskMountArgsSchema = objectSchema<DiskMountArgs>({
 });
 
 const createImageArgsSchema = objectSchema<CreateImageArgs>({
-  description: "Create a blank disk image (D64/D71/D81/DNP). An existing file at the path is not overwritten; the call fails.",
+  description: "Create a blank disk image. Fails if the file already exists.",
   properties: {
     format: stringSchema({
       description: "Disk image format to create.",
@@ -137,7 +137,7 @@ const createImageArgsSchema = objectSchema<CreateImageArgs>({
       minLength: 1,
     }),
     diskname: optionalSchema(stringSchema({
-      description: "Optional disk label (1-16 characters, converted to PETSCII).",
+      description: "Disk label (1-16 characters).",
       minLength: 1,
       maxLength: 16,
     })),
@@ -228,7 +228,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "mount",
       diskMountArgsSchema.jsonSchema as JsonSchema,
-      { description: "Mount a disk image with optional verification/retries." },
+      { description: "Mount a disk image, optionally verifying." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -298,7 +298,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "create_image",
       createImageArgsSchema.jsonSchema as JsonSchema,
-      { description: "Create a blank disk image of the specified format. An existing file at the path is not overwritten; the call fails and a different path (or deleting the file first) is needed." },
+      { description: "Create a blank disk image. Fails if the file already exists." },
     ),
     handler: async (rawArgs, ctx) => {
       const { [OPERATION_DISCRIMINATOR]: _ignored, ...rest } = rawArgs;
@@ -349,7 +349,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "find_and_run",
       ensureDescriptor(metaDescriptorIndex, "find_and_run_program_by_name").inputSchema,
-      { description: "Search for a PRG/CRT by name substring and run the first match." },
+      { description: "Find a PRG/CRT by name substring and run the first match." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "find_and_run_program_by_name", rawArgs, ctx),
   },
@@ -358,7 +358,7 @@ const diskOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "find_paths",
       ensureDescriptor(metaDescriptorIndex, "find_paths_by_name").inputSchema,
-      { description: "Search Ultimate storage for paths containing a name substring, without running anything." },
+      { description: "Find Ultimate storage paths containing a name substring; runs nothing." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "find_paths_by_name", rawArgs, ctx),
   },
@@ -383,7 +383,7 @@ export const diskModuleGroup = defineToolModule({
       description: "Grouped entry point for disk mounts, listings, image creation, and program discovery.",
       summary: "Mount or unmount images, create new disks, list drives, and find programs from one tool.",
       inputSchema: discriminatedUnionSchema({
-        description: "Disk operations available via the c64_disk tool.",
+        description: "Disk operations.",
         variants: diskOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

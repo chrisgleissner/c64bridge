@@ -60,7 +60,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "upload_run_asm",
       ensureDescriptor(programDescriptorIndex, "upload_run_asm").inputSchema,
-      { description: "Assemble 6502/6510 source (ACME, ca65 and 64tass directive spellings; .include/.incbin read host files), upload and run it." },
+      { description: "Assemble 6502/6510 source (ACME, ca65, 64tass syntax; .include/.incbin read host files), upload and run it." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(programRunnersModule, "upload_run_asm", rawArgs, ctx),
   },
@@ -87,7 +87,7 @@ const programOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "cross_platform_greeting",
       ensureDescriptor(metaDescriptorIndex, "cross_platform_greeting").inputSchema,
-      { description: "Show a platform-specific greeting on configured backends, capture screenshots and verify." },
+      { description: "Greet on the configured backends with screenshots and verification." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "cross_platform_greeting", rawArgs, ctx),
   },
@@ -113,7 +113,7 @@ export const programModule = defineToolModule({
       description: "Grouped entry point for program upload, execution, and batch workflows.",
       summary: "Runs PRG/CRT files, uploads BASIC or ASM, and coordinates batch test flows.",
       inputSchema: discriminatedUnionSchema({
-        description: "Program operations available via the c64_program tool.",
+        description: "Program operations.",
         variants: programOperations.map((operation) => operation.schema),
       }),
       operationEffects: {

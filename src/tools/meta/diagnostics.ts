@@ -10,8 +10,8 @@ const performanceReportSchema = objectSchema({
   description: "Summarize timing and diagnostic data from the current or latest MCP session.",
   properties: {
     scope: optionalSchema(stringSchema({ description: "Which diagnostics session to summarize.", enum: ["current", "latest"] }), "current"),
-    includeTimeline: optionalSchema(booleanSchema({ description: "Include the tail of the event timeline.", default: true }), true),
-    maxEntries: optionalSchema(numberSchema({ description: "Maximum number of span and timeline entries to return.", integer: true, minimum: 1, maximum: 200, default: 25 }), 25),
+    includeTimeline: optionalSchema(booleanSchema({ description: "Include the event timeline tail.", default: true }), true),
+    maxEntries: optionalSchema(numberSchema({ description: "Maximum span and timeline entries.", integer: true, minimum: 1, maximum: 200, default: 25 }), 25),
   },
   required: [],
   additionalProperties: false,

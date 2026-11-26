@@ -310,11 +310,11 @@ const uploadBasicArgsSchema = objectSchema({
       minLength: 1,
     }),
     verify: booleanSchema({
-      description: "Poll the screen until the program ends, shows a BASIC error (reported with its line) or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) ends. Without verify nothing is observed.",
+      description: "Poll the screen until the program ends, shows a BASIC error (with its line) or the poll window (C64BRIDGE_POLL_MAX_MS, default 2 s) ends. Without verify nothing is observed.",
       default: false,
     }),
     autoFix: optionalSchema(booleanSchema({
-      description: "With verify:true, on a BASIC error append a missing closing quote or parenthesis to the failing line and run again (default true; rewritten lines are reported). Set false for programs with side effects.",
+      description: "With verify:true, a BASIC error caused by a missing closing quote or parenthesis is fixed in the failing line and the program rerun (rewritten lines reported). Set false for programs with side effects.",
       default: true,
     })),
   },

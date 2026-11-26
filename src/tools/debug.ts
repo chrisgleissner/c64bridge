@@ -161,7 +161,7 @@ const createCheckpointArgsSchema = objectSchema({
     address: stringSchema({ description: `Start address: ${ADDRESS_FORMS}.`, minLength: 1 }),
     endAddress: optionalSchema(stringSchema({ description: "End address (inclusive) of an address range, in the same forms as address.", minLength: 1 })),
     stopOnHit: optionalSchema(booleanSchema({ description: "Pause execution when hit (default true).", default: true })),
-    enabled: optionalSchema(booleanSchema({ description: "Whether the checkpoint is enabled (default true).", default: true })),
+    enabled: optionalSchema(booleanSchema({ description: "Whether the checkpoint is enabled.", default: true })),
     temporary: optionalSchema(booleanSchema({ description: "Automatically remove after first hit.", default: false })),
     label: optionalSchema(stringSchema({ description: "Optional human-readable label stored in-process.", maxLength: 64 })),
     operations: optionalSchema(objectSchema<CheckpointOperationsRecord>({
@@ -274,7 +274,7 @@ const getMonitorStateArgsSchema = objectSchema({
 });
 
 const waitForStateArgsSchema = objectSchema({
-  description: "Wait until the CPU is stopped (checkpoint hit or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled.",
+  description: "Wait until the CPU is stopped (checkpoint or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled.",
   properties: {
     op: literalSchema("wait_for_state"),
     expectedPC: optionalSchema(stringSchema({ description: "PC address to wait for, in the same forms as address.", minLength: 1 })),
