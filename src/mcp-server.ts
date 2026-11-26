@@ -722,6 +722,10 @@ async function main() {
     if (!httpToken) {
       console.error("c64bridge: C64BRIDGE_HTTP_TOKEN is not set; any local process that can reach 127.0.0.1 on this port can call every tool.");
     }
+    if (typeof (globalThis as { Bun?: unknown }).Bun !== "undefined") {
+      // Bun's node:http server does not emit 'close' when the client disconnects, so the signal above never aborts.
+      console.error("c64bridge: the HTTP transport is running under Bun, which does not report client disconnects; a pre-2026 client that disconnects does not cancel its running call. Run the server under Node (the supported runtime) to get disconnect cancellation.");
+    }
     console.error(`c64bridge MCP server running on HTTP at http://127.0.0.1:${port}/mcp`);
   } else {
     // The first message decides the era: initialize selects the pre-2026 protocol, a
