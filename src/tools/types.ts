@@ -1,3 +1,4 @@
+import type { C64Facade } from "../device.js";
 import type { C64Client } from "../c64Client.js";
 import type { RagRetriever } from "../rag/types.js";
 import {
@@ -79,10 +80,12 @@ export interface ToolExecutionContext {
    */
   readonly reportProgress?: (completed: number, total?: number, message?: string) => void;
   /**
-   * Id of the detached task this call belongs to. A call carrying the id of a task that holds a
-   * resource lease passes the lease gate in toolRegistry.invoke; set only by the task engine.
+   * Id of the detached task this call belongs to. The resource gate skips that task's own lease.
+   * Set only by the task engine.
    */
   readonly taskLease?: string;
+  /** Facade captured with the lease for a pinned operation. */
+  readonly taskFacade?: C64Facade;
 }
 
 /** Error result for a call that the client cancelled. */

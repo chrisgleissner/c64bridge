@@ -2,6 +2,8 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { startServer, connect, resultText, TASKS_EXT, SKILLS_EXT, MODERN } from "./helpers/modernClient.mjs";
 
+import { nativeTaskCandidate, registerTaskHandlers } from "../src/mcp/tasksAdapter.js";
+
 const TRANSPORTS = ["stdio", "http"];
 const INLINE_ENV = { C64BRIDGE_TASK_INLINE_MS: "0" };
 const CLIENT_CAPS_KEY = "io.modelcontextprotocol/clientCapabilities";
@@ -184,3 +186,19 @@ for (const transport of TRANSPORTS) {
     });
   }
 }
+
+test("a legacy connection cannot use Tasks even with a modern request context", async () => {
+  const context = { mcpReq: { envelope: {
+    [PROTOCOL_VERSION_KEY]: MODERN,
+    [CLIENT_CAPS_KEY]: { extensions: { [TASKS_EXT]: {} } },
+  } } };
+  const args = { op: "wait_until" };
+  assert.ok(nativeTaskCandidate(context, "c64_memory", args, "modern"));
+  assert.equal(nativeTaskCandidate(context, "c64_memory", args, "legacy"), undefined);
+
+  const handlers = new Map();
+  registerTaskHandlers({ setRequestHandler: (method, _schema, handler) => handlers.set(method, handler) }, "legacy");
+  for (const method of ["tasks/get", "tasks/update", "tasks/cancel"]) {
+    await assert.rejects(handlers.get(method)({ taskId: "unused" }, context), { code: TASK_NOT_DECLARED });
+  }
+});

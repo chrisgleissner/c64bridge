@@ -88,16 +88,17 @@ export const toolRegistry = {
 
     // Single enforcement point for C64BRIDGE_ACCESS. Batch commands and background task starts
     // also arrive here (the batch tool and c64_system start_task declare their effect per call).
+    const op = getOperation(args);
     const effect = entry.module.effectOf ? entry.module.effectOf(name, args) : "destructive";
     if (effect) {
-      assertAccess(name, getOperation(args), effect);
+      assertAccess(name, op, effect);
     }
 
-    // Resource gate (process-local task leases): a foreground call that would disturb a running
-    // exclusive task is rejected; a task's own calls carry ctx.taskLease. The backend lookup only
-    // happens while a lease is held.
-    if (!noLeasesHeld()) {
-      assertForegroundAllowed({ tool: name, op: getOperation(args), effect, backendId: await activeBackendType(enrichedCtx) }, enrichedCtx.taskLease);
+    // Backend selection checks leases at the point of the switch, after any playback cleanup.
+    if (name !== "c64_select_backend" && !noLeasesHeld()) {
+      const taskOperation = op === "start_task" ? (args as Record<string, unknown>).operation : undefined;
+      const backendId = enrichedCtx.taskFacade?.type ?? await activeBackendType(enrichedCtx);
+      assertForegroundAllowed({ tool: name, op, effect, backendId, taskOperation }, enrichedCtx.taskLease);
     }
 
     return entry.module.invoke(name, args, enrichedCtx);

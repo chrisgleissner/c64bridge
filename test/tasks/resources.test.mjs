@@ -1,6 +1,8 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { toolRegistry } from "../../src/tools/registry/index.js";
+import { listAllowlistKeys, lookupAllowlist } from "../../src/tasks/allowlist.js";
+import { C64Client } from "../../src/c64Client.js";
 import { ToolExecutionError } from "../../src/tools/errors.js";
 import {
   classifyOperation,
@@ -10,7 +12,7 @@ import {
   listLeases,
   __resetLeasesForTests,
 } from "../../src/tasks/resources.js";
-import { submitCall, cancelTask, __resetForTests } from "../../src/tasks/engine.js";
+import { submitCall, cancelTask, waitForTask, __resetForTests } from "../../src/tasks/engine.js";
 import { deferred, baseCtx } from "./helpers.mjs";
 
 // Each test starts and ends with no leases and no tasks, so a failing test cannot leak state.
@@ -62,7 +64,12 @@ const CLASSIFY_CASES = [
   { name: "program start", tool: "c64_program", op: "run_prg", effect: "write", backend: "c64u", expected: "program-start" },
   { name: "config write", tool: "c64_config", op: "set", effect: "write", backend: "c64u", expected: "configuration" },
   { name: "rag query", tool: "c64_rag", op: "query", effect: "read", backend: "c64u", expected: "host-only" },
-  { name: "start_task", tool: "c64_system", op: "start_task", effect: "write", backend: "c64u", expected: "host-only" },
+  { name: "interval write start", tool: "c64_system", op: "start_task", taskOperation: "write", effect: "write", backend: "c64u", expected: "memory-write" },
+  { name: "interval write_memory start", tool: "c64_system", op: "start_task", taskOperation: "write_memory", effect: "write", backend: "c64u", expected: "memory-write" },
+  { name: "interval menu_button start", tool: "c64_system", op: "start_task", taskOperation: "menu_button", effect: "write", backend: "c64u", expected: "input" },
+  { name: "interval read start on c64u", tool: "c64_system", op: "start_task", taskOperation: "read", effect: "read", backend: "c64u", expected: "passive-read" },
+  { name: "interval read_screen start on vice", tool: "c64_system", op: "start_task", taskOperation: "read_screen", effect: "read", backend: "vice", expected: "interrupting-read" },
+  { name: "allowlisted task start", tool: "c64_system", op: "start_task", taskOperation: "c64_memory.wait_until", effect: "read", backend: "vice", expected: "host-only" },
   { name: "list_tasks", tool: "c64_system", op: "list_tasks", effect: "read", backend: "c64u", expected: "host-only" },
   { name: "task_result", tool: "c64_system", op: "task_result", effect: "read", backend: "c64u", expected: "host-only" },
   { name: "unknown tool, read effect", tool: "x_unknown_tool", op: "anything", effect: "read", backend: "c64u", expected: "passive-read" },
@@ -72,7 +79,7 @@ const CLASSIFY_CASES = [
 
 for (const c of CLASSIFY_CASES) {
   test(`classifyOperation: ${c.name} is ${c.expected}`, isolated(() => {
-    assert.equal(classifyOperation(c.tool, c.op, c.effect, c.backend), c.expected);
+    assert.equal(classifyOperation(c.tool, c.op, c.effect, c.backend, c.taskOperation), c.expected);
   }));
 }
 
@@ -308,3 +315,110 @@ test("gate: a call carrying taskLease equal to the holder's task id passes the g
   }
   cancelTask(task.id);
 })));
+
+test("a VICE task is exempt from only its own lease", isolated(() => {
+  acquireLease(exclusiveLease("capture", "vice"));
+  acquireLease(observeLease("wait", { backendId: "vice", pinned: false }));
+  const read = { tool: "c64_memory", op: "wait_for_text", effect: "read", backendId: "vice" };
+  assert.throws(() => assertForegroundAllowed(read, "wait"), (error) => {
+    assert.equal(error.code, "resource_conflict");
+    assert.equal(error.details.heldBy, "capture");
+    return true;
+  });
+}));
+
+test("wait_until is the only allowlisted operation pinned to its backend", () => {
+  assert.deepEqual(listAllowlistKeys().filter((key) => lookupAllowlist(key).pinned), ["c64_memory.wait_until"]);
+});
+
+const select = (backend, ctx) => toolRegistry.invoke("c64_select_backend", { op: "select", backend }, ctx);
+
+function switchableContext(stopManagedSidwavePlayback) {
+  let active = "c64u";
+  return baseCtx({
+    client: {
+      getActiveBackendType: async () => active,
+      pinFacade: async () => ({ type: active }),
+      readMemoryRaw: async () => Uint8Array.of(0x41),
+      getAvailableBackends: () => ["c64u", "vice"],
+      switchBackend: (backend) => { active = backend; },
+      stopManagedSidwavePlayback,
+    },
+    setPlatform() {},
+  });
+}
+
+test("a switch rechecks leases after playback cleanup", isolated(async () => {
+  const cleaning = deferred();
+  const release = deferred();
+  const ctx = switchableContext(() => {
+    cleaning.resolve();
+    return release.promise;
+  });
+  const switching = select("vice", ctx);
+  await cleaning.promise;
+  const task = await startHoldingTask();
+  release.resolve();
+  await assert.rejects(switching, isResourceConflict);
+  assert.equal(await ctx.client.getActiveBackendType(), task.backendId);
+}));
+
+test("selecting the active backend succeeds with an unpinned lease", isolated(async () => {
+  const ctx = switchableContext(() => assert.fail("no-op select must keep playback"));
+  acquireLease(observeLease("unpinned", { pinned: false }));
+  const result = await select("c64u", ctx);
+  assert.equal(result.structuredContent.data.alreadyActive, true);
+}));
+
+test("c64_select_backend blocks an unpinned wait and allows a pinned wait_until", isolated(async () => {
+  const ctx = switchableContext();
+  const unpinned = await submitCall({ tool: "c64_memory", op: "wait_for_text", ctx, invoke: () => deferred().promise });
+  await assert.rejects(select("vice", ctx), isResourceConflict);
+  assert.equal(await ctx.client.getActiveBackendType(), "c64u");
+  cancelTask(unpinned.id);
+
+  const runWait = deferred();
+  const pinned = await submitCall({
+    tool: "c64_memory", op: "wait_until", ctx,
+    args: { condition: { type: "equals", address: "$0400", bytes: "41" }, timeoutMs: 500 },
+    invoke: async (tool, args, taskCtx) => {
+      await runWait.promise;
+      return toolRegistry.invoke(tool, args, taskCtx);
+    },
+  });
+  const result = await select("vice", ctx);
+  assert.equal(result.structuredContent?.data.activeBackend, "vice");
+  assert.equal(await ctx.client.getActiveBackendType(), "vice");
+  assert.equal(pinned.backendId, "c64u");
+  assert.equal(pinned.state, "working");
+  runWait.resolve();
+  const completed = await waitForTask(pinned.id, 500);
+  assert.equal(completed.state, "completed");
+  assert.equal(completed.result?.structuredContent?.data.backend, "c64u");
+  assert.equal(completed.result?.structuredContent?.data.met, true);
+}));
+
+test("a queued client switch checks leases at the actual backend change", isolated(async () => {
+  const releasing = deferred();
+  const release = deferred();
+  const c64u = Promise.resolve({ type: "c64u" });
+  const client = Object.assign(Object.create(C64Client.prototype), {
+    initPromise: Promise.resolve(),
+    activeType: "c64u",
+    facadePromise: c64u,
+    allFacades: new Map([["c64u", c64u], ["vice", Promise.resolve({ type: "vice" })]]),
+    sidwaveQueue: new WeakMap(),
+    sidwaveSessions: new Map([["session", {}]]),
+    stopManagedSidwavePlayback: async () => {},
+    releaseManagedSidwave: () => {
+      releasing.resolve();
+      return release.promise;
+    },
+  });
+  const switching = select("vice", baseCtx({ client, setPlatform() {} }));
+  await releasing.promise;
+  const task = await startHoldingTask();
+  release.resolve();
+  await assert.rejects(switching, isResourceConflict);
+  assert.equal(await client.getActiveBackendType(), task.backendId);
+}));

@@ -131,7 +131,7 @@ export async function executeWaitUntil(rawArgs: unknown, ctx: ToolExecutionConte
       return resultFor({ met: false, reason: "cancelled", target: {}, expected: "", observed: null, firstObservation: null, lastObservation: null, iterations: 0, elapsedMs: 0, backend: ctx.platform?.id ?? "unknown" }, []);
     }
     // Pin the facade once; every later read and the checkpoint cleanup use it.
-    const facade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
+    const facade = ctx.taskFacade ?? await ctx.client.pinFacade?.();
     const backend: string = facade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : ctx.platform?.id) ?? "unknown";
 
     const condition: Condition = parseCondition(args.condition, (raw, path) => parseAddressArg(raw, path));

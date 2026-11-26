@@ -2,15 +2,15 @@
  * MCP Tasks extension (`io.modelcontextprotocol/tasks`, spec 2026-07-28): thin mapping of the task engine
  * (`src/tasks/engine.ts`) onto `tools/call` task handles and `tasks/get`, `tasks/update`, `tasks/cancel`.
  *
- * A task handle is returned only to a request whose per-request envelope declares the extension and only for an
- * allowlisted `(tool, op)`. Every other request keeps the ordinary `tools/call` path. The decision never looks
- * at the client name. Task state is process-global (the engine), so it survives stateless HTTP requests.
+ * A task handle requires a modern connection, a request envelope declaring the extension, and an
+ * allowlisted `(tool, op)`. Task state is process-global (the engine), so it survives stateless HTTP requests.
  */
 import { z } from "zod";
 import { MissingRequiredClientCapabilityError, ProtocolError, ProtocolErrorCode, type Server } from "@modelcontextprotocol/server";
 import { allowlistKey, lookupAllowlist, type AllowlistEntry } from "../tasks/allowlist.js";
-import { cancelTask, getTask, runWithInlineWindow, type CallTask } from "../tasks/engine.js";
+import { cancelTask, getTask, runWithInlineWindow, WorkingTaskLimitError, type CallTask } from "../tasks/engine.js";
 import { assertAccess } from "../tools/access.js";
+import { toolRegistry } from "../tools/registry/index.js";
 import { ToolError, unknownErrorResult } from "../tools/errors.js";
 import type { ToolExecutionContext, ToolRunResult } from "../tools/types.js";
 import { toCallToolResult } from "./callToolResult.js";
@@ -23,6 +23,7 @@ const MODERN_PROTOCOL_VERSION = "2026-07-28";
 export const TASK_TTL_ENV = "C64BRIDGE_TASK_TTL_MS";
 
 type RequestContext = { mcpReq: { envelope?: unknown } };
+type ProtocolEra = "legacy" | "modern";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,8 +57,8 @@ export interface NativeCandidate {
 }
 
 /** The allowlist entry when this `tools/call` may become a task for this request; otherwise undefined. */
-export function nativeTaskCandidate(ctx: RequestContext, name: string, args: unknown): NativeCandidate | undefined {
-  if (!requestDeclaresExtension(ctx, TASKS_EXTENSION_ID)) return undefined;
+export function nativeTaskCandidate(ctx: RequestContext, name: string, args: unknown, era: ProtocolEra | undefined): NativeCandidate | undefined {
+  if (era !== "modern" || !requestDeclaresExtension(ctx, TASKS_EXTENSION_ID)) return undefined;
   if (!isRecord(args) || typeof args.op !== "string") return undefined;
   const entry = lookupAllowlist(allowlistKey(name, args.op));
   if (!entry) return undefined;
@@ -83,16 +84,22 @@ export async function runNativeCall(
   // The same check toolRegistry.invoke makes, first, so an access denial wins over a lease conflict as for a direct call.
   assertAccess(tool, candidate.op, candidate.entry.effect);
   const ttlMs = taskTtlMs();
-  const outcome = await runWithInlineWindow({
-    tool,
-    op: candidate.op,
-    args: candidate.rest,
-    ctx: toolCtx,
-    ...(requestSignal ? { requestSignal } : {}),
-    ...(ttlMs !== undefined ? { ttlMs } : {}),
-  });
-  if (outcome.kind === "result") return outcome;
-  return { kind: "task", handle: { resultType: "task", ...taskFields(outcome.task) } };
+  try {
+    const outcome = await runWithInlineWindow({
+      tool,
+      op: candidate.op,
+      args: candidate.rest,
+      ctx: toolCtx,
+      ...(requestSignal ? { requestSignal } : {}),
+      ...(ttlMs !== undefined ? { ttlMs } : {}),
+    });
+    if (outcome.kind === "result") return outcome;
+    return { kind: "task", handle: { resultType: "task", ...taskFields(outcome.task) } };
+  } catch (error) {
+    if (!(error instanceof WorkingTaskLimitError)) throw error;
+    const result = await toolRegistry.invoke(tool, { ...candidate.rest, op: candidate.op }, toolCtx);
+    return { kind: "result", result };
+  }
 }
 
 // ---- Task wire shapes ------------------------------------------------------------------------------------------
@@ -147,8 +154,8 @@ function detailedTask(task: CallTask): Record<string, unknown> {
 
 // ---- tasks/get, tasks/update, tasks/cancel ---------------------------------------------------------------------
 
-function requireTasksExtension(ctx: RequestContext): void {
-  if (!requestDeclaresExtension(ctx, TASKS_EXTENSION_ID)) {
+function requireTasksExtension(ctx: RequestContext, era: ProtocolEra | undefined): void {
+  if (era !== "modern" || !requestDeclaresExtension(ctx, TASKS_EXTENSION_ID)) {
     throw new MissingRequiredClientCapabilityError({ requiredCapabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } } });
   }
 }
@@ -162,19 +169,19 @@ function lookupTask(taskId: string): CallTask {
 const taskIdParams = z.looseObject({ taskId: z.string() });
 const updateParams = z.looseObject({ taskId: z.string(), inputResponses: z.record(z.string(), z.unknown()).optional() });
 
-export function registerTaskHandlers(server: Server): void {
+export function registerTaskHandlers(server: Server, era: ProtocolEra | undefined): void {
   server.setRequestHandler("tasks/get", { params: taskIdParams }, async (params, ctx) => {
-    requireTasksExtension(ctx);
+    requireTasksExtension(ctx, era);
     return detailedTask(lookupTask(params.taskId));
   });
   // No task ever asks for input, so there is nothing to apply; the call is acknowledged once the task is known.
   server.setRequestHandler("tasks/update", { params: updateParams }, async (params, ctx) => {
-    requireTasksExtension(ctx);
+    requireTasksExtension(ctx, era);
     lookupTask(params.taskId);
     return { resultType: "complete" };
   });
   server.setRequestHandler("tasks/cancel", { params: taskIdParams }, async (params, ctx) => {
-    requireTasksExtension(ctx);
+    requireTasksExtension(ctx, era);
     lookupTask(params.taskId);
     cancelTask(params.taskId);
     return { resultType: "complete" };

@@ -7,9 +7,11 @@ import { toolRegistry } from "../../src/tools/registry/index.js";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { stopAllBackgroundTasks } from "../../src/tools/meta/background.js";
 import { __resetForTests, setEngineClock, submitCall } from "../../src/tasks/engine.js";
-import { __resetLeasesForTests } from "../../src/tasks/resources.js";
+import { acquireLease, releaseLease, __resetLeasesForTests } from "../../src/tasks/resources.js";
+import { runNativeCall } from "../../src/mcp/tasksAdapter.js";
+import { lookupAllowlist } from "../../src/tasks/allowlist.js";
 import { taskOperationEffect } from "../../src/tools/access.js";
-import { baseCtx, createFakeClock, settle } from "./helpers.mjs";
+import { baseCtx, createFakeClock, deferred, settle } from "./helpers.mjs";
 
 function platformCtx(client) {
   return {
@@ -206,4 +208,143 @@ test("a working call task and interval tasks share the limit of 16", () => withS
     assert.equal(overCall.isError, true);
     assert.match(overCall.content[0].text, /Too many running background tasks/);
   });
+}));
+
+const intervalStart = (name, operation = "read", args = {}) => ({
+  op: "start_task", name, operation, intervalMs: 100, arguments: args,
+});
+const callStart = (name) => ({
+  op: "start_task", name, operation: "c64_memory.wait_for_text",
+  arguments: { pattern: "NEVER", timeoutMs: 120000 },
+});
+
+function exclusiveLease() {
+  return acquireLease({ taskId: "capture", backendId: "c64u", mode: "exclusive", tool: "c64_sound", op: "capture_samples", pinned: false });
+}
+
+test("an exclusive lease rejects conflicting interval starts", () => withState(async () => {
+  exclusiveLease();
+  const ctx = platformCtx(screenClient("READY."));
+  for (const operation of ["write", "write_memory", "menu_button"]) {
+    await assert.rejects(system(intervalStart("blocked", operation, { address: "$0400", bytes: "$41" }), ctx), { code: "resource_conflict" });
+  }
+  assert.equal(data(await system(intervalStart("passive"), ctx)).started, true);
+}));
+
+test("an interval skips and logs a blocked iteration and resumes after release", () => withState(async () => {
+  const fake = createFakeClock();
+  setEngineClock(fake.clock);
+  let writes = 0;
+  const ctx = platformCtx({ ...screenClient(""), writeMemory: async () => { writes += 1; return { success: true }; } });
+  const started = await system(intervalStart("skip", "write", { address: "$0400", bytes: "$41" }), ctx);
+  assert.equal(data(started).started, true);
+  const lease = exclusiveLease();
+  await fake.advance(100);
+  assert.equal(writes, 0);
+  const logPath = path.join(path.dirname(process.env.C64_TASK_STATE_FILE), data(started).task.folder, "log.txt");
+  for (let attempts = 0; fake.pending() === 0 && attempts < 100; attempts += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.match(await fs.readFile(logPath, "utf8"), /skipp.*capture/i);
+  assert.equal(data(await system({ op: "task_result", name: "skip" }, ctx)).status, "running");
+  releaseLease(lease);
+  await fake.advance(100);
+  assert.equal(writes, 1);
+}));
+
+async function seedForeignIntervals(names, status) {
+  const now = new Date().toISOString();
+  const tasks = names.map((name) => ({
+    name, id: `foreign_${name}`, ownerPid: process.ppid, ownerSession: "foreign",
+    status, intervalMs: 100, operation: "read", args: {}, iterations: 1,
+    startedAt: now, updatedAt: now, folder: `tasks/background/foreign_${name}`,
+  }));
+  await fs.writeFile(process.env.C64_TASK_STATE_FILE, JSON.stringify({ tasks }));
+}
+
+test("foreign intervals do not use this process's working-task slots", () => withState(async () => {
+  await seedForeignIntervals(Array.from({ length: 16 }, (_, i) => `foreign-${i}`), "running");
+  const ctx = platformCtx(screenClient("NOTHING"));
+  const interval = await system(intervalStart("local"), ctx);
+  assert.equal(data(interval)?.started, true, interval.content[0].text);
+  const call = await withEnv({ C64BRIDGE_TASK_INLINE_MS: "0" }, () => system(callStart("local-call"), ctx));
+  assert.equal(data(call)?.started, true, call.content[0].text);
+}));
+
+test("result, stop and delete resolve a local call ahead of a foreign interval", () => withState(async () => {
+  await seedForeignIntervals(["shared"], "completed");
+  const ctx = platformCtx(screenClient("NOTHING"));
+  const call = await withEnv({ C64BRIDGE_TASK_INLINE_MS: "0" }, () => system(callStart("shared"), ctx));
+  assert.equal(data(call)?.started, true);
+  assert.equal(data(await system({ op: "task_result", name: "shared" }, ctx)).id, data(call).task.id);
+  assert.equal(data(await system({ op: "stop_task", name: "shared" }, ctx)).status, "stopped");
+  assert.equal(data(await system({ op: "delete_task", name: "shared" }, ctx)).deleted, true);
+  assert.equal(data(await system({ op: "task_result", name: "shared" }, ctx)).id, "foreign_shared");
+}));
+
+test("concurrent interval and call starts cannot both take the same name", () => withState(() => withEnv({ C64BRIDGE_TASK_INLINE_MS: "0" }, async () => {
+  const lookup = deferred();
+  const resolving = deferred();
+  const callContext = platformCtx({
+    ...screenClient("NOTHING"),
+    getActiveBackendType: () => {
+      resolving.resolve();
+      return lookup.promise;
+    },
+  });
+  const call = system(callStart("race"), callContext);
+  await resolving.promise;
+  const interval = await system({ ...intervalStart("race"), intervalMs: 60_000 }, platformCtx(screenClient("")));
+  lookup.resolve("c64u");
+  const results = [await call, interval];
+  assert.equal(results.filter((result) => data(result)?.started).length, 1);
+  assert.equal(results.filter((result) => result.isError).length, 1);
+})));
+
+test("a rejected interval restart keeps the previous finished call task", () => withState(async () => {
+  const ctx = platformCtx(screenClient("READY."));
+  const previous = await system({
+    ...callStart("restart"),
+    arguments: { pattern: "READY.", timeoutMs: 1000 },
+  }, ctx);
+  assert.equal(data(previous)?.started, true);
+  for (let i = 0; i < 16; i += 1) {
+    assert.equal(data(await system({ ...intervalStart(`fill-${i}`), intervalMs: 100000 }, ctx))?.started, true);
+  }
+  assert.equal((await system(intervalStart("restart"), ctx)).isError, true);
+  assert.equal(data(await system({ op: "task_result", name: "restart" }, ctx))?.id, data(previous).task.id);
+}));
+
+test("direct, native and legacy waits respect the same exclusive VICE lease", () => withState(() => withEnv({ C64BRIDGE_TASK_INLINE_MS: "5000" }, async () => {
+  acquireLease({ taskId: "vice-capture", backendId: "vice", mode: "exclusive", tool: "c64_sound", op: "capture_samples", pinned: false });
+  let reads = 0;
+  const ctx = platformCtx({
+    getActiveBackendType: async () => "vice",
+    readScreen: async () => { reads += 1; return "READY."; },
+  });
+  const rest = { pattern: "READY.", timeoutMs: 1000 };
+  const op = "wait_for_text";
+  const entry = lookupAllowlist("c64_memory.wait_for_text");
+  const conflict = { code: "resource_conflict", details: { heldBy: "vice-capture", tool: "c64_sound", op: "capture_samples", backend: "vice", class: "interrupting-read" } };
+  await assert.rejects(toolRegistry.invoke("c64_memory", { op, ...rest }, ctx), conflict);
+  await assert.rejects(runNativeCall({ entry, op, rest }, "c64_memory", ctx), conflict);
+  const legacy = await system({ ...callStart("blocked-wait"), arguments: rest }, ctx);
+  assert.equal(legacy.isError, true);
+  assert.equal(legacy.metadata.error.code, conflict.code);
+  assert.equal(legacy.metadata.error.details.heldBy, "vice-capture");
+  assert.equal(reads, 0);
+})));
+
+test("a foreign running interval does not reserve a name in this process", () => withState(async () => {
+  await seedForeignIntervals(["foreign-name"], "running");
+  const ctx = platformCtx(screenClient("READY."));
+  const started = await system({ ...intervalStart("foreign-name"), intervalMs: 60_000 }, ctx);
+  assert.equal(data(started)?.started, true, started.content[0].text);
+  const id = data(started).task.id;
+  assert.equal(data(await system({ op: "task_result", name: "foreign-name" }, ctx)).id, id);
+  assert.equal(data(await system({ op: "stop_task", name: "foreign-name" }, ctx)).stopped, true);
+  assert.equal(data(await system({ op: "delete_task", name: "foreign-name" }, ctx)).deleted, true);
+  const foreign = await system({ op: "task_result", name: "foreign-name" }, ctx);
+  assert.equal(data(foreign).id, "foreign_foreign-name");
+  assert.equal(data(foreign).status, "running");
 }));

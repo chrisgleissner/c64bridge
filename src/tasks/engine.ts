@@ -1,6 +1,7 @@
 // Protocol-independent task engine (contract C1). No MCP imports: the legacy c64_system adapter
 // (src/tools/meta/background.ts) and the native Tasks adapter sit on top of this module.
 import { randomUUID } from "node:crypto";
+import type { C64Facade } from "../device.js";
 import type { ToolExecutionContext, ToolRunResult } from "../tools/types.js";
 import { cancelledResult } from "../tools/types.js";
 import { ToolExecutionError } from "../tools/errors.js";
@@ -29,6 +30,12 @@ export function fromLegacyStatus(status: unknown): TaskState {
 }
 
 export const MAX_WORKING_TASKS = 16;
+
+export class WorkingTaskLimitError extends ToolExecutionError {
+  constructor() {
+    super(`Too many running background tasks (limit ${MAX_WORKING_TASKS}); stop one first.`, { code: "too_many_tasks" });
+  }
+}
 export const MAX_FINISHED_CALL_TASKS = 64;
 export const DEFAULT_TASK_TTL_MS = 600_000;
 export const DEFAULT_POLL_INTERVAL_MS = 1_000;
@@ -199,6 +206,7 @@ function expired(task: CallTask): boolean {
 export interface TaskSource {
   /** Number of working tasks this source owns. */
   countWorking(): number;
+  hasWorkingName?(name: string): boolean;
   /** Cancels every working task this source owns and persists the result. */
   stopAll(): Promise<void> | void;
 }
@@ -246,10 +254,8 @@ async function defaultInvoke(name: string, args: unknown, ctx: ToolExecutionCont
   return toolRegistry.invoke(name, args, ctx);
 }
 
-async function resolveBackendId(spec: CallSpec): Promise<string> {
-  if (spec.backendId) return spec.backendId;
+async function resolveBackendId(client: CallSpec["ctx"]["client"]): Promise<string> {
   try {
-    const client = spec.ctx.client as { getActiveBackendType?: () => Promise<string> | string } | undefined;
     const type = await client?.getActiveBackendType?.();
     if (typeof type === "string" && type.length > 0) return type;
   } catch { /* fall through */ }
@@ -264,11 +270,18 @@ function checkOptionalInt(value: number | undefined, label: string, min: number,
   return value;
 }
 
+function checkSubmission(name: string | undefined): CallTask | undefined {
+  const existing = name === undefined ? undefined : findByName(name);
+  if (name !== undefined && (existing?.state === "working" || [...sources.values()].some((source) => source.hasWorkingName?.(name)))) {
+    throw new ToolExecutionError(`A background task named "${name}" is already running`, { code: "task_name_in_use" });
+  }
+  if (countWorkingTasks() >= MAX_WORKING_TASKS) throw new WorkingTaskLimitError();
+  return existing;
+}
+
 /**
- * Starts one detached run of an allowlisted operation. Everything that can reject a submission
- * (allowlist, limits, name, lease) is checked in one synchronous section after the backend id is
- * known, so concurrent submissions cannot both pass. The run starts inside this call through
- * toolRegistry.invoke, so the access mode, validation and the resource gate apply as for any call.
+ * Starts one detached run of an allowlisted operation. Register the task only after verifying
+ * its lease covers the selected backend and its name and working slot are still available.
  */
 export async function submitCall(spec: CallSpec): Promise<CallTask> {
   const key = allowlistKey(spec.tool, spec.op);
@@ -278,21 +291,28 @@ export async function submitCall(spec: CallSpec): Promise<CallTask> {
   }
   const ttlMs = checkOptionalInt(spec.ttlMs, "ttlMs", 0, 86_400_000) ?? DEFAULT_TASK_TTL_MS;
   const pollIntervalMs = checkOptionalInt(spec.pollIntervalMs, "pollIntervalMs", 1, 3_600_000) ?? DEFAULT_POLL_INTERVAL_MS;
-  const backendId = await resolveBackendId(spec);
+  const client = spec.ctx.client;
+  const backendId = spec.backendId ?? await resolveBackendId(client);
 
-  // ---- synchronous section: reserve everything or reject ----
-  if (spec.name !== undefined) {
-    const existing = findByName(spec.name);
-    if (existing && existing.state === "working") {
-      throw new ToolExecutionError(`A background task named "${spec.name}" is already running`, { code: "task_name_in_use" });
-    }
-    if (existing) removeTask(existing);
-  }
-  if (countWorkingTasks() >= MAX_WORKING_TASKS) {
-    throw new ToolExecutionError(`Too many running background tasks (limit ${MAX_WORKING_TASKS}); stop one first.`, { code: "too_many_tasks" });
-  }
+  checkSubmission(spec.name);
   const id = randomUUID();
   const lease = acquireLease({ taskId: id, backendId, mode: entry.lease, tool: spec.tool, op: spec.op, pinned: entry.pinned });
+  let taskFacade: C64Facade | undefined;
+  try {
+    if (entry.pinned && client?.pinFacade) taskFacade = await client.pinFacade();
+    const active = client?.getSelectedBackendType?.() ?? await resolveBackendId(client);
+    if (active !== backendId || (taskFacade && taskFacade.type !== backendId)) {
+      throw new ToolExecutionError(
+        `${key} cannot start: a backend switch changed the selection from ${backendId} to ${active} during submission.`,
+        { code: "resource_conflict", details: { backend: backendId, activeBackend: active } },
+      );
+    }
+    const previous = checkSubmission(spec.name);
+    if (previous) removeTask(previous);
+  } catch (error) {
+    releaseLease(lease);
+    throw error;
+  }
   const now = clock.now();
   const task: CallTask = {
     kind: "call", id, name: spec.name, tool: spec.tool, op: spec.op, backendId,
@@ -320,6 +340,7 @@ export async function submitCall(spec: CallSpec): Promise<CallTask> {
       ...spec.ctx,
       signal: task.controller.signal,
       taskLease: id,
+      ...(taskFacade ? { taskFacade } : {}),
       reportProgress: (completed, total, message) => {
         if (message !== undefined && task.state === "working") task.statusMessage = message;
         spec.ctx.reportProgress?.(completed, total, message);

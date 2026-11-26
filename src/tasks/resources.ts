@@ -50,10 +50,23 @@ const PROGRAM_START_OPS: ReadonlySet<string> = new Set([
  * passive-read (interrupting-read on VICE, whose monitor stops the CPU), anything else
  * memory-write.
  */
-export function classifyOperation(tool: string, op: string | undefined, effect: ToolEffect | undefined, backendType: string | undefined): OperationClass {
+export function classifyOperation(tool: string, op: string | undefined, effect: ToolEffect | undefined, backendType: string | undefined, taskOperation?: unknown): OperationClass {
   if (tool === "c64_select_backend") return op === "select" || op === undefined ? "backend-switch" : "passive-read";
   if (HOST_ONLY_TOOLS.has(tool)) return "host-only";
-  if (tool === "c64_system" && op !== undefined && TASK_MANAGEMENT_OPS.has(op)) return "host-only";
+  if (tool === "c64_system" && op !== undefined && TASK_MANAGEMENT_OPS.has(op)) {
+    if (op === "start_task") {
+      switch (taskOperation) {
+        case "write":
+        case "write_memory": return "memory-write";
+        case "menu_button": return "input";
+        case "read":
+        case "read_memory":
+        case "read_screen": return backendType === "vice" ? "interrupting-read" : "passive-read";
+      }
+    }
+    // Allowlisted calls take their lease through the engine.
+    return "host-only";
+  }
   if (op !== undefined) {
     if (RESET_POWER_OPS.has(op)) return "reset-power";
     if (tool === "c64_input" && op !== "state") return "input";
@@ -73,11 +86,6 @@ const leases = new Set<Lease>();
 
 export function listLeases(): readonly Lease[] {
   return [...leases];
-}
-
-export function leaseHeldBy(taskId: string): boolean {
-  for (const lease of leases) if (lease.taskId === taskId) return true;
-  return false;
 }
 
 function describe(lease: Lease): string {
@@ -120,16 +128,17 @@ export interface ForegroundCall {
   readonly tool: string;
   readonly op?: string;
   readonly effect?: ToolEffect;
+  readonly taskOperation?: unknown;
   /** Active backend type of the call, when known. */
   readonly backendId?: string;
 }
 
-/** Throws ToolExecutionError when the call conflicts with a held lease. A task's own calls pass `taskLease`. */
+/** Throws ToolExecutionError when the call conflicts with a lease held by another task. */
 export function assertForegroundAllowed(call: ForegroundCall, taskLease?: string): void {
   if (leases.size === 0) return;
-  if (taskLease !== undefined && leaseHeldBy(taskLease)) return;
-  const cls = classifyOperation(call.tool, call.op, call.effect, call.backendId);
+  const cls = classifyOperation(call.tool, call.op, call.effect, call.backendId, call.taskOperation);
   for (const held of leases) {
+    if (held.taskId === taskLease) continue;
     if (call.backendId !== undefined && held.backendId !== "unknown" && held.backendId !== call.backendId) continue;
     const blocks = held.mode === "exclusive"
       ? BLOCKED_BY_EXCLUSIVE.has(cls)

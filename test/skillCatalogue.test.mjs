@@ -13,7 +13,10 @@ import {
   readSkillBytes,
   readSkillResource,
   SkillCursorError,
+  SKILL_LIMITS,
 } from "../src/mcp/skills.ts";
+
+import { readSkillExtensionResource } from "../src/mcp/skillsAdapter.js";
 
 const REAL_ROOT = new URL("..", import.meta.url).pathname;
 
@@ -262,4 +265,39 @@ test("catalogue: legacy listing keeps its shape", () => {
 
 test("catalogue: tool and op names in the skills match the published interface", () => {
   execFileSync(process.execPath, [join(REAL_ROOT, "scripts", "check-skills.mjs")], { stdio: "pipe" });
+});
+
+test("skill resource text preserves the BOM covered by its listed digest", () => {
+  const { root, cleanup } = fixture({ bom: { "SKILL.md": md("bom"), "table.csv": "\uFEFFname,value\n" } });
+  try {
+    const { uri, digest, size } = listSkillExtensionEntries({ root })[0].resources.find((file) => file.uri.endsWith("/table.csv"));
+    const { text } = readSkillExtensionResource(uri, { root });
+    assert.equal(Buffer.byteLength(text), size);
+    assert.equal(`sha256:${createHash("sha256").update(text).digest("hex")}`, digest);
+  } finally {
+    cleanup();
+  }
+});
+
+test("catalogue: per-skill byte limit counts supporting files together", () => {
+  const halfLimit = Buffer.alloc(SKILL_LIMITS.maxBytes / 2);
+  const { root, cleanup } = fixture({ large: { "SKILL.md": md("large"), "first.bin": halfLimit, "second.bin": halfLimit } });
+  try {
+    assert.deepEqual(listSkillExtensionEntries({ root }), []);
+    assert.ok(getSkillDiagnostics({ root }).some(({ message }) => message.includes(`more than ${SKILL_LIMITS.maxBytes} bytes`)));
+  } finally {
+    cleanup();
+  }
+});
+
+test("catalogue: directory symlinks inside a skill are not followed", () => {
+  const { root, base, cleanup } = fixture({ nested: { "SKILL.md": md("nested"), "actual/data.txt": "content" } });
+  try {
+    symlinkSync("actual", join(base, "nested", "alias"), "dir");
+    const [{ resources }] = listSkillExtensionEntries({ root });
+    assert.deepEqual(resources.map(({ uri }) => uri), ["skill://nested/SKILL.md", "skill://nested/actual/data.txt"]);
+    assert.equal(readSkillBytes("skill://nested/alias/data.txt", { root }), undefined);
+  } finally {
+    cleanup();
+  }
 });

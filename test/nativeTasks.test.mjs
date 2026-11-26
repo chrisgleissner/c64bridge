@@ -5,6 +5,10 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { connect, resultData, startServer, waitFor, TASKS_EXT } from "./helpers/modernClient.mjs";
 
+import { registerTaskHandlers } from "../src/mcp/tasksAdapter.js";
+import { deleteTask, runWithInlineWindow } from "../src/tasks/engine.js";
+import { baseCtx, deferred, errorResult, settle } from "./tasks/helpers.mjs";
+
 const TRANSPORTS = ["stdio", "http"];
 const MEMORY_C000 = 0xc000;
 const unmet = (timeoutMs, extra = {}) => ({ op: "wait_until", condition: { type: "equals", address: "$C000", bytes: "FF" }, timeoutMs, pollIntervalMs: 50, ...extra });
@@ -213,4 +217,74 @@ test("a finished task expires after its ttl: tasks/get then answers invalid para
   await waitFor(async () => (await client.request("tasks/get", { taskId: handle.taskId })).error?.code === -32602, { label: "task expiry" });
   const cancel = await client.request("tasks/cancel", { taskId: handle.taskId });
   assert.equal(cancel.error?.code, -32602);
+});
+
+test("at the working-task limit a native call has the ordinary direct result", async (t) => {
+  const server = await startServer(t, { transport: "http" });
+  const native = await tasksClient(server);
+  const direct = await connect(server, { extensions: {} });
+  for (let i = 0; i < 16; i += 1) {
+    const start = await direct.callTool("c64_system", { op: "start_task", operation: "read_screen", name: `slot-${i}`, intervalMs: 60_000 });
+    assert.equal(resultData(start.result)?.started, true, JSON.stringify(start));
+  }
+  const args = { op: "wait_until", condition: { type: "equals", address: "$C000", bytes: "FF" }, timeoutMs: 500 };
+  server.mock.state.memory[MEMORY_C000] = 0xff;
+  const expected = await direct.callTool("c64_memory", args);
+  const actual = await native.callTool("c64_memory", args);
+  assert.equal(expected.result?.isError, undefined, JSON.stringify(expected));
+  assert.equal(actual.result?.isError, undefined, JSON.stringify(actual));
+  assert.equal(actual.result?.resultType, expected.result?.resultType);
+  for (const reply of [actual, expected]) {
+    assert.equal(resultData(reply.result)?.met, true, JSON.stringify(reply));
+    assert.equal(resultData(reply.result)?.reason, "condition_met");
+  }
+});
+
+test("legacy task management leaves unnamed native tasks alone", async (t) => {
+  const server = await startServer(t, { transport: "http", env: { C64BRIDGE_TASK_INLINE_MS: "0" } });
+  const native = await tasksClient(server);
+  const legacy = await connect(server, { extensions: {} });
+  const handle = await startTask(native, unmet(60_000));
+  const list = await legacy.callTool("c64_system", { op: "list_tasks" });
+  assert.deepEqual(resultData(list.result)?.tasks, []);
+  const stopped = await legacy.callTool("c64_system", { op: "stop_all_tasks" });
+  assert.equal(resultData(stopped.result)?.count, 0);
+  assert.equal(resultData(stopped.result)?.totalTasks, 0);
+  assert.equal((await getTask(native, handle.taskId)).status, "working");
+  await native.ok("tasks/cancel", { taskId: handle.taskId });
+});
+
+test("tasks/get maps both kinds of failure after handover", async () => {
+  const handlers = new Map();
+  registerTaskHandlers({ setRequestHandler: (method, _schema, handler) => handlers.set(method, handler) }, "modern");
+  const context = { mcpReq: { envelope: {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientCapabilities": { extensions: { [TASKS_EXT]: {} } },
+  } } };
+  for (const throws of [false, true]) {
+    const operation = deferred();
+    const outcome = await runWithInlineWindow({
+      tool: "c64_memory", op: "wait_until", ctx: baseCtx(), invoke: () => operation.promise,
+    }, { inlineMs: 0 });
+    assert.equal(outcome.kind, "task");
+    const { task } = outcome;
+    assert.equal(task.handedOver, true);
+    try {
+      if (throws) operation.reject(new Error("background failure"));
+      else operation.resolve(errorResult("background tool error"));
+      await settle();
+      const detail = await handlers.get("tasks/get")({ taskId: task.id }, context);
+      assert.equal(detail.resultType, "complete");
+      if (throws) {
+        assert.equal(detail.status, "failed");
+        assert.deepEqual(detail.error, { code: -32603, message: "background failure" });
+      } else {
+        assert.equal(detail.status, "completed");
+        assert.equal(detail.result?.isError, true);
+        assert.equal(detail.result?.content[0]?.text, "background tool error");
+      }
+    } finally {
+      deleteTask(task.id);
+    }
+  }
 });

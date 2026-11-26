@@ -482,6 +482,11 @@ export class C64Client {
     return this.activeType;
   }
 
+  /** The current selection for callers that have already awaited client initialization. */
+  getSelectedBackendType(): DeviceType {
+    return this.activeType;
+  }
+
   /**
    * Discover native endpoint availability without changing machine state.
    * `machine:input` has a safe GET probe; `machine:menu_screen` is only
@@ -539,10 +544,11 @@ export class C64Client {
     });
   }
 
-  switchBackend(type: DeviceType): void | Promise<void> {
+  switchBackend(type: DeviceType, beforeSwitch?: (active: DeviceType) => void): void | Promise<void> {
     const nextFacade = this.allFacades.get(type);
     if (!nextFacade) throw new Error(`Backend '${type}' is not configured`);
     const select = () => {
+      if (type !== this.activeType) beforeSwitch?.(this.activeType);
       // Platform state is owned by the caller, which updates global routing.
       this.facadePromise = nextFacade;
       this.activeType = type;

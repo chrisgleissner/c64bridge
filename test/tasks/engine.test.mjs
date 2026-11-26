@@ -328,7 +328,7 @@ test("exclusive conflict on one backend names the holding task; observe is allow
   );
   const observe = await submitCall(spec({ ...OBSERVE, backendId: "c64u", invoke: pending() }));
   assert.equal(observe.state, "working");
-  const other = await submitCall(spec({ backendId: "vice", invoke: pending() }));
+  const other = await submitCall(spec({ backendId: "vice", ctx: baseCtx({ client: { getActiveBackendType: async () => "vice" } }), invoke: pending() }));
   assert.equal(other.state, "working");
 }));
 
@@ -413,4 +413,31 @@ test("runWithInlineWindow keepCompleted keeps a completed task and returns kind 
   assert.equal(outcome.kind, "task");
   assert.equal(outcome.task.state, "completed");
   assert.ok(getTask(outcome.task.id), "completed task is still stored");
+}));
+
+test("a task is rejected if the active backend changed during lease acquisition", withEngine(async () => {
+  let active = "c64u";
+  const ctx = baseCtx({ client: {
+    getActiveBackendType: async () => {
+      const snapshot = active;
+      active = "vice";
+      return snapshot;
+    },
+  } });
+  await assert.rejects(submitCall(spec({ ctx, invoke: () => assert.fail("stale backend must never run") })), (error) => {
+    assert.equal(error.code, "resource_conflict");
+    assert.match(error.message, /switch.*c64u.*vice/i);
+    return true;
+  });
+  assert.deepEqual(listLeases(), []);
+  assert.deepEqual(listCallTasks(), []);
+}));
+
+test("a rejected lease-conflicting restart keeps the previous finished task", withEngine(async () => {
+  const previous = await submitCall(spec({ name: "job" }));
+  await settle();
+  assert.equal(previous.state, "completed");
+  await submitCall(spec({ invoke: pending() }));
+  await assert.rejects(submitCall(spec({ ...BOUNDED, name: "job" })), { code: "resource_conflict" });
+  assert.equal(findByName("job"), previous);
 }));

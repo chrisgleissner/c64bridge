@@ -381,3 +381,21 @@ test("VICE mock: memory conditions work on the VICE backend too", async () => {
     assert.equal(data(result).backend, "vice");
   });
 });
+
+test("checkpoint cleanup still runs when reading the checkpoint fails", async () => {
+  const deleted = [];
+  const facade = {
+    type: "vice",
+    checkpointOperation: (operate) => operate({
+      checkpointCreate: async () => ({ id: 42 }),
+      checkpointGet: async () => { throw new Error("monitor read failed"); },
+      checkpointDelete: async (id) => { deleted.push(id); },
+    }),
+  };
+  const result = await run(makeCtx(stubClient({ facade })), {
+    condition: { type: "checkpoint", address: "$0810" }, timeoutMs: 500,
+  });
+  assert.equal(result.isError, true);
+  assert.equal(data(result).reason, "communication_failure");
+  assert.deepEqual(deleted, [42]);
+});

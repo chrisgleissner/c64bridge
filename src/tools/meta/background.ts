@@ -3,7 +3,7 @@ import { assertAccess, taskOperationEffect } from "../access.js";
 import type { ToolDefinition } from "../types.js";
 import { objectSchema, stringSchema, numberSchema, optionalSchema } from "../schema.js";
 import { jsonResult } from "../responses.js";
-import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
+import { ToolError, ToolExecutionError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../errors.js";
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
 import type { C64Facade } from "../../device.js";
@@ -23,6 +23,7 @@ import {
   listCallTasks, registerTaskSource, runWithInlineWindow, startEngineTimer, stopAllTasks, toLegacyStatus,
   transition, waitForTask,
 } from "../../tasks/engine.js";
+import { assertForegroundAllowed } from "../../tasks/resources.js";
 import { allowlistKey, listAllowlistKeys, lookupAllowlist, looksLikeAllowlistKey } from "../../tasks/allowlist.js";
 
 const SESSION_ID = randomUUID();
@@ -394,11 +395,6 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         try { disk = JSON.parse(await fs.readFile(path, "utf8")).tasks ?? []; }
         catch (error: any) { if (error?.code !== "ENOENT") throw error; }
         const owned = [...TASKS.values()].filter(isOwned);
-        for (const task of changedTasks) {
-          if (task.state === "working" && disk.some((other) => other.name === task.name && other.id !== task.id && other.status === "running" && ownerIsLive(other.ownerPid, other.ownerSession))) {
-            throw new ToolValidationError("Task with this name is already running in another MCP process", { path: "$.name" });
-          }
-        }
         const ownedIds = new Set(owned.map((task) => task.id));
         const merged = disk.filter((task) => !(task.ownerPid === process.pid && task.ownerSession === SESSION_ID) && !ownedIds.has(task.id) && !deletedTaskIds.has(task.id));
         merged.push(...owned.map(toPersistedTask));
@@ -452,6 +448,12 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
   }
 }
 
+function assertIntervalAllowed(task: BackgroundTask): void {
+  assertForegroundAllowed({
+    tool: "c64_system", op: "start_task", taskOperation: task.operation, backendId: task.backendId ?? undefined,
+  });
+}
+
 function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]): void {
   if (task.state !== "working") return;
   const delay = Math.min(MAX_INTERVAL_MS, Math.max(0, task.intervalMs));
@@ -459,6 +461,16 @@ function scheduleNextRun(task: BackgroundTask, ctx: Parameters<ToolDefinition["e
   task._timer = startEngineTimer(async () => {
     if (task.state !== "working") return;
     try {
+      try {
+        assertIntervalAllowed(task);
+      } catch (error) {
+        if (!(error instanceof ToolExecutionError) || error.code !== "resource_conflict") throw error;
+        await appendTaskLog(task, `skipped iteration: ${error.message}`).catch((logError) => {
+          logger.warn(`Unable to log the skipped iteration of background task ${task.name}: ${String(logError)}`);
+        });
+        scheduleNextRun(task, ctx);
+        return;
+      }
       const result = await runOperation(task, ctx);
       // A stop that arrived while the operation was in flight wins: never turn it into completed/error.
       if (task.state !== "working") return;
@@ -519,7 +531,11 @@ async function stopAllIntervalTasks(): Promise<void> {
 }
 
 registerTaskSource("interval", {
-  countWorking: () => Array.from(TASKS.values()).filter((task) => task.state === "working").length,
+  countWorking: () => Array.from(TASKS.values()).filter((task) => isOwned(task) && task.state === "working").length,
+  hasWorkingName: (name) => {
+    const task = TASKS.get(name);
+    return task !== undefined && isOwned(task) && task.state === "working";
+  },
   stopAll: stopAllIntervalTasks,
 });
 
@@ -640,7 +656,9 @@ async function startCallTask(
   // The effect of the allowlisted operation is checked here; the inner invoke checks it again.
   assertAccess("c64_system", "start_task", taskOperationEffect(parsed.operation));
   const existing = TASKS.get(parsed.name);
-  if (existing?.state === "working") throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
+  if (existing?.state === "working" && isOwned(existing)) {
+    throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
+  }
   const outcome = await runWithInlineWindow(
     { tool: entry.tool, op: entry.op, args: callArgs, ctx, name: parsed.name, requestSignal: ctx.signal },
     { keepCompleted: true },
@@ -655,11 +673,22 @@ async function startCallTask(
 }
 
 async function removeIntervalTask(task: BackgroundTask): Promise<void> {
+  if (TASKS.get(task.name) !== task || task.state === "working") return;
   if (!(isOwned(task) || !ownerIsLive(task.ownerPid, task.ownerSession))) return;
   deletedTaskIds.add(task.id);
   TASKS.delete(task.name);
   await persistTasks();
   await fs.rm(getBackgroundTaskFolderAbsolute(task.id), { recursive: true, force: true });
+}
+
+function findNamedTask(name: string): BackgroundTask | CallTask | undefined {
+  const interval = TASKS.get(name);
+  if (interval?.state === "working" && isOwned(interval)) return interval;
+  return findCallTask(name) ?? interval;
+}
+
+function listNamedCallTasks(): CallTask[] {
+  return listCallTasks().filter((task) => task.name !== undefined);
 }
 
 function callTaskListEntry(task: CallTask) {
@@ -709,15 +738,15 @@ export const tools: ToolDefinition[] = [
         assertAccess("c64_system", "start_task", taskOperationEffect(parsed.operation));
         const now = new Date();
         const existing = TASKS.get(parsed.name);
-        if (existing) getBackgroundTaskFolderAbsolute(existing.id);
-        if (existing && existing.state === "working") {
+        const ownedInterval = existing && isOwned(existing) ? existing : undefined;
+        if (ownedInterval) getBackgroundTaskFolderAbsolute(ownedInterval.id);
+        if (ownedInterval?.state === "working") {
           throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
         }
         const sameNameCall = findCallTask(parsed.name);
         if (sameNameCall?.state === "working") {
           throw new ToolValidationError("Task with this name is already running", { path: "$.name" });
         }
-        if (sameNameCall) deleteCallTask(sameNameCall.id);
         if (countWorkingTasks() >= MAX_RUNNING_TASKS) {
           throw new ToolValidationError(`Too many running background tasks (limit ${MAX_RUNNING_TASKS}); stop one first.`, { path: "$.name" });
         }
@@ -731,7 +760,7 @@ export const tools: ToolDefinition[] = [
           type: "background",
           operation: parsed.operation,
           args: (parsed.arguments as Record<string, unknown>) ?? {},
-          intervalMs: parsed.intervalMs ?? (existing?.intervalMs ?? 1000),
+          intervalMs: parsed.intervalMs ?? ownedInterval?.intervalMs ?? 1000,
           maxIterations: parsed.maxIterations,
           iterations: 0,
           state: "working",
@@ -753,13 +782,14 @@ export const tools: ToolDefinition[] = [
         // Only the task that is still the running registry entry may write its files or start its timer.
         const superseded = (): boolean => TASKS.get(task.name) !== task || task.state !== "working";
         try {
-          await persistTasks([task], true);
-          if (superseded()) return supersededStartResult(task);
           // Pin the facade now: a later c64_select_backend must not retarget a running task.
           const pinnedFacade = ctx.client.pinFacade ? await ctx.client.pinFacade() : undefined;
           if (superseded()) return supersededStartResult(task);
           task._facade = pinnedFacade;
           task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
+          if (superseded()) return supersededStartResult(task);
+          assertIntervalAllowed(task);
+          await persistTasks([task], true);
           if (superseded()) return supersededStartResult(task);
           // Ensure per-task structure and seed files
           await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
@@ -770,6 +800,7 @@ export const tools: ToolDefinition[] = [
           if (superseded()) return supersededStartResult(task);
           await appendTaskLog(task, "started");
           if (superseded()) return supersededStartResult(task);
+          if (sameNameCall) deleteCallTask(sameNameCall.id);
           scheduleNextRun(task, ctx);
         } catch (startError) {
           // Undo the reservation so the failed start neither blocks its name nor holds a running slot.
@@ -804,15 +835,14 @@ export const tools: ToolDefinition[] = [
         await ensureTasksLoaded();
         await loadTasks();
         const parsed = stopBackgroundTaskArgsSchema.parse(args ?? {});
-        const task = TASKS.get(parsed.name);
+        const task = findNamedTask(parsed.name);
         if (!task) {
-          const call = findCallTask(parsed.name);
-          if (call) {
-            cancelCallTask(call.id);
-            return jsonResult({ stopped: true, name: parsed.name, status: toLegacyStatus(call.state) }, { success: true });
-          }
           // Idempotent stop: report success even if task does not exist anymore
           return jsonResult({ stopped: false, name: parsed.name, notFound: true }, { success: true });
+        }
+        if (task.kind === "call") {
+          cancelCallTask(task.id);
+          return jsonResult({ stopped: true, name: parsed.name, status: toLegacyStatus(task.state) }, { success: true });
         }
         requireOwnership(task);
         stopTask(task);
@@ -836,14 +866,12 @@ export const tools: ToolDefinition[] = [
         await ensureTasksLoaded();
         await loadTasks();
         const parsed = stopBackgroundTaskArgsSchema.parse(args ?? {});
-        const task = TASKS.get(parsed.name);
-        const call = task ? undefined : findCallTask(parsed.name);
-        if (call) {
-          if (call.state === "working") throw new ToolValidationError("Stop the running task before deleting it", { path: "$.name" });
-          deleteCallTask(call.id);
+        const task = findNamedTask(parsed.name);
+        if (task?.state === "working") throw new ToolValidationError("Stop the running task before deleting it", { path: "$.name" });
+        if (task?.kind === "call") {
+          deleteCallTask(task.id);
           return jsonResult({ deleted: true, name: parsed.name }, { success: true });
         }
-        if (task?.state === "working") throw new ToolValidationError("Stop the running task before deleting it", { path: "$.name" });
         if (task) {
           requireOwnership(task);
           deletedTaskIds.add(task.id);
@@ -888,7 +916,7 @@ export const tools: ToolDefinition[] = [
           lastResult: t.lastResult ?? null,
           folder: t.folder,
         }));
-        const all = [...tasks, ...listCallTasks().map(callTaskListEntry)];
+        const all = [...tasks, ...listNamedCallTasks().map(callTaskListEntry)];
         return jsonResult({ tasks: all }, { success: true, count: all.length });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
@@ -908,8 +936,10 @@ export const tools: ToolDefinition[] = [
         await loadTasks();
         const parsed = taskResultArgsSchema.parse(args ?? {});
         const waitMs = parsed.waitMs ?? 0;
-        const interval = TASKS.get(parsed.name);
-        if (interval) {
+        const found = findNamedTask(parsed.name);
+        if (!found) throw new ToolValidationError(`No task named "${parsed.name}"`, { path: "$.name" });
+        if (found.kind === "interval") {
+          const interval = found;
           await waitForIntervalTask(interval, waitMs, ctx.signal);
           return jsonResult({
             name: interval.name, id: interval.id, kind: "interval", status: toLegacyStatus(interval.state),
@@ -918,8 +948,6 @@ export const tools: ToolDefinition[] = [
             ...(interval.lastError ? { error: interval.lastError } : {}),
           }, { success: true });
         }
-        const found = findCallTask(parsed.name);
-        if (!found) throw new ToolValidationError(`No task named "${parsed.name}"`, { path: "$.name" });
         const call = (await waitForTask(found.id, waitMs, ctx.signal)) ?? found;
         const done = call.state !== "working";
         return jsonResult({
@@ -955,12 +983,13 @@ export const tools: ToolDefinition[] = [
         }
         await persistTasks(stoppedTasks);
         let stoppedCalls = 0;
-        for (const call of listCallTasks()) {
+        const namedCalls = listNamedCallTasks();
+        for (const call of namedCalls) {
           if (call.state !== "working") continue;
           cancelCallTask(call.id);
           stoppedCalls += 1;
         }
-        return jsonResult({ stoppedAll: true, count: stoppedTasks.length + stoppedCalls, totalTasks: TASKS.size + listCallTasks().length }, { success: true });
+        return jsonResult({ stoppedAll: true, count: stoppedTasks.length + stoppedCalls, totalTasks: TASKS.size + namedCalls.length }, { success: true });
       } catch (error) {
         if (error instanceof ToolError) return toolErrorResult(error);
         return unknownErrorResult(error);

@@ -275,7 +275,7 @@ async function main() {
     }
   );
   registerSkillsHandlers(server);
-  registerTaskHandlers(server);
+  registerTaskHandlers(server, factoryContext?.era);
 
   // RESOURCES: Expose C64 knowledge base
   server.setRequestHandler("resources/list", async () => {
@@ -529,7 +529,7 @@ async function main() {
         ...(progress ? { reportProgress: progress.report } : {}),
       };
       // Native Tasks: only for a request that declares the extension and an allowlisted (tool, op).
-      const candidate = nativeTaskCandidate(ctx, name, args);
+      const candidate = nativeTaskCandidate(ctx, name, args, factoryContext?.era);
       let result: ToolRunResult;
       if (candidate) {
         const outcome = await runNativeCall(candidate, name, toolContext, ctx.mcpReq.signal).finally(() => progress?.stop());

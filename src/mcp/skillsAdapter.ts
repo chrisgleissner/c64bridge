@@ -17,6 +17,7 @@ import {
   listSkillExtensionEntries,
   pageSkillExtensionEntries,
   readSkillBytes,
+  type SkillCatalogueOptions,
 } from "./skills.js";
 
 export const SKILLS_EXTENSION_ID = "io.modelcontextprotocol/skills";
@@ -69,11 +70,11 @@ export function isSkillExtensionUri(uri: string): boolean {
  * `resources/read` for a `skill://<name>/<path>` URI: the catalogue bytes exactly as hashed for `skills/list`
  * (no further rewriting). Unknown, traversal and escaping URIs are resource-not-found.
  */
-export function readSkillExtensionResource(uri: string): { uri: string; mimeType: string; text: string } | { uri: string; mimeType: string; blob: string } {
-  const found = readSkillBytes(uri);
+export function readSkillExtensionResource(uri: string, options?: SkillCatalogueOptions): { uri: string; mimeType: string; text: string } | { uri: string; mimeType: string; blob: string } {
+  const found = readSkillBytes(uri, options);
   if (!found) throw new ResourceNotFoundError(uri, `Unknown resource: ${uri}`);
   try {
-    return { uri, mimeType: found.mimeType, text: new TextDecoder("utf-8", { fatal: true }).decode(found.bytes) };
+    return { uri, mimeType: found.mimeType, text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(found.bytes) };
   } catch {
     return { uri, mimeType: found.mimeType, blob: Buffer.from(found.bytes).toString("base64") };
   }
