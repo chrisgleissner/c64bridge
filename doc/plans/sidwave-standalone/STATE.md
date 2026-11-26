@@ -63,6 +63,8 @@ No quota worries. No codex. All implementation by Sonnet subagents (model sonnet
 
 ## Next action
 
+2026-11-26 18:05: chrisgleissner/sidwave created and pushed (split proof clean, ledger). sidwave.splitOutput config removed from /home/chris/dev/c64/sidwave, so the split script will refuse to overwrite the real clone. CI run 45870416384 watched in background. Sonnet implementer working on sidwave PR 1 (6502-toolkit rename, disassembler, licences D14/D15) in worktree c64bridge-wt/sidwave-toolkit, branch feat/6502-toolkit; brief in session scratchpad brief-toolkit-pr1.md; it edits only until told 'machine free' (peer c64bridge-64 quiet window). Next: PR 2 docs + coverage for 6502-toolkit (user requirement in D14), then port the three feature branches, then README polish.
+
 2026-11-26 16:45: review fixes in 19f56cff (package metadata to sidwave repo; proof lists failed_attempts/retried_steps, node failure lines). PR body rewritten, PR marked ready; background watch on CI run 45865386187 squash-merges #193 on success (log ~/.c64bridge/sidwave-standalone/ci-193-45865386187.log). Split-proof attempt-1 failure was in the c64-asm6502 node tests, not the sidplayfp flake; 3 local reruns pass; cause unknown, rerun of the split on main will name the test. Next: step 2 (split on merged main, check proof, gh repo create, push, CI, README polish).
 
 2026-11-26 16:10 (session 3): CI run 45852020844 green (ledger). origin/main unchanged since branch point, no rebase needed. Sonnet review of the PR diff running (split-proof retries, repository.url, GPL headers, tarball budget, correctness). Next: fix confirmed findings via codex (Codex 5h empty until ~18:45; small fixes by orchestrator or Haiku), build, PR body, ready, merge.
