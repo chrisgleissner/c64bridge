@@ -351,7 +351,9 @@ export async function submitCall(spec: CallSpec): Promise<CallTask> {
         spec.ctx.reportProgress?.(completed, total, message);
       },
     };
-    void run(task, invoke, { ...(spec.args ?? {}), op: spec.op }, ctx);
+    const running = run(task, invoke, { ...(spec.args ?? {}), op: spec.op }, ctx);
+    runningCalls.add(running);
+    void running.finally(() => runningCalls.delete(running));
   }
   return task;
 }
@@ -451,11 +453,22 @@ export function waitForTask(id: string, timeoutMs: number, signal?: AbortSignal)
 }
 
 /** Shutdown: cancels every working task of every kind and clears every timer the engine holds. */
+/** Runs of call tasks that have not settled yet, so shutdown can let their cleanup finish. */
+const runningCalls = new Set<Promise<void>>();
+const STOP_CLEANUP_GRACE_MS = 1000;
+
 export async function stopAllTasks(): Promise<void> {
   for (const task of [...callTasks.values()]) {
     transition(task, "cancelled", { statusMessage: "Stopped at shutdown." });
     clearEngineTimer(task.expiryTimer);
     task.expiryTimer = undefined;
+  }
+  // A cancelled operation may still be cleaning up (for example removing a VICE checkpoint); wait at most 1 s.
+  if (runningCalls.size > 0) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, STOP_CLEANUP_GRACE_MS); });
+    await Promise.race([Promise.allSettled([...runningCalls]), deadline]);
+    clearTimeout(timer);
   }
   for (const source of sources.values()) await source.stopAll();
 }

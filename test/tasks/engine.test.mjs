@@ -453,3 +453,26 @@ test("a rejected lease-conflicting restart keeps the previous finished task", wi
   await assert.rejects(submitCall(spec({ ...BOUNDED, name: "job" })), { code: "resource_conflict" });
   assert.equal(findByName("job"), previous);
 }));
+
+test("stopAllTasks waits for a cancelled call to finish its cleanup", withEngine(async () => {
+  let cleaned = false;
+  await submitCall(spec({
+    ...OBSERVE,
+    invoke: (_name, _args, ctx) => new Promise((resolve) => {
+      ctx.signal.addEventListener("abort", () => {
+        // Cleanup after the abort takes a few event-loop turns (for example removing a VICE checkpoint).
+        setTimeout(() => { cleaned = true; resolve(okResult()); }, 20);
+      });
+    }),
+  }));
+  await stopAllTasks();
+  assert.equal(cleaned, true, "the cleanup ran before stopAllTasks returned");
+}));
+
+test("stopAllTasks does not wait more than about one second for a call that never settles", withEngine(async () => {
+  await submitCall(spec({ ...OBSERVE, invoke: () => new Promise(() => {}) }));
+  const started = Date.now();
+  await stopAllTasks();
+  const elapsed = Date.now() - started;
+  assert.ok(elapsed >= 900 && elapsed < 3000, `stopAllTasks returned after ${elapsed} ms`);
+}));

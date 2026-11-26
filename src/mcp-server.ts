@@ -143,11 +143,11 @@ function installShutdown(client: C64Client, mode: "stdio" | "http"): void {
     console.error(`c64bridge shutting down (${reason})`);
     shutdownPromise = (async () => {
       try {
-        const cleanup = Promise.allSettled([
-          stopAllBackgroundTasks(),
-          client.releaseVideoCapture(),
-          endViceSessions(), // deletes stopping checkpoints and exits the monitor before the sockets close
-        ]);
+        // Tasks stop first so a cancelled wait can remove its VICE checkpoint before the monitor session ends.
+        const cleanup = Promise.allSettled([stopAllBackgroundTasks(), client.releaseVideoCapture()]).then(() =>
+          Promise.allSettled([
+            endViceSessions(), // deletes stopping checkpoints and exits the monitor before the sockets close
+          ]));
         await Promise.race([
           cleanup,
           new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS).unref()),
