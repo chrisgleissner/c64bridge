@@ -21,6 +21,7 @@ A built-in, searchable knowledge base gives it access to C64 programming and har
 - [Quick start](#quick-start)
 - [Project showcases](#project-showcases)
 - [Configuration](#configuration)
+- [Protocol support, skills and tasks](#protocol-support-skills-and-tasks)
 - [HTTP invocation](#http-invocation)
 - [Build and test](#build-and-test)
 - [Documentation](#documentation)
@@ -246,6 +247,21 @@ Host paths refer to files on the machine running C64 Bridge. Tools can use the s
 
 After `poweroff` on C64U/U64, restore power at the outlet. The machine starts automatically only if its power-restoration setting allows it.
 
+## Protocol support, skills and tasks
+
+The server speaks MCP 2026-07-28 and earlier revisions (2025-11-25 and older) on stdio and on the stateless HTTP transport. Each request is served according to the protocol version it carries. Pre-2026 clients receive the same tools, resources and results as before.
+
+**Skills.** The packaged skills are served through the MCP Skills extension (`skills/list`, `skills/get`, `skill://<name>/SKILL.md`) and as the resources `c64://skills/<name>`, from one catalogue. Clients that do not implement the extension read the resources. Claude Code documents MCP skills; VS Code Copilot documents them as an experimental setting without naming the wire protocol; Codex CLI does not document them.
+
+**Long operations.** A call to `c64_memory` (`wait_until`, `wait_for_text`), `c64_debug` (`wait_for_state`), `c64_sound` (`capture_samples`, `pipeline`), `c64_graphics` (`capture_frame`) or `c64_program` (`batch_run`, `bundle_run`) that does not finish within one second can run as a task.
+
+- With native Tasks support (the `io.modelcontextprotocol/tasks` extension, which a client declares on each request), the server returns a task handle and the client polls `tasks/get` or cancels with `tasks/cancel`. Claude Code documents MCP 2026-07-28 and tasks; Codex CLI and VS Code Copilot do not document them.
+- Any client can use the fallback: `c64_system` `start_task` with `operation: "c64_memory.wait_until"` (or another allowlisted `tool.op`) and `arguments`, then `task_result` with `waitMs` to collect the result.
+
+Tasks are held in memory only. They are not resumed after a restart. See [hardening behavior](doc/hardening-behavior.md).
+
+**Waiting for a condition.** `c64_memory` `wait_until` waits for a memory value, a screen text change or a VICE checkpoint, with a mandatory `timeoutMs`. Use it instead of polling `read` in a loop.
+
 ## HTTP invocation
 
 Use the optional loopback HTTP transport for manual inspection. Start it with `npx -y c64bridge@latest --http 3000` or `npm start -- --http 3000` from a checkout.
@@ -333,7 +349,10 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 | `C64BRIDGE_POLL_INTERVAL_MS` | 200 | — | Interval between screen polls during program-output validation in normal runtime mode |
 | `C64BRIDGE_POLL_MAX_MS` | 2000 | — | Maximum time to poll for program-output validation before timing out in normal runtime mode |
 | `C64BRIDGE_POLL_STABILIZE_MS` | 100 | — | Extra settle time after a successful poll match before considering output stable |
+| `C64BRIDGE_SKILLS_PAGE_SIZE` | 100 | — | Skills returned per skills/list page (integer, 1 or more) |
 | `C64BRIDGE_STATE_DIR` | ~/.c64bridge | — | Root directory for task state, run artifacts and diagnostics |
+| `C64BRIDGE_TASK_INLINE_MS` | 1000 | — | Time in ms a task-capable call waits for its result before it moves to the background (0-600000) |
+| `C64BRIDGE_TASK_TTL_MS` | 600000 | — | Time in ms a finished task and its result are kept (0-86400000) |
 | `C64BRIDGE_VERBOSE_SCHEMA` |  | — | Set to 1 to include full per-operation schemas in tools/list |
 | `LOG_LEVEL` | info | — | Logger verbosity (debug, info, warn, error) |
 

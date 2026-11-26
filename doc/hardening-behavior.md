@@ -18,6 +18,57 @@ Task status changes are persisted immediately; repeated iteration snapshots and 
 
 Wait and workload limits appear in the schemas. MCP cancellation stops further work at supported boundaries and returns a cancellation result. An operation already sent to the device may have taken effect; cancellation does not undo a launched program or completed writes. Temporary capture cleanup restores the user's previous stream, including when requests overlap or are cancelled. Captures serialize with stream changes.
 
+## Tasks
+
+One task engine serves two kinds of task. Interval tasks are the `c64_system` `start_task` operations that repeat a fixed operation (`read`, `write`, `read_screen`, `menu_button`); they are persisted as described above. Call tasks are single detached runs of an allowlisted operation. Only these operations can become call tasks: `c64_memory` `wait_until` and `wait_for_text`, `c64_debug` `wait_for_state`, `c64_sound` `capture_samples` and `pipeline`, `c64_graphics` `capture_frame`, `c64_program` `batch_run` and `bundle_run`. Other operations are not allowlisted because they are short, or because their work runs on the server's event loop and a detached run would not move it (`c64_sound` `sample_render`, `analyze` and `record_analyze`).
+
+**States.** A task is `working`, then `completed`, `failed` or `cancelled`. A terminal state is final: a late completion never overwrites a cancellation, and a repeated cancel reports the existing state. The legacy `c64_system` status strings are `running`, `completed`, `error` and `stopped` for these four states. An operation result with `isError: true` makes the engine state `failed` and keeps the result. The native Tasks adapter reports that as `completed` with the result, as a direct call would have returned it, and reserves `failed` with a JSON-RPC `error` for a thrown error without a result.
+
+**Inline window.** A task-capable call waits up to `C64BRIDGE_TASK_INLINE_MS` (default 1000, 0 to 600000, read on each call) for the operation to finish. If it finishes, the caller receives the ordinary tool result and no task record remains, so validation errors, access denials, resource conflicts and fast results are identical for every client. Otherwise a client that declared the Tasks extension receives a task handle. Other clients wait for the result as before and their request signal stays linked.
+
+**Start-time checks.** The access mode, argument validation, address and symbol resolution and backend pinning happen at submission, with the access mode and symbol table of that moment. Submission is rejected with `task_not_allowed`, `task_name_in_use`, `too_many_tasks` or `resource_conflict`. At most 16 tasks of both kinds can be `working` at once.
+
+**Expiry and retention.** A finished call task is kept for `C64BRIDGE_TASK_TTL_MS` (default 600000) after it reached a terminal state, and at most 64 finished call tasks are kept (oldest removed first). A later `tasks/get` for an expired or unknown id answers `-32602`. The native `ttlMs` is `null` while the task works and counts from `createdAt` once it has finished.
+
+**Cancellation.** Until the call is handed over (a task handle returned, or `started: true` from `start_task`), cancelling the request cancels the task. Afterwards only `tasks/cancel`, `c64_system` `stop_task` or `stop_all_tasks` stops it. Cancellation is cooperative: the operation stops at its next step, and an operation already sent to the device may have taken effect. `c64_graphics` `capture_frame` and `c64_program` `bundle_run` ignore the abort signal and are bounded instead (at most 32 frames with a capture timeout; at most 256 memory ranges and 2 MiB). After a cancel they report `cancelled` at once, and their lease stays held until the underlying call has returned.
+
+**Persistence.** Call tasks are held in memory only. They are never persisted and never resumed after a restart; the server cancels its working tasks on shutdown. Interval tasks keep their persisted format and owner rules.
+
+**Legacy path.** `c64_system` `start_task` accepts an allowlist key such as `c64_memory.wait_until` as `operation`, with `arguments` holding that operation's arguments without `op`. `intervalMs` and `maxIterations` are rejected for call tasks. `task_result` takes `name` and `waitMs` (0 to 60000, default 0) and returns the status, `done`, and `result` or `error`. `stop_task`, `stop_all_tasks`, `list_tasks` and `delete_task` cover call tasks as well. Starting a call task inherits the effect of its operation for the access mode.
+
+## Resource coordination
+
+Foreground operations are classified as `passive-read`, `interrupting-read` (VICE monitor reads, which stop the CPU), `memory-write`, `program-start`, `reset-power`, `input`, `capture`, `configuration`, `backend-switch` or `host-only`. An operation without a specific class is classified by its effect: a read is `passive-read` (`interrupting-read` on VICE), anything else is `memory-write`.
+
+A task holds a lease on its backend from submission until it reaches a terminal state.
+
+- An `observe` lease is shared and never blocks a foreground call. The monitoring tasks (`wait_until`, `wait_for_text`, `wait_for_state`) hold it. `wait_until` works on a backend pinned at submission, so a backend switch is allowed while it runs. `wait_for_text` and `wait_for_state` read through the active backend on every step, so a backend switch is rejected while they run.
+- An `exclusive` lease is held by `capture_samples`, `pipeline`, `capture_frame`, `batch_run` and `bundle_run`. While it is held on a backend, a second exclusive task and foreground calls of class `memory-write`, `program-start`, `reset-power`, `input`, `capture`, `configuration`, `backend-switch` and `interrupting-read` are rejected with a `resource_conflict` error that names the task and how to cancel it. `passive-read` and `host-only` calls stay allowed. Calls are not queued.
+
+The guarantee is process-local. It does not cover other MCP server processes, other users of the device, or the interval tasks' own writes, which are not gated by leases. A task's own invocations pass the gate.
+
+## Conditional waits (`c64_memory` `wait_until`)
+
+`wait_until` is a `read` operation. `timeoutMs` (1 to 3600000) is mandatory; `pollIntervalMs` is 50 to 60000 (default 250) and `maxIterations` 1 to 100000 (default 10000). Unknown keys are validation errors with the path of the key.
+
+- **Resolution and pinning.** Addresses and symbols are resolved once at the start, and the backend facade is pinned once. A later backend switch or program start does not retarget the wait. Every address and length must stay at or below `$FFFF`. On Ultimate hardware a read that overlaps `$D000-$DFFF` is refused unless `includeIo: true`.
+- **Iterations.** An iteration starts only after the previous one finished, so slow reads never overlap. The deadline always allows one last read.
+- **Results.** `met: true` has reason `condition_met`. `timeout` and `max_iterations` are normal results with `met: false`. A failed read ends the wait with reason `communication_failure` and an error result that still carries the observation fields; the wait does not retry. A cancelled wait returns an error result with `cancelled: true`. Progress is reported after each unmet iteration.
+- **`changed` and `screen_changed`** compare with the first read of the same wait, so the first iteration is never met.
+- **`checkpoint`** is available on VICE only; other backends give a validation error. It creates a non-stopping checkpoint that does not halt the CPU, reads its hit count on each iteration (met at one or more hits), and deletes the checkpoint on every exit including cancellation. A failed removal is reported in `warnings`.
+
+## Skills
+
+The skill catalogue reads `.github/skills/*/SKILL.md` (without the developer-only `pr-converge`). A skill is served only if its frontmatter has a `name` equal to its directory name, following the Agent Skills naming rules (1 to 64 lowercase letters, digits and single hyphens), and a non-empty `description` of at most 1024 characters. Invalid or duplicate skills are left out and reported as diagnostics. Supporting files are served only when their names match `[A-Za-z0-9_][A-Za-z0-9._-]*`; dotfiles are skipped; symlinks that point outside the skill directory are skipped, and a `SKILL.md` that is such a symlink excludes the whole skill. A skill is limited to 512 files and 16 MiB. The bytes of each skill are produced once and used for `c64://skills/<name>` and `skill://<name>/SKILL.md`; the digest (`sha256:`) and size in `skills/list` are computed over those bytes. `skill://` resources are readable through `resources/read` but are not repeated in `resources/list`. `C64BRIDGE_SKILLS_PAGE_SIZE` sets the page size of `skills/list` (default 100); an unknown `skills/get` uri or an invalid cursor answers `-32602`.
+
+## Protocol negotiation
+
+The server serves both protocol eras on stdio and on the stateless HTTP transport (loopback Host and Origin checks and the bearer token apply as before). Capabilities are decided for each request from its own envelope: a request declares the Tasks extension only if it carries protocol version 2026-07-28 and `io.modelcontextprotocol/tasks` in its client capabilities. The server never decides by client name. A request that did not declare the extension never receives a task handle; it waits for the result. `tasks/get`, `tasks/update` and `tasks/cancel` from such a request answer `-32021` with `data.requiredCapabilities`. The extensions are advertised in the `server/discover` result only; the pre-2026 `initialize` result has no `extensions` key.
+
+**Differences for pre-2026 clients.** Results, `tools/list`, resources and prompts are unchanged. The only wire difference is that an unknown resource answers `-32602` with `data.uri` instead of `-32002`, because the SDK encoder maps `-32002` to `-32602` for every protocol version. The message text keeps the earlier `MCP error <code>: ` prefix.
+
+**Task handle details.** The SDK adds an empty `content` array and `_meta` server information to a task handle. The handle does not need them, and clients that read `resultType` first can ignore them.
+
 ## Verification and device behavior
 
 A launch acknowledgement does not establish successful execution or completion. Program runners, bundles and shuffle record failed launches and failed artifact reads. BASIC verification requires evidence from the new run. Printer text treats mnemonic-looking text literally; its bounded screen check reports a launch and observed errors rather than guaranteeing a completed print job. Silent or unavailable audio cannot establish accurate playback.
@@ -103,7 +154,7 @@ The built-in assembler accepts the spellings of ACME, 64tass, ca65 and Kick Asse
 
 ### MCP layer
 
-- **Skills as resources.** Every packaged skill is listed and readable as `c64://skills/<name>`. Prompts and served knowledge name that URI instead of `.github/skills/<name>/SKILL.md`, which a client outside the repository cannot read. Read the resource.
+- **Skills as resources.** Every packaged skill is listed and readable as `c64://skills/<name>`, and is also served through the Skills extension (see Skills). Prompts and served knowledge name that URI instead of `.github/skills/<name>/SKILL.md`, which a client outside the repository cannot read. Read the resource.
 - **Initialize instructions.** The `initialize` response carries short instructions: `op` on grouped calls, platform status, backend selection, skills, the game-development index, RAG, address syntax, host paths and `location: "host"`, labels and progress.
 - **Prompts and annotations.** `prompts/get` carries tool names and resource references in `_meta` instead of full tool descriptors. `destructiveHint` is true for every tool that has a write or destructive operation. Invalid prompt arguments are reported as InvalidParams.
 

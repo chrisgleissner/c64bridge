@@ -18,7 +18,8 @@ Use this skill for RAM inspection, screen reads, polling for output, and careful
 1. For direct memory inspection, use `c64_memory` with `op: "read"`.
    Pass `format: "dump"` for a 16-bytes-per-line listing with addresses and a PETSCII column; the default `"hex"` returns one hex string.
 2. For screen output, use `c64_memory` with `op: "read_screen"`. To see the BASIC program in memory as text, use `op: "list_basic"`.
-3. For polling, use `c64_memory` with `op: "wait_for_text"`.
+3. To wait for on-screen text, use `c64_memory` with `op: "wait_for_text"`. To wait for a memory value, a screen change or a VICE checkpoint, use `op: "wait_until"` instead of reading in a loop. `timeoutMs` is required; a timeout is a normal result with `met: false`.
+   Example: `{"op":"wait_until","condition":{"type":"masked","address":"$D012","mask":128,"value":128},"timeoutMs":10000}`. Condition types: `equals`, `not_equals`, `masked`, `range`, `threshold`, `changed`, `screen_text`, `screen_changed`, `checkpoint` (VICE only). A call that runs longer than the inline window can continue as a background task; see `system-control`.
 4. For writes, use `c64_memory` with `op: "write"` only after confirming the target range and side effects.
 
 Artifact memory snapshots are limited to 256 ranges and 2 MiB aggregate raw data. Explicit address strings such as `0400` are hexadecimal. Host exports follow the [host path restrictions](../../../doc/hardening-behavior.md).
