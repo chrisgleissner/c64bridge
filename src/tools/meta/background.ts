@@ -602,7 +602,7 @@ const startBackgroundTaskArgsSchema = objectSchema({
       minLength: 1,
       pattern: /^[A-Za-z0-9_][A-Za-z0-9_. -]*$/,
     }),
-    operation: stringSchema({ description: "Interval operation: read, write, read_screen or menu_button (read_memory and write_memory are aliases); write requires arguments.address and arguments.bytes. Or a detached one-shot operation as \"tool.op\" (for example c64_memory.wait_for_text) with arguments = that operation's arguments; intervalMs and maxIterations do not apply to it.", minLength: 1 }),
+    operation: stringSchema({ description: "read, write (needs arguments.address and bytes), read_screen, menu_button, or an allowlisted tool.op such as c64_memory.wait_for_text.", minLength: 1 }),
     arguments: optionalSchema(objectSchema({ description: "Operation-specific arguments", properties: {}, additionalProperties: true }), {} as any),
     intervalMs: optionalSchema(numberSchema({ description: `Interval milliseconds (${MIN_INTERVAL_MS} to ${MAX_INTERVAL_MS})`, integer: true, minimum: MIN_INTERVAL_MS, maximum: MAX_INTERVAL_MS, default: 1000 }), 1000),
     maxIterations: optionalSchema(numberSchema({ description: `Maximum number of iterations (1 to ${MAX_ITERATIONS_LIMIT}; omit for indefinite)`, integer: true, minimum: 1, maximum: MAX_ITERATIONS_LIMIT }), undefined),
@@ -626,10 +626,10 @@ function supersededStartResult(task: BackgroundTask) {
 }
 
 const taskResultArgsSchema = objectSchema({
-  description: "Read the status and result of a background task by name, optionally waiting for it to finish.",
+  description: "Task status and result.",
   properties: {
     name: stringSchema({ description: "Task name", minLength: 1 }),
-    waitMs: optionalSchema(numberSchema({ description: "Wait up to this many milliseconds for the task to finish (0 to 60000; default 0).", integer: true, minimum: 0, maximum: MAX_TASK_RESULT_WAIT_MS, default: 0 }), 0),
+    waitMs: optionalSchema(numberSchema({ description: "Max wait in ms (0-60000)", integer: true, minimum: 0, maximum: MAX_TASK_RESULT_WAIT_MS, default: 0 }), 0),
   },
   required: ["name"],
   additionalProperties: false,

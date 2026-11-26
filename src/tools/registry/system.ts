@@ -97,7 +97,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "start_task",
       ensureDescriptor(metaDescriptorIndex, "start_background_task").inputSchema,
-      { description: "Start a named interval task, or a detached one-shot task for an allowlisted operation (operation \"c64_memory.wait_for_text\"; arguments are that operation's arguments)." },
+      { description: "Start a named interval or one-shot task." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "start_background_task", rawArgs, ctx),
   },
@@ -139,7 +139,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "task_result",
       ensureDescriptor(metaDescriptorIndex, "get_background_task_result").inputSchema,
-      { description: "Read the status and result of a background task by name, waiting up to waitMs for it to finish." },
+      { description: "Status and result of a task." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "get_background_task_result", rawArgs, ctx),
   },
