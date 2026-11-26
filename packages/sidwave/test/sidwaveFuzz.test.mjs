@@ -9,7 +9,7 @@ import { parse as yamlParse } from "yaml";
 import { generateSidwave, MUSIC_STYLES } from "../src/audio/generateSidwave.js";
 import { maxSidwaveMidi } from "../src/sidwaveCompiler.js";
 import { SIDWAVE_EXAMPLES, readSidwaveExample } from "../src/sidwaveExamples.js";
-import { chance, checkEquivalence, exercise, genDoc, genRound2Doc, int, noteName, pick, prng, signature } from "./helpers/sidwaveFuzzKit.mjs";
+import { chance, cpuNow, checkEquivalence, exercise, genDoc, genRound2Doc, int, noteName, pick, prng, signature } from "./helpers/sidwaveFuzzKit.mjs";
 import { parseSidwave } from "../src/sidwave.js";
 
 const ITERATIONS = Number(process.env.SIDWAVE_FUZZ_ITERATIONS ?? 100);
@@ -215,13 +215,13 @@ test("fuzz: mutated examples are rejected with a path, never crash or hang", { t
     const r = prng(SEED * 1_000_003 + 500_000 + i);
     const source = sources[i % sources.length];
     const mode = pick(r, ["object", "object", "json", "text"]);
-    const started = performance.now();
+    const started = cpuNow();
     if (mode === "text") check("mutation", `${source.name}~text#${i}`, mutateText(r, source.text), { loop: false, maxCalls: 300, compileBudgetMs: 20_000 });
     else {
       const mutated = mutateObject(r, source.doc, hugeCap);
       check("mutation", `${source.name}~${mode}#${i}`, mode === "json" ? JSON.stringify(mutated) : mutated, { loop: false, maxCalls: 300, compileBudgetMs: 20_000 });
     }
-    if (performance.now() - started > 4000) slow++;
+    if (cpuNow() - started > 4000) slow++;
   }
   bump("mutation", "slowCases", slow);
   failOnNewFindings("mutation");
@@ -250,9 +250,9 @@ test("fuzz: very deep and very wide documents are rejected with a path", () => {
   cases.push(["a very long timeline", { sidwave: "1.1", voices: [{ id: 1, patterns: { A: { groove: ["C3"] } } }], timeline: Array.from({ length: wide }, () => ({ bars: 1, layers: { v1: "A" } })) }]);
   cases.push(["a very long title", { sidwave: "1.1", title: "x".repeat(SOAK ? 10_000_000 : 1_000_000), voices: [{ id: 1, patterns: { A: { groove: ["C3"] } } }], timeline: [{ bars: 1, layers: { v1: "A" } }] }]);
   for (const [label, input] of cases) {
-    const started = performance.now();
+    const started = cpuNow();
     check("deep", label, input, { loop: false, maxCalls: 50, compileBudgetMs: 20_000 });
-    const ms = performance.now() - started;
+    const ms = cpuNow() - started;
     if (ms > 5000) record("deep", label, typeof input === "string" ? input.slice(0, 200) : "(large generated document)", false, [{ kind: "parse-slow-case", detail: `${Math.round(ms)} ms` }]);
   }
   failOnNewFindings("deep");
@@ -363,9 +363,9 @@ function limitCases() {
 
 test("limits: the largest valid documents compile within a time bound or refuse cleanly", { timeout: 300_000 }, () => {
   for (const [name, doc] of limitCases()) {
-    const started = performance.now();
+    const started = cpuNow();
     const result = check("limits", `limit: ${name}`, doc, { loop: false, maxCalls: 400, compileBudgetMs: 20_000 });
-    const elapsed = performance.now() - started;
+    const elapsed = cpuNow() - started;
     if (process.env.SIDWAVE_FUZZ_VERBOSE) console.info(`limit ${Math.round(elapsed)} ms ${result.outcome} ${name}`);
     bump("limits", result.outcome === "played" ? "played" : "refused");
     if (elapsed > 40_000) record("limits", `limit: ${name}`, doc, false, [{ kind: "limit-case-slow", detail: `${Math.round(elapsed)} ms` }]);

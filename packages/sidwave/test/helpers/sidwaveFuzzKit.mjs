@@ -7,6 +7,16 @@ import { Cpu } from "./sidwaveEmulator.mjs";
 // ---------------------------------------------------------------------------
 // PRNG (mulberry32) and small helpers
 
+/**
+ * Milliseconds of CPU time used by this process. Time budgets in the fuzz checks bound the work done,
+ * so they use CPU time: wall-clock time also counts waiting for a CPU, which on a loaded machine
+ * fails the budgets without any change in the code under test.
+ */
+export function cpuNow() {
+  const { user, system } = process.cpuUsage();
+  return (user + system) / 1000;
+}
+
 export function prng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -424,17 +434,17 @@ export function exercise(input, { loop = true, maxCalls = 1500, checkPsid = true
   const fault = (kind, detail) => faults.push({ kind, detail });
   const stats = { calls: 0, totalFrames: 0, compileMs: 0, maxCycles: 0, estimate: 0, prgBytes: 0 };
   const before = typeof input === "object" ? safeJson(input) : undefined;
-  const t0 = performance.now();
+  const t0 = cpuNow();
   let doc;
   try { doc = parseSidwave(input); } catch (error) { cleanError("parse", error, fault); return { outcome: "invalid", faults, stats, error }; }
   if (before !== undefined && safeJson(input) !== before) fault("parse-mutated-input", "parseSidwave modified the object it was given");
-  const parseMs = performance.now() - t0;
+  const parseMs = cpuNow() - t0;
   if (parseMs > 3000) fault("parse-slow", `parse took ${Math.round(parseMs)} ms`);
 
   let compiled;
-  const t1 = performance.now();
-  try { compiled = compileSidwaveToPrg(doc, { loop }); } catch (error) { cleanError("compile", error, fault); stats.compileMs = performance.now() - t1; return { outcome: "refused", faults, stats, doc, error }; }
-  stats.compileMs = performance.now() - t1;
+  const t1 = cpuNow();
+  try { compiled = compileSidwaveToPrg(doc, { loop }); } catch (error) { cleanError("compile", error, fault); stats.compileMs = cpuNow() - t1; return { outcome: "refused", faults, stats, doc, error }; }
+  stats.compileMs = cpuNow() - t1;
   if (stats.compileMs > compileBudgetMs) fault("compile-slow", `compile took ${Math.round(stats.compileMs)} ms`);
   Object.assign(stats, { totalFrames: compiled.totalFrames, estimate: compiled.worstCaseCyclesPerCall, prgBytes: compiled.prg.length });
 
