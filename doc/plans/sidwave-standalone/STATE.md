@@ -38,7 +38,7 @@ S0 done (commits 32cf57e2, d50cdd95). S1 in progress in worktree sidwave-s1; doc
 
 ## Disproven hypotheses
 
-(none yet)
+- 2026-11-26: 'bun test failed (exit null)' in local coverage runs around 19:00-19:45 was not a timeout or a code fault: the peer c64bridge-64 reported that one of its subagents ran `pkill -f "bun test"` in that window, killing our runs. Such runs are rerun, not counted as failures.
 
 ## Pre-existing failures
 
