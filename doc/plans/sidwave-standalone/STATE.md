@@ -61,6 +61,7 @@ No quota worries. No codex. All implementation by Sonnet subagents (model sonnet
 
 ## Backlog (user additions)
 
+- 2026-11-27: sidwave README badges are broken; the licence badge does not show the licence correctly (GitHub detects the combined GPL-2.0-or-later + exception licence as "Other"). Fix the badges (licence badge with an explicit label, check every badge URL renders).
 - 2026-11-26, user: the public repo `chrisgleissner/sidwave` ("SID Wave") gets a great `README.md`, informative, clear, concise and appealing to musicians and developers alike, and a repository structure similar to the user's other repos (c64bridge, sidflow: look at their top-level layout, README sections, badges, doc/ folder, CI workflows, CHANGELOG, LICENSE). Draft the README in `packages/sidwave/README.md` from S2 onward (a minimal version ships with PR 1, the full one in S9) so the split script carries it. Repository creation itself stays at S9 step 1 as the brief orders (creating it earlier would expose an unfinished package); the user's message confirms the authority for it.
 
 ## Next action
