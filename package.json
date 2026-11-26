@@ -80,7 +80,8 @@
     "jimp": "^1.6.1",
     "meyda": "5.6.2",
     "pitchfinder": "^2.3.4",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.6.6"
   },
   "optionalDependencies": {
     "naudiodon": "^2.3.6"
