@@ -1,3 +1,4 @@
+import { switchBackendChecked } from "../backendSwitch.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 // Program testing and orchestration meta tools
 import { cancelledResult, type ToolDefinition, type ToolExecutionContext } from "../types.js";
@@ -486,7 +487,7 @@ export const tools: ToolDefinition[] = [
             };
 
             await timedStep("switch_backend", async () => {
-              await ctx.client.switchBackend(backend);
+              await switchBackendChecked(ctx, backend);
               ctx.setPlatform(backend);
             });
 
@@ -615,7 +616,7 @@ export const tools: ToolDefinition[] = [
             try {
               const restoreStartedAt = Date.now();
               await withDiagnosticSpan("greeting", "restore_backend", { backend: startingBackend }, async () => {
-                await ctx.client.switchBackend(startingBackend);
+                await switchBackendChecked(ctx, startingBackend);
                 ctx.setPlatform(startingBackend);
               });
               restoreBackendLatencyMs = Date.now() - restoreStartedAt;

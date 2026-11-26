@@ -1,3 +1,4 @@
+import { switchBackendChecked } from "../backendSwitch.js";
 import { SIDWAVE_EXAMPLES, SIDWAVE_EXAMPLES_URI, readSidwaveExample, type SidwaveExampleName } from "sidwave/examples";
 import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
@@ -369,7 +370,7 @@ export const tools: ToolDefinition[] = [
 
         try {
           for (const [backendIndex, backend] of requestedBackends.entries()) {
-            await context.client.switchBackend(backend);
+            await switchBackendChecked(context, backend);
             context.setPlatform(backend);
             await trySilenceSid(context);
 
@@ -434,7 +435,7 @@ export const tools: ToolDefinition[] = [
         } finally {
           if (restoreActiveBackend) {
             try {
-              await context.client.switchBackend(startingBackend);
+              await switchBackendChecked(context, startingBackend);
               context.setPlatform(startingBackend);
             } catch (error) {
               restoreError = error instanceof Error ? error.message : String(error);

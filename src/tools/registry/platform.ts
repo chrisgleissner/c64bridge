@@ -1,4 +1,4 @@
-import { assertForegroundAllowed } from "../../tasks/resources.js";
+import { backendSwitchGuard } from "../backendSwitch.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { describePlatformCapabilities, type PlatformId } from "../../platform.js";
 import { cancelGeneratedSidPlayback } from "../audio.js";
@@ -66,10 +66,9 @@ const platformOperationHandlers: OperationHandlerMap<PlatformOperations> = {
     const active = typeof ctx.client.getActiveBackendType === "function"
       ? await ctx.client.getActiveBackendType()
       : ctx.platform?.id;
+    const guard = backendSwitchGuard(ctx);
     const checkSwitch = (backendId: PlatformId | undefined) => {
-      if (backendId !== backend) {
-        assertForegroundAllowed({ tool: "c64_select_backend", op: "select", backendId }, ctx.taskLease);
-      }
+      if (backendId !== backend) guard(backendId);
     };
     let alreadyActive = (ctx.client.getSelectedBackendType?.() ?? active) === backend;
     if (!alreadyActive) {
