@@ -51,4 +51,10 @@ Check quota with `llm-usage` (13:42: Claude 5h 48 % left, weekly 93 % "conserve"
 
 ## Next action
 
-PR 1 is #193 (draft). Merge wip/sidwave-s2 into feat/sidwave-standalone when the S2 worker finishes; then S2: minimal CLI, split script + local proof, consumer clean-install on Node and Bun, VICE playback check, U64 gate (ask peer c64bridge-64 for all-clear), independent review, PR 1.
+Branches in flight (all local worktrees under c64bridge-wt/):
+- `wip/sidwave-s2` (sidwave-s2): S2 worker (CLI, packages/ root files, split script, consumer check). When done: review its report; question the "retry test steps up to three times" in the split proof (must not hide failures: every attempt recorded, any failure reported); merge into feat/sidwave-standalone (squash or rebase, each commit building), push, update PR #193 body.
+- `feat/sidwave-engine` (sidwave-engine): engine 95fb8378 + verify T0/T1/A0 481dd4fe. Goes to the sidwave repo after PR 1 merges (D8).
+- `feat/sidwave-format` (sidwave-format): formatter/diff/merge f1a97cd0 + transforms ace10ef3 (thin tests: needs more). Same destination.
+- `feat/sidwave-sidfile` (sidwave-sidfile): SID file module 4c00c5c1. Same destination.
+Then: PR 1 gate = independent review (Sonnet reviewer that wrote none of it), U64 check (ask peer c64bridge-64 for all-clear; it holds the U64 until it releases), CI green, rebase, merge. Then create chrisgleissner/sidwave from the split output (D8), port the three feature branches there as PRs.
+Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (resets ~19:10). Pause new agent work until reset.
