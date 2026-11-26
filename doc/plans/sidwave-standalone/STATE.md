@@ -47,4 +47,4 @@ Check quota with `llm-usage` (13:42: Claude 5h 48 % left, weekly 93 % "conserve"
 
 ## Next action
 
-Integrate S1 (wip/sidwave-s1) and docs (wip/sidwave-docs) into feat/sidwave-standalone; then S2: minimal CLI, split script + local proof, consumer clean-install on Node and Bun, VICE playback check, U64 gate (ask peer c64bridge-64 for all-clear), independent review, PR 1.
+PR 1 is #193 (draft). Merge wip/sidwave-s2 into feat/sidwave-standalone when the S2 worker finishes; then S2: minimal CLI, split script + local proof, consumer clean-install on Node and Bun, VICE playback check, U64 gate (ask peer c64bridge-64 for all-clear), independent review, PR 1.
