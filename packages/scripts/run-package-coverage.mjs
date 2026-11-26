@@ -5,14 +5,17 @@
  * functions are dropped, as in scripts/run-coverage.mjs. Each package has a .c8rc.json whose
  * `lines` value is the minimum percentage.
  *
- *   node scripts/run-package-coverage.mjs [package-dir ...]   default: every directory under packages/
+ *   node scripts/run-package-coverage.mjs [package-dir ...]   default: every package directory next to scripts/
+ *
+ * This file lives in packages/scripts. packages/ is the root of the standalone sidwave repository, so the
+ * script only refers to its own parent directory and works in c64bridge and in the standalone repository.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packagesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHARD_SIZE = Number(process.env.C64BRIDGE_COVERAGE_SHARD_SIZE) || 12;
 
 export function parseLcov(text, packageDir) {
@@ -88,7 +91,7 @@ export function coverPackage(packageDir) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const dirs = process.argv.slice(2).length
     ? process.argv.slice(2).map((dir) => path.resolve(dir))
-    : fs.readdirSync(path.join(repoRoot, "packages"), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path.join(repoRoot, "packages", e.name));
+    : fs.readdirSync(packagesRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(packagesRoot, e.name, ".c8rc.json"))).map((e) => path.join(packagesRoot, e.name));
   let failed = false;
   for (const dir of dirs) {
     const result = coverPackage(dir);

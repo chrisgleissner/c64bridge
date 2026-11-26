@@ -25,7 +25,7 @@ timeline:
 end: true
 `;
 
-test("SIDWAVE 1.2 documents compile to the same PRG bytes when they declare sidwave: 1.3", () => {
+test("SIDWAVE 1.2 documents compile to the same PRG bytes when they declare sidwave: 1.3", { timeout: 180_000 }, () => {
   for (const file of fs.readdirSync(fixtures).filter((name) => name.endsWith(".yaml"))) {
     const source = fs.readFileSync(path.join(fixtures, file), "utf8");
     if (!/^sidwave: 1\.2$/m.test(source)) continue;

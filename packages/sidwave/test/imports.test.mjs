@@ -43,3 +43,17 @@ test("the package source imports only itself, node: builtins and declared depend
   }
   assert.deepEqual(offenders, []);
 });
+
+test("the command line is covered by the import scan and uses no network module", () => {
+  const srcDir = path.join(packageRoot, "src");
+  const scanned = sourceFiles(srcDir).map((file) => path.relative(srcDir, file));
+  for (const file of ["cli.ts", "bin.ts", "sidwaveOps.ts"]) assert.ok(scanned.includes(file), `${file} is scanned`);
+  const network = new Set(["http", "https", "http2", "net", "tls", "dns", "dgram", "child_process", "worker_threads"]);
+  for (const file of ["cli.ts", "bin.ts", "sidwaveOps.ts"]) {
+    for (const spec of specifiers(fs.readFileSync(path.join(srcDir, file), "utf8"))) {
+      assert.ok(!network.has(spec.replace(/^node:/, "")), `${file} imports ${spec}`);
+    }
+    assert.ok(!/\bfetch\s*\(|XMLHttpRequest|WebSocket/.test(fs.readFileSync(path.join(srcDir, file), "utf8")), `${file} makes a network call`);
+  }
+  assert.equal(manifest.bin.sidwave, "./dist/bin.js");
+});

@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "sidwave": "./dist/bin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -73,6 +76,7 @@
     "dist/**",
     "!dist/.tsbuildinfo",
     "data/**",
+    "doc/licensing.md",
     "LICENSE",
     "README.md"
   ],
@@ -80,9 +84,16 @@
     "build": "tsc -p tsconfig.json",
     "test": "node --import tsx/esm --test test/*.test.mjs",
     "test:bun": "bun test test/*.test.mjs",
-    "coverage": "node ../../scripts/run-package-coverage.mjs ."
+    "coverage": "node ../scripts/run-package-coverage.mjs ."
   },
-  "keywords": ["sid", "c64", "commodore-64", "music", "chiptune", "sidwave"],
+  "keywords": [
+    "sid",
+    "c64",
+    "commodore-64",
+    "music",
+    "chiptune",
+    "sidwave"
+  ],
   "author": "Christian Gleissner",
   "license": "GPL-2.0-only",
   "repository": {

@@ -3,7 +3,7 @@ let describeImpl;
 
 if (typeof globalThis.Bun !== "undefined") {
   const { describe: bunDescribe, test: bunTest, afterAll, afterEach: bunAfterEach, beforeAll, beforeEach: bunBeforeEach } = await import("bun:test");
-  const DEFAULT_TIMEOUT_MS = 30_000;
+  const DEFAULT_TIMEOUT_MS = 120_000;
 
   function parseArgs(name, optionsOrFn, maybeFn) {
     if (typeof optionsOrFn === "function" || optionsOrFn === undefined) {

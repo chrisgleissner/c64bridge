@@ -75,13 +75,13 @@ Language features, by SIDWAVE version (1.0 to 1.3; each version compiles older s
 - Several SIDs with model, pan and filter ownership per chip; CIA2 volume digis (PRG only).
 - Lint checks that report problems such as notes shorter than the hard-restart minimum or a tempo that does not fit the frame grid.
 
-The compiler measures the player's cost and reports it (`worstCaseCyclesPerCall` in the compile result is a conservative cycle estimate). Typical songs use roughly 20 to 65 raster lines per frame. The full definition is in the [language specification](sidwave/doc/sidwave.md).
+The compiler measures the player's cost and reports it (`worstCaseCyclesPerCall` in the compile result is a conservative cycle estimate). Typical songs use roughly 20 to 65 raster lines per frame. The full definition is in the [language specification](sidwave/data/sound/sidwave.md).
 
 ## For musicians
 
 ### 1. Write a score
 
-Save a score as `song.sidwave.yaml`. A JSON Schema is shipped for editor completion and validation; see [Authoring and validation](sidwave/doc/sidwave.md#authoring-and-validation). Start from one of the [examples](#examples) and change it.
+Save a score as `song.sidwave.yaml`. A JSON Schema is shipped for editor completion and validation; see [Authoring and validation](sidwave/data/sound/sidwave.md#authoring-and-validation). Start from one of the [examples](#examples) and change it.
 
 ### 2. Check and compile
 
@@ -91,7 +91,7 @@ sidwave lint song.sidwave.yaml
 sidwave compile song.sidwave.yaml
 ```
 
-The command line is minimal at extraction time and its options are not final; run `sidwave --help` for what your installed version supports. `sidwave examples` lists the bundled scores.
+`validate` exits 0 for a valid score and 1 with the path of the first error otherwise. `compile` writes `song.prg` (or `song.sid` with `--format sid`) into the current directory; `-o <file>` chooses another name. `lint` prints the findings. `sidwave examples` lists the bundled scores. The full list of commands and options is in the [package README](sidwave/README.md#command-line).
 
 ### 3. Play
 
@@ -101,7 +101,7 @@ The command line is minimal at extraction time and its options are not final; ru
 
 ### Examples
 
-The repository ships 14 example scores. Their headers describe technique and form. A few starting points:
+The repository ships 14 example scores in [`sidwave/data/sound/examples`](sidwave/data/sound/examples); `sidwave examples <name> -o <dir>` writes one out. Their headers describe technique and form. A few starting points:
 
 | Score | Shows |
 | --- | --- |
@@ -145,7 +145,7 @@ writeFileSync("song.sid", sid);
 
 ### Command line
 
-`sidwave validate | compile | lint | examples`, as above. Arguments are not final.
+`sidwave validate | compile | lint | examples`; see the [package README](sidwave/README.md#command-line) for every option and the exit codes.
 
 ### Using the player in a game
 
@@ -168,7 +168,7 @@ SIDWAVE is being extracted from [c64bridge](https://github.com/chrisgleissner/c6
 - 14 example scores.
 - Reference rendering through an external `sidplayfp`.
 - Similarity and fidelity analysis of rendered audio.
-- A minimal CLI: `sidwave validate | compile | lint | examples`.
+- A minimal CLI: `sidwave validate | compile | lint | examples`, with exit codes 0 (success), 1 (invalid input or failed verdict) and 2 (usage or operational error).
 
 **Planned, not available**
 
@@ -184,7 +184,7 @@ Known limitations of the language: no per-note velocity, no multiple subtunes, n
 
 ## Documentation
 
-- [Language specification](sidwave/doc/sidwave.md) and [JSON Schema](sidwave/doc/sidwave.schema.json)
+- [Language specification](sidwave/data/sound/sidwave.md) and [JSON Schema](sidwave/data/sound/sidwave.schema.json)
 - [Licensing notes](sidwave/doc/licensing.md), including what the generated player means for released tunes and games
 - [Repository structure](doc/repository-structure.md)
 - [Changelog](CHANGELOG.md)
