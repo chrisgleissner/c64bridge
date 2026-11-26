@@ -52,7 +52,9 @@ Check quota with `llm-usage` (13:42: Claude 5h 48 % left, weekly 93 % "conserve"
 
 ## Next action
 
-Branches in flight (all local worktrees under c64bridge-wt/):
+2026-11-26 15:45 (new session from HANDOVER.md): wip/sidwave-s2 is merged into feat/sidwave-standalone (c68d87c1); the list below is historical. Head 426a08ed, pushed. CI run 45852020844 on #193 pending (watch log `~/.c64bridge/sidwave-standalone/ci-193-45852020844.log`). Quota at session start: Claude 5h 12 % (resets ~17:10), Codex 5h 0 % (resets ~18:45). Paused per cost rule. On resume follow HANDOVER.md "Remaining work" step 1: check that CI result, then Sonnet review of the diff (split-proof retries, repository.url, GPL header list, tarball budget), rebase, build, PR body, ready, merge.
+
+Branches in flight (historical, before the S2 merge) (all local worktrees under c64bridge-wt/):
 - `wip/sidwave-s2` (sidwave-s2): S2 worker (CLI, packages/ root files, split script, consumer check). When done: review its report; question the "retry test steps up to three times" in the split proof (must not hide failures: every attempt recorded, any failure reported); merge into feat/sidwave-standalone (squash or rebase, each commit building), push, update PR #193 body.
 - `feat/sidwave-engine` (sidwave-engine): engine 95fb8378 + verify T0/T1/A0 481dd4fe. Goes to the sidwave repo after PR 1 merges (D8).
 - `feat/sidwave-format` (sidwave-format): formatter/diff/merge f1a97cd0 + transforms ace10ef3 (thin tests: needs more). Same destination.
