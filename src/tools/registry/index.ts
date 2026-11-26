@@ -1,6 +1,7 @@
 import type { ToolDescriptor, ToolExecutionContext, ToolModule, ToolRunResult } from "../types.js";
 import { ToolValidationError } from "../errors.js";
 import { assertAccess } from "../access.js";
+import { assertForegroundAllowed, noLeasesHeld } from "../../tasks/resources.js";
 import { getPlatformStatus, setPlatform } from "../../platform.js";
 import { programModule } from "./program.js";
 import { memoryModuleGroup as memoryModule } from "./memory.js";
@@ -92,9 +93,26 @@ export const toolRegistry = {
       assertAccess(name, getOperation(args), effect);
     }
 
+    // Resource gate (process-local task leases): a foreground call that would disturb a running
+    // exclusive task is rejected; a task's own calls carry ctx.taskLease. The backend lookup only
+    // happens while a lease is held.
+    if (!noLeasesHeld()) {
+      assertForegroundAllowed({ tool: name, op: getOperation(args), effect, backendId: await activeBackendType(enrichedCtx) }, enrichedCtx.taskLease);
+    }
+
     return entry.module.invoke(name, args, enrichedCtx);
   },
 };
+
+async function activeBackendType(ctx: ToolExecutionContext): Promise<string | undefined> {
+  try {
+    const client = ctx.client as { getActiveBackendType?: () => Promise<string> | string } | undefined;
+    const type = await client?.getActiveBackendType?.();
+    return typeof type === "string" ? type : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function getOperation(args: unknown): string | undefined {
   const op = typeof args === "object" && args !== null ? (args as Record<string, unknown>).op : undefined;

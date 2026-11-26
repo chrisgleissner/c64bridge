@@ -78,6 +78,11 @@ export interface ToolExecutionContext {
    * server also sends a heartbeat while the call runs.
    */
   readonly reportProgress?: (completed: number, total?: number, message?: string) => void;
+  /**
+   * Id of the detached task this call belongs to. A call carrying the id of a task that holds a
+   * resource lease passes the lease gate in toolRegistry.invoke; set only by the task engine.
+   */
+  readonly taskLease?: string;
 }
 
 /** Error result for a call that the client cancelled. */

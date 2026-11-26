@@ -97,7 +97,7 @@ const systemOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "start_task",
       ensureDescriptor(metaDescriptorIndex, "start_background_task").inputSchema,
-      { description: "Start a named interval task." },
+      { description: "Start a named interval task, or a detached one-shot task for an allowlisted operation (operation \"c64_memory.wait_for_text\"; arguments are that operation's arguments)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "start_background_task", rawArgs, ctx),
   },
@@ -135,6 +135,15 @@ const systemOperations: GroupedOperationConfig[] = [
     handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "list_background_tasks", rawArgs, ctx),
   },
   {
+    op: "task_result",
+    schema: extendSchemaWithOp(
+      "task_result",
+      ensureDescriptor(metaDescriptorIndex, "get_background_task_result").inputSchema,
+      { description: "Read the status and result of a background task by name, waiting up to waitMs for it to finish." },
+    ),
+    handler: async (rawArgs, ctx) => invokeModuleTool(metaModule, "get_background_task_result", rawArgs, ctx),
+  },
+  {
     op: "performance_report",
     schema: extendSchemaWithOp(
       "performance_report",
@@ -170,7 +179,7 @@ export const systemModuleGroup = defineToolModule({
       operationEffects: {
         pause: "write", resume: "write", reset: "write", reboot: "destructive", poweroff: "destructive",
         power_cycle: "destructive", menu: "write", read_menu_screen: "read", start_task: "write",
-        stop_task: "read", stop_all_tasks: "read", delete_task: "write", list_tasks: "read", performance_report: "read",
+        stop_task: "read", stop_all_tasks: "read", delete_task: "write", list_tasks: "read", task_result: "read", performance_report: "read",
       },
       effectOf: (op, args) => (op === "start_task" ? taskOperationEffect((args as { operation?: unknown }).operation) : undefined),
       tags: ["system", "control", "grouped"],

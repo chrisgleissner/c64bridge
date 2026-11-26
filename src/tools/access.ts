@@ -1,4 +1,5 @@
 import { ToolValidationError } from "./errors.js";
+import { lookupAllowlist } from "../tasks/allowlist.js";
 
 /**
  * Effect classification of an operation.
@@ -67,8 +68,14 @@ export function assertAccess(toolName: string, op: string | undefined, effect: T
   );
 }
 
-/** Effect of a background task operation (read, write, read_screen, menu_button and the *_memory aliases). */
+/**
+ * Effect of a background task operation: read, write, read_screen, menu_button and the *_memory
+ * aliases for interval tasks, or the declared effect of an allowlisted operation ("tool.op")
+ * for a detached call task. The inner invoke of a call task checks the access mode again.
+ */
 export function taskOperationEffect(operation: unknown): ToolEffect {
+  const allowlisted = lookupAllowlist(operation);
+  if (allowlisted) return allowlisted.effect;
   switch (operation) {
     case "read":
     case "read_memory":
