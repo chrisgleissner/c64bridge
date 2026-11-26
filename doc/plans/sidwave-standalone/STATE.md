@@ -52,6 +52,8 @@ Check quota with `llm-usage` (13:42: Claude 5h 48 % left, weekly 93 % "conserve"
 
 ## Next action
 
+2026-11-26 16:10 (session 3): CI run 45852020844 green (ledger). origin/main unchanged since branch point, no rebase needed. Sonnet review of the PR diff running (split-proof retries, repository.url, GPL headers, tarball budget, correctness). Next: fix confirmed findings via codex (Codex 5h empty until ~18:45; small fixes by orchestrator or Haiku), build, PR body, ready, merge.
+
 2026-11-26 15:45 (new session from HANDOVER.md): wip/sidwave-s2 is merged into feat/sidwave-standalone (c68d87c1); the list below is historical. Head 426a08ed, pushed. CI run 45852020844 on #193 pending (watch log `~/.c64bridge/sidwave-standalone/ci-193-45852020844.log`). Quota at session start: Claude 5h 12 % (resets ~17:10), Codex 5h 0 % (resets ~18:45). Paused per cost rule. On resume follow HANDOVER.md "Remaining work" step 1: check that CI result, then Sonnet review of the diff (split-proof retries, repository.url, GPL header list, tarball budget), rebase, build, PR body, ready, merge.
 
 Branches in flight (historical, before the S2 merge) (all local worktrees under c64bridge-wt/):
