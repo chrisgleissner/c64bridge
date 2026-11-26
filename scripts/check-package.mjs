@@ -91,6 +91,7 @@ async function cleanInstallCheck() {
       const dir = stack.pop();
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+        if (entry.name === '.bin') continue; // npm's own relative bin links
         if (entry.isDirectory()) stack.push(full);
         else if (entry.isSymbolicLink()) offenders.push(`${path.relative(installed, full)} is a symbolic link`);
         else if (entry.name !== 'package-lock.json' && /\.(js|mjs|json|ts)$/.test(entry.name) && /\/home\/|\/Users\//.test(readFileSync(full, 'utf8'))) offenders.push(`${path.relative(installed, full)} contains an absolute home path`);
