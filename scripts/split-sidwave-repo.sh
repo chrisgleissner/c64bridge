@@ -206,7 +206,7 @@ step() { # name command...
 import json, sys
 name, code, secs, log, attempt = sys.argv[1:6]
 text = open(log, errors="replace").read()
-failed = [l for l in text.splitlines() if l.startswith("(fail)")][:6]
+failed = [l.strip() for l in text.splitlines() if l.startswith("(fail)") or l.lstrip().startswith(("✖", "not ok"))][:12]
 print(json.dumps({"step": name, "attempt": int(attempt), "exit": int(code), "seconds": int(secs), "failed_tests": failed, "tail": text[-600:] if code != "0" else ""}))
 PY
     [ "$code" = 0 ] && break
@@ -268,9 +268,13 @@ result = {
     "head_after_split": subprocess.run(["git", "-C", os.path.join(work, "result"), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip(),
     "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
     "history": load("history.json", {}), "proof_run": proof == "1", "proof_ok": proof_ok == "true" if proof == "1" else None,
+    "failed_attempts": [{k: s[k] for k in ("step", "attempt", "exit", "failed_tests")} for s in steps if s["exit"] != 0],
+    "retried_steps": sorted({s["step"] for s in steps if s["attempt"] > 1}),
     "steps": steps, "consumer": load("consumer.json", None), "pack_contents": load("pack-lists.json", {}),
 }
 json.dump(result, open(evidence, "w"), indent=2)
+for f in result["failed_attempts"]:
+    print(f"WARNING: proof step {f['step']} attempt {f['attempt']} failed (exit {f['exit']}): {'; '.join(f['failed_tests']) or 'see steps in the evidence'}", file=sys.stderr)
 PY
 
 if [ "$PROOF" = 1 ] && [ "$PROOF_OK" != true ]; then

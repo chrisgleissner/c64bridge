@@ -25,5 +25,13 @@
     "@types/node": "^25.9.5",
     "tsx": "^4.23.11",
     "typescript": "^6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisgleissner/sidwave.git"
+  },
+  "homepage": "https://github.com/chrisgleissner/sidwave#readme",
+  "bugs": {
+    "url": "https://github.com/chrisgleissner/sidwave/issues"
   }
 }

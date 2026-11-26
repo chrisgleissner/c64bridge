@@ -98,8 +98,8 @@
   "license": "GPL-2.0-only",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chrisgleissner/c64bridge.git",
-    "directory": "packages/sidwave"
+    "url": "git+https://github.com/chrisgleissner/sidwave.git",
+    "directory": "sidwave"
   },
   "engines": {
     "node": ">=24"
@@ -107,5 +107,9 @@
   "dependencies": {
     "c64-asm6502": "0.1.0",
     "yaml": "^2.9.0"
+  },
+  "homepage": "https://github.com/chrisgleissner/sidwave/tree/main/sidwave#readme",
+  "bugs": {
+    "url": "https://github.com/chrisgleissner/sidwave/issues"
   }
 }

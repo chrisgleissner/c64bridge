@@ -45,15 +45,26 @@
     "coverage": "node ../scripts/run-package-coverage.mjs .",
     "corpus-hash": "node scripts/corpus-hash.mjs"
   },
-  "keywords": ["c64", "commodore-64", "6502", "6510", "assembler", "acme"],
+  "keywords": [
+    "c64",
+    "commodore-64",
+    "6502",
+    "6510",
+    "assembler",
+    "acme"
+  ],
   "author": "Christian Gleissner",
   "license": "GPL-2.0-only",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chrisgleissner/c64bridge.git",
-    "directory": "packages/asm6502"
+    "url": "git+https://github.com/chrisgleissner/sidwave.git",
+    "directory": "asm6502"
   },
   "engines": {
     "node": ">=24"
+  },
+  "homepage": "https://github.com/chrisgleissner/sidwave/tree/main/asm6502#readme",
+  "bugs": {
+    "url": "https://github.com/chrisgleissner/sidwave/issues"
   }
 }
