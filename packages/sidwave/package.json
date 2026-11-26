@@ -1,0 +1,115 @@
+{
+  "name": "sidwave",
+  "version": "0.1.0",
+  "description": "SIDWAVE music format for the SID chip: parser, compiler to C64 PRG and PSID, linter, generator and offline analysis",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "sidwave": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./sidwave": {
+      "types": "./dist/sidwave.d.ts",
+      "default": "./dist/sidwave.js"
+    },
+    "./compiler": {
+      "types": "./dist/sidwaveCompiler.d.ts",
+      "default": "./dist/sidwaveCompiler.js"
+    },
+    "./digi": {
+      "types": "./dist/sidwaveDigi.d.ts",
+      "default": "./dist/sidwaveDigi.js"
+    },
+    "./pcm": {
+      "types": "./dist/sidwavePcm.d.ts",
+      "default": "./dist/sidwavePcm.js"
+    },
+    "./form": {
+      "types": "./dist/sidwaveForm.d.ts",
+      "default": "./dist/sidwaveForm.js"
+    },
+    "./filterModel": {
+      "types": "./dist/sidwaveFilterModel.d.ts",
+      "default": "./dist/sidwaveFilterModel.js"
+    },
+    "./lint": {
+      "types": "./dist/sidwaveLint.d.ts",
+      "default": "./dist/sidwaveLint.js"
+    },
+    "./examples": {
+      "types": "./dist/sidwaveExamples.d.ts",
+      "default": "./dist/sidwaveExamples.js"
+    },
+    "./generate": {
+      "types": "./dist/audio/generateSidwave.d.ts",
+      "default": "./dist/audio/generateSidwave.js"
+    },
+    "./reference": {
+      "types": "./dist/audio/sidwaveReference.d.ts",
+      "default": "./dist/audio/sidwaveReference.js"
+    },
+    "./similarity": {
+      "types": "./dist/audio/sidwaveSimilarity.d.ts",
+      "default": "./dist/audio/sidwaveSimilarity.js"
+    },
+    "./fidelity": {
+      "types": "./dist/audio/sidwaveFidelity.d.ts",
+      "default": "./dist/audio/sidwaveFidelity.js"
+    },
+    "./quality": {
+      "types": "./dist/audio/sidwaveQuality.d.ts",
+      "default": "./dist/audio/sidwaveQuality.js"
+    },
+    "./data/*": "./data/*",
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#test/assert": "./test/helpers/assert.js",
+    "#test/runner": "./test/helpers/test.js"
+  },
+  "files": [
+    "dist/**",
+    "!dist/.tsbuildinfo",
+    "data/**",
+    "doc/licensing.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx/esm --test test/*.test.mjs",
+    "test:bun": "bun test test/*.test.mjs",
+    "coverage": "node ../scripts/run-package-coverage.mjs ."
+  },
+  "keywords": [
+    "sid",
+    "c64",
+    "commodore-64",
+    "music",
+    "chiptune",
+    "sidwave"
+  ],
+  "author": "Christian Gleissner",
+  "license": "GPL-2.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisgleissner/sidwave.git",
+    "directory": "sidwave"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "c64-asm6502": "0.1.0",
+    "yaml": "^2.9.0"
+  },
+  "homepage": "https://github.com/chrisgleissner/sidwave/tree/main/sidwave#readme",
+  "bugs": {
+    "url": "https://github.com/chrisgleissner/sidwave/issues"
+  }
+}

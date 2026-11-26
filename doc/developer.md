@@ -64,6 +64,8 @@ Subsequent `./build build` invocations reuse the incremental cache stored in `di
 | --- | --- |
 | [`src/index.ts`](../src/index.ts) | Runtime entrypoint (loaded by [`scripts/start.mjs`](../scripts/start.mjs)) |
 | [`src/mcp-server.ts`](../src/mcp-server.ts) | Server wiring using [`@modelcontextprotocol/sdk`](https://www.npmjs.com/package/@modelcontextprotocol/sdk) |
+| [`packages/asm6502`](../packages/asm6502/) | npm workspace `c64-asm6502`: assembler, PETSCII and I/O range helpers. `src/petscii.ts`, `src/ioRange.ts` and `src/tools/translation/assembler.ts` re-export it. |
+| [`packages/sidwave`](../packages/sidwave/) | npm workspace `sidwave`: SIDWAVE parser, compiler, linter, generator and analysis, with the specification, schema and examples. `data/sound/sidwave.md`, `sidwave.schema.json` and `examples/*.yaml` are generated copies (`node scripts/sync-sidwave-data.mjs`, run by `npm run build`); `npm run test:packages` and `npm run coverage:packages` run the package tests and the 90 % line gate. |
 | [`src/tools/`](../src/tools/) | Tool implementations; registries under [`src/tools/registry/`](../src/tools/registry/) |
 | [`src/prompts/`](../src/prompts/) | Prompt templates mirroring personas in [AGENTS.md](../AGENTS.md) |
 | [`src/rag/`](../src/rag/) & [`data/`](../data/) | RAG builder, indices, and corpora |

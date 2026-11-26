@@ -1,5 +1,5 @@
 import type { C64Facade, ViceBackend } from "./device.js";
-import { isModern, type ParsedSidwave } from "./sidwave.js";
+import { isModern, type ParsedSidwave } from "sidwave/sidwave";
 import { normalizeConfigInventory } from "./tools/meta/configInventory.js";
 import { ToolValidationError } from "./tools/errors.js";
 

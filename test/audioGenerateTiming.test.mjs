@@ -1,8 +1,8 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { toolRegistry } from "../src/tools/registry/index.js";
-import { arrangeSidwave } from "../src/sidwaveCompiler.js";
-import { midiToNoteName, parseSidwave } from "../src/sidwave.js";
+import { arrangeSidwave } from "sidwave/compiler";
+import { midiToNoteName, parseSidwave } from "sidwave/sidwave";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} };
 async function generate(args) {

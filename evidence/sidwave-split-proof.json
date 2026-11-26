@@ -1,0 +1,285 @@
+{
+  "source_ref_commit": "1a86db2e7a0b2015334f823575fbf6db1286f34a",
+  "output": "/home/chris/dev/c64/sidwave",
+  "commit_count": 149,
+  "tree_equals_packages_at_source": true,
+  "head_after_split": "2b563545c8eb2db5ca8f5e6491030a529c0c54df",
+  "generated_at": "2026-11-26T15:34:02+00:00",
+  "history": {
+    "ok": true,
+    "files": [
+      {
+        "old": "src/sidwaveCompiler.ts",
+        "new": "sidwave/src/sidwaveCompiler.ts",
+        "source_commits_for_old_path": 33,
+        "carried": 33,
+        "not_carried": [],
+        "log_follow_commits": 32,
+        "oldest_author_time": 1761068750,
+        "authors": [
+          "Christian Gleissner",
+          "Claude",
+          "Cursor Agent"
+        ],
+        "follow_oldest_author_time": 1761068750,
+        "ok": true
+      },
+      {
+        "old": "src/sidwave.ts",
+        "new": "sidwave/src/sidwave.ts",
+        "source_commits_for_old_path": 26,
+        "carried": 26,
+        "not_carried": [],
+        "log_follow_commits": 25,
+        "oldest_author_time": 1761063310,
+        "authors": [
+          "Christian Gleissner",
+          "Claude",
+          "Cursor Agent"
+        ],
+        "follow_oldest_author_time": 1761063310,
+        "ok": true
+      },
+      {
+        "old": "src/tools/translation/assembler.ts",
+        "new": "asm6502/src/assembler.ts",
+        "source_commits_for_old_path": 29,
+        "carried": 29,
+        "not_carried": [],
+        "log_follow_commits": 29,
+        "oldest_author_time": 1778226894,
+        "authors": [
+          "Christian Gleissner",
+          "Claude"
+        ],
+        "follow_oldest_author_time": 1778226894,
+        "ok": true
+      },
+      {
+        "old": "data/sound/sidwave.md",
+        "new": "sidwave/data/sound/sidwave.md",
+        "source_commits_for_old_path": 27,
+        "carried": 27,
+        "not_carried": [],
+        "log_follow_commits": 26,
+        "oldest_author_time": 1762015166,
+        "authors": [
+          "Christian Gleissner"
+        ],
+        "follow_oldest_author_time": 1762015166,
+        "ok": true
+      }
+    ]
+  },
+  "proof_run": true,
+  "proof_ok": true,
+  "steps": [
+    {
+      "step": "install",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 18,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "build",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 47,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "test-node",
+      "attempt": 1,
+      "exit": 1,
+      "seconds": 285,
+      "failed_tests": [],
+      "tail": "9)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: false,\n    expected: true,\n    operator: '==',\n    diff: 'simple'\n  }\nnpm error Lifecycle script `test` failed with error:\nnpm error code 1\nnpm error path /tmp/sidwave-split.CS15pV/proof/asm6502\nnpm error workspace c64-asm6502@0.1.0\nnpm error location /tmp/sidwave-split.CS15pV/proof/asm6502\nnpm error command failed\nnpm error command sh -c node --import tsx/esm --test test/*.test.mjs\n"
+    },
+    {
+      "step": "test-node",
+      "attempt": 2,
+      "exit": 0,
+      "seconds": 157,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "test-bun",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 511,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "coverage",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 683,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "pack",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 0,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "consumer",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 7,
+      "failed_tests": [],
+      "tail": ""
+    },
+    {
+      "step": "clean-ci-install",
+      "attempt": 1,
+      "exit": 0,
+      "seconds": 12,
+      "failed_tests": [],
+      "tail": ""
+    }
+  ],
+  "consumer": {
+    "example": "fuer_elise",
+    "runtimes": {
+      "node": {
+        "version": "v24.22.1",
+        "loop_true": {
+          "prg_sha256": "eb6cfa38039cdf03348586528190bcbafae5fb1ca15373463e0c96f1c86c4121",
+          "prg_length": 4032,
+          "psid_sha256": "277ac7eab5c53a63f3ee740455811eab50007fde0ea6e83462a5c994fcc5152b"
+        },
+        "loop_false": {
+          "prg_sha256": "41b52252d93d029e0809cc5fdcd8de2de0078c226882e9e5dccc5de9a7cf9b55",
+          "prg_length": 4176,
+          "psid_sha256": "ce5f3e8b5dd24c3dcf046cc62e351d8def57076f61d43d4dd362c66853675355"
+        },
+        "cli": {
+          "prg_sha256": "eb6cfa38039cdf03348586528190bcbafae5fb1ca15373463e0c96f1c86c4121",
+          "psid_sha256": "277ac7eab5c53a63f3ee740455811eab50007fde0ea6e83462a5c994fcc5152b",
+          "prgBytes": 4032,
+          "sidBytes": 4156
+        }
+      },
+      "bun": {
+        "version": "1.3.1",
+        "loop_true": {
+          "prg_sha256": "eb6cfa38039cdf03348586528190bcbafae5fb1ca15373463e0c96f1c86c4121",
+          "prg_length": 4032,
+          "psid_sha256": "277ac7eab5c53a63f3ee740455811eab50007fde0ea6e83462a5c994fcc5152b"
+        },
+        "loop_false": {
+          "prg_sha256": "41b52252d93d029e0809cc5fdcd8de2de0078c226882e9e5dccc5de9a7cf9b55",
+          "prg_length": 4176,
+          "psid_sha256": "ce5f3e8b5dd24c3dcf046cc62e351d8def57076f61d43d4dd362c66853675355"
+        },
+        "cli": {
+          "prg_sha256": "eb6cfa38039cdf03348586528190bcbafae5fb1ca15373463e0c96f1c86c4121",
+          "psid_sha256": "277ac7eab5c53a63f3ee740455811eab50007fde0ea6e83462a5c994fcc5152b",
+          "prgBytes": 4032,
+          "sidBytes": 4156
+        }
+      }
+    },
+    "checks": [
+      {
+        "pack": "c64-asm6502",
+        "files": 13,
+        "bytes": 40678
+      },
+      {
+        "pack": "sidwave",
+        "files": 54,
+        "bytes": 248688
+      },
+      {
+        "installed": "no symbolic links, no absolute home paths"
+      },
+      {
+        "nodeEqualsBun": true
+      }
+    ],
+    "ok": true
+  },
+  "pack_contents": {
+    "c64-asm6502-0.1.0.tgz": [
+      "LICENSE",
+      "README.md",
+      "dist/assembler.d.ts",
+      "dist/assembler.js",
+      "dist/index.d.ts",
+      "dist/index.js",
+      "dist/ioRange.d.ts",
+      "dist/ioRange.js",
+      "dist/opcodeInventory.d.ts",
+      "dist/opcodeInventory.js",
+      "dist/petscii.d.ts",
+      "dist/petscii.js",
+      "package.json"
+    ],
+    "sidwave-0.1.0.tgz": [
+      "LICENSE",
+      "README.md",
+      "data/sound/examples/acid_line.yaml",
+      "data/sound/examples/ambient_filter.yaml",
+      "data/sound/examples/arp_ballad.yaml",
+      "data/sound/examples/chamber_waltz.yaml",
+      "data/sound/examples/chiptune_drive.yaml",
+      "data/sound/examples/digi_groove.yaml",
+      "data/sound/examples/drum_and_bass.yaml",
+      "data/sound/examples/fuer_elise.yaml",
+      "data/sound/examples/funk_bass.yaml",
+      "data/sound/examples/metal_sync.yaml",
+      "data/sound/examples/stereo_echo.yaml",
+      "data/sound/examples/title_fanfare.yaml",
+      "data/sound/examples/ultisid_orchestra.yaml",
+      "data/sound/examples/wall_of_sid.yaml",
+      "data/sound/sidwave.md",
+      "data/sound/sidwave.schema.json",
+      "dist/audio/generateSidwave.d.ts",
+      "dist/audio/generateSidwave.js",
+      "dist/audio/sidwaveFidelity.d.ts",
+      "dist/audio/sidwaveFidelity.js",
+      "dist/audio/sidwaveQuality.d.ts",
+      "dist/audio/sidwaveQuality.js",
+      "dist/audio/sidwaveReference.d.ts",
+      "dist/audio/sidwaveReference.js",
+      "dist/audio/sidwaveSimilarity.d.ts",
+      "dist/audio/sidwaveSimilarity.js",
+      "dist/bin.d.ts",
+      "dist/bin.js",
+      "dist/cli.d.ts",
+      "dist/cli.js",
+      "dist/index.d.ts",
+      "dist/index.js",
+      "dist/sidwave.d.ts",
+      "dist/sidwave.js",
+      "dist/sidwaveCompiler.d.ts",
+      "dist/sidwaveCompiler.js",
+      "dist/sidwaveDigi.d.ts",
+      "dist/sidwaveDigi.js",
+      "dist/sidwaveExamples.d.ts",
+      "dist/sidwaveExamples.js",
+      "dist/sidwaveFilterModel.d.ts",
+      "dist/sidwaveFilterModel.js",
+      "dist/sidwaveForm.d.ts",
+      "dist/sidwaveForm.js",
+      "dist/sidwaveLint.d.ts",
+      "dist/sidwaveLint.js",
+      "dist/sidwaveOps.d.ts",
+      "dist/sidwaveOps.js",
+      "dist/sidwavePcm.d.ts",
+      "dist/sidwavePcm.js",
+      "doc/licensing.md",
+      "package.json"
+    ]
+  }
+}

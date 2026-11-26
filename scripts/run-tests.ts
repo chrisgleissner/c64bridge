@@ -53,7 +53,10 @@ const ISOLATED_BUN_TEST_FILES = new Set([
 ]);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultEmbeddingsDir = path.join(repoRoot, "artifacts", "test-embeddings");
-const defaultTestFiles = listRepoTestFiles(path.join(repoRoot, "test"));
+const defaultTestFiles = [
+  ...listRepoTestFiles(path.join(repoRoot, "test")),
+  ...listWorkspaceTestRoots().flatMap((dir) => listRepoTestFiles(dir)),
+];
 
 function findExecutableOnPath(binary: string, envPath: string | undefined = process.env.PATH): string | null {
   const normalized = binary.trim();
@@ -599,6 +602,18 @@ export function normalizeBunBatchArg(arg: string): string {
     return `./${arg}`;
   }
   return arg;
+}
+
+/** The test directories of the workspace packages under packages/. */
+function listWorkspaceTestRoots(): string[] {
+  const packagesDir = path.join(repoRoot, "packages");
+  if (!fs.existsSync(packagesDir)) {
+    return [];
+  }
+  return fs.readdirSync(packagesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(packagesDir, entry.name, "test")))
+    .map((entry) => path.join(packagesDir, entry.name, "test"))
+    .sort();
 }
 
 function listRepoTestFiles(testRoot: string): string[] {
