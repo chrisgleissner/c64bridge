@@ -19,6 +19,8 @@ S0 done (commits 32cf57e2, d50cdd95). S1 in progress in worktree sidwave-s1; doc
 - D1 (2026-11-26) `src/petscii.ts`, `src/ioRange.ts`, `src/tools/translation/assembler.ts` remain in c64bridge as one-line re-export shims from `c64-asm6502`, because `src/tools/meta/background.ts` (owned by the modern-mcp agent) imports petscii; no second implementation.
 - D2 Standalone repository layout: `packages/` in c64bridge becomes the root of `chrisgleissner/sidwave` (filter-repo path rename). Root README, CHANGELOG, doc/, CI and a workspace-root package.json for the standalone repo live under `packages/` in c64bridge; `packages/*` workspace glob in c64bridge matches only the two package directories.
 - D3 A0 (bit-identical PCM) is defined on SIDLite; reSIDfp PCM is not reproducible across fresh engines (3.6 finding).
+- D5 `data/sound/examples/Biosphere.sid` (third-party tune, 1993, in c64bridge since 2025-10, unreferenced by code) stays in c64bridge and is not moved into the sidwave package.
+- D6 Docs drafts done on wip/sidwave-docs 934191e2 (packages/README.md, sidwave/README.md, asm6502/README.md, sidwave/doc/licensing.md, CHANGELOG.md, doc/repository-structure.md). Before PR 1: fix spec/schema links to the paths S1 chose, confirm CLI `--help`, drop Biosphere mention from licensing.md if it stays out of the package.
 - D4 Work packages run in worktrees `c64bridge-wt/sidwave-s1` (S1, branch wip/sidwave-s1) and `c64bridge-wt/sidwave-docs` (README/licensing drafts, wip/sidwave-docs); both merge into feat/sidwave-standalone for PR 1.
 
 ## Disproven hypotheses
