@@ -55,7 +55,7 @@ async function stopChild(child) {
  * Starts a mock C64 and a c64bridge server on stdio or HTTP.
  * `env` entries are added to the server environment (access mode, inline window, ttl, page size, token ...).
  */
-export async function startServer(t, { transport = "stdio", env = {}, mockOptions } = {}) {
+export async function startServer(t, { transport = "stdio", env = {}, mockOptions, execPath = process.execPath } = {}) {
   const mock = await startMockC64Server(mockOptions);
   t.after(async () => { await mock.close(); });
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-native-"));
@@ -66,7 +66,7 @@ export async function startServer(t, { transport = "stdio", env = {}, mockOption
   fs.mkdirSync(homeDir, { recursive: true });
   const port = transport === "http" ? await reservePort() : undefined;
   const child = spawn(
-    process.execPath,
+    execPath,
     ["--import", "tsx/esm", path.join(repoRoot, "src", "mcp-server.ts"), ...(port ? ["--http", String(port)] : [])],
     {
       cwd: repoRoot,

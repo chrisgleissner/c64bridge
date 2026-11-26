@@ -3,6 +3,7 @@ import "./bootstrap/stdio-logger.js";
 import { pruneRunArtifacts } from "./runArtifacts.js";
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { timingSafeEqual } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ProtocolError, ProtocolErrorCode, ResourceNotFoundError, Server, type CallToolResult, type Tool } from "@modelcontextprotocol/server";
@@ -525,14 +526,14 @@ async function main() {
         logger: toolLogger,
         platform: getPlatformStatus(),
         setPlatform,
-        signal: ctx?.mcpReq?.signal,
+        signal: combineSignals(ctx?.mcpReq?.signal, httpDisconnectSignals.getStore()),
         ...(progress ? { reportProgress: progress.report } : {}),
       };
       // Native Tasks: only for a request that declares the extension and an allowlisted (tool, op).
       const candidate = nativeTaskCandidate(ctx, name, args, factoryContext?.era);
       let result: ToolRunResult;
       if (candidate) {
-        const outcome = await runNativeCall(candidate, name, toolContext, ctx.mcpReq.signal).finally(() => progress?.stop());
+        const outcome = await runNativeCall(candidate, name, toolContext, toolContext.signal).finally(() => progress?.stop());
         if (outcome.kind === "task") {
           toolLogger.info(`call tool name=${name} status=task latencyMs=${Date.now() - startedAt}`);
           writeDiagnosticEvent("mcp_call_tool_task", { name, latencyMs: Date.now() - startedAt });
@@ -704,7 +705,13 @@ async function main() {
         response.end("Method not allowed: this stateless MCP endpoint accepts POST only");
         return;
       }
-      mcpHandler(request, response).catch((error) => {
+      // The SDK's legacy stateless path does not always propagate the client's disconnect to the tool
+      // (a call kept polling for up to its own timeout), so this server aborts a signal of its own.
+      const disconnect = new AbortController();
+      response.once("close", () => {
+        if (!response.writableFinished) disconnect.abort();
+      });
+      httpDisconnectSignals.run(disconnect.signal, () => mcpHandler(request, response)).catch((error) => {
         if (!response.headersSent) response.statusCode = 500;
         response.end(error instanceof Error ? error.message : "MCP transport error");
       });
@@ -731,6 +738,15 @@ async function main() {
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
   });
+}
+
+/** Signal aborted when the HTTP client of the current request closes the connection before the response finished. */
+const httpDisconnectSignals = new AsyncLocalStorage<AbortSignal>();
+
+function combineSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const present = signals.filter((s): s is AbortSignal => s !== undefined);
+  if (present.length <= 1) return present[0];
+  return AbortSignal.any(present);
 }
 
 /**
