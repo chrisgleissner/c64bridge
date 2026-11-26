@@ -83,48 +83,55 @@ import json, subprocess, sys
 clone, out = sys.argv[1:3]
 def git(*args):
     return subprocess.run(["git", "-C", clone, *args], check=True, capture_output=True, text=True).stdout
-moves = {}      # old path -> set of new paths (without the packages/ prefix)
-move_parents = set()
+moves = {}      # (parent of the move commit, old path) -> set of new paths (without the packages/ prefix)
 for commit in git("log", "--format=%H", "main", "--", "packages/").split():
     parents = git("rev-list", "--parents", "-n", "1", commit).split()[1:]
     if not parents:
         continue
-    found = False
     diff = git("diff-tree", "--no-commit-id", "-r", "-M50%", "-C50%", "--find-copies-harder", "--name-status", parents[0], commit)
     for line in diff.splitlines():
         fields = line.split("\t")
         if fields[0][0] in "RC" and not fields[1].startswith("packages/") and fields[2].startswith("packages/"):
-            moves.setdefault(fields[1], set()).add(fields[2][len("packages/"):])
-            found = True
-    if found:
-        move_parents.add(parents[0])
-before = set()
-for parent in move_parents:
-    before.update(git("rev-list", parent).split())
-mapping = {old: sorted(new) for old, new in sorted(moves.items())}
-json.dump({"before_move": sorted(before), "moves": mapping}, open(out, "w"))
-print(f"{len(mapping)} moved or copied source paths, {len(before)} commits before the move")
+            moves.setdefault((parents[0], fields[1]), set()).add(fields[2][len("packages/"):])
+# An old path is mapped only in commits before the commit that moved it (ancestors of that commit's parent). Later
+# commits touching the old path (shims, generated copies) are not part of the standalone repository.
+ancestors = {}
+entries = []
+for (parent, old), new in sorted(moves.items()):
+    if parent not in ancestors:
+        ancestors[parent] = set(git("rev-list", parent).split())
+    entries.append({"old": old, "new": sorted(new), "before": parent})
+json.dump({"before": {k: sorted(v) for k, v in ancestors.items()}, "moves": entries}, open(out, "w"))
+print(f"{len(entries)} moved or copied source paths from {len(ancestors)} move commits")
 PY
 
 echo "== filtering history"
-# The callback keeps only packages/ files (prefix removed) and, in commits before the move, the old paths of moved
+# The callback keeps only packages/ files (prefix removed) and, in commits before the move of that path, the old paths of moved
 # files (mapped to their new paths). A path may map to several new paths (a copied LICENSE). Everything else is dropped.
 cat > "$WORK/callback.py" <<'PY'
 import json, os
 if "_split" not in globals():
     _split = json.load(open(os.environ["SIDWAVE_SPLIT_MAPPING"]))
-    _before = set(_split["before_move"])
-    _moves = {k.encode(): [v.encode() for v in vs] for k, vs in _split["moves"].items()}
+    _before = {k: set(v) for k, v in _split["before"].items()}
+    _moves = {}
+    for entry in _split["moves"]:
+        _moves.setdefault(entry["old"].encode(), []).append((entry["before"], [n.encode() for n in entry["new"]]))
+_id = commit.original_id.decode()
 changes = []
+seen = set()
 for change in commit.file_changes:
     name = change.filename
     if name.startswith(b"packages/"):
         targets = [name[len(b"packages/"):]]
-    elif commit.original_id.decode() in _before and name in _moves:
-        targets = _moves[name]
     else:
-        continue
+        targets = []
+        for parent, new in _moves.get(name, []):
+            if _id in _before[parent]:
+                targets.extend(new)
     for target in targets:
+        if target in seen:
+            continue
+        seen.add(target)
         changes.append(FileChange(change.type, target, change.blob_id, change.mode))
 commit.file_changes = changes
 PY
@@ -137,6 +144,12 @@ git -C "$WORK/result" remote remove origin
 git -C "$WORK/result" config --local sidwave.splitOutput true
 COMMITS="$(git -C "$WORK/result" rev-list --count HEAD)"
 echo "$COMMITS commits, $(git -C "$WORK/result" ls-files | wc -l) files"
+# The tree of the new HEAD must be exactly the tree of packages/ at the source commit.
+if [ "$(git -C "$WORK/result" rev-parse 'HEAD^{tree}')" != "$(git -C "$REPO_ROOT" rev-parse "$SHA:packages")" ]; then
+  echo "the split tree differs from packages/ at $SHA" >&2
+  exit 1
+fi
+echo "tree identical to packages/ at the source commit"
 
 # History checks: authorship, dates and subjects of the commits that touched a moved file before the move must be
 # present under the new path; git log --follow must reach the same commits.
@@ -241,6 +254,7 @@ def load(name, default):
 steps = [json.loads(l) for l in open(os.path.join(work, "steps.jsonl")) if l.strip()]
 result = {
     "source_ref_commit": sha, "output": out, "commit_count": int(commits),
+    "tree_equals_packages_at_source": True,
     "head_after_split": subprocess.run(["git", "-C", os.path.join(work, "result"), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip(),
     "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
     "history": load("history.json", {}), "proof_run": proof == "1", "proof_ok": proof_ok == "true" if proof == "1" else None,
