@@ -6,9 +6,10 @@ import { join } from "node:path";
 import { renderSynth, renderSample, quantizePcm, readPcmFile, unpackNibbles } from "../src/sidwavePcm.js";
 import { parseSidwave } from "../src/sidwave.js";
 import { compileSidwaveToPrg } from "../src/sidwaveCompiler.js";
-import { soundModuleGroup } from "../src/tools/registry/sound.js";
 
 const RATE = 4000;
+const reader = (path) => readFileSync(path);
+const files = { readFile: reader };
 const toPcm = ({ data, sampleCount }) => Float64Array.from(unpackNibbles(data, sampleCount), (x) => (2 * x - 15) / 15);
 
 function goertzel(samples, frequency, rate = RATE) {
@@ -30,6 +31,27 @@ function strongest(samples, low, high) {
   }
   return bestHz;
 }
+
+function stereoToneWav() {
+  const rate = 44100, frames = rate / 2;
+  const wav = Buffer.alloc(44 + frames * 4);
+  wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(2, 22);
+  wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 4, 28);
+  wav.writeUInt16LE(4, 32); wav.writeUInt16LE(16, 34);
+  wav.write("data", 36); wav.writeUInt32LE(frames * 4, 40);
+  for (let i = 0; i < frames; i++) {
+    const tone = Math.sin(2 * Math.PI * i * 440 / rate);
+    const aliased = Math.sin(2 * Math.PI * i * 5500 / rate);
+    const side = Math.sin(2 * Math.PI * i * 700 / rate);
+    wav.writeInt16LE(Math.round(tone * 14000 + aliased * 9000 + side * 5000 + 1000), 44 + i * 4);
+    wav.writeInt16LE(Math.round(tone * 10000 + aliased * 9000 - side * 5000 + 1000), 46 + i * 4);
+  }
+  return wav;
+}
+
+
+const score = (samples) => ({ sidwave: "1.2", tempo: 120, voices: [], timeline: [{ bars: 1, layers: {} }], samples });
 
 test("built-in kick's fundamental falls and all six kits are distinct", () => {
   const kick = toPcm(renderSample({ kit: "kick" }, RATE));
@@ -62,30 +84,12 @@ test("seeded layered noise, filters, envelope, crush and vowel rendering are rep
   assert.ok(rendered.stats.snrDb > 0);
 });
 
-function stereoToneWav() {
-  const rate = 44100, frames = rate / 2;
-  const wav = Buffer.alloc(44 + frames * 4);
-  wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(2, 22);
-  wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 4, 28);
-  wav.writeUInt16LE(4, 32); wav.writeUInt16LE(16, 34);
-  wav.write("data", 36); wav.writeUInt32LE(frames * 4, 40);
-  for (let i = 0; i < frames; i++) {
-    const tone = Math.sin(2 * Math.PI * i * 440 / rate);
-    const aliased = Math.sin(2 * Math.PI * i * 5500 / rate);
-    const side = Math.sin(2 * Math.PI * i * 700 / rate);
-    wav.writeInt16LE(Math.round(tone * 14000 + aliased * 9000 + side * 5000 + 1000), 44 + i * 4);
-    wav.writeInt16LE(Math.round(tone * 10000 + aliased * 9000 - side * 5000 + 1000), 46 + i * 4);
-  }
-  return wav;
-}
-
 test("stereo 44.1 kHz WAV import mixes to mono, removes DC and rejects aliasing at 4 kHz", () => {
   const dir = mkdtempSync(join(tmpdir(), "sidwave-wav-"));
   try {
     const path = join(dir, "tone.wav");
     writeFileSync(path, stereoToneWav());
-    const rendered = renderSample({ file: path, dither: "none" }, RATE);
+    const rendered = renderSample({ file: path, dither: "none" }, RATE, files);
     const samples = toPcm(rendered);
     const stable = samples.subarray(100, 1900);
     assert.equal(samples.length, 2000);
@@ -96,10 +100,6 @@ test("stereo 44.1 kHz WAV import mixes to mono, removes DC and rejects aliasing 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-test("PCM import refuses a file outside the allowed host roots", () => {
-  assert.throws(() => renderSample({ file: "/etc/hosts" }, RATE), /outside.*allowed|allowed roots/i);
 });
 
 test("quantizer normalizes signed peaks, trims silence and packs odd lengths", () => {
@@ -120,8 +120,6 @@ test("shaped dither reduces coherent and low frequency error on a quiet sine", (
   assert.ok(bandPower(shaped) < bandPower(none));
   assert.ok(goertzel(tpdf, 125) < goertzel(none, 125));
 });
-
-const score = (samples) => ({ sidwave: "1.2", tempo: 120, voices: [], timeline: [{ bars: 1, layers: {} }], samples });
 
 test("compiler reports unique packed bytes, headroom, timing and source statistics", () => {
   const doc = parseSidwave(score({ rate: RATE,
@@ -150,30 +148,6 @@ test("an oversize packed score reports sample bytes and mitigation", () => {
   assert.throws(() => compileSidwaveToPrg(doc), /needs \d+ bytes and includes 49000 sample bytes.*lower sample rate or shorter samples/i);
 });
 
-test("sample_render and analyze round-trip a quantized WAV with no device client", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "sidwave-preview-"));
-  try {
-    const ctx = { client: new Proxy({}, { get() { throw new Error("Preview accessed the device"); } }),
-      platform: { id: "c64u" }, logger: { info: () => {} } };
-    const definition = { synth: { osc: "sine", freq: "A4", ms: 160 } };
-    const result = await soundModuleGroup.invoke("c64_sound", { op: "sample_render", definition, outputDir: dir }, ctx);
-    assert.ok(!result.isError, JSON.stringify(result));
-    const { outputPath, stats } = result.structuredContent.data;
-    assert.equal(stats.bytes, 320);
-    assert.equal(readFileSync(outputPath).toString("ascii", 0, 4), "RIFF");
-    const wav = readPcmFile(outputPath);
-    assert.equal(wav.rate, RATE);
-    assert.equal(wav.data.length, 640);
-    assert.equal(strongest(wav.data, 425, 455), 440);
-    const analysis = await soundModuleGroup.invoke("c64_sound", { op: "analyze", wavPath: outputPath }, ctx);
-    assert.ok(!analysis.isError, JSON.stringify(analysis));
-    assert.equal(analysis.metadata.analysis.analysis.source, "wav");
-    assert.ok(analysis.metadata.analysis.analysis.voices[0].detected_notes.some((note) => note.note === "A4"));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test("PCM decoder accepts 8-bit, signed 24-bit and float32 WAV plus raw u8 and s16", () => {
   const dir = mkdtempSync(join(tmpdir(), "sidwave-formats-"));
   try {
@@ -196,32 +170,33 @@ test("PCM decoder accepts 8-bit, signed 24-bit and float32 WAV plus raw u8 and s
       raw.copy(wav, 44);
       const path = join(dir, name);
       writeFileSync(path, wav);
-      assert.deepEqual([...readPcmFile(path).data], [-1, -0.5, 0, 0.5]);
+      assert.deepEqual([...readPcmFile(path, undefined, reader).data], [-1, -0.5, 0, 0.5]);
     }
 
     const u8 = join(dir, "samples.u8"), s16 = join(dir, "samples.s16");
     writeFileSync(u8, Buffer.from([0, 128, 192]));
     writeFileSync(s16, Buffer.from("008000000040", "hex"));
     for (const file of [u8, s16]) {
-      assert.deepEqual([...readPcmFile(file, RATE).data], [-1, 0, 0.5]);
-      assert.throws(() => renderSample({ file }, RATE), /file_rate/);
-      assert.equal(renderSample({ file, file_rate: RATE }, RATE).stats.source, "file");
+      assert.deepEqual([...readPcmFile(file, RATE, reader).data], [-1, 0, 0.5]);
+      assert.throws(() => renderSample({ file }, RATE, files), /file_rate/);
+      assert.equal(renderSample({ file, file_rate: RATE }, RATE, files).stats.source, "file");
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("compile_play dry run exposes sample statistics and NMI budget", async () => {
-  const sidwave = score({ rate: RATE, defs: { hit: { b64: "5w==" } }, triggers: [{ sample: "hit", at: [0] }] });
-  const ctx = { client: new Proxy({}, { get() { throw new Error("Dry run accessed the device"); } }),
-    platform: { id: "c64u" }, logger: { info: () => {} } };
-  const result = await soundModuleGroup.invoke("c64_sound", { op: "compile_play", sidwave, dryRun: true }, ctx);
-  assert.ok(!result.isError, JSON.stringify(result));
-  const report = result.metadata;
-  assert.equal(report.sampleBytes, 1);
-  assert.equal(report.sampleDefinitions.hit.source, "b64");
-  assert.equal(report.digiWorstCaseCyclesPerNmi, 116);
-  assert.ok(report.digiCyclesPerCall >= report.digiWorstCaseCyclesPerNmi);
-  assert.ok(report.bytesBelowD000 > 0);
+test("a file: sample source without a reader is an error, and the size limit is an option", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sidwave-noreader-"));
+  try {
+    const file = join(dir, "a.u8");
+    writeFileSync(file, Uint8Array.of(0, 128, 255, 128));
+    assert.throws(() => renderSample({ file, file_rate: RATE }, RATE), /file reader/);
+    assert.throws(() => parseSidwave(score({ rate: RATE, defs: { a: { file, file_rate: RATE } } })), /file reader/);
+    assert.throws(() => readPcmFile(file, RATE, reader, 3), /size limit/);
+    assert.equal(readPcmFile(file, RATE, reader, 4).data.length, 4);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
+

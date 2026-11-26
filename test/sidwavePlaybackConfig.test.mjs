@@ -1,8 +1,8 @@
 import test from "#test/runner";
 import assert from "#test/assert";
 import { C64Client } from "../src/c64Client.js";
-import { parseSidwave } from "../src/sidwave.js";
-import { compileSidwaveToPrg } from "../src/sidwaveCompiler.js";
+import { parseSidwave } from "sidwave/sidwave";
+import { compileSidwaveToPrg } from "sidwave/compiler";
 import { audioModule } from "../src/tools/audio.js";
 import { metaModule } from "../src/tools/meta/index.js";
 

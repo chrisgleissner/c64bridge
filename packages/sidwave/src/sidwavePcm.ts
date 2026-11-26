@@ -1,6 +1,5 @@
-import { readFileSync } from "node:fs";
+import { Buffer } from "node:buffer";
 import { extname } from "node:path";
-import { DEFAULT_MAX_READ_BYTES, resolveHostPath } from "./hostPaths.js";
 
 const MAX_SAMPLES = 0x18000;
 export const SAMPLE_KITS = ["kick", "snare", "clap", "hat", "tom", "zap"] as const;
@@ -320,10 +319,24 @@ export function quantizePcm(input: Float64Array, options: {
     snrDb: signal && noise ? 10 * Math.log10(signal / noise) : null };
 }
 
-export function readPcmFile(file: string, fileRate?: number): { data: Float64Array; rate: number } {
-  const path = resolveHostPath(file, { purpose: "read" });
-  const bytes = readFileSync(path);
-  if (bytes.length > DEFAULT_MAX_READ_BYTES) throw new Error("PCM file exceeds the host read size limit");
+/** Reads the bytes of a sample file. The caller decides which paths are allowed and how they are resolved. */
+export type SidwaveFileReader = (path: string) => Uint8Array;
+
+/** Largest PCM file accepted by default. */
+export const DEFAULT_MAX_PCM_FILE_BYTES = 16 * 1024 * 1024;
+
+/** How `file:` sample sources are read. Without a reader, a `file:` source is an error. */
+export interface SidwaveReadOptions {
+  readFile?: SidwaveFileReader;
+  /** Upper bound for the bytes of one sample file; defaults to {@link DEFAULT_MAX_PCM_FILE_BYTES}. */
+  maxFileBytes?: number;
+}
+
+export function readPcmFile(file: string, fileRate?: number, reader?: SidwaveFileReader, maxFileBytes: number = DEFAULT_MAX_PCM_FILE_BYTES): { data: Float64Array; rate: number } {
+  if (!reader) throw new Error("file: sample sources need a file reader; pass readFile in the options");
+  const read = reader(file);
+  const bytes = Buffer.isBuffer(read) ? read : Buffer.from(read.buffer, read.byteOffset, read.byteLength);
+  if (bytes.length > maxFileBytes) throw new Error("PCM file exceeds the host read size limit");
   const ext = extname(file).toLowerCase();
   if (ext === ".u8" || ext === ".s16") {
     const rate = integer(fileRate, "file_rate", 1, 0xffffffff);
@@ -400,7 +413,7 @@ function synthesizeSample(kit: typeof SAMPLE_KITS[number], rate: number): Float6
 }
 
 /** Shared by the score compiler and the host-only WAV preview. */
-export function renderSample(raw: unknown, rate: number): RenderedSample {
+export function renderSample(raw: unknown, rate: number, options: SidwaveReadOptions = {}): RenderedSample {
   const spec = fields(raw, "sample", SAMPLE_SOURCE_KEYS);
   if (!Number.isInteger(rate) || rate < 16 || rate > 8000) throw new Error("rate must be an integer in 16..8000");
   const keys = ["synth", "file", "kit", "hex", "b64", "base64"] as const;
@@ -445,7 +458,7 @@ export function renderSample(raw: unknown, rate: number): RenderedSample {
       pcm = resamplePcm(synthesizeSample(kit, 32_000), 32_000, rate);
     } else {
       if (typeof spec.file !== "string" || !spec.file) throw new Error("file must be a host path");
-      const imported = readPcmFile(spec.file, spec.file_rate as number | undefined);
+      const imported = readPcmFile(spec.file, spec.file_rate as number | undefined, options.readFile, options.maxFileBytes);
       if (!imported.data.length) throw new Error("Sample contains no audio frames");
       const dc = imported.data.reduce((sum, x) => sum + x, 0) / imported.data.length;
       silenceLevel = -dc;

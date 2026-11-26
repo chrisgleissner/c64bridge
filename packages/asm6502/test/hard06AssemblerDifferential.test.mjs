@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assemblyToPrgDetailed, AssemblyError } from "../src/tools/translation/assembler.js";
+import { assemblyToPrgDetailed, AssemblyError } from "../src/assembler.js";
 
 // HARD06 review point 4 of branch F (decision D5): differential check of the built-in assembler.
 //

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../../hostPaths.js";
-import { renderSample, sampleWav } from "../../sidwavePcm.js";
+import { renderSample, sampleWav } from "sidwave/pcm";
+import { hostSidwaveReadOptions } from "../../sidwaveHost.js";
 import { Buffer } from "node:buffer";
 import {
   cancelledResult,
@@ -81,7 +82,7 @@ const soundOperations: GroupedOperationConfig[] = [
       try {
         const { definition, rate, outputDir } = sampleRenderArgsSchema.parse(rawArgs);
         if (ctx.signal?.aborted) return cancelledResult();
-        const sample = renderSample(definition ?? { kit: "kick" }, rate ?? 4000);
+        const sample = renderSample(definition ?? { kit: "kick" }, rate ?? 4000, hostSidwaveReadOptions);
         const dir = outputDir ? resolveHostPath(outputDir, { purpose: "write" }) : defaultHostOutputDir("artifacts", "samples");
         await mkdir(dir, { recursive: true });
         const outputPath = resolveHostChildPath(dir, `sample-${randomUUID()}.wav`);

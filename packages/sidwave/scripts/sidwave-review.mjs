@@ -2,7 +2,7 @@
 /**
  * Objective quality gate for a SIDWAVE rendering or capture (src/audio/sidwaveQuality.ts, doc/sidwave-hil.md).
  *
- *   node scripts/sidwave-review.mjs --wav <file.wav> [--song <file.yaml|preset:<style>>] [--offset-ms N] [--out report.json]
+ *   node packages/sidwave/scripts/sidwave-review.mjs --wav <file.wav> [--song <file.yaml|preset:<style>>] [--offset-ms N] [--out report.json]
  *
  * With --song the score is used for scheduled onsets, bars and sections. The song start in the WAV is found by comparing
  * with a sidplayfp rendering unless --offset-ms is given. Offline: no device is contacted. Exit 1 on a FAIL verdict.
@@ -16,7 +16,7 @@ const MODULES = ["sidwave", "sidwaveCompiler", "audio/sidwaveFidelity", "audio/g
 
 function usage(message) {
   if (message) console.error(`error: ${message}\n`);
-  console.error("usage: node scripts/sidwave-review.mjs --wav <file.wav> [--song <file.yaml|preset:<style>>] [--offset-ms N] [--model 6581|8580] [--out report.json]");
+  console.error("usage: node packages/sidwave/scripts/sidwave-review.mjs --wav <file.wav> [--song <file.yaml|preset:<style>>] [--offset-ms N] [--model 6581|8580] [--out report.json]");
   process.exit(2);
 }
 

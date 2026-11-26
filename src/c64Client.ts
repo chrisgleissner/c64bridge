@@ -15,8 +15,8 @@ import axios from "axios";
 import { basicToPrg } from "./tools/translation/basicTokenizer.js";
 import { assemblyToPrgDetailed, prgEntryAddress } from "./tools/translation/assembler.js";
 import { stripHexByteSeparators } from "./tools/hex.js";
-import { SIDWAVE_PLAY_ADDRESS, type CompileResult } from "./sidwaveCompiler.js";
-import type { ParsedSidwave } from "./sidwave.js";
+import { SIDWAVE_PLAYER, isSidwaveIrqHandler, type CompileResult } from "sidwave/compiler";
+import type { ParsedSidwave } from "sidwave/sidwave";
 import { BASIC_IRQ, basicReady, dmaStartSidwave, irqVector, isSidwaveIrq, keyboardIdle } from "./sidwaveUltimateStart.js";
 import { clearUltimateSidWindows, readUltimateSidWindows, prepareSidwaveSetup, sidwaveNeedsMap, type SidwaveSetup } from "./sidwavePlaybackConfig.js";
 import { petsciiToAscii, screenCodesToAscii } from "./petscii.js";
@@ -1403,11 +1403,9 @@ export class C64Client {
     const handler = (vector[0] ?? 0) | ((vector[1] ?? 0) << 8);
     // A handler too close to $FFFF cannot hold the 6-byte SIDWAVE handler (and the read would cross $FFFF).
     if (handler === 0xea31 || handler > 0xfffa) return false;
-    const code = await facade.readMemory(handler, 6);
-    const playVector = await facade.readMemory(SIDWAVE_PLAY_ADDRESS, 3);
-    const isSidwaveHandler = code[0] === 0x20 && code[3] === 0x4c && code[4] === 0x31 && code[5] === 0xea
-      && playVector[0] === 0x4c && playVector[1] === code[1] && playVector[2] === code[2];
-    if (!isSidwaveHandler) return false;
+    const code = await facade.readMemory(handler, SIDWAVE_PLAYER.irqHandler.length);
+    const playVector = await facade.readMemory(SIDWAVE_PLAYER.playAddress, SIDWAVE_PLAYER.playVectorLength);
+    if (!isSidwaveIrqHandler(code, playVector)) return false;
     await facade.writeMemory(0x0314, Uint8Array.of(0x31, 0xea));
     return true;
   }

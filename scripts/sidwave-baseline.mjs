@@ -21,13 +21,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Module resolver. After the SIDWAVE code move, only this function changes.
 // ---------------------------------------------------------------------------
 async function loadSidwaveModules() {
-  const load = (rel) => import(pathToFileURL(path.join(root, rel)).href);
+  const api = await import("sidwave"); // the public exports of the sidwave package
   return {
-    parser: await load("dist/sidwave.js"),            // parseSidwave, SidwaveValidationError
-    compiler: await load("dist/sidwaveCompiler.js"),  // compileSidwaveToPrg, compileSidwaveToSid
-    lint: await load("dist/sidwaveLint.js"),          // formatFinding
-    generator: await load("dist/audio/generateSidwave.js"), // MUSIC_STYLES, DEFAULT_MUSIC_SEED, generateSidwave
-    reference: await load("dist/audio/sidwaveReference.js"), // renderReference
+    parser: api,    // parseSidwave, SidwaveValidationError
+    compiler: api,  // compileSidwaveToPrg, compileSidwaveToSid, arrangeSidwave
+    lint: api,      // formatFinding
+    generator: api, // MUSIC_STYLES, DEFAULT_MUSIC_SEED, generateSidwave
+    reference: api, // renderReference
   };
 }
 // ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ function compileRecord(mod, text, { forRender = false } = {}) {
 function collectScores() {
   const items = [];
   for (const f of listYaml(path.join(root, "data/sound/examples"))) items.push({ kind: "example", file: f });
-  const fx = path.join(root, "test/fixtures");
+  const fx = path.join(root, "packages/sidwave/test/fixtures");
   for (const d of fs.readdirSync(fx).filter((d) => /^sidwave/.test(d)).sort()) {
     for (const f of listYaml(path.join(fx, d))) items.push({ kind: "fixture", file: f });
   }
@@ -184,7 +184,7 @@ async function record() {
   let t = Date.now();
   const docs = new Map();
   for (const item of collectScores()) {
-    const key = rel(item.file);
+    const key = rel(item.file).replace(/^packages\/sidwave\//, ""); // keys of moved fixtures stay test/fixtures/...
     const { doc, rec } = compileRecord(mod, fs.readFileSync(item.file, "utf8"));
     rec.kind = item.kind;
     rec.source_sha256 = sha(fs.readFileSync(item.file));

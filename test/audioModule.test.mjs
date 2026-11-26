@@ -2,8 +2,8 @@ import test from "#test/runner";
 import assert from "#test/assert";
 import { Buffer } from "node:buffer";
 import { audioModule } from "../src/tools/audio.js";
-import { compileSidwaveToPrg } from "../src/sidwaveCompiler.js";
-import { parseSidwave } from "../src/sidwave.js";
+import { compileSidwaveToPrg } from "sidwave/compiler";
+import { parseSidwave } from "sidwave/sidwave";
 
 function createLogger() {
   return {

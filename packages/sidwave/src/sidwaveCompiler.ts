@@ -12,7 +12,7 @@ import { RELEASE_MS, SidwaveFindings, lintArrangement, arrangementReport, format
 import { digiTriggers, makeTimelineClock, rampValue, timelinePatternPasses, type TimelineClock } from "./sidwaveForm.js";
 import type { SampleStats } from "./sidwavePcm.js";
 import { addDigiPlayer, digiCyclesPerCall, digiDataAsm, digiPeakCycles, digiPeriod, validateDigiRate } from "./sidwaveDigi.js";
-import { assemblyToPrgDetailed } from "./tools/translation/assembler.js";
+import { assemblyToPrgDetailed } from "c64-asm6502/assembler";
 import { isModern, patternBeats, sectionBarBeats } from "./sidwave.js";
 import type { ParsedSidwave, SystemMode, SidwaveVoice, SidwavePattern, SidwavePatternGroove, MotifEntry, SidwaveRegisterTable, FilterModSpec, SidwaveSamples, SidwaveGrooveNote } from "./sidwave.js";
 import {
@@ -43,6 +43,40 @@ export const SIDWAVE_HARD_RESTART_FRAMES = 2;
 export const SIDWAVE_MIN_NOTE_FRAMES = SIDWAVE_HARD_RESTART_FRAMES + 1;
 /** BASIC's memory ends where the BASIC ROM starts. */
 export const SIDWAVE_BASIC_END = 0xa000;
+
+/**
+ * Fixed addresses and the IRQ handler shape of a standalone SIDWAVE player, for hosts that need to recognise
+ * a running player in C64 memory. The play vector at {@link SIDWAVE_PLAY_ADDRESS} is `JMP play`; the handler
+ * installed at $0314 is `JSR play` followed by `JMP $EA31`.
+ */
+export const SIDWAVE_PLAYER = {
+  loadAddress: SIDWAVE_LOAD_ADDRESS,
+  entryAddress: SIDWAVE_PRG_ENTRY,
+  initAddress: SIDWAVE_INIT_ADDRESS,
+  playAddress: SIDWAVE_PLAY_ADDRESS,
+  /** Length of the play vector read at `playAddress` (`JMP play`). */
+  playVectorLength: 3,
+  irqHandler: {
+    /** Bytes of the handler to read: `JSR play` (3) and `JMP $EA31` (3). */
+    length: 6,
+    /** KERNAL IRQ handler the player jumps to after the play call. */
+    kernalIrq: 0xea31,
+    /** Opcode byte of `JSR` at offset 0 and of `JMP` at offsets 3 (handler) and 0 (play vector). */
+    jsrOpcode: 0x20,
+    jmpOpcode: 0x4c,
+    /** The six handler bytes with the play address (offsets 1 and 2) left open. */
+    signature: [0x20, null, null, 0x4c, 0x31, 0xea] as ReadonlyArray<number | null>,
+  },
+} as const;
+
+/**
+ * True when `handler` (the {@link SIDWAVE_PLAYER}.irqHandler.length bytes at the IRQ vector's target) is the SIDWAVE
+ * IRQ stub and `playVector` (the bytes at the play address) is a `JMP` to the same routine the stub calls.
+ */
+export function isSidwaveIrqHandler(handler: ArrayLike<number>, playVector: ArrayLike<number>): boolean {
+  return handler[0] === 0x20 && handler[3] === 0x4c && handler[4] === 0x31 && handler[5] === 0xea
+    && playVector[0] === 0x4c && playVector[1] === handler[1] && playVector[2] === handler[2];
+}
 
 export interface CompileResult {
   prg: Buffer;

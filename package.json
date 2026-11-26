@@ -14,6 +14,9 @@
     "#test/assert": "./test/helpers/assert.js",
     "#test/runner": "./test/helpers/test.js"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "bin": {
     "c64bridge": "scripts/cli.js"
   },
@@ -22,11 +25,14 @@
     "mcp": "node scripts/invoke-bun.mjs src/mcp-server.ts",
     "mcp:node": "node dist/mcp-server.js",
     "mcp:build": "npm run build && node dist/mcp-server.js",
-    "build": "VICE_VISIBLE=false node scripts/prebuild.mjs && VICE_VISIBLE=false tsc -p tsconfig.json && VICE_VISIBLE=false node scripts/postbuild.mjs && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/update-readme.ts && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
+    "build:packages": "tsc -b packages/asm6502 packages/sidwave",
+    "build": "node scripts/sync-sidwave-data.mjs && npm run build:packages && VICE_VISIBLE=false node scripts/prebuild.mjs && VICE_VISIBLE=false tsc -p tsconfig.json && VICE_VISIBLE=false node scripts/postbuild.mjs && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/update-readme.ts && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
     "prepack": "npm run build",
     "lint": "npm run check",
     "test": "node scripts/invoke-bun.mjs scripts/run-tests.ts",
     "test:node": "node scripts/run-tests.mjs",
+    "test:packages": "npm run test --workspaces",
+    "coverage:packages": "node scripts/run-package-coverage.mjs",
     "test:sidwave-hil": "node scripts/sidwave-hil.mjs",
     "test:stress": "node scripts/stress-mcp.mjs",
     "test:vice:mock": "npm run test -- --platform=vice --target=mock",
@@ -75,9 +81,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "axios": "^1.20.0",
+    "c64-asm6502": "0.1.0",
     "jimp": "^1.6.1",
     "meyda": "5.6.2",
     "pitchfinder": "^2.3.4",
+    "sidwave": "0.1.0",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -125,5 +133,9 @@
     "!.github/prompts/steer.prompt.md",
     "!.github/prompts/pr-converge.prompt.md",
     "!.github/skills/pr-converge/**"
+  ],
+  "bundleDependencies": [
+    "c64-asm6502",
+    "sidwave"
   ]
 }

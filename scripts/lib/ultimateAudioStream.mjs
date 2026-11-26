@@ -10,23 +10,49 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const VALUES_PER_PACKET = 384;
 
+/** Modules that moved into the sidwave package, by the name the scripts use, and their public subpath. */
+const SIDWAVE_PACKAGE_MODULES = {
+  sidwave: "sidwave/sidwave",
+  sidwaveCompiler: "sidwave/compiler",
+  sidwaveExamples: "sidwave/examples",
+  sidwaveLint: "sidwave/lint",
+  sidwavePcm: "sidwave/pcm",
+  "audio/generateSidwave": "sidwave/generate",
+  "audio/sidwaveFidelity": "sidwave/fidelity",
+  "audio/sidwaveQuality": "sidwave/quality",
+  "audio/sidwaveReference": "sidwave/reference",
+  "audio/sidwaveSimilarity": "sidwave/similarity",
+};
+
 /**
- * Imports src/<name>.ts for each name. With preferDist, a complete dist build is used instead when one exists.
- * dist can be older than src, so a script that must run the checked-out code passes preferDist: false.
+ * Imports the modules the scripts need. Names of the sidwave package modules (see SIDWAVE_PACKAGE_MODULES) load
+ * the built package (npm run build). Other names load src/<name>.ts; with preferDist, a complete dist build is
+ * used instead when one exists. dist can be older than src, so a script that must run the checked-out code passes
+ * preferDist: false. parseSidwave is wrapped so that file: samples are read with the host path rules of the tools.
  */
 export async function loadModules(names, { preferDist = true } = {}) {
+  const packageNames = names.filter((name) => name in SIDWAVE_PACKAGE_MODULES);
+  const repoNames = names.filter((name) => !(name in SIDWAVE_PACKAGE_MODULES));
+  const repoLoad = packageNames.length ? [...repoNames, "sidwaveHost"] : repoNames;
   const dist = preferDist ? [path.join(ROOT, "dist"), path.join(ROOT, "dist", "src")].find((dir) =>
-    names.every((name) => fs.existsSync(path.join(dir, `${name}.js`)))) : undefined;
+    repoLoad.every((name) => fs.existsSync(path.join(dir, `${name}.js`)))) : undefined;
+  let repoMods;
   if (dist) {
-    const mods = await Promise.all(names.map((m) => import(pathToFileURL(path.join(dist, `${m}.js`)).href)));
-    return Object.assign({}, ...mods);
+    repoMods = await Promise.all(repoLoad.map((m) => import(pathToFileURL(path.join(dist, `${m}.js`)).href)));
+  } else {
+    if (!globalThis.Bun) {
+      const { register } = await import("tsx/esm/api");
+      register();
+    }
+    repoMods = await Promise.all(repoLoad.map((m) => import(pathToFileURL(path.join(ROOT, "src", `${m}.ts`)).href)));
   }
-  if (!globalThis.Bun) {
-    const { register } = await import("tsx/esm/api");
-    register();
+  const packageMods = await Promise.all(packageNames.map((name) => import(SIDWAVE_PACKAGE_MODULES[name])));
+  const merged = Object.assign({}, ...repoMods, ...packageMods);
+  if (typeof merged.parseSidwave === "function" && merged.hostSidwaveReadOptions) {
+    const parse = merged.parseSidwave;
+    merged.parseSidwave = (input, options = merged.hostSidwaveReadOptions) => parse(input, options);
   }
-  const src = (m) => import(pathToFileURL(path.join(ROOT, "src", `${m}.ts`)).href);
-  return Object.assign({}, ...(await Promise.all(names.map(src))));
+  return merged;
 }
 
 export function writeWav(file, pcm, sampleRate) {

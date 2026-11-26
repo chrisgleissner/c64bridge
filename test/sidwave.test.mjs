@@ -1,7 +1,7 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { compileSidwaveToPrg, compileSidwaveToSid, hzToSidFrequency, sidwaveFrameRate } from "../src/sidwaveCompiler.js";
-import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, hzToSidFrequency, sidwaveFrameRate } from "sidwave/compiler";
+import { midiToHz, noteNameToMidi, parseSidwave } from "sidwave/sidwave";
 import { runSidToWav, SidplayExecutionError } from "../src/sidplayRunner.js";
 import os from "node:os";
 import fs from "node:fs";

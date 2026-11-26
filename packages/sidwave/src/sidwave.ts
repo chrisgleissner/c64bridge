@@ -8,7 +8,7 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { Buffer } from 'node:buffer';
 import pkg from 'yaml';
-import { renderSample, SAMPLE_SOURCE_KEYS, type RenderedSample, type SampleSource } from "./sidwavePcm.js";
+import { renderSample, SAMPLE_SOURCE_KEYS, type RenderedSample, type SampleSource, type SidwaveReadOptions } from "./sidwavePcm.js";
 const { parse: yamlParse } = pkg;
 
 export type SystemMode = "PAL" | "NTSC";
@@ -319,7 +319,7 @@ const PATTERN_FX_KEYS = new Set(["vibrato", "pwm_sweep", "slide", "filter_mod"])
 const GLOBAL_FX_KEYS = new Set(["reverb_sim", "filter_env"]);
 const WAVEFORMS = new Set(["pulse", "sawtooth", "saw", "triangle", "tri", "noise"]);
 
-export function parseSidwave(input: string | object): ParsedSidwave {
+export function parseSidwave(input: string | object, options: SidwaveReadOptions = {}): ParsedSidwave {
   let obj: any;
   if (typeof input === "string") {
     try {
@@ -472,7 +472,7 @@ export function parseSidwave(input: string | object): ParsedSidwave {
     length_bars = requireNumber(header.length_bars, `${headerPath}.length_bars`, { min: 1, max: MAX_SIDWAVE_BARS, integer: true });
   }
 
-  const samples = normalizeSamples(obj.samples, sids, modern, barStartBeats(timeline, length_bars, meter), digiVoices.length > 0);
+  const samples = normalizeSamples(obj.samples, sids, modern, barStartBeats(timeline, length_bars, meter), digiVoices.length > 0, options);
   const song: ParsedSidwave["song"] = { title, tempo, mode, length_bars, meter, global_fx, ...(meterSig ? { meterSig } : {}) };
   if (author !== undefined) song.author = author;
   const speed = obj.speed === undefined ? 1 : requireNumber(obj.speed, "$.speed", { min: 1, max: 4, integer: true });
@@ -574,7 +574,7 @@ function parseSidMix(sid: Record<string, unknown>, path: string): { volume: numb
   return { volume, pan };
 }
 
-function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, starts: number[], digiLayers = false): SidwaveSampleSchedule | undefined {
+function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, starts: number[], digiLayers = false, readOptions: SidwaveReadOptions = {}): SidwaveSampleSchedule | undefined {
   const bars = starts.length - 1;
   const totalBeats = starts[bars]!;
   if (raw === undefined) return;
@@ -586,7 +586,7 @@ function normalizeSamples(raw: unknown, sids: SidMapEntry[], modern: boolean, st
   let totalBytes = 0;
   const add = (name: string, value: unknown, sourcePath: string) => {
     try {
-      const sample = renderSample(value, rate);
+      const sample = renderSample(value, rate, readOptions);
       totalBytes += sample.data.length;
       if (totalBytes > 0xc800) {
         throw new Error(`Sample data needs ${totalBytes} bytes and cannot fit below $D000. Use a lower rate or shorter samples`);

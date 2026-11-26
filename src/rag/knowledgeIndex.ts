@@ -1,4 +1,4 @@
-import { SIDWAVE_EXAMPLES, SIDWAVE_SCORE_RESOURCES, sidwaveExamplePath } from "../sidwaveExamples.js";
+import { SIDWAVE_EXAMPLES, SIDWAVE_SCORE_RESOURCES, sidwaveExamplePath } from "sidwave/examples";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

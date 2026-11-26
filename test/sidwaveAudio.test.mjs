@@ -5,8 +5,8 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { compileSidwaveToPrg, compileSidwaveToSid } from "../src/sidwaveCompiler.js";
-import { midiToHz, noteNameToMidi, parseSidwave } from "../src/sidwave.js";
+import { compileSidwaveToPrg, compileSidwaveToSid } from "sidwave/compiler";
+import { midiToHz, noteNameToMidi, parseSidwave } from "sidwave/sidwave";
 import { runSidToWav, SidplayExecutionError } from "../src/sidplayRunner.js";
 
 function readMonoPcm16(file) {

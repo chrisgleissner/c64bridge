@@ -1,8 +1,8 @@
-import { SIDWAVE_EXAMPLES_URI } from "../sidwaveExamples.js";
-import { DEFAULT_MUSIC_SEED, generateSidwave, MUSIC_STYLES, type MusicStyle } from "../audio/generateSidwave.js";
+import { SIDWAVE_EXAMPLES_URI } from "sidwave/examples";
+import { DEFAULT_MUSIC_SEED, generateSidwave, MUSIC_STYLES, type MusicStyle } from "sidwave/generate";
 import { clearViceSymbols } from "./translation/symbolRegistry.js";
-import { compileSidwaveToPrg, compileSidwaveToSid, type CompileResult } from "../sidwaveCompiler.js";
-import { midiToHz, noteNameToMidi, parseSidwave, type ParsedSidwave } from "../sidwave.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, type CompileResult } from "sidwave/compiler";
+import { midiToHz, noteNameToMidi, parseSidwave, type ParsedSidwave } from "sidwave/sidwave";
 import { analyzePcm, noAudioMeasurement, recordAndAnalyzeAudio } from "../audio/record_and_analyze_audio.js";
 import { cancelledResult, defineToolModule, type JsonSchema, type ToolExecutionContext } from "./types.js";
 import {
@@ -25,7 +25,8 @@ import {
 
 import { sidwaveSetupWarnings, validateViceSidwaveMap } from "../sidwavePlaybackConfig.js";
 import { getPlatformStatus } from "../platform.js";
-import { readPcmFile } from "../sidwavePcm.js";
+import { readPcmFile } from "sidwave/pcm";
+import { hostSidwaveFileReader, hostSidwaveReadOptions } from "../sidwaveHost.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -991,7 +992,7 @@ export const audioModule = defineToolModule({
           });
           for (const { note } of leadTimeline) assertPlayableFrequency(noteHz(note), note, system, "$.root");
           const sidwave = JSON.stringify(score);
-          const document = parseSidwave(sidwave);
+          const document = parseSidwave(sidwave, hostSidwaveReadOptions);
           const compiled = compileSidwaveToPrg(document, { loop: false });
           const backend = facade?.type ?? ctx.platform?.id ?? getPlatformStatus().id;
           const warnings = [...compiled.warnings, ...playbackSetupWarnings(document, backend, parsed.configure)];
@@ -1071,7 +1072,7 @@ export const audioModule = defineToolModule({
             dryRun: parsed.dryRun,
           });
 
-          const document = parseSidwave(source);
+          const document = parseSidwave(source, hostSidwaveReadOptions);
           if (!parsed.dryRun && platform === "vice") validateViceSidwaveMap(document);
           const compiled = compileSidwaveToPrg(document);
           const sidFile = outputFormat === "sid" ? compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress }) : undefined;
@@ -1223,7 +1224,7 @@ export const audioModule = defineToolModule({
           let analysis: Awaited<ReturnType<AudioAnalyzer>>;
           const expected = normaliseSidwaveInput(parsed.expectedSidwave);
           if (parsed.wavPath) {
-            const { data, rate } = readPcmFile(parsed.wavPath);
+            const { data, rate } = readPcmFile(parsed.wavPath, undefined, hostSidwaveFileReader);
             if (!data.length) throw new ToolValidationError("WAV contains no audio frames");
             const limit = Math.max(1, Math.floor((parsed.durationSeconds ?? 120) * rate));
             analysis = await analyzePcm(Float32Array.from(data.subarray(0, limit)), rate, "wav", expected, undefined, ctx.signal);

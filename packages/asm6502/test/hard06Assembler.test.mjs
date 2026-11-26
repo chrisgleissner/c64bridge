@@ -1,7 +1,6 @@
 import test from "#test/runner";
 import assert from "#test/assert";
-import { assemblyToPrgDetailed, AssemblyError } from "../src/tools/translation/assembler.js";
-import { disassemble, formatDisassembly } from "../src/tools/translation/disassembler.js";
+import { assemblyToPrgDetailed, AssemblyError } from "../src/assembler.js";
 
 // HARD06 TRANSLATE-3 to 8, 12 to 16: assembler dialect, expressions, diagnostics.
 
@@ -235,11 +234,3 @@ test("many reserved blocks merge in linear time (TRANSLATE-8)", () => {
   assert.equal(around.length, 2 + 4 + 1 + 2);
 });
 
-test("disassembler operands stay assemblable and symbols are reported separately (TRANSLATE-16)", () => {
-  const lines = disassemble(Uint8Array.of(0xad, 0x00, 0xd0, 0x20, 0x10, 0xff), 0xc000, undefined, new Map([[0xd000, "VIC"], [0xff10, "foo"]]));
-  assert.equal(lines[0].operand, "$D000");
-  assert.equal(lines[0].operandLabel, "VIC");
-  assert.match(formatDisassembly(lines), /LDA \$D000 {2}; VIC/);
-  const text = lines.map((line) => `${line.mnemonic} ${line.operand}`).join("\n");
-  assert.deepEqual(asm(text), [0xad, 0x00, 0xd0, 0x20, 0x10, 0xff]);
-});

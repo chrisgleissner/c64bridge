@@ -1,4 +1,4 @@
-import { SIDWAVE_SCORE_RESOURCES, SIDWAVE_EXAMPLES_URI } from "../sidwaveExamples.js";
+import { SIDWAVE_SCORE_RESOURCES, SIDWAVE_EXAMPLES_URI } from "sidwave/examples";
 
 export const RESOURCE_URIS = {
   guide: {
