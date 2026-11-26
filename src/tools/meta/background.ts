@@ -19,10 +19,10 @@ import { stateRootDir } from "../../hostPaths.js";
 import { randomUUID } from "node:crypto";
 import { processIsAlive, withTaskStateLock } from "../../taskStateLock.js";
 import {
-  MAX_WORKING_TASKS, type LegacyTaskStatus, type TaskCore, type TaskState, cancelTask as cancelCallTask, clearEngineTimer,
-  countWorkingTasks, deleteTask as deleteCallTask, engineNow, findByName as findCallTask, fromLegacyStatus, getTask as getCallTask,
-  handoverTask, isTerminal, listCallTasks, registerTaskSource, runWithInlineWindow, startEngineTimer, stopAllTasks, toLegacyStatus,
-  transition, waitForTask, type CallTask,
+  MAX_WORKING_TASKS, type CallTask, type LegacyTaskStatus, type TaskCore, cancelTask as cancelCallTask, clearEngineTimer,
+  countWorkingTasks, deleteTask as deleteCallTask, engineNow, findByName as findCallTask, fromLegacyStatus,
+  listCallTasks, registerTaskSource, runWithInlineWindow, startEngineTimer, stopAllTasks, toLegacyStatus,
+  transition, waitForTask,
 } from "../../tasks/engine.js";
 import { allowlistKey, listAllowlistKeys, lookupAllowlist, looksLikeAllowlistKey } from "../../tasks/allowlist.js";
 

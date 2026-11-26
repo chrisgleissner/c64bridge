@@ -6,10 +6,10 @@ import path from "node:path";
 import { toolRegistry } from "../../src/tools/registry/index.js";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { stopAllBackgroundTasks } from "../../src/tools/meta/background.js";
-import { __resetForTests, submitCall } from "../../src/tasks/engine.js";
+import { __resetForTests, setEngineClock, submitCall } from "../../src/tasks/engine.js";
 import { __resetLeasesForTests } from "../../src/tasks/resources.js";
 import { taskOperationEffect } from "../../src/tools/access.js";
-import { baseCtx } from "./helpers.mjs";
+import { baseCtx, createFakeClock, settle } from "./helpers.mjs";
 
 function platformCtx(client) {
   return {
@@ -167,3 +167,43 @@ test("the inner invoke enforces the access mode for a call task even when the st
   assert.equal(task.state, "failed");
   assert.match(task.error, /is blocked: it has effect "write"/);
 })));
+
+test("interval tasks run on the engine clock, and stop_all leaves no timer behind", () => withState(async () => {
+  const fake = createFakeClock();
+  setEngineClock(fake.clock);
+  let reads = 0;
+  const ctx = platformCtx({ getActiveBackendType: async () => "c64u", readMemory: async () => { reads += 1; return { success: true, data: "$00" }; } });
+  const started = await system({ op: "start_task", name: "tick", operation: "read", arguments: { address: "$0400", length: 1 }, intervalMs: 100 }, ctx);
+  assert.equal(data(started).started, true);
+  assert.equal(fake.pending(), 1, "one pending iteration timer");
+  assert.ok(fake.allUnref(), "interval timers are unref'd");
+  await fake.advance(100);
+  await settle();
+  assert.equal(reads, 1);
+  assert.equal(data(await system({ op: "list_tasks" }, ctx)).tasks.find((task) => task.name === "tick").status, "running");
+  await stopAllBackgroundTasks();
+  assert.equal(fake.pending(), 0, "stopAllBackgroundTasks clears every timer");
+  assert.equal(data(await system({ op: "list_tasks" }, ctx)).tasks.find((task) => task.name === "tick").status, "stopped");
+  await fake.advance(1000);
+  assert.equal(reads, 1, "a stopped task never runs again");
+}));
+
+test("a working call task and interval tasks share the limit of 16", () => withState(async () => {
+  const ctx = platformCtx(screenClient("NOTHING"));
+  await withEnv({ C64BRIDGE_TASK_INLINE_MS: "0" }, async () => {
+    for (let index = 0; index < 8; index += 1) {
+      const started = await system({ op: "start_task", name: `i${index}`, operation: "read_screen", intervalMs: 100000 }, ctx);
+      assert.equal(data(started).started, true);
+    }
+    for (let index = 0; index < 8; index += 1) {
+      const started = await system({ op: "start_task", name: `c${index}`, operation: "c64_memory.wait_for_text", arguments: { pattern: "NEVER", timeoutMs: 120000 } }, ctx);
+      assert.equal(data(started).started, true, `call ${index}: ${started.content?.[0]?.text}`);
+    }
+    const overInterval = await system({ op: "start_task", name: "i9", operation: "read_screen", intervalMs: 100000 }, ctx);
+    assert.equal(overInterval.isError, true);
+    assert.match(overInterval.content[0].text, /Too many running background tasks/);
+    const overCall = await system({ op: "start_task", name: "c9", operation: "c64_memory.wait_for_text", arguments: { pattern: "NEVER", timeoutMs: 120000 } }, ctx);
+    assert.equal(overCall.isError, true);
+    assert.match(overCall.content[0].text, /Too many running background tasks/);
+  });
+}));

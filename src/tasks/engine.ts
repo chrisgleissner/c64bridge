@@ -5,7 +5,7 @@ import type { ToolExecutionContext, ToolRunResult } from "../tools/types.js";
 import { cancelledResult } from "../tools/types.js";
 import { ToolExecutionError } from "../tools/errors.js";
 import { lookupAllowlist, allowlistKey, type AllowlistEntry } from "./allowlist.js";
-import { acquireLease, releaseLease, type Lease } from "./resources.js";
+import { __resetLeasesForTests, acquireLease, releaseLease, type Lease } from "./resources.js";
 
 export type TaskState = "working" | "completed" | "failed" | "cancelled";
 export type TaskKind = "interval" | "call";
@@ -441,6 +441,7 @@ export function __resetForTests(): void {
     clearEngineTimer(task.expiryTimer);
   }
   callTasks.clear();
+  __resetLeasesForTests();
   setEngineClock(null);
 }
 
