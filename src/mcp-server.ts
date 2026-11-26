@@ -19,12 +19,14 @@ import type { RagRetriever } from "./rag/types.js";
 import { getMcpServerImplementationInfo } from "./mcp/metadata.js";
 import { listSkillResources, readSkillResource, rewriteSkillPaths } from "./mcp/skills.js";
 import { createProgressReporter, type ProgressToken } from "./mcp/progress.js";
+import { SKILLS_EXTENSION_ID, isSkillExtensionUri, readSkillExtensionResource, registerSkillsHandlers } from "./mcp/skillsAdapter.js";
+import { TASKS_EXTENSION_ID, nativeTaskCandidate, registerTaskHandlers, runNativeCall } from "./mcp/tasksAdapter.js";
 import { stopAllBackgroundTasks } from "./tools/meta/background.js";
 import { delegateViceSignalHandling, endViceSessions, stopManagedViceProcessesSync } from "./device.js";
 import { toolRegistry } from "./tools/registry/index.js";
 import { ACCESS_ENV_VAR, getAccessMode } from "./tools/access.js";
 import { ToolValidationError, unknownErrorResult } from "./tools/errors.js";
-import { publishedInputSchema, publishedToolMeta } from "./tools/types.js";
+import { publishedInputSchema, publishedToolMeta, type ToolRunResult } from "./tools/types.js";
 import { createPromptRegistry, type PromptSegment } from "./prompts/registry.js";
 import { describePlatformCapabilities, getPlatformStatus, setPlatform } from "./platform.js";
 import { RequestQueue } from "./loggingHttpClient.js";
@@ -123,6 +125,7 @@ export const SERVER_INSTRUCTIONS = [
   "Ultimate hardware reads run_prg/load_prg paths from its own storage; pass location: \"host\" to upload a PRG built on this machine.",
   "Labels from upload_run_asm or a symbolsFile can be used as addresses until the next program start, reset or backend switch.",
   "Long calls report progress when the request carries a progress token; a cancelled call stops at the next step.",
+  "Long allowlisted operations run as tasks for clients that declare the Tasks extension, and through c64_system start_task + task_result otherwise; c64_memory wait_until waits for a condition.",
 ].join("\n");
 
 /**
@@ -255,7 +258,7 @@ async function main() {
   // per request (the SDK rejects reuse of a stateless transport), so server
   // creation and handler registration live in this factory. The handler bodies
   // below are unchanged and intentionally not re-indented.
-  const createMcpServer = (): Server => {
+  const createMcpServer = (factoryContext?: { era: "legacy" | "modern" }): Server => {
   const server = new Server(
     implementationInfo,
     {
@@ -263,10 +266,16 @@ async function main() {
         resources: {},
         tools: {},
         prompts: {},
+        // Extensions are advertised to 2026-07-28 clients only, so the pre-2026 initialize result stays unchanged.
+        ...(factoryContext?.era === "legacy" ? {} : {
+          extensions: { [SKILLS_EXTENSION_ID]: {}, [TASKS_EXTENSION_ID]: {} },
+        }),
       },
       instructions: SERVER_INSTRUCTIONS,
     }
   );
+  registerSkillsHandlers(server);
+  registerTaskHandlers(server);
 
   // RESOURCES: Expose C64 knowledge base
   server.setRequestHandler("resources/list", async () => {
@@ -323,7 +332,7 @@ async function main() {
   // No resource templates; answering keeps clients that ask from logging a method-not-found error.
   server.setRequestHandler("resources/templates/list", async () => ({ resourceTemplates: [] }));
 
-  server.setRequestHandler("resources/read", async (request) => {
+  server.setRequestHandler("resources/read", async (request, ctx) => {
     // c64_rag returns links with a #fragment (a section); the resource is the document.
     const uri = request.params.uri.split("#")[0]!;
     const startedAt = Date.now();
@@ -340,12 +349,17 @@ async function main() {
             },
           ],
         };
+      } else if (isSkillExtensionUri(uri)) {
+        // Served bytes of the catalogue, already rewritten once; digests in skills/list cover exactly these bytes.
+        response = { contents: [readSkillExtensionResource(uri)] };
       } else {
         const skill = readSkillResource(uri);
         const result = skill ?? readKnowledgeResource(uri, PROJECT_ROOT);
         if (!result) {
           // The SDK puts -32602 with data { uri } on the wire for every protocol era; it never emits -32002.
-          throw new ResourceNotFoundError(request.params.uri, `Unknown resource: ${request.params.uri}`);
+          // Pre-2026 clients also got the `MCP error <code>: ` message prefix of the v1 SDK; the code itself cannot
+          // be -32002 any more because the SDK's error encoder maps -32002 to -32602 for every era.
+          throw new ResourceNotFoundError(request.params.uri, legacyErrorMessage(ctx, -32002, `Unknown resource: ${request.params.uri}`));
         }
         // Knowledge text names skills by repository path; clients read them as c64://skills/<name>.
         const text = (result as { text?: unknown }).text;
@@ -505,7 +519,7 @@ async function main() {
       : undefined;
 
     try {
-      const result = await toolRegistry.invoke(name, args, {
+      const toolContext = {
         client,
         rag,
         logger: toolLogger,
@@ -513,7 +527,21 @@ async function main() {
         setPlatform,
         signal: ctx?.mcpReq?.signal,
         ...(progress ? { reportProgress: progress.report } : {}),
-      }).finally(() => progress?.stop());
+      };
+      // Native Tasks: only for a request that declares the extension and an allowlisted (tool, op).
+      const candidate = nativeTaskCandidate(ctx, name, args);
+      let result: ToolRunResult;
+      if (candidate) {
+        const outcome = await runNativeCall(candidate, name, toolContext, ctx.mcpReq.signal).finally(() => progress?.stop());
+        if (outcome.kind === "task") {
+          toolLogger.info(`call tool name=${name} status=task latencyMs=${Date.now() - startedAt}`);
+          writeDiagnosticEvent("mcp_call_tool_task", { name, latencyMs: Date.now() - startedAt });
+          return outcome.handle as unknown as CallToolResult;
+        }
+        result = outcome.result;
+      } else {
+        result = await toolRegistry.invoke(name, args, toolContext).finally(() => progress?.stop());
+      }
       await progress?.flush();
 
       const response = toCallToolResult(result);
@@ -563,7 +591,7 @@ async function main() {
     }
   });
 
-  server.setRequestHandler("prompts/get", async (request) => {
+  server.setRequestHandler("prompts/get", async (request, ctx) => {
     const { name } = request.params;
     const args = request.params.arguments ?? {};
     const startedAt = Date.now();
@@ -631,7 +659,7 @@ async function main() {
         error,
       });
       if (error instanceof ToolValidationError) {
-        throw new ProtocolError(ProtocolErrorCode.InvalidParams, error.message);
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, legacyErrorMessage(ctx, ProtocolErrorCode.InvalidParams, error.message));
       }
       throw error;
     }
@@ -703,6 +731,14 @@ async function main() {
   writeDiagnosticEvent("server_ready", {
     diagnosticsFile: diagnostics.filePath,
   });
+}
+
+/**
+ * Pre-2026 clients (no per-request envelope) saw `MCP error <code>: <message>` for errors thrown by handlers,
+ * because the v1 SDK built its `McpError` messages that way. Keep that text for them; 2026-07-28 requests get the plain message.
+ */
+export function legacyErrorMessage(ctx: { mcpReq: { envelope?: unknown } } | undefined, code: number, message: string): string {
+  return ctx?.mcpReq?.envelope === undefined ? `MCP error ${code}: ${message}` : message;
 }
 
 /** Bytes of the content blocks, for the log line; serialising a large result once more only to count it is wasted time. */
