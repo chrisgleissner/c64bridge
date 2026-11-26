@@ -65,6 +65,8 @@ No quota worries. No codex. All implementation by Sonnet subagents (model sonnet
 
 ## Next action
 
+2026-11-26 22:30: sidwave PR 3 (6502-toolkit docs/tests) open, CI watch merges it. Workers: port-sidfile, port-format, port-engine (EXTRA: optional peer dep, readable code, overflow test, trace-vs-audio test, ROM docs). A1 calibration design frozen (Opus): research/a1-calibration-design.md. Licence note: brief section 4 says GPL-2.0-only and no exception; superseded by the user's D14/D15. Remaining queue after ports: S3 verify CLI/API parity + A1 implementation and calibration; consumer readiness (D17); S4 game integration, retargeting, assets, example scores; S5; S6; S7; S8; S9.
+
 2026-11-26 21:00: c64bridge 1.4.0 is tagged and released (origin/main 735a86c5, by the modern-mcp session); the S9 c64bridge release is therefore a later minor (1.5.0). sidwave PR 2 (README/SIDWave) merged 16849806. 6502-toolkit docs/tests PR: review done, fixes pending after orchestrator test rerun. Step 3 started: ports of feat/sidwave-sidfile (worktree sidwave-port-sidfile, branch feat/sid-file) and feat/sidwave-format (sidwave-port-format, feat/format-transform) by Sonnet workers, brief scratchpad brief-port.md; engine port after these (optional dependency + lock file). User: continue until fully done.
 
 2026-11-26 19:40: sidwave PR 1 merged (a8efb3f). Two Sonnet workers in parallel: README/SIDWave naming (worktree c64bridge-wt/sidwave-toolkit, branch docs/sidwave-readme, brief-sidwave-readme.md) and 6502-toolkit docs + tests + branch coverage via c8 (worktree c64bridge-wt/sidwave-toolkit-docs, branch feat/6502-toolkit-docs, brief-toolkit-pr2.md). Each: orchestrator reruns tests, Sonnet review, PR, CI, squash-merge. Then port the three feature branches (step 3).
