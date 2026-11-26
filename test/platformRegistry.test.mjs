@@ -134,3 +134,40 @@ test("c64_select_backend supports round-trip backend switching", async () => {
   assert.equal(toC64u.structuredContent?.data?.activeBackend, "c64u");
   assert.ok(toC64u.structuredContent?.data?.usageHint.includes('"vice"'));
 });
+
+test("c64_select_backend is refused while an exclusive task lease holds the current backend, and switches nothing", async () => {
+  const { acquireLease, __resetLeasesForTests } = await import("../src/tasks/resources.js");
+  __resetLeasesForTests();
+  try {
+    acquireLease({ taskId: "held-1", backendId: "c64u", mode: "exclusive", tool: "c64_sound", op: "capture_samples", pinned: true });
+    const client = createSwitchClient(["c64u", "vice"], "c64u");
+    const setPlatformCalls = [];
+    await assert.rejects(
+      toolRegistry.invoke("c64_select_backend", { op: "select", backend: "vice" }, createCtx(client, setPlatformCalls)),
+      { code: "resource_conflict" },
+    );
+    assert.deepEqual(client.switches, []);
+    assert.deepEqual(setPlatformCalls, []);
+  } finally {
+    __resetLeasesForTests();
+  }
+});
+
+test("c64_select_backend does not re-check leases for the target backend itself inside the switch callback", async () => {
+  const { acquireLease, __resetLeasesForTests } = await import("../src/tasks/resources.js");
+  __resetLeasesForTests();
+  try {
+    acquireLease({ taskId: "held-2", backendId: "c64u", mode: "exclusive", tool: "c64_sound", op: "capture_samples", pinned: true });
+    const client = createSwitchClient(["c64u", "vice"], "vice");
+    const calls = [];
+    client.switchBackend = (target, check) => {
+      calls.push(target);
+      check(target); // the target backend itself is never a lease conflict, even though c64u holds an exclusive lease
+    };
+    const result = await toolRegistry.invoke("c64_select_backend", { op: "select", backend: "c64u" }, createCtx(client, [], "vice"));
+    assert.equal(result.isError, undefined, JSON.stringify(result));
+    assert.deepEqual(calls, ["c64u"]);
+  } finally {
+    __resetLeasesForTests();
+  }
+});

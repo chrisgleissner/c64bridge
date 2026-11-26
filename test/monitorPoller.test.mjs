@@ -252,3 +252,56 @@ test("without onProgress and signal the loop still works", async () => {
   const result = await pollUntil(equals(1), opts(), deps);
   assert.equal(result.reason, "condition_met");
 });
+
+test("a read failure with a live, never-aborted signal is a communication failure and leaves no abort listener behind", async () => {
+  const controller = new AbortController();
+  let added = 0;
+  let removed = 0;
+  const signal = controller.signal;
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = (...args) => { added += 1; return originalAdd(...args); };
+  signal.removeEventListener = (...args) => { removed += 1; return originalRemove(...args); };
+  const { deps } = harness({ values: [0], failAt: 0, signal });
+  const result = await pollUntil(equals(5), opts(), deps);
+  assert.equal(result.reason, "communication_failure");
+  assert.equal(result.error, "socket closed");
+  assert.equal(added, 1);
+  assert.equal(removed, 1, "the listener is removed when the read rejects");
+});
+
+test("a successful read with a live signal removes its abort listener", async () => {
+  const controller = new AbortController();
+  let removed = 0;
+  const originalRemove = controller.signal.removeEventListener.bind(controller.signal);
+  controller.signal.removeEventListener = (...args) => { removed += 1; return originalRemove(...args); };
+  const { deps } = harness({ values: [5], signal: controller.signal });
+  const result = await pollUntil(equals(5), opts(), deps);
+  assert.equal(result.met, true);
+  assert.equal(removed, 1);
+});
+
+test("a signal aborted synchronously while the read starts cancels without a communication failure, even if the read then rejects", async () => {
+  const controller = new AbortController();
+  const { state, deps } = harness({ values: [0], failAt: 0, signal: controller.signal, onRead: () => controller.abort() });
+  const result = await pollUntil(equals(5), opts(), deps);
+  assert.equal(result.reason, "cancelled");
+  assert.equal(result.met, false);
+  assert.equal(result.iterations, 0);
+  assert.equal(result.error, undefined);
+  assert.equal(state.reads, 1);
+});
+
+test("a sleep that rejects without an abort does not end the wait; polling continues", async () => {
+  const { state, deps } = harness({ values: [0, 0, 5] });
+  let sleeps = 0;
+  deps.sleep = async (ms) => {
+    sleeps += 1;
+    state.t += ms;
+    throw new Error("timer failed");
+  };
+  const result = await pollUntil(equals(5), opts(), deps);
+  assert.equal(result.met, true);
+  assert.equal(result.iterations, 3);
+  assert.equal(sleeps, 2);
+});

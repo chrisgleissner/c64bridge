@@ -476,3 +476,125 @@ test("stopAllTasks does not wait more than about one second for a call that neve
   const elapsed = Date.now() - started;
   assert.ok(elapsed >= 900 && elapsed < 3000, `stopAllTasks returned after ${elapsed} ms`);
 }));
+
+test("submitCall uses backend id \"unknown\" when the client cannot report its backend type", withEngine(async () => {
+  const throwing = await submitCall(spec({
+    ctx: baseCtx({ client: { getActiveBackendType: async () => { throw new Error("no backend"); } } }),
+    invoke: pending(),
+  }));
+  assert.equal(throwing.backendId, "unknown");
+  cancelTask(throwing.id);
+  const empty = await submitCall(spec({ ctx: baseCtx({ client: { getActiveBackendType: async () => "" } }), invoke: pending() }));
+  assert.equal(empty.backendId, "unknown");
+}));
+
+test("submitCall rejects ttlMs and pollIntervalMs outside their ranges with invalid_task_option", withEngine(async () => {
+  for (const overrides of [{ ttlMs: -1 }, { ttlMs: 1.5 }, { ttlMs: 86_400_001 }, { pollIntervalMs: 0 }, { pollIntervalMs: 3_600_001 }]) {
+    await assert.rejects(submitCall(spec(overrides)), { code: "invalid_task_option" });
+  }
+  assert.equal(listCallTasks().length, 0, "no task was registered");
+  assert.equal(listLeases().length, 0, "no lease was taken");
+  const accepted = await submitCall(spec({ ttlMs: 0, pollIntervalMs: 1, invoke: pending() }));
+  assert.equal(accepted.pollIntervalMs, 1);
+}));
+
+test("reportProgress with a message updates the working task status and forwards to the request context", withEngine(async () => {
+  const forwarded = [];
+  const d = deferred();
+  const task = await submitCall(spec({
+    ctx: baseCtx({ reportProgress: (...args) => forwarded.push(args) }),
+    invoke: async (_name, _args, ctx) => {
+      ctx.reportProgress(1, 4, "step one");
+      ctx.reportProgress(2, 4);
+      await d.promise;
+      return okResult();
+    },
+  }));
+  await settle();
+  assert.equal(task.statusMessage, "step one", "a progress call without a message keeps the previous status");
+  assert.deepEqual(forwarded, [[1, 4, "step one"], [2, 4, undefined]]);
+  d.resolve();
+  await settle();
+  assert.equal(task.state, "completed");
+}));
+
+test("reportProgress after cancel forwards but does not overwrite the cancelled status message", withEngine(async () => {
+  let report;
+  const task = await submitCall(spec({ invoke: (_name, _args, ctx) => { report = ctx.reportProgress; return new Promise(() => {}); } }));
+  await settle();
+  cancelTask(task.id);
+  report(1, 2, "late");
+  assert.equal(task.statusMessage, "Cancelled.");
+}));
+
+test("an isError result with metadata.cancelled becomes a cancelled task and keeps the result", withEngine(async () => {
+  const result = { ...errorResult("stopped"), metadata: { success: false, cancelled: true } };
+  const task = await submitCall(spec({ invoke: async () => result }));
+  await settle();
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.result, result);
+}));
+
+test("an error result without a text block reports a generic error message", withEngine(async () => {
+  const task = await submitCall(spec({ invoke: async () => ({ content: [], metadata: { success: false }, isError: true }) }));
+  await settle();
+  assert.equal(task.state, "failed");
+  assert.equal(task.error, "The operation reported an error.");
+}));
+
+test("getTask drops a finished task whose ttl has passed even when its expiry timer never fired", async () => {
+  reset();
+  let now = 5_000;
+  setEngineClock({ now: () => now, monotonicNow: () => now, setTimeout: () => ({ unref() {} }), clearTimeout() {} });
+  try {
+    const task = await submitCall(spec({ ttlMs: 100, invoke: async () => okResult() }));
+    await settle();
+    assert.equal(task.state, "completed");
+    assert.equal(getTask(task.id), task);
+    now += 100;
+    assert.equal(findByName("x"), undefined);
+    assert.equal(listCallTasks().length, 0, "expired task is not listed");
+    assert.equal(getTask(task.id), undefined, "expired task is removed on access");
+  } finally {
+    reset();
+    if (originalIntervalSource) registerTaskSource("interval", originalIntervalSource);
+  }
+});
+
+test("runWithInlineWindow throws a ToolExecutionError carrying the message when a failed task has neither result nor error object", withEngine(async () => {
+  await assert.rejects(
+    runWithInlineWindow(spec({ invoke: async () => { throw undefined; } }), { inlineMs: 1_000 }), // eslint-disable-line no-throw-literal
+    (error) => error instanceof Error && error.message === "undefined",
+  );
+}));
+
+test("runWithInlineWindow returns a cancelled result when the request is aborted inside the window", withEngine(async (fake) => {
+  const ac = new AbortController();
+  const running = runWithInlineWindow(spec({ requestSignal: ac.signal, invoke: pending() }), { inlineMs: 1_000 });
+  await settle();
+  ac.abort();
+  await settle();
+  const outcome = await running;
+  assert.equal(outcome.kind, "result");
+  assert.equal(outcome.result.isError, true);
+  assert.equal(listCallTasks().length, 0, "the cancelled task record is dropped");
+  assert.equal(fake.pending(), 0);
+}));
+
+test("transition on a non-call task runs cleanup, aborts on cancel, and releases its lease without touching call bookkeeping", withEngine(async () => {
+  let cleanups = 0;
+  const controller = new AbortController();
+  const core = {
+    kind: "interval", state: "working", updatedAt: new Date(0), finishedAt: null,
+    controller, lease: null, cleanup: () => { cleanups += 1; },
+  };
+  assert.equal(transition(core, "cancelled", { statusMessage: "Stopped." }), true);
+  assert.equal(core.state, "cancelled");
+  assert.equal(core.statusMessage, "Stopped.");
+  assert.equal(core.lease, null);
+  assert.equal(cleanups, 1);
+  assert.equal(controller.signal.aborted, true);
+  assert.equal(transition(core, "completed"), false, "a finished task does not change state again");
+  assert.equal(cleanups, 1);
+  assert.equal(listCallTasks().length, 0);
+}));

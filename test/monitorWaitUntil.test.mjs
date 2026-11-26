@@ -399,3 +399,44 @@ test("checkpoint cleanup still runs when reading the checkpoint fails", async ()
   assert.equal(data(result).reason, "communication_failure");
   assert.deepEqual(deleted, [42]);
 });
+
+test("a VICE facade without checkpoint support is a validation error and reads nothing", async () => {
+  const client = stubClient({ facade: { type: "vice" } });
+  const result = await run(makeCtx(client), { condition: { type: "checkpoint", address: "$0810" }, timeoutMs: 100 });
+  assert.equal(result.isError, true);
+  assert.equal(result.metadata.error.kind, "validation");
+  assert.equal(result.metadata.error.path, "$.condition.type");
+  assert.match(result.content[0].text, /does not support checkpoints/);
+  assert.equal(client.reads.length, 0);
+});
+
+test("a checkpoint that cannot be removed is reported as a warning and logged, and the wait result is kept", async () => {
+  const warned = [];
+  const facade = {
+    type: "vice",
+    checkpointOperation: (operate) => operate({
+      checkpointCreate: async () => ({ id: 7 }),
+      checkpointGet: async () => ({ hitCount: 1 }),
+      checkpointDelete: async () => { throw new Error("monitor gone"); },
+    }),
+  };
+  const ctx = makeCtx(stubClient({ facade }), { logger: { ...logger, warn: (message, fields) => warned.push([message, fields]) } });
+  const result = await run(ctx, { condition: { type: "checkpoint", address: "$0810" }, timeoutMs: 500 });
+  assert.equal(result.isError, undefined);
+  assert.equal(data(result).met, true);
+  assert.deepEqual(data(result).warnings, ["Temporary checkpoint 7 could not be removed: monitor gone"]);
+  assert.deepEqual(warned, [["wait_until could not remove its checkpoint", { id: 7 }]]);
+});
+
+test("a non-Error rejection while removing the checkpoint is stringified into the warning", async () => {
+  const facade = {
+    type: "vice",
+    checkpointOperation: (operate) => operate({
+      checkpointCreate: async () => ({ id: 8 }),
+      checkpointGet: async () => ({ hitCount: 1 }),
+      checkpointDelete: async () => { throw "plain text"; }, // eslint-disable-line no-throw-literal
+    }),
+  };
+  const result = await run(makeCtx(stubClient({ facade })), { condition: { type: "checkpoint", address: "$0810" }, timeoutMs: 500 });
+  assert.deepEqual(data(result).warnings, ["Temporary checkpoint 8 could not be removed: plain text"]);
+});
