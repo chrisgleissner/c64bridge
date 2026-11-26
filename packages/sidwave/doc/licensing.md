@@ -38,4 +38,4 @@ A project in this position can add a runtime exception to the licence for the ge
 
 ## Example scores
 
-The example scores are covered by the same licence as the repository unless a file states otherwise. Some examples are arrangements of public-domain compositions. The repository's `Biosphere.sid` is a third-party tune by Alexander Rebjonok (1993) and is not covered by this licence; its redistribution terms need to be checked before it is published.
+The example scores are covered by the same licence as the repository unless a file states otherwise. Some examples are arrangements of public-domain compositions.
