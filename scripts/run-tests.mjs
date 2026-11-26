@@ -3,10 +3,14 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { prepareTestStateDir } from "./test-state-dir.mjs";
 
 export const DEFAULT_TARGET = "mock";
+
+// Declared before the top-level buildNodeTestArgs() call below; a later declaration would be in
+// its temporal dead zone there.
+const BUN_TEST_IMPORT_RE = /^\s*import\s[^;]*?\bfrom\s*["']bun:test["']/m;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tsLoader = "tsx/esm";
@@ -38,8 +42,15 @@ if (target === "real" && !env.C64_TEST_BASE_URL) {
   env.C64_TEST_BASE_URL = resolveBaseUrlFromConfig() ?? "http://c64u";
 }
 
-if (isMainModule(import.meta.url)) {
+if (isMainModule(import.meta.url) && process.argv.includes("--list-files")) {
+  // Print the files a default run would hand to `node --test`, one per line, then exit.
+  const files = nodeArgs.filter((arg) => arg !== "--list-files" && looksLikeTestFileArg(arg));
+  console.log(files.join("\n"));
+} else if (isMainModule(import.meta.url)) {
   const stateDir = prepareTestStateDir(env);
+  // Every test file runs in its own process; load the shared guard (see test/setup/hermetic-state.mjs) in each.
+  const setupUrl = pathToFileURL(path.join(repoRoot, "test", "setup", "hermetic-state.mjs")).href;
+  env.NODE_OPTIONS = `${env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ` : ""}--import=${setupUrl}`;
   const child = spawn(process.execPath, nodeArgs, {
     stdio: "inherit",
     env,
@@ -242,6 +253,29 @@ export function listWorkspaceTestRoots(root = repoRoot) {
     .sort();
 }
 
+/**
+ * Selection rules for the default (no explicit files) Node run:
+ *  - A directory named `fixtures` holds helper scripts that tests spawn or import.
+ *    Its files are never test files, even when they end in .mjs or .test.mjs.
+ *  - A file that imports `bun:test` needs the Bun runtime and cannot load under Node
+ *    (ERR_UNSUPPORTED_ESM_URL_SCHEME). scripts/run-tests.ts runs these under Bun, and
+ *    so does the coverage runner, so they stay covered. Explicit file arguments are
+ *    still passed through unchanged.
+ */
+export function isFixtureFile(file) {
+  return file.split(/[\\/]/).includes("fixtures");
+}
+
+export function importsBunTest(file) {
+  let source;
+  try {
+    source = fs.readFileSync(file, "utf8");
+  } catch {
+    return false;
+  }
+  return BUN_TEST_IMPORT_RE.test(source);
+}
+
 export function listRepoTestFiles(root, base = repoRoot) {
   if (!fs.existsSync(root)) {
     return [];
@@ -251,6 +285,7 @@ export function listRepoTestFiles(root, base = repoRoot) {
   walkDirectory(root, files);
   return files
     .filter((file) => looksLikeTestFileArg(file))
+    .filter((file) => !isFixtureFile(path.relative(root, file)) && !importsBunTest(file))
     .map((file) => path.relative(base, file).split(path.sep).join("/"))
     .sort();
 }
