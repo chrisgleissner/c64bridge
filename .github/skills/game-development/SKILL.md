@@ -1,6 +1,6 @@
 ---
 name: game-development
-description: Develop a Commodore 64 game with c64bridge, targeting a modern C64U/Ultimate device (default) or a stock C64.
+description: Use when the user wants to design or build a Commodore 64 game, targeting a modern C64U/Ultimate device (default) or a stock C64; read first for any game request.
 ---
 
 ## Intent

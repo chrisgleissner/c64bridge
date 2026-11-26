@@ -586,79 +586,79 @@
     {
       "name": "Skill: assembly-program",
       "uri": "c64://skills/assembly-program",
-      "description": "Execute 6502/6510 assembly workflows through c64bridge.",
+      "description": "Use when the user wants a custom 6502/6510 assembly routine assembled, run and verified on the C64 (raster, sprites, IRQs, SID or VIC code written in assembly).",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: basic-program",
       "uri": "c64://skills/basic-program",
-      "description": "Execute bespoke Commodore BASIC v2 programs through c64bridge.",
+      "description": "Use when the user wants a custom Commodore BASIC v2 program written, uploaded and run, including output checks and BASIC listing or debugging.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: cross-platform-demo",
       "uri": "c64://skills/cross-platform-demo",
-      "description": "Run the shortest visible demo path across VICE and C64U.",
+      "description": "Use when the user wants a quick visible greeting or smoke test on VICE and/or C64U with screenshot or text verification.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: drive-manager",
       "uri": "c64://skills/drive-manager",
-      "description": "Manage disk images and drive state through c64bridge.",
+      "description": "Use when the user wants to mount, unmount, create, copy or inspect disk images or drive state (D64, D71, D81, drive slots, drive power).",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: game-development",
       "uri": "c64://skills/game-development",
-      "description": "Develop a Commodore 64 game with c64bridge, targeting a modern C64U/Ultimate device (default) or a stock C64.",
+      "description": "Use when the user wants to design or build a Commodore 64 game, targeting a modern C64U/Ultimate device (default) or a stock C64; read first for any game request.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: graphics-demo",
       "uri": "c64://skills/graphics-demo",
-      "description": "Execute PETSCII, sprite, bitmap, and frame-capture graphics workflows.",
+      "description": "Use when the user wants PETSCII art, sprites, bitmap or character-set graphics created, or a frame captured from the C64 or VICE.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: hello-world",
       "uri": "c64://skills/hello-world",
-      "description": "Run the fastest greeting or smoke-test path across VICE and C64U.",
+      "description": "Use when the user asks for the fastest hello-world, greeting or smoke test, for example 'print HELLO WORLD on VICE' or 'run this on hardware'.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: memory-debug",
       "uri": "c64://skills/memory-debug",
-      "description": "Inspect, patch, and validate C64 memory safely.",
+      "description": "Use when the user wants to read, search, compare, patch, disassemble or save C64 memory, read the screen, or wait for on-screen text.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: printer-job",
       "uri": "c64://skills/printer-job",
-      "description": "Execute Commodore and Epson printing workflows through c64bridge.",
+      "description": "Use when the user wants to print text or bitmaps, or define custom characters, on a Commodore (MPS) or Epson printer from a C64U or U2.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: sid-music",
       "uri": "c64://skills/sid-music",
-      "description": "Execute built-in and custom SID playback workflows through c64bridge.",
+      "description": "Use when the user wants SID music or sound effects, such as playing a preset, composing or generating a tune, setting SID registers, or capturing and analyzing audio.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: software-launch",
       "uri": "c64://skills/software-launch",
-      "description": "Load and run existing C64 software through c64bridge.",
+      "description": "Use when the user wants to run existing C64 software (a PRG, CRT cartridge or disk image) rather than a newly written program.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: stream-control",
       "uri": "c64://skills/stream-control",
-      "description": "Start and stop live C64 audio or video streams.",
+      "description": "Use when the user wants to start or stop a live video, audio or debug stream from an Ultimate 64-class device to another host.",
       "mimeType": "text/markdown"
     },
     {
       "name": "Skill: system-control",
       "uri": "c64://skills/system-control",
-      "description": "Control machine lifecycle, background tasks, and configuration state.",
+      "description": "Use when the user wants to pause, resume, reset, reboot or power off the machine, manage background tasks, or read or change Ultimate configuration.",
       "mimeType": "text/markdown"
     },
     {

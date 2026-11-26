@@ -37,6 +37,7 @@
     "test:matrix": "npm run test -- --platform=c64u --target=mock && npm run test:vice:mock && npm run test:vice:device",
     "mcp:generate": "node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
     "check:package": "node scripts/check-package.mjs",
+    "check:skills": "node scripts/check-skills.mjs",
     "check:run-local": "bash scripts/run-mcp-check.sh local 5",
     "check:run-npm": "bash scripts/run-mcp-check.sh npm 5",
     "check": "npm run build && npm test",

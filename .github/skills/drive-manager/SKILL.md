@@ -1,6 +1,6 @@
 ---
 name: drive-manager
-description: Manage disk images and drive state through c64bridge.
+description: Use when the user wants to mount, unmount, create, copy or inspect disk images or drive state (D64, D71, D81, drive slots, drive power).
 ---
 
 ## Intent

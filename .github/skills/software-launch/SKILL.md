@@ -1,6 +1,6 @@
 ---
 name: software-launch
-description: Load and run existing C64 software through c64bridge.
+description: Use when the user wants to run existing C64 software (a PRG, CRT cartridge or disk image) rather than a newly written program.
 ---
 
 ## Intent

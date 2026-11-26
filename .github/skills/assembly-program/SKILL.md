@@ -1,6 +1,6 @@
 ---
 name: assembly-program
-description: Execute 6502/6510 assembly workflows through c64bridge.
+description: Use when the user wants a custom 6502/6510 assembly routine assembled, run and verified on the C64 (raster, sprites, IRQs, SID or VIC code written in assembly).
 ---
 
 ## Intent

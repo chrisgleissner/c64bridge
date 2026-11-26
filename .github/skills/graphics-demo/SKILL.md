@@ -1,6 +1,6 @@
 ---
 name: graphics-demo
-description: Execute PETSCII, sprite, bitmap, and frame-capture graphics workflows.
+description: Use when the user wants PETSCII art, sprites, bitmap or character-set graphics created, or a frame captured from the C64 or VICE.
 ---
 
 ## Intent

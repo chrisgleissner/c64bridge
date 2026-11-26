@@ -1,6 +1,6 @@
 ---
 name: memory-debug
-description: Inspect, patch, and validate C64 memory safely.
+description: Use when the user wants to read, search, compare, patch, disassemble or save C64 memory, read the screen, or wait for on-screen text.
 ---
 
 ## Intent

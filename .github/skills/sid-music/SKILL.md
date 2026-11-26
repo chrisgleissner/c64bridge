@@ -1,6 +1,6 @@
 ---
 name: sid-music
-description: Execute built-in and custom SID playback workflows through c64bridge.
+description: Use when the user wants SID music or sound effects, such as playing a preset, composing or generating a tune, setting SID registers, or capturing and analyzing audio.
 ---
 
 ## Intent

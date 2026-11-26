@@ -76,6 +76,16 @@ async function main() {
     'dist/rag/sources.csv',
   ];
 
+  // Every served skill ships in the tarball; the developer-only pr-converge skill does not.
+  const skillDirs = (await fs.readdir(path.join(root, '.github', 'skills'), { withFileTypes: true }))
+    .filter((e) => e.isDirectory() && e.name !== 'pr-converge')
+    .map((e) => e.name);
+  for (const name of skillDirs) required.push(`.github/skills/${name}/SKILL.md`);
+  if (skillDirs.length === 0) throw new Error('No skills found under .github/skills');
+  if (files.some((f) => f.startsWith('.github/skills/pr-converge/'))) {
+    throw new Error('Package must not contain the developer-only pr-converge skill');
+  }
+
   await assertIncludes(files, required);
   await assertNoDuplicates(files);
   await spotCheckTarball(required);

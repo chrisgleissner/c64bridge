@@ -1,6 +1,6 @@
 ---
 name: basic-program
-description: Execute bespoke Commodore BASIC v2 programs through c64bridge.
+description: Use when the user wants a custom Commodore BASIC v2 program written, uploaded and run, including output checks and BASIC listing or debugging.
 ---
 
 ## Intent

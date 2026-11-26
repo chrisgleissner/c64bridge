@@ -1,6 +1,6 @@
 ---
 name: system-control
-description: Control machine lifecycle, background tasks, and configuration state.
+description: Use when the user wants to pause, resume, reset, reboot or power off the machine, manage background tasks, or read or change Ultimate configuration.
 ---
 
 ## Intent
