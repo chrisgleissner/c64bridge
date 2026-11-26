@@ -60,7 +60,7 @@ function sidplayfp(t, sid, model) {
   const file = path.join(dir, "score.sid");
   const wav = path.join(dir, "score.wav");
   fs.writeFileSync(file, sid);
-  const run = spawnSync("sidplayfp", ["-m", model === "8580" ? "-mnf" : "-mof", "-f48000", "-t5", `-w${wav}`, file], { encoding: "utf8" });
+  const run = spawnSync("sidplayfp", ["-m", model === "8580" ? "-mnf" : "-mof", "--delay=0", "-f48000", "-t5", `-w${wav}`, file], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   return { dir, wav };
 }

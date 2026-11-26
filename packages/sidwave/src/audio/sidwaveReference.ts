@@ -87,7 +87,9 @@ export function renderReference(doc: ParsedSidwave, options: RenderOptions): Ste
       const sidFile = path.join(dir, `sid${chip + 1}.sid`), wav = path.join(dir, `sid${chip + 1}.wav`);
       fs.writeFileSync(sidFile, sid);
       const model = options.useScoreModels ? doc.sids[chip]?.model ?? options.model : options.model;
-      const run = spawnSync(bin, ["-m", `-m${model === "8580" ? "n" : "o"}f`, `-f${sampleRate}`, `-t${seconds}`, `-w${wav}`, sidFile], { encoding: "utf8" });
+      // --delay=0 fixes sidplayfp's power-on delay, which is random (0..8191 cycles) by default and shifts the whole
+      // render against the frame grid by up to about 8 ms (and, at a frame boundary, by one 20 ms frame).
+      const run = spawnSync(bin, ["-m", `-m${model === "8580" ? "n" : "o"}f`, "--delay=0", `-f${sampleRate}`, `-t${seconds}`, `-w${wav}`, sidFile], { encoding: "utf8" });
       if (run.error) throw new Error(`cannot run ${bin}: ${run.error.message}`);
       if (run.status !== 0 || !fs.existsSync(wav)) throw new Error(`${bin} failed for SID ${chip + 1}: ${run.stderr || run.stdout}`);
       const w = readWav(wav);
