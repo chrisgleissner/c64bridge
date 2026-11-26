@@ -335,15 +335,14 @@ test("direct, native and legacy waits respect the same exclusive VICE lease", ()
   assert.equal(reads, 0);
 })));
 
-test("a foreign running interval does not reserve a name in this process", () => withState(async () => {
+test("a live foreign interval reserves its running name for interval and call starts", () => withState(async () => {
   await seedForeignIntervals(["foreign-name"], "running");
   const ctx = platformCtx(screenClient("READY."));
-  const started = await system({ ...intervalStart("foreign-name"), intervalMs: 60_000 }, ctx);
-  assert.equal(data(started)?.started, true, started.content[0].text);
-  const id = data(started).task.id;
-  assert.equal(data(await system({ op: "task_result", name: "foreign-name" }, ctx)).id, id);
-  assert.equal(data(await system({ op: "stop_task", name: "foreign-name" }, ctx)).stopped, true);
-  assert.equal(data(await system({ op: "delete_task", name: "foreign-name" }, ctx)).deleted, true);
+  for (const args of [intervalStart("foreign-name"), callStart("foreign-name")]) {
+    const result = await system(args, ctx);
+    assert.equal(result.isError, true, result.content[0].text);
+    assert.match(result.content[0].text, /"foreign-name".*already running in another MCP process/);
+  }
   const foreign = await system({ op: "task_result", name: "foreign-name" }, ctx);
   assert.equal(data(foreign).id, "foreign_foreign-name");
   assert.equal(data(foreign).status, "running");

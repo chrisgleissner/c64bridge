@@ -57,6 +57,7 @@ interface BackgroundTask extends TaskCore {
 }
 
 const TASKS: Map<string, BackgroundTask> = new Map();
+const pendingStarts = new Set<BackgroundTask>();
 const logger = loggerFor("background");
 
 export const MIN_INTERVAL_MS = 100;
@@ -209,7 +210,7 @@ let tasksLoadedPromise: Promise<void> | null = null;
 // Every caller awaits the same load, so a concurrent first call never sees an empty registry.
 function ensureTasksLoaded(): Promise<void> {
   if (!tasksLoadedPromise) {
-    tasksLoadedPromise = loadTasks();
+    tasksLoadedPromise = loadTasks().then(() => {});
   }
   return tasksLoadedPromise;
 }
@@ -234,7 +235,7 @@ function ownerIsLive(pid: unknown, session: unknown): boolean {
   return processIsAlive(pid);
 }
 
-function isOwned(task: BackgroundTask): boolean {
+function isOwned(task: Pick<BackgroundTask, "ownerPid" | "ownerSession">): boolean {
   return task.ownerPid === process.pid && task.ownerSession === SESSION_ID;
 }
 
@@ -242,11 +243,17 @@ function requireOwnership(task: BackgroundTask): void {
   if (!isOwned(task)) throw new ToolValidationError("Task is owned by another live MCP process", { path: "$.name" });
 }
 
-async function loadTasks(): Promise<void> {
-  await withTaskStateLock(getTaskStateFilePath(), readTasks);
+function assertNoForeignRunningTask(name: string, tasks: readonly PersistedTask[]): void {
+  if (tasks.some((task) => task.name === name && task.status === "running" && !isOwned(task) && ownerIsLive(task.ownerPid, task.ownerSession))) {
+    throw new ToolValidationError(`Task "${name}" is already running in another MCP process`, { path: "$.name" });
+  }
 }
 
-async function readTasks(): Promise<void> {
+async function loadTasks(): Promise<readonly PersistedTask[]> {
+  return withTaskStateLock(getTaskStateFilePath(), readTasks);
+}
+
+async function readTasks(): Promise<readonly PersistedTask[]> {
   const path = getTaskStateFilePath();
   let text: string;
   try {
@@ -258,18 +265,18 @@ async function readTasks(): Promise<void> {
     } else {
       logger.error(`Unable to read background task state file ${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return;
+    return [];
   }
   let parsed: any;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
     await moveCorruptStateAside(path, error instanceof Error ? error.message : String(error));
-    return;
+    return [];
   }
   if (!parsed || !Array.isArray(parsed.tasks)) {
     await moveCorruptStateAside(path, "missing tasks array");
-    return;
+    return [];
   }
   const diskIds = new Set((parsed.tasks as PersistedTask[]).map((task) => task.id));
   for (const [name, task] of TASKS) {
@@ -301,6 +308,7 @@ async function readTasks(): Promise<void> {
   if (JSON.stringify(data) !== JSON.stringify(parsed.tasks)) {
     await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
   }
+  return data;
 }
 
 let tempFileCounter = 0;
@@ -386,7 +394,7 @@ async function pruneFinishedTasks(): Promise<void> {
 // Persistence is serialised so two writers never rename over each other.
 let persistChain: Promise<void> = Promise.resolve();
 
-function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = false): Promise<void> {
+function persistTasks(changedTasks: readonly BackgroundTask[] = [], startingTask?: BackgroundTask): Promise<void> {
   const run = persistChain.then(async () => {
     try {
       const path = getTaskStateFilePath();
@@ -394,7 +402,13 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         let disk: PersistedTask[] = [];
         try { disk = JSON.parse(await fs.readFile(path, "utf8")).tasks ?? []; }
         catch (error: any) { if (error?.code !== "ENOENT") throw error; }
-        const owned = [...TASKS.values()].filter(isOwned);
+        // Only a start's own persistence step can publish its pending running entry.
+        const owned = [...TASKS.values()].filter((task) => isOwned(task) && (
+          task === startingTask || task.state !== "working" || !pendingStarts.has(task)
+        ));
+        if (startingTask?.state === "working" && TASKS.get(startingTask.name) === startingTask) {
+          assertNoForeignRunningTask(startingTask.name, disk);
+        }
         const ownedIds = new Set(owned.map((task) => task.id));
         const merged = disk.filter((task) => !(task.ownerPid === process.pid && task.ownerSession === SESSION_ID) && !ownedIds.has(task.id) && !deletedTaskIds.has(task.id));
         merged.push(...owned.map(toPersistedTask));
@@ -402,6 +416,7 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         const retained = new Set(finished.slice(0, MAX_FINISHED_TASKS).map((task) => task.id));
         const data = merged.filter((task) => task.status === "running" || retained.has(task.id));
         await writeFileAtomic(path, JSON.stringify({ tasks: data }, null, 2));
+        if (startingTask) pendingStarts.delete(startingTask);
         deletedTaskIds.clear();
         await pruneFinishedTasks();
       });
@@ -414,7 +429,7 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
         t._lastPersistedAt = Date.now();
       }
     } catch (error) {
-      if (strict || error instanceof ToolValidationError) throw error;
+      if (startingTask || error instanceof ToolValidationError) throw error;
       logger.warn(`Unable to persist background task state: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
@@ -730,8 +745,9 @@ export const tools: ToolDefinition[] = [
     async execute(args, ctx) {
       try {
         await ensureTasksLoaded();
-        await loadTasks();
+        const disk = await loadTasks();
         const parsed = startBackgroundTaskArgsSchema.parse(args ?? {});
+        assertNoForeignRunningTask(parsed.name, disk);
         if (looksLikeAllowlistKey(parsed.operation)) return await startCallTask(parsed, (args ?? {}) as Record<string, unknown>, ctx);
         validateTaskOperation(parsed.operation, (parsed.arguments as Record<string, unknown> | undefined) ?? {});
         // The effect of the task operation is checked once, at start; a running task is not re-checked.
@@ -778,6 +794,7 @@ export const tools: ToolDefinition[] = [
         // Reserve the name and id before the first await below. Everything above is synchronous,
         // so a concurrent start sees this task as running and cannot reuse its name or id.
         TASKS.set(task.name, task);
+        pendingStarts.add(task);
         // While this start awaits, the task may be stopped and its name reused by another start.
         // Only the task that is still the running registry entry may write its files or start its timer.
         const superseded = (): boolean => TASKS.get(task.name) !== task || task.state !== "working";
@@ -789,7 +806,7 @@ export const tools: ToolDefinition[] = [
           task.backendId = pinnedFacade?.type ?? (ctx.client.getActiveBackendType ? await ctx.client.getActiveBackendType() : null);
           if (superseded()) return supersededStartResult(task);
           assertIntervalAllowed(task);
-          await persistTasks([task], true);
+          await persistTasks([task], task);
           if (superseded()) return supersededStartResult(task);
           // Ensure per-task structure and seed files
           await fs.mkdir(getBackgroundTaskFolderAbsolute(task.id), { recursive: true });
@@ -812,6 +829,8 @@ export const tools: ToolDefinition[] = [
           }
           await persistTasks();
           throw startError;
+        } finally {
+          pendingStarts.delete(task);
         }
         await persistTasks([task]);
         if (existing && existing.id !== task.id && (isOwned(existing) || !ownerIsLive(existing.ownerPid, existing.ownerSession))) {
