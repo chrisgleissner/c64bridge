@@ -162,8 +162,8 @@ export function registerMcpServerResourcesTests(withSharedMcpClient) {
             { method: "resources/read", params: { uri } },
             ReadResourceResultSchema,
           ),
-          (error) => error.code === -32002,
-          `${uri} should return Resource not found (-32002)`,
+          (error) => error.code === -32602 && error.data?.uri === uri,
+          `${uri} should return Resource not found (-32602 with data.uri)`,
         );
       }
     });

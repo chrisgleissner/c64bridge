@@ -5,7 +5,7 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ProtocolError, ProtocolErrorCode, Server, type CallToolResult, type Tool } from "@modelcontextprotocol/server";
+import { ProtocolError, ProtocolErrorCode, ResourceNotFoundError, Server, type CallToolResult, type Tool } from "@modelcontextprotocol/server";
 import { loadConfig } from "./config.js";
 import { C64Client } from "./c64Client.js";
 import {
@@ -344,7 +344,8 @@ async function main() {
         const skill = readSkillResource(uri);
         const result = skill ?? readKnowledgeResource(uri, PROJECT_ROOT);
         if (!result) {
-          throw new ProtocolError(-32002, `Unknown resource: ${request.params.uri}`);
+          // The SDK puts -32602 with data { uri } on the wire for every protocol era; it never emits -32002.
+          throw new ResourceNotFoundError(request.params.uri, `Unknown resource: ${request.params.uri}`);
         }
         // Knowledge text names skills by repository path; clients read them as c64://skills/<name>.
         const text = (result as { text?: unknown }).text;
