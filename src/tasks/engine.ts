@@ -218,6 +218,11 @@ export function registerTaskSource(kind: string, source: TaskSource): void {
   sources.set(kind, source);
 }
 
+/** The source registered for a kind, so a test that replaces it can put the original back. */
+export function getTaskSource(kind: string): TaskSource | undefined {
+  return sources.get(kind);
+}
+
 export function countWorkingTasks(): number {
   let count = 0;
   for (const task of callTasks.values()) if (task.state === "working") count += 1;

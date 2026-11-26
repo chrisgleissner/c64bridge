@@ -14,6 +14,7 @@ import {
   inlineWindowMs,
   setEngineClock,
   registerTaskSource,
+  getTaskSource,
   DEFAULT_INLINE_MS,
   MAX_WORKING_TASKS,
   __resetForTests,
@@ -34,7 +35,17 @@ function zeroSource() {
   return { countWorking: () => 0, stopAll() {} };
 }
 
+// The "interval" source is process-wide state registered by src/tools/meta/background.ts when it is first
+// imported. These tests replace it, so the original is captured once and put back after every test; otherwise
+// later files in the same process (Bun runs a batch in one process) lose their real interval source.
+let originalIntervalSource;
+let originalCaptured = false;
+
 function reset() {
+  if (!originalCaptured) {
+    originalCaptured = true;
+    originalIntervalSource = getTaskSource("interval");
+  }
   __resetForTests();
   __resetLeasesForTests();
   registerTaskSource("interval", zeroSource());
@@ -50,6 +61,7 @@ function withEngine(body) {
       await body(fake);
     } finally {
       reset();
+      if (originalIntervalSource) registerTaskSource("interval", originalIntervalSource);
     }
   };
 }
