@@ -533,7 +533,7 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 #### c64_memory
 
-Grouped entry point for memory I/O, screen reads, and screen polling.
+Grouped entry point for memory I/O, screen reads, screen polling, and conditional waits on memory, the screen or a VICE checkpoint (wait_until).
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -547,6 +547,7 @@ Grouped entry point for memory I/O, screen reads, and screen polling.
 | `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | ✅ | ✅ | ✅ |
+| `wait_until` | Wait until memory, the screen or a VICE checkpoint satisfies a typed condition, then return (synchronous). Ends when the condition is met, timeoutMs elapses, maxIterations reads were made, or the call is cancelled. Timeout and iteration cap are successful results with met: false; one failed read ends the wait at once with an error result (reason communication_failure) that still carries the observations collected so far. Addresses and symbols are resolved once at the start and the backend is pinned at the start. Ultimate hardware refuses $D000-$DFFF unless includeIo is true. The checkpoint condition is VICE only: it sets a temporary non-stopping checkpoint, never halts the CPU, and removes the checkpoint on every exit path. | `condition`, `timeoutMs` | `pollIntervalMs=250`, `maxIterations=10000`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `write` | Write a hexadecimal byte sequence into RAM. Supports verification. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | ✅ | ✅ | ✅ |
 
 #### c64_printer

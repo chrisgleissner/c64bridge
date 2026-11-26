@@ -8,6 +8,7 @@
         "write",
         "read_screen",
         "wait_for_text",
+        "wait_until",
         "list_basic",
         "disassemble",
         "copy_memory",
@@ -108,10 +109,9 @@
         "integer",
         "null"
       ],
-      "description": "Overall timeout in milliseconds (1-120000)",
+      "description": "Overall timeout in milliseconds (1-120000) Limits depend on op.",
       "minimum": 1,
-      "maximum": 120000,
-      "default": 3000
+      "maximum": 3600000
     },
     "intervalMs": {
       "type": [
@@ -121,6 +121,329 @@
       "description": "Poll interval in milliseconds (minimum 20; values above 5000 are clamped to 5000)",
       "minimum": 20,
       "default": 100
+    },
+    "condition": {
+      "description": "Typed condition; type is one of equals, not_equals, masked, range, threshold, changed, screen_text, screen_changed, checkpoint.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Memory at address equals bytes.",
+          "properties": {
+            "type": {
+              "const": "equals"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "bytes": {
+              "type": "string",
+              "description": "Hex bytes, for example \"$A9 00\" (1..1024 bytes)."
+            }
+          },
+          "required": [
+            "type",
+            "address",
+            "bytes"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Memory at address differs from bytes.",
+          "properties": {
+            "type": {
+              "const": "not_equals"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "bytes": {
+              "type": "string",
+              "description": "Hex bytes (1..1024 bytes)."
+            }
+          },
+          "required": [
+            "type",
+            "address",
+            "bytes"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "(byte & mask) == value for one byte.",
+          "properties": {
+            "type": {
+              "const": "masked"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "mask": {
+              "description": "Integer, or a numeric literal string ($FF, 0xFF, 255).",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "value": {
+              "description": "Integer, or a numeric literal string ($FF, 0xFF, 255).",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "address",
+            "mask",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "min <= value <= max (inclusive) for a width-byte integer.",
+          "properties": {
+            "type": {
+              "const": "range"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "min": {
+              "description": "Integer, or a numeric literal string ($FF, 0xFF, 255).",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "max": {
+              "description": "Integer, or a numeric literal string ($FF, 0xFF, 255).",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "width": {
+              "description": "Value width in bytes.",
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4
+              ]
+            },
+            "signed": {
+              "description": "Two's complement signed value (default false).",
+              "type": "boolean",
+              "default": false
+            },
+            "endian": {
+              "description": "Byte order (default little).",
+              "type": "string",
+              "enum": [
+                "little",
+                "big"
+              ],
+              "default": "little"
+            }
+          },
+          "required": [
+            "type",
+            "address",
+            "min",
+            "max",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Compare a width-byte integer with value.",
+          "properties": {
+            "type": {
+              "const": "threshold"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "comparison": {
+              "type": "string",
+              "enum": [
+                "gt",
+                "gte",
+                "lt",
+                "lte"
+              ]
+            },
+            "value": {
+              "description": "Integer, or a numeric literal string ($FF, 0xFF, 255).",
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "width": {
+              "description": "Value width in bytes.",
+              "type": "integer",
+              "enum": [
+                1,
+                2,
+                4
+              ]
+            },
+            "signed": {
+              "description": "Two's complement signed value (default false).",
+              "type": "boolean",
+              "default": false
+            },
+            "endian": {
+              "description": "Byte order (default little).",
+              "type": "string",
+              "enum": [
+                "little",
+                "big"
+              ],
+              "default": "little"
+            }
+          },
+          "required": [
+            "type",
+            "address",
+            "comparison",
+            "value",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "length bytes at address differ from the first read of this wait.",
+          "properties": {
+            "type": {
+              "const": "changed"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1024
+            }
+          },
+          "required": [
+            "type",
+            "address",
+            "length"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Text is on the screen (or absent with present: false); the screen is read where the VIC-II shows it.",
+          "properties": {
+            "type": {
+              "const": "screen_text"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "present": {
+              "type": "boolean",
+              "default": true
+            },
+            "caseInsensitive": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "The screen text differs from the first read of this wait.",
+          "properties": {
+            "type": {
+              "const": "screen_changed"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "VICE only: a temporary non-stopping checkpoint at address was hit.",
+          "properties": {
+            "type": {
+              "const": "checkpoint"
+            },
+            "address": {
+              "description": "Address: $HHHH, 0xHHHH, decimal, a loaded program label or documented name (screen, CHROUT), optionally +n or -n. Resolved once at the start.",
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exec",
+                "load",
+                "store"
+              ],
+              "default": "exec"
+            }
+          },
+          "required": [
+            "type",
+            "address"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "pollIntervalMs": {
+      "type": "integer",
+      "minimum": 50,
+      "maximum": 60000,
+      "default": 250,
+      "description": "Pause between reads in milliseconds (default 250)."
+    },
+    "maxIterations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100000,
+      "default": 10000,
+      "description": "Maximum number of reads (default 10000)."
+    },
+    "includeIo": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Ultimate: allow reading $D000-$DFFF; reading I/O can clear CIA interrupts. No effect on VICE. Limits depend on op.",
+      "default": false
     },
     "instructionCount": {
       "type": [
@@ -140,14 +463,6 @@
       "type": "string",
       "description": "Destination start address, in the same forms as source.",
       "minLength": 1
-    },
-    "includeIo": {
-      "type": [
-        "boolean",
-        "null"
-      ],
-      "description": "Ultimate: also read $D000-$DFFF; reading I/O can clear CIA interrupts. No effect on VICE.",
-      "default": false
     },
     "startAddress": {
       "type": "string",
@@ -206,6 +521,6 @@
   "required": [
     "op"
   ],
-  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format, bank.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
+  "description": "Memory operations available via the c64_memory tool.\n\nOperations:\n- read: Read a range of bytes and return a hex dump with address metadata. Required inputs: address. Optional inputs: length, format, bank.\n- write [write]: Write a hexadecimal byte sequence into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the current 40x25 text screen converted to ASCII.\n- wait_for_text: Poll the screen until a substring or regex appears, or timeout elapses. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- wait_until: Wait until memory, the screen or a VICE checkpoint satisfies a typed condition, then return (synchronous). Ends when the condition is met, timeoutMs elapses, maxIterations reads were made, or the call is cancelled. Timeout and iteration cap are successful results with met: false; one failed read ends the wait at once with an error result (reason communication_failure) that still carries the observations collected so far. Addresses and symbols are resolved once at the start and the backend is pinned at the start. Ultimate hardware refuses $D000-$DFFF unless includeIo is true. The checkpoint condition is VICE only: it sets a temporary non-stopping checkpoint, never halts the CPU, and removes the checkpoint on every exit path. Required inputs: condition, timeoutMs. Optional inputs: pollIntervalMs, maxIterations, includeIo.\n- list_basic: List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises.\n- disassemble: Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search for a byte pattern within a memory range and return matching addresses. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions byte-by-byte and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file, with an optional PRG load-address header. Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
   "additionalProperties": false
 }
