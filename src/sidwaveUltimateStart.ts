@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import type { C64Facade } from "./device.js";
-import { SIDWAVE_PLAY_ADDRESS } from "./sidwaveCompiler.js";
+import { SIDWAVE_PLAYER, isSidwaveIrqHandler } from "sidwave/compiler";
 
 export const BASIC_IRQ = 0xea31;
 const KEY_BUFFER = 0x0277;
@@ -14,10 +14,9 @@ export async function irqVector(facade: C64Facade): Promise<number> {
 /** Recognize the original SIDWAVE IRQ stub, including players loaded outside this session. */
 export async function isSidwaveIrq(facade: C64Facade, handler: number): Promise<boolean> {
   if (handler < 0x0816 || handler > 0xcffa || handler === BASIC_IRQ) return false;
-  const code = await facade.readMemory(handler, 6);
-  const vector = await facade.readMemory(SIDWAVE_PLAY_ADDRESS, 3);
-  return code[0] === 0x20 && code[3] === 0x4c && code[4] === 0x31 && code[5] === 0xea
-    && vector[0] === 0x4c && vector[1] === code[1] && vector[2] === code[2];
+  const code = await facade.readMemory(handler, SIDWAVE_PLAYER.irqHandler.length);
+  const vector = await facade.readMemory(SIDWAVE_PLAYER.playAddress, SIDWAVE_PLAYER.playVectorLength);
+  return isSidwaveIrqHandler(code, vector);
 }
 
 export async function keyboardIdle(facade: C64Facade): Promise<boolean> {

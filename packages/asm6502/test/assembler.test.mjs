@@ -1,0 +1,545 @@
+import test from "#test/runner";
+import assert from "#test/assert";
+import { assemblyToPrg, assemblyToPrgDetailed, AssemblyError, prgEntryAddress } from "../src/assembler.js";
+
+test("assemblyToPrg assembles simple program with default load address", () => {
+  const source = `
+    .org $0801
+start:
+    lda #$42
+    sta $0400
+    rts
+  `;
+
+  const prg = assemblyToPrg(source);
+
+  const expected = Buffer.from([
+    0x01, 0x08, // load address
+    0xa9, 0x42, // LDA #$42
+    0x8d, 0x00, 0x04, // STA $0400
+    0x60, // RTS
+  ]);
+
+  assert.equal(prg.length, expected.length);
+  assert.deepEqual([...prg], [...expected]);
+});
+
+test("assemblyToPrg picks zero page or absolute opcodes based on operands", () => {
+  const source = `
+    org $0801
+    lda #1
+    sta $10
+    sta $1234
+    sta $10,X
+    sta $2000,x
+    rts
+  `;
+
+  const prg = assemblyToPrg(source);
+
+  const expected = Buffer.from([
+    0x01, 0x08,
+    0xa9, 0x01, // LDA #1
+    0x85, 0x10, // STA $10 (zero page)
+    0x8d, 0x34, 0x12, // STA $1234 (absolute)
+    0x95, 0x10, // STA $10,X (zero page,X)
+    0x9d, 0x00, 0x20, // STA $2000,X (absolute,X)
+    0x60, // RTS
+  ]);
+
+  assert.deepEqual([...prg], [...expected]);
+});
+
+test("assemblyToPrg encodes relative branches and local labels", () => {
+  const source = `
+    * = $0801
+start:
+    beq .skip
+    nop
+.skip:
+    bne end
+    nop
+end:
+    rts
+  `;
+
+  const prg = assemblyToPrg(source);
+
+  const expected = Buffer.from([
+    0x01, 0x08,
+    0xf0, 0x01, // BEQ to .skip (skip the next instruction)
+    0xea, // NOP
+    0xd0, 0x01, // BNE end
+    0xea, // NOP
+    0x60, // RTS
+  ]);
+
+  assert.deepEqual([...prg], [...expected]);
+});
+
+test("assemblyToPrg handles directives and expressions", () => {
+  const source = `
+    .org $0801
+value = $4000
+start:
+    jsr init
+    rts
+init:
+    .byte $01,"AB"
+    .word value + 1
+    ds 2
+    rts
+  `;
+
+  const prg = assemblyToPrg(source);
+  const expected = Buffer.from([
+    0x01, 0x08,
+    0x20, 0x05, 0x08, // JSR init
+    0x60, // RTS
+    0x01, // .byte $01
+    0x41, 0x42, // "AB"
+    0x01, 0x40, // .word value + 1
+    0x00, 0x00, // ds 2
+    0x60, // RTS
+  ]);
+
+  assert.deepEqual([...prg], [...expected]);
+});
+
+test("assemblyToPrg reports undefined symbols", () => {
+  const source = `
+    org $0801
+    lda missing
+  `;
+
+  assert.throws(
+    () => assemblyToPrg(source),
+    (error) => error instanceof AssemblyError && /:3: Undefined symbol "missing"/u.test(error.message),
+  );
+});
+
+test("assemblyToPrg assembles at the load address when no org directive is given", () => {
+  const source = `
+start:
+    lda #1
+    jmp start
+  `;
+
+  // At the default $0801 the code follows a "10 SYS02062" stub, because BASIC
+  // relinks whatever is loaded at $0801 as program lines.
+  const prg = assemblyToPrg(source);
+  assert.deepEqual(
+    [...prg],
+    [
+      0x01, 0x08,
+      0x0c, 0x08, 0x0a, 0x00, 0x9e, 0x30, 0x32, 0x30, 0x36, 0x32, 0x00, 0x00, 0x00, // 10 SYS02062
+      0xa9, 0x01, 0x4c, 0x0e, 0x08, // $080E: LDA #1, JMP start
+    ],
+  );
+  assert.equal(prgEntryAddress(prg), 0x080e);
+  assert.deepEqual(
+    [...assemblyToPrg(source, { loadAddress: 0xc000 })],
+    [0x00, 0xc0, 0xa9, 0x01, 0x4c, 0x00, 0xc0],
+  );
+});
+
+test("assemblyToPrg adds no stub when the source sets its own origin", () => {
+  const withOrg = assemblyToPrg(`
+* = $0801
+    .byte $0b, $08, $0a, $00, $9e, $34, $30, $39, $36, $00, $00, $00
+* = $1000
+    rts
+  `);
+  assert.equal(withOrg.readUInt16LE(0), 0x0801);
+  assert.deepEqual([...withOrg.subarray(2, 14)], [0x0b, 0x08, 0x0a, 0x00, 0x9e, 0x34, 0x30, 0x39, 0x36, 0x00, 0x00, 0x00]);
+  // The user's own stub says SYS4096.
+  assert.equal(prgEntryAddress(withOrg), 0x1000);
+  assert.equal(prgEntryAddress(assemblyToPrg("* = $c000\n rts")), 0xc000);
+});
+
+test("assemblyToPrg rejects indexed addressing modes the instruction does not support", () => {
+  for (const line of ["stx $1234,y", "sty $1234,x", "ldx $10,x", "ldy $10,y", "stx fwd,y", "lda $10,s"]) {
+    const source = `
+    * = $c000
+    ${line}
+    rts
+fwd = $1234
+    `;
+    assert.throws(
+      () => assemblyToPrg(source),
+      (error) => error instanceof AssemblyError && /does not support/iu.test(error.message),
+      `expected "${line}" to be rejected`,
+    );
+  }
+});
+
+test("assemblyToPrg encodes zero-page-only indexed modes, including forward references", () => {
+  const source = `
+    * = $c000
+    stx $10,y
+    sty $10,x
+    ldx $10,y
+    ldx $1234,y
+    ldy $10,x
+    ldy $1234,x
+    stx fwd,y
+    sty fwd,x
+    rts
+fwd = $20
+  `;
+
+  assert.deepEqual([...assemblyToPrg(source)], [
+    0x00, 0xc0,
+    0x96, 0x10, // STX $10,Y
+    0x94, 0x10, // STY $10,X
+    0xb6, 0x10, // LDX $10,Y
+    0xbe, 0x34, 0x12, // LDX $1234,Y
+    0xb4, 0x10, // LDY $10,X
+    0xbc, 0x34, 0x12, // LDY $1234,X
+    0x96, 0x20, // STX fwd,Y
+    0x94, 0x20, // STY fwd,X
+    0x60, // RTS
+  ]);
+});
+
+test("assemblyToPrg keeps the local label scope across constant assignments", () => {
+  const source = `
+    * = $c000
+start:
+    ldx #3
+SCREEN = $0400
+.loop:
+    dex
+    bne .loop
+    stx SCREEN
+    rts
+  `;
+
+  assert.deepEqual([...assemblyToPrg(source)], [
+    0x00, 0xc0,
+    0xa2, 0x03, // LDX #3
+    0xca, // DEX
+    0xd0, 0xfd, // BNE .loop
+    0x8e, 0x00, 0x04, // STX SCREEN
+    0x60, // RTS
+  ]);
+});
+
+test("assemblyToPrg sizes the PRG to the emitted bytes and ignores label-only org blocks", () => {
+  const code = `
+    * = $c000
+    lda #1
+    rts
+  `;
+
+  assert.deepEqual([...assemblyToPrg(`${code}\n* = $e000\nbuffer:\n`)], [0x00, 0xc0, 0xa9, 0x01, 0x60]);
+  assert.deepEqual([...assemblyToPrg(`${code}\n* = $0400\nscreen:\n`)], [0x00, 0xc0, 0xa9, 0x01, 0x60]);
+  assert.deepEqual(
+    [...assemblyToPrg(`${code}\n* = $c004\n.byte $ff\n* = $c003\n.byte $ee\n`)],
+    [0x00, 0xc0, 0xa9, 0x01, 0x60, 0xee, 0xff],
+  );
+});
+
+test("assemblyToPrg evaluates * as the current PC and < > as low and high byte selectors", () => {
+  const source = `
+    * = $c000
+    jmp *
+    lda #<msg
+    ldx #>msg
+    lda #<(msg + $ff)
+    lda #2*3
+    lda #<(* - $bf00)
+msg:
+    .byte 0
+  `;
+
+  assert.deepEqual([...assemblyToPrg(source)], [
+    0x00, 0xc0,
+    0x4c, 0x00, 0xc0, // JMP *
+    0xa9, 0x0d, // LDA #<msg
+    0xa2, 0xc0, // LDX #>msg
+    0xa9, 0x0c, // LDA #<(msg + $ff) = $c10c
+    0xa9, 0x06, // LDA #2*3
+    0xa9, 0x0b, // LDA #* - $bf00 = $c00b - $bf00 = $010b
+    0x00, // msg
+  ]);
+});
+
+test("assemblyToPrg reads %-prefixed binary literals and keeps % as modulo after a value", () => {
+  const source = `
+    * = $c000
+    lda #%00001111
+    and %10000001
+    .byte %1, %10
+mask = %101
+    ldx #mask
+    ldy #7 % 4
+  `;
+
+  assert.deepEqual([...assemblyToPrg(source)], [
+    0x00, 0xc0,
+    0xa9, 0x0f, // LDA #%00001111
+    0x25, 0x81, // AND $81
+    0x01, 0x02, // .byte %1, %10
+    0xa2, 0x05, // LDX #%101
+    0xa0, 0x03, // LDY #7 % 4
+  ]);
+});
+
+test("assemblyToPrg points the automatic SYS stub at the first instruction when data comes first", () => {
+  const prg = assemblyToPrg(`
+msg: .byte 1, 2, 3
+start: lda msg
+    rts
+  `);
+  // Stub at $0801, data at $080E-$0810, first instruction at $0811 (2065).
+  assert.deepEqual([...prg.subarray(2, 15)], [0x0c, 0x08, 0x0a, 0x00, 0x9e, 0x30, 0x32, 0x30, 0x36, 0x35, 0x00, 0x00, 0x00]);
+  assert.equal(prgEntryAddress(prg), 0x0811);
+  assert.deepEqual([...prg.subarray(15)], [0x01, 0x02, 0x03, 0xad, 0x0e, 0x08, 0x60]);
+});
+
+test("assemblyToPrg reserves space with .res without emitting it", () => {
+  const prg = assemblyToPrg(`
+* = $fb
+ptr: .res 2
+* = $c000
+    lda #0
+    sta ptr
+    rts
+buffer: .res 16
+  `);
+  // The zero-page variables are not in the PRG; the buffer right after the code is, zero-filled.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x00, 0x85, 0xfb, 0x60, ...new Array(16).fill(0)]);
+
+  // A trailing counter is zero-initialised when the program loads, as in ca65 and DASM.
+  const counter = assemblyToPrg("* = $c000\n    inc counter\n    rts\ncounter: .res 1");
+  assert.deepEqual([...counter], [0x00, 0xc0, 0xee, 0x04, 0xc0, 0x60, 0x00]);
+
+  // Reserved space between code is still part of the image, zero-filled.
+  const gap = assemblyToPrg("* = $c000\n    nop\n    .res 2\n    rts");
+  assert.deepEqual([...gap], [0x00, 0xc0, 0xea, 0x00, 0x00, 0x60]);
+});
+
+test("assemblyToPrg applies < and > to the whole expression, as ACME and 64tass do", () => {
+  const prg = assemblyToPrg(`
+* = $c000
+table = $10ff
+    lda #>table+1
+    ldx #<table+1
+    ldy #>table
+  `);
+  // >($10FF+1) = $11 and <($10FF+1) = $00; binding tightly would give $10+1 = $11 and $FF+1 = $100.
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x11, 0xa2, 0x00, 0xa0, 0x10]);
+  const wide = assemblyToPrg("* = $c000\nmsg = $c0fe\n    lda #>msg+2");
+  // High byte of $C100, not ($C0)+2.
+  assert.deepEqual([...wide], [0x00, 0xc0, 0xa9, 0xc1]);
+});
+
+test("assemblyToPrgDetailed enters at the first instruction, not the lowest address", () => {
+  const result = assemblyToPrgDetailed(`
+* = $c000
+    jmp sub
+* = $0900
+sub: rts
+  `);
+  assert.equal(result.prg.readUInt16LE(0), 0x0900);
+  assert.equal(result.entryAddress, 0xc000);
+  // A leading SYS stub still decides the entry point.
+  assert.equal(assemblyToPrgDetailed("msg: .byte 1\nstart: rts").entryAddress, 0x080f);
+});
+
+test("assemblyToPrg zero-fills reserved space that overlaps later code", () => {
+  // The .byte at $C002 lands inside the reserved block $C001-$C004; the block still extends the image.
+  const prg = assemblyToPrg("* = $c000\n    rts\nv: .res 4\n* = $c002\n    .byte $ee");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0x60, 0x00, 0xee, 0x00, 0x00]);
+});
+
+function assemblyError(source) {
+  try {
+    assemblyToPrg(source);
+  } catch (error) {
+    assert.ok(error instanceof AssemblyError, `expected AssemblyError, got ${error}`);
+    return error.message;
+  }
+  assert.fail("expected assembly to fail");
+}
+
+test("assembler rejects operands that would be truncated and names the line", () => {
+  assert.match(assemblyError("*=$C000\n nop\n lda ($1000),y"), /:3: .*zero-page/);
+  assert.match(assemblyError("*=$C000\n lda ($1000,x)"), /:2: .*zero-page/);
+  assert.match(assemblyError("*=$C000\n nop\n lda #256"), /:3: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n lda #-129"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n .byte 1,256"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n .byte -129"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n .word 1\n .word 70000"), /:3: .*-32768\.\.65535/);
+  assert.match(assemblyError("*=$C000\n .word -32769"), /:2: .*-32768\.\.65535/);
+  assert.match(assemblyError("*=$C000\n jmp $10000"), /:2: .*\$0000-\$FFFF/);
+});
+
+test("assembler accepts the boundary values of each range", () => {
+  const prg = assemblyToPrg("*=$C000\n lda #255\n lda #-128\n lda ($FF),y\n .byte -128,255\n .word -32768,65535");
+  assert.deepEqual([...prg.subarray(2)], [0xa9, 0xff, 0xa9, 0x80, 0xb1, 0xff, 0x80, 0xff, 0x00, 0x80, 0xff, 0xff]);
+});
+
+test("assembler checks ranges on the final value of forward references only", () => {
+  const prg = assemblyToPrg("*=$C000\n lda #<later\n lda ($10),y\n jmp later\nlater: rts");
+  assert.equal(prg[prg.length - 1], 0x60);
+  assert.match(assemblyError("*=$C000\n lda #later\nlater: rts"), /:2: .*-128\.\.255/);
+});
+
+test("assembler rejects output that passes $FFFF", () => {
+  assert.match(assemblyError("*=$FFFE\n nop\n nop\n nop"), /:4: .*\$FFFF/);
+  assert.match(assemblyError("*=$FFFE\n jmp $1234"), /:2: .*\$FFFF/);
+  assert.match(assemblyError("*=$FFF0\n .res $20"), /:2: .*\$FFFF/);
+  const prg = assemblyToPrg("*=$FFFE\n nop\n nop");
+  assert.deepEqual([...prg], [0xfe, 0xff, 0xea, 0xea]);
+});
+
+test("assembler names the undefined symbol", () => {
+  assert.match(assemblyError("*=$C000\n nop\n jmp nowhere"), /:3: Undefined symbol "nowhere"/);
+  assert.match(assemblyError("*=$C000\n lda #<missing+other"), /:2: Undefined symbols "missing", "other"/);
+  assert.match(assemblyError("*=$C000\n .byte ghost"), /:2: Undefined symbol "ghost"/);
+  assert.match(assemblyError("*=$C000\n .word ghost"), /:2: Undefined symbol "ghost"/);
+});
+
+test("assembler reports a duplicate label with both line numbers", () => {
+  const message = assemblyError("*=$C000\nstart: nop\n nop\nstart: rts");
+  assert.match(message, /:4: Duplicate label "start" \(first defined at \(input\):2\)/);
+  assert.match(assemblyError("*=$C000\nmain: nop\n.loop: nop\n.loop: nop"), /:4: Duplicate label "\.loop" \(first defined at \(input\):3\)/);
+  // The same local name under different global labels is fine.
+  assert.equal(assemblyToPrg("*=$C000\na: nop\n.l: nop\nb: nop\n.l: nop").length, 6);
+  assert.match(assemblyError("*=$C000\nx = 1\nx: nop"), /:3: Duplicate label "x" \(first defined at \(input\):2\)/);
+});
+
+test(".equ defines constants in both documented forms", () => {
+  const prg = assemblyToPrg("*=$C000\nBORDER .equ $d020\n.equ COLOR, 5\n lda #COLOR\n sta BORDER");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xa9, 0x05, 0x8d, 0x20, 0xd0]);
+  assert.match(assemblyError("*=$C000\n.equ X 5"), /:2: .*comma/);
+});
+
+test(".fill emits count bytes of the value, default 0", () => {
+  assert.deepEqual([...assemblyToPrg("*=$C000\n.fill 3\n.fill 2, $ea")], [0x00, 0xc0, 0, 0, 0, 0xea, 0xea]);
+  assert.match(assemblyError("*=$C000\n.fill 2, 300"), /:2: .*-128\.\.255/);
+  assert.match(assemblyError("*=$C000\n.fill -1"), /:2: .*count/);
+  assert.match(assemblyError("*=$C000\n.fill n"), /:2: Undefined symbol "n"/);
+});
+
+test(".align pads to a multiple of the boundary", () => {
+  const prg = assemblyToPrg("*=$C000\n nop\n.align 4\nhere: .byte 7\n.align 4, $ea\n.align 2");
+  assert.deepEqual([...prg], [0x00, 0xc0, 0xea, 0, 0, 0, 7, 0xea, 0xea, 0xea]);
+  const withLabel = assemblyToPrgDetailed("*=$C001\n.align 256\nlab: rts");
+  assert.equal(withLabel.symbols.get("lab"), 0xc100);
+  assert.match(assemblyError("*=$C000\n.align 0"), /:2: .*boundary/);
+});
+
+test(".text and .ascii map ASCII letters to PETSCII upper case", () => {
+  const prg = assemblyToPrg('*=$C000\n.text "Hello, 1!"\n.ascii "az", $0d\n.text "a\\n"');
+  assert.deepEqual([...prg.subarray(2)], [
+    0x48, 0x45, 0x4c, 0x4c, 0x4f, 0x2c, 0x20, 0x31, 0x21,
+    0x41, 0x5a, 0x0d,
+    0x41, 0x0d,
+  ]);
+  assert.match(assemblyError('*=$C000\n.text "café€"'), /:2: .*no PETSCII mapping/);
+});
+
+test(".org, *= and the loadAddress option reject values outside $0000-$FFFF", () => {
+  assert.match(assemblyError("*=$10000\n nop"), /:1: .*outside \$0000-\$FFFF/);
+  assert.match(assemblyError(".org -1\n nop"), /:1: .*outside \$0000-\$FFFF/);
+  assert.match(assemblyError("* = $12345\n nop"), /:1: .*outside/);
+  assert.throws(() => assemblyToPrg(" nop", { loadAddress: 0x10000 }), /outside \$0000-\$FFFF/);
+  assert.deepEqual([...assemblyToPrg("*=$FFFF\n .byte 1")], [0xff, 0xff, 1]);
+});
+
+test("overlapping .org blocks are an error naming both ranges", () => {
+  const message = assemblyError("*=$c000\n nop\n nop\n*=$c000\n lda #1");
+  assert.match(message, /:5: Overlapping output/);
+  assert.match(message, /\$C000 \(line 5\)/i);
+  assert.match(message, /\$C000-\$C001 \(line 2\)/i);
+  // Blocks that only touch, or reuse an address without writing, are fine.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n nop\n*=$c001\n nop")], [0x00, 0xc0, 0xea, 0xea]);
+  assert.doesNotThrow(() => assemblyToPrg("*=$c000\n nop\n*=$c000\nlabel:\n*=$c002\n nop"));
+});
+
+test("string directives count characters the same way in both passes for non-BMP text", () => {
+  // Pass 0 used UTF-16 length and pass 1 iterated by code point, which moved the entry address.
+  const emoji = "a\u{1F600}";
+  assert.throws(() => assemblyToPrg(`.word "${emoji}"\n lda #1\n rts`), /does not fit in one word/);
+  assert.throws(() => assemblyToPrg(`.byte "${emoji}"\n lda #1\n rts`), /does not fit in one byte|outside/);
+  const ok = assemblyToPrgDetailed('.word "ab"\nstart: lda #1\n rts');
+  assert.equal(ok.symbols.get("start"), prgEntryAddress(ok.prg));
+});
+
+test("shift counts and bitwise operands outside 32 bits are errors", () => {
+  assert.match(assemblyError(" lda #1<<32"), /Shift count 32/);
+  assert.match(assemblyError(" lda #1<<40"), /Shift count 40/);
+  assert.match(assemblyError(" lda #1>>-1"), /Shift count -1/);
+  assert.match(assemblyError(" lda #$100000000 & $ff"), /outside the 32-bit range/);
+  assert.match(assemblyError(" lda #1<<31"), /outside|too large|range/i); // 2147483648 does not fit a byte
+  assert.match(assemblyError(".word 1<<31"), /2147483648/);
+  assert.deepEqual([...assemblyToPrg("*=$c000\n lda #1<<7\n lda #$ff & $0f\n lda #256>>8")], [0x00, 0xc0, 0xa9, 0x80, 0xa9, 0x0f, 0xa9, 0x01]);
+});
+
+test("32-bit shift and bitwise expressions keep their 1.1.0 results", () => {
+  // 1.1.0 used JavaScript signed 32-bit operators: $80000000 >> 31 is -1, low byte $FF.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n.byte ($80000000 >> 31) & $ff")], [0x00, 0xc0, 0xff]);
+  // -1 & $ffffffff is -1 in 32-bit arithmetic, low byte $FF.
+  assert.deepEqual([...assemblyToPrg("*=$c000\n.byte <(-1 & $ffffffff)")], [0x00, 0xc0, 0xff]);
+});
+
+test("data-only source at the default address gets no BASIC stub", () => {
+  assert.deepEqual([...assemblyToPrg('.text "Hi"')], [0x01, 0x08, 0x48, 0x49]);
+  assert.deepEqual([...assemblyToPrg(".byte 1,2,3")], [0x01, 0x08, 1, 2, 3]);
+  // Data followed by code at the default address keeps the stub, which jumps to the first instruction.
+  const mixed = assemblyToPrgDetailed(".byte 1\nstart: lda #1\n rts");
+  assert.equal(mixed.prg.subarray(2, 6).toString("hex"), "0c080a00");
+  assert.equal(mixed.entryAddress, mixed.symbols.get("start"));
+  // Data at the default address followed by code at an explicit origin has no entry point at $0801.
+  assert.deepEqual([...assemblyToPrg(".byte 1\n*=$c000\n nop")].slice(0, 3), [0x01, 0x08, 1]);
+});
+
+test("HARD03-034 assembler rejects the invalid (zp),x operand and names the two valid indirect modes", () => {
+  const message = assemblyError("*=$C000\n nop\n lda ($10),x");
+  assert.match(message, /:3: /);
+  assert.match(message, /\(zp\),Y/);
+  assert.match(message, /\(zp,X\)/);
+  assert.match(assemblyError("*=$C000\n lda ($10),X"), /:2: .*\(zp\),Y/u);
+  // The two valid forms still assemble.
+  assert.deepEqual([...assemblyToPrg("*=$C000\n lda ($10),y\n lda ($10,x)").subarray(2)], [0xb1, 0x10, 0xa1, 0x10]);
+});
+
+test("HARD03-035 assembler refuses a zero-filled gap that crosses $D000-$DFFF", () => {
+  const message = assemblyError("* = $c000\n rts\n* = $e000\n .byte 1");
+  assert.match(message, /\$D000-\$DFFF/);
+  assert.match(message, /separately/);
+  // Blocks that leave the I/O area out of the gap still assemble, with the gap zero-filled.
+  const prg = assemblyToPrg("* = $c000\n rts\n* = $c800\n .byte 1");
+  assert.equal(prg.length, 2 + 0x801);
+  assert.equal(prg[2], 0x60);
+  assert.equal(prg[2 + 0x800], 0x01);
+});
+
+test("gap validation handles many adjacent reservations without blocking for seconds", () => {
+  const count = 50000;
+  const source = "*=$0200\n.byte 1\n" + ".res 1\n".repeat(count) + ".byte 2";
+  const started = performance.now();
+  const prg = assemblyToPrg(source);
+  assert.ok(performance.now() - started < 3000, "reservation checks must not scan every reservation for every byte");
+  assert.equal(prg.length, count + 4);
+  assert.equal(prg.readUInt16LE(0), 0x0200);
+  assert.equal(prg[2], 1);
+  assert.ok(prg.subarray(3, -1).every((byte) => byte === 0));
+  assert.equal(prg.at(-1), 2);
+});
+
+test("gap validation preserves overlapping reservations and source diagnostics", () => {
+  // Explicit reservations retain their existing zero-fill behaviour, including in I/O.
+  const prg = assemblyToPrg("*=$CFFF\n.byte 1\n.res $1000\n*=$D800\n.res $800\n*=$E000\n.byte 2");
+  assert.equal(prg.length, 0x1004);
+  assert.equal(prg[2], 1);
+  assert.equal(prg.at(-1), 2);
+  // A reservation ending before I/O must not conceal a subsequent unsafe gap.
+  assert.throws(
+    () => assemblyToPrg("*=$CFFE\n.byte 1\n.res 1\n*=$E000\n.byte 2", { fileName: "gap.asm" }),
+    /gap\.asm:5: .*\$D000-\$DFFF/,
+  );
+});

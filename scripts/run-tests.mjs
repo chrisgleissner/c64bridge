@@ -183,7 +183,10 @@ function isMainModule(moduleUrl) {
 }
 
 export function buildNodeTestArgs(args, root = repoRoot) {
-  const defaultTestFiles = listRepoTestFiles(path.join(root, "test"), root);
+  const defaultTestFiles = [
+    ...listRepoTestFiles(path.join(root, "test"), root),
+    ...listWorkspaceTestRoots(root).flatMap((dir) => listRepoTestFiles(dir, root)),
+  ];
   const nodeArgs = ["--import", tsLoader, "--test"];
   let target = DEFAULT_TARGET;
   let explicitBaseUrl = null;
@@ -225,6 +228,18 @@ export function buildNodeTestArgs(args, root = repoRoot) {
 
 export function looksLikeTestFileArg(arg) {
   return typeof arg === "string" && /\.(c|m)?(j|t)sx?$/.test(arg) && !arg.startsWith("--");
+}
+
+/** The test directories of the workspace packages under packages/. */
+export function listWorkspaceTestRoots(root = repoRoot) {
+  const packagesDir = path.join(root, "packages");
+  if (!fs.existsSync(packagesDir)) {
+    return [];
+  }
+  return fs.readdirSync(packagesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(packagesDir, entry.name, "test")))
+    .map((entry) => path.join(packagesDir, entry.name, "test"))
+    .sort();
 }
 
 export function listRepoTestFiles(root, base = repoRoot) {

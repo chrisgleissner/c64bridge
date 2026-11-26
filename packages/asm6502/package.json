@@ -1,0 +1,70 @@
+{
+  "name": "c64-asm6502",
+  "version": "0.1.0",
+  "description": "6502/6510 assembler for the Commodore 64 with ACME-style directives, PETSCII text and PRG output",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./assembler": {
+      "types": "./dist/assembler.d.ts",
+      "default": "./dist/assembler.js"
+    },
+    "./opcodeInventory": {
+      "types": "./dist/opcodeInventory.d.ts",
+      "default": "./dist/opcodeInventory.js"
+    },
+    "./petscii": {
+      "types": "./dist/petscii.d.ts",
+      "default": "./dist/petscii.js"
+    },
+    "./ioRange": {
+      "types": "./dist/ioRange.d.ts",
+      "default": "./dist/ioRange.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#test/assert": "./test/helpers/assert.js",
+    "#test/runner": "./test/helpers/test.js"
+  },
+  "files": [
+    "dist/**",
+    "!dist/.tsbuildinfo",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx/esm --test test/*.test.mjs",
+    "test:bun": "bun test test/*.test.mjs",
+    "coverage": "node ../scripts/run-package-coverage.mjs .",
+    "corpus-hash": "node scripts/corpus-hash.mjs"
+  },
+  "keywords": [
+    "c64",
+    "commodore-64",
+    "6502",
+    "6510",
+    "assembler",
+    "acme"
+  ],
+  "author": "Christian Gleissner",
+  "license": "GPL-2.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisgleissner/sidwave.git",
+    "directory": "asm6502"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "homepage": "https://github.com/chrisgleissner/sidwave/tree/main/asm6502#readme",
+  "bugs": {
+    "url": "https://github.com/chrisgleissner/sidwave/issues"
+  }
+}

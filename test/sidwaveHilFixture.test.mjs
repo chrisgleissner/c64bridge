@@ -3,7 +3,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { compareToReference } from "../src/audio/sidwaveSimilarity.js";
+import { compareToReference } from "sidwave/similarity";
 
 // 5 s excerpt of the first U64 hardware run (chiptune, seed 65, UltiSID) and of its sidplayfp 8580 rendering,
 // mono 8 kHz. The capture is about 10 dB louder, with more bass and denser harmonics than the reference.

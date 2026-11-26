@@ -1,8 +1,9 @@
-import { SIDWAVE_EXAMPLES, SIDWAVE_EXAMPLES_URI, readSidwaveExample, type SidwaveExampleName } from "../../sidwaveExamples.js";
+import { SIDWAVE_EXAMPLES, SIDWAVE_EXAMPLES_URI, readSidwaveExample, type SidwaveExampleName } from "sidwave/examples";
 import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave } from "../audio.js";
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
-import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "../../sidwaveCompiler.js";
-import { parseSidwave } from "../../sidwave.js";
+import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "sidwave/compiler";
+import { parseSidwave } from "sidwave/sidwave";
+import { hostSidwaveReadOptions } from "../../sidwaveHost.js";
 import { noAudioMeasurement, recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { jsonResult } from "../responses.js";
@@ -356,7 +357,7 @@ export const tools: ToolDefinition[] = [
           });
         }
 
-        const document = parseSidwave(preset.sidwave);
+        const document = parseSidwave(preset.sidwave, hostSidwaveReadOptions);
         const compiled = compileSidwaveToPrg(document, { loop: preset.key !== "title_fanfare" });
         const analyzer = resolveAnalyzer(context);
         const verify = parsed.verify === true;
@@ -504,7 +505,7 @@ export const tools: ToolDefinition[] = [
         const silenceWaitMs = parsed.silenceWaitMs ?? DEFAULT_SILENCE_WAIT_MS;
         const expectedSidwave = normalizeSidwaveInput(parsed.expectedSidwave ?? parsed.sidwave ?? parsed.cpg);
 
-        const document = parseSidwave(source);
+        const document = parseSidwave(source, hostSidwaveReadOptions);
         if (format === "sid") validateSidwavePsidMap(document);
         const compiled = compileSidwaveToPrg(document);
 

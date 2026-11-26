@@ -1,8 +1,8 @@
 import test, { describe } from "#test/runner";
 import assert from "#test/assert";
-import { parseSidwave } from "../../src/sidwave.js";
-import { readSidwaveExample, SIDWAVE_EXAMPLES } from "../../src/sidwaveExamples.js";
-import { SIDWAVE_MEMORY_END } from "../../src/sidwaveCompiler.js";
+import { parseSidwave } from "sidwave/sidwave";
+import { readSidwaveExample, SIDWAVE_EXAMPLES } from "sidwave/examples";
+import { SIDWAVE_MEMORY_END } from "sidwave/compiler";
 import { metaModule } from "../../src/tools/meta/index.js";
 import { createLogger } from "./helpers.mjs";
 

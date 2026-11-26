@@ -71,6 +71,10 @@ function detectDuplicates() {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const fullPath = resolve(dir, entry.name);
       if (entry.isDirectory()) {
+        // Bundled dependencies (sidwave, c64-asm6502 and their yaml dependency) are separate
+        // packages: data/sound/* are intentional copies of sidwave files at their public paths,
+        // and third-party packages may contain identical files of their own.
+        if (dir === packageDir && entry.name === 'node_modules') continue;
         walk(fullPath);
       } else if (entry.isFile()) {
         const rel = relative(packageDir, fullPath);

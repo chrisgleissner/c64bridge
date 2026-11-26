@@ -1,0 +1,37 @@
+{
+  "name": "sidwave-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Workspace root of the SIDWAVE repository: packages sidwave and c64-asm6502",
+  "type": "module",
+  "license": "GPL-2.0-only",
+  "author": "Christian Gleissner",
+  "workspaces": [
+    "sidwave",
+    "asm6502"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -b asm6502 sidwave",
+    "test": "npm run build && npm run test --workspaces",
+    "test:bun": "npm run build && npm run test:bun --workspaces",
+    "coverage": "npm run build && node scripts/run-package-coverage.mjs",
+    "pack": "npm run build && node --eval \"import('node:fs').then((fs) => fs.mkdirSync('artifacts', { recursive: true }))\" && npm pack --workspaces --pack-destination ./artifacts",
+    "check:consumer": "node scripts/check-consumer.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.5",
+    "tsx": "^4.23.11",
+    "typescript": "^6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chrisgleissner/sidwave.git"
+  },
+  "homepage": "https://github.com/chrisgleissner/sidwave#readme",
+  "bugs": {
+    "url": "https://github.com/chrisgleissner/sidwave/issues"
+  }
+}
