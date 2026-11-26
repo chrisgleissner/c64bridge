@@ -7,6 +7,29 @@
 
 
 
+
+## 1.4.0 - 2026-11-26
+
+### Features
+
+- support MCP protocol 2026-07-28 through the v2 SDK, and keep serving clients that use earlier protocol versions (69dca8c1)
+- publish the workflow skills through the MCP Skills extension (`skills/list`, `skills/get`, `skill://` URIs) (69dca8c1)
+- run long tool calls as native MCP tasks (`tasks/get`, `tasks/cancel`), with leases that stop a foreground call or backend switch from interfering with a running task (69dca8c1)
+- add `c64_memory` `wait_until`, which waits for a memory value, screen text or, on VICE, a checkpoint hit without halting the CPU (69dca8c1)
+- move SIDWAVE and the 6502 assembler into the workspace packages `sidwave` and `c64-asm6502` (41263934)
+
+### Bug Fixes
+
+- cancel a pre-2026 HTTP tool call when its client disconnects (69dca8c1)
+- remove a VICE checkpoint left by a running `wait_until` when the server shuts down (69dca8c1)
+
+### Compatibility
+
+- error paths differ for clients that use a protocol version earlier than 2026-07-28; see "Compatibility: differences for pre-2026 clients" in `doc/hardening-behavior.md` (69dca8c1):
+  - an unknown resource answers `-32602` with `data.uri` instead of `-32002`;
+  - invalid `tools/call` params answer `-32602` instead of `-32603`;
+  - an HTTP request that uses 2026 envelope keys without the `MCP-Protocol-Version` header gets HTTP 400.
+
 ## 1.3.3 - 2026-11-21
 
 ### Features
