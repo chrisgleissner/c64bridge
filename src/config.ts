@@ -1,8 +1,8 @@
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
-import os from "node:os";
 import { fileURLToPath } from "url";
 import { registerSecret } from "./redact.js";
+import { homeDirectory } from "./hostPaths.js";
 
 export interface C64BridgeConfig {
   c64_host: string;
@@ -48,7 +48,7 @@ const DEFAULT_PORT = 80;
 export function loadConfig(): C64BridgeConfig {
   const configPath = process.env.C64BRIDGE_CONFIG;
   const cwdConfigPath = join(process.cwd(), ".c64bridge.json");
-  const homeConfigPath = join(os.homedir(), ".c64bridge.json");
+  const homeConfigPath = join(homeDirectory(), ".c64bridge.json");
   // Legacy package-adjacent config is deliberately last: it is useful for
   // source checkouts but must never override a project or user config.
   const legacyPackageConfigPath = join(dirname(fileURLToPath(import.meta.url)), "..", ".c64bridge.json");

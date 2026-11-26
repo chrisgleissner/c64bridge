@@ -267,3 +267,45 @@ test("run-tests.mjs preserves explicit files instead of appending defaults", () 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("run-tests.mjs default selection skips fixtures and files that import bun:test", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "run-tests-node-select-"));
+  const write = (rel, body) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body, "utf8");
+  };
+  write("test/alpha.test.mjs", "export {};\n");
+  write("test/fixtures/worker.mjs", "export {};\n");
+  write("test/fixtures/nested/other.test.mjs", "export {};\n");
+  write("test/bunOnly.test.mjs", 'import { expect, test } from "bun:test";\n');
+  write("test/bunOnlySingle.test.mjs", "import { test } from 'bun:test';\n");
+
+  try {
+    const files = buildNodeTestArgs([], root).nodeArgs.slice(3);
+    assert.deepEqual(files, ["test/alpha.test.mjs"]);
+    // An explicit file argument is always honoured.
+    assert.equal(buildNodeTestArgs(["test/bunOnly.test.mjs"], root).nodeArgs.includes("test/bunOnly.test.mjs"), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run-tests.mjs default selection leaves every bun:test file to the Bun runner", () => {
+  const selected = new Set(buildNodeTestArgs([]).nodeArgs.slice(3));
+  for (const file of ["test/fixtures/task-owner.mjs", "test/updateReadme.test.mjs", "test/meta/backgroundState.test.mjs", "test/meta/taskOwnership.test.mjs", "test/meta/taskRetention.test.mjs"]) {
+    assert.equal(selected.has(file), false, `${file} must not be selected for Node`);
+  }
+});
+
+test("run-tests.mjs applies the bun:test exclusion when it runs as the main script", async () => {
+  // The runner builds its file list while the module is still being evaluated, which the
+  // imported-module tests above do not exercise. --list-files prints the list and exits.
+  const { spawnSync } = await import("node:child_process");
+  const result = spawnSync(process.execPath, [path.resolve("scripts/run-tests.mjs"), "--list-files"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const files = result.stdout.split("\n").filter(Boolean);
+  assert.ok(files.includes("test/scripts/run-tests.test.mjs"));
+  for (const file of ["test/fixtures/task-owner.mjs", "test/updateReadme.test.mjs", "test/meta/taskOwnership.test.mjs"]) {
+    assert.equal(files.includes(file), false, `${file} must not be selected for Node`);
+  }
+});

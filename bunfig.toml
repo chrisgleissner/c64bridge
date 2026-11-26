@@ -1,0 +1,3 @@
+[test]
+# Keeps every `bun test` process, however it is started, away from the real ~/.c64bridge.
+preload = ["./test/setup/hermetic-state.mjs"]

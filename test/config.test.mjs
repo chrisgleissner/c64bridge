@@ -612,3 +612,26 @@ test("C64_MODE=u2 without a u2 section still uses the C64U_* variables", (t) => 
   __resetConfigCacheForTests();
   assert.equal(loadConfig().baseUrl, "http://only-c64u-vars");
 });
+
+test("loadConfig reads ~/.c64bridge.json from $HOME on every runtime", (t) => {
+  // Bun's os.homedir() does not follow $HOME; the config path must use the same home as the state paths.
+  const originalEnv = process.env.C64BRIDGE_CONFIG;
+  const originalHome = process.env.HOME;
+  const originalCwd = process.cwd();
+  const cwdDir = mkdtempSync(path.join(tmpdir(), "c64-cwd-"));
+  const homeDir = mkdtempSync(path.join(tmpdir(), "c64-home-"));
+  writeFileSync(path.join(homeDir, ".c64bridge.json"), JSON.stringify({ c64u: { host: "home-only.example" } }), "utf8");
+  delete process.env.C64BRIDGE_CONFIG;
+  process.env.HOME = homeDir;
+  process.chdir(cwdDir);
+  __resetConfigCacheForTests();
+  t.after(() => {
+    __resetConfigCacheForTests();
+    process.chdir(originalCwd);
+    if (originalEnv === undefined) delete process.env.C64BRIDGE_CONFIG; else process.env.C64BRIDGE_CONFIG = originalEnv;
+    if (originalHome === undefined) delete process.env.HOME; else process.env.HOME = originalHome;
+    rmSync(cwdDir, { recursive: true, force: true });
+    rmSync(homeDir, { recursive: true, force: true });
+  });
+  assert.equal(loadConfig().c64_host, "home-only.example");
+});

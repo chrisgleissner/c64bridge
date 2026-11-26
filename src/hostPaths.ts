@@ -52,7 +52,8 @@ function safeRealpath(p: string): string {
   try { return realpathOfDeepest(path.resolve(p)); } catch { return path.resolve(p); }
 }
 
-function homeDirectory(): string {
+/** The user's home: $HOME, else os.homedir(). Bun's os.homedir() does not follow $HOME. */
+export function homeDirectory(): string {
   return process.env.HOME || os.homedir();
 }
 

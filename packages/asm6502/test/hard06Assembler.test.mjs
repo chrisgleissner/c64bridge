@@ -223,11 +223,13 @@ test("many reserved blocks merge in linear time (TRANSLATE-8)", () => {
   const lines = ["* = $8000", "nop"];
   const count = 20000;
   for (let index = 0; index < count; index += 1) lines.push(`* = $${(0x8000 + count - index).toString(16)}`, ".res 1");
-  const started = performance.now();
+  // CPU time, not wall-clock time: the bound is on the work done, which a loaded machine does not change.
+  const cpu = () => { const { user, system } = process.cpuUsage(); return (user + system) / 1000; };
+  const started = cpu();
   const result = assemblyToPrgDetailed(lines.join("\n"));
-  const elapsed = performance.now() - started;
+  const elapsed = cpu() - started;
   assert.equal(result.prg.length, 2 + count + 1);
-  assert.ok(elapsed < 1500, `took ${elapsed} ms`);
+  assert.ok(elapsed < 1500, `took ${elapsed} ms of CPU time`);
   // Ranges on both sides of the image extend it; a detached range does not.
   const around = assemblyToPrgDetailed("* = $c010\n.res 4\nnop\n.res 2\n* = $c100\n.res 8\n").prg;
   assert.deepEqual([...around.subarray(0, 2)], [0x10, 0xc0]);

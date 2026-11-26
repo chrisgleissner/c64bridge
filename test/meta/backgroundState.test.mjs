@@ -267,7 +267,7 @@ describe("meta/background state loading", () => {
     const previousStateDir = process.env.C64BRIDGE_STATE_DIR;
     delete process.env.C64BRIDGE_STATE_DIR;
     try {
-      expect(getTasksHomeDir()).toBe(path.resolve(path.join(os.homedir(), ".c64bridge")));
+      expect(getTasksHomeDir()).toBe(path.resolve(path.join(process.env.HOME || os.homedir(), ".c64bridge")));
     } finally {
       if (previousStateDir !== undefined) process.env.C64BRIDGE_STATE_DIR = previousStateDir;
     }

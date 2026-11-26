@@ -219,6 +219,12 @@ test("start script falls back to dist when Bun cannot be launched", async (t) =>
   assert.equal(globalThis[markerKey], "dist-fallback");
 });
 test("start script imports src entry directly when running under Bun", async (t) => {
+  // scripts/start.mjs only takes the direct src import when globalThis.Bun exists. Under Node it
+  // spawns Bun or falls back to dist, which the neighbouring tests cover. The Bun suite runs this test.
+  if (typeof globalThis.Bun === "undefined") {
+    t.skip("requires the Bun runtime (globalThis.Bun); runs in the Bun suite");
+    return;
+  }
   const fixture = createFixture();
   const markerKey = `__startFixtureSrc_${Date.now()}`;
   writeFile(
