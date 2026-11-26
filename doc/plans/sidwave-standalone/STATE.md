@@ -21,6 +21,7 @@ S0 done (commits 32cf57e2, d50cdd95). S1 in progress in worktree sidwave-s1; doc
 - D3 A0 (bit-identical PCM) is defined on SIDLite; reSIDfp PCM is not reproducible across fresh engines (3.6 finding).
 - D5 `data/sound/examples/Biosphere.sid` (third-party tune, 1993, in c64bridge since 2025-10, unreferenced by code) stays in c64bridge and is not moved into the sidwave package.
 - D6 Docs drafts done on wip/sidwave-docs 934191e2 (packages/README.md, sidwave/README.md, asm6502/README.md, sidwave/doc/licensing.md, CHANGELOG.md, doc/repository-structure.md). Before PR 1: fix spec/schema links to the paths S1 chose, confirm CLI `--help`, drop Biosphere mention from licensing.md if it stays out of the package.
+- D7 S3 SID file module done on feat/sidwave-sidfile 4c00c5c1 (worktree sidwave-sidfile): parseSidFile/writeSidFile/subtunes/songSpeed/md5ForSonglengths, songlengths parser; 25 tests both runners; full HVSC 59,886 files parse and rewrite byte-identically. Rebase onto main after PR 1; package tsconfig needs `types: ["node"]`; songSpeed v2 psidSpecific=0 ambiguity documented in code.
 - D4 Work packages run in worktrees `c64bridge-wt/sidwave-s1` (S1, branch wip/sidwave-s1) and `c64bridge-wt/sidwave-docs` (README/licensing drafts, wip/sidwave-docs); both merge into feat/sidwave-standalone for PR 1.
 
 ## Disproven hypotheses
