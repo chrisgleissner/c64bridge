@@ -560,7 +560,7 @@ export class C64Client {
     if (this.sidwaveSwitch || (type !== this.activeType && (this.pendingSidwave || this.sidwaveSessions.size))) {
       const previous = this.sidwaveSwitch;
       const switching = (async () => {
-        await previous;
+        await previous?.catch(() => {});
         if (type !== this.activeType) {
           const facade = await this.facadePromise;
           await this.withSidwaveQueue(facade, async () => {

@@ -422,3 +422,45 @@ test("a queued client switch checks leases at the actual backend change", isolat
   await assert.rejects(switching, isResourceConflict);
   assert.equal(await client.getActiveBackendType(), task.backendId);
 }));
+
+test("a queued client switch is not rejected by the earlier switch's lease conflict once the lease is released", isolated(async () => {
+  const firstRelease = deferred();
+  const secondRelease = deferred();
+  const secondReached = deferred();
+  const c64u = Promise.resolve({ type: "c64u" });
+  let releaseCalls = 0;
+  const client = Object.assign(Object.create(C64Client.prototype), {
+    initPromise: Promise.resolve(),
+    activeType: "c64u",
+    facadePromise: c64u,
+    allFacades: new Map([["c64u", c64u], ["vice", Promise.resolve({ type: "vice" })]]),
+    sidwaveQueue: new WeakMap(),
+    sidwaveSessions: new Map([["session", {}]]),
+    stopManagedSidwavePlayback: async () => {},
+    releaseManagedSidwave: () => {
+      releaseCalls += 1;
+      if (releaseCalls === 1) return firstRelease.promise;
+      secondReached.resolve();
+      return secondRelease.promise;
+    },
+  });
+  const ctx = baseCtx({ client, setPlatform() {} });
+  const first = select("vice", ctx);
+  while (releaseCalls < 1) await new Promise((resolve) => setImmediate(resolve));
+  // The second switch passes the start check and is queued behind the first one, which has not changed the backend yet.
+  const second = select("vice", ctx);
+  await new Promise((resolve) => setImmediate(resolve));
+  const task = await startHoldingTask();
+  firstRelease.resolve();
+  await assert.rejects(first, isResourceConflict);
+  // The second switch must run its own check, so it reaches its own release step after the first one was rejected.
+  await Promise.race([
+    secondReached.promise,
+    new Promise((resolve) => setTimeout(resolve, 500)),
+  ]);
+  cancelTask(task.id);
+  secondRelease.resolve();
+  const result = await second;
+  assert.ok(!result?.isError, `second switch failed: ${result?.content?.[0]?.text}`);
+  assert.equal(await client.getActiveBackendType(), "vice");
+}));
