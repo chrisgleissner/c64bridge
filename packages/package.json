@@ -18,7 +18,7 @@
     "test": "npm run build && npm run test --workspaces",
     "test:bun": "npm run build && npm run test:bun --workspaces",
     "coverage": "npm run build && node scripts/run-package-coverage.mjs",
-    "pack": "npm run build && npm pack --workspaces --pack-destination ./artifacts",
+    "pack": "npm run build && node --eval \"import('node:fs').then((fs) => fs.mkdirSync('artifacts', { recursive: true }))\" && npm pack --workspaces --pack-destination ./artifacts",
     "check:consumer": "node scripts/check-consumer.mjs"
   },
   "devDependencies": {

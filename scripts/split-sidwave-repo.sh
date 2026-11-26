@@ -227,7 +227,7 @@ if [ "$PROOF" = 1 ]; then
     STEP_TRIES=3 step test-node npm test &&
     STEP_TRIES=3 step test-bun npm run test:bun &&
     STEP_TRIES=3 step coverage npm run coverage &&
-    step pack npm pack --workspaces --pack-destination "$WORK/packs" &&
+    step pack bash -c "mkdir -p \"$WORK/packs\" && npm pack --workspaces --pack-destination \"$WORK/packs\"" &&
     step consumer node scripts/check-consumer.mjs --out "$WORK/consumer.json" &&
     step clean-ci-install bash -c 'rm -rf node_modules */node_modules */dist */coverage && npm ci --no-audit --no-fund && npm run build'
   } || PROOF_OK=false
