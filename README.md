@@ -533,22 +533,22 @@ Cross-platform PETSCII typing plus native Ultimate keyboard and joystick events.
 
 #### c64_memory
 
-Grouped entry point for memory I/O, screen reads, screen polling, and conditional waits on memory, the screen or a VICE checkpoint (wait_until).
+Grouped entry point for memory I/O, screen reads, and screen polling.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `compare_memory` | Compare two memory regions byte-by-byte and report differences. | `address1`, `address2`, `length` | `maxDiffs=10`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `compare_memory` | Compare two memory regions and report differences. | `address1`, `address2`, `length` | `maxDiffs=10`, `includeIo=false` | ✅ | ✅ | ✅ |
 | `copy_memory` | Copy a RAM region to another address. | `source`, `dest`, `length` | `includeIo=false` | ✅ | ✅ | ✅ |
-| `disassemble` | Disassemble a memory region into annotated 6502/6510 instructions, including undocumented opcodes. Labels from loaded `.vs` files annotate the listing. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
+| `disassemble` | Disassemble memory into 6502/6510 instructions, with loaded labels. | `address` | `length=64`, `instructionCount` | ✅ | ✅ | ✅ |
 | `fill_memory` | Fill a memory range with a repeating byte pattern. | `address`, `length`, `pattern` | — | ✅ | ✅ | ✅ |
-| `list_basic` | List the BASIC program in memory as text: reads the $2B-$2E pointers, walks the line links and detokenises. | — | — | ✅ | ✅ | ✅ |
-| `read` | Read a range of bytes and return a hex dump with address metadata. | `address` | `length=256`, `format="hex"`, `bank` | ✅ | ✅ | ✅ |
-| `read_screen` | Return the current 40x25 text screen converted to ASCII. | — | — | ✅ | ✅ | ✅ |
-| `save_memory` | Dump a memory range to a local file, with an optional PRG load-address header. | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
-| `search_memory` | Search for a byte pattern within a memory range and return matching addresses. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
-| `wait_for_text` | Poll the screen until a substring or regex appears, or timeout elapses. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | ✅ | ✅ | ✅ |
-| `wait_until` | Wait until memory, the screen or a VICE checkpoint satisfies a typed condition, then return (synchronous). Ends when the condition is met, timeoutMs elapses, maxIterations reads were made, or the call is cancelled. Timeout and iteration cap are successful results with met: false; one failed read ends the wait at once with an error result (reason communication_failure) that still carries the observations collected so far. Addresses and symbols are resolved once at the start and the backend is pinned at the start. Ultimate hardware refuses $D000-$DFFF unless includeIo is true. The checkpoint condition is VICE only: it sets a temporary non-stopping checkpoint, never halts the CPU, and removes the checkpoint on every exit path. | `condition`, `timeoutMs` | `pollIntervalMs=250`, `maxIterations=10000`, `includeIo=false` | ✅ | ✅ | ✅ |
-| `write` | Write a hexadecimal byte sequence into RAM. Supports verification. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | ✅ | ✅ | ✅ |
+| `list_basic` | List the BASIC program in memory as text. | — | — | ✅ | ✅ | ✅ |
+| `read` | Read a range of bytes with address metadata. | `address` | `length=256`, `format="hex"`, `bank` | ✅ | ✅ | ✅ |
+| `read_screen` | Return the 40x25 text screen as ASCII. | — | — | ✅ | ✅ | ✅ |
+| `save_memory` | Dump a memory range to a local file (optional PRG header). | `startAddress`, `endAddress`, `filePath` | `asPrg=true`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `search_memory` | Search a memory range for a byte pattern. | `startAddress`, `endAddress`, `pattern` | `maxResults=10`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `wait_for_text` | Poll the screen for a substring or regex. | `pattern` | `isRegex=false`, `caseInsensitive=true`, `timeoutMs=3000`, `intervalMs=100` | ✅ | ✅ | ✅ |
+| `wait_until` | Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with an error result (communication_failure) carrying the data so far. Addresses and backend are fixed at the start. | `condition`, `timeoutMs` | `pollIntervalMs=250`, `maxIterations=10000`, `includeIo=false` | ✅ | ✅ | ✅ |
+| `write` | Write hex bytes into RAM. Supports verification. | `address`, `bytes` | `verify=false`, `expected`, `mask`, `abortOnMismatch=true` | ✅ | ✅ | ✅ |
 
 #### c64_printer
 

@@ -23,8 +23,8 @@ import { rangeOverlapsIo } from "../ioRange.js";
 import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../tools/errors.js";
 import { jsonResult } from "../tools/responses.js";
 import type { JsonSchema, ToolExecutionContext, ToolRunResult } from "../tools/types.js";
-import { parseAddressArg, ADDRESS_FORMS } from "../tools/memory.js";
-import { parseCondition, readPlan, hex, CONDITION_TYPES, MAX_COMPARE_BYTES, MAX_SCREEN_TEXT_LENGTH, type Condition, type Observation, type ReadTarget } from "./conditions.js";
+import { parseAddressArg } from "../tools/memory.js";
+import { parseCondition, readPlan, hex, type Condition, type Observation, type ReadTarget } from "./conditions.js";
 import { pollUntil, type PollerDeps, type WaitResult } from "./poller.js";
 
 export const DEFAULT_POLL_INTERVAL_MS = 250;
@@ -37,49 +37,21 @@ export const MAX_MAX_ITERATIONS = 100_000;
 const TOP_LEVEL_KEYS = new Set(["op", "condition", "pollIntervalMs", "timeoutMs", "maxIterations", "includeIo"]);
 
 export const WAIT_UNTIL_DESCRIPTION =
-  "Wait until memory, the screen or a VICE checkpoint satisfies a typed condition, then return (synchronous). "
-  + "Ends when the condition is met, timeoutMs elapses, maxIterations reads were made, or the call is cancelled. "
-  + "Timeout and iteration cap are successful results with met: false; one failed read ends the wait at once with an error result (reason communication_failure) that still carries the observations collected so far. "
-  + "Addresses and symbols are resolved once at the start and the backend is pinned at the start. Ultimate hardware refuses $D000-$DFFF unless includeIo is true. "
-  + "The checkpoint condition is VICE only: it sets a temporary non-stopping checkpoint, never halts the CPU, and removes the checkpoint on every exit path.";
-
-const addressSchema: JsonSchema = { description: `Address: ${ADDRESS_FORMS}. Resolved once at the start.`, type: "string", minLength: 1 };
-const intOrLiteral: JsonSchema = { description: "Integer, or a numeric literal string ($FF, 0xFF, 255).", type: ["integer", "string"] };
-const widthSchema: JsonSchema = { description: "Value width in bytes.", type: "integer", enum: [1, 2, 4] };
-const numericProps: Record<string, JsonSchema> = {
-  width: widthSchema,
-  signed: { description: "Two's complement signed value (default false).", type: "boolean", default: false },
-  endian: { description: "Byte order (default little).", type: "string", enum: ["little", "big"], default: "little" },
-};
-
-function variant(type: string, description: string, properties: Record<string, JsonSchema>, required: string[]): JsonSchema {
-  return { type: "object", description, properties: { type: { const: type }, ...properties }, required: ["type", ...required], additionalProperties: false };
-}
+  "Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with an error result (communication_failure) carrying the data so far. Addresses and backend are fixed at the start.";
 
 const conditionSchema: JsonSchema = {
-  description: `Typed condition; type is one of ${CONDITION_TYPES.join(", ")}.`,
-  oneOf: [
-    variant("equals", "Memory at address equals bytes.", { address: addressSchema, bytes: { type: "string", description: `Hex bytes, for example "$A9 00" (1..${MAX_COMPARE_BYTES} bytes).` } }, ["address", "bytes"]),
-    variant("not_equals", "Memory at address differs from bytes.", { address: addressSchema, bytes: { type: "string", description: `Hex bytes (1..${MAX_COMPARE_BYTES} bytes).` } }, ["address", "bytes"]),
-    variant("masked", "(byte & mask) == value for one byte.", { address: addressSchema, mask: intOrLiteral, value: intOrLiteral }, ["address", "mask", "value"]),
-    variant("range", "min <= value <= max (inclusive) for a width-byte integer.", { address: addressSchema, min: intOrLiteral, max: intOrLiteral, ...numericProps }, ["address", "min", "max", "width"]),
-    variant("threshold", "Compare a width-byte integer with value.", { address: addressSchema, comparison: { type: "string", enum: ["gt", "gte", "lt", "lte"] }, value: intOrLiteral, ...numericProps }, ["address", "comparison", "value", "width"]),
-    variant("changed", "length bytes at address differ from the first read of this wait.", { address: addressSchema, length: { type: "integer", minimum: 1, maximum: MAX_COMPARE_BYTES } }, ["address", "length"]),
-    variant("screen_text", "Text is on the screen (or absent with present: false); the screen is read where the VIC-II shows it.", { text: { type: "string", minLength: 1, maxLength: MAX_SCREEN_TEXT_LENGTH }, present: { type: "boolean", default: true }, caseInsensitive: { type: "boolean", default: true } }, ["text"]),
-    variant("screen_changed", "The screen text differs from the first read of this wait.", {}, []),
-    variant("checkpoint", "VICE only: a temporary non-stopping checkpoint at address was hit.", { address: addressSchema, kind: { type: "string", enum: ["exec", "load", "store"], default: "exec" } }, ["address"]),
-  ],
+  type: "object",
+  description: "{type: equals|not_equals|masked|range|threshold|changed|screen_text|screen_changed|checkpoint, address, bytes|mask,value|min,max,width|comparison,value,width|length|text|kind}",
 };
 
 export const waitUntilArgsJsonSchema: JsonSchema = {
   type: "object",
-  description: WAIT_UNTIL_DESCRIPTION,
   properties: {
     condition: conditionSchema,
-    pollIntervalMs: { type: "integer", minimum: MIN_POLL_INTERVAL_MS, maximum: MAX_POLL_INTERVAL_MS, default: DEFAULT_POLL_INTERVAL_MS, description: "Pause between reads in milliseconds (default 250)." },
-    timeoutMs: { type: "integer", minimum: 1, maximum: MAX_TIMEOUT_MS, description: "Mandatory overall timeout in milliseconds." },
-    maxIterations: { type: "integer", minimum: 1, maximum: MAX_MAX_ITERATIONS, default: DEFAULT_MAX_ITERATIONS, description: "Maximum number of reads (default 10000)." },
-    includeIo: { type: "boolean", default: false, description: "Ultimate: allow reading $D000-$DFFF; reading I/O can clear CIA interrupts. No effect on VICE." },
+    pollIntervalMs: { type: "integer", minimum: MIN_POLL_INTERVAL_MS, maximum: MAX_POLL_INTERVAL_MS, default: DEFAULT_POLL_INTERVAL_MS },
+    timeoutMs: { type: "integer", minimum: 1, maximum: MAX_TIMEOUT_MS, description: "Required timeout ms." },
+    maxIterations: { type: "integer", minimum: 1, maximum: MAX_MAX_ITERATIONS, default: DEFAULT_MAX_ITERATIONS },
+    includeIo: { type: "boolean", default: false, description: "Ultimate: allow $D000-$DFFF." },
   },
   required: ["condition", "timeoutMs"],
   additionalProperties: false,
