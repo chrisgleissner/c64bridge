@@ -17,8 +17,7 @@ See <https://www.gnu.org/licenses/> for details.
 
 import { performance } from "node:perf_hooks";
 import type { C64Facade } from "../device.js";
-import { screenLayoutFromRegisters } from "../device.js";
-import { screenCodesToAscii } from "../petscii.js";
+import { readScreenThroughFacade } from "./screenRead.js";
 import { rangeOverlapsIo } from "../ioRange.js";
 import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } from "../tools/errors.js";
 import { jsonResult } from "../tools/responses.js";
@@ -87,25 +86,6 @@ export function parseWaitUntilArgs(raw: unknown): ParsedWaitArgs {
   const maxIterations = integerOption(args.maxIterations, "$.maxIterations", "maxIterations", 1, MAX_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS);
   if (args.includeIo !== undefined && typeof args.includeIo !== "boolean") throw new ToolValidationError("includeIo must be true or false", { path: "$.includeIo" });
   return { condition: args.condition, pollIntervalMs, timeoutMs, maxIterations, includeIo: args.includeIo === true };
-}
-
-/** Reads the text screen where the VIC-II shows it (base and character set from $D018/$DD00) through the pinned facade. */
-export async function readScreenThroughFacade(ctx: ToolExecutionContext, facade: C64Facade | undefined): Promise<string> {
-  if (facade?.readScreenState) {
-    const state = await facade.readScreenState();
-    return screenCodesToAscii(state.bytes, { columns: 40, rows: 25, charset: state.charset });
-  }
-  let d018: number | undefined;
-  let dd00: number | undefined;
-  try {
-    d018 = (await ctx.client.readMemoryRaw(0xd018, 1, facade))[0];
-    dd00 = (await ctx.client.readMemoryRaw(0xdd00, 1, facade))[0];
-  } catch {
-    // Keep the defaults ($0400, upper case) when the registers cannot be read.
-  }
-  const layout = screenLayoutFromRegisters(d018, dd00);
-  const bytes = await ctx.client.readMemoryRaw(layout.baseAddress, Math.min(0x03e8, 0x10000 - layout.baseAddress), facade);
-  return screenCodesToAscii(bytes, { columns: 40, rows: 25, charset: layout.charset });
 }
 
 interface CheckpointRunner {

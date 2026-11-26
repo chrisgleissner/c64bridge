@@ -7,8 +7,7 @@ import { ToolError, ToolValidationError, toolErrorResult, unknownErrorResult } f
 import { promises as fs } from "node:fs";
 import { dirname, resolve as resolvePath, join as joinPath, sep } from "node:path";
 import type { C64Facade } from "../../device.js";
-import { screenCodesToAscii } from "../../petscii.js";
-import { screenLayoutFromRegisters } from "../../device.js";
+import { readScreenThroughFacade } from "../../monitor/screenRead.js";
 import { resolveAddressSymbol } from "../../knowledge.js";
 import { assertAddressRange, assertNotBareHex, parseNumericLiteral } from "../../numericArg.js";
 import { stripHexByteSeparators } from "../hex.js";
@@ -427,25 +426,6 @@ function persistTasks(changedTasks: readonly BackgroundTask[] = [], strict = fal
   return run;
 }
 
-/** Reads the text screen where the VIC-II shows it (screen base and character set from $D018/$DD00) through the pinned facade. */
-async function readPinnedScreen(ctx: Parameters<ToolDefinition["execute"]>[1], facade: C64Facade): Promise<string> {
-  if (facade.readScreenState) {
-    const state = await facade.readScreenState();
-    return screenCodesToAscii(state.bytes, { columns: 40, rows: 25, charset: state.charset });
-  }
-  let d018: number | undefined;
-  let dd00: number | undefined;
-  try {
-    d018 = (await ctx.client.readMemoryRaw(0xd018, 1, facade))[0];
-    dd00 = (await ctx.client.readMemoryRaw(0xdd00, 1, facade))[0];
-  } catch {
-    // Keep the defaults ($0400, upper case) when the registers cannot be read.
-  }
-  const layout = screenLayoutFromRegisters(d018, dd00);
-  const bytes = await ctx.client.readMemoryRaw(layout.baseAddress, Math.min(0x03e8, 0x10000 - layout.baseAddress), facade);
-  return screenCodesToAscii(bytes, { columns: 40, rows: 25, charset: layout.charset });
-}
-
 function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["execute"]>[1]) {
   const args = task.args;
   const facade = task._facade;
@@ -461,7 +441,7 @@ function runOperation(task: BackgroundTask, ctx: Parameters<ToolDefinition["exec
       return ctx.client.writeMemory(address, bytes, facade);
     }
     case "read_screen": {
-      if (facade) return readPinnedScreen(ctx, facade);
+      if (facade) return readScreenThroughFacade(ctx, facade);
       return ctx.client.readScreen();
     }
     case "menu_button": {
