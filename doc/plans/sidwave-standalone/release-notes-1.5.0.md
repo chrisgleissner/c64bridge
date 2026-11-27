@@ -10,7 +10,6 @@
     grep -v '^#' release-assets.txt | while read -r source name; do cp "$source" "$d/$name"; done &&
     gh release upload 1.5.0 "$d"/* -R chrisgleissner/c64bridge
   ```
-- Run the cookbook prompts that lead the notes on the Ultimate 64. Until then keep the sentence that they have not been verified on hardware.
 - Update the figures if SIDWave changes before the release: reconstruction results, tracker fidelity, and the MOD short-loop limit (delete it if the fix is in the packaged version). After rebuilding the tarballs, also run `build.mjs`, `render.mjs`, `verify.mjs` and `record.mjs` in `examples/sidwave-showcase`, compare the figures in its README and in the showcase paragraph below, and replace the files to upload if they changed.
 
 ## Release text
@@ -23,7 +22,7 @@
 >
 > **Video:** [one minute of Pulse Guard](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and sound effects, recorded from VICE
 
-The clips and the video come from [Pulse Guard](https://github.com/chrisgleissner/c64bridge/blob/main/examples/sidwave-showcase/README.md), a showcase game in the repository whose five songs and nine sound effects are one SIDWave score ([PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg), joystick in port 2). Its player and music take 14,925 bytes; the worst play call takes 5,392 of the 19,656 cycles of a PAL frame in the SIDWave emulator (5,507 with an effect started on every call), and the longest call measured in 191 seconds of scripted play in VICE took 5,383. The game has been run in VICE only; the MIDI source in the first conversion clip is played by a small synthesiser that is part of the example.
+The clips and the video come from [Pulse Guard](https://github.com/chrisgleissner/c64bridge/blob/main/examples/sidwave-showcase/README.md), a showcase game in the repository whose five songs and nine sound effects are one SIDWave score ([PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg), joystick in port 2). Its player and music take 14,925 bytes; the worst play call takes 5,392 of the 19,656 cycles of a PAL frame in the SIDWave emulator (5,507 with an effect started on every call), and the longest call measured in 191 seconds of scripted play in VICE took 5,383. The game was played through in VICE only; on an Ultimate 64 its title screen, title song and the start of a game were checked. The MIDI source in the first conversion clip is played by a small synthesiser that is part of the example.
 
 C64 Bridge 1.5.0 adds SIDWave to your AI client: compose, convert, play, render and build SID music through the `c64_sound` tool.
 
@@ -45,7 +44,7 @@ Compose a tune, render it to WAV, check the audio and play it in VICE. On a C64 
 
 > I do not own a C64. Compose a new ambient tune, tell me its key and form, render it to WAV, check the WAV against the score, and play it in VICE.
 
-The [prompt cookbook](https://github.com/chrisgleissner/c64bridge/blob/main/doc/sidwave-cookbook.md) has six prompts, run end to end on VICE, with what each produced. They have not been verified on hardware. To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux).
+The [prompt cookbook](https://github.com/chrisgleissner/c64bridge/blob/main/doc/sidwave-cookbook.md) has six prompts, run end to end on VICE, with what each produced. The MIDI playback prompt and the game music prompt were also run on an Ultimate 64 Elite (see Limits). To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux).
 
 ### Losses are part of the result
 
@@ -66,6 +65,7 @@ Every conversion says what it dropped or approximated, with counts. `strict` wri
 
 ## Limits
 
+- **Hardware:** checked on an Ultimate 64 Elite, firmware 3.15a, PAL, with an UltiSID: `play` with a MIDI file, a ProTracker module, a SIDWave score and SID files built by SIDWave, the MIDI playback and game music prompts of the cookbook, and the start of Pulse Guard. The checks read the machine's memory; nobody listened and no audio was recorded. Not verified: a C64 Ultimate, a U2 cartridge, a physical SID chip, NTSC, `configure: true` with several SIDs, SID files made with other players, the other four cookbook prompts and the `sidwave play --target u64` command line.
 - **SID reconstruction is experimental.** It gives an approximate score with a verdict. On 24 development tunes, none matched exactly, neither in register writes nor in register state.
 - **SID Factory II** support covers driver 11 and playback fidelity is partial. Over the first 8 seconds of 54 example songs, compared with the original driver, the medians were 0.957 gate and 0.709 note agreement on import, and 0.979 and 0.756 on export. The weakest songs for pitch were Cracked Down (0.17, import) and Scotch Koczka (0.11, export). Export loses some effects, including glides in 36 of those songs.
 - **CheeseCutter** fidelity is also partial: over 12 example songs, 0.989 gate and 0.849 note on import, 0.997 and 0.883 on export.

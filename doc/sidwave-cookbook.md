@@ -7,7 +7,7 @@ Six prompts for an AI client with C64 Bridge connected. Each ends in something y
 - Register C64 Bridge with your client as in the [Quick start](../README.md#quick-start), and install VICE.
 - Start your client in the folder that holds your music files. C64 Bridge reads and writes files there, in `~/.c64bridge` and in the temp directory only, unless `C64BRIDGE_ALLOWED_DIRS` adds more.
 - **To hear VICE,** set `VICE_ARGS=-sounddev pulse` (Linux) in the server environment. A VICE that C64 Bridge starts has no audio output otherwise. For other systems, use the name of a VICE sound driver of your install. The WAV files below play in any audio player and need no sound setting.
-- **On hardware,** replace "in VICE" with "on c64u" in a prompt. The measurements on this page are from VICE; the prompts have not been verified on hardware.
+- **On hardware,** replace "in VICE" with "on c64u" in a prompt; `c64u` is also the backend name for an Ultimate 64. Prompts 1 and 3 were also run on an Ultimate 64 Elite, see [Verification on an Ultimate 64](#verification-on-an-ultimate-64).
 - Rendering a WAV takes up to about as long as the audio, for each output file. A client with a short call timeout needs the background task described in the `sid-music` skill.
 
 The client follows the [`sid-music` skill](../.github/skills/sid-music/SKILL.md), which has walkthroughs for musicians, game developers and archivists.
@@ -54,7 +54,7 @@ You get a score, its key, metre and form, a WAV, a pitch check of the rendered a
 
 You get the header facts, a preservation bundle (recovered score, report and manifest) with its verification, three voice files and the tune playing. SID reconstruction is experimental: the recovered score is approximate and carries a verdict that says how far it matches. The voice files come from that score and are diagnostic audio, not stems of the original player. On VICE the playback is the reconstruction of the first 30 seconds; on a C64 Ultimate or U2 the original file plays.
 
-## Verification run
+## Verification run on VICE
 
 All six prompts were run on 2026-11-27 through the MCP server with VICE 3.10 (PAL), by an agent that made the tool calls described in the prompts and skills. VICE wrote its SID register writes to a file (`-sounddev dump`). "Notes match" means that, for each voice, the note frequencies VICE received are the same, in the same order, as an offline trace of the score. WAV levels are RMS relative to full scale.
 
@@ -68,3 +68,23 @@ All six prompts were run on 2026-11-27 through the MCP server with VICE 3.10 (PA
 | 6 | Bundle of 3 files, verification passed, verdict "not strictly exact" over 180 s; three 30 s voice files | Playback of the reconstruction matches the score the SID file was built from over 8 s: 34, 35 and 6 notes; voice WAVs RMS 0.030 to 0.045 |
 
 The input files of prompts 1, 2 and 6 were written for this test. The input of prompt 6 was compiled by SIDWave itself, so it does not show how well reconstruction works on tunes made with other players.
+
+## Verification on an Ultimate 64
+
+Run on 2026-11-27 on an Ultimate 64 Elite with firmware 3.15a (core 1.50, FPGA 126) in PAL mode, through the MCP server with backend `c64u`, by a script that made the tool calls. An UltiSID answered at `$D400`; both SID sockets were disabled. `configure` was not used, and the 20 configuration categories read the same before the first run and after the final reset.
+
+Nobody listened to the machine and no audio was recorded. The checks read memory over the REST API:
+
+- **Player state matches** means that the RAM the music player writes was identical, byte for byte, to an offline 6502 emulation of the same program after a whole number of play calls. Two such snapshots about 2 s apart gave 49.4 to 50.4 play calls per second; a PAL tune calls the player about 50 times per second, and the timing includes the REST requests.
+- **Voice 3 activity** means that the readback registers `$D41B` and `$D41C` changed while the music played. The SID has no readback for voices 1 and 2.
+
+| Run | Check | Result |
+| --- | --- | --- |
+| `play` with a MIDI file, a ProTracker module and a SIDWave score built by the tests (two voices each) | PRG in RAM equals the saved PRG outside the bytes the player writes; `$0314` points to the SIDWave interrupt handler; player state matches | Passed for all three; voice 3 is unused, so there is no readback |
+| `play` with a SID file built by the tests (the original file, played by the firmware) | The firmware's SID player shows title, author, song 1 of 1 and the play time; the file's data is in RAM; player state matches | Passed; voice 3 is unused |
+| `play` with a five-song SID compiled from the showcase score, `song: 3` | SID player shows song 3 of 5; player state matches song 3 and does not match song 4; voice 3 activity | Passed |
+| Prompt 1, `harbour_lights.mid` | 36.9 s loop, 3 voices, 1 loss (one drum hit dropped), as on VICE; PRG, interrupt and player state checks; voice 3 activity | Passed |
+| Prompt 3 (`compose` style `chiptune`, seed 3) | Player at `$8000`-`$99D5`, variables `$99D6`-`$9B4B`; the compiler reports a worst play call of 4551 cycles in its emulator, upper bound 5893 (cycles were not measured on the Ultimate). The test program ran and the player state matched. Fire on joystick port 2 was injected twice with `c64_input`; after each press the RAM matched the emulation with the coin effect started at one play call (9 of 10 and 10 of 10 snapshots) | Passed |
+| The [Pulse Guard](../examples/sidwave-showcase/README.md) PRG | Title screen text; the game's interrupt installed and its frame counter advancing; title song player state matches; injected fire on port 2 changes the game from the title to play and draws the status lines; voice 3 activity in the title and flight songs | Passed; the game was not played further and its sound effects were not checked |
+
+Not verified: prompts 2, 4, 5 and 6 as written (the SID file runs above cover playing an original SID, with files that SIDWave built, not tunes made with other players); a C64 Ultimate or a U2 cartridge; a physical SID chip; NTSC; `configure: true` and scores with several SIDs; audio capture; the `sidwave play --target u64` command line.

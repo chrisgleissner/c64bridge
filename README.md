@@ -32,6 +32,8 @@ Hear and see it, from the [Pulse Guard showcase](examples/sidwave-showcase/READM
 
 The [prompt cookbook](doc/sidwave-cookbook.md) has six prompts of this kind, each with what it produces. To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux); a VICE that C64 Bridge starts is otherwise silent.
 
+Hardware status: playback of a MIDI file, a ProTracker module, a SIDWave score and SIDWave-built SID files, the game music test program and the start of the showcase game were checked on an Ultimate 64 Elite (firmware 3.15a) by reading its memory. Nobody listened, and nothing was verified on a C64 Ultimate or a U2 cartridge. [Details](doc/sidwave-cookbook.md#verification-on-an-ultimate-64)
+
 Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID Factory II and CheeseCutter imports are approximate, and writing SID Factory II or CheeseCutter needs your own driver file. A single SID has three voices, and a conversion drops and reports the rest. [All sound operations](#c64_sound)
 
 ## Contents

@@ -81,7 +81,9 @@ PRG is 29 262 bytes.
   100 ms after a request was above -40 dBFS (the quietest, the start sound, -38 dBFS).
 
 The script's player dodges and shoots without pause, which is not how a person plays. The difficulty has not been
-tested with people. The game has been run in VICE only, not on hardware, and it is written for PAL.
+tested with people. The game is written for PAL. `verify.mjs` runs in VICE only. On an Ultimate 64 Elite (firmware 3.15a,
+2026-11-27) the title screen, the title song and the start of a game by injected joystick fire were checked by reading
+memory; the game was not played further, its sound effects were not checked and nobody listened to it.
 
 ## The soundtrack
 
