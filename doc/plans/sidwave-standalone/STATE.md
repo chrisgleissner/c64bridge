@@ -131,3 +131,12 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - sidwave PR 25 (feat/convert-limits) open, merge watch running.
 - Running: codex on feat/import-mod-jch (must-fix items plus bounded follow-ups, spec briefs/codex-modjch.md; JCH wave-table dwell and row timing stay open); Sonnet on feat/cli-authoring (W14 blocker); Sonnet resuming SF2 phase 1.
 - Waiting for a free slot, in order: S5d CPU check, PR and merge (worktree sidwave-s5d, HANDOVER-S5d.md); W20 resume (brief-w20-mcp.md, head 19acd167).
+
+### 15:00 update
+
+- Merged: sidwave PR 25 (convert limits), 27 (MOD/JCH), 28 (authoring CLI).
+- PR 26 (S5d): CI failures being fixed by a Sonnet agent; then rebase, CI, merge. Then S5d part 4, then the held-out run.
+- W20 (c64bridge feat/sidwave-mcp, a3568bf2): implemented, independent review running. Open: background-task allowlist for convert/reconstruct/compare/analyze_music is modern-mcp's area; U64 workflow run by the lead; sidwave bug "chiptune_drive reconstructs as recompile_failed" to be rechecked after PR 26.
+- SF2 phase 1 (sidwave-formats2, b9145e3): final tests running.
+- W13 developer integration: codex on feat/developer-integration (sidwave-devint), spec briefs/codex-w13.md; follow-up not in spec: `--effects-only` build.
+- Helpers: briefs/watch-merge2.sh <pr> <branch> <sha> (merges only if green and not behind main), briefs/rebase-union.sh.
