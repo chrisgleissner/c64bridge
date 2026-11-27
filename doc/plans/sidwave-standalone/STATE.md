@@ -123,3 +123,4 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
   - Not started: S5d part 4, W13, W15, W16, W18, W19, W21/22, S8, A1 v2, S9 release.
 - MOD/JCH review (feat/import-mod-jch): merge after fixing 15-sample auto-detection (formats/mod.ts), JCH detection of unsupported versions (formats/jch.ts) and the bar-tempo loss text (modImport.ts:104-119). Follow-ups: rows-per-beat choice minimising mistimed rows, autocorrelation prefix sums/FFT in modSamples.ts (1 s of 1.6 s), `--sids` on convert, tighter MOD CPU budget, whole-word drum names, JCH wave-table dwell and row timing (pitch agreement 0.0-0.97 on 10 HVSC tunes).
 - feat/convert-limits c3efb2c: reviewed, ready for PR.
+- User directive 2026-11-27 (after the usage limit): minimal token use; Sonnet 5.5 drives the main session; Opus only for difficult research, specification and important reviews; good use of codex gpt-6-luna agents.
