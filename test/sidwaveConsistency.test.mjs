@@ -159,7 +159,7 @@ test("sids keeps the fourth channel of a module, and applies to MOD input only",
   const one = await ok({ op: "convert", inputPath: input, to: "sidwave", outputPath: at("four-1.yaml") });
   assert.match(JSON.stringify(one.losses), /Channels 4 are not imported/);
   const two = await ok({ op: "convert", inputPath: input, to: "sidwave", sids: 2, outputPath: at("four-2.yaml") });
-  assert.doesNotMatch(JSON.stringify(two.losses), /Channels 4 are not imported/);
+  assert.ok(!/Channels 4 are not imported/.test(JSON.stringify(two.losses)), JSON.stringify(two.losses));
   assert.equal(parseSidwave(fs.readFileSync(two.outputPath, "utf8")).voices.length, 4);
   await rejected({ op: "convert", sidwave: SCORE, to: "midi", sids: 2 }, /MOD input/);
   await rejected({ op: "play", sidwave: SCORE, sids: 2 }, /sids applies to a MOD file only/);
