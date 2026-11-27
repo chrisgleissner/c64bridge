@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { consumerOverrides } from './sidwave-dependency.mjs';
 import { lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 
 const root = process.cwd();
@@ -76,7 +77,7 @@ async function cleanInstallCheck() {
     const [info] = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', work], { cwd: root }));
     const project = path.join(work, 'project');
     mkdirSync(project);
-    writeFileSync(path.join(project, 'package.json'), JSON.stringify({ name: 'consumer', private: true, type: 'module' }));
+    writeFileSync(path.join(project, 'package.json'), JSON.stringify({ name: 'consumer', private: true, type: 'module', overrides: consumerOverrides() }));
     run('npm', ['install', '--no-audit', '--no-fund', '--no-package-lock', '--ignore-scripts', path.join(work, info.filename)], { cwd: project });
     const installed = path.join(project, 'node_modules', 'c64bridge');
     for (const name of ['sidwave', '6502-toolkit']) {

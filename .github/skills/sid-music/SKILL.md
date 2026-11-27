@@ -25,7 +25,7 @@ Use this skill for preset music demos, SIDWAVE composition, direct voice control
 
 ## Offline operations
 
-These `c64_sound` operations work on host files and do not play anything. Give the score as `inputPath` or inline as `sidwave`. Without `outputPath` an operation writes a new file below `artifacts/sidwave/` and returns its path; an existing file is replaced only with `overwrite: true`. `includeScore: true` also returns the written score.
+These `c64_sound` operations work on host files and do not play anything. Give the score as `inputPath` or inline as `sidwave`. Without `outputPath` an operation writes a new file below `artifacts/sidwave/` (a score with `imports`: next to its input file) and returns its path; an existing file is replaced only with `overwrite: true`. `includeScore: true` also returns the written score.
 
 | Task | Operations |
 | --- | --- |

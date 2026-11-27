@@ -3,9 +3,10 @@
  * Switches the sidwave and 6502-toolkit dependencies between local tarballs and a registry version.
  *
  *   node scripts/sidwave-dependency.mjs tarballs [--dir <dir>] [--no-install]
- *       Point both dependencies at the tarballs `npm pack` produced in <dir>
- *       (default ~/.c64bridge/sidwave-standalone/tarballs). Because sidwave itself depends on 6502-toolkit from the
- *       registry, an override makes npm use the same tarball for that nested dependency.
+ *       Copy the tarballs `npm pack` produced in <dir> (default ~/.c64bridge/sidwave-standalone/tarballs) to the
+ *       ignored directory vendor/sidwave-tarballs and point both dependencies at the copies, so that package.json and
+ *       the lock files hold relative paths. Run this in a new checkout before `npm ci`. Because sidwave itself depends
+ *       on 6502-toolkit from the registry, an override makes npm use the same tarball for that nested dependency.
  *   node scripts/sidwave-dependency.mjs registry --sidwave <x.y.z> --toolkit <x.y.z> [--no-install]
  *       Use caret ranges of published versions and remove the override. This is the only step of the release PR that
  *       changes the dependency source.
@@ -24,6 +25,19 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJsonPath = path.join(root, "package.json");
 const PACKAGES = ["sidwave", "6502-toolkit"];
+/** Ignored by git; relative to the repository root. */
+const VENDOR_DIR = "vendor/sidwave-tarballs";
+
+/**
+ * Overrides for a scratch project that installs the packed c64bridge: a relative file: dependency does not resolve
+ * from the installed copy, so it is pointed at the tarball in this checkout. Empty for registry versions.
+ */
+export function consumerOverrides(pkg = readPackage()) {
+  return Object.fromEntries(PACKAGES
+    .map((name) => [name, String(pkg.dependencies?.[name] ?? "")])
+    .filter(([, spec]) => spec.startsWith("file:"))
+    .map(([name, spec]) => [name, `file:${path.resolve(root, spec.slice(5))}`]));
+}
 
 const args = process.argv.slice(2);
 const mode = args[0];
@@ -79,35 +93,44 @@ function refreshLocks() {
   else if (bun.status !== 0) fail("bun install --lockfile-only failed");
 }
 
-if (mode === "tarballs") {
-  const dir = path.resolve(option("--dir") ?? path.join(os.homedir(), ".c64bridge", "sidwave-standalone", "tarballs"));
-  const pkg = readPackage();
-  pkg.dependencies ??= {};
-  for (const name of PACKAGES) pkg.dependencies[name] = `file:${findTarball(dir, name)}`;
-  pkg.overrides = { ...pkg.overrides, "6502-toolkit": "$6502-toolkit" };
-  pkg.dependencies = Object.fromEntries(Object.entries(pkg.dependencies).sort(([a], [b]) => (a < b ? -1 : 1)));
-  writePackage(pkg);
-  refreshLocks();
-} else if (mode === "registry") {
-  const versions = { sidwave: option("--sidwave"), "6502-toolkit": option("--toolkit") };
-  for (const [name, version] of Object.entries(versions)) {
-    if (!version || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) fail(`pass an exact version for ${name}, for example ${name === "sidwave" ? "--sidwave" : "--toolkit"} 1.0.0`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (mode === "tarballs") {
+    const dir = path.resolve(option("--dir") ?? path.join(os.homedir(), ".c64bridge", "sidwave-standalone", "tarballs"));
+    const pkg = readPackage();
+    pkg.dependencies ??= {};
+    const sources = PACKAGES.map((name) => [name, findTarball(dir, name)]);
+    fs.rmSync(path.join(root, VENDOR_DIR), { recursive: true, force: true });
+    fs.mkdirSync(path.join(root, VENDOR_DIR), { recursive: true });
+    for (const [name, source] of sources) {
+      const target = `${VENDOR_DIR}/${path.basename(source)}`;
+      fs.copyFileSync(source, path.join(root, target));
+      pkg.dependencies[name] = `file:${target}`;
+    }
+    pkg.overrides = { ...pkg.overrides, "6502-toolkit": "$6502-toolkit" };
+    pkg.dependencies = Object.fromEntries(Object.entries(pkg.dependencies).sort(([a], [b]) => (a < b ? -1 : 1)));
+    writePackage(pkg);
+    refreshLocks();
+  } else if (mode === "registry") {
+    const versions = { sidwave: option("--sidwave"), "6502-toolkit": option("--toolkit") };
+    for (const [name, version] of Object.entries(versions)) {
+      if (!version || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) fail(`pass an exact version for ${name}, for example ${name === "sidwave" ? "--sidwave" : "--toolkit"} 1.0.0`);
+    }
+    const pkg = readPackage();
+    pkg.dependencies ??= {};
+    for (const name of PACKAGES) pkg.dependencies[name] = `^${versions[name]}`;
+    if (pkg.overrides) {
+      delete pkg.overrides["6502-toolkit"];
+      if (Object.keys(pkg.overrides).length === 0) delete pkg.overrides;
+    }
+    pkg.dependencies = Object.fromEntries(Object.entries(pkg.dependencies).sort(([a], [b]) => (a < b ? -1 : 1)));
+    writePackage(pkg);
+    refreshLocks();
+  } else if (mode === "check") {
+    const pkg = readPackage();
+    const offenders = PACKAGES.filter((name) => String(pkg.dependencies?.[name] ?? "").startsWith("file:"));
+    if (offenders.length) fail(`${offenders.join(", ")} still use file: tarballs; run: node scripts/sidwave-dependency.mjs registry --sidwave <x.y.z> --toolkit <x.y.z>`);
+    console.log("sidwave-dependency: both dependencies use registry versions");
+  } else {
+    fail("usage: sidwave-dependency.mjs tarballs [--dir <dir>] | registry --sidwave <x.y.z> --toolkit <x.y.z> | check");
   }
-  const pkg = readPackage();
-  pkg.dependencies ??= {};
-  for (const name of PACKAGES) pkg.dependencies[name] = `^${versions[name]}`;
-  if (pkg.overrides) {
-    delete pkg.overrides["6502-toolkit"];
-    if (Object.keys(pkg.overrides).length === 0) delete pkg.overrides;
-  }
-  pkg.dependencies = Object.fromEntries(Object.entries(pkg.dependencies).sort(([a], [b]) => (a < b ? -1 : 1)));
-  writePackage(pkg);
-  refreshLocks();
-} else if (mode === "check") {
-  const pkg = readPackage();
-  const offenders = PACKAGES.filter((name) => String(pkg.dependencies?.[name] ?? "").startsWith("file:"));
-  if (offenders.length) fail(`${offenders.join(", ")} still use file: tarballs; run: node scripts/sidwave-dependency.mjs registry --sidwave <x.y.z> --toolkit <x.y.z>`);
-  console.log("sidwave-dependency: both dependencies use registry versions");
-} else {
-  fail("usage: sidwave-dependency.mjs tarballs [--dir <dir>] | registry --sidwave <x.y.z> --toolkit <x.y.z> | check");
 }

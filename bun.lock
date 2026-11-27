@@ -4,7 +4,7 @@
     "": {
       "name": "c64bridge",
       "dependencies": {
-        "6502-toolkit": "file:/home/chris/.c64bridge/sidwave-standalone/tarballs/6502-toolkit-0.1.0.tgz",
+        "6502-toolkit": "file:vendor/sidwave-tarballs/6502-toolkit-0.1.0.tgz",
         "@modelcontextprotocol/node": "2.1.2",
         "@modelcontextprotocol/server": "2.4.0",
         "axios": "^1.20.0",
@@ -12,7 +12,7 @@
         "libsidplayfp-wasm": "1.1.1",
         "meyda": "5.6.2",
         "pitchfinder": "^2.3.4",
-        "sidwave": "file:/home/chris/.c64bridge/sidwave-standalone/tarballs/sidwave-0.1.0.tgz",
+        "sidwave": "file:vendor/sidwave-tarballs/sidwave-0.1.0.tgz",
         "yaml": "^2.9.0",
         "zod": "^4.6.6",
       },
@@ -30,12 +30,12 @@
     },
   },
   "overrides": {
-    "6502-toolkit": "file:/home/chris/.c64bridge/sidwave-standalone/tarballs/6502-toolkit-0.1.0.tgz",
+    "6502-toolkit": "file:vendor/sidwave-tarballs/6502-toolkit-0.1.0.tgz",
     "hono": "^4.13.16",
     "zod": "^4.6.6",
   },
   "packages": {
-    "6502-toolkit": ["6502-toolkit@/home/chris/.c64bridge/sidwave-standalone/tarballs/6502-toolkit-0.1.0.tgz", {}],
+    "6502-toolkit": ["6502-toolkit@vendor/sidwave-tarballs/6502-toolkit-0.1.0.tgz", {}],
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
@@ -487,7 +487,7 @@
 
     "side-channel-weakmap": ["side-channel-weakmap@1.0.2", "", { "dependencies": { "call-bound": "^1.0.2", "es-errors": "^1.3.0", "get-intrinsic": "^1.2.5", "object-inspect": "^1.13.3", "side-channel-map": "^1.0.1" } }, "sha512-WPS/HvHQTYnHisLo9McqBHOJk2FkHO/tlpvldyrnem4aeQp4hai3gythswg6p01oSoTl58rcpiFAjF2br2Ak2A=="],
 
-    "sidwave": ["sidwave@/home/chris/.c64bridge/sidwave-standalone/tarballs/sidwave-0.1.0.tgz", { "dependencies": { "6502-toolkit": "^0.1.0", "yaml": "^2.9.0" }, "peerDependencies": { "libsidplayfp-wasm": "^1.1.1" }, "optionalPeers": ["libsidplayfp-wasm"], "bin": { "sidwave": "./bin/sidwave.js" } }],
+    "sidwave": ["sidwave@vendor/sidwave-tarballs/sidwave-0.1.0.tgz", { "dependencies": { "6502-toolkit": "^0.1.0", "yaml": "^2.9.0" }, "peerDependencies": { "libsidplayfp-wasm": "^1.1.1" }, "optionalPeers": ["libsidplayfp-wasm"], "bin": { "sidwave": "./bin/sidwave.js" } }],
 
     "simple-xml-to-json": ["simple-xml-to-json@1.2.7", "", {}, "sha512-mz9VXphOxQWX3eQ/uXCtm6upltoN0DLx8Zb5T4TFC4FHB7S9FDPGre8CfLWqPWQQH/GrQYd2AXhhVM5LDpYx6Q=="],
 

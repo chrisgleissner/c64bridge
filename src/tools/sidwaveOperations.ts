@@ -9,7 +9,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 import YAML from "yaml";
 import {
-  classifyError, compileSidwaveBytes, compileSidwave, completeScore, convert, createImportResolver, describeSidwave,
+  classifyError, compileSidwaveBytes, compileSidwave, completeScore, convert, describeSidwave,
   generateSidwave, hvscDatabases, hvscPathOf, identifySidPlayer, lintSidwave, parseSidFile, parseSidIdConfig,
   parseSidwave, parseSonglengths, parseStil, PROFILES, queryStil, SIDWAVE_SYMBOL_FORMATS, sidInfo, validationFailure,
   DEFAULT_MUSIC_SEED, MUSIC_STYLES, type MusicStyle, type SidwaveReadOptions, type SidwaveSymbolFormat,
@@ -27,7 +27,7 @@ import {
   humanise, quantise, restructure, scaleTempo, setTempo, SidwaveTransformError, substituteInstrument, transpose,
 } from "sidwave/transform";
 import { DEFAULT_MAX_READ_BYTES, defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
-import { hostSidwaveReadOptions } from "../sidwaveHost.js";
+import { hostSidwaveImportResolver, hostSidwaveReadOptions } from "../sidwaveHost.js";
 import { getPlatformStatus } from "../platform.js";
 import { playbackSetupWarnings, resolveSidSystem } from "./audio.js";
 import { cancelledResult, type ToolExecutionContext, type ToolRunResult } from "./types.js";
@@ -164,7 +164,7 @@ async function readFileInput(inputPath: string): Promise<Input> {
   const name = basename(file);
   const stem = basename(name, extname(name)).replace(/\.sidwave$/i, "");
   // Libraries of a score's `imports` are resolved next to the score and may not leave its directory.
-  return { bytes, name, stem, file, read: { ...hostSidwaveReadOptions, imports: createImportResolver({ file }) } };
+  return { bytes, name, stem, file, read: { ...hostSidwaveReadOptions, imports: hostSidwaveImportResolver(file) } };
 }
 
 const scoreText = (input: Input) => input.bytes.toString("utf8");
@@ -173,15 +173,19 @@ const isSid = (bytes: Uint8Array) => bytes.length >= 4 && /^[PR]SID$/.test(Strin
 
 interface Artifact { outputPath: string; bytes: number; sha256: string }
 
+const existsError = (path: string, argument: string) =>
+  new ToolValidationError(`${path} exists; pass overwrite: true to replace it`, { path: argument });
+
 /**
  * Resolves and checks an output file before any long work starts. Without `outputPath` the file gets a new name in
- * the artifacts directory. An existing file is replaced only with `overwrite`.
+ * `directory`, by default the artifacts directory. An existing file is replaced only with `overwrite`.
  */
-function planOutput(args: Args, defaultStem: string, extension: string, protect: readonly (string | undefined)[] = []) {
+function planOutput(args: Args, defaultStem: string, extension: string, protect: readonly (string | undefined)[] = [], directory?: string) {
   const path = args.outputPath !== undefined
     ? resolveHostPath(args.outputPath, { purpose: "write" })
-    : resolveHostChildPath(defaultHostOutputDir("artifacts", "sidwave"), `${defaultStem}-${randomUUID().slice(0, 8)}${extension}`);
+    : resolveHostChildPath(directory ?? defaultHostOutputDir("artifacts", "sidwave"), `${defaultStem}-${randomUUID().slice(0, 8)}${extension}`);
   if (protect.includes(path)) throw new ToolValidationError(`The output file is an input file: ${path}`, { path: "$.outputPath" });
+  if (args.overwrite !== true && existsSync(path)) throw existsError(path, "$.outputPath");
   return { path, write: (content: Uint8Array | string, ctx: ToolExecutionContext) => writeArtifact(path, content, args.overwrite === true, ctx) };
 }
 
@@ -193,16 +197,20 @@ async function writeArtifact(path: string, content: Uint8Array | string, overwri
     await writeFile(path, bytes, { flag: overwrite ? "w" : "wx" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new ToolValidationError(`${path} exists; pass overwrite: true to replace it`, { path: "$.outputPath" });
+      throw existsError(path, "$.outputPath");
     }
     throw error;
   }
   return { outputPath: path, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
-/** Writes a score produced by an operation and returns the artifact, with the text when `includeScore` is set. */
-async function writeScore(args: Args, input: Pick<Input, "stem">, suffix: string, score: string, ctx: ToolExecutionContext) {
-  const artifact = await planOutput(args, `${input.stem}-${suffix}`, ".sidwave.yaml").write(score, ctx);
+/**
+ * Writes a score produced by an operation and returns the artifact, with the text when `includeScore` is set. A score
+ * with `imports` is written next to its input file by default, because the library paths are relative to the score.
+ */
+async function writeScore(args: Args, input: Pick<Input, "stem" | "file">, suffix: string, score: string, ctx: ToolExecutionContext) {
+  const directory = input.file !== undefined && record(YAML.parse(score)).imports !== undefined ? dirname(input.file) : undefined;
+  const artifact = await planOutput(args, `${input.stem}-${suffix}`, ".sidwave.yaml", [], directory).write(score, ctx);
   return { ...artifact, ...(args.includeScore ? { sidwave: score } : {}) };
 }
 
@@ -352,8 +360,10 @@ const definitions: Definition[] = [
       }
       let details: Record<string, unknown> = {};
       try {
-        details = format.describe?.(input.bytes) ?? {};
+        // The format's own description parses a score without read options and so rejects imports and sample files.
+        details = format.id === "sidwave" ? { ...describeSidwave(parseScore(input)) } : format.describe?.(input.bytes) ?? {};
       } catch (error) {
+        if (error instanceof ToolError) throw error;
         throw new ToolValidationError(`${input.name} is not a valid ${format.id} file: ${(error as Error).message}`, { path: "$.inputPath" });
       }
       return {
@@ -466,8 +476,11 @@ const definitions: Definition[] = [
       ];
       const planned = outputs.map(([name, content]) => ({ path: resolveHostChildPath(directory, name), content }));
       // Check every file first, so a refusal does not leave half of a build behind.
+      if (planned.some(({ path }) => path === input.file)) {
+        throw new ToolValidationError(`The output file is an input file: ${input.file}`, { path: "$.outputDir" });
+      }
       const existing = args.overwrite ? undefined : planned.find(({ path }) => existsSync(path));
-      if (existing) throw new ToolValidationError(`${existing.path} exists; pass overwrite: true to replace it`, { path: "$.outputDir" });
+      if (existing) throw existsError(existing.path, "$.outputDir");
       const files: Artifact[] = [];
       for (const { path, content } of planned) files.push(await writeArtifact(path, content, args.overwrite === true, ctx));
       const { entryPoints, memory, zeroPage, sidRegisters, registers, interrupts, maxStackBytes, playCallsPerFrame, songs, effects, system } = build.contract;

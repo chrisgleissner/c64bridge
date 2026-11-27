@@ -27,7 +27,7 @@ export const FORBIDDEN_PATTERNS = Object.freeze([
   /^src\//,
   /^test\//,
   /^doc\/img\//,
-  /^node_modules\/(?!(?:sidwave|6502-toolkit|yaml)\/)/, // bundleDependencies: the workspace packages and the yaml they need
+  /^node_modules\//, // dependencies are installed from their own packages, never shipped inside this one
   /\.map$/,
   /\.tsbuildinfo$/,
   /^scripts\/(run-tests|run-coverage|test-state-dir|vice-soak|sid2wav|prepare-release|validate-release|generate-|update-readme|rag-rebuild|fetch-external)/,

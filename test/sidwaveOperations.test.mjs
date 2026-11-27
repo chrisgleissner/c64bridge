@@ -189,7 +189,11 @@ test("compile writes PRG and SID files and reports the active backend", async ()
   assert.equal(fs.readFileSync(at("fuer.prg")).readUInt16LE(0), prg.loadAddress);
   const sid = await ok({ op: "compile", inputPath: SHORT, output: "sid", outputPath: at("fuer.sid") });
   assert.equal(fs.readFileSync(sid.outputPath).subarray(0, 4).toString(), "PSID");
-  await rejected({ op: "compile", inputPath: SHORT, outputPath: SHORT, overwrite: true }, /input file/);
+  // A copy: a regression here would overwrite the file.
+  const own = write("own.yaml", SCORE);
+  await rejected({ op: "compile", inputPath: own, outputPath: own, overwrite: true }, /input file/);
+  await rejected({ op: "convert", inputPath: own, to: "sidwave", outputPath: own, overwrite: true }, /input file/);
+  assert.equal(fs.readFileSync(own, "utf8"), SCORE);
 });
 
 test("compile forDevice warns when the machine's clock or SID model differs", async () => {
@@ -201,6 +205,10 @@ test("compile forDevice warns when the machine's clock or SID model differs", as
   assert.deepEqual([data.device.system, data.device.sidModel], ["NTSC", "6581"]);
   assert.ok(data.warnings.some((warning) => /PAL but the machine is NTSC/.test(warning)), data.warnings.join("\n"));
   assert.ok(data.warnings.some((warning) => /declares 8580.*6581/.test(warning)), data.warnings.join("\n"));
+  // An UltiSID that also answers at $D400 leaves the model unknown.
+  const shared = { ...config, "SID Addressing": { ...config["SID Addressing"], "UltiSID 1 Address": "$D400" } };
+  const mixed = await ok({ op: "compile", sidwave: SCORE, forDevice: true, outputPath: at("mixed.prg") }, machine({ platform: "c64u", config: shared }));
+  assert.equal(mixed.device.sidModel, undefined);
 });
 
 test("compile builds the game target with symbols and the register contract", async () => {
@@ -304,12 +312,25 @@ test("reconstruct recovers a score from a SID with a verdict, progress and a ver
 
 test("a cancelled reconstruction stops and writes nothing", async () => {
   const sid = (await ok({ op: "compile", sidwave: SCORE, output: "sid", outputPath: at("cancel.sid") })).outputPath;
-  const controller = new AbortController();
-  const ctx = { ...machine(), signal: controller.signal, reportProgress: () => controller.abort() };
-  const { result } = await sound({ op: "reconstruct", inputPath: sid, durationSeconds: 120, outputPath: at("cancelled.yaml") }, ctx);
-  assert.equal(result.isError, true);
-  assert.equal(result.metadata.cancelled, true);
-  assert.equal(fs.existsSync(at("cancelled.yaml")), false);
+  // Pass 1 traces the input; the library records a failure of pass 2 in its report instead of throwing it.
+  for (const pass of [1, 2]) {
+    const controller = new AbortController();
+    const passes = new Set();
+    const ctx = {
+      ...machine(),
+      signal: controller.signal,
+      reportProgress: (completed, total, message) => {
+        passes.add(message);
+        if (message.endsWith(`pass ${pass}`)) controller.abort();
+      },
+    };
+    const output = at(`cancelled-${pass}.yaml`);
+    const { result } = await sound({ op: "reconstruct", inputPath: sid, durationSeconds: 120, outputPath: output }, ctx);
+    assert.equal(result.isError, true);
+    assert.equal(result.metadata.cancelled, true);
+    assert.equal(passes.size, pass, `no engine pass runs after the cancelled pass ${pass}`);
+    assert.equal(fs.existsSync(output), false);
+  }
 });
 
 test("compare reports equal scores and the musical differences of different ones", async () => {
@@ -350,4 +371,93 @@ test("complete continues a score and keeps the original material", async () => {
   assert.equal(data.protected.identical, true);
   assert.equal((await ok({ op: "validate", inputPath: data.outputPath })).valid, true);
   await rejected({ op: "complete", inputPath: composed.outputPath, action: "rewrite" }, /Unknown complete action/);
+});
+
+const VOICE = `voices:
+  - id: 1
+    waveform: triangle
+    patterns:
+      main: { notes: [C4, E4] }
+timeline:
+  - { bars: 1, layers: { v1: main } }
+`;
+const library = (extra = "") => `sidwave: 1.4
+library: { name: lib, version: 1.0.0, licence: CC0-1.0, provenance: { author: a, source: s, created: 2026-01-01 } }
+${extra}instruments: { bell: { waveform: pulse } }
+`;
+const importing = (from) => `sidwave: 1.4
+tempo: 120
+imports:
+  - { as: x, from: ${JSON.stringify(from)} }
+${VOICE}`;
+
+test("a score with imports is described, and a changed copy stays next to its libraries", async () => {
+  fs.mkdirSync(at("imports"));
+  write("imports/lib.yaml", library());
+  const score = write("imports/song.sidwave.yaml", importing("lib.yaml"));
+  const inspected = await ok({ op: "inspect", inputPath: score });
+  assert.deepEqual([inspected.format, inspected.details.voices], ["sidwave", 1]);
+  const changed = await ok({ op: "transform", inputPath: score, action: "transpose", semitones: 1 });
+  assert.equal(path.dirname(changed.outputPath), fs.realpathSync(at("imports")));
+  assert.equal((await ok({ op: "validate", inputPath: changed.outputPath })).valid, true);
+});
+
+test("imports may not leave the score directory or read hidden files, directly or through a library", async () => {
+  fs.mkdirSync(at("confined/score"), { recursive: true });
+  write("confined/outside.yaml", library());
+  write("confined/score/.hidden.yaml", library());
+  fs.symlinkSync(at("confined/outside.yaml"), at("confined/score/link.yaml"));
+  write("confined/score/nested.yaml", library("imports:\n  - { as: y, from: .hidden.yaml }\n"));
+  const check = async (from) => sound({ op: "validate", inputPath: write("confined/score/song.yaml", importing(from)) });
+  for (const from of ["../outside.yaml", "link.yaml"]) {
+    const { data } = await check(from);
+    assert.equal(data.valid, false, from);
+    assert.match(data.message, /outside the score directory/, from);
+  }
+  for (const from of [".hidden.yaml", "nested.yaml"]) {
+    const { result, text } = await check(from);
+    assert.equal(result.isError, true, from);
+    assert.match(text, /hidden component/, from);
+  }
+  await rejected({ op: "inspect", inputPath: at("confined/score/song.yaml") }, /hidden component/);
+});
+
+test("an existing output file is refused before any long work, and a game build never replaces its input", async () => {
+  const sid = (await ok({ op: "compile", sidwave: SCORE, output: "sid", outputPath: at("early.sid") })).outputPath;
+  const taken = write("taken.yaml", "keep");
+  const ctx = machine();
+  await rejected({ op: "reconstruct", inputPath: sid, durationSeconds: 3, outputPath: taken }, /exists; pass overwrite/, ctx);
+  assert.equal(ctx.progress.length, 0, "no engine pass ran");
+  assert.equal(fs.readFileSync(taken, "utf8"), "keep");
+
+  fs.mkdirSync(at("self"));
+  const input = write("self/level.bin", fs.readFileSync(path.join(EXAMPLES, "game_songs.yaml")));
+  await rejected({ op: "compile", inputPath: input, output: "game", origin: 0x8000, outputDir: at("self"), overwrite: true }, /input file/);
+  assert.deepEqual(fs.readdirSync(at("self")), ["level.bin"]);
+});
+
+test("outputs and imports cannot escape through symbolic links", async () => {
+  const outside = fs.mkdtempSync(path.join(process.cwd(), ".sidwave-outside-"));
+  const previous = process.cwd();
+  fs.mkdirSync(at("links"));
+  fs.writeFileSync(path.join(outside, "keep.prg"), "keep");
+  fs.symlinkSync(outside, at("links/dir"));
+  fs.symlinkSync(path.join(outside, "keep.prg"), at("links/file.prg"));
+  fs.symlinkSync(path.join(outside, "keep.prg"), at("links/score.bin"));
+  try {
+    process.chdir(work);
+    for (const args of [
+      { op: "compile", sidwave: SCORE, outputPath: at("links/dir/new.prg") },
+      { op: "compile", sidwave: SCORE, outputPath: at("links/file.prg"), overwrite: true },
+      { op: "compile", sidwave: SCORE, output: "game", origin: 0x8000, outputDir: at("links"), overwrite: true },
+      { op: "inspect", inputPath: at("links/file.prg") },
+    ]) {
+      await rejected(args, /outside the allowed directories/);
+    }
+    assert.deepEqual(fs.readdirSync(outside), ["keep.prg"]);
+    assert.equal(fs.readFileSync(path.join(outside, "keep.prg"), "utf8"), "keep");
+  } finally {
+    process.chdir(previous);
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
 });
