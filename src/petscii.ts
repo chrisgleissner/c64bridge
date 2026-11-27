@@ -1,1 +1,1 @@
-export * from "c64-asm6502/petscii";
+export * from "6502-toolkit/petscii";

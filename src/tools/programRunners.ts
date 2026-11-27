@@ -689,7 +689,7 @@ async function executeUploadRunAsm(rawArgs: unknown, ctx: ToolExecutionContext):
 
     // Assemble locally to expose structured metadata and capture symbols
     const asmResult = assemblyToPrgDetailed(parsed.program, assemblerHostResolvers);
-    const prg = asmResult.prg;
+    const prg = Buffer.from(asmResult.prg);
     const entryAddress = asmResult.entryAddress;
 
     const loadAddress = prg.length >= 2 ? prg.readUInt16LE(0) : 0;

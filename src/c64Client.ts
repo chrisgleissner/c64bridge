@@ -1008,7 +1008,7 @@ export class C64Client {
   async uploadAndRunAsm(program: string, assembledProgram?: ReturnType<typeof assemblyToPrgDetailed>): Promise<RunBasicResult> {
     try {
       const assembled = assembledProgram ?? assemblyToPrgDetailed(program);
-      const prg = assembled.prg;
+      const prg = Buffer.from(assembled.prg);
       if (prg.length < 2) {
         return { success: false, details: { message: "Assembled program produced no output" } };
       }

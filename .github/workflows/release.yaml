@@ -195,6 +195,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
           node scripts/validate-release.mjs "$RELEASE_VERSION"
           git diff --exit-code
+          # The local sidwave tarballs of development are not in the repository; a release needs registry versions.
+          node scripts/sidwave-dependency.mjs check
 
       - name: Install dependencies
         run: npm ci
@@ -237,9 +239,8 @@ jobs:
           mkdir -p "$PACKAGE_DIR"
           tar -xzf "$RELEASE_TARBALL" -C "$PACKAGE_DIR"
           node scripts/verify-package.mjs "$PACKAGE_DIR/package"
-          # The tarball bundles the workspace packages sidwave and c64-asm6502, which are not on the registry, so
-          # `npm install` inside the extracted directory cannot resolve them. Install the tarball into an empty
-          # project, as a user does, and validate the installed copy.
+          # Install the tarball into an empty project, as a user does, so that its registry dependencies (sidwave,
+          # 6502-toolkit) are resolved like on a user's machine, and validate the installed copy.
           CONSUMER_DIR="$RUNNER_TEMP/release-consumer"
           mkdir -p "$CONSUMER_DIR"
           (cd "$CONSUMER_DIR" && echo '{"name":"release-consumer","private":true}' > package.json \
@@ -649,7 +650,7 @@ jobs:
           const root = 'sidwave-examples';
           const manifest = JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8'));
           const names = Object.keys(manifest.songs);
-          if (names.length !== 13 || new Set(names).size !== 13) throw new Error('Expected 13 rendered songs');
+          if (names.length !== 14 || new Set(names).size !== 14) throw new Error('Expected 14 rendered songs');
           const expectedFiles = new Set(['manifest.json']);
           for (const name of names) { expectedFiles.add(`${name}.yaml`); expectedFiles.add(`${name}.mp3`); }
           const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };

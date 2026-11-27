@@ -14,9 +14,6 @@
     "#test/assert": "./test/helpers/assert.js",
     "#test/runner": "./test/helpers/test.js"
   },
-  "workspaces": [
-    "packages/*"
-  ],
   "bin": {
     "c64bridge": "scripts/cli.js"
   },
@@ -25,14 +22,11 @@
     "mcp": "node scripts/invoke-bun.mjs src/mcp-server.ts",
     "mcp:node": "node dist/mcp-server.js",
     "mcp:build": "npm run build && node dist/mcp-server.js",
-    "build:packages": "tsc -b packages/asm6502 packages/sidwave",
-    "build": "node scripts/sync-sidwave-data.mjs && npm run build:packages && VICE_VISIBLE=false node scripts/prebuild.mjs && VICE_VISIBLE=false tsc -p tsconfig.json && VICE_VISIBLE=false node scripts/postbuild.mjs && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/update-readme.ts && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
+    "build": "node scripts/sync-sidwave-data.mjs && VICE_VISIBLE=false node scripts/prebuild.mjs && VICE_VISIBLE=false tsc -p tsconfig.json && VICE_VISIBLE=false node scripts/postbuild.mjs && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/update-readme.ts && VICE_VISIBLE=false node scripts/invoke-bun.mjs scripts/generate-mcp-interface.ts",
     "prepack": "npm run build",
     "lint": "npm run check",
     "test": "node scripts/invoke-bun.mjs scripts/run-tests.ts",
     "test:node": "node scripts/run-tests.mjs",
-    "test:packages": "npm run test --workspaces",
-    "coverage:packages": "node packages/scripts/run-package-coverage.mjs",
     "test:sidwave-hil": "node scripts/sidwave-hil.mjs",
     "test:stress": "node scripts/stress-mcp.mjs",
     "test:vice:mock": "npm run test -- --platform=vice --target=mock",
@@ -45,7 +39,7 @@
     "check:package": "node scripts/check-package.mjs",
     "check:skills": "node scripts/check-skills.mjs",
     "check:package:install": "node scripts/check-package.mjs --install",
-    "check:sidwave-consumer": "node packages/scripts/check-consumer.mjs --baseline evidence/baseline/sidwave-baseline.json",
+    "check:sidwave-consumer": "node scripts/check-sidwave-consumer.mjs --baseline evidence/baseline/sidwave-baseline.json",
     "check:run-local": "bash scripts/run-mcp-check.sh local 5",
     "check:run-npm": "bash scripts/run-mcp-check.sh npm 5",
     "check": "npm run build && npm test",
@@ -82,14 +76,15 @@
     "node": ">=24"
   },
   "dependencies": {
+    "6502-toolkit": "^0.9.0",
     "@modelcontextprotocol/node": "2.1.2",
     "@modelcontextprotocol/server": "2.4.0",
     "axios": "^1.20.0",
-    "c64-asm6502": "0.1.0",
     "jimp": "^1.6.1",
+    "libsidplayfp-wasm": "1.1.1",
     "meyda": "5.6.2",
     "pitchfinder": "^2.3.4",
-    "sidwave": "0.1.0",
+    "sidwave": "^0.9.0",
     "yaml": "^2.9.0",
     "zod": "^4.6.6"
   },
@@ -125,6 +120,7 @@
     "doc/u2/**",
     "doc/vice/**",
     "doc/hardening-behavior.md",
+    "doc/sidwave-cookbook.md",
     "scripts/cli.js",
     "scripts/start.mjs",
     "scripts/invoke-bun.mjs",
@@ -140,9 +136,5 @@
     "!.github/prompts/steer.prompt.md",
     "!.github/prompts/pr-converge.prompt.md",
     "!.github/skills/pr-converge/**"
-  ],
-  "bundleDependencies": [
-    "c64-asm6502",
-    "sidwave"
   ]
 }

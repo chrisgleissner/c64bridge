@@ -1,8 +1,0 @@
-node_modules/
-dist/
-coverage/
-artifacts/
-*.tsbuildinfo
-*.log
-.DS_Store
-.env

@@ -4,6 +4,9 @@
  *
  * Usage: node scripts/sidwave-baseline.mjs [--out file] [--compare a.json b.json]
  *
+ * The test fixtures are not part of the sidwave package. They are read from `sidwave/test/fixtures` of a checkout of
+ * the sidwave repository, given by the environment variable SIDWAVE_SOURCE; without it only the examples are recorded.
+ *
  * Records hashes and metadata of SIDWAVE compile, lint, generator and reference-render output
  * so that a later code move can be checked for byte-identical behaviour. Keys under `timing`
  * are measurements and are ignored by --compare.
@@ -94,7 +97,11 @@ function compileRecord(mod, text, { forRender = false } = {}) {
 function collectScores() {
   const items = [];
   for (const f of listYaml(path.join(root, "data/sound/examples"))) items.push({ kind: "example", file: f });
-  const fx = path.join(root, "packages/sidwave/test/fixtures");
+  const fx = process.env.SIDWAVE_SOURCE ? path.join(process.env.SIDWAVE_SOURCE, "sidwave/test/fixtures") : undefined;
+  if (!fx || !fs.existsSync(fx)) {
+    console.error("sidwave-baseline: SIDWAVE_SOURCE is not set to a sidwave checkout; fixtures are not recorded");
+    return items;
+  }
   for (const d of fs.readdirSync(fx).filter((d) => /^sidwave/.test(d)).sort()) {
     for (const f of listYaml(path.join(fx, d))) items.push({ kind: "fixture", file: f });
   }
@@ -184,7 +191,7 @@ async function record() {
   let t = Date.now();
   const docs = new Map();
   for (const item of collectScores()) {
-    const key = rel(item.file).replace(/^packages\/sidwave\//, ""); // keys of moved fixtures stay test/fixtures/...
+    const key = item.kind === "fixture" ? `test/fixtures/${path.relative(path.join(process.env.SIDWAVE_SOURCE, "sidwave/test/fixtures"), item.file).split(path.sep).join("/")}` : rel(item.file); // fixture keys stay test/fixtures/...
     const { doc, rec } = compileRecord(mod, fs.readFileSync(item.file, "utf8"));
     rec.kind = item.kind;
     rec.source_sha256 = sha(fs.readFileSync(item.file));

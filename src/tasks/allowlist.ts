@@ -35,6 +35,9 @@ const ENTRIES: readonly AllowlistEntry[] = [
   { tool: "c64_graphics", op: "capture_frame", resourceClass: "capture", lease: "exclusive", pinned: false, effect: "read", cancellation: "bounded" },
   { tool: "c64_program", op: "batch_run", resourceClass: "program-start", lease: "exclusive", pinned: false, effect: "write", cancellation: "honoured" },
   { tool: "c64_program", op: "bundle_run", resourceClass: "capture", lease: "exclusive", pinned: false, effect: "write", cancellation: "bounded" },
+  // Offline SIDWave work on host files: no device access, so no lease.
+  ...([["convert", "write"], ["reconstruct", "write"], ["render", "write"], ["analyze_music", "read"], ["compare", "read"]] as const)
+    .map(([op, effect]): AllowlistEntry => ({ tool: "c64_sound", op, resourceClass: "host-only", lease: "none", pinned: false, effect, cancellation: "honoured" })),
 ];
 
 const TABLE: ReadonlyMap<string, AllowlistEntry> = new Map(ENTRIES.map((entry) => [`${entry.tool}.${entry.op}`, entry]));

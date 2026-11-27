@@ -1,11 +1,26 @@
 # Changelog
 
+## Unreleased
 
+### Features
 
+- `c64_sound` op `play`: play any readable music file or SIDWave score on the active backend, with a loss report
+- `c64_sound` ops `formats`, `inspect`, `convert`, `validate`, `lint`, `format`, `transform`, `retarget`, `compose` and `complete`: convert, check, write and change SIDWave scores
+- `c64_sound` op `compile`: PRG, PSID and game builds with assembler includes, symbol files, relocation tables and a cycle limit
+- `c64_sound` ops `render` (mix, stems, solo, mute) and `extract_instruments`
+- `c64_sound` op `convert` writes SID Factory II and CheeseCutter files with a driver file of the user (`driverPath`); `play` and `convert` take `sids` to keep more than three channels of a MOD file
+- `c64_sound` ops `reconstruct` (experimental), `analyze_music`, `compare`, `sid_info`, `sid_edit` and `preserve`
+- `c64_sound` ops `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks
+- `c64_sound` labels approximate imports (SID and register trace recovery, ABC, JCH, SID Factory II, CheeseCutter)
+- a SIDWave prompt cookbook and walkthroughs for musicians, game developers and archivists in the `sid-music` skill
+- Pulse Guard, a showcase game with an original SIDWave soundtrack and conversion demos, in `examples/sidwave-showcase` (repository only, not in the npm package)
+- SIDWave and the 6502 assembler come from the `sidwave` and `6502-toolkit` packages instead of workspace packages; SIDWave scores can use version 1.4 (songs and effects) and 1.5
 
+### Bug Fixes
 
-
-
+- resolve SIDWave imports and file samples safely in `compile_play` and `pipeline`
+- fix the sidplayfp power-on delay so reference renders are deterministic
+- warn that the HTTP transport under Bun does not cancel a call on client disconnect
 
 
 ## 1.4.0 - 2026-11-26

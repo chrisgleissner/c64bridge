@@ -47,3 +47,4 @@ Use this skill to write, port or extend a C64 game. Knowledge lives in MCP resou
 - Switch to `.github/skills/assembly-program/SKILL.md` for isolated routines that are not part of a game.
 - Switch to `.github/skills/software-launch/SKILL.md` to run existing games rather than develop one.
 - Switch to `.github/skills/sid-music/SKILL.md` or `.github/skills/graphics-demo/SKILL.md` for stand-alone music or graphics work.
+- For a game's music and sound effects, follow the game developer walkthrough of `.github/skills/sid-music/SKILL.md` (`c64://skills/sid-music`).

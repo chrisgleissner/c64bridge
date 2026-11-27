@@ -14,10 +14,33 @@ A built-in, searchable knowledge base gives it access to C64 programming and har
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
 
+## C64 music with SIDWave
+
+**Ask your AI for C64 music. Hear it on a real C64 or in VICE. Ship it in your game.**
+
+Hear and see it, from the [Pulse Guard showcase](examples/sidwave-showcase/README.md), a game with original music and sound effects:
+
+- **Original music:** [Pulse Guard, in game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3) (71 s), [Deep Field, title](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-deep-field.mp3) (77 s) and [Iron Moth, boss fight](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-iron-moth.mp3) (51 s).
+- **Conversion, source then SID** (16 s each): [MIDI](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and [ProTracker module](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-mod-before-after.mp3). The MIDI source is played by a small synthesiser that is part of the example.
+- **Video:** [one minute of the game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and effects, recorded from VICE.
+
+- **Musicians: bring your song and hear it on the SID in one request.** `c64_sound` `play` reads MIDI, MusicXML, ProTracker modules, ABC, several SID tracker formats and more, converts the file where needed, starts it, saves an editable score and a PRG, and lists what the conversion lost, with counts.
+- **Game developers: music and sound effects with a measured cycle cost.** One score holds the songs and effects. The build is an assembler include for 64tass, ACME or ca65 (KickAssembler is also offered, unverified) with the cycles per play call and the memory and zero page it uses, and it is refused when it exceeds your cycle limit.
+- **AI and retro enthusiasts: no C64 needed.** Compose a tune, render it to WAV, check the audio and play it in VICE. On a C64 Ultimate, Ultimate 64 or U2 cartridge, the same operations play it on the machine.
+
+> In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
+
+The [prompt cookbook](doc/sidwave-cookbook.md) has six prompts of this kind, each with what it produces. To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux); a VICE that C64 Bridge starts is otherwise silent.
+
+Hardware status: playback of a MIDI file, a ProTracker module, a SIDWave score and SIDWave-built SID files, the game music test program and the start of the showcase game were checked on an Ultimate 64 Elite (firmware 3.15a) by reading its memory. Nobody listened, and nothing was verified on a C64 Ultimate or a U2 cartridge. [Details](doc/sidwave-cookbook.md#verification-on-an-ultimate-64)
+
+Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID Factory II and CheeseCutter imports are approximate, and writing SID Factory II or CheeseCutter needs your own driver file. A single SID has three voices, and a conversion drops and reports the rest. [All sound operations](#c64_sound)
+
 ## Contents
 
 <!-- AUTO-GENERATED:TOC-START -->
 
+- [C64 music with SIDWave](#c64-music-with-sidwave)
 - [Quick start](#quick-start)
 - [Project showcases](#project-showcases)
 - [Configuration](#configuration)
@@ -144,7 +167,7 @@ Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the
 
 ### Compose for the SID
 
-Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. [Sound tools](#c64_sound)
+Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. Your agent can also convert between music formats, recover an editable score from a SID tune with a stated verdict, retarget a score to another clock or SID, and build a player for use inside a game. [Sound tools](#c64_sound)
 
 Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
 
@@ -253,7 +276,7 @@ The server speaks MCP 2026-07-28 and earlier revisions (2025-11-25 and older) on
 
 **Skills.** The packaged skills are served through the MCP Skills extension (`skills/list`, `skills/get`, `skill://<name>/SKILL.md`) and as the resources `c64://skills/<name>`, from one catalogue. Clients that do not implement the extension read the resources. Claude Code documents MCP skills; VS Code Copilot documents them as an experimental setting without naming the wire protocol; Codex CLI does not document them.
 
-**Long operations.** A call to `c64_memory` (`wait_until`, `wait_for_text`), `c64_debug` (`wait_for_state`), `c64_sound` (`capture_samples`, `pipeline`), `c64_graphics` (`capture_frame`) or `c64_program` (`batch_run`, `bundle_run`) that does not finish within one second can run as a task.
+**Long operations.** A call to `c64_memory` (`wait_until`, `wait_for_text`), `c64_debug` (`wait_for_state`), `c64_sound` (`capture_samples`, `pipeline`, `convert`, `reconstruct`, `render`, `analyze_music`, `compare`), `c64_graphics` (`capture_frame`) or `c64_program` (`batch_run`, `bundle_run`) that does not finish within one second can run as a task.
 
 - With native Tasks support (the `io.modelcontextprotocol/tasks` extension, which a client declares on each request), the server returns a task handle and the client polls `tasks/get` or cancels with `tasks/cancel`. Claude Code documents MCP 2026-07-28 and tasks; Codex CLI and VS Code Copilot do not document them.
 - Any client can use the fallback: `c64_system` `start_task` with `operation: "c64_memory.wait_until"` (or another allowlisted `tool.op`) and `arguments`, then `task_result` with `waitMs` to collect the result.
@@ -428,7 +451,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **53 resources**, and **11 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **54 resources**, and **11 prompts** for controlling your Commodore 64.
 
 See the [hardening behavior guide](doc/hardening-behavior.md) for host path restrictions, argument limits, task retention, cancellation and verification semantics.
 
@@ -614,25 +637,45 @@ Switch the active backend between C64U/U64 hardware, U2-family cartridges, and t
 
 #### c64_sound
 
-SID control, playback, composition and audio analysis.
+Play any music file (op play). SID control, composition, SIDWave conversion, audio analysis.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `analyze` | Analyze SID playback or a host WAV. | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
+| `analyze` | Check SID audio or a host WAV (musical structure: analyze_music). | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
+| `analyze_music` | Musical analysis of a score or SID (key, form, techniques); audio check: analyze. | — | `sidwave`, `inputPath`, `song`, `durationSeconds` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture Ultimate stereo PCM. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
+| `compare` | Compare two scores or SIDs: register differences and verification level. | `comparePath` | `sidwave`, `inputPath`, `song`, `durationSeconds`, `level`, `ladder` | ✅ | ✅ | ✅ |
+| `compile` | Compile a score to PRG, SID or game files, without playing. | — | `sidwave`, `inputPath`, `output`, `outputPath`, `outputDir`, `overwrite`, `loop`, `song`, `origin`, `dataOrigin`, `zeroPage`, `symbols`, `assembler`, `relocation`, `maxCycles`, `forDevice` | ✅ | ✅ | ✅ |
 | `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
+| `complete` | Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Supports verification. | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `bars`, `voice`, `target`, `bass`, `drums`, `section`, `after`, `at`, `seed`, `harmony`, `instrument`, `verify` | ✅ | ✅ | ✅ |
+| `compose` | Compose a new score with form and harmony, without playing. | — | `style="chiptune"`, `profile`, `seed`, `system`, `root`, `cycleBudget`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
+| `convert` | Convert between music formats. Supports verification. | — | `sidwave`, `inputPath`, `to`, `from`, `outputPath`, `overwrite`, `strict`, `verify`, `song`, `voices`, `sids`, `system`, `model`, `durationSeconds`, `includeScore`, `driverPath` | ✅ | ✅ | ✅ |
+| `extract_instruments` | Save the instruments of a score or SID as an importable library. | — | `sidwave`, `inputPath`, `from`, `song`, `durationSeconds`, `name`, `licence`, `author`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
+| `format` | Write a score in canonical form. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
+| `formats` | List conversion formats. | — | `from` | ✅ | ✅ | ✅ |
 | `generate` | Compose and play a seeded SIDWAVE PRG (replaces the program in memory). | — | `includeScore`, `configure`, `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
+| `inspect` | Detect and describe a music file. | — | `sidwave`, `inputPath`, `from` | ✅ | ✅ | ✅ |
+| `lint` | List a score's musical and hardware problems. | — | `sidwave`, `inputPath`, `loop` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Start a SID voice. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile, play and analyze SIDWAVE. Supports verification. | — | `configure`, `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
+| `play` | Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses. | — | `sidwave`, `inputPath`, `from`, `song`, `voices`, `sids`, `system`, `durationSeconds`, `configure`, `outputDir` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play an Ultimate MOD file. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |
+| `preserve` | Preservation bundle by action: create (default; from a SID, into outputDir) or verify (read-only; inputPath: the bundle folder). | `inputPath` | `action`, `outputDir`, `overwrite`, `song`, `durationSeconds`, `level`, `ladder`, `stilPath`, `hvscPath`, `hvscDir`, `includeOriginal`, `rightsPermitted` | ✅ | ✅ | ✅ |
+| `reconstruct` | Experimental: approximate score from a SID file or register trace, with a verdict. | `inputPath` | `outputPath`, `overwrite`, `includeScore`, `song`, `durationSeconds`, `from`, `system` | ✅ | ✅ | ✅ |
 | `record_analyze` | Analyze a recording from the Ultimate stream or host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
+| `render` | Render WAV by action: mix (default), stems (not SID), solo or mute (voice). | — | `sidwave`, `inputPath`, `action`, `voice`, `from`, `song`, `durationSeconds`, `model`, `outputPath`, `outputDir`, `overwrite` | ✅ | ✅ | ✅ |
 | `reset` | Reset SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
+| `retarget` | Adapt a score to a clock, SID model, SID count or budget. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `system`, `model`, `sids`, `budgetCycles`, `budgetBytes`, `allowChanges`, `forDevice` | ✅ | ✅ | ✅ |
 | `sample_render` | Render a SIDWAVE sample to WAV. | — | `definition`, `rate=4000`, `outputDir` | ✅ | ✅ | ✅ |
 | `set_volume` | Set SID volume ($D418). | `volume` | `filterMode` | ✅ | ✅ | ✅ |
+| `sid_edit` | Edit a copy by action: header (fields: name, author, released, clock, sidModel, startSong, ...) or songlength (durations "3:05 0:41" into a Songlengths database). | `inputPath`, `action` | `fields`, `durations`, `songlengthsPath`, `hvscDir`, `hvscPath`, `outputPath`, `overwrite` | ✅ | ✅ | ✅ |
+| `sid_info` | SID header, song lengths, STIL notes and player. | `inputPath` | `songlengthsPath`, `stilPath`, `hvscDir`, `hvscPath`, `sidIdPath` | ✅ | ✅ | ✅ |
 | `silence_all` | Silence all SID voices. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
+| `transform` | Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `semitones`, `bpm`, `factor`, `order`, `grid`, `seed`, `maxShift`, `from`, `to`, `scope` | ✅ | ✅ | ✅ |
+| `validate` | Check a score. | — | `sidwave`, `inputPath` | ✅ | ✅ | ✅ |
 
 #### c64_stream
 
@@ -714,6 +757,7 @@ VICE resources, snapshots.
 | `c64://sound/examples/chamber_waltz` | Three independent voices in 3/4 with no percussion |
 | `c64://sound/examples/title_fanfare` | Short filtered brass fanfare with timpani and a held cadence |
 | `c64://sound/examples/ultisid_orchestra` | Eight SIDs with divided strings, twin echo leads, arps and a drum kit |
+| `c64://sound/examples/game_songs` | SIDWave 1.4 songs: a title tune, an in-game loop and a game-over jingle that share one player |
 | `c64://sound/examples/wall_of_sid` | Nine SIDs and a gradual build to a 27-voice finale |
 | `c64://sound/examples/fuer_elise` | Legacy three-voice arrangement of Beethoven’s Bagatelle |
 | `c64://sound/sid/file-format` | Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music. |

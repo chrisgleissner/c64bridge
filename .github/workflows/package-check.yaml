@@ -131,8 +131,7 @@ jobs:
           set -euo pipefail
           PKG_DIR="${{ steps.extract.outputs.pkg_dir }}"
           TARFILE="$(realpath "${{ steps.pack.outputs.tarball }}")"
-          # Install the tarball as a consumer would: npm then takes the bundled sidwave and
-          # c64-asm6502 from the tarball instead of the registry, where they are not published yet.
+          # Install the tarball as a consumer would, so that npm resolves its dependencies from the registry.
           CONSUMER="$(mktemp -d)"
           (cd "$CONSUMER" && npm init -y >/dev/null && npm install --omit=dev --no-audit --no-fund "$TARFILE")
           mkdir -p "$PKG_DIR/node_modules"

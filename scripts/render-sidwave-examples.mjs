@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Render the 13 public SIDWAVE examples as matched, full-length MP3/YAML assets. */
+/** Render the 14 public SIDWAVE examples as matched, full-length MP3/YAML assets. */
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -35,7 +35,12 @@ if (!Number.isInteger(jobs) || jobs < 1 || jobs > 4) usage("--jobs must be an in
 
 const m = await loadModules(["sidwave", "sidwaveCompiler", "sidwaveExamples", "audio/sidwaveReference"]);
 const examples = m.SIDWAVE_EXAMPLES.map(({ name }) => name);
-if (examples.length !== 13 || new Set(examples).size !== 13) throw new Error("expected 13 unique public SIDWAVE examples");
+// Deliberately fixed, so that a sidwave package update that adds or drops a public example fails here and in the
+// release workflow's asset check. test/sidwaveRenderExamples.test.mjs keeps the three places in step.
+const PUBLIC_EXAMPLES = 14;
+if (examples.length !== PUBLIC_EXAMPLES || new Set(examples).size !== PUBLIC_EXAMPLES) {
+  throw new Error(`expected ${PUBLIC_EXAMPLES} unique public SIDWAVE examples, found ${examples.length}`);
+}
 if (worker && (!examples.includes(worker) || !manifestOut)) usage("invalid worker invocation");
 const output = path.resolve(outDir);
 if (!worker && !resume && fs.existsSync(output) && fs.readdirSync(output).length > 0) {
@@ -154,7 +159,7 @@ if (!worker) {
     if (Object.values(manifest.songs).some((entry) => !entry)) throw new Error("one or more songs did not produce a manifest entry");
     fs.writeFileSync(path.join(output, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     const names = fs.readdirSync(output).sort();
-    if (names.length !== 27 || examples.some((name) => !names.includes(`${name}.mp3`) || !names.includes(`${name}.yaml`))) {
+    if (names.length !== PUBLIC_EXAMPLES * 2 + 1 || examples.some((name) => !names.includes(`${name}.mp3`) || !names.includes(`${name}.yaml`))) {
       throw new Error("render output is missing one or more expected MP3/YAML pairs");
     }
   } finally {

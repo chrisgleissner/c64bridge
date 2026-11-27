@@ -35,6 +35,7 @@ import {
   unknownErrorResult,
 } from "../errors.js";
 import { jsonResult } from "../responses.js";
+import { sidwaveOperationEffects, sidwaveOperations } from "../sidwaveOperations.js";
 
 const audioDescriptorIndex = buildDescriptorIndex(audioModule);
 const metaDescriptorIndex = buildDescriptorIndex(metaModule);
@@ -75,6 +76,8 @@ const sampleRenderArgsSchema = objectSchema({
 });
 
 const soundOperations: GroupedOperationConfig[] = [
+  // First, because it is the one operation that plays whatever the user has.
+  ...sidwaveOperations.filter(({ op }) => op === "play"),
   {
     op: "sample_render",
     schema: sampleRenderArgsSchema.jsonSchema,
@@ -257,7 +260,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "analyze",
       ensureDescriptor(audioDescriptorIndex, "analyze_audio").inputSchema,
-      { description: "Analyze SID playback or a host WAV." },
+      { description: "Check SID audio or a host WAV (musical structure: analyze_music)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "analyze_audio", rawArgs, ctx),
   },
@@ -270,6 +273,7 @@ const soundOperations: GroupedOperationConfig[] = [
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "record_and_analyze_audio", rawArgs, ctx),
   },
+  ...sidwaveOperations.filter(({ op }) => op !== "play"),
 ];
 
 const soundOperationHandlers = createOperationHandlers(soundOperations);
@@ -288,7 +292,7 @@ export const soundModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_sound",
-      description: "SID control, playback, composition and audio analysis.",
+      description: "Play any music file (op play). SID control, composition, SIDWave conversion, audio analysis.",
       summary: "Adjusts SID registers, plays files, composes music, and runs verification captures.",
       inputSchema: discriminatedUnionSchema({
         description: "Sound operations.",
@@ -298,7 +302,10 @@ export const soundModuleGroup = defineToolModule({
         sample_render: "write", capture_samples: "read", set_volume: "write", reset: "write", note_on: "write", note_off: "write",
         silence_all: "write", play_sid_file: "write", play_mod_file: "write", generate: "write",
         compile_play: "write", play_preset: "write", pipeline: "write", analyze: "read", record_analyze: "read",
+        ...sidwaveOperationEffects,
       },
+      // Verifying a preservation bundle only reads it.
+      effectOf: (op, args) => (op === "preserve" && (args as { action?: unknown }).action === "verify" ? "read" : undefined),
       tags: ["sid", "audio", "grouped"],
       operationPlatforms: {
         capture_samples: ["c64u"],
@@ -331,6 +338,11 @@ export const soundModuleGroup = defineToolModule({
           name: "Play Für Elise",
           description: "Compile and play the built-in Für Elise preset on the active backend",
           arguments: { op: "play_preset", preset: "fuer_elise" },
+        },
+        {
+          name: "List formats",
+          description: "See which music formats can be converted, with what each conversion loses",
+          arguments: { op: "formats" },
         },
         {
           name: "Verify silence",

@@ -287,7 +287,7 @@
         "required": [
           "op"
         ],
-        "description": "Program operations.\n\nOperations:\n- load_prg [write]: Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host). Required inputs: path. Optional inputs: location, symbolsFile.\n- run_prg [write]: Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE. Required inputs: path. Optional inputs: location, symbolsFile.\n- run_crt [c64u, u2] [write]: Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2). Required inputs: path. Optional inputs: location.\n- upload_run_basic [write]: Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line. Required inputs: program. Optional inputs: verify, autoFix.\n- upload_run_asm [write]: Assemble 6502/6510 source (ACME, ca65, 64tass syntax; .include/.incbin read host files), upload and run it. Required inputs: program. Optional inputs: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required inputs: programs. Optional inputs: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory and debug registers into a bundle. Required inputs: runId, outputPath. Optional inputs: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Greet on the configured backends with screenshots and verification. Optional inputs: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
+        "description": "Program operations.\n\nOperations:\n- load_prg [write]: Load a PRG into memory without running it (Ultimate path, host path on VICE, or location host). Required: path. Optional: location, symbolsFile.\n- run_prg [write]: Load and run a PRG: Ultimate path on c64u/u2 (location host uploads a host file), host path on VICE. Required: path. Optional: location, symbolsFile.\n- run_crt [c64u, u2] [write]: Run a CRT cartridge image from an Ultimate path, or upload a host file with location host (c64u/u2). Required: path. Optional: location.\n- upload_run_basic [write]: Tokenize BASIC v2 source, upload and run it; verify:true reports BASIC errors with their line. Required: program. Optional: verify, autoFix.\n- upload_run_asm [write]: Assemble 6502/6510 source (ACME, ca65, 64tass syntax; .include/.incbin read host files), upload and run it. Required: program. Optional: verify.\n- batch_run [write]: Run multiple PRG/CRT programs with post-run assertions. Required: programs. Optional: continueOnError, durationMs, outputPath, resetDelayMs.\n- bundle_run [write]: Capture screen, memory and debug registers into a bundle. Required: runId, outputPath. Optional: captureScreen, memoryRanges, captureDebugReg.\n- cross_platform_greeting [write]: Greet on the configured backends with screenshots and verification. Optional: platforms, messageTemplate, verify, captureScreenshot, outputPath, restoreActiveBackend, timeoutMs, pollIntervalMs.",
         "additionalProperties": false
       },
       "annotations": {
@@ -550,7 +550,7 @@
         "required": [
           "op"
         ],
-        "description": "Memory operations.\n\nOperations:\n- read: Read a range of bytes with address metadata. Required inputs: address. Optional inputs: length, format, bank.\n- write [write]: Write hex bytes into RAM. Required inputs: address, bytes. Optional inputs: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the 40x25 text screen as ASCII.\n- wait_for_text: Poll the screen for a substring or regex. Required inputs: pattern. Optional inputs: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- wait_until: Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with a communication_failure error carrying the data so far. Addresses and backend are fixed at the start. Required inputs: condition, timeoutMs. Optional inputs: pollIntervalMs, maxIterations, includeIo.\n- list_basic: List the BASIC program in memory as text.\n- disassemble: Disassemble memory into 6502/6510 instructions, with loaded labels. Required inputs: address. Optional inputs: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required inputs: source, dest, length. Optional inputs: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required inputs: address, length, pattern.\n- search_memory: Search a memory range for a byte pattern. Required inputs: startAddress, endAddress, pattern. Optional inputs: maxResults, includeIo.\n- compare_memory: Compare two memory regions and report differences. Required inputs: address1, address2, length. Optional inputs: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file (optional PRG header). Required inputs: startAddress, endAddress, filePath. Optional inputs: asPrg, includeIo.",
+        "description": "Memory operations.\n\nOperations:\n- read: Read a range of bytes with address metadata. Required: address. Optional: length, format, bank.\n- write [write]: Write hex bytes into RAM. Required: address, bytes. Optional: verify, expected, mask, abortOnMismatch.\n- read_screen: Return the 40x25 text screen as ASCII.\n- wait_for_text: Poll the screen for a substring or regex. Required: pattern. Optional: isRegex, caseInsensitive, timeoutMs, intervalMs.\n- wait_until: Wait until a condition on memory, the screen or a VICE checkpoint holds. Timeout or maxIterations: success with met false. A failed read ends the wait with a communication_failure error carrying the data so far. Addresses and backend are fixed at the start. Required: condition, timeoutMs. Optional: pollIntervalMs, maxIterations, includeIo.\n- list_basic: List the BASIC program in memory as text.\n- disassemble: Disassemble memory into 6502/6510 instructions, with loaded labels. Required: address. Optional: length, instructionCount.\n- copy_memory [write]: Copy a RAM region to another address. Required: source, dest, length. Optional: includeIo.\n- fill_memory [write]: Fill a memory range with a repeating byte pattern. Required: address, length, pattern.\n- search_memory: Search a memory range for a byte pattern. Required: startAddress, endAddress, pattern. Optional: maxResults, includeIo.\n- compare_memory: Compare two memory regions and report differences. Required: address1, address2, length. Optional: maxDiffs, includeIo.\n- save_memory [write]: Dump a memory range to a local file (optional PRG header). Required: startAddress, endAddress, filePath. Optional: asPrg, includeIo.",
         "additionalProperties": false
       },
       "annotations": {
@@ -586,13 +586,14 @@
     {
       "name": "c64_sound",
       "title": "Adjusts SID registers, plays files, composes music, and runs verification captures.",
-      "description": "SID control, playback, composition and audio analysis.",
+      "description": "Play any music file (op play). SID control, composition, SIDWave conversion, audio analysis.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "op": {
             "type": "string",
             "enum": [
+              "play",
               "sample_render",
               "capture_samples",
               "set_volume",
@@ -607,9 +608,109 @@
               "play_preset",
               "pipeline",
               "analyze",
-              "record_analyze"
+              "record_analyze",
+              "render",
+              "extract_instruments",
+              "formats",
+              "inspect",
+              "convert",
+              "validate",
+              "lint",
+              "format",
+              "compile",
+              "transform",
+              "retarget",
+              "reconstruct",
+              "analyze_music",
+              "compare",
+              "sid_info",
+              "sid_edit",
+              "preserve",
+              "compose",
+              "complete"
             ],
             "description": "Selects the operation."
+          },
+          "sidwave": {
+            "type": [
+              "string",
+              "object",
+              "null"
+            ],
+            "description": "Inline score (text or object). Limits depend on op."
+          },
+          "inputPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host input file.",
+            "minLength": 1
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "song": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 256
+          },
+          "voices": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "sids": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 8
+          },
+          "system": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Default: the machine's ($02A6). Limits depend on op.",
+            "enum": [
+              "PAL",
+              "NTSC"
+            ]
+          },
+          "durationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Override capture duration in seconds. Limits depend on op.",
+            "minimum": 0.5,
+            "maximum": 600
+          },
+          "configure": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Set up SID playback."
+          },
+          "outputDir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
           },
           "definition": {
             "type": [
@@ -627,13 +728,6 @@
             "minimum": 16,
             "maximum": 8000,
             "default": 4000
-          },
-          "outputDir": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "minLength": 1
           },
           "count": {
             "type": [
@@ -659,7 +753,7 @@
           },
           "volume": {
             "type": "number",
-            "description": "SID master volume 0-15. Writes all of $D418, clearing filter mode bits.",
+            "description": "Writes all of $D418.",
             "minimum": 0,
             "maximum": 15
           },
@@ -668,27 +762,30 @@
               "integer",
               "null"
             ],
-            "description": "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+            "description": "$D418 bits 4-7: low/band/high-pass, voice 3 off.",
             "minimum": 0,
             "maximum": 15
           },
           "hard": {
             "type": "boolean",
-            "description": "If true, perform a hard register scrub; otherwise silence voices softly.",
+            "description": "Full register scrub.",
             "default": false
           },
           "voice": {
-            "type": "integer",
-            "description": "SID voice to trigger (1-3). Limits depend on op.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "SID voice (note_on: 1-3). Limits depend on op.",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 24
           },
           "note": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Musical note like A4, C#5, or Bb3. Overrides frequencyHz if provided.",
+            "description": "Note such as C#5; overrides frequencyHz.",
             "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$"
           },
           "frequencyHz": {
@@ -698,17 +795,6 @@
             ],
             "description": "Explicit frequency in Hz. Used when note is omitted.",
             "minimum": 1
-          },
-          "system": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
-            "enum": [
-              "PAL",
-              "NTSC"
-            ]
           },
           "waveform": {
             "type": [
@@ -725,35 +811,31 @@
           },
           "pulseWidth": {
             "type": "integer",
-            "description": "Pulse width (0-4095). Used for pulse waveform.",
+            "description": "For the pulse waveform.",
             "minimum": 0,
             "maximum": 4095,
             "default": 2048
           },
           "attack": {
             "type": "integer",
-            "description": "Attack rate nibble (0-15).",
             "minimum": 0,
             "maximum": 15,
             "default": 1
           },
           "decay": {
             "type": "integer",
-            "description": "Decay rate nibble (0-15).",
             "minimum": 0,
             "maximum": 15,
             "default": 1
           },
           "sustain": {
             "type": "integer",
-            "description": "Sustain level nibble (0-15).",
             "minimum": 0,
             "maximum": 15,
             "default": 15
           },
           "release": {
             "type": "integer",
-            "description": "Release rate nibble (0-15).",
             "minimum": 0,
             "maximum": 15,
             "default": 3
@@ -763,12 +845,11 @@
               "boolean",
               "null"
             ],
-            "description": "Record audio after silencing to confirm the output is quiet.",
-            "default": false
+            "description": "Check that the output is quiet. Limits depend on op."
           },
           "path": {
             "type": "string",
-            "description": "SID, PRG or audio file path (absolute or Ultimate).",
+            "description": "File path (host or Ultimate).",
             "minLength": 1
           },
           "songnr": {
@@ -776,7 +857,7 @@
               "integer",
               "null"
             ],
-            "description": "Song number within the SID file (0-based index).",
+            "description": "Subtune from 1; 0: start song.",
             "minimum": 0
           },
           "includeScore": {
@@ -785,18 +866,13 @@
               "null"
             ]
           },
-          "configure": {
+          "root": {
             "type": [
-              "boolean",
+              "string",
               "null"
             ],
-            "description": "Set up SID playback."
-          },
-          "root": {
-            "type": "string",
-            "description": "Tonic and lead register.",
-            "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$",
-            "default": "C4"
+            "description": "Tonic and lead register. Limits depend on op.",
+            "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$"
           },
           "pattern": {
             "type": [
@@ -845,13 +921,17 @@
               "chamber_waltz",
               "title_fanfare",
               "ultisid_orchestra",
+              "game_songs",
               "wall_of_sid",
               "fuer_elise"
             ]
           },
           "style": {
-            "type": "string",
-            "description": "Arrangement style.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Arrangement style. Limits depend on op.",
             "enum": [
               "chiptune",
               "ambient",
@@ -860,19 +940,13 @@
             "default": "chiptune"
           },
           "seed": {
-            "type": "integer",
-            "description": "Reproducible composition seed.",
-            "minimum": 0,
-            "maximum": 4294967295,
-            "default": 65
-          },
-          "sidwave": {
             "type": [
-              "string",
-              "object",
+              "integer",
               "null"
             ],
-            "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object. Limits depend on op."
+            "description": "Random seed (compose: 65). Limits depend on op.",
+            "minimum": 0,
+            "maximum": 4294967295
           },
           "cpg": {
             "type": [
@@ -880,14 +954,14 @@
               "object",
               "null"
             ],
-            "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object. Limits depend on op."
+            "description": "SIDWAVE score: YAML/JSON text or object. Limits depend on op."
           },
           "format": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Source format hint when providing raw text.",
+            "description": "Raw text format.",
             "enum": [
               "yaml",
               "json"
@@ -898,12 +972,12 @@
               "string",
               "null"
             ],
-            "description": "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere).",
+            "description": "SID playback needs c64u or u2; SID export with dryRun works anywhere. Limits depend on op.",
             "enum": [
               "prg",
-              "sid"
-            ],
-            "default": "prg"
+              "sid",
+              "game"
+            ]
           },
           "dryRun": {
             "type": [
@@ -918,7 +992,7 @@
               "string",
               "null"
             ],
-            "description": "Host file for the compiled PRG or SID (allowed directories only). Works with dryRun.",
+            "description": "Host PRG or SID file. Works with dryRun.",
             "minLength": 1
           },
           "platforms": {
@@ -976,7 +1050,6 @@
               "boolean",
               "null"
             ],
-            "description": "Measure silence before playback.",
             "default": false
           },
           "verifySilenceAfter": {
@@ -984,7 +1057,6 @@
               "boolean",
               "null"
             ],
-            "description": "Measure silence after playback.",
             "default": false
           },
           "silenceDurationSeconds": {
@@ -992,7 +1064,6 @@
               "number",
               "null"
             ],
-            "description": "Silence capture seconds.",
             "minimum": 0.5,
             "maximum": 10,
             "default": 1.5
@@ -1002,7 +1073,6 @@
               "number",
               "null"
             ],
-            "description": "Silence RMS threshold.",
             "minimum": 0,
             "maximum": 1,
             "default": 0.02
@@ -1012,7 +1082,6 @@
               "number",
               "null"
             ],
-            "description": "Post-capture delay in ms.",
             "minimum": 0,
             "maximum": 5000,
             "default": 200
@@ -1022,7 +1091,6 @@
               "number",
               "null"
             ],
-            "description": "Delay before silence capture in ms.",
             "minimum": 0,
             "maximum": 5000,
             "default": 150
@@ -1039,24 +1107,438 @@
               "string",
               "null"
             ],
-            "description": "Verification goal wording; \"does it sound right\" requests add a verdict.",
+            "description": "\"Does it sound right\" adds a verdict.",
             "minLength": 1,
             "default": "analyze the SID output"
           },
-          "durationSeconds": {
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "enum": [
+              "6581",
+              "8580"
+            ]
+          },
+          "overwrite": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Replace existing files."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "licence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "strict": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Write nothing if content is lost."
+          },
+          "driverPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "sf2 or ct driver: a song or player.",
+            "minLength": 1
+          },
+          "loop": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Game build address.",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "dataOrigin": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "zeroPage": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 251
+          },
+          "symbols": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "64tass",
+                "acme",
+                "kickass",
+                "ca65",
+                "vice",
+                "json"
+              ]
+            }
+          },
+          "assembler": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Also write a source include.",
+            "minLength": 1,
+            "enum": [
+              "64tass",
+              "acme",
+              "kickass",
+              "ca65"
+            ]
+          },
+          "relocation": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Also write a relocation table."
+          },
+          "maxCycles": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Limit per play call.",
+            "minimum": 1
+          },
+          "forDevice": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Use the machine's clock and SID model, not its SID count."
+          },
+          "semitones": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -96,
+            "maximum": 96
+          },
+          "bpm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "factor": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "order": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "grid": {
             "type": [
               "number",
               "null"
             ],
-            "description": "Override capture duration in seconds. Limits depend on op.",
-            "minimum": 0.5,
-            "maximum": 30
+            "description": "Beats."
+          },
+          "maxShift": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "voices": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "sections": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "budgetCycles": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "budgetBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "allowChanges": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Allow lossy steps."
+          },
+          "comparePath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Second file.",
+            "minLength": 1
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "enum": [
+              "T0",
+              "T1",
+              "A0",
+              "A1"
+            ]
+          },
+          "ladder": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "songlengthsPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "stilPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "hvscDir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "hvscPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "sidIdPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "sidid.cfg",
+            "minLength": 1
+          },
+          "fields": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {},
+            "additionalProperties": true
+          },
+          "durations": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "includeOriginal": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rightsPermitted": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "You may redistribute the original."
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "e.g. funk-vc-dorian",
+            "minLength": 1
+          },
+          "cycleBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bars": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1024
+          },
+          "target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "bass": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "drums": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "section": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "harmony": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "enum": [
+              "arp",
+              "line"
+            ]
+          },
+          "instrument": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
           }
         },
         "required": [
           "op"
         ],
-        "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations.\n\nOperations:\n- play [write]: Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses. Optional: sidwave, inputPath, from, song, voices, sids, system, durationSeconds, configure, outputDir.\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required: volume. Optional: filterMode.\n- reset [write]: Reset SID registers. Optional: hard.\n- note_on [write]: Start a SID voice. Optional: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required: voice.\n- silence_all [write]: Silence all SID voices. Optional: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required: path. Optional: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Check SID audio or a host WAV (musical structure: analyze_music). Optional: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required: durationSeconds. Optional: expectedSidwave.\n- render [write]: Render WAV by action: mix (default), stems (not SID), solo or mute (voice). Optional: sidwave, inputPath, action, voice, from, song, durationSeconds, model, outputPath, outputDir, overwrite.\n- extract_instruments [write]: Save the instruments of a score or SID as an importable library. Optional: sidwave, inputPath, from, song, durationSeconds, name, licence, author, outputPath, overwrite, includeScore.\n- formats: List conversion formats. Optional: from.\n- inspect: Detect and describe a music file. Optional: sidwave, inputPath, from.\n- convert [write]: Convert between music formats. Optional: sidwave, inputPath, to, from, outputPath, overwrite, strict, verify, song, voices, sids, system, model, durationSeconds, includeScore, driverPath.\n- validate: Check a score. Optional: sidwave, inputPath.\n- lint: List a score's musical and hardware problems. Optional: sidwave, inputPath, loop.\n- format [write]: Write a score in canonical form. Optional: sidwave, inputPath, outputPath, overwrite, includeScore.\n- compile [write]: Compile a score to PRG, SID or game files, without playing. Optional: sidwave, inputPath, output, outputPath, outputDir, overwrite, loop, song, origin, dataOrigin, zeroPage, symbols, assembler, relocation, maxCycles, forDevice.\n- transform [write]: Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). Required: action. Optional: sidwave, inputPath, outputPath, overwrite, includeScore, semitones, bpm, factor, order, grid, seed, maxShift, from, to, scope.\n- retarget [write]: Adapt a score to a clock, SID model, SID count or budget. Optional: sidwave, inputPath, outputPath, overwrite, includeScore, system, model, sids, budgetCycles, budgetBytes, allowChanges, forDevice.\n- reconstruct [write]: Experimental: approximate score from a SID file or register trace, with a verdict. Required: inputPath. Optional: outputPath, overwrite, includeScore, song, durationSeconds, from, system.\n- analyze_music: Musical analysis of a score or SID (key, form, techniques); audio check: analyze. Optional: sidwave, inputPath, song, durationSeconds.\n- compare: Compare two scores or SIDs: register differences and verification level. Required: comparePath. Optional: sidwave, inputPath, song, durationSeconds, level, ladder.\n- sid_info: SID header, song lengths, STIL notes and player. Required: inputPath. Optional: songlengthsPath, stilPath, hvscDir, hvscPath, sidIdPath.\n- sid_edit [write]: Edit a copy by action: header (fields: name, author, released, clock, sidModel, startSong, ...) or songlength (durations \"3:05 0:41\" into a Songlengths database). Required: inputPath, action. Optional: fields, durations, songlengthsPath, hvscDir, hvscPath, outputPath, overwrite.\n- preserve [write]: Preservation bundle by action: create (default; from a SID, into outputDir) or verify (read-only; inputPath: the bundle folder). Required: inputPath. Optional: action, outputDir, overwrite, song, durationSeconds, level, ladder, stilPath, hvscPath, hvscDir, includeOriginal, rightsPermitted.\n- compose [write]: Compose a new score with form and harmony, without playing. Optional: style, profile, seed, system, root, cycleBudget, outputPath, overwrite, includeScore.\n- complete [write]: Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Required: action. Optional: sidwave, inputPath, outputPath, overwrite, includeScore, bars, voice, target, bass, drums, section, after, at, seed, harmony, instrument, verify.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1116,7 +1598,27 @@
           "play_preset": "write",
           "pipeline": "write",
           "analyze": "read",
-          "record_analyze": "read"
+          "record_analyze": "read",
+          "play": "write",
+          "render": "write",
+          "extract_instruments": "write",
+          "formats": "read",
+          "inspect": "read",
+          "convert": "write",
+          "validate": "read",
+          "lint": "read",
+          "format": "write",
+          "compile": "write",
+          "transform": "write",
+          "retarget": "write",
+          "reconstruct": "write",
+          "analyze_music": "read",
+          "compare": "read",
+          "sid_info": "read",
+          "sid_edit": "write",
+          "preserve": "write",
+          "compose": "write",
+          "complete": "write"
         }
       }
     },
@@ -1249,7 +1751,7 @@
         "required": [
           "op"
         ],
-        "description": "System operations.\n\nOperations:\n- pause [write]: Pause the machine until resumed.\n- resume [write]: Resume CPU execution after a pause.\n- reset [write]: Issue a soft reset without cutting power. Optional inputs: waitForReady, readyTimeoutMs.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Optional inputs: waitForReady, readyTimeoutMs.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family cannot power off. On C64U/U64 power must be restored at the outlet; it starts by itself only if automatic startup on power restoration is enabled.\n- power_cycle [destructive]: Return the backend to a fresh state. C64U/U64 Tool Menu verification needs machine:menu_screen (U64 3.15+ or supporting C64U firmware); U2-family reboots through REST. Optional inputs: waitForReady, readyTimeoutMs.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (needs firmware support; U64/U2 3.15+).\n- start_task [write]: Start a named interval or one-shot task. Required inputs: name, operation. Optional inputs: arguments, intervalMs, maxIterations.\n- stop_task: Stop a background task. Required inputs: name.\n- stop_all_tasks: Stop all running tasks and persist state.\n- delete_task [write]: Delete a finished task and its artifacts; stop running tasks first. Required inputs: name.\n- list_tasks: List background tasks with status.\n- task_result: Status and result of a task. Required inputs: name. Optional inputs: waitMs.\n- performance_report: Summarize diagnostics spans and tool latencies of the current or latest session. Optional inputs: scope, includeTimeline, maxEntries.",
+        "description": "System operations.\n\nOperations:\n- pause [write]: Pause the machine until resumed.\n- resume [write]: Resume CPU execution after a pause.\n- reset [write]: Issue a soft reset without cutting power. Optional: waitForReady, readyTimeoutMs.\n- reboot [destructive]: Trigger a firmware reboot to recover from faults. Optional: waitForReady, readyTimeoutMs.\n- poweroff [c64u, vice] [destructive]: Shut down C64U/U64 or quit VICE. U2-family cannot power off. On C64U/U64 power must be restored at the outlet; it starts by itself only if automatic startup on power restoration is enabled.\n- power_cycle [destructive]: Return the backend to a fresh state. C64U/U64 Tool Menu verification needs machine:menu_screen (U64 3.15+ or supporting C64U firmware); U2-family reboots through REST. Optional: waitForReady, readyTimeoutMs.\n- menu [c64u, u2] [write]: Toggle the Ultimate menu button.\n- read_menu_screen [c64u, u2]: Read the active Ultimate menu's raw character and colour matrix through machine:menu_screen (needs firmware support; U64/U2 3.15+).\n- start_task [write]: Start a named interval or one-shot task. Required: name, operation. Optional: arguments, intervalMs, maxIterations.\n- stop_task: Stop a background task. Required: name.\n- stop_all_tasks: Stop all running tasks and persist state.\n- delete_task [write]: Delete a finished task and its artifacts; stop running tasks first. Required: name.\n- list_tasks: List background tasks with status.\n- task_result: Status and result of a task. Required: name. Optional: waitMs.\n- performance_report: Summarize diagnostics spans and tool latencies of the current or latest session. Optional: scope, includeTimeline, maxEntries.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1326,7 +1828,7 @@
         "required": [
           "op"
         ],
-        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server. Required inputs: backend.",
+        "description": "Runtime backend selection operations.\n\nOperations:\n- select: Switch the active runtime backend without restarting the MCP server. Required: backend.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1596,7 +2098,7 @@
         "required": [
           "op"
         ],
-        "description": "Graphics operations.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional inputs: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap, optionally displaying it. Optional inputs: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required inputs: text. Optional inputs: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour (writes memory and VIC-II registers). Required inputs: sprite. Optional inputs: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image to VIC-II bitmap, write it to RAM and display it. Required inputs: imagePath, format. Optional inputs: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
+        "description": "Graphics operations.\n\nOperations:\n- capture_frame [c64u, vice]: Capture one or more complete video frames from the active backend. Optional: count, includePixels, format, encoding.\n- render_petscii_art [write]: Create PETSCII art from a prompt, text or bitmap, optionally displaying it. Optional: prompt, text, maxWidth, maxHeight, borderColor, backgroundColor, foregroundColor, dryRun, bitmap.\n- render_petscii_text [write]: Display PETSCII text with optional border and background colours. Required: text. Optional: borderColor, backgroundColor.\n- render_sprite [write]: Display 63-byte sprite data at a position and colour (writes memory and VIC-II registers). Required: sprite. Optional: index, x, y, color, multicolour, dataAddress.\n- render_bitmap [write]: Convert an image to VIC-II bitmap, write it to RAM and display it. Required: imagePath, format. Optional: bitmapAddress, screenAddress, borderColor, backgroundColor, preserveAspect.\n- get_display_state: Read VIC-II and CIA2 registers to determine the current graphics mode and memory layout.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1665,7 +2167,7 @@
         "required": [
           "op"
         ],
-        "description": "RAG operations.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required inputs: q. Optional inputs: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required inputs: q. Optional inputs: k.\n- docs: Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. Required inputs: q. Optional inputs: k.",
+        "description": "RAG operations.\n\nOperations:\n- basic: Retrieve BASIC references and snippets from the local knowledge base. Required: q. Optional: k.\n- asm: Retrieve 6502/6510 assembly references from the local knowledge base. Required: q. Optional: k.\n- docs: Search all curated docs (hardware, Ultimate features, game development, specs) with no BASIC/assembly filter. Required: q. Optional: k.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1910,7 +2412,7 @@
         "required": [
           "op"
         ],
-        "description": "Disk operations.\n\nOperations:\n- list_drives: List drive slots and mounted images.\n- mount [write]: Mount a disk image, optionally verifying. Required inputs: drive, image. Optional inputs: type, attachmentMode, location, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Unmount the image from a drive slot. Required inputs: drive.\n- file_info [c64u, u2]: Inspect a file on the Ultimate filesystem. Required inputs: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image. Fails if the file already exists. Required inputs: format, path. Optional inputs: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Find a PRG/CRT by name substring and run the first match. Required inputs: nameContains. Optional inputs: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Find Ultimate storage paths containing a name substring; runs nothing. Required inputs: nameContains. Optional inputs: root, extensions, maxResults, caseInsensitive.",
+        "description": "Disk operations.\n\nOperations:\n- list_drives: List drive slots and mounted images.\n- mount [write]: Mount a disk image, optionally verifying. Required: drive, image. Optional: type, attachmentMode, location, driveMode, verify, powerOnIfNeeded, resetAfterMount, maxRetries, retryDelayMs.\n- unmount [c64u, u2] [write]: Unmount the image from a drive slot. Required: drive.\n- file_info [c64u, u2]: Inspect a file on the Ultimate filesystem. Required: path.\n- create_image [c64u, u2] [destructive]: Create a blank disk image. Fails if the file already exists. Required: format, path. Optional: diskname, tracks.\n- find_and_run [c64u, u2] [write]: Find a PRG/CRT by name substring and run the first match. Required: nameContains. Optional: root, extensions, caseInsensitive, sort, waitMs, captureCandidates.\n- find_paths [c64u, u2]: Find Ultimate storage paths containing a name substring; runs nothing. Required: nameContains. Optional: root, extensions, maxResults, caseInsensitive.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2002,7 +2504,7 @@
         "required": [
           "op"
         ],
-        "description": "Drive operations.\n\nOperations:\n- reset [write]: Issue an IEC reset for the selected drive slot. Required inputs: drive.\n- power_on [write]: Power on a specific Ultimate drive slot. Required inputs: drive.\n- power_off [write]: Power off a specific Ultimate drive slot. Required inputs: drive.\n- load_rom [c64u, u2] [destructive]: Temporarily load a custom ROM into an Ultimate drive slot. Required inputs: drive, path.\n- set_mode [write]: Set the emulation mode for a drive slot (1541/1571/1581). Required inputs: drive, mode.",
+        "description": "Drive operations.\n\nOperations:\n- reset [write]: Issue an IEC reset for the selected drive slot. Required: drive.\n- power_on [write]: Power on a specific Ultimate drive slot. Required: drive.\n- power_off [write]: Power off a specific Ultimate drive slot. Required: drive.\n- load_rom [c64u, u2] [destructive]: Temporarily load a custom ROM into an Ultimate drive slot. Required: drive, path.\n- set_mode [write]: Set the emulation mode for a drive slot (1541/1571/1581). Required: drive, mode.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2195,7 +2697,7 @@
         "required": [
           "op"
         ],
-        "description": "Printer operations.\n\nOperations:\n- print_text [write]: Generate BASIC that prints text to device 4. Required inputs: text. Optional inputs: target, secondaryAddress, formFeed.\n- print_bitmap [write]: Print a bitmap row (Commodore BIM or Epson ESC/P). Required inputs: printer, columns. Optional inputs: repeats, useSubRepeat, secondaryAddress, ensureMsb, mode, density, timesPerLine.\n- define_chars [write]: Define custom printer characters (Commodore DLL mode). Required inputs: firstChar, chars. Optional inputs: secondaryAddress.",
+        "description": "Printer operations.\n\nOperations:\n- print_text [write]: Generate BASIC that prints text to device 4. Required: text. Optional: target, secondaryAddress, formFeed.\n- print_bitmap [write]: Print a bitmap row (Commodore BIM or Epson ESC/P). Required: printer, columns. Optional: repeats, useSubRepeat, secondaryAddress, ensureMsb, mode, density, timesPerLine.\n- define_chars [write]: Define custom printer characters (Commodore DLL mode). Required: firstChar, chars. Optional: secondaryAddress.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2380,7 +2882,7 @@
         "required": [
           "op"
         ],
-        "description": "Configuration operations.\n\nOperations:\n- list: List configuration categories reported by the firmware.\n- get: Read a configuration category or specific item. Required inputs: category. Optional inputs: item, includeSecretValues.\n- set [write]: Write a configuration value in the selected category. Required inputs: category, item, value.\n- batch_update [write]: Apply several configuration updates at once. Pass `updates` as {category: {item: value}}. Optional inputs: updates.\n- load_flash [c64u, u2] [destructive]: Load configuration from flash. Optional inputs: category.\n- save_flash [c64u, u2] [destructive]: Persist the configuration to flash. Optional inputs: category.\n- reset_defaults [c64u, u2] [destructive]: Reset configuration to factory defaults. Optional inputs: category.\n- read_debugreg [c64u]: Read the Ultimate debug register ($D7FF).\n- write_debugreg [c64u] [destructive]: Write a hex value to the Ultimate debug register ($D7FF). Required inputs: value.\n- info: Retrieve Ultimate hardware information and status.\n- version: Fetch firmware version details.\n- snapshot [write]: Snapshot configuration to disk. Required inputs: path.\n- restore [write]: Restore configuration from a snapshot file. Writes only items that differ; a category the device refuses (e.g. 403 for a wrong network password) does not stop the others and is named in the error. Required inputs: path. Optional inputs: applyToFlash.\n- diff: Compare configuration with a snapshot. Required inputs: path.\n- shuffle [c64u, u2] [write]: Run each PRG/CRT found, optionally capturing the screen. Optional inputs: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
+        "description": "Configuration operations.\n\nOperations:\n- list: List configuration categories reported by the firmware.\n- get: Read a configuration category or specific item. Required: category. Optional: item, includeSecretValues.\n- set [write]: Write a configuration value in the selected category. Required: category, item, value.\n- batch_update [write]: Apply several configuration updates at once. Pass `updates` as {category: {item: value}}. Optional: updates.\n- load_flash [c64u, u2] [destructive]: Load configuration from flash. Optional: category.\n- save_flash [c64u, u2] [destructive]: Persist the configuration to flash. Optional: category.\n- reset_defaults [c64u, u2] [destructive]: Reset configuration to factory defaults. Optional: category.\n- read_debugreg [c64u]: Read the Ultimate debug register ($D7FF).\n- write_debugreg [c64u] [destructive]: Write a hex value to the Ultimate debug register ($D7FF). Required: value.\n- info: Retrieve Ultimate hardware information and status.\n- version: Fetch firmware version details.\n- snapshot [write]: Snapshot configuration to disk. Required: path.\n- restore [write]: Restore configuration from a snapshot file. Writes only items that differ; a category the device refuses (e.g. 403 for a wrong network password) does not stop the others and is named in the error. Required: path. Optional: applyToFlash.\n- diff: Compare configuration with a snapshot. Required: path.\n- shuffle [c64u, u2] [write]: Run each PRG/CRT found, optionally capturing the screen. Optional: root, extensions, durationMs, captureScreen, maxPrograms, outputPath, resetDelayMs.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2657,7 +3159,7 @@
         "required": [
           "op"
         ],
-        "description": "Extraction operations.\n\nOperations:\n- sprites [write]: Scan RAM for sprites, optionally exporting .spr files. Required inputs: address, length. Optional inputs: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, includeRows, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Optional inputs: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with a manifest. Required inputs: address, length, outputPath. Optional inputs: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Per-extension size statistics for one directory (no recursion; at most one file per extension). Optional inputs: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
+        "description": "Extraction operations.\n\nOperations:\n- sprites [write]: Scan RAM for sprites, optionally exporting .spr files. Required: address, length. Optional: stride, maxSprites, minNonZeroRows, minSetBits, includeBase64, includeRows, outputDir, pauseDuringRead.\n- charset [write]: Locate and extract 2KB character sets from RAM. Optional: address, scanRange, outputPath, pauseDuringRead, minNonEmptyChars, minEntropy.\n- memory_dump [write]: Dump a RAM range to hex or binary files with a manifest. Required: address, length, outputPath. Optional: format, chunkSize, pauseDuringRead, retries.\n- fs_stats [c64u, u2]: Per-extension size statistics for one directory (no recursion; at most one file per extension). Optional: root, extensions, includeContainers, maxSamplesPerExtension.\n- firmware_health: Run firmware readiness checks and report status metrics.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2722,7 +3224,7 @@
         "required": [
           "op"
         ],
-        "description": "Streaming operations.\n\nOperations:\n- start [write]: Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). Required inputs: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required inputs: stream.",
+        "description": "Streaming operations.\n\nOperations:\n- start [write]: Start an Ultimate streaming session. The device sends an unencrypted UDP stream to the target (IPv4 address or hostname, optional :port). Required: stream, target.\n- stop [write]: Stop an active Ultimate streaming session. Required: stream.",
         "additionalProperties": false
       },
       "annotations": {
@@ -2986,7 +3488,7 @@
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id. Required inputs: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required inputs: address. Optional inputs: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required inputs: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required inputs: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required inputs: id, expression.\n- list_registers: List available registers (metadata). Optional inputs: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Optional inputs: memspace, registers.\n- set_registers [write]: Write register values. Required inputs: writes. Optional inputs: memspace.\n- step [write]: Single-step CPU execution. Optional inputs: count, mode.\n- step_return [write]: Continue execution until the current routine returns.\n- get_monitor_state: Read CPU registers and return the current monitor state. Optional inputs: memspace.\n- wait_for_state: Wait until the CPU is stopped (checkpoint or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled. Optional inputs: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [destructive]: Kill and restart the VICE process (managed instances only).\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id. Required: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required: address. Optional: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required: id, expression.\n- list_registers: List available registers (metadata). Optional: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Optional: memspace, registers.\n- set_registers [write]: Write register values. Required: writes. Optional: memspace.\n- step [write]: Single-step CPU execution. Optional: count, mode.\n- step_return [write]: Continue execution until the current routine returns.\n- get_monitor_state: Read CPU registers and return the current monitor state. Optional: memspace.\n- wait_for_state: Wait until the CPU is stopped (checkpoint or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled. Optional: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [destructive]: Kill and restart the VICE process (managed instances only).\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
         "additionalProperties": false
       },
       "annotations": {
@@ -3060,7 +3562,7 @@
         "required": [
           "op"
         ],
-        "description": "VICE emulator operations.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.\n- snapshot_save [write]: Save snapshot. Required inputs: path.\n- snapshot_restore [destructive]: Restore snapshot. Required inputs: path.\n- version: VICE version.",
+        "description": "VICE emulator operations.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required: name, value.\n- snapshot_save [write]: Save snapshot. Required: path.\n- snapshot_restore [destructive]: Restore snapshot. Required: path.\n- version: VICE version.",
         "additionalProperties": false
       },
       "annotations": {
@@ -3267,7 +3769,7 @@
         "required": [
           "op"
         ],
-        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text [write]: Send a text string to the keyboard buffer, with PETSCII token expansion. Required inputs: text. Optional inputs: delayMs.\n- key [write]: Press one key one or more times, optionally with a delay. Required inputs: key. Optional inputs: durationMs, count.\n- joystick [c64u, vice] [write]: Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. Required inputs: port, controls, action. Optional inputs: durationMs.\n- keyboard [c64u] [write]: Send physical C64 keyboard matrix events through machine:input (needs firmware support; U64 3.15+). Required inputs: inputs, transition.\n- release_all [c64u] [write]: Release every key and joystick control injected through machine:input.\n- state [c64u]: Read the keys and joystick controls held through machine:input.",
+        "description": "Input operations: write_text, key, keyboard, joystick, release_all, state.\n\nOperations:\n- write_text [write]: Send a text string to the keyboard buffer, with PETSCII token expansion. Required: text. Optional: delayMs.\n- key [write]: Press one key one or more times, optionally with a delay. Required: key. Optional: durationMs, count.\n- joystick [c64u, vice] [write]: Simulate joystick input. On C64U/U64 this uses machine:input. On VICE it attaches the joyport simulation device, which pulls CIA lines 5-7 low: port 1 produces phantom keys and port 2 reads $1E for up instead of $7E. Prefer port 2 on VICE and test bits 0-4. Required: port, controls, action. Optional: durationMs.\n- keyboard [c64u] [write]: Send physical C64 keyboard matrix events through machine:input (needs firmware support; U64 3.15+). Required: inputs, transition.\n- release_all [c64u] [write]: Release every key and joystick control injected through machine:input.\n- state [c64u]: Read the keys and joystick controls held through machine:input.",
         "additionalProperties": false
       },
       "annotations": {

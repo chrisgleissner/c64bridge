@@ -4,7 +4,7 @@ import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "sidwave/compiler";
 import { parseSidwave } from "sidwave/sidwave";
-import { hostSidwaveReadOptions } from "../../sidwaveHost.js";
+import { hostSidwaveReadOptions, hostSidwaveReadOptionsFor } from "../../sidwaveHost.js";
 import { noAudioMeasurement, recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { jsonResult } from "../responses.js";
@@ -75,12 +75,12 @@ const musicCompilePlayAnalyzeArgsSchema = objectSchema({
     waitBeforeCaptureMs: optionalSchema(numberSchema({ description: "Capture delay in ms.", minimum: 0, maximum: 5000 }), DEFAULT_PLAYBACK_WAIT_MS),
     analysisDurationSeconds: optionalSchema(numberSchema({ description: "Capture seconds.", minimum: 0.5, maximum: 20 }), DEFAULT_ANALYSIS_DURATION_SECONDS),
     expectedSidwave: optionalSchema(stringSchema({ description: "Reference SIDWAVE.", minLength: 1 })),
-    verifySilenceBefore: optionalSchema(booleanSchema({ description: "Measure silence before playback.", default: false }), false),
-    verifySilenceAfter: optionalSchema(booleanSchema({ description: "Measure silence after playback.", default: false }), false),
-    silenceDurationSeconds: optionalSchema(numberSchema({ description: "Silence capture seconds.", minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
-    silenceRmsThreshold: optionalSchema(numberSchema({ description: "Silence RMS threshold.", minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
-    postSilenceWaitMs: optionalSchema(numberSchema({ description: "Post-capture delay in ms.", minimum: 0, maximum: 5000 }), DEFAULT_POST_SILENCE_WAIT_MS),
-    silenceWaitMs: optionalSchema(numberSchema({ description: "Delay before silence capture in ms.", minimum: 0, maximum: 5000 }), DEFAULT_SILENCE_WAIT_MS),
+    verifySilenceBefore: optionalSchema(booleanSchema({ default: false }), false),
+    verifySilenceAfter: optionalSchema(booleanSchema({ default: false }), false),
+    silenceDurationSeconds: optionalSchema(numberSchema({ minimum: 0.5, maximum: 10 }), DEFAULT_SILENCE_DURATION_SECONDS),
+    silenceRmsThreshold: optionalSchema(numberSchema({ minimum: 0, maximum: 1 }), DEFAULT_RMS_THRESHOLD),
+    postSilenceWaitMs: optionalSchema(numberSchema({ minimum: 0, maximum: 5000 }), DEFAULT_POST_SILENCE_WAIT_MS),
+    silenceWaitMs: optionalSchema(numberSchema({ minimum: 0, maximum: 5000 }), DEFAULT_SILENCE_WAIT_MS),
   },
   additionalProperties: false,
 });
@@ -506,7 +506,7 @@ export const tools: ToolDefinition[] = [
         const silenceWaitMs = parsed.silenceWaitMs ?? DEFAULT_SILENCE_WAIT_MS;
         const expectedSidwave = normalizeSidwaveInput(parsed.expectedSidwave ?? parsed.sidwave ?? parsed.cpg);
 
-        const document = parseSidwave(source, hostSidwaveReadOptions);
+        const document = parseSidwave(source, hostSidwaveReadOptionsFor());
         if (format === "sid") validateSidwavePsidMap(document);
         const compiled = compileSidwaveToPrg(document);
 

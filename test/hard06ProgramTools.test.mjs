@@ -10,7 +10,7 @@ const platform = (id) => ({ id, features: [], limitedFeatures: [] });
 /** A client whose memory holds the assembled program; counts every read. */
 function asmClient(source, extra = {}) {
   const prg = assemblyToPrgDetailed(source).prg;
-  const load = prg.readUInt16LE(0);
+  const load = prg[0] | (prg[1] << 8);
   const calls = { screen: 0, memory: 0 };
   return {
     calls,

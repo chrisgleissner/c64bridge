@@ -37,9 +37,9 @@ Method (`src/audio/sidwaveFidelity.ts`)
 - The stream is UDP. Missing packets are replaced with silence of the same length, so the timeline stays aligned, but heavy loss lowers the rates.
 - Unit tests (`test/sidwaveFidelity.test.mjs`) use synthetic PCM only. The method has not been run against a device in this change.
 
-## Quality gate (`packages/sidwave/scripts/sidwave-review.mjs`, `packages/sidwave/src/audio/sidwaveQuality.ts`)
+## Quality gate (`sidwave/scripts/sidwave-review.mjs`, `sidwave/src/audio/sidwaveQuality.ts` in the [sidwave repository](https://github.com/chrisgleissner/sidwave))
 
-`node packages/sidwave/scripts/sidwave-review.mjs --wav <reference.wav|capture.wav> [--song <file|preset:style>] [--offset-ms N] [--out report.json]` runs offline checks and prints PASS, WARN, FAIL or SKIP per check and a verdict (exit 1 on FAIL). With `--song`, the schedule gives scheduled onsets, bars and sections; the song start in the WAV is found by aligning with a sidplayfp rendering unless `--offset-ms` is given. Checks marked "score" are SKIP without `--song`. Thresholds are `DEFAULT_QUALITY_THRESHOLDS`.
+In a built `sidwave` checkout, `node sidwave/scripts/sidwave-review.mjs --wav <reference.wav|capture.wav> [--song <file|preset:style>] [--offset-ms N] [--out report.json]` runs offline checks and prints PASS, WARN, FAIL or SKIP per check and a verdict (exit 1 on FAIL). With `--song`, the schedule gives scheduled onsets, bars and sections; the song start in the WAV is found by aligning with a sidplayfp rendering unless `--offset-ms` is given. Checks marked "score" are SKIP without `--song`. Thresholds are `DEFAULT_QUALITY_THRESHOLDS`.
 
 | Check | Measure | WARN | FAIL |
 |---|---|---|---|

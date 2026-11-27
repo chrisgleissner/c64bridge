@@ -78,7 +78,7 @@ test("DEVICE-6 drive mount with location host uploads the image and takes the ty
 
 function asmClient(source) {
   const prg = assemblyToPrgDetailed(source, assemblerHostResolvers).prg;
-  const load = prg.readUInt16LE(0);
+  const load = prg[0] | (prg[1] << 8);
   return {
     async uploadAndRunAsm() { return { success: true }; },
     async readScreen() { return "READY.\n"; },

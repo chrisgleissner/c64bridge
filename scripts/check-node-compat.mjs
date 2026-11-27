@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { consumerOverrides } from "./sidwave-dependency.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -68,12 +69,11 @@ try {
 
   console.log("✔ Extracted tarball for inspection");
 
-  // The tarball bundles the workspace packages sidwave and c64-asm6502, which are not on the registry, so a plain
-  // `npm install` inside the extracted directory cannot resolve them. Install the tarball into an empty project, as a
-  // user does, and import from the installed copy.
+  // Install the tarball into an empty project, as a user does, and import from the installed copy. Before the release,
+  // sidwave and 6502-toolkit are local tarballs, which the consumer project overrides.
   const consumerDir = path.join(tempDir, "consumer");
   fs.mkdirSync(consumerDir);
-  fs.writeFileSync(path.join(consumerDir, "package.json"), JSON.stringify({ name: "consumer", private: true, type: "module" }));
+  fs.writeFileSync(path.join(consumerDir, "package.json"), JSON.stringify({ name: "consumer", private: true, type: "module", overrides: consumerOverrides() }));
   runInDir("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--no-package-lock", path.resolve(repoRoot, tarball)], consumerDir);
   extractDir = path.join(consumerDir, "node_modules", "c64bridge");
   console.log("✔ Installed the tarball and its runtime dependencies via npm");

@@ -1,25 +1,77 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/chrisgleissner/c64bridge/refs/heads/main/data/sound/sidwave.schema.json",
-  "title": "SIDWAVE Composition Schema",
+  "title": "SIDWave Composition Schema",
   "description": "See sidwave.md for the meaning of every field. The compiler also checks note ranges after transposition and minimum note durations.",
   "type": "object",
-  "required": ["sidwave", "title", "tempo", "voices", "timeline"],
+  "required": ["sidwave", "title", "tempo", "voices"],
   "allOf": [{
+    "if": { "not": { "required": ["songs"] } },
+    "then": { "required": ["timeline"] },
+    "else": { "properties": { "sidwave": { "enum": [1.4, "1.4", 1.5, "1.5"] } }, "not": { "anyOf": [{ "required": ["timeline"] }, { "required": ["loop_to"] }, { "required": ["end"] }, { "required": ["length_bars"] }] } }
+  }, {
     "if": { "not": { "required": ["samples"] } },
     "then": { "properties": { "voices": { "minItems": 1 } } }
   }],
   "properties": {
-    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, 1.3, "1.0", "1", "1.1", "1.2", "1.3"] },
+    "sidwave": { "type": ["number", "string"], "enum": [1, 1.1, 1.2, 1.3, 1.4, 1.5, "1.0", "1", "1.1", "1.2", "1.3", "1.4", "1.5"] },
     "title": { "type": "string" },
     "author": { "type": "string" },
     "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Beats (quarter notes) per minute." },
     "mode": { "type": "string", "enum": ["PAL", "NTSC"] },
     "meter": { "$ref": "#/$defs/meter", "default": 4, "description": "Song metre. 3 or 4 quarter notes per bar; 1.3 also takes a time signature." },
-    "speed": { "type": "integer", "minimum": 1, "maximum": 4 },
+    "speed": { "type": "integer", "minimum": 1, "maximum": 8, "description": "Player calls per frame: 1 to 4, or up to 8 in 1.5." },
+    "global_table": { "type": "object", "additionalProperties": false, "required": ["steps"], "description": "1.5: per-call values of the filter and volume registers of the SID; one SID, no songs and no effects.", "properties": { "loop": { "type": "integer", "minimum": 0, "description": "Step the table continues with after the last one; without it the last values are kept." }, "steps": { "type": "array", "minItems": 1, "maxItems": 2048, "items": { "type": "object", "additionalProperties": false, "properties": { "d415": { "type": "integer", "minimum": 0, "maximum": 255 }, "d416": { "type": "integer", "minimum": 0, "maximum": 255 }, "d416_add": { "type": "integer", "minimum": -255, "maximum": 255, "description": "Added to $D416 (modulo 256) in every call of the step." }, "d417": { "type": "integer", "minimum": 0, "maximum": 255 }, "d418": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Needs player.soft_start: false." }, "calls": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1 } } } } } },
+    "player": { "type": "object", "additionalProperties": false, "properties": { "soft_start": { "type": "boolean", "default": true, "description": "1.5: false removes the volume ramp over the first calls." }, "idle_writes": { "oneOf": [{ "type": "boolean" }, { "const": "control" }], "default": true, "description": "1.5: false stops the player from writing the registers of a voice that has not played a note yet; control writes only its control register. Default true keeps the 1.4 bytes." }, "init": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "type": "object", "additionalProperties": false, "required": ["reg", "value"], "properties": { "reg": { "description": "SID register $D400 to $D418, as a number or a string such as $D404.", "oneOf": [{ "type": "integer", "minimum": 54272, "maximum": 54296 }, { "type": "string", "pattern": "^\\$[dD]4[0-1][0-9a-fA-F]$" }] }, "value": { "type": "integer", "minimum": 0, "maximum": 255 } } }, "description": "1.5: register writes that init makes after clearing the SID." }, "start": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "array", "minItems": 0, "maxItems": 32, "items": { "type": "object", "additionalProperties": false, "required": ["reg", "value"], "properties": { "reg": { "description": "SID register $D400 to $D418, as a number or a string such as $D404.", "oneOf": [{ "type": "integer", "minimum": 54272, "maximum": 54296 }, { "type": "string", "pattern": "^\\$[dD]4[0-1][0-9a-fA-F]$" }] }, "value": { "type": "integer", "minimum": 0, "maximum": 255 } } } }, "description": "1.5: the register writes of the first player calls, one list per call, in order. The song starts after the last list." }}, "description": "1.5: player options." },
+    "tuning": { "type": "object", "additionalProperties": false, "properties": { "cents": { "type": "number", "minimum": -100, "maximum": 100 }, "registers": { "type": "object", "propertyNames": { "pattern": "^[A-Ga-g][#b]?[0-7]$" }, "additionalProperties": { "anyOf": [{ "type": "integer", "minimum": 1, "maximum": 65535 }, { "type": "string", "pattern": "^\\$[0-9A-Fa-f]{1,4}$" }] } } }, "description": "1.5: shift of every note in cents and exact frequency registers for single notes (C0 to B7), for the clock of mode." },
     "cpu": { "type": "string", "enum": ["turbo"] },
     "kit": { "type": "object", "minProperties": 1, "propertyNames": { "pattern": "^[A-Za-z]$" }, "additionalProperties": { "$ref": "#/$defs/instrumentRef" }, "description": "1.2: default kit for drums.steps; the keys are also groove and motif tokens that play the instrument at C3." },
     "sections": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$" }, "additionalProperties": { "$ref": "#/$defs/section" }, "description": "1.2: named sections used by the timeline." },
+    "songs": {
+      "type": "array", "minItems": 1, "maxItems": 32,
+      "description": "1.4: several songs that share the voices, patterns, sections and instruments. Replaces the top-level timeline, loop_to, end and length_bars. The first song is the default; init selects a song by its 0-based index. The songs times the voice channels (3 per SID) may not exceed 255.",
+      "items": {
+        "type": "object", "required": ["name", "timeline"], "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 32, "description": "Unique within the document." },
+          "timeline": { "type": "array", "minItems": 1, "items": { "oneOf": [{ "$ref": "#/$defs/section" }, { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]*([+-][0-9]+)?(\\*[0-9]+)?$" }] }, "description": "Sections of this song, as the top-level timeline." },
+          "loop": { "oneOf": [{ "type": "boolean" }, { "type": "string" }, { "type": "integer", "minimum": 1 }], "default": true, "description": "true loops from the start, false plays once and stops, a section name or 1-based timeline position loops back to that entry." },
+          "tempo": { "type": "number", "minimum": 30, "maximum": 220, "description": "Defaults to the document tempo." },
+          "speed": { "type": "integer", "minimum": 1, "maximum": 4, "description": "Play calls per video frame; defaults to the document speed." }
+        }
+      }
+    },
+    "imports": {
+      "type": "array", "maxItems": 64,
+      "description": "1.4: asset libraries the score uses. Each library file provides instruments, patterns and effects under the namespace given by as: drums.kick, drums.beat. Requires sidwave: 1.4 and a library resolver (the sidwave command provides one).",
+      "items": { "$ref": "#/$defs/import" }
+    },
+    "effects": {
+      "type": "object", "maxProperties": 32, "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,31}$" },
+      "description": "1.4: sound effects that a game starts at run time with the sfx entry (A = effect index in the order written, Y = voice 1-3 or $FF). An empty mapping defines none. Requires sidwave: 1.4.",
+      "additionalProperties": {
+        "type": "object", "required": ["priority", "steps"], "additionalProperties": false,
+        "properties": {
+          "priority": { "type": "integer", "minimum": 0, "maximum": 15, "description": "A new effect may take a voice only from an effect of strictly lower priority." },
+          "voices": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 3 }, "default": [1, 2, 3], "description": "Voices of the first SID the effect may use." },
+          "steps": {
+            "type": "array", "minItems": 1, "maxItems": 255,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "properties": {
+                "freq": { "type": ["string", "number"], "description": "A note name such as C5 or a frequency in Hz (1 to 3848), as a number or text such as 880Hz. Required in the first step." },
+                "wave": { "type": "string", "description": "pulse, sawtooth, triangle, noise, tri+pulse, tri+saw, saw+pulse or tri+saw+pulse. The first step defaults to pulse; later steps keep the last value." },
+                "pulse": { "type": "number", "minimum": 0, "maximum": 4095, "description": "Pulse width as a fraction (0 to 1, exclusive) or a register value 1 to 4094. Defaults to 0.5." },
+                "adsr": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "description": "Attack, decay, sustain, release; defaults to [0, 0, 15, 0]." },
+                "gate": { "type": "boolean", "description": "The first step defaults to true; later steps keep the last value." },
+                "filter": { "enum": ["off", "keep"], "description": "off: the voice bypasses the filter until the effect ends or a later step says keep." },
+                "wait": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1, "description": "Play calls the step lasts." }
+              }
+            }
+          }
+        }
+      }
+    },
     "loop_to": { "type": ["string", "integer"], "minimum": 1, "description": "1.2: section name or 1-based timeline index the song loops to. Exclusive with end and length_bars." },
     "accent": { "type": "integer", "minimum": 0, "maximum": 8, "default": 3, "description": "1.2: sustain levels added by a ! accent." },
     "end": { "oneOf": [{ "const": true }, { "type": "object", "properties": { "hold_beats": { "type": "number", "minimum": 0, "maximum": 64 }, "release": { "type": "boolean", "default": true } }, "additionalProperties": false }], "description": "1.2: hold the notes sounding at the last bar line, release them and stop writing." },
@@ -162,6 +214,40 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "import": {
+      "type": "object", "required": ["as", "from"], "additionalProperties": false,
+      "description": "One library import (SIDWave 1.4). Local paths are relative to the importing file and stay inside the score directory or the library search path; pkg:<package>/<file> resolves through node_modules of the score directory. There are no URLs.",
+      "properties": {
+        "as": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "not": { "const": "lib" }, "description": "The namespace. The library's items are named <as>.<name>; its effects <as>_<name>." },
+        "from": { "type": "string", "minLength": 1, "description": "A path such as ./libs/drums.yaml, or pkg:sidwave-lib-drums/drums.yaml." },
+        "version": { "type": "string", "description": "Version range the library must satisfy: 1.2.3, ^1.2.0, ~1.2.0, 1.x, >=1.0.0 <2.0.0, alternatives with ||." },
+        "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$", "description": "SHA-256 of the canonical library text (without the from of its own imports). sidwave lock writes it." },
+        "effects": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$" }, "description": "Effects of the library to include; they are numbered after the score's own effects." }
+      }
+    },
+    "libraryFile": {
+      "type": "object", "required": ["sidwave", "library"], "additionalProperties": false,
+      "description": "A SIDWave library file (1.4 or 1.5): metadata and the maps instruments, patterns and effects, with no voices or timeline. Validate library files against this definition.",
+      "properties": {
+        "sidwave": { "enum": [1.4, "1.4", 1.5, "1.5"] },
+        "library": {
+          "type": "object", "required": ["name", "version", "licence", "provenance"], "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+            "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+            "licence": { "type": "string", "description": "SPDX identifier or expression, for example CC0-1.0 or MIT OR Apache-2.0." },
+            "provenance": {
+              "type": "object", "required": ["author", "source", "created"], "additionalProperties": false,
+              "properties": { "author": { "type": "string" }, "source": { "type": "string" }, "created": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" } }
+            }
+          }
+        },
+        "imports": { "type": "array", "items": { "$ref": "#/$defs/import" } },
+        "instruments": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "additionalProperties": { "$ref": "#/$defs/instrument" } },
+        "patterns": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "description": "Patterns as in voices[].patterns. Drum patterns name their own kit, or use the score's kit letters." },
+        "effects": { "type": "object", "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } }
+      }
+    },
     "meter": {
       "description": "3 or 4 (quarter notes per bar). 1.3: a time signature, optionally with groups of the denominator unit that add up to the numerator. A beat stays a quarter note, so a 7/8 bar lasts 3.5 beats.",
       "oneOf": [
@@ -290,7 +376,8 @@
       "properties": {
         "frames": { "type": "integer", "minimum": 0, "maximum": 255 },
         "adsr": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 15 }, "minItems": 4, "maxItems": 4 },
-        "test": { "type": "boolean", "default": false }
+        "test": { "type": "boolean", "default": false },
+        "wave": { "const": "none", "description": "1.5: the restart calls hold no waveform bits." }
       },
       "additionalProperties": false
     },
@@ -532,12 +619,13 @@
         "pulsetable": { "$ref": "#/$defs/pulsetable" },
         "filtertable": { "$ref": "#/$defs/filtertable" },
         "wavetable": { "type": "array", "minItems": 1, "items": { "type": "object", "properties": {
-          "wave": { "type": "string", "enum": ["tri", "saw", "pulse", "noise", "tri+pulse", "saw+pulse", "tri+saw", "tri+saw+pulse"] },
+          "wave": { "type": "string", "enum": ["tri", "saw", "pulse", "noise", "tri+pulse", "saw+pulse", "tri+saw", "tri+saw+pulse", "none"], "description": "none (1.5): no waveform bits." },
           "test": { "type": "boolean" }, "gate": { "type": "boolean", "default": true }, "ring": { "type": "boolean" }, "sync": { "type": "boolean" },
           "note": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$" },
           "frames": { "type": "integer", "minimum": 1, "maximum": 255, "default": 1, "description": "Video frames in 1.2." },
           "calls": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.2: player calls instead of frames." },
-          "slide_to": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$", "description": "1.2: linear pitch slide reaching the target on the last call of the step." }
+          "slide_to": { "type": "string", "pattern": "^(?:[+-][0-9]+|[A-Ga-g][#b]?[0-7])$", "description": "1.2: linear pitch slide reaching the target on the last call of the step." },
+          "reg": { "anyOf": [{ "type": "integer", "minimum": 0, "maximum": 65535 }, { "type": "string", "pattern": "^\\$[0-9A-Fa-f]{1,4}$" }], "description": "1.5: exact 16-bit frequency register value instead of a note. Cannot be combined with note or slide_to." }
         }, "additionalProperties": false } }
       },
       "additionalProperties": true
@@ -551,7 +639,8 @@
           "properties": {
             "steps": { "type": "array", "minItems": 1, "maxItems": 255, "items": { "$ref": "#/$defs/pulsetableStep" } },
             "loop": { "type": "integer", "minimum": 0, "maximum": 254 },
-            "reset": { "type": "boolean", "default": true, "description": "1.2: false keeps the table running across attacks." }
+            "reset": { "type": "boolean", "default": true, "description": "1.2: false keeps the table running across attacks." },
+            "wrap": { "type": "boolean", "default": false, "description": "1.5: add steps wrap modulo 4096 instead of clamping to 1..4094." }
           },
           "additionalProperties": false
         }
@@ -562,7 +651,7 @@
       "oneOf": [{ "required": ["set"] }, { "required": ["add"] }],
       "dependentRequired": { "add": ["frames"] },
       "properties": {
-        "set": { "anyOf": [{ "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, { "type": "integer", "minimum": 1, "maximum": 4094 }] },
+        "set": { "anyOf": [{ "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, { "type": "integer", "minimum": 0, "maximum": 4094 }], "description": "1.5 accepts the integer 0." },
         "add": { "type": "integer", "minimum": -2048, "maximum": 2047 },
         "frames": { "type": "integer", "minimum": 1, "maximum": 255, "description": "Video frames in 1.2." },
         "calls": { "type": "integer", "minimum": 1, "maximum": 255, "description": "1.2: player calls instead of frames." }

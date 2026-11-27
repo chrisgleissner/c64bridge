@@ -13,6 +13,7 @@ artifacts/
 build/
 coverage/
 dist/
+vendor/sidwave-tarballs/
 external/
 generated/**/*.js
 generated/**/*.js.map

@@ -1,1 +1,1 @@
-export * from "c64-asm6502/opcodeInventory";
+export * from "6502-toolkit/opcodeInventory";

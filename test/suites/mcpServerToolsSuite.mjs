@@ -70,14 +70,15 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
     });
   });
 
-  test("tools/list stays below 71 KB and omits the duplicated per-op schemas", async () => {
+  test("tools/list stays below 76 KB and omits the duplicated per-op schemas", async () => {
     await withSharedMcpClient(async ({ client }) => {
       const listResult = await client.request(
         { method: "tools/list", params: {} },
         ListToolsResultSchema,
       );
       const bytes = Buffer.byteLength(JSON.stringify(listResult));
-      assert.ok(bytes < 71_000, `tools/list is ${bytes} bytes`);
+      // 71 KB until the fifteen offline SIDWave operations of c64_sound (about 6 KB) were added; 75.5 KB measured.
+      assert.ok(bytes < 76_000, `tools/list is ${bytes} bytes`);
       const soundSchema = JSON.stringify(listResult.tools.find(({ name }) => name === "c64_sound").inputSchema);
       for (const name of ["chiptune_drive", "stereo_echo", "wall_of_sid"]) {
         assert.ok(soundSchema.includes(`"${name}"`), `play_preset advertises ${name}`);
@@ -127,7 +128,7 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
           const line = text.split("\n").find((entry) => entry.startsWith(`- ${operation.op} `) || entry.startsWith(`- ${operation.op}:`));
           assert.ok(line, `${descriptor.name} description should list op ${operation.op}`);
           if (operation.required.length > 0) {
-            assert.ok(line.includes(`Required inputs: ${operation.required.join(", ")}.`), `${descriptor.name}.${operation.op}: ${line}`);
+            assert.ok(line.includes(`Required: ${operation.required.join(", ")}.`), `${descriptor.name}.${operation.op}: ${line}`);
           }
           for (const name of operation.optional) {
             assert.ok(line.includes(name), `${descriptor.name}.${operation.op} should name optional ${name}`);

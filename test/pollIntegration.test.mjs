@@ -7,7 +7,7 @@ import { assemblyToPrg } from "../src/tools/translation/assembler.js";
 // the test's own memory behaviour.
 function withProgramLoaded(ctx, source) {
   const prg = assemblyToPrg(source);
-  const loadAddress = prg.readUInt16LE(0);
+  const loadAddress = prg[0] | (prg[1] << 8);
   const body = prg.subarray(2);
   const inner = ctx.client.readMemoryRaw?.bind(ctx.client) ?? (async (_address, length) => new Uint8Array(length));
   return {

@@ -26,12 +26,12 @@ import {
 import { sidwaveSetupWarnings, validateViceSidwaveMap } from "../sidwavePlaybackConfig.js";
 import { getPlatformStatus } from "../platform.js";
 import { readPcmFile } from "sidwave/pcm";
-import { hostSidwaveFileReader, hostSidwaveReadOptions } from "../sidwaveHost.js";
+import { hostSidwaveFileReader, hostSidwaveReadOptions, hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
+export const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 
 const DEFAULT_SILENCE_VERIFY_DURATION_SECONDS = 1.5;
 const DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD = 0.02;
@@ -99,12 +99,12 @@ const sidVolumeArgsSchema = objectSchema({
   description: "Set the SID master volume (0-15).",
   properties: {
     volume: numberSchema({
-      description: "SID master volume 0-15. Writes all of $D418, clearing filter mode bits.",
+      description: "Writes all of $D418.",
       minimum: 0,
       maximum: 15,
     }),
     filterMode: optionalSchema(numberSchema({
-      description: "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+      description: "$D418 bits 4-7: low/band/high-pass, voice 3 off.",
       integer: true,
       minimum: 0,
       maximum: 15,
@@ -118,7 +118,7 @@ const sidResetArgsSchema = objectSchema({
   description: "Reset or silence the SID chip.",
   properties: {
     hard: booleanSchema({
-      description: "If true, perform a hard register scrub; otherwise silence voices softly.",
+      description: "Full register scrub.",
       default: false,
     }),
   },
@@ -129,14 +129,14 @@ const sidNoteOnArgsSchema = objectSchema({
   description: "Parameters for starting a SID note on a specific voice.",
   properties: {
     voice: numberSchema({
-      description: "SID voice to trigger (1-3).",
+      description: "SID voice (note_on: 1-3).",
       integer: true,
       minimum: 1,
       maximum: 3,
       default: 1,
     }),
     note: optionalSchema(stringSchema({
-      description: "Musical note like A4, C#5, or Bb3. Overrides frequencyHz if provided.",
+      description: "Note such as C#5; overrides frequencyHz.",
       pattern: NOTE_PATTERN,
     })),
     frequencyHz: optionalSchema(numberSchema({
@@ -144,7 +144,7 @@ const sidNoteOnArgsSchema = objectSchema({
       minimum: 1,
     })),
     system: optionalSchema(stringSchema({
-      description: "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
+      description: "Default: the machine's ($02A6).",
       enum: ["PAL", "NTSC"],
     })),
     waveform: stringSchema({
@@ -153,35 +153,31 @@ const sidNoteOnArgsSchema = objectSchema({
       default: "pulse",
     }),
     pulseWidth: numberSchema({
-      description: "Pulse width (0-4095). Used for pulse waveform.",
+      description: "For the pulse waveform.",
       integer: true,
       minimum: 0,
       maximum: 0x0fff,
       default: 0x0800,
     }),
     attack: numberSchema({
-      description: "Attack rate nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
       default: 1,
     }),
     decay: numberSchema({
-      description: "Decay rate nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
       default: 1,
     }),
     sustain: numberSchema({
-      description: "Sustain level nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
       default: 15,
     }),
     release: numberSchema({
-      description: "Release rate nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
@@ -209,7 +205,7 @@ const sidSilenceArgsSchema = objectSchema({
   description: "Silence all SID voices with an optional verification capture.",
   properties: {
     verify: optionalSchema(booleanSchema({
-      description: "Record audio after silencing to confirm the output is quiet.",
+      description: "Check that the output is quiet.",
       default: false,
     }), false),
   },
@@ -217,7 +213,7 @@ const sidSilenceArgsSchema = objectSchema({
 });
 
 const sidFileSchema = stringSchema({
-  description: "SID, PRG or audio file path (absolute or Ultimate).",
+  description: "File path (host or Ultimate).",
   minLength: 1,
 });
 
@@ -226,7 +222,7 @@ const sidplayFileArgsSchema = objectSchema({
   properties: {
     path: sidFileSchema,
     songnr: optionalSchema(numberSchema({
-      description: "Song number within the SID file (0-based index).",
+      description: "Subtune from 1; 0: start song.",
       integer: true,
       minimum: 0,
     })),
@@ -259,14 +255,14 @@ const musicGenerateArgsSchema = objectSchema({
     preset: stringSchema({ description: "Classic or varied lead phrasing.", enum: ["classic", "expression"], default: "classic" }),
     system: optionalSchema(stringSchema({ description: "PAL/NTSC timing. Defaults to the machine.", enum: ["PAL", "NTSC"] })),
     style: stringSchema({ description: "Arrangement style.", enum: Object.keys(MUSIC_STYLES), default: "chiptune" }),
-    seed: numberSchema({ description: "Reproducible composition seed.", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
+    seed: numberSchema({ description: "Random seed (compose: 65).", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
   },
   additionalProperties: false,
 });
 
 const sidwaveSourceSchema: Schema<string | Record<string, unknown>> = {
   jsonSchema: {
-    description: "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+    description: "SIDWAVE score: YAML/JSON text or object.",
     type: ["string", "object"],
   } satisfies JsonSchema,
   parse(value: unknown, path?: string) {
@@ -292,11 +288,11 @@ const musicCompileArgsSchema = objectSchema({
     sidwave: optionalSchema(sidwaveSourceSchema),
     cpg: optionalSchema(sidwaveSourceSchema),
     format: optionalSchema(stringSchema({
-      description: "Source format hint when providing raw text.",
+      description: "Raw text format.",
       enum: ["yaml", "json"],
     })),
     output: optionalSchema(stringSchema({
-      description: "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere).",
+      description: "SID playback needs c64u or u2; SID export with dryRun works anywhere.",
       enum: ["prg", "sid"],
       default: "prg",
     }), "prg"),
@@ -305,7 +301,7 @@ const musicCompileArgsSchema = objectSchema({
       default: false,
     }), false),
     outputPath: optionalSchema(stringSchema({
-      description: "Host file for the compiled PRG or SID (allowed directories only). Works with dryRun.",
+      description: "Host PRG or SID file. Works with dryRun.",
       minLength: 1,
     })),
   },
@@ -331,7 +327,7 @@ const analyzeAudioArgsSchema = objectSchema({
   properties: {
     wavPath: optionalSchema(stringSchema({ minLength: 1 })),
     request: optionalSchema(stringSchema({
-      description: "Verification goal wording; \"does it sound right\" requests add a verdict.",
+      description: "\"Does it sound right\" adds a verdict.",
       minLength: 1,
     }), "analyze the SID output"),
     durationSeconds: optionalSchema(numberSchema({
@@ -1072,7 +1068,7 @@ export const audioModule = defineToolModule({
             dryRun: parsed.dryRun,
           });
 
-          const document = parseSidwave(source, hostSidwaveReadOptions);
+          const document = parseSidwave(source, hostSidwaveReadOptionsFor());
           if (!parsed.dryRun && platform === "vice") validateViceSidwaveMap(document);
           const compiled = compileSidwaveToPrg(document);
           const sidFile = outputFormat === "sid" ? compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress }) : undefined;
