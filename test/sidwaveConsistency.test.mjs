@@ -4,6 +4,7 @@ import assert from "#test/assert";
 import fs from "node:fs";
 import { lookupAllowlist } from "../src/tasks/allowlist.js";
 import { runWithInlineWindow, waitForTask, cancelTask, __resetForTests } from "../src/tasks/engine.js";
+import { acquireLease } from "../src/tasks/resources.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { createLogger } from "./meta/helpers.mjs";
 import { SCORE, sidFile } from "./helpers/musicFixtures.mjs";
@@ -56,11 +57,14 @@ test("a render longer than 180 s of a score or SID file runs until its task is c
   }
 });
 
-test("compose, complete and retarget write nothing when cancelled during their work", async () => {
+test("operations that work synchronously write nothing when cancelled during their work", async () => {
   const calls = {
     compose: { style: "funk", seed: 3 },
     complete: { sidwave: SCORE, action: "continue", bars: 4 },
     retarget: { sidwave: SCORE, system: "NTSC" },
+    transform: { sidwave: SCORE, action: "transpose", semitones: 2 },
+    format: { sidwave: SCORE },
+    compile: { sidwave: SCORE },
   };
   for (const [op, args] of Object.entries(calls)) {
     const controller = new AbortController();
@@ -70,6 +74,19 @@ test("compose, complete and retarget write nothing when cancelled during their w
     const result = await toolRegistry.invoke("c64_sound", { op, ...args, outputPath }, context(controller.signal));
     assert.equal(result.metadata?.cancelled, true, `${op}: ${result.content[0].text}`);
     assert.equal(fs.existsSync(outputPath), false, op);
+  }
+});
+
+test("host file operations run while another task holds the exclusive lease; operations that read the machine do not", async () => {
+  __resetForTests();
+  acquireLease({ taskId: "other", backendId: "vice", mode: "exclusive", tool: "c64_sound", op: "pipeline", pinned: false });
+  try {
+    await ok({ op: "validate", sidwave: SCORE });
+    await ok({ op: "convert", sidwave: SCORE, to: "midi", outputPath: at("leased.mid") });
+    await ok({ op: "render", sidwave: SCORE, durationSeconds: 1, outputPath: at("leased.wav") });
+    await assert.rejects(toolRegistry.invoke("c64_sound", { op: "compose", seed: 1 }, context()), /blocked by task other/);
+  } finally {
+    __resetForTests();
   }
 });
 
@@ -90,6 +107,8 @@ test("approximate formats are labelled in formats, inspect, convert, play and re
   assert.equal(exact.approximate, undefined);
   const recovered = await ok({ op: "convert", inputPath: write("tune.sid", sidFile()), to: "sidwave", durationSeconds: 2 });
   assert.match(recovered.approximateNote, /Experimental recovery/);
+  const instruments = await ok({ op: "extract_instruments", inputPath: at("tune.sid"), durationSeconds: 2 });
+  assert.match(instruments.approximateNote, /Experimental recovery/);
 });
 
 test("generate and note_on keep their limits in the merged c64_sound schema", () => {
@@ -97,5 +116,5 @@ test("generate and note_on keep their limits in the merged c64_sound schema", ()
   assert.match(properties.voice.description, /note_on: 1-3/);
   assert.ok(properties.root.pattern, "the note pattern of root");
   assert.equal(properties.style.default, "chiptune");
-  assert.match(properties.seed.description, /default 65/);
+  assert.match(properties.seed.description, /compose: 65/);
 });

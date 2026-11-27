@@ -8,8 +8,8 @@ import { keepVoices, renderStems, stemVoiceGroups, StemsRefusedError, writeWav }
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
 import { ToolValidationError } from "./errors.js";
 import {
-  approximation, engineFactory, existsError, isSid, lossReport, planOutput, readInput, scoreOf, SCORE, writeArtifact,
-  type Artifact, type Definition,
+  approximation, engineFactory, existsError, isSid, lossReport, planOutput, readInput, scoreOf, SCORE, writeArtifacts,
+  type Definition,
 } from "./sidwaveShared.js";
 
 const SAMPLE_RATE = 48_000;
@@ -99,14 +99,13 @@ export const renderDefinition: Definition = {
         if (error instanceof StemsRefusedError) throw new ToolValidationError(error.message, { path: "$.action" });
         throw error;
       }
-      const files: Array<Artifact & { voices?: number[] }> = [];
-      for (const [index, path] of paths.entries()) {
-        const stem = index === 0 ? undefined : result.stems[index - 1]!;
-        const artifact = await writeArtifact(path, writeWav(stem ? stem.samples : result.mix, result.sampleRate), args.overwrite === true, ctx);
-        files.push({ ...artifact, outputPath: basename(artifact.outputPath), ...(stem ? { voices: stem.voices } : {}) });
-      }
+      const stems = [undefined, ...result.stems];
+      const written = await writeArtifacts(paths.map((path, index) => ({
+        path, content: () => writeWav(stems[index]?.samples ?? result.mix, result.sampleRate),
+      })), args.overwrite === true, ctx);
       return {
-        action, outputDir: directory, files: files.map(({ outputPath, ...file }) => ({ file: outputPath, ...file })),
+        action, outputDir: directory,
+        files: written.map(({ outputPath, ...file }, index) => ({ file: basename(outputPath), ...file, ...(stems[index] ? { voices: stems[index]!.voices } : {}) })),
         seconds: result.seconds, sampleRate: result.sampleRate, engine: result.engine,
         additive: result.additive, energyRatio: result.sumError.energyRatio, coupling: result.coupling,
         ...(conversion ? { conversion } : {}),

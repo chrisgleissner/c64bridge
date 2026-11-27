@@ -4,8 +4,8 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, extname } from "node:path";
+import { chmod, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 import YAML from "yaml";
 import { classifyError, convert, parseSidwave, SIDWAVE_ASSEMBLERS, SIDWAVE_SYMBOL_FORMATS, MUSIC_STYLES, type ConvertResult, type SidwaveReadOptions } from "sidwave";
 import { createLibsidplayfpEngine, type SidEmulation, type SidEngine, type TraceRequest, type RenderRequest } from "sidwave/engine";
@@ -99,7 +99,7 @@ export const PROPERTIES: { [K in ArgName]-?: Schema<unknown> } = {
   factor: num(),
   order: optionalSchema(arraySchema(stringSchema({ minLength: 1 }), { minItems: 1 })),
   grid: num("Beats."),
-  seed: int(0, 0xffffffff, "Composition seed (default 65)."),
+  seed: int(0, 0xffffffff, "Random seed (compose: 65)."),
   maxShift: num(),
   scope: optionalSchema(objectSchema({
     properties: {
@@ -188,16 +188,49 @@ export function planOutput(args: Args, defaultStem: string, extension: string, p
 }
 
 export async function writeArtifact(path: string, content: Uint8Array | string, overwrite: boolean, ctx: ToolExecutionContext): Promise<Artifact> {
-  ctx.signal?.throwIfAborted();
+  await cancellationPoint(ctx);
+  return storeArtifact(path, content, overwrite);
+}
+
+/**
+ * Writes a set of files that belong together. A cancellation stops the call before the first file; after that the set
+ * is completed. A function as content is evaluated when its file is written.
+ */
+export async function writeArtifacts(
+  files: ReadonlyArray<{ path: string; content: Uint8Array | string | (() => Uint8Array) }>, overwrite: boolean, ctx: ToolExecutionContext,
+): Promise<Artifact[]> {
+  await cancellationPoint(ctx);
+  const written: Artifact[] = [];
+  for (const { path, content } of files) written.push(await storeArtifact(path, typeof content === "function" ? content() : content, overwrite));
+  return written;
+}
+
+/** A replaced file is written next to the target and renamed over it, so it never holds a part of the new content. */
+async function replaceFile(path: string, bytes: Uint8Array): Promise<void> {
+  const temporary = join(dirname(path), `.c64bridge-${randomUUID()}.tmp`);
+  const previous = await stat(path).catch(() => undefined);
+  try {
+    await writeFile(temporary, bytes, { flag: "wx" });
+    if (previous) await chmod(temporary, previous.mode & 0o777);
+    await rename(temporary, path);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
+}
+
+async function storeArtifact(path: string, content: Uint8Array | string, overwrite: boolean): Promise<Artifact> {
   const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : content;
   await mkdir(dirname(path), { recursive: true });
-  try {
-    await writeFile(path, bytes, { flag: overwrite ? "w" : "wx" });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw existsError(path, "$.outputPath");
+  if (overwrite) {
+    await replaceFile(path, bytes);
+  } else {
+    try {
+      await writeFile(path, bytes, { flag: "wx" });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw existsError(path, "$.outputPath");
+      throw error;
     }
-    throw error;
   }
   return { outputPath: path, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
@@ -215,10 +248,10 @@ export async function writeScore(args: Args, input: Pick<Input, "stem" | "file">
 export const documentText = (score: unknown) => formatSidwave(YAML.stringify(score));
 
 /**
- * For synchronous library work: reads a cancellation that arrived while the event loop was blocked, and stops before
- * anything is written. The work itself runs to its end.
+ * Runs before anything is written: reads a cancellation that arrived while synchronous library work blocked the event
+ * loop. That work itself runs to its end.
  */
-export async function cancellationPoint(ctx: ToolExecutionContext): Promise<void> {
+async function cancellationPoint(ctx: ToolExecutionContext): Promise<void> {
   if (!ctx.signal) return;
   // The timer starts a new turn of the event loop, whose input phase runs before the immediate.
   await new Promise<void>((resolve) => setTimeout(resolve, 0));

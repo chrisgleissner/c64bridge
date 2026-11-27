@@ -640,7 +640,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `play_mod_file` | Play an Ultimate MOD file. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |
-| `preserve` | Preservation bundle by action: create (default; from a SID, into outputDir) or verify (inputPath: the bundle folder). | `inputPath` | `action`, `outputDir`, `overwrite`, `song`, `durationSeconds`, `level`, `ladder`, `stilPath`, `hvscPath`, `hvscDir`, `includeOriginal`, `rightsPermitted` | ✅ | ✅ | ✅ |
+| `preserve` | Preservation bundle by action: create (default; from a SID, into outputDir) or verify (read-only; inputPath: the bundle folder). | `inputPath` | `action`, `outputDir`, `overwrite`, `song`, `durationSeconds`, `level`, `ladder`, `stilPath`, `hvscPath`, `hvscDir`, `includeOriginal`, `rightsPermitted` | ✅ | ✅ | ✅ |
 | `reconstruct` | Experimental: approximate score from a SID file or register trace, with a verdict. | `inputPath` | `outputPath`, `overwrite`, `includeScore`, `song`, `durationSeconds`, `from`, `system` | ✅ | ✅ | ✅ |
 | `record_analyze` | Analyze a recording from the Ultimate stream or host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `render` | Render WAV by action: mix (default), stems (not SID), solo or mute (voice). | — | `sidwave`, `inputPath`, `action`, `voice`, `from`, `song`, `durationSeconds`, `model`, `outputPath`, `outputDir`, `overwrite` | ✅ | ✅ | ✅ |

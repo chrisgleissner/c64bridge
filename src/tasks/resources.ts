@@ -33,6 +33,11 @@ const BLOCKED_BY_EXCLUSIVE: ReadonlySet<OperationClass> = new Set<OperationClass
 ]);
 
 const HOST_ONLY_TOOLS: ReadonlySet<string> = new Set(["c64_rag", "c64_batch"]);
+/** `c64_sound` operations that never contact the machine. compose, compile and retarget may read its clock or SID. */
+const HOST_ONLY_SOUND_OPS: ReadonlySet<string> = new Set([
+  "formats", "inspect", "convert", "validate", "lint", "format", "transform", "complete", "reconstruct", "render",
+  "extract_instruments", "analyze_music", "compare", "sid_info", "sid_edit", "preserve",
+]);
 const TASK_MANAGEMENT_OPS: ReadonlySet<string> = new Set([
   "start_task", "stop_task", "stop_all_tasks", "delete_task", "list_tasks", "task_result", "performance_report",
 ]);
@@ -53,6 +58,7 @@ const PROGRAM_START_OPS: ReadonlySet<string> = new Set([
 export function classifyOperation(tool: string, op: string | undefined, effect: ToolEffect | undefined, backendType: string | undefined, taskOperation?: unknown): OperationClass {
   if (tool === "c64_select_backend") return op === "select" || op === undefined ? "backend-switch" : "passive-read";
   if (HOST_ONLY_TOOLS.has(tool)) return "host-only";
+  if (tool === "c64_sound" && op !== undefined && HOST_ONLY_SOUND_OPS.has(op)) return "host-only";
   if (tool === "c64_system" && op !== undefined && TASK_MANAGEMENT_OPS.has(op)) {
     if (op === "start_task") {
       switch (taskOperation) {

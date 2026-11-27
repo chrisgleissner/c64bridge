@@ -13,7 +13,10 @@
 ### Bug Fixes
 
 - resolve SIDWave imports and file samples safely in `compile_play` and `pipeline`
-- cancel `c64_sound` `compose`, `complete` and `retarget` before they write
+- cancel synchronous `c64_sound` operations before they write
+- allow `c64_sound` `preserve` with `action: "verify"` in read-only mode
+- replace overwritten SIDWave output files, including a Songlengths database, as a whole
+- do not refuse `c64_sound` operations on host files while a task holds the exclusive lease
 
 
 

@@ -255,7 +255,7 @@ const musicGenerateArgsSchema = objectSchema({
     preset: stringSchema({ description: "Classic or varied lead phrasing.", enum: ["classic", "expression"], default: "classic" }),
     system: optionalSchema(stringSchema({ description: "PAL/NTSC timing. Defaults to the machine.", enum: ["PAL", "NTSC"] })),
     style: stringSchema({ description: "Arrangement style.", enum: Object.keys(MUSIC_STYLES), default: "chiptune" }),
-    seed: numberSchema({ description: "Composition seed (default 65).", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
+    seed: numberSchema({ description: "Random seed (compose: 65).", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
   },
   additionalProperties: false,
 });

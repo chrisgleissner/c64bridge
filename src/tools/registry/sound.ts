@@ -304,6 +304,8 @@ export const soundModuleGroup = defineToolModule({
         compile_play: "write", play_preset: "write", pipeline: "write", analyze: "read", record_analyze: "read",
         ...sidwaveOperationEffects,
       },
+      // Verifying a preservation bundle only reads it.
+      effectOf: (op, args) => (op === "preserve" && (args as { action?: unknown }).action === "verify" ? "read" : undefined),
       tags: ["sid", "audio", "grouped"],
       operationPlatforms: {
         capture_samples: ["c64u"],

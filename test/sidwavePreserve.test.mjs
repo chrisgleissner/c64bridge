@@ -41,4 +41,17 @@ test("preserve refuses used directories, protected paths, links out of a bundle 
   fs.symlinkSync("/etc/passwd", at("bundle/link.txt"));
   await rejected({ op: "preserve", action: "verify", inputPath: at("bundle") }, /outside the allowed directories/);
   await blockedWhenReadOnly({ op: "preserve", inputPath: tune });
+  await blockedWhenReadOnly({ op: "preserve", action: "create", inputPath: tune });
+});
+
+test("verifying a bundle is allowed in read-only mode", async () => {
+  await ok({ op: "preserve", inputPath: tune, durationSeconds: 2, ladder: false, outputDir: at("readable") });
+  const previous = process.env.C64BRIDGE_ACCESS;
+  process.env.C64BRIDGE_ACCESS = "read-only";
+  try {
+    assert.equal((await ok({ op: "preserve", action: "verify", inputPath: at("readable") })).ok, true);
+  } finally {
+    if (previous === undefined) delete process.env.C64BRIDGE_ACCESS;
+    else process.env.C64BRIDGE_ACCESS = previous;
+  }
 });

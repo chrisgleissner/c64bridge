@@ -31,9 +31,9 @@ import { playDefinition } from "./sidwavePlay.js";
 import { renderDefinition } from "./sidwaveRender.js";
 import { extractInstrumentsDefinition, preserveDefinition, sidEditDefinition } from "./sidwaveArchive.js";
 import {
-  approximation, backendOf, cancellationPoint, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
-  planOutput, readFileInput, readInput, record, required, SCORE, SCORE_OUT, scoreText, writeArtifact, writeScore,
-  type ArgName, type Artifact, type Definition, type Input,
+  approximation, backendOf, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
+  planOutput, readFileInput, readInput, record, required, SCORE, SCORE_OUT, scoreText, writeArtifacts, writeScore,
+  type ArgName, type Definition, type Input,
 } from "./sidwaveShared.js";
 
 /* ------------------------------------------------------------------------------------------------ summaries */
@@ -217,8 +217,7 @@ const definitions: Definition[] = [
       }
       const existing = args.overwrite ? undefined : planned.find(({ path }) => existsSync(path));
       if (existing) throw existsError(existing.path, "$.outputDir");
-      const files: Artifact[] = [];
-      for (const { path, content } of planned) files.push(await writeArtifact(path, content, args.overwrite === true, ctx));
+      const files = await writeArtifacts(planned, args.overwrite === true, ctx);
       const { entryPoints, memory, zeroPage, sidRegisters, registers, interrupts, maxStackBytes, playCallsPerFrame, songs, effects, system } = build.contract;
       return {
         outputDir: directory, files, ...target,
@@ -270,7 +269,6 @@ const definitions: Definition[] = [
         clock, model, sids: args.sids, budgetCycles: args.budgetCycles, budgetBytes: args.budgetBytes,
         allowChanges: args.allowChanges, read: input.read,
       });
-      await cancellationPoint(ctx);
       const { changes, sids, ...report } = result.report;
       const shown = capped(changes, 20);
       const voices = capped(sids?.voices ?? [], 12);
@@ -421,7 +419,6 @@ const definitions: Definition[] = [
         composer: 2, style, seed, system, preset: "classic", profile: args.profile, cycleBudget: args.cycleBudget,
         root: args.root as string,
       });
-      await cancellationPoint(ctx);
       if (!("sections" in result)) throw new ToolExecutionError("The composer returned no arrangement");
       const artifact = await writeScore(args, { stem: `${args.profile ?? style}-${seed}` }, "composed", documentText(result.score), ctx);
       return {
@@ -446,7 +443,6 @@ const definitions: Definition[] = [
       const result = completeScore(scoreText(input), action, {
         bars, voice, target, bass, drums, section, after, at, seed, style: harmony, instrument, verify, readOptions: input.read,
       });
-      await cancellationPoint(ctx);
       return {
         action, targets: result.targets, entries: result.entries, addedBars: result.addedBars,
         ...(result.protected ? { protected: result.protected } : {}),

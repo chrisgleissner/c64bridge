@@ -34,8 +34,14 @@ test("a song length is written to a copy of the database or, on request, into it
   assert.equal(lookupSonglength(parseSonglengths(fs.readFileSync(copy.outputPath, "latin1")), bytes, 1), 185_000);
   await rejected({ op: "sid_edit", inputPath: tune, action: "songlength", durations: "0:41", hvscDir: at("hvsc"), outputPath: database }, /exists; pass overwrite/);
   assert.equal(fs.readFileSync(database, "latin1"), DATABASE);
+  // A second name of the old file shows whether the database was replaced as a whole or rewritten in place.
+  fs.linkSync(database, at("previous.md5"));
+  fs.chmodSync(database, 0o640);
   const placed = await ok({ op: "sid_edit", inputPath: tune, action: "songlength", durations: "0:41", hvscDir: at("hvsc"), outputPath: database, overwrite: true });
   assert.deepEqual([placed.result, placed.note], ["added", undefined]);
+  assert.equal(fs.readFileSync(at("previous.md5"), "latin1"), DATABASE);
+  assert.equal(fs.statSync(database).mode & 0o777, 0o640);
+  assert.deepEqual(fs.readdirSync(at("hvsc/DOCUMENTS")).sort(), ["STIL.txt", "Songlengths.md5"]);
   const info = await ok({ op: "sid_info", inputPath: tune, hvscDir: at("hvsc") });
   assert.equal(info.hvscPath, "/MUSICIANS/T/Tune.sid");
   assert.match(JSON.stringify(info.stil), /Written for the tests/);

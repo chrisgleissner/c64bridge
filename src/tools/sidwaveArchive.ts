@@ -11,8 +11,8 @@ import { createPreservation, extractInstruments, verifyPreservation } from "sidw
 import { defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
 import { ToolValidationError } from "./errors.js";
 import {
-  approximation, capped, engineFactory, existsError, isSid, planOutput, readFileInput, readInput, required, scoreOf, SCORE, writeArtifact,
-  type Args, type Artifact, type Definition, type Input,
+  approximation, capped, engineFactory, existsError, isSid, planOutput, readFileInput, readInput, required, scoreOf, SCORE, writeArtifacts,
+  type Args, type Definition, type Input,
 } from "./sidwaveShared.js";
 
 const latin1File = async (path: string) => (await readHostFile(path)).toString("latin1");
@@ -55,6 +55,7 @@ export const extractInstrumentsDefinition: Definition = {
     if (isSid(input.bytes)) {
       checkSong(args, parseSidFile(input.bytes).songs);
       source = input.bytes;
+      label = approximation("sid");
     } else {
       const read = await scoreOf(input, args, ctx);
       source = read.text;
@@ -133,7 +134,7 @@ export const sidEditDefinition: Definition = {
 
 export const preserveDefinition: Definition = {
   op: "preserve", effect: "write",
-  description: "Preservation bundle by action: create (default; from a SID, into outputDir) or verify (inputPath: the bundle folder).",
+  description: "Preservation bundle by action: create (default; from a SID, into outputDir) or verify (read-only; inputPath: the bundle folder).",
   required: ["inputPath"],
   optional: ["action", "outputDir", "overwrite", "song", "durationSeconds", "level", "ladder", "stilPath", "hvscPath", "hvscDir", "includeOriginal", "rightsPermitted"],
   run: async (args, ctx) => {
@@ -179,8 +180,7 @@ export const preserveDefinition: Definition = {
     ctx.signal?.throwIfAborted();
     const planned = [...bundle.files].map(([name, content]) => ({ path: resolveHostChildPath(directory, name), content }));
     if (planned.some(({ path }) => path === input.file)) throw new ToolValidationError(`The output file is an input file: ${input.file}`, { path: "$.outputDir" });
-    const files: Artifact[] = [];
-    for (const { path, content } of planned) files.push(await writeArtifact(path, content, args.overwrite === true, ctx));
+    const files = await writeArtifacts(planned, args.overwrite === true, ctx);
     const { verdict, horizon, source, rights, ambiguities } = bundle.manifest;
     const open = capped(ambiguities, 10);
     return {
