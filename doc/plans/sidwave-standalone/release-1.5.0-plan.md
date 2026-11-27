@@ -134,3 +134,9 @@ Finish in this order and stop adding scope at the first point where quota will n
 
 - 2026-11-27: the user added `NPM_TOKEN` to `chrisgleissner/sidwave` (7-day expiry, delete after the first publish and switch to trusted publishing). Explicit publish approval is still outstanding.
 - 2026-11-27: showcase integrated; Opus adversarial review of `feat/sidwave-mcp` done and fixed, head `c37c7384` (`convert` gained `driverPath` and MOD `sids`; tool list about 75,850 of 76,000 bytes). Still to do on that branch: tarball rebuild after the last sidwave merge, then the VICE end-to-end test and showcase scripts. Low findings left open: import files are re-read by the library after the confinement check; some library errors name command-line flags.
+
+## User directive (2026-11-27 20:10): release only
+
+"i changed my mind. i now just want you to proceed to the point where we have a release 1.5.0 of c64bridge which correctly pulls in the sidwave release. the subsequent tasks must then be written into a markdown continuation prompt in the c64bridge-workspace folder, clearly dated so I can easily find it. now carry on."
+
+This approves publishing `6502-toolkit` and `sidwave` 0.9.0 and the c64bridge 1.5.0 release, including the tags. It replaces "continue into the deferred items". Listening to the clips and the U64 run no longer block the release; if the U64 run does not happen, the release notes keep saying that hardware is unverified. Continuation prompt: `/home/chris/dev/c64/c64bridge-workspace/prompts/2026-11-27-sidwave-continuation-after-c64bridge-1.5.0.md`.
