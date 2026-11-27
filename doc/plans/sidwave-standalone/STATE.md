@@ -160,3 +160,7 @@ User: "let's prioritize. i want low hanging fruits first so c64bridge can benefi
 
 Release-first order (proposed to the user): merge the four in-flight items (PR 31, SF2 phase 1, W15, S5d part 4); finish W20 (codex on compile_play/pipeline imports), rebuild its tarballs, run the U64 workflow; publish 6502-toolkit and sidwave; switch the dependency; release c64bridge 1.5.0. No new large package starts before the release. Deferred: SF2 phase 2, W16, remaining W18 formats, W19/W21/W22 beyond release needs, S8, A1 v2, held-out run.
 Pending user answers: publish version (proposed 0.9.0, the earlier "no publish before S9" rule needs lifting); NPM_TOKEN secret is missing in chrisgleissner/sidwave (only CODECOV_TOKEN exists).
+
+## Release plan (2026-11-27 17:00)
+
+The active plan is `release-1.5.0-plan.md` in this directory. The user approved its scope; publishing and tagging still need explicit approval.
