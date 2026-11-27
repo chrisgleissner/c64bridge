@@ -22,11 +22,10 @@ Open before release, and only the user can resolve them:
 
 | Item | Branch (worktree under `c64bridge-wt/`) | State |
 |---|---|---|
-| sidwave main | | PRs up to #31 merged (ABC import #30, BASIC export #31, assembler includes #29) |
-| SF2 and CheeseCutter phase 1 | `feat/formats-ct-sf2` (`sidwave-formats2`) | independent review running |
-| W15 play, preview, watch | `feat/play-watch` (`sidwave-play`) | independent review running |
-| S5d part 4 | `feat/reconstruct-exact` (`sidwave-s5d4`) | development run; then review, PR, merge |
-| W20 MCP operations | `feat/sidwave-mcp` (`sidwave-mcp`, c64bridge repo) | implemented and reviewed at `4839d33c`; codex is removing the `compile_play`/`pipeline` import limitation |
+| sidwave main | | PRs up to #33 merged (play and watch #32, SF2 and CheeseCutter phase 1 #33) |
+| S5d part 4 | `feat/reconstruct-exact` (`sidwave-s5d4`) | CPU comparison; then review, PR, merge |
+| WP1 MCP features | `feat/sidwave-mcp` (`sidwave-mcp`, c64bridge repo) | implemented at `106a6933`; review and WP2 running (`brief-wp2.md`) |
+| WP3a showcase | `feat/sidwave-showcase` (`sidwave-showcase`, c64bridge repo) | running (`brief-wp3a.md`) |
 
 ## Work packages, in order
 
