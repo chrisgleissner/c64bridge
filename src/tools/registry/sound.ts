@@ -260,7 +260,7 @@ const soundOperations: GroupedOperationConfig[] = [
     schema: extendSchemaWithOp(
       "analyze",
       ensureDescriptor(audioDescriptorIndex, "analyze_audio").inputSchema,
-      { description: "Analyze SID playback or a host WAV." },
+      { description: "Check SID audio or a host WAV (musical structure: analyze_music)." },
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "analyze_audio", rawArgs, ctx),
   },

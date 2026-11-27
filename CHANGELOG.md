@@ -7,10 +7,13 @@
 - `c64_sound` op `play`: play any readable music file or SIDWave score on the active backend, with a loss report
 - `c64_sound` op `compile`: assembler includes, relocation tables and a cycle limit for game builds
 - `c64_sound` ops `render` (mix, stems, solo, mute), `extract_instruments`, `sid_edit` and `preserve`
+- `c64_sound` ops `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks
+- `c64_sound` labels approximate imports (SID and register trace recovery, ABC, JCH, SID Factory II)
 
 ### Bug Fixes
 
 - resolve SIDWave imports and file samples safely in `compile_play` and `pipeline`
+- cancel `c64_sound` `compose`, `complete` and `retarget` before they write
 
 
 

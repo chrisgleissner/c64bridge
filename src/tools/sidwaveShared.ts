@@ -15,7 +15,7 @@ import { SidwaveTransformError } from "sidwave/transform";
 import { defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
 import { hostSidwaveReadOptions, hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
 import { getPlatformStatus } from "../platform.js";
-import { resolveSidSystem } from "./audio.js";
+import { NOTE_PATTERN, resolveSidSystem } from "./audio.js";
 import { cancelledResult, type ToolExecutionContext, type ToolRunResult } from "./types.js";
 import {
   arraySchema, booleanSchema, literalSchema, numberSchema, objectSchema, optionalSchema, stringSchema, type Schema,
@@ -41,7 +41,7 @@ export type Args = {
 };
 export type ArgName = keyof Args;
 
-const text = (extra: { enum?: readonly string[]; description?: string } = {}) => optionalSchema(stringSchema({ minLength: 1, ...extra }));
+const text = (extra: { enum?: readonly string[]; description?: string; pattern?: RegExp } = {}) => optionalSchema(stringSchema({ minLength: 1, ...extra }));
 const flag = (description?: string) => optionalSchema(booleanSchema(description ? { description } : {}));
 const int = (minimum: number, maximum?: number, description?: string) => optionalSchema(numberSchema({
   integer: true, minimum, ...(maximum === undefined ? {} : { maximum }), ...(description ? { description } : {}),
@@ -92,14 +92,14 @@ export const PROPERTIES: { [K in ArgName]-?: Schema<unknown> } = {
   durations: text(),
   includeOriginal: flag(),
   rightsPermitted: flag("You may redistribute the original."),
-  forDevice: flag("Use the machine's clock and SID model."),
+  forDevice: flag("Use the machine's clock and SID model, not its SID count."),
   action: text(),
   semitones: int(-96, 96),
   bpm: num(),
   factor: num(),
   order: optionalSchema(arraySchema(stringSchema({ minLength: 1 }), { minItems: 1 })),
   grid: num("Beats."),
-  seed: int(0, 0xffffffff),
+  seed: int(0, 0xffffffff, "Composition seed (default 65)."),
   maxShift: num(),
   scope: optionalSchema(objectSchema({
     properties: {
@@ -118,9 +118,9 @@ export const PROPERTIES: { [K in ArgName]-?: Schema<unknown> } = {
   hvscDir: text(),
   hvscPath: text(),
   sidIdPath: text({ description: "sidid.cfg" }),
-  style: text({ enum: Object.keys(MUSIC_STYLES) }),
+  style: optionalSchema(stringSchema({ enum: Object.keys(MUSIC_STYLES), default: "chiptune" }), "chiptune"),
   profile: text({ description: "e.g. funk-vc-dorian" }),
-  root: text(),
+  root: text({ pattern: NOTE_PATTERN, description: "Tonic and lead register." }),
   cycleBudget: int(1),
   bars: int(1, 1024),
   voice: int(1, 24),
@@ -213,6 +213,38 @@ export async function writeScore(args: Args, input: Pick<Input, "stem" | "file">
 }
 
 export const documentText = (score: unknown) => formatSidwave(YAML.stringify(score));
+
+/**
+ * For synchronous library work: reads a cancellation that arrived while the event loop was blocked, and stops before
+ * anything is written. The work itself runs to its end.
+ */
+export async function cancellationPoint(ctx: ToolExecutionContext): Promise<void> {
+  if (!ctx.signal) return;
+  // The timer starts a new turn of the event loop, whose input phase runs before the immediate.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  ctx.signal.throwIfAborted();
+}
+
+/* ------------------------------------------------------------------------------------------------ approximations */
+
+const RECOVERED = "Experimental recovery from register writes: an approximate score with a verdict.";
+/**
+ * Importers that read a file only in part, beyond the losses they count. The library itself marks only the formats it
+ * recovers from register writes.
+ */
+const PARTIAL_IMPORTS: Readonly<Record<string, string>> = {
+  abc: "ABC import is approximate: ornaments, chord symbols and voice overlays are omitted.",
+  jch: "JCH import is approximate: the filter, most commands and per-voice looping are not imported.",
+  sf2: "SID Factory II import and export (driver 11) are approximate: playback differs from the original driver.",
+};
+
+/** The label of a conversion that is approximate by nature, from the source format and, for exports, the target. */
+export function approximation(from: string, to?: string): { approximate?: true; approximateNote?: string } {
+  const note = PARTIAL_IMPORTS[from] ?? (findFormat(from)?.readIsApproximate ? RECOVERED : undefined)
+    ?? (to === "sf2" ? PARTIAL_IMPORTS.sf2 : undefined);
+  return note === undefined ? {} : { approximate: true, approximateNote: note };
+}
 
 /* ------------------------------------------------------------------------------------------------ engine and device */
 

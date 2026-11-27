@@ -11,7 +11,7 @@ import { createPreservation, extractInstruments, verifyPreservation } from "sidw
 import { defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
 import { ToolValidationError } from "./errors.js";
 import {
-  capped, engineFactory, existsError, isSid, planOutput, readFileInput, readInput, required, scoreOf, SCORE, writeArtifact,
+  approximation, capped, engineFactory, existsError, isSid, planOutput, readFileInput, readInput, required, scoreOf, SCORE, writeArtifact,
   type Args, type Artifact, type Definition, type Input,
 } from "./sidwaveShared.js";
 
@@ -51,11 +51,14 @@ export const extractInstrumentsDefinition: Definition = {
     const options = Object.fromEntries(Object.entries({ name: args.name, licence: args.licence, author: args.author })
       .filter(([, value]) => value !== undefined)) as { name?: string; licence?: string; author?: string };
     let source: string | Uint8Array;
+    let label = {};
     if (isSid(input.bytes)) {
       checkSong(args, parseSidFile(input.bytes).songs);
       source = input.bytes;
     } else {
-      source = (await scoreOf(input, args, ctx)).text;
+      const read = await scoreOf(input, args, ctx);
+      source = read.text;
+      if (read.converted) label = approximation(read.converted.from);
     }
     let result;
     try {
@@ -72,7 +75,7 @@ export const extractInstrumentsDefinition: Definition = {
     const shown = capped(result.instruments, 20);
     const first = result.instruments[0]?.name;
     return {
-      ...artifact, libraryName: result.libraryName, count: result.instruments.length,
+      ...artifact, ...label, libraryName: result.libraryName, count: result.instruments.length,
       instruments: shown.items.map(({ name, sourceName, usedByVoices, patternEntries }) => ({ name, sourceName, usedByVoices, patternEntries })),
       ...(shown.omitted ? { instrumentsOmitted: shown.omitted } : {}),
       external: result.external, provenance: result.provenance,

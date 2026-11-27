@@ -8,7 +8,7 @@ import { keepVoices, renderStems, stemVoiceGroups, StemsRefusedError, writeWav }
 import { defaultHostOutputDir, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
 import { ToolValidationError } from "./errors.js";
 import {
-  engineFactory, existsError, isSid, lossReport, planOutput, readInput, scoreOf, SCORE, writeArtifact,
+  approximation, engineFactory, existsError, isSid, lossReport, planOutput, readInput, scoreOf, SCORE, writeArtifact,
   type Artifact, type Definition,
 } from "./sidwaveShared.js";
 
@@ -47,7 +47,10 @@ export const renderDefinition: Definition = {
       const target = output();
       if (action === "mix") {
         const tune = { source: input.name, kind: "sid" as const, bytes: input.bytes, md5: createHash("md5").update(input.bytes).digest("hex") };
-        const { wav, summary } = await renderTune(tune, { seconds, song: args.song, model: args.model, createEngine: engines, signal: ctx.signal });
+        // renderTune stops at 180 s unless told otherwise; the operation allows the 600 s of its schema.
+        const { wav, summary } = await renderTune(tune, {
+          seconds, maxSeconds: MAX_SECONDS, song: args.song, model: args.model, createEngine: engines, signal: ctx.signal,
+        });
         return { action, ...(await target.write(wav, ctx)), seconds: summary.seconds, sampleRate: summary.sampleRate, engine: summary.engine };
       }
       if (args.model !== undefined) throw new ToolValidationError("model does not apply to a voice of a SID file", { path: "$.model" });
@@ -72,7 +75,7 @@ export const renderDefinition: Definition = {
     const song = wanted - 1;
     const conversion = converted ? (() => {
       const { losses, omitted } = lossReport(converted.losses, 10);
-      return { from: converted.from, severity: converted.severity, losses, ...(omitted ? { lossesOmitted: omitted } : {}) };
+      return { from: converted.from, ...approximation(converted.from), severity: converted.severity, losses, ...(omitted ? { lossesOmitted: omitted } : {}) };
     })() : undefined;
 
     if (action === "stems") {
@@ -125,7 +128,9 @@ export const renderDefinition: Definition = {
     const seconds = args.durationSeconds ?? Math.min(MAX_SECONDS, Math.max(1, Math.ceil(compiled.summary.durationSeconds)));
     const target = output();
     const tune = { source: input.name, kind: "score" as const, bytes: compiled.bytes, md5: createHash("md5").update(compiled.bytes).digest("hex") };
-    const { wav, summary } = await renderTune(tune, { seconds, song: song + 1, model: args.model, createEngine: engines, signal: ctx.signal });
+    const { wav, summary } = await renderTune(tune, {
+      seconds, maxSeconds: MAX_SECONDS, song: song + 1, model: args.model, createEngine: engines, signal: ctx.signal,
+    });
     return {
       action, ...(single ? { voice: args.voice, soundingVoices: sounding } : {}), ...(await target.write(wav, ctx)),
       seconds: summary.seconds, sampleRate: summary.sampleRate, engine: summary.engine, ...(conversion ? { conversion } : {}),

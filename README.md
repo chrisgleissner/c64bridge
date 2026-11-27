@@ -253,7 +253,7 @@ The server speaks MCP 2026-07-28 and earlier revisions (2025-11-25 and older) on
 
 **Skills.** The packaged skills are served through the MCP Skills extension (`skills/list`, `skills/get`, `skill://<name>/SKILL.md`) and as the resources `c64://skills/<name>`, from one catalogue. Clients that do not implement the extension read the resources. Claude Code documents MCP skills; VS Code Copilot documents them as an experimental setting without naming the wire protocol; Codex CLI does not document them.
 
-**Long operations.** A call to `c64_memory` (`wait_until`, `wait_for_text`), `c64_debug` (`wait_for_state`), `c64_sound` (`capture_samples`, `pipeline`), `c64_graphics` (`capture_frame`) or `c64_program` (`batch_run`, `bundle_run`) that does not finish within one second can run as a task.
+**Long operations.** A call to `c64_memory` (`wait_until`, `wait_for_text`), `c64_debug` (`wait_for_state`), `c64_sound` (`capture_samples`, `pipeline`, `convert`, `reconstruct`, `render`, `analyze_music`, `compare`), `c64_graphics` (`capture_frame`) or `c64_program` (`batch_run`, `bundle_run`) that does not finish within one second can run as a task.
 
 - With native Tasks support (the `io.modelcontextprotocol/tasks` extension, which a client declares on each request), the server returns a task handle and the client polls `tasks/get` or cancels with `tasks/cancel`. Claude Code documents MCP 2026-07-28 and tasks; Codex CLI and VS Code Copilot do not document them.
 - Any client can use the fallback: `c64_system` `start_task` with `operation: "c64_memory.wait_until"` (or another allowlisted `tool.op`) and `arguments`, then `task_result` with `waitMs` to collect the result.
@@ -618,14 +618,14 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
-| `analyze` | Analyze SID playback or a host WAV. | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
-| `analyze_music` | Key, form, voices, techniques and resources of a score or SID. | — | `sidwave`, `inputPath`, `song`, `durationSeconds` | ✅ | ✅ | ✅ |
+| `analyze` | Check SID audio or a host WAV (musical structure: analyze_music). | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
+| `analyze_music` | Musical analysis of a score or SID (key, form, techniques); audio check: analyze. | — | `sidwave`, `inputPath`, `song`, `durationSeconds` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture Ultimate stereo PCM. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compare` | Compare two scores or SIDs: register differences and verification level. | `comparePath` | `sidwave`, `inputPath`, `song`, `durationSeconds`, `level`, `ladder` | ✅ | ✅ | ✅ |
 | `compile` | Compile a score to PRG, SID or game files, without playing. | — | `sidwave`, `inputPath`, `output`, `outputPath`, `outputDir`, `overwrite`, `loop`, `song`, `origin`, `dataOrigin`, `zeroPage`, `symbols`, `assembler`, `relocation`, `maxCycles`, `forDevice` | ✅ | ✅ | ✅ |
 | `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
 | `complete` | Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Supports verification. | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `bars`, `voice`, `target`, `bass`, `drums`, `section`, `after`, `at`, `seed`, `harmony`, `instrument`, `verify` | ✅ | ✅ | ✅ |
-| `compose` | Compose a new score with form and harmony, without playing. | — | `style`, `profile`, `seed`, `system`, `root`, `cycleBudget`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
+| `compose` | Compose a new score with form and harmony, without playing. | — | `style="chiptune"`, `profile`, `seed`, `system`, `root`, `cycleBudget`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
 | `convert` | Convert between music formats. Supports verification. | — | `sidwave`, `inputPath`, `to`, `from`, `outputPath`, `overwrite`, `strict`, `verify`, `song`, `voices`, `system`, `model`, `durationSeconds`, `includeScore` | ✅ | ✅ | ✅ |
 | `extract_instruments` | Save the instruments of a score or SID as an importable library. | — | `sidwave`, `inputPath`, `from`, `song`, `durationSeconds`, `name`, `licence`, `author`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
 | `format` | Write a score in canonical form. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
@@ -641,7 +641,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |
 | `preserve` | Preservation bundle by action: create (default; from a SID, into outputDir) or verify (inputPath: the bundle folder). | `inputPath` | `action`, `outputDir`, `overwrite`, `song`, `durationSeconds`, `level`, `ladder`, `stilPath`, `hvscPath`, `hvscDir`, `includeOriginal`, `rightsPermitted` | ✅ | ✅ | ✅ |
-| `reconstruct` | Recover a score from a SID file or register trace, with a verdict. | `inputPath` | `outputPath`, `overwrite`, `includeScore`, `song`, `durationSeconds`, `from`, `system` | ✅ | ✅ | ✅ |
+| `reconstruct` | Experimental: approximate score from a SID file or register trace, with a verdict. | `inputPath` | `outputPath`, `overwrite`, `includeScore`, `song`, `durationSeconds`, `from`, `system` | ✅ | ✅ | ✅ |
 | `record_analyze` | Analyze a recording from the Ultimate stream or host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `render` | Render WAV by action: mix (default), stems (not SID), solo or mute (voice). | — | `sidwave`, `inputPath`, `action`, `voice`, `from`, `song`, `durationSeconds`, `model`, `outputPath`, `outputDir`, `overwrite` | ✅ | ✅ | ✅ |
 | `reset` | Reset SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |

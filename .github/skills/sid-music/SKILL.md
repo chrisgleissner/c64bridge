@@ -16,7 +16,7 @@ Use this skill for preset music demos, SIDWAVE composition, direct voice control
 
 ## Play any music file
 
-To play a file or score the user has, execute `c64_sound` with `op: "play"` and `inputPath` (or `sidwave`). It detects SIDWave, SID, MIDI, MusicXML, MOD, tracker and notation files and PRG, converts when needed for the machine's clock, saves the score and PRG and starts them. Report `summary`, every loss and warning, and the saved paths. `approximate: true` means a reconstruction (a SID file on VICE): say so, and set `durationSeconds` for more than the first 30 s. Pass `from` only when detection fails, `configure: true` for more than three voices on an Ultimate. Edit the saved score with `op: "transform"` or `op: "retarget"` and play it again.
+To play a file or score the user has, execute `c64_sound` with `op: "play"` and `inputPath` (or `sidwave`). It detects SIDWave, SID, MIDI, MusicXML, MOD, tracker and notation files and PRG, converts when needed for the machine's clock, saves the score and PRG and starts them. Report `summary`, every loss and warning, and the saved paths. `approximate: true` means a reconstruction (a SID file on VICE) or a partial importer (ABC, JCH, SID Factory II): say so with `warnings`. For a SID file on VICE set `durationSeconds` for more than the first 30 s. Pass `from` only when detection fails, `configure: true` for more than three voices on an Ultimate. Edit the saved score with `op: "transform"` or `op: "retarget"` and play it again.
 
 ## Execution
 
@@ -44,15 +44,15 @@ These `c64_sound` operations work on host files and do not play anything (only `
 | Maintain a collection | `op: "sid_info"` for header, song lengths, STIL and player; `op: "sid_edit"` with `action` header (`fields`) or songlength (`durations`, `hvscDir`) writes a copy |
 | Preserve a tune | `op: "preserve"` with a SID file writes a bundle with score, report and manifest; `action: "verify"` checks one. Report the verdict unchanged; `includeOriginal` only when the user states the rights |
 | Study music | `op: "analyze_music"`, `op: "compare"`; `op: "sid_info"` with `hvscDir` for song lengths and STIL notes |
-| Recover a score | `op: "reconstruct"` from a SID file, a VICE dump or a siddump table |
+| Recover a score (experimental) | `op: "reconstruct"` from a SID file, a VICE dump or a siddump table: an approximate score with a verdict |
 
-`op: "analyze"` is different: it judges recorded audio. Reading a SID file, rendering WAV and verification trace the tune on an emulated SID, so give long tunes a `durationSeconds` horizon.
+`op: "analyze"` is different from `analyze_music`: it judges recorded audio. Reading a SID file, rendering WAV and verification trace the tune on an emulated SID, so give long tunes a `durationSeconds` horizon. `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks (`c64_system` `start_task` with `operation: "c64_sound.render"` and its `arguments`). Results with `approximate: true` (SID and register trace recovery, ABC, JCH, SID Factory II import or export) must be reported as approximate.
 
 ## Workflow: compose, compile, deploy, capture, verify
 
 1. Select the backend with `c64_select_backend`. Execute `c64_sound` with `op: "compose"` (`style`, `seed`; the clock defaults to the machine) and `includeScore: true`, or write the score yourself.
 2. Execute `c64_sound` with `op: "validate"`, then `op: "lint"`, and fix the findings.
-3. Execute `c64_sound` with `op: "compile"` and `forDevice: true`. Resolve every warning about the clock, SID model or SID map. For a clock or model mismatch use `op: "retarget"` with `forDevice: true`.
+3. Execute `c64_sound` with `op: "compile"` and `forDevice: true`. Resolve every warning about the clock, SID model or SID map. For a clock or model mismatch use `op: "retarget"` with `forDevice: true`; it does not read the SID count, so pass `sids` for that.
 4. Deploy with `c64_sound` `op: "compile_play"` (or `op: "pipeline"`), passing the score as `sidwave`. Use `configure: true` for scores with several SIDs on an Ultimate.
 5. Capture and verify:
    - Ultimate (`c64u`): `c64_sound` `op: "record_analyze"` with `durationSeconds` and `expectedSidwave` records the audio stream.

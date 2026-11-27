@@ -31,7 +31,7 @@ import { resolveHostPath } from "../hostPaths.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
+export const NOTE_PATTERN = /^([A-Ga-g])([#b]?)(-?\d+)$/;
 
 const DEFAULT_SILENCE_VERIFY_DURATION_SECONDS = 1.5;
 const DEFAULT_SILENCE_VERIFY_RMS_THRESHOLD = 0.02;
@@ -129,7 +129,7 @@ const sidNoteOnArgsSchema = objectSchema({
   description: "Parameters for starting a SID note on a specific voice.",
   properties: {
     voice: numberSchema({
-      description: "SID voice to trigger (1-3).",
+      description: "SID voice (note_on: 1-3).",
       integer: true,
       minimum: 1,
       maximum: 3,
@@ -255,7 +255,7 @@ const musicGenerateArgsSchema = objectSchema({
     preset: stringSchema({ description: "Classic or varied lead phrasing.", enum: ["classic", "expression"], default: "classic" }),
     system: optionalSchema(stringSchema({ description: "PAL/NTSC timing. Defaults to the machine.", enum: ["PAL", "NTSC"] })),
     style: stringSchema({ description: "Arrangement style.", enum: Object.keys(MUSIC_STYLES), default: "chiptune" }),
-    seed: numberSchema({ description: "Reproducible composition seed.", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
+    seed: numberSchema({ description: "Composition seed (default 65).", integer: true, minimum: 0, maximum: 0xffffffff, default: DEFAULT_MUSIC_SEED }),
   },
   additionalProperties: false,
 });

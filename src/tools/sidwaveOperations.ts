@@ -31,7 +31,7 @@ import { playDefinition } from "./sidwavePlay.js";
 import { renderDefinition } from "./sidwaveRender.js";
 import { extractInstrumentsDefinition, preserveDefinition, sidEditDefinition } from "./sidwaveArchive.js";
 import {
-  backendOf, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
+  approximation, backendOf, cancellationPoint, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
   planOutput, readFileInput, readInput, record, required, SCORE, SCORE_OUT, scoreText, writeArtifact, writeScore,
   type ArgName, type Artifact, type Definition, type Input,
 } from "./sidwaveShared.js";
@@ -63,13 +63,17 @@ const definitions: Definition[] = [
       const all = listFormats();
       if (from === undefined) {
         return {
-          formats: all.map((f) => ({ id: f.id, extensions: f.extensions, read: f.read ? (f.readApproximate ? "approximate" : "yes") : "no", write: f.write, losses: f.lossSummary })),
+          formats: all.map((f) => ({
+            id: f.id, extensions: f.extensions, read: !f.read ? "no" : approximation(f.id).approximate ? "approximate" : "yes",
+            write: f.write, losses: f.lossSummary, ...approximation(f.id),
+          })),
         };
       }
       const id = findFormat(from)?.id;
       const format = all.find((f) => f.id === id);
       if (!format) throw new ToolValidationError(`Unknown format "${from}"`, { path: "$.from", details: { allowed: all.map((f) => f.id) } });
-      return { format };
+      const label = approximation(format.id);
+      return { format: { ...format, ...(label.approximate ? { readApproximate: format.read } : {}) }, ...label };
     },
   },
   {
@@ -93,7 +97,7 @@ const definitions: Definition[] = [
         format: format.id, name: format.name, bytes: input.bytes.length,
         detectedBy: args.from !== undefined ? "from" : detection.best!.by,
         confidence: args.from !== undefined ? 1 : detection.best!.confidence,
-        readable: format.read !== undefined, writable: format.write !== undefined,
+        readable: format.read !== undefined, writable: format.write !== undefined, ...approximation(format.id),
         details, warnings: detection.warnings, candidates: detection.candidates,
       };
     },
@@ -117,7 +121,7 @@ const definitions: Definition[] = [
       return {
         written: !strictFailed,
         ...(artifact ?? { note: "strict: content would be lost, so nothing was written" }),
-        from: result.from, to: result.to, chain: result.chain,
+        from: result.from, to: result.to, chain: result.chain, ...approximation(result.from, result.to),
         detectedBy: result.detected.viaFrom ? "from" : result.detected.by,
         severity: result.severity, losses: losses.losses, ...(losses.omitted ? { lossesOmitted: losses.omitted } : {}),
         ...(result.metrics ? { metrics: result.metrics } : {}),
@@ -266,6 +270,7 @@ const definitions: Definition[] = [
         clock, model, sids: args.sids, budgetCycles: args.budgetCycles, budgetBytes: args.budgetBytes,
         allowChanges: args.allowChanges, read: input.read,
       });
+      await cancellationPoint(ctx);
       const { changes, sids, ...report } = result.report;
       const shown = capped(changes, 20);
       const voices = capped(sids?.voices ?? [], 12);
@@ -278,7 +283,7 @@ const definitions: Definition[] = [
     },
   },
   {
-    op: "reconstruct", effect: "write", description: "Recover a score from a SID file or register trace, with a verdict.",
+    op: "reconstruct", effect: "write", description: "Experimental: approximate score from a SID file or register trace, with a verdict.",
     required: ["inputPath"], optional: ["outputPath", "overwrite", "includeScore", "song", "durationSeconds", "from", "system"],
     run: async (args, ctx) => {
       const input = await readFileInput(args.inputPath!);
@@ -321,7 +326,7 @@ const definitions: Definition[] = [
     },
   },
   {
-    op: "analyze_music", effect: "read", description: "Key, form, voices, techniques and resources of a score or SID.",
+    op: "analyze_music", effect: "read", description: "Musical analysis of a score or SID (key, form, techniques); audio check: analyze.",
     optional: [...SCORE, "song", "durationSeconds"],
     run: async (args, ctx) => {
       const input = await readInput(args);
@@ -416,6 +421,7 @@ const definitions: Definition[] = [
         composer: 2, style, seed, system, preset: "classic", profile: args.profile, cycleBudget: args.cycleBudget,
         root: args.root as string,
       });
+      await cancellationPoint(ctx);
       if (!("sections" in result)) throw new ToolExecutionError("The composer returned no arrangement");
       const artifact = await writeScore(args, { stem: `${args.profile ?? style}-${seed}` }, "composed", documentText(result.score), ctx);
       return {
@@ -440,6 +446,7 @@ const definitions: Definition[] = [
       const result = completeScore(scoreText(input), action, {
         bars, voice, target, bass, drums, section, after, at, seed, style: harmony, instrument, verify, readOptions: input.read,
       });
+      await cancellationPoint(ctx);
       return {
         action, targets: result.targets, entries: result.entries, addedBars: result.addedBars,
         ...(result.protected ? { protected: result.protected } : {}),

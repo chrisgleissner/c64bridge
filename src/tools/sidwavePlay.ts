@@ -11,7 +11,7 @@ import { clearViceSymbols } from "./translation/symbolRegistry.js";
 import { ToolExecutionError, ToolValidationError } from "./errors.js";
 import type { ToolExecutionContext } from "./types.js";
 import {
-  backendOf, detectInput, engineFactory, lossReport, parseScore, planOutput, readInput, scoreText, SCORE,
+  approximation, backendOf, detectInput, engineFactory, lossReport, parseScore, planOutput, readInput, scoreText, SCORE,
   type Args, type Definition, type Input,
 } from "./sidwaveShared.js";
 
@@ -114,11 +114,13 @@ export const playDefinition: Definition = {
       { score: saved, program: program.outputPath });
 
     const reconstructed = converted && format.readIsApproximate;
+    const label = converted ? approximation(format.id) : {};
     const report = reconstructed ? converted!.reports.read as { strictExact?: boolean; registerStateExact?: boolean; horizon?: { seconds: number } } : undefined;
     const warnings = [...compiled.warnings, ...playbackSetupWarnings(document, backend, args.configure)];
     if (document.song.mode !== machine.system) {
       warnings.push(`The score is ${document.song.mode} but the machine is ${machine.system}; use op retarget to adapt it.`);
     }
+    if (label.approximateNote) warnings.push(label.approximateNote);
     if (format.id === "sid") {
       warnings.push(`VICE cannot start a SID file, so an approximate score was reconstructed from the first ${report?.horizon?.seconds} s and played (durationSeconds sets the length). On c64u or u2 the original SID plays unchanged.`);
     }
@@ -126,14 +128,15 @@ export const playDefinition: Definition = {
     const title = document.song.title;
     const duration = Math.round(compiled.durationSeconds * 10) / 10;
     const loops = document.songs ? document.songs[song ?? 0]!.loop : !document.end;
-    const how = converted ? `${format.name}, ${reconstructed ? "reconstructed (approximate)" : "converted"}` : "SIDWave score";
+    const kind = reconstructed ? "reconstructed (approximate)" : label.approximate ? "converted (approximate)" : "converted";
+    const how = converted ? `${format.name}, ${kind}` : "SIDWave score";
     const lossCount = losses ? losses.total : 0;
     return {
       summary: `Playing '${title}' (${how}; ${document.voices.length} voice${document.voices.length === 1 ? "" : "s"}, ${document.song.mode}, ${duration} s ${loops ? "loop" : "once"}) on ${backend}.`
         + (converted ? ` ${lossCount ? `${lossCount} kind${lossCount === 1 ? "" : "s"} of conversion loss, see losses.` : "No conversion losses."}` : ""),
       playing: true, backend, method: "run_prg", detected: found,
       conversion: !converted ? "none" : reconstructed ? "reconstructed" : "converted",
-      ...(reconstructed ? { approximate: true } : {}),
+      ...(label.approximate ? { approximate: true } : {}),
       ...(report ? { verdict: { strictExact: report.strictExact, registerStateExact: report.registerStateExact } } : {}),
       title, system: document.song.mode, systemSource: machine.source, voices: document.voices.length, sids: document.sids.length,
       durationSeconds: duration, score, program,
