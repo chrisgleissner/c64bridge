@@ -144,7 +144,7 @@ Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the
 
 ### Compose for the SID
 
-Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. [Sound tools](#c64_sound)
+Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. Your agent can also convert between music formats, recover an editable score from a SID tune with a stated verdict, retarget a score to another clock or SID, and build a player for use inside a game. [Sound tools](#c64_sound)
 
 Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
 
@@ -614,25 +614,40 @@ Switch the active backend between C64U/U64 hardware, U2-family cartridges, and t
 
 #### c64_sound
 
-SID control, playback, composition and audio analysis.
+SID control, playback, composition, SIDWave conversion and audio analysis.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
 | `analyze` | Analyze SID playback or a host WAV. | — | `wavPath`, `request="analyze the SID output"`, `durationSeconds`, `expectedSidwave` | ✅ | ✅ | ✅ |
+| `analyze_music` | Key, form, voices, techniques and resources of a score or SID. | — | `sidwave`, `inputPath`, `song`, `durationSeconds` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture Ultimate stereo PCM. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
+| `compare` | Compare two scores or SIDs: register differences and verification level. | `comparePath` | `sidwave`, `inputPath`, `song`, `durationSeconds`, `level`, `ladder` | ✅ | ✅ | ✅ |
+| `compile` | Compile a score to PRG, SID or game files, without playing. | — | `sidwave`, `inputPath`, `output`, `outputPath`, `outputDir`, `overwrite`, `loop`, `song`, `origin`, `dataOrigin`, `zeroPage`, `symbols`, `forDevice` | ✅ | ✅ | ✅ |
 | `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
+| `complete` | Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Supports verification. | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `bars`, `voice`, `target`, `bass`, `drums`, `section`, `after`, `at`, `seed`, `harmony`, `instrument`, `verify` | ✅ | ✅ | ✅ |
+| `compose` | Compose a new score with form and harmony, without playing. | — | `style`, `profile`, `seed`, `system`, `root`, `cycleBudget`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
+| `convert` | Convert between music formats. Supports verification. | — | `sidwave`, `inputPath`, `to`, `from`, `outputPath`, `overwrite`, `strict`, `verify`, `song`, `voices`, `system`, `model`, `durationSeconds`, `includeScore` | ✅ | ✅ | ✅ |
+| `format` | Write a score in canonical form. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
+| `formats` | List conversion formats. | — | `from` | ✅ | ✅ | ✅ |
 | `generate` | Compose and play a seeded SIDWAVE PRG (replaces the program in memory). | — | `includeScore`, `configure`, `root="C4"`, `pattern`, `steps`, `tempoMs`, `waveform`, `preset="classic"`, `system`, `style="chiptune"`, `seed=65` | ✅ | ✅ | ✅ |
+| `inspect` | Detect and describe a music file. | — | `sidwave`, `inputPath`, `from` | ✅ | ✅ | ✅ |
+| `lint` | List a score's musical and hardware problems. | — | `sidwave`, `inputPath`, `loop` | ✅ | ✅ | ✅ |
 | `note_off` | Release a SID voice. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Start a SID voice. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile, play and analyze SIDWAVE. Supports verification. | — | `configure`, `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play an Ultimate MOD file. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |
+| `reconstruct` | Recover a score from a SID file or register trace, with a verdict. | `inputPath` | `outputPath`, `overwrite`, `includeScore`, `song`, `durationSeconds`, `from`, `system` | ✅ | ✅ | ✅ |
 | `record_analyze` | Analyze a recording from the Ultimate stream or host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
 | `reset` | Reset SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
+| `retarget` | Adapt a score to a clock, SID model, SID count or budget. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `system`, `model`, `sids`, `budgetCycles`, `budgetBytes`, `allowChanges`, `forDevice` | ✅ | ✅ | ✅ |
 | `sample_render` | Render a SIDWAVE sample to WAV. | — | `definition`, `rate=4000`, `outputDir` | ✅ | ✅ | ✅ |
 | `set_volume` | Set SID volume ($D418). | `volume` | `filterMode` | ✅ | ✅ | ✅ |
+| `sid_info` | SID header, song lengths, STIL notes and player. | `inputPath` | `songlengthsPath`, `stilPath`, `hvscDir`, `hvscPath`, `sidIdPath` | ✅ | ✅ | ✅ |
 | `silence_all` | Silence all SID voices. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
+| `transform` | Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `semitones`, `bpm`, `factor`, `order`, `grid`, `seed`, `maxShift`, `from`, `to`, `scope` | ✅ | ✅ | ✅ |
+| `validate` | Check a score. | — | `sidwave`, `inputPath` | ✅ | ✅ | ✅ |
 
 #### c64_stream
 

@@ -586,7 +586,7 @@
     {
       "name": "c64_sound",
       "title": "Adjusts SID registers, plays files, composes music, and runs verification captures.",
-      "description": "SID control, playback, composition and audio analysis.",
+      "description": "SID control, playback, composition, SIDWave conversion and audio analysis.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -607,7 +607,22 @@
               "play_preset",
               "pipeline",
               "analyze",
-              "record_analyze"
+              "record_analyze",
+              "formats",
+              "inspect",
+              "convert",
+              "validate",
+              "lint",
+              "format",
+              "compile",
+              "transform",
+              "retarget",
+              "reconstruct",
+              "analyze_music",
+              "compare",
+              "sid_info",
+              "compose",
+              "complete"
             ],
             "description": "Selects the operation."
           },
@@ -678,10 +693,13 @@
             "default": false
           },
           "voice": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "description": "SID voice to trigger (1-3). Limits depend on op.",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 24
           },
           "note": {
             "type": [
@@ -704,7 +722,7 @@
               "string",
               "null"
             ],
-            "description": "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
+            "description": "PAL or NTSC for the note frequency. Default: read from the machine ($02A6). Limits depend on op.",
             "enum": [
               "PAL",
               "NTSC"
@@ -763,8 +781,7 @@
               "boolean",
               "null"
             ],
-            "description": "Record audio after silencing to confirm the output is quiet.",
-            "default": false
+            "description": "Record audio after silencing to confirm the output is quiet. Limits depend on op."
           },
           "path": {
             "type": "string",
@@ -793,10 +810,11 @@
             "description": "Set up SID playback."
           },
           "root": {
-            "type": "string",
-            "description": "Tonic and lead register.",
-            "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$",
-            "default": "C4"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Tonic and lead register. Limits depend on op."
           },
           "pattern": {
             "type": [
@@ -851,21 +869,25 @@
             ]
           },
           "style": {
-            "type": "string",
-            "description": "Arrangement style.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Arrangement style. Limits depend on op.",
             "enum": [
               "chiptune",
               "ambient",
               "funk"
-            ],
-            "default": "chiptune"
+            ]
           },
           "seed": {
-            "type": "integer",
-            "description": "Reproducible composition seed.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Reproducible composition seed. Limits depend on op.",
             "minimum": 0,
-            "maximum": 4294967295,
-            "default": 65
+            "maximum": 4294967295
           },
           "sidwave": {
             "type": [
@@ -899,12 +921,12 @@
               "string",
               "null"
             ],
-            "description": "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere).",
+            "description": "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere). Limits depend on op.",
             "enum": [
               "prg",
-              "sid"
-            ],
-            "default": "prg"
+              "sid",
+              "game"
+            ]
           },
           "dryRun": {
             "type": [
@@ -1051,13 +1073,388 @@
             ],
             "description": "Override capture duration in seconds. Limits depend on op.",
             "minimum": 0.5,
-            "maximum": 30
+            "maximum": 600
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "inputPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host input file.",
+            "minLength": 1
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Replace existing files."
+          },
+          "strict": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Write nothing if content is lost."
+          },
+          "song": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 256
+          },
+          "voices": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "enum": [
+              "6581",
+              "8580"
+            ]
+          },
+          "loop": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Game build address.",
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "dataOrigin": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 65535
+          },
+          "zeroPage": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 251
+          },
+          "symbols": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "acme",
+                "kickass",
+                "ca65",
+                "vice",
+                "json"
+              ]
+            }
+          },
+          "forDevice": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Use the machine's clock and SID model."
+          },
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "semitones": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": -96,
+            "maximum": 96
+          },
+          "bpm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "factor": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "order": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "grid": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Beats."
+          },
+          "maxShift": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "voices": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "sections": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "sids": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 8
+          },
+          "budgetCycles": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "budgetBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "allowChanges": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Allow lossy steps."
+          },
+          "comparePath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Second file.",
+            "minLength": 1
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "enum": [
+              "T0",
+              "T1",
+              "A0",
+              "A1"
+            ]
+          },
+          "ladder": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "songlengthsPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "stilPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "hvscDir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "hvscPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "sidIdPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "sidid.cfg",
+            "minLength": 1
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "e.g. funk-vc-dorian",
+            "minLength": 1
+          },
+          "cycleBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "bars": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 1024
+          },
+          "target": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "bass": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "drums": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 24
+          },
+          "section": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "harmony": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "enum": [
+              "arp",
+              "line"
+            ]
+          },
+          "instrument": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
           }
         },
         "required": [
           "op"
         ],
-        "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.",
+        "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.\n- formats: List conversion formats. Optional inputs: from.\n- inspect: Detect and describe a music file. Optional inputs: sidwave, inputPath, from.\n- convert [write]: Convert between music formats. Optional inputs: sidwave, inputPath, to, from, outputPath, overwrite, strict, verify, song, voices, system, model, durationSeconds, includeScore.\n- validate: Check a score. Optional inputs: sidwave, inputPath.\n- lint: List a score's musical and hardware problems. Optional inputs: sidwave, inputPath, loop.\n- format [write]: Write a score in canonical form. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore.\n- compile [write]: Compile a score to PRG, SID or game files, without playing. Optional inputs: sidwave, inputPath, output, outputPath, outputDir, overwrite, loop, song, origin, dataOrigin, zeroPage, symbols, forDevice.\n- transform [write]: Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). Required inputs: action. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore, semitones, bpm, factor, order, grid, seed, maxShift, from, to, scope.\n- retarget [write]: Adapt a score to a clock, SID model, SID count or budget. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore, system, model, sids, budgetCycles, budgetBytes, allowChanges, forDevice.\n- reconstruct [write]: Recover a score from a SID file or register trace, with a verdict. Required inputs: inputPath. Optional inputs: outputPath, overwrite, includeScore, song, durationSeconds, from, system.\n- analyze_music: Key, form, voices, techniques and resources of a score or SID. Optional inputs: sidwave, inputPath, song, durationSeconds.\n- compare: Compare two scores or SIDs: register differences and verification level. Required inputs: comparePath. Optional inputs: sidwave, inputPath, song, durationSeconds, level, ladder.\n- sid_info: SID header, song lengths, STIL notes and player. Required inputs: inputPath. Optional inputs: songlengthsPath, stilPath, hvscDir, hvscPath, sidIdPath.\n- compose [write]: Compose a new score with form and harmony, without playing. Optional inputs: style, profile, seed, system, root, cycleBudget, outputPath, overwrite, includeScore.\n- complete [write]: Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Required inputs: action. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore, bars, voice, target, bass, drums, section, after, at, seed, harmony, instrument, verify.",
         "additionalProperties": false
       },
       "annotations": {
@@ -1117,7 +1514,22 @@
           "play_preset": "write",
           "pipeline": "write",
           "analyze": "read",
-          "record_analyze": "read"
+          "record_analyze": "read",
+          "formats": "read",
+          "inspect": "read",
+          "convert": "write",
+          "validate": "read",
+          "lint": "read",
+          "format": "write",
+          "compile": "write",
+          "transform": "write",
+          "retarget": "write",
+          "reconstruct": "write",
+          "analyze_music": "read",
+          "compare": "read",
+          "sid_info": "read",
+          "compose": "write",
+          "complete": "write"
         }
       }
     },

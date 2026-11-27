@@ -113,6 +113,7 @@ If a workflow description starts listing tool calls outside `.github/skills`, tr
 - Configuration: `c64_config` (get/set, `batch_update`, `snapshot`, `restore`, `diff`, `shuffle`, `load_flash`, `save_flash`, `reset_defaults`). The flash operations take an optional `category`.
 - Drives & files: `c64_disk` (including `find_paths`, which returns `results` and `truncated`; limit with `maxResults`), `c64_drive`
 - SID / music: `c64_sound` (`play_preset`, playback, generate, analyze, `capture_samples`). `play_preset` and `pipeline` do not verify unless `verify: true`; without `system`, note frequencies follow the machine's PAL/NTSC flag at `$02A6`; `set_volume` takes `filterMode`
+- SIDWave offline (`c64_sound`, no playback): `formats`, `inspect`, `convert`, `validate`, `lint`, `format`, `compile` (PRG, PSID or game build), `compose`, `complete`, `transform`, `retarget`, `reconstruct`, `analyze_music`, `compare`, `sid_info`. Each takes `inputPath` or inline `sidwave`, writes a new file below `artifacts/sidwave/` unless `outputPath` is given, and replaces a file only with `overwrite: true`. Report losses and the `reconstruct` verdict unchanged. `forDevice: true` (`compile`, `retarget`) uses the machine's clock and, on Ultimate hardware with a socket chip at `$D400`, its SID model
 - Graphics: `c64_graphics` (PETSCII, sprites, `capture_frame`). `capture_frame` omits raw pixels unless `includePixels: true`; `format: "png"` returns viewable images (at most 4 frames; raw output is capped at 2 MiB, as for `capture_samples`).
 - Debugging (VICE): `c64_debug` (checkpoints, registers, stepping, `wait_for_state`), `c64_vice` (resources, `snapshot_save`, `snapshot_restore`, `version`)
 - Streaming and extraction: `c64_stream` (C64U), `c64_extract` (sprites, charset, memory dump, firmware health)
@@ -143,7 +144,7 @@ Long operations (`c64_memory` `wait_until` and `wait_for_text`, `c64_debug` `wai
 | Quick visible greeting or smoke test | `.github/skills/cross-platform-demo/SKILL.md` |
 | Custom BASIC program | `.github/skills/basic-program/SKILL.md` |
 | Custom assembly routine | `.github/skills/assembly-program/SKILL.md` |
-| SID demo or composition | `.github/skills/sid-music/SKILL.md` |
+| SID demo, composition, conversion, reconstruction or game music | `.github/skills/sid-music/SKILL.md` |
 | Graphics workflow | `.github/skills/graphics-demo/SKILL.md` |
 | Memory inspection or patching | `.github/skills/memory-debug/SKILL.md` |
 | Disk and drive management | `.github/skills/drive-manager/SKILL.md` |

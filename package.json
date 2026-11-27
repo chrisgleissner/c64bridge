@@ -81,6 +81,7 @@
     "@modelcontextprotocol/server": "2.4.0",
     "axios": "^1.20.0",
     "jimp": "^1.6.1",
+    "libsidplayfp-wasm": "1.1.1",
     "meyda": "5.6.2",
     "pitchfinder": "^2.3.4",
     "sidwave": "file:/home/chris/.c64bridge/sidwave-standalone/tarballs/sidwave-0.1.0.tgz",
