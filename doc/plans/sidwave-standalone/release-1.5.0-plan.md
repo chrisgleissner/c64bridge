@@ -129,3 +129,5 @@ Finish in this order and stop adding scope at the first point where quota will n
 ## User directive (2026-11-27 19:35)
 
 "Continue and do not stop until fully done. Also, review any PR adversarially and fix any findings". Every open and future PR gets an adversarial review, with fixes, before it merges. The final c64bridge release branch gets an adversarial review by Opus. That review may also add the SF2 and CheeseCutter export driver argument to `convert` if small. Publishing and tagging still need explicit approval and the `NPM_TOKEN` secret. The VICE sound default stays unchanged until the user answers.
+
+- 2026-11-27 ~19:40: peer 1541ultimate-a6 announced JTAG red/green work on the u64 (possibly c64u) in the following hours. This session told it "none" and that it will ask for an all-clear before any u64 use. Do not touch the u64 without that all-clear.
