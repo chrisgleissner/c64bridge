@@ -13,7 +13,7 @@ LLM → SIDWave (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VIC
 
 - **Format name:** SIDWave
 - **File suffix:** `.sidwave.yaml` (or `.sid.yaml` for brevity)
-- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, `sidwave: 1.2`, `sidwave: 1.3`, or `sidwave: 1.4`
+- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, `sidwave: 1.2`, `sidwave: 1.3`, `sidwave: 1.4`, or `sidwave: 1.5`
 - **Schema file:** `sidwave.schema.json`
 - **Serialization:** YAML 1.2 or JSON
 
@@ -92,9 +92,11 @@ timeline:
 
 | Field | Meaning |
 | --- | --- |
-| `sidwave` | Format version, `1.0` (legacy), `1.1`, `1.2`, or `1.3`. |
+| `sidwave` | Format version: `1.0` (legacy), `1.1`, `1.2`, `1.3`, `1.4` or `1.5`. |
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
-| `speed` | Player calls per frame, from 1 to 4. |
+| `speed` | Player calls per frame, from 1 to 4 (to 8 in 1.5; see "Speed up to 8"). |
+| `player` | 1.5: player options `soft_start`, `idle_writes` and `start` (see "Player options"). |
+| `tuning` | 1.5: `cents` shift and exact `registers` per note (see "Tuning"). |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
 | `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. 1.3 also accepts time signatures (see SIDWave 1.3). |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
@@ -1208,6 +1210,170 @@ unchanged, and a document with `effects: {}` compiles to the same PRG and game b
 key (`test/sidwave14Effects`). A document with `sidwave: 1.3` (or 1.2, or none) that contains `effects` is rejected with
 `effects require sidwave: 1.4` (`$.effects`).
 
+## SIDWave 1.5
+
+A `sidwave: 1.5` document accepts everything that 1.4 accepts and compiles a document that uses no 1.5 construct to the
+same PRG and PSID bytes as under 1.4 (test/sidwave15Extensions: the same score as 1.4 and 1.5, with and without a pulse
+table, gives equal bytes). Every 1.5 construct is rejected in an older document with an error that names the version and
+the field, for example `$.player: player options require sidwave: 1.5; the document declares sidwave: 1.4`.
+
+The extensions come from reconstructing real SID tunes (`sidwave reconstruct`, S5d). The counts below are over the 24
+development tunes of `data/reconstruct/corpus-manifest.json`; no tune is named, and no recovery rule refers to one.
+
+### Why a language change
+
+#### Player options: `player.soft_start` and `player.idle_writes`
+
+**Reproducer.** A tune that sets the master volume to 15 in its first call and keeps it there. Recovered as a 1.4 score
+and compiled, the 1.4 player writes volume 1, 2, ... 15 over its first 15 frames (`$D418`), so every call of the first
+15 frames differs in the volume class.
+
+**Why 1.4 cannot express it.** The soft-start ramp is part of every modern player (`softVolume`); no field switches it off.
+
+**Evidence.** All 24 development tunes start at volume 15 without a ramp, so 24 of 24 differ at the first volume write.
+
+**Design.** `player: { soft_start: false }` removes the ramp code; the default is `true`, which keeps the 1.4 bytes. The
+player writes the chip volume of the song from its first call.
+
+**Rejected alternative.** A volume ramp length in frames. No tune needs a ramp of a different length, and a ramp table is the
+trace dump that the language avoids.
+
+`player.idle_writes` follows the same pattern.
+
+**Reproducer.** A tune in which one voice plays no note for the first seconds and whose player never writes that voice's
+frequency registers. The 1.4 player writes the frequency registers of every voice in every call, including a voice that has
+not started a note, so those registers differ from the tune in the pitch class from call 0.
+
+**Why 1.4 cannot express it.** The frequency write of an idle voice is part of the player's voice loop; no field switches it
+off. A rest or a silent note still writes the frequency.
+
+**Evidence.** The development tunes show the difference at call 0 or in the first calls of a voice that starts silent (see
+`data/reconstruct/dev-report.md`).
+
+**Design.** `player: { idle_writes: false }` makes the player skip the frequency registers of a voice until it has an
+instrument, that is, until the voice has played its first note. The default is `true`, which keeps the 1.4 bytes. Recovery
+emits `false` when a voice's registers stay unwritten until its first note. The field belongs to the `player` object, which
+accepts only `soft_start`, `idle_writes` and `start`; any other key is an error.
+
+**Rejected alternative.** Initialising the registers of idle voices from the score. That adds a start-up write per voice for
+no musical content, and a tune that never writes them still differs.
+
+`idle_writes: control` is a third value. A tune whose player writes only the control register of a voice that has not
+played yet (value 0, every call) leaves its other registers at zero. The F-diff compares the in-call control writes, so
+`false` (no write) and `true` (all seven registers, with the player's default pulse width and C0 frequency) both differ.
+With `control` the player writes only `v_ctrl` of an idle voice in every call. Evidence: before this option, the first difference of most development tunes was a missing control write of an idle voice at call 0 or 1 (see the first-difference column of `data/reconstruct/dev-report.md`).
+
+#### Player options: `player.start`
+
+**Reproducer.** A tune whose player, in its first calls and before any note, writes the test bit to the control registers
+(`$08` to `$D404`, `$D40B`, `$D412`) and sets `$D417`. After the init call, the 1.4 player writes nothing in those calls.
+
+**Why 1.4 cannot express it.** The language has no construct for register writes that are not part of a note, an
+instrument or a global effect.
+
+**Evidence.** Several development tunes write the test bit or filter registers in the first call after the init, before
+any gate-on; the per-tune first differences are in `data/reconstruct/dev-report.md`.
+
+**Design.** `player: { start: [ [ { reg: $D404, value: 8 }, ... ], ... ] }` lists the writes of up to 8 player calls, up to
+32 writes per call, registers `$D400` to `$D418` of the first SID, in the given order. In each of these calls the player
+writes only the listed registers and does nothing else; the song starts in the call after the last list. Recovery lists only
+calls before the first gate-on of any voice. The option is limited to that start-up phase so that it cannot hold music.
+
+**Interaction with `soft_start`.** Start writes are exact in their calls whatever `soft_start` is. A start call writes
+`$D415` to `$D418` straight to the first SID, so a `$D418` value is not scaled by the volume ramp and the ramp does not run
+in those calls. With the default `soft_start: true` the ramp then begins at zero in the first song call and moves the
+volume from there, so the start volume holds only until that call; set `soft_start: false` to keep the written volume.
+
+**Rejected alternative.** An `init` register list written by the init routine instead of in play calls. The original writes
+in play calls, and the F-diff compares call by call, so a write in the init call would be in the wrong call.
+
+#### Tuning: `tuning.cents` and `tuning.registers`
+
+**Reproducer.** Gate-on frequency registers that no equal-temperament note produces under any single detune, for example
+a player whose own note table holds values a few units away from the 16-bit equal-temperament registers.
+
+**Why 1.4 cannot express it.** A voice `detune` shifts all notes of one voice by the same cents. A note table that is not
+equal temperament (every entry off by its own amount) needs one register per note. Per-voice detune cannot express it, and a
+score-level cents shift cannot either.
+
+**Evidence.** The baseline run reports an exact-frequency candidate for 24 of 24 tunes.
+
+**Design.** A top-level `tuning` with `cents` (-100 to 100, a shift of every note) and `registers`, a mapping from note
+names (C0 to B7) to exact 16-bit register values (integer or `$hhhh`). Both replace entries of the 96-entry note table that
+the player copies at init, for the clock of the document's `mode`. Nothing else in the player changes. Arpeggios, wavetable
+note steps and the vibrato base use the same table. `tuning: {}` or an absent field keeps the equal-temperament table.
+
+```yaml
+sidwave: 1.5
+tuning:
+  cents: -12
+  registers: { A4: $1CD6, C5: 0x2222 }
+```
+
+**Deviation from the S5 design.** The design proposed a note literal `f$1CD6` wherever a note name is accepted. A literal would
+add a per-note payload to the stream and to the player's note start; the observed need is a player's note table, which a
+table override expresses with no player change and no per-note cost. The literal is not implemented. A per-call exact
+register is available as the wavetable step `reg` below.
+
+**Rejected alternative.** Free tuning in cents per score only: it cannot express a table whose entries are not a constant
+distance from equal temperament.
+
+#### Wavetable step `reg`
+
+**Reproducer.** A percussion note whose frequency steps through values that are not notes (for example `$10C3`, `$430F`,
+`$2187`, `$191E`) on consecutive calls.
+
+**Why 1.4 cannot express it.** A wavetable step has a note (absolute or relative) or a linear `slide_to`; neither can write
+an arbitrary register value.
+
+**Evidence.** 21 of 24 tunes report a pitch-table candidate.
+
+**Design.** A wavetable step may carry `reg: $hhhh` (or an integer 0 to 65535) instead of `note`. It reuses the raw-pitch
+path that `slide_to` already uses, so the player code is unchanged; the value is the same on PAL and NTSC. `reg` cannot be
+combined with `note` or `slide_to`.
+
+**Rejected alternative.** A free-form per-call pitch list: it is a register dump, and the wavetable already has the step
+structure.
+
+#### Pulse tables: width 0 and `wrap`
+
+**Reproducer.** A pulse table that sets the width to 0, or whose `add` steps leave 1..4094 and continue modulo 4096.
+
+**Why 1.4 cannot express it.** `set` accepts 1 to 4094 and fractions above 0, and `add` clamps to 1..4094.
+
+**Evidence.** 20 of 24 tunes report a pulse-table construct the language cannot write.
+
+**Design.** In 1.5, `set: 0` is accepted. A pulse table in mapping form may set `wrap: true`; its `add` steps then wrap
+modulo 4096 instead of clamping. The player gains a short wrap branch only when a table uses `wrap`.
+
+**Rejected alternative.** Explicit per-call widths: they are a dump of the trace.
+
+#### Speed up to 8 and rows of 1/128 beat
+
+**Reproducer.** A tune whose player runs five or six times per frame (CIA timer set to a fraction of the frame).
+
+**Why 1.4 cannot express it.** `speed` is limited to 1 to 4, and a pattern length or `len` is at least 1/64 beat, which at
+speed 5 or more is less than one player call at tempos up to 220.
+
+**Evidence.** 10 of 24 tunes call their player more than 4.5 times per frame (speeds 5, 6 and 8).
+
+**Design.** In 1.5, `speed` is 1 to 8 and pattern length and groove `len` are at least 1/128 beat. A note still lasts at least
+one frame (`speed` calls). The compiler's cycle budget check still applies: at the higher speeds the 1.4 player needs more cycles per
+call than one call period holds at 1 MHz, and such a score is rejected with `use cpu: turbo`. Seven of the 24 development tunes are
+rejected for that reason (speeds 4 to 8), so the recovered score does not compile for them.
+
+**Known limit.** At speed 8 the first note of a score lasts one call fewer than its row count (gate off at call 29 instead of 30
+in the round-trip test), because the player's first row starts one call into the song at that speed. A recovered speed-8 score
+therefore has a first note one call shorter than the tune; later notes are exact. This is open (`todo` in `reconstructRepairs.test.mjs`).
+
+**Rejected alternative.** Mapping a multi-speed tune onto a slower grid: the call timing then differs.
+
+#### Not designed here
+
+SID addresses in a multi-SID score exist already (`sids[].address`), so recovery of tunes with several SIDs is a recovery
+change (the recovery emits only SID 1 today), not a language change. A table of global volume, filter and routing steps
+(`global_table`) is not implemented: 10 of 24 tunes change the filter or volume registers outside any note, and the S5d work did not reach it.
+
 ## Playable examples
 
 Open the composition index and use the names with `c64_sound` `play_preset`.
@@ -1223,7 +1389,7 @@ guide in its header. [Composition index](c64://sound/examples)
 
 ## Asset libraries (SIDWave 1.4)
 
-A `sidwave: 1.4` score may import libraries of instruments, patterns and effects. Resolution happens before the score is
+A `sidwave: 1.4` (or 1.5) score may import libraries of instruments, patterns and effects. Resolution happens before the score is
 parsed, so a score that uses libraries compiles to the bytes of the equivalent score with the library items written out.
 
 **Observed need.** A drum kit, a bass instrument or a sound effect set that several scores share is copied into each
@@ -1237,8 +1403,9 @@ built-in `lib:` instruments, a fixed list that ships with the compiler (see "Bui
 aliases work inside one file only. There is no way to name another file, to say which version of it is meant, or to
 check that its content is what the author tested.
 
-**Design.** A library is a SIDWave file with `sidwave: 1.4`, a `library` block, and the maps `instruments`, `patterns`
-and `effects`. It has no voices, timeline or SID map. A library may import other libraries.
+**Design.** A library is a SIDWave file with `sidwave: 1.4` or `1.5`, a `library` block, and the maps `instruments`, `patterns`
+and `effects`. It has no voices, timeline or SID map. A library may import other libraries. A
+1.5 construct inside a library item needs a `sidwave: 1.5` score: the check applies to the score that imports the item.
 
 ```yaml
 sidwave: 1.4
@@ -1327,7 +1494,7 @@ bytes of the flattened score"). Only the items a score refers to are included, s
 
 **Older documents are unchanged.** A score without `imports` takes the same path as before: the hash fixture
 `test/fixtures/sidwave-s4a/example-hashes.json` passes with a library resolver supplied ("keep their recorded bytes").
-`imports` in a document that is not `sidwave: 1.4` is rejected with `imports require sidwave: 1.4`.
+`imports` in a document that is neither `sidwave: 1.4` nor `1.5` is rejected with `imports require sidwave: 1.4 or later`.
 
 **Tests.** `test/sidwave14Libs.test.mjs`: resolution, namespaces and nested libraries, collisions, cycles, the depth,
 size and count caps, path traversal (`../`, absolute, URLs, symbolic links to files and directories, `pkg:` escapes),

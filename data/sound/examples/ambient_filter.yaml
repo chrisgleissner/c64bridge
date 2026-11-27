@@ -16,398 +16,398 @@
 # arps, then koto with the thud. v3 (filter owner, the only filtered channel) wind, flute, water plucks with the thud, bright flute, dark flute, wind.
 # Accepted lint: none.
 sidwave: 1.3
-title: Blue Current
+title: "Blue Current"
 tempo: 68.35
-mode: PAL
+mode: "PAL"
 sids:
-  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v3, route: [3] } }
-kit: { t: thud }
+  - {id: "sid1", address: "$D400", model: "8580", filter: {owner: "v3", route: [3]}}
 instruments:
   # Drone: pulse width sweeps 50 % -> 21 % over 4.8 s and back; at 50 % the third harmonic (the fifth, A2) is strongest.
   drone:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 2048
     adsr: [12, 9, 12, 11]
-    hard_restart: { frames: 0 }
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 2048 }, { add: -5, frames: 240 }, { add: 5, frames: 240 }] }
+    hard_restart: {frames: 0}
+    pulsetable: {reset: false, loop: 1, steps: [{set: 2048}, {add: -5, frames: 240}, {add: 5, frames: 240}]}
   drone_dusk:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 2048
     adsr: [11, 9, 12, 11]
-    hard_restart: { frames: 0 }
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 2048 }, { add: -2, frames: 150 }, { add: 2, frames: 150 }] }
+    hard_restart: {frames: 0}
+    pulsetable: {reset: false, loop: 1, steps: [{set: 2048}, {add: -2, frames: 150}, {add: 2, frames: 150}]}
   # Wind: noise through a band-pass that loops 600 Hz -> 2.5 kHz -> 600 Hz over 300 frames.
   wind:
-    waveform: noise
+    waveform: "noise"
     adsr: [11, 0, 15, 10]
-    filtertable: { reset: false, loop: 1, steps: [{ cutoff: 600Hz, resonance: 12, type: bandpass }, { add: 2, frames: 150 }, { add: -2, frames: 150 }] }
+    filtertable: {reset: false, loop: 1, steps: [{cutoff: "600Hz", resonance: 12, type: "bandpass"}, {add: 2, frames: 150}, {add: -2, frames: 150}]}
   wind_close:
-    waveform: noise
+    waveform: "noise"
     adsr: [9, 0, 15, 12]
-    filtertable: [{ cutoff: 2.4kHz, resonance: 13, type: bandpass }, { add: -1, frames: 255 }, { add: -1, frames: 40 }]
+    filtertable: [{cutoff: "2.4kHz", resonance: 13, type: "bandpass"}, {add: -1, frames: 255}, {add: -1, frames: 40}]
   # Flute colours. Every one starts with a frame of noise at the note's own rate (the breath) and holds without a pitch step.
   flute:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [4, 6, 11, 7]
-    vibrato: { depth: 0.45, rate: 4.5, delay: 30, fade: 40 }
-    wavetable: [{ wave: noise }, { wave: tri }]
-    filtertable: { reset: false, loop: 1, steps: [{ cutoff: 1.6kHz, resonance: 5, type: lowpass }, { add: 1, frames: 90 }, { add: -1, frames: 90 }] }
+    wavetable: [{wave: "noise"}, {wave: "tri"}]
+    filtertable: {reset: false, loop: 1, steps: [{cutoff: "1.6kHz", resonance: 5, type: "lowpass"}, {add: 1, frames: 90}, {add: -1, frames: 90}]}
+    vibrato: {depth: 0.45, rate: 4.5, delay: 30, fade: 40}
   flute_mord:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [4, 6, 11, 7]
-    vibrato: { depth: 0.45, rate: 4.5, delay: 30, fade: 40 }
-    wavetable: [{ wave: noise }, { wave: tri, frames: 3 }, { note: "+1", frames: 3 }, { wave: tri }]
-    filtertable: { reset: false, loop: 1, steps: [{ cutoff: 1.6kHz, resonance: 5, type: lowpass }, { add: 1, frames: 90 }, { add: -1, frames: 90 }] }
+    wavetable: [{wave: "noise"}, {wave: "tri", frames: 3}, {note: "+1", frames: 3}, {wave: "tri"}]
+    filtertable: {reset: false, loop: 1, steps: [{cutoff: "1.6kHz", resonance: 5, type: "lowpass"}, {add: 1, frames: 90}, {add: -1, frames: 90}]}
+    vibrato: {depth: 0.45, rate: 4.5, delay: 30, fade: 40}
   flute_mord2:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [4, 6, 11, 7]
-    vibrato: { depth: 0.3, rate: 5.5, delay: 20, fade: 30 }
-    wavetable: [{ wave: noise }, { wave: tri, frames: 3 }, { note: "+2", frames: 3 }, { wave: tri }]
-    filtertable: { reset: false, loop: 1, steps: [{ cutoff: 1.6kHz, resonance: 5, type: lowpass }, { add: 1, frames: 90 }, { add: -1, frames: 90 }] }
+    wavetable: [{wave: "noise"}, {wave: "tri", frames: 3}, {note: "+2", frames: 3}, {wave: "tri"}]
+    filtertable: {reset: false, loop: 1, steps: [{cutoff: "1.6kHz", resonance: 5, type: "lowpass"}, {add: 1, frames: 90}, {add: -1, frames: 90}]}
+    vibrato: {depth: 0.3, rate: 5.5, delay: 20, fade: 30}
   flute_trill:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [4, 6, 11, 7]
+    wavetable: [{wave: "noise"}, {wave: "tri", note: "+0", frames: 3}, {note: "+2", frames: 3}]
+    filtertable: {steps: [{cutoff: "1.8kHz", resonance: 5, type: "lowpass"}, {add: 3, frames: 40}]}
     loop: 1
-    wavetable: [{ wave: noise }, { wave: tri, note: "+0", frames: 3 }, { note: "+2", frames: 3 }]
-    filtertable: { steps: [{ cutoff: 1.8kHz, resonance: 5, type: lowpass }, { add: 3, frames: 40 }] }
   flute_dark:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [5, 6, 11, 8]
-    vibrato: { depth: 0.3, rate: 5.5, delay: 20, fade: 30 }
-    wavetable: [{ wave: noise }, { wave: tri }]
-    filtertable: { reset: false, loop: 1, steps: [{ cutoff: 1.2kHz, resonance: 6, type: lowpass }, { add: 1, frames: 120 }, { add: -1, frames: 120 }] }
+    wavetable: [{wave: "noise"}, {wave: "tri"}]
+    filtertable: {reset: false, loop: 1, steps: [{cutoff: "1.2kHz", resonance: 6, type: "lowpass"}, {add: 1, frames: 120}, {add: -1, frames: 120}]}
+    vibrato: {depth: 0.3, rate: 5.5, delay: 20, fade: 30}
   # Dusk: a pulse flute whose width opens fast and then breathes; the section offset opens its low-pass completely.
   flute_hi:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 300
     adsr: [3, 7, 11, 7]
-    vibrato: { depth: 0.4, rate: 5.5, delay: 22, fade: 35 }
-    wavetable: [{ wave: noise }, { wave: pulse }]
-    pulsetable: { loop: 2, steps: [{ set: 300 }, { add: 40, frames: 20 }, { add: -6, frames: 50 }, { add: 6, frames: 50 }] }
-    filtertable: [{ cutoff: 1.2kHz, resonance: 7, type: lowpass }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "noise"}, {wave: "pulse"}]
+    pulsetable: {loop: 2, steps: [{set: 300}, {add: 40, frames: 20}, {add: -6, frames: 50}, {add: 6, frames: 50}]}
+    filtertable: [{cutoff: "1.2kHz", resonance: 7, type: "lowpass"}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.4, rate: 5.5, delay: 22, fade: 35}
   # The signature note: straight for 88 frames (the held A5 and its 20-frame bend), then vibrato.
   flute_sig:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 300
     adsr: [3, 7, 11, 7]
-    vibrato: { depth: 0.5, rate: 5, delay: 88, fade: 30 }
-    wavetable: [{ wave: noise }, { wave: pulse }]
-    pulsetable: { loop: 2, steps: [{ set: 300 }, { add: 30, frames: 30 }, { add: -5, frames: 60 }, { add: 5, frames: 60 }] }
-    filtertable: [{ cutoff: 1.2kHz, resonance: 7, type: lowpass }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "noise"}, {wave: "pulse"}]
+    pulsetable: {loop: 2, steps: [{set: 300}, {add: 30, frames: 30}, {add: -5, frames: 60}, {add: 5, frames: 60}]}
+    filtertable: [{cutoff: "1.2kHz", resonance: 7, type: "lowpass"}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.5, rate: 5, delay: 88, fade: 30}
   hi_mord:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 300
     adsr: [3, 7, 11, 7]
-    vibrato: { depth: 0.4, rate: 5.5, delay: 22, fade: 35 }
-    wavetable: [{ wave: noise }, { wave: pulse, frames: 3 }, { note: "+1", frames: 3 }, { wave: pulse }]
-    pulsetable: { loop: 2, steps: [{ set: 300 }, { add: 40, frames: 20 }, { add: -6, frames: 50 }, { add: 6, frames: 50 }] }
-    filtertable: [{ cutoff: 1.2kHz, resonance: 7, type: lowpass }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "noise"}, {wave: "pulse", frames: 3}, {note: "+1", frames: 3}, {wave: "pulse"}]
+    pulsetable: {loop: 2, steps: [{set: 300}, {add: 40, frames: 20}, {add: -6, frames: 50}, {add: 6, frames: 50}]}
+    filtertable: [{cutoff: "1.2kHz", resonance: 7, type: "lowpass"}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.4, rate: 5.5, delay: 22, fade: 35}
   # The climax note: deeper, faster vibrato that fades in over 40 frames.
   flute_peak:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 500
     adsr: [2, 7, 12, 8]
-    vibrato: { depth: 0.55, rate: 6, delay: 26, fade: 40 }
-    wavetable: [{ wave: noise }, { wave: pulse }]
-    pulsetable: { loop: 2, steps: [{ set: 500 }, { add: 50, frames: 20 }, { add: -8, frames: 50 }, { add: 8, frames: 50 }] }
-    filtertable: [{ cutoff: 1.4kHz, resonance: 8, type: lowpass }, { add: 3, frames: 60 }]
+    wavetable: [{wave: "noise"}, {wave: "pulse"}]
+    pulsetable: {loop: 2, steps: [{set: 500}, {add: 50, frames: 20}, {add: -8, frames: 50}, {add: 8, frames: 50}]}
+    filtertable: [{cutoff: "1.4kHz", resonance: 8, type: "lowpass"}, {add: 3, frames: 60}]
+    vibrato: {depth: 0.55, rate: 6, delay: 26, fade: 40}
   hi_mord2:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 300
     adsr: [3, 7, 11, 7]
-    vibrato: { depth: 0.4, rate: 5.5, delay: 22, fade: 35 }
-    wavetable: [{ wave: noise }, { wave: pulse, frames: 3 }, { note: "+2", frames: 3 }, { wave: pulse }]
-    pulsetable: { loop: 2, steps: [{ set: 300 }, { add: 40, frames: 20 }, { add: -6, frames: 50 }, { add: 6, frames: 50 }] }
-    filtertable: [{ cutoff: 1.2kHz, resonance: 7, type: lowpass }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "noise"}, {wave: "pulse", frames: 3}, {note: "+2", frames: 3}, {wave: "pulse"}]
+    pulsetable: {loop: 2, steps: [{set: 300}, {add: 40, frames: 20}, {add: -6, frames: 50}, {add: 6, frames: 50}]}
+    filtertable: [{cutoff: "1.2kHz", resonance: 7, type: "lowpass"}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.4, rate: 5.5, delay: 22, fade: 35}
   hi_trill:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 300
     adsr: [3, 7, 11, 7]
+    wavetable: [{wave: "noise"}, {wave: "pulse", note: "+0", frames: 3}, {note: "+2", frames: 3}]
+    pulsetable: {loop: 2, steps: [{set: 300}, {add: 40, frames: 20}, {add: -6, frames: 50}, {add: 6, frames: 50}]}
+    filtertable: {steps: [{cutoff: "1.2kHz", resonance: 7, type: "lowpass"}, {add: 2, frames: 60}]}
     loop: 1
-    wavetable: [{ wave: noise }, { wave: pulse, note: "+0", frames: 3 }, { note: "+2", frames: 3 }]
-    pulsetable: { loop: 2, steps: [{ set: 300 }, { add: 40, frames: 20 }, { add: -6, frames: 50 }, { add: 6, frames: 50 }] }
-    filtertable: { steps: [{ cutoff: 1.2kHz, resonance: 7, type: lowpass }, { add: 2, frames: 60 }] }
   # Koto: 8 % pulse with an octave click; the bent variant clicks with a saw frame instead, so it can bend.
   koto:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 328
     adsr: [0, 9, 0, 0]
-    hard_restart: { frames: 0 }
-    wavetable: [{ note: "+12" }, { wave: pulse }]
-    pulsetable: [{ set: 328 }, { add: 8, frames: 30 }]
+    hard_restart: {frames: 0}
+    wavetable: [{note: "+12"}, {wave: "pulse"}]
+    pulsetable: [{set: 328}, {add: 8, frames: 30}]
   # Soft koto for the notes between group heads: no click, quicker decay.
   koto_s:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 500
     adsr: [0, 7, 0, 0]
-    hard_restart: { frames: 0 }
-    wavetable: [{ wave: tri }, { wave: pulse }]
-    pulsetable: [{ set: 500 }, { add: 6, frames: 30 }]
+    hard_restart: {frames: 0}
+    wavetable: [{wave: "tri"}, {wave: "pulse"}]
+    pulsetable: [{set: 500}, {add: 6, frames: 30}]
   koto_bend:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 328
     adsr: [0, 10, 0, 0]
-    hard_restart: { frames: 0 }
-    wavetable: [{ wave: saw }, { wave: pulse }]
-    pulsetable: [{ set: 328 }, { add: 6, frames: 40 }]
+    hard_restart: {frames: 0}
+    wavetable: [{wave: "saw"}, {wave: "pulse"}]
+    pulsetable: [{set: 328}, {add: 6, frames: 40}]
   # Water drops on the filter owner: each pluck opens a resonant band-pass at 2.2 kHz that drops to 1 kHz in 6 frames.
   koto_f:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 500
     adsr: [0, 8, 0, 0]
-    hard_restart: { frames: 0 }
-    wavetable: [{ note: "+12" }, { wave: pulse }]
-    pulsetable: [{ set: 500 }, { add: 10, frames: 20 }]
-    filtertable: [{ cutoff: 2.2kHz, resonance: 13, type: bandpass }, { add: -20, frames: 6 }]
+    hard_restart: {frames: 0}
+    wavetable: [{note: "+12"}, {wave: "pulse"}]
+    pulsetable: [{set: 500}, {add: 10, frames: 20}]
+    filtertable: [{cutoff: "2.2kHz", resonance: 13, type: "bandpass"}, {add: -20, frames: 6}]
   koto_fh:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 700
     adsr: [0, 9, 0, 0]
-    hard_restart: { frames: 0 }
-    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse }]
-    pulsetable: [{ set: 700 }, { add: -12, frames: 30 }]
-    filtertable: [{ cutoff: 3kHz, resonance: 14, type: bandpass }, { add: -40, frames: 8 }]
+    hard_restart: {frames: 0}
+    wavetable: [{wave: "saw", note: "+12"}, {wave: "pulse"}]
+    pulsetable: [{set: 700}, {add: -12, frames: 30}]
+    filtertable: [{cutoff: "3kHz", resonance: 14, type: "bandpass"}, {add: -40, frames: 8}]
   # Bell: triangle ring-modulated by a hidden source an octave above (voice 1 is silent in Water).
   bell:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [0, 10, 0, 9]
+    wavetable: [{wave: "tri", ring: true, note: "+12", frames: 2}, {wave: "tri", ring: true}]
     source_note: "+12"
-    wavetable: [{ wave: tri, ring: true, note: "+12", frames: 2 }, { wave: tri, ring: true }]
   # Glass: broken chords, high to low so the root lands last; maj7 at 3 frames per tone, m9 at 2.
   gmaj:
-    waveform: pulse
+    waveform: "pulse"
     adsr: [2, 9, 6, 9]
+    wavetable: [{wave: "saw", note: "+12"}, {wave: "pulse", note: "+11", frames: 3}, {note: "+7", frames: 3}, {note: "+4", frames: 3}, {note: "+0", frames: 3}]
+    pulsetable: {reset: false, loop: 1, steps: [{set: 1600}, {add: -6, frames: 150}, {add: 6, frames: 150}]}
     loop: 1
-    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, note: "+11", frames: 3 }, { note: "+7", frames: 3 }, { note: "+4", frames: 3 }, { note: "+0", frames: 3 }]
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 1600 }, { add: -6, frames: 150 }, { add: 6, frames: 150 }] }
   gmin:
-    waveform: pulse
+    waveform: "pulse"
     adsr: [2, 9, 6, 9]
+    wavetable: [{wave: "saw", note: "+12"}, {wave: "pulse", note: "+14", frames: 2}, {note: "+10", frames: 2}, {note: "+7", frames: 2}, {note: "+3", frames: 2}, {note: "+0", frames: 2}]
+    pulsetable: {reset: false, loop: 1, steps: [{set: 1000}, {add: 5, frames: 150}, {add: -5, frames: 150}]}
     loop: 1
-    wavetable: [{ wave: saw, note: "+12" }, { wave: pulse, note: "+14", frames: 2 }, { note: "+10", frames: 2 }, { note: "+7", frames: 2 }, { note: "+3", frames: 2 }, { note: "+0", frames: 2 }]
-    pulsetable: { reset: false, loop: 1, steps: [{ set: 1000 }, { add: 5, frames: 150 }, { add: -5, frames: 150 }] }
   # Thud: noise tick, then a triangle falling from D3 to D2; its own low-pass so the water band-pass does not thin it.
   thud:
-    waveform: triangle
+    waveform: "triangle"
     adsr: [0, 9, 0, 0]
-    hard_restart: { test: true }
-    wavetable: [{ wave: noise, note: G5 }, { wave: tri, note: D3, slide_to: D2, frames: 4 }, { wave: tri, note: D2, frames: 5 }, { gate: false }]
-    filtertable: [{ cutoff: 700Hz, resonance: 4, type: lowpass }]
+    hard_restart: {test: true}
+    wavetable: [{wave: "noise", note: "G5"}, {wave: "tri", note: "D3", slide_to: "D2", frames: 4}, {wave: "tri", note: "D2", frames: 5}, {gate: false}]
+    filtertable: [{cutoff: "700Hz", resonance: 4, type: "lowpass"}]
   thud2:
-    waveform: tri
+    waveform: "tri"
     adsr: [0, 9, 0, 0]
-    hard_restart: { test: true }
-    wavetable: [{ wave: noise, note: E5 }, { wave: tri, note: D3, slide_to: D2, frames: 4 }, { wave: tri, note: D2, frames: 5 }, { gate: false }]
+    hard_restart: {test: true}
+    wavetable: [{wave: "noise", note: "E5"}, {wave: "tri", note: "D3", slide_to: "D2", frames: 4}, {wave: "tri", note: "D2", frames: 5}, {gate: false}]
+kit: {t: "thud"}
 voices:
   - id: 1
-    name: Drone and hidden ring source
-    role: pad
+    name: "Drone and hidden ring source"
+    role: "pad"
     level: 8
-    instrument: drone
+    instrument: "drone"
     patterns:
-      still: { length: 4, groove: "D1 ~ ~ ~ ~ ~ ~ ~" }
+      still: {groove: "D1 ~ ~ ~ ~ ~ ~ ~", length: 4}
       # Tied from Stillness: no new swell under the flute entry.
-      flute: { length: 4, groove: "~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~" }
-      dusk_a: { length: 4, groove: "Bb1@drone_dusk ~ ~ ~" }
-      dusk_b: { length: 4, groove: "G1@drone_dusk ~ ~ ~" }
+      flute: {groove: "~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~", length: 4}
+      dusk_a: {groove: "Bb1@drone_dusk ~ ~ ~", length: 4}
+      dusk_b: {groove: "G1@drone_dusk ~ ~ ~", length: 4}
       # Return keeps the Dusk drone timbre, now on D.
-      ret: { length: 4, groove: "D1@drone_dusk ~ ~ ~ ~ ~ ~ ~" }
-      last: { length: 4, groove: "~ ~ ~ -" }
+      ret: {groove: "D1@drone_dusk ~ ~ ~ ~ ~ ~ ~", length: 4}
+      last: {groove: "~ ~ ~ -", length: 4}
   - id: 2
-    name: Koto, bells and glass
-    role: arp
-    instrument: koto
+    name: "Koto, bells and glass"
+    role: "arp"
+    instrument: "koto"
     patterns:
       still:
-        length: 0.25
-        bars: 8
         groove:
           - "- - - - - -"
-          - { note: A4, inst: koto_bend, bend: { to: Bb4, frames: 8 }, len: 1.5 }
-          - { note: A4, len: 0.75 }
+          - {note: "A4", inst: "koto_bend", len: 1.5, bend: {to: "Bb4", frames: 8}}
+          - {note: "A4", len: 0.75}
           - "G4 |"
-          - { note: D4, len: 4 }
+          - {note: "D4", len: 4}
           - "| - - - - - - - - - -"
-          - { note: G3, len: 1.5 }
+          - {note: "G3", len: 1.5}
           - "| - - - - - - - - - -"
-          - { note: D5, len: 0.5 }
-          - { note: A4, len: 1 }
+          - {note: "D5", len: 0.5}
+          - {note: "A4", len: 1}
           - "|"
-          - { note: Bb4, inst: koto_bend, bend: { to: A4, frames: 10 }, len: 2 }
+          - {note: "Bb4", inst: "koto_bend", len: 2, bend: {to: "A4", frames: 10}}
           - "- - - - - - - - | - - - -"
-          - { note: G4, len: 0.75 }
+          - {note: "G4", len: 0.75}
           - "D5"
-          - { note: Eb5, len: 2 }
+          - {note: "Eb5", len: 2}
           - "|"
-          - { note: D5, len: 1.25 }
-          - { note: A4, len: 2.75 }
+          - {note: "D5", len: 1.25}
+          - {note: "A4", len: 2.75}
           - "| - - - - - - - - D3@thud2 - - -"
-          - { note: G4, len: 0.5 }
-          - { note: A4, len: 0.5 }
-      flute:
-        length: 0.25
-        bars: 12
-        groove:
-          - "- - - - - - - -"
-          - { note: D4, len: 2 }
-          - "| - - - - - - - - - - - - - - - - | - - - -"
-          - { note: A3, len: 3 }
-          - "| - - D5 A4 Bb4 A4"
-          - { note: G4, len: 0.5 }
-          - { note: D4, len: 2 }
-          - "| - - - - - - - -"
-          - { note: G3, len: 2 }
-          - "| - - - - - - - - - - - - - - - - | - - - - - - - - - G5 D5 Eb5"
-          - { note: D5, len: 0.5 }
-          - { note: A4, len: 0.5 }
-          - "|"
-          - { note: G4, len: 1.5 }
-          - { note: D4, len: 2.5 }
-          - "| - - - -"
-          - { note: G3, len: 3 }
-          - "| - - - - - - - - - - - - - - - - | - - - - - - - -"
-          - { note: A3, len: 2 }
-          - "| - - - - - A4 D5@koto_s Bb4@koto_s - - Bb4 Eb5@koto_s D5@koto_s - - G4"
-      bells: { length: 0.5, bars: 8, groove: "A5@bell - - - - - - - | - - - Bb5@bell - - - - | A5@bell - - - - - G5@bell - | - - - - Eb5@bell - - - | - - D5@bell - - A5@bell - - | A5@bell - - G5@bell - Bb5@bell - - | - - - - Bb5@bell - A5@bell D5@bell | - - - G5@bell - - - A5@bell" }
-      # The glass enters on beat 3 of bar 29, together with the flute's F5, so the flute introduces the F.
-      glass_a: { length: 0.5, bars: 4, groove: "- - - - - - Bb3@gmaj ~ | Bb3@gmaj ~ ~ Bb4@gmaj ~ ~ Bb3@gmaj ~ | Bb3@gmaj ~ ~ Bb3@gmaj ~ ~ Bb4@gmaj ~ | Bb3@gmaj ~ ~ Bb3@gmaj ~ ~ ~ ~" }
-      glass_b: { length: 0.5, bars: 4, groove: "G3@gmin ~ ~ G3@gmin ~ ~ G4@gmin ~ | G3@gmin ~ ~ G4@gmin ~ ~ G3@gmin ~ | G3@gmin ~ ~ G3@gmin ~ ~ G4@gmin ~ | Eb4@gmaj ~ ~ ~ ~ ~ ~ ~" }
-      ret: { length: 0.5, bars: 8, groove: "D3@thud2 - - - - - - - | - - - - - D4 F4 A4 | D5 - - - - - - - | Bb3@gmaj ~ ~ ~ D5 A4 Bb4 G4 | D3@thud2 - A4 - - - - - | - - - - - D3@thud2 - - | - - - - D5 Bb4 F4 G4 | D4 - - - A4 - - -" }
-      last:
-        length: 0.5
-        bars: 4
-        groove:
-          - "- - - - - - - - |"
-          - { note: A4, inst: koto_bend, bend: { to: Bb4, frames: 20 }, len: 4 }
-          - "| - - - - - - - - | - - - - - - - -"
-  - id: 3
-    name: Wind, flute and water (filter owner)
-    role: lead
-    instrument: flute
-    patterns:
-      wind: { length: 1, bars: 8, groove: "D5@wind ~ ~ ~ | ~ ~ ~ ~ | ~ ~ - - | Eb5@wind ~ ~ ~ | ~ ~ ~ ~ | ~ - G4@wind ~ | ~ ~ ~ ~ | ~ ~ ~ -" }
-      flute:
-        length: 0.25
-        bars: 12
-        groove:
-          - "-"
-          - { note: A4, slide_from: G4, portamento: 8, len: 2.25 }
-          - { note: Bb4, legato: true, len: 0.5 }
-          - { note: A4, legato: true, len: 1 }
-          - "|"
-          - { note: G4, len: 0.5 }
-          - { note: D4, len: 3.5 }
-          - "| ~ ~ ~ ~ - - - G4"
-          - { note: A4, inst: flute_mord, len: 2 }
-          - "| - - - - - - - - - - - - - - - - |"
-          - { note: D5, slide_from: A4, portamento: 10, len: 1.25 }
-          - { note: Bb4, len: 0.5 }
-          - { note: A4, len: 2.25 }
-          - "|"
-          - { note: G4, len: 0.75 }
-          - "Eb4"
-          - { note: D4, len: 3 }
-          - "| ~ ~ ~ ~ ~ ~ - - - - - - - - - - | - - - - - - - - - -"
-          - { note: D5, len: 0.75 }
-          - { note: D5, legato: true, bend: { to: A4, frames: 16 }, len: 0.75 }
-          - "| - -"
-          - { note: Bb4, slide_from: A4, portamento: 6, len: 1.5 }
-          - { note: D5, legato: true, len: 0.5 }
-          - { note: Bb4, len: 0.75 }
-          - "A4"
-          - { note: Eb5, len: 0.5 }
-          - "|"
-          - { note: G5, inst: flute_trill, len: 1.5 }
-          - { note: D5, len: 0.5 }
-          - { note: Bb4, len: 1 }
-          - { note: A4, inst: flute_mord, len: 1 }
-          - "|"
-          - { note: G4, len: 0.75 }
-          - { note: A4, len: 3.25 }
-          - "| ~ ~ ~ ~ - - - - - - - - - - - -"
-      water: { length: 0.25, bars: 8, groove: "A4@koto_fh G5@koto_f - - D3@thud A4@koto_fh Bb4@koto_f - - - Bb4@koto_fh A5@koto_f Eb5@koto_f D5@koto_f D3@thud A4@koto_fh | Bb4@koto_f - - - G4@koto_fh D5@koto_f - - - D4@koto_fh G4@koto_f Bb4@koto_f A4@koto_f D3@thud D4@koto_fh Eb4@koto_f | - - - D5@koto_fh Bb5@koto_f G5@koto_f Eb5@koto_f D3@thud Bb4@koto_fh Eb5@koto_f D5@koto_f G5@koto_f - A4@koto_fh Eb5@koto_f - | - - A4@koto_fh D5@koto_f G5@koto_f Eb5@koto_f D3@thud G4@koto_fh D5@koto_f A4@koto_f Eb5@koto_f - Eb4@koto_fh A4@koto_f - - | D3@thud D4@koto_fh G4@koto_f Eb4@koto_f A4@koto_f - D4@koto_fh D5@koto_f A4@koto_f G4@koto_f - G4@koto_fh Bb4@koto_f Eb5@koto_f D5@koto_f D3@thud | A4@koto_fh Eb5@koto_f Bb4@koto_f G5@koto_f - Bb4@koto_fh A5@koto_f Eb5@koto_f D5@koto_f D3@thud D5@koto_fh G5@koto_f Eb5@koto_f A5@koto_f - Eb5@koto_fh | Eb5@koto_f Bb5@koto_f A5@koto_f - D5@koto_fh G5@koto_f Bb5@koto_f A5@koto_f D3@thud - - - - - - - | D5@koto_f Bb4@koto_f D3@thud G4@koto_fh - - D5@koto_f - - A5@koto_fh - - - D5@koto_f ~ ~" }
-      dusk_a:
-        length: 0.25
-        bars: 4
-        groove:
-          - { note: A5, inst: flute_sig, len: 1.5 }
-          - { note: A5, legato: true, bend: { to: Bb5, frames: 20 }, len: 1.5 }
-          - { note: Bb5, legato: true, bend: { to: F5, frames: 12 }, len: 1 }
-          - "| ~ ~ ~ ~ ~ ~ ~"
-          - { note: D5, inst: flute_hi, len: 0.5 }
-          - { note: Eb5, inst: flute_hi, len: 0.5 }
-          - "G5@flute_hi"
-          - { note: A5, inst: hi_mord, len: 1 }
-          - "|"
-          - { note: Bb5, inst: flute_hi, slide_from: A5, portamento: 6, len: 1.75 }
-          - { note: A5, inst: flute_hi, len: 0.5 }
-          - { note: F5, inst: flute_hi, len: 0.75 }
-          - { note: D5, inst: flute_hi, len: 1 }
-          - "|"
-          - { note: F5, inst: hi_trill, len: 1.5 }
-          - { note: Eb5, inst: flute_hi, len: 0.5 }
-          - { note: D5, inst: flute_hi, len: 1.5 }
-          - "- -"
-      # Climax: the A-Bb-A turn rises into the only Eb6 of the piece, then descends through F to the half cadence.
-      dusk_b:
-        length: 0.25
-        bars: 4
-        groove:
-          - { note: A5, inst: flute_hi, slide_from: G5, portamento: 6, len: 0.75 }
-          - "Bb5@flute_hi"
-          - { note: A5, inst: flute_hi, len: 0.5 }
-          - { note: D6, inst: flute_hi, len: 1.25 }
-          - { note: Bb5, inst: flute_hi, len: 0.5 }
-          - { note: A5, inst: flute_hi, len: 0.75 }
-          - "|"
-          - { note: Eb6, inst: flute_peak, slide_from: D6, portamento: 8, len: 2.5 }
-          - { note: Eb6, legato: true, bend: { to: D6, frames: 14 }, len: 0.5 }
-          - { note: Bb5, inst: flute_hi, len: 0.5 }
-          - { note: G5, inst: flute_hi, len: 0.5 }
-          - "|"
-          - { note: G5, inst: hi_mord2, len: 0.75 }
-          - "F5@flute_hi"
-          - { note: Eb5, inst: flute_hi, len: 0.5 }
-          - { note: D5, inst: flute_hi, len: 1.5 }
-          - "- -"
-          - { note: Bb5, inst: flute_hi, len: 0.5 }
-          - "|"
-          - { note: A5, inst: flute_hi, len: 4 }
-      ret:
+          - {note: "G4", len: 0.5}
+          - {note: "A4", len: 0.5}
         length: 0.25
         bars: 8
+      flute:
+        groove:
+          - "- - - - - - - -"
+          - {note: "D4", len: 2}
+          - "| - - - - - - - - - - - - - - - - | - - - -"
+          - {note: "A3", len: 3}
+          - "| - - D5 A4 Bb4 A4"
+          - {note: "G4", len: 0.5}
+          - {note: "D4", len: 2}
+          - "| - - - - - - - -"
+          - {note: "G3", len: 2}
+          - "| - - - - - - - - - - - - - - - - | - - - - - - - - - G5 D5 Eb5"
+          - {note: "D5", len: 0.5}
+          - {note: "A4", len: 0.5}
+          - "|"
+          - {note: "G4", len: 1.5}
+          - {note: "D4", len: 2.5}
+          - "| - - - -"
+          - {note: "G3", len: 3}
+          - "| - - - - - - - - - - - - - - - - | - - - - - - - -"
+          - {note: "A3", len: 2}
+          - "| - - - - - A4 D5@koto_s Bb4@koto_s - - Bb4 Eb5@koto_s D5@koto_s - - G4"
+        length: 0.25
+        bars: 12
+      bells: {groove: "A5@bell - - - - - - - | - - - Bb5@bell - - - - | A5@bell - - - - - G5@bell - | - - - - Eb5@bell - - - | - - D5@bell - - A5@bell - - | A5@bell - - G5@bell - Bb5@bell - - | - - - - Bb5@bell - A5@bell D5@bell | - - - G5@bell - - - A5@bell", length: 0.5, bars: 8}
+      # The glass enters on beat 3 of bar 29, together with the flute's F5, so the flute introduces the F.
+      glass_a: {groove: "- - - - - - Bb3@gmaj ~ | Bb3@gmaj ~ ~ Bb4@gmaj ~ ~ Bb3@gmaj ~ | Bb3@gmaj ~ ~ Bb3@gmaj ~ ~ Bb4@gmaj ~ | Bb3@gmaj ~ ~ Bb3@gmaj ~ ~ ~ ~", length: 0.5, bars: 4}
+      glass_b: {groove: "G3@gmin ~ ~ G3@gmin ~ ~ G4@gmin ~ | G3@gmin ~ ~ G4@gmin ~ ~ G3@gmin ~ | G3@gmin ~ ~ G3@gmin ~ ~ G4@gmin ~ | Eb4@gmaj ~ ~ ~ ~ ~ ~ ~", length: 0.5, bars: 4}
+      ret: {groove: "D3@thud2 - - - - - - - | - - - - - D4 F4 A4 | D5 - - - - - - - | Bb3@gmaj ~ ~ ~ D5 A4 Bb4 G4 | D3@thud2 - A4 - - - - - | - - - - - D3@thud2 - - | - - - - D5 Bb4 F4 G4 | D4 - - - A4 - - -", length: 0.5, bars: 8}
+      last:
+        groove:
+          - "- - - - - - - - |"
+          - {note: "A4", inst: "koto_bend", len: 4, bend: {to: "Bb4", frames: 20}}
+          - "| - - - - - - - - | - - - - - - - -"
+        length: 0.5
+        bars: 4
+  - id: 3
+    name: "Wind, flute and water (filter owner)"
+    role: "lead"
+    instrument: "flute"
+    patterns:
+      wind: {groove: "D5@wind ~ ~ ~ | ~ ~ ~ ~ | ~ ~ - - | Eb5@wind ~ ~ ~ | ~ ~ ~ ~ | ~ - G4@wind ~ | ~ ~ ~ ~ | ~ ~ ~ -", length: 1, bars: 8}
+      flute:
+        groove:
+          - "-"
+          - {note: "A4", len: 2.25, portamento: 8, slide_from: "G4"}
+          - {note: "Bb4", len: 0.5, legato: true}
+          - {note: "A4", len: 1, legato: true}
+          - "|"
+          - {note: "G4", len: 0.5}
+          - {note: "D4", len: 3.5}
+          - "| ~ ~ ~ ~ - - - G4"
+          - {note: "A4", inst: "flute_mord", len: 2}
+          - "| - - - - - - - - - - - - - - - - |"
+          - {note: "D5", len: 1.25, portamento: 10, slide_from: "A4"}
+          - {note: "Bb4", len: 0.5}
+          - {note: "A4", len: 2.25}
+          - "|"
+          - {note: "G4", len: 0.75}
+          - "Eb4"
+          - {note: "D4", len: 3}
+          - "| ~ ~ ~ ~ ~ ~ - - - - - - - - - - | - - - - - - - - - -"
+          - {note: "D5", len: 0.75}
+          - {note: "D5", len: 0.75, legato: true, bend: {to: "A4", frames: 16}}
+          - "| - -"
+          - {note: "Bb4", len: 1.5, portamento: 6, slide_from: "A4"}
+          - {note: "D5", len: 0.5, legato: true}
+          - {note: "Bb4", len: 0.75}
+          - "A4"
+          - {note: "Eb5", len: 0.5}
+          - "|"
+          - {note: "G5", inst: "flute_trill", len: 1.5}
+          - {note: "D5", len: 0.5}
+          - {note: "Bb4", len: 1}
+          - {note: "A4", inst: "flute_mord", len: 1}
+          - "|"
+          - {note: "G4", len: 0.75}
+          - {note: "A4", len: 3.25}
+          - "| ~ ~ ~ ~ - - - - - - - - - - - -"
+        length: 0.25
+        bars: 12
+      water: {groove: "A4@koto_fh G5@koto_f - - D3@thud A4@koto_fh Bb4@koto_f - - - Bb4@koto_fh A5@koto_f Eb5@koto_f D5@koto_f D3@thud A4@koto_fh | Bb4@koto_f - - - G4@koto_fh D5@koto_f - - - D4@koto_fh G4@koto_f Bb4@koto_f A4@koto_f D3@thud D4@koto_fh Eb4@koto_f | - - - D5@koto_fh Bb5@koto_f G5@koto_f Eb5@koto_f D3@thud Bb4@koto_fh Eb5@koto_f D5@koto_f G5@koto_f - A4@koto_fh Eb5@koto_f - | - - A4@koto_fh D5@koto_f G5@koto_f Eb5@koto_f D3@thud G4@koto_fh D5@koto_f A4@koto_f Eb5@koto_f - Eb4@koto_fh A4@koto_f - - | D3@thud D4@koto_fh G4@koto_f Eb4@koto_f A4@koto_f - D4@koto_fh D5@koto_f A4@koto_f G4@koto_f - G4@koto_fh Bb4@koto_f Eb5@koto_f D5@koto_f D3@thud | A4@koto_fh Eb5@koto_f Bb4@koto_f G5@koto_f - Bb4@koto_fh A5@koto_f Eb5@koto_f D5@koto_f D3@thud D5@koto_fh G5@koto_f Eb5@koto_f A5@koto_f - Eb5@koto_fh | Eb5@koto_f Bb5@koto_f A5@koto_f - D5@koto_fh G5@koto_f Bb5@koto_f A5@koto_f D3@thud - - - - - - - | D5@koto_f Bb4@koto_f D3@thud G4@koto_fh - - D5@koto_f - - A5@koto_fh - - - D5@koto_f ~ ~", length: 0.25, bars: 8}
+      dusk_a:
+        groove:
+          - {note: "A5", inst: "flute_sig", len: 1.5}
+          - {note: "A5", len: 1.5, legato: true, bend: {to: "Bb5", frames: 20}}
+          - {note: "Bb5", len: 1, legato: true, bend: {to: "F5", frames: 12}}
+          - "| ~ ~ ~ ~ ~ ~ ~"
+          - {note: "D5", inst: "flute_hi", len: 0.5}
+          - {note: "Eb5", inst: "flute_hi", len: 0.5}
+          - "G5@flute_hi"
+          - {note: "A5", inst: "hi_mord", len: 1}
+          - "|"
+          - {note: "Bb5", inst: "flute_hi", len: 1.75, portamento: 6, slide_from: "A5"}
+          - {note: "A5", inst: "flute_hi", len: 0.5}
+          - {note: "F5", inst: "flute_hi", len: 0.75}
+          - {note: "D5", inst: "flute_hi", len: 1}
+          - "|"
+          - {note: "F5", inst: "hi_trill", len: 1.5}
+          - {note: "Eb5", inst: "flute_hi", len: 0.5}
+          - {note: "D5", inst: "flute_hi", len: 1.5}
+          - "- -"
+        length: 0.25
+        bars: 4
+      # Climax: the A-Bb-A turn rises into the only Eb6 of the piece, then descends through F to the half cadence.
+      dusk_b:
+        groove:
+          - {note: "A5", inst: "flute_hi", len: 0.75, portamento: 6, slide_from: "G5"}
+          - "Bb5@flute_hi"
+          - {note: "A5", inst: "flute_hi", len: 0.5}
+          - {note: "D6", inst: "flute_hi", len: 1.25}
+          - {note: "Bb5", inst: "flute_hi", len: 0.5}
+          - {note: "A5", inst: "flute_hi", len: 0.75}
+          - "|"
+          - {note: "Eb6", inst: "flute_peak", len: 2.5, portamento: 8, slide_from: "D6"}
+          - {note: "Eb6", len: 0.5, legato: true, bend: {to: "D6", frames: 14}}
+          - {note: "Bb5", inst: "flute_hi", len: 0.5}
+          - {note: "G5", inst: "flute_hi", len: 0.5}
+          - "|"
+          - {note: "G5", inst: "hi_mord2", len: 0.75}
+          - "F5@flute_hi"
+          - {note: "Eb5", inst: "flute_hi", len: 0.5}
+          - {note: "D5", inst: "flute_hi", len: 1.5}
+          - "- -"
+          - {note: "Bb5", inst: "flute_hi", len: 0.5}
+          - "|"
+          - {note: "A5", inst: "flute_hi", len: 4}
+        length: 0.25
+        bars: 4
+      ret:
         groove:
           - "- - -"
-          - { note: A4, inst: flute_dark, slide_from: Bb4, portamento: 8, len: 1.75 }
-          - { note: G4, inst: flute_dark, len: 0.5 }
-          - { note: A4, legato: true, len: 0.5 }
-          - { note: Bb4, legato: true, len: 0.5 }
+          - {note: "A4", inst: "flute_dark", len: 1.75, portamento: 8, slide_from: "Bb4"}
+          - {note: "G4", inst: "flute_dark", len: 0.5}
+          - {note: "A4", len: 0.5, legato: true}
+          - {note: "Bb4", len: 0.5, legato: true}
           - "|"
-          - { note: Eb5, inst: flute_dark, len: 2.5 }
-          - { note: Eb5, legato: true, bend: { to: D5, frames: 10 }, len: 0.5 }
+          - {note: "Eb5", inst: "flute_dark", len: 2.5}
+          - {note: "Eb5", len: 0.5, legato: true, bend: {to: "D5", frames: 10}}
           - "- - - - |"
-          - { note: D4, inst: flute_dark, len: 0.75 }
+          - {note: "D4", inst: "flute_dark", len: 0.75}
           - "F4@flute_dark"
-          - { note: G4, inst: flute_mord2, len: 0.75 }
-          - { note: A4, inst: flute_dark, len: 0.5 }
-          - { note: Bb4, inst: flute_dark, len: 0.75 }
-          - { note: D5, inst: flute_dark, len: 1 }
+          - {note: "G4", inst: "flute_mord2", len: 0.75}
+          - {note: "A4", inst: "flute_dark", len: 0.5}
+          - {note: "Bb4", inst: "flute_dark", len: 0.75}
+          - {note: "D5", inst: "flute_dark", len: 1}
           - "| ~ ~ ~ ~ ~ ~ ~ ~ - - - - - - - - | -"
-          - { note: A4, slide_from: G4, portamento: 8, len: 2.75 }
-          - { note: Bb4, legato: true, len: 1 }
+          - {note: "A4", len: 2.75, portamento: 8, slide_from: "G4"}
+          - {note: "Bb4", len: 1, legato: true}
           - "|"
-          - { note: A4, legato: true, len: 1.25 }
-          - { note: G4, len: 0.75 }
-          - { note: D4, inst: flute_mord, len: 2 }
+          - {note: "A4", len: 1.25, legato: true}
+          - {note: "G4", len: 0.75}
+          - {note: "D4", inst: "flute_mord", len: 2}
           - "| ~ ~ ~ ~ ~ ~ ~ ~ - - - - - - - - | - - - - - - - - - - - - - - - -"
-      last: { length: 4, bars: 4, groove: "G4@wind_close ~ ~ ~" }
+        length: 0.25
+        bars: 8
+      last: {groove: "G4@wind_close ~ ~ ~", length: 4, bars: 4}
 sections:
-  stillness: { bars: 8, level: p, volume: { from: 9, to: 13 }, filter: { cutoff: { from: -30, to: 40 } }, layers: { v1: still, v2: still, v3: wind } }
-  flute: { bars: 12, level: f, levels: { v1: pp }, volume: 13, filter: { cutoff: { from: 0, to: 120 } }, layers: { v1: flute, v2: flute, v3: flute } }
-  water: { bars: 8, level: mf, volume: { from: 12, to: 15 }, filter: { cutoff: { from: -40, to: 160 } }, layers: { v1: "-", v2: bells, v3: water } }
-  dusk_a: { bars: 4, level: mf, levels: { v1: pp }, volume: 13, filter: { cutoff: { from: 400, to: 700 } }, layers: { v1: dusk_a, v2: glass_a, v3: dusk_a } }
-  dusk_b: { bars: 4, level: ff, levels: { v1: p }, volume: 15, filter: { cutoff: { from: 800, to: 1100 } }, layers: { v1: dusk_b, v2: glass_b, v3: dusk_b } }
-  return: { bars: 8, level: mf, levels: { v1: pp }, volume: { from: 14, to: 12 }, filter: { cutoff: { from: 300, to: 0 } }, layers: { v1: ret, v2: ret, v3: ret } }
-  last: { bars: 4, level: p, volume: 12, layers: { v1: last, v2: last, v3: last } }
-timeline: [stillness, flute, water, dusk_a, dusk_b, return, last]
-end: { hold_beats: 0, release: true }
+  stillness: {bars: 8, level: "p", volume: {from: 9, to: 13}, filter: {cutoff: {from: -30, to: 40}}, layers: {v1: "still", v2: "still", v3: "wind"}}
+  flute: {bars: 12, level: "f", levels: {v1: "pp"}, volume: 13, filter: {cutoff: {from: 0, to: 120}}, layers: {v1: "flute", v2: "flute", v3: "flute"}}
+  water: {bars: 8, level: "mf", volume: {from: 12, to: 15}, filter: {cutoff: {from: -40, to: 160}}, layers: {v1: "-", v2: "bells", v3: "water"}}
+  dusk_a: {bars: 4, level: "mf", levels: {v1: "pp"}, volume: 13, filter: {cutoff: {from: 400, to: 700}}, layers: {v1: "dusk_a", v2: "glass_a", v3: "dusk_a"}}
+  dusk_b: {bars: 4, level: "ff", levels: {v1: "p"}, volume: 15, filter: {cutoff: {from: 800, to: 1100}}, layers: {v1: "dusk_b", v2: "glass_b", v3: "dusk_b"}}
+  return: {bars: 8, level: "mf", levels: {v1: "pp"}, volume: {from: 14, to: 12}, filter: {cutoff: {from: 300, to: 0}}, layers: {v1: "ret", v2: "ret", v3: "ret"}}
+  last: {bars: 4, level: "p", volume: 12, layers: {v1: "last", v2: "last", v3: "last"}}
+timeline: ["stillness", "flute", "water", "dusk_a", "dusk_b", "return", "last"]
+end: {hold_beats: 0, release: true}

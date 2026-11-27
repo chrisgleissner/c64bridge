@@ -588,6 +588,7 @@
       "items": {
         "type": "string",
         "enum": [
+          "64tass",
           "acme",
           "kickass",
           "ca65",

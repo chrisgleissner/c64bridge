@@ -26,226 +26,226 @@
 #   horn 2, and the centre mirror of the timpani and bass).
 # Accepted lint: LEVEL-NOOP for the kettle drum and cymbal (sustain 0); section levels shape the rolls instead.
 sidwave: 1.3
-title: The Gate Opens
+title: "The Gate Opens"
 tempo: 125.31
-mode: PAL
-accent: 2
+mode: "PAL"
 sids:
-  - { id: sid1, address: "$D400", model: "8580", volume: 12, pan: "Left 4", filter: { owner: v1, route: [1, 2] } }
-  - { id: sid2, address: "$D420", model: "8580", volume: 12, pan: "Right 4", filter: { owner: v4, route: [1, 2] } }
+  - {id: "sid1", address: "$D400", model: "8580", volume: 12, pan: "Left 4", filter: {owner: "v1", route: [1, 2]}}
+  - {id: "sid2", address: "$D420", model: "8580", volume: 12, pan: "Right 4", filter: {owner: "v4", route: [1, 2]}}
 instruments:
   trumpet:
-    waveform: saw
+    waveform: "saw"
     adsr: [1, 5, 11, 5]
-    vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 16 }
-    wavetable: [{ wave: saw, note: "+12" }, { wave: saw }]
-    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: lowpass }, { add: -36, frames: 6 }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "saw", note: "+12"}, {wave: "saw"}]
+    filtertable: [{cutoff: "2.5kHz", resonance: 6, type: "lowpass"}, {add: -36, frames: 6}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.3, rate: 5.6, delay: 20, fade: 16}
   # Scoop into the swerve (a slide needs a wavetable without pitch steps: the click is a noise frame) and a lip
   # turn on the held answer note.
   trumpet_scoop:
-    waveform: saw
+    waveform: "saw"
     adsr: [1, 5, 11, 5]
-    vibrato: { depth: 0.3, rate: 5.6, delay: 20, fade: 16 }
-    wavetable: [{ wave: noise }, { wave: saw }]
-    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: lowpass }, { add: -36, frames: 6 }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "noise"}, {wave: "saw"}]
+    filtertable: [{cutoff: "2.5kHz", resonance: 6, type: "lowpass"}, {add: -36, frames: 6}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.3, rate: 5.6, delay: 20, fade: 16}
   trumpet_turn:
-    waveform: saw
+    waveform: "saw"
     adsr: [1, 5, 11, 5]
-    vibrato: { depth: 0.3, rate: 5.6, delay: 24, fade: 16 }
-    wavetable: [{ wave: saw, note: "+12" }, { wave: saw, frames: 5 }, { wave: saw, note: "+2", frames: 3 }, { wave: saw, note: "-1", frames: 3 }, { wave: saw }]
-    filtertable: [{ cutoff: 2.5kHz, resonance: 6, type: lowpass }, { add: -36, frames: 6 }, { add: 2, frames: 60 }]
+    wavetable: [{wave: "saw", note: "+12"}, {wave: "saw", frames: 5}, {wave: "saw", note: "+2", frames: 3}, {wave: "saw", note: "-1", frames: 3}, {wave: "saw"}]
+    filtertable: [{cutoff: "2.5kHz", resonance: 6, type: "lowpass"}, {add: -36, frames: 6}, {add: 2, frames: 60}]
+    vibrato: {depth: 0.3, rate: 5.6, delay: 24, fade: 16}
   horn:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 1433
     adsr: [3, 6, 10, 5]
-    hard_restart: { frames: 0 }
-    vibrato: { depth: 0.25, rate: 5.8, delay: 28 }
-    wavetable: [{ wave: tri, note: "+12" }, { wave: pulse }]
-    pulsetable: { loop: 1, steps: [{ set: 1433 }, { add: 14, frames: 30 }, { add: -6, frames: 70 }] }
+    hard_restart: {frames: 0}
+    wavetable: [{wave: "tri", note: "+12"}, {wave: "pulse"}]
+    pulsetable: {loop: 1, steps: [{set: 1433}, {add: 14, frames: 30}, {add: -6, frames: 70}]}
+    vibrato: {depth: 0.25, rate: 5.8, delay: 28}
   # The last chord: the left trumpet rips up an octave (a bend needs a wavetable without pitch steps, so its click
   # is a noise frame); both trumpets open their filters over 40 frames and ring out with release 10.
   rip:
-    waveform: saw
+    waveform: "saw"
     adsr: [0, 6, 12, 10]
-    vibrato: { depth: 0.4, rate: 5.6, delay: 22, fade: 30 }
-    wavetable: [{ wave: noise }, { wave: saw }]
-    filtertable: [{ cutoff: 600Hz, resonance: 7, type: lowpass }, { add: 10, frames: 40 }]
+    wavetable: [{wave: "noise"}, {wave: "saw"}]
+    filtertable: [{cutoff: "600Hz", resonance: 7, type: "lowpass"}, {add: 10, frames: 40}]
+    vibrato: {depth: 0.4, rate: 5.6, delay: 22, fade: 30}
   trumpet_ring:
-    waveform: saw
+    waveform: "saw"
     adsr: [1, 6, 12, 10]
-    vibrato: { depth: 0.4, rate: 5.4, delay: 22, fade: 30 }
-    wavetable: [{ wave: saw, note: "+12" }, { wave: saw }]
-    filtertable: [{ cutoff: 600Hz, resonance: 7, type: lowpass }, { add: 10, frames: 40 }]
+    wavetable: [{wave: "saw", note: "+12"}, {wave: "saw"}]
+    filtertable: [{cutoff: "600Hz", resonance: 7, type: "lowpass"}, {add: 10, frames: 40}]
+    vibrato: {depth: 0.4, rate: 5.4, delay: 22, fade: 30}
   horn_ring:
-    waveform: pulse
+    waveform: "pulse"
     pulse_width: 1433
     adsr: [3, 6, 11, 10]
-    vibrato: { depth: 0.25, rate: 5, delay: 28 }
-    wavetable: [{ wave: tri, note: "+12" }, { wave: pulse }]
-    pulsetable: { loop: 1, steps: [{ set: 1433 }, { add: 14, frames: 30 }, { add: -6, frames: 70 }] }
+    wavetable: [{wave: "tri", note: "+12"}, {wave: "pulse"}]
+    pulsetable: {loop: 1, steps: [{set: 1433}, {add: 14, frames: 30}, {add: -6, frames: 70}]}
+    vibrato: {depth: 0.25, rate: 5, delay: 28}
   timp:
-    waveform: tri
+    waveform: "tri"
     adsr: [0, 10, 0, 10]
-    hard_restart: { test: true }
-    wavetable: [{ wave: noise, note: "+24" }, { wave: pulse, note: "+7", slide_to: "+0", frames: 3 }, { wave: tri }]
+    hard_restart: {test: true}
+    wavetable: [{wave: "noise", note: "+24"}, {wave: "pulse", note: "+7", slide_to: "+0", frames: 3}, {wave: "tri"}]
   roll:
-    waveform: tri
+    waveform: "tri"
     adsr: [0, 4, 7, 3]
-    hard_restart: { frames: 0 }
-    wavetable: [{ wave: noise, note: "+12" }, { wave: tri }]
+    hard_restart: {frames: 0}
+    wavetable: [{wave: "noise", note: "+12"}, {wave: "tri"}]
   contrabass:
-    waveform: pulse
+    waveform: "pulse"
     adsr: [1, 7, 11, 6]
-    hard_restart: { test: true }
-    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse }]
-    pulsetable: [{ set: 1700 }, { add: 8, frames: 60 }]
+    hard_restart: {test: true}
+    wavetable: [{wave: "pulse", note: "+12"}, {wave: "pulse"}]
+    pulsetable: [{set: 1700}, {add: 8, frames: 60}]
   bass_ring:
-    waveform: pulse
+    waveform: "pulse"
     adsr: [1, 7, 12, 10]
-    hard_restart: { test: true }
-    wavetable: [{ wave: pulse, note: "+12" }, { wave: pulse }]
-    pulsetable: [{ set: 1700 }, { add: 8, frames: 60 }]
+    hard_restart: {test: true}
+    wavetable: [{wave: "pulse", note: "+12"}, {wave: "pulse"}]
+    pulsetable: [{set: 1700}, {add: 8, frames: 60}]
   cymbal:
-    waveform: noise
+    waveform: "noise"
     adsr: [0, 10, 0, 10]
-    hard_restart: { frames: 0 }
-    wavetable: [{ wave: noise, note: C7 }, { wave: noise, note: A6, frames: 2 }, { wave: noise, note: F6 }]
+    hard_restart: {frames: 0}
+    wavetable: [{wave: "noise", note: "C7"}, {wave: "noise", note: "A6", frames: 2}, {wave: "noise", note: "F6"}]
 voices:
   - id: 1
-    name: Left trumpet
-    role: lead
-    instrument: trumpet
+    name: "Left trumpet"
+    role: "lead"
+    instrument: "trumpet"
     patterns:
-      m0: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - A4 A4 A4" }
-      m1: { length: 0.5, bars: 1, groove: "D5! ~ ~ F#5 A5 ~ ~ ~" }
-      m2: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - F#4 F#4 F#4" }
-      m3: { length: 0.5, bars: 1, groove: "B4 ~ ~ D5 C#5 ~ ~ E5" }
-      m4: { length: 0.3333333333333333, bars: 1, groove: "D5 ~ ~ G5 ~ ~ E5 F#5 G5 A4 A4 A4" }
+      m0: {groove: "- - - - - - - - - A4 A4 A4", length: 0.3333333333333333, bars: 1}
+      m1: {groove: "D5! ~ ~ F#5 A5 ~ ~ ~", length: 0.5, bars: 1}
+      m2: {groove: "- - - - - - - - - F#4 F#4 F#4", length: 0.3333333333333333, bars: 1}
+      m3: {groove: "B4 ~ ~ D5 C#5 ~ ~ E5", length: 0.5, bars: 1}
+      m4: {groove: "D5 ~ ~ G5 ~ ~ E5 F#5 G5 A4 A4 A4", length: 0.3333333333333333, bars: 1}
       m5:
+        groove: [{note: "Bb4", inst: "trumpet_scoop", len: 1.5, portamento: 5, slide_from: "A4"}, "D5 F5 ~ ~ ~"]
         length: 0.5
         bars: 1
-        groove: [{ note: Bb4, inst: trumpet_scoop, slide_from: A4, portamento: 5, len: 1.5 }, "D5 F5 ~ ~ ~"]
-      m6: { length: 0.5, bars: 1, groove: "G5 F5 E5 ~ F5 E5 D5 C5" }
-      m7: { length: 0.3333333333333333, bars: 1, groove: "D5 D5 D5 E5 E5 E5 G5 E5 C#5 A4 A4 A4" }
+      m6: {groove: "G5 F5 E5 ~ F5 E5 D5 C5", length: 0.5, bars: 1}
+      m7: {groove: "D5 D5 D5 E5 E5 E5 G5 E5 C#5 A4 A4 A4", length: 0.3333333333333333, bars: 1}
       m8:
+        groove: [{note: "D5", inst: "rip", len: 4, bend: {to: "D6", frames: 7}}]
         length: 1
         bars: 1
-        groove: [{ note: D5, inst: rip, len: 4, bend: { to: D6, frames: 7 } }]
   - id: 2
-    name: Left horn
-    instrument: horn
+    name: "Left horn"
+    instrument: "horn"
     patterns:
-      m0: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - F#4 F#4 F#4" }
-      m1: { length: 0.5, bars: 1, groove: "A4 ~ ~ D5 F#5 ~ ~ ~" }
-      m3: { length: 0.5, bars: 1, groove: "F#4 ~ ~ ~ E4 ~ ~ ~" }
-      m4: { length: 0.3333333333333333, bars: 1, groove: "G4 ~ ~ ~ ~ ~ G4 ~ ~ E4 E4 E4" }
-      m5: { length: 0.5, bars: 1, groove: "F4 ~ ~ ~ Bb4 ~ ~ ~" }
+      m0: {groove: "- - - - - - - - - F#4 F#4 F#4", length: 0.3333333333333333, bars: 1}
+      m1: {groove: "A4 ~ ~ D5 F#5 ~ ~ ~", length: 0.5, bars: 1}
+      m3: {groove: "F#4 ~ ~ ~ E4 ~ ~ ~", length: 0.5, bars: 1}
+      m4: {groove: "G4 ~ ~ ~ ~ ~ G4 ~ ~ E4 E4 E4", length: 0.3333333333333333, bars: 1}
+      m5: {groove: "F4 ~ ~ ~ Bb4 ~ ~ ~", length: 0.5, bars: 1}
       # The run starts here on beat 3 and is handed to the right trumpet on beat 4.
       m6:
+        groove: [{note: "E4", len: 1.5}, {note: "G4", len: 0.5}, "(E4 F4 G4 A4 Bb4 C5 D5 E5) - - - - - - - -"]
         length: 0.125
         bars: 1
-        groove: [{ note: E4, len: 1.5 }, { note: G4, len: 0.5 }, "(E4 F4 G4 A4 Bb4 C5 D5 E5) - - - - - - - -"]
-      m7: { length: 0.3333333333333333, bars: 1, groove: "A4 A4 A4 B4 B4 B4 E5 C#5 A4 C#5 C#5 C#5" }
-      m8: { length: 1, bars: 1, groove: "D5@horn_ring ~ ~ ~" }
+      m7: {groove: "A4 A4 A4 B4 B4 B4 E5 C#5 A4 C#5 C#5 C#5", length: 0.3333333333333333, bars: 1}
+      m8: {groove: "D5@horn_ring ~ ~ ~", length: 1, bars: 1}
   - id: 3
-    name: Timpani and contrabass
-    role: bass
+    name: "Timpani and contrabass"
+    role: "bass"
+    center: {sid: "sid2", channel: 3}
     level: 13
-    instrument: contrabass
-    center: { sid: sid2, channel: 3 }
+    instrument: "contrabass"
     patterns:
       m0:
-        length: 0.16666666666666666
-        bars: 1
         groove: "D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll D2@roll A1@timp ~ ~ ~ ~ ~"
-      m1: { length: 0.5, bars: 1, groove: "D2@timp ~ D2 ~ ~ ~ A1@timp ~" }
-      m2: { length: 0.5, bars: 1, groove: "B1 ~ ~ ~ C#2 ~ A1@timp ~" }
-      m3: { length: 0.5, bars: 1, groove: "B1@timp ~ B1 ~ A1 ~ ~ ~" }
-      m4: { length: 0.3333333333333333, bars: 1, groove: "G1 ~ ~ ~ ~ ~ E1 ~ ~ A1@timp ~ ~" }
-      m5:
         length: 0.16666666666666666
         bars: 1
+      m1: {groove: "D2@timp ~ D2 ~ ~ ~ A1@timp ~", length: 0.5, bars: 1}
+      m2: {groove: "B1 ~ ~ ~ C#2 ~ A1@timp ~", length: 0.5, bars: 1}
+      m3: {groove: "B1@timp ~ B1 ~ A1 ~ ~ ~", length: 0.5, bars: 1}
+      m4: {groove: "G1 ~ ~ ~ ~ ~ E1 ~ ~ A1@timp ~ ~", length: 0.3333333333333333, bars: 1}
+      m5:
         groove: "Bb1@timp ~ ~ ~ ~ ~ Bb1 ~ ~ ~ ~ ~ Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll Bb1@roll"
-      m6:
-        length: 0.125
+        length: 0.16666666666666666
         bars: 1
+      m6:
         groove:
           - "C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~ C2@roll ~"
-          - { note: C2, inst: timp, len: 1 }
-          - { note: C2, len: 1 }
-      m7: { length: 0.3333333333333333, bars: 1, groove: "A1@timp A1@timp A1@timp A1 ~ ~ A1@timp A1@timp A1@timp A1@roll A1@roll A1@roll" }
-      m8: { length: 0.5, bars: 1, groove: "D2@timp ~ D2@bass_ring ~ ~ ~ ~ ~" }
-  - id: 4
-    name: Right trumpet
-    role: lead
-    instrument: trumpet
-    patterns:
-      m1: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - F#5 F#5 F#5" }
-      m2: { length: 0.5, bars: 1, groove: "A5 ~ F#5 D5 E5@trumpet_turn ~ ~ ~" }
-      m3: { length: 0.5, bars: 1, groove: "- - - - F#5 ~ ~ A5" }
-      m4: { length: 0.16666666666666666, bars: 1, groove: "G5 ~ ~ ~ ~ ~ ~ ~ ~ B5 ~ ~ G5 ~ A5 ~ B5 ~ D5 ~ D5 ~ D5 ~" }
-      m5: { length: 0.5, bars: 1, groove: "D5 ~ ~ F5 Bb5 ~ ~ ~" }
-      m6:
+          - {note: "C2", inst: "timp", len: 1}
+          - {note: "C2", len: 1}
         length: 0.125
         bars: 1
-        groove:
-          - { note: E5, len: 1.5 }
-          - { note: G5, len: 0.5 }
-          - "- - - - - - - - (F5 G5 A5 Bb5 C6) ~ ~ ~"
-      m7: { length: 0.3333333333333333, bars: 1, groove: "G5 G5 G5 A5 A5 A5 C#6 A5 G5 G5 G5 G5" }
-      m8: { length: 1, bars: 1, groove: "F#5@trumpet_ring ~ ~ ~" }
-  - id: 5
-    name: Right horn
-    instrument: horn
+      m7: {groove: "A1@timp A1@timp A1@timp A1 ~ ~ A1@timp A1@timp A1@timp A1@roll A1@roll A1@roll", length: 0.3333333333333333, bars: 1}
+      m8: {groove: "D2@timp ~ D2@bass_ring ~ ~ ~ ~ ~", length: 0.5, bars: 1}
+  - id: 4
+    name: "Right trumpet"
+    role: "lead"
+    instrument: "trumpet"
     patterns:
-      m1: { length: 0.3333333333333333, bars: 1, groove: "- - - - - - - - - D5 D5 D5" }
-      m2: { length: 0.5, bars: 1, groove: "D5 ~ D5 B4 C#5 ~ ~ ~" }
-      m3: { length: 0.5, bars: 1, groove: "D4 ~ ~ ~ C#4 ~ ~ ~" }
-      m4: { length: 0.3333333333333333, bars: 1, groove: "B3 ~ ~ ~ ~ ~ B3 ~ ~ D4 D4 D4" }
-      m5: { length: 0.5, bars: 1, groove: "C3@cymbal ~ D4 ~ ~ ~ ~ ~" }
-      m6: { length: 0.5, bars: 1, groove: "G4 ~ ~ ~ E4 ~ ~ ~" }
-      m7: { length: 0.3333333333333333, bars: 1, groove: "E5 E5 E5 D5 D5 D5 A4 C#5 E5 E5 E5 E5" }
-      m8: { length: 1, bars: 1, groove: "A5@horn_ring ~ ~ ~" }
+      m1: {groove: "- - - - - - - - - F#5 F#5 F#5", length: 0.3333333333333333, bars: 1}
+      m2: {groove: "A5 ~ F#5 D5 E5@trumpet_turn ~ ~ ~", length: 0.5, bars: 1}
+      m3: {groove: "- - - - F#5 ~ ~ A5", length: 0.5, bars: 1}
+      m4: {groove: "G5 ~ ~ ~ ~ ~ ~ ~ ~ B5 ~ ~ G5 ~ A5 ~ B5 ~ D5 ~ D5 ~ D5 ~", length: 0.16666666666666666, bars: 1}
+      m5: {groove: "D5 ~ ~ F5 Bb5 ~ ~ ~", length: 0.5, bars: 1}
+      m6:
+        groove:
+          - {note: "E5", len: 1.5}
+          - {note: "G5", len: 0.5}
+          - "- - - - - - - - (F5 G5 A5 Bb5 C6) ~ ~ ~"
+        length: 0.125
+        bars: 1
+      m7: {groove: "G5 G5 G5 A5 A5 A5 C#6 A5 G5 G5 G5 G5", length: 0.3333333333333333, bars: 1}
+      m8: {groove: "F#5@trumpet_ring ~ ~ ~", length: 1, bars: 1}
+  - id: 5
+    name: "Right horn"
+    instrument: "horn"
+    patterns:
+      m1: {groove: "- - - - - - - - - D5 D5 D5", length: 0.3333333333333333, bars: 1}
+      m2: {groove: "D5 ~ D5 B4 C#5 ~ ~ ~", length: 0.5, bars: 1}
+      m3: {groove: "D4 ~ ~ ~ C#4 ~ ~ ~", length: 0.5, bars: 1}
+      m4: {groove: "B3 ~ ~ ~ ~ ~ B3 ~ ~ D4 D4 D4", length: 0.3333333333333333, bars: 1}
+      m5: {groove: "C3@cymbal ~ D4 ~ ~ ~ ~ ~", length: 0.5, bars: 1}
+      m6: {groove: "G4 ~ ~ ~ E4 ~ ~ ~", length: 0.5, bars: 1}
+      m7: {groove: "E5 E5 E5 D5 D5 D5 A4 C#5 E5 E5 E5 E5", length: 0.3333333333333333, bars: 1}
+      m8: {groove: "A5@horn_ring ~ ~ ~", length: 1, bars: 1}
 sections:
   summons:
     bars: 1
-    volume: { from: 8, to: 12 }
-    levels: { v3: { from: p, to: ff }, v1: f, v2: mf }
-    layers: { v1: m0, v2: m0, v3: m0 }
+    levels: {v3: {from: "p", to: "ff"}, v1: "f", v2: "mf"}
+    volume: {from: 8, to: 12}
+    layers: {v1: "m0", v2: "m0", v3: "m0"}
   call:
     bars: 2
-    level: f
-    levels: { v3: f, v1: ff, v4: ff }
-    layers: { v1: "m1 m2", v2: "m1 -", v3: "m1 m2", v4: "m1 m2", v5: "m1 m2" }
+    level: "f"
+    levels: {v3: "f", v1: "ff", v4: "ff"}
+    layers: {v1: "m1 m2", v2: "m1 -", v3: "m1 m2", v4: "m1 m2", v5: "m1 m2"}
   # The canon leans left while the left choir leads, then right while the right choir carries the imitation.
   canon:
     bars: 1
-    level: f
-    levels: { v1: ff, v2: f, v4: mf, v5: mp }
-    filter: { sid1: { cutoff: { from: 0, to: 40 } }, sid2: { cutoff: 0 } }
-    layers: { v1: m3, v2: m3, v3: m3, v4: m3, v5: m3 }
+    level: "f"
+    levels: {v1: "ff", v2: "f", v4: "mf", v5: "mp"}
+    filter: {sid1: {cutoff: {from: 0, to: 40}}, sid2: {cutoff: 0}}
+    layers: {v1: "m3", v2: "m3", v3: "m3", v4: "m3", v5: "m3"}
   canon2:
     bars: 1
-    level: ff
-    levels: { v1: f, v2: mp, v4: ff, v5: f }
-    filter: { sid1: { cutoff: 40 }, sid2: { cutoff: { from: 0, to: 60 } } }
-    layers: { v1: m4, v2: m4, v3: m4, v4: m4, v5: m4 }
+    level: "ff"
+    levels: {v1: "f", v2: "mp", v4: "ff", v5: "f"}
+    filter: {sid1: {cutoff: 40}, sid2: {cutoff: {from: 0, to: 60}}}
+    layers: {v1: "m4", v2: "m4", v3: "m4", v4: "m4", v5: "m4"}
   swerve:
     bars: 2
-    level: { from: mp, to: ff }
+    level: {from: "mp", to: "ff"}
+    levels: {v1: "ff", v2: "mf", v3: "ff", v4: "mf", v5: "mp"}
     # Hit the Bb at full chip volume; the roll and the level change carry the two-bar swell.
     volume: 12
-    levels: { v1: ff, v2: mf, v3: ff, v4: mf, v5: mp }
-    layers: { v1: "m5 m6", v2: "m5 m6", v3: "m5 m6", v4: "m5 m6", v5: "m5 m6" }
+    layers: {v1: "m5 m6", v2: "m5 m6", v3: "m5 m6", v4: "m5 m6", v5: "m5 m6"}
   tutti:
     bars: 1
-    level: ff
-    levels: { v1: ff, v2: mf, v3: ff, v4: mf, v5: mp }
-    filter: { sid1: { cutoff: 80 }, sid2: { cutoff: 80 } }
-    layers: { v1: m7, v2: m7, v3: m7, v4: m7, v5: m7 }
+    level: "ff"
+    levels: {v1: "ff", v2: "mf", v3: "ff", v4: "mf", v5: "mp"}
+    filter: {sid1: {cutoff: 80}, sid2: {cutoff: 80}}
+    layers: {v1: "m7", v2: "m7", v3: "m7", v4: "m7", v5: "m7"}
   gate:
     bars: 1
-    level: ff
-    layers: { v1: m8, v2: m8, v3: m8, v4: m8, v5: m8 }
-timeline: [summons, call, canon, canon2, swerve, tutti, gate]
-end: { hold_beats: 0, release: true }
+    level: "ff"
+    layers: {v1: "m8", v2: "m8", v3: "m8", v4: "m8", v5: "m8"}
+timeline: ["summons", "call", "canon", "canon2", "swerve", "tutti", "gate"]
+accent: 2
+end: {hold_beats: 0, release: true}
