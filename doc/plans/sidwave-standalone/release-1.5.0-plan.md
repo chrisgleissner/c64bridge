@@ -125,3 +125,7 @@ Finish in this order and stop adding scope at the first point where quota will n
 5. User: listen to clips and video; decide whether managed VICE plays sound by default (silent today); approve publishing; add `NPM_TOKEN`.
 6. WP4 release.
 
+
+## User directive (2026-11-27 19:35)
+
+"Continue and do not stop until fully done. Also, review any PR adversarially and fix any findings". Every open and future PR gets an adversarial review, with fixes, before it merges. The final c64bridge release branch gets an adversarial review by Opus. That review may also add the SF2 and CheeseCutter export driver argument to `convert` if small. Publishing and tagging still need explicit approval and the `NPM_TOKEN` secret. The VICE sound default stays unchanged until the user answers.
