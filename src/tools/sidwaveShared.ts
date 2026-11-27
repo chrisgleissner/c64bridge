@@ -7,13 +7,13 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 import YAML from "yaml";
-import { classifyError, parseSidwave, SIDWAVE_ASSEMBLERS, SIDWAVE_SYMBOL_FORMATS, MUSIC_STYLES, type ConvertResult, type SidwaveReadOptions } from "sidwave";
+import { classifyError, convert, parseSidwave, SIDWAVE_ASSEMBLERS, SIDWAVE_SYMBOL_FORMATS, MUSIC_STYLES, type ConvertResult, type SidwaveReadOptions } from "sidwave";
 import { createLibsidplayfpEngine, type SidEmulation, type SidEngine, type TraceRequest, type RenderRequest } from "sidwave/engine";
 import { detectFormat, findFormat, formatDefinitions, type FormatDefinition } from "sidwave/export";
 import { formatSidwave } from "sidwave/format";
 import { SidwaveTransformError } from "sidwave/transform";
 import { defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
-import { hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
+import { hostSidwaveReadOptions, hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
 import { getPlatformStatus } from "../platform.js";
 import { resolveSidSystem } from "./audio.js";
 import { cancelledResult, type ToolExecutionContext, type ToolRunResult } from "./types.js";
@@ -306,6 +306,20 @@ export function detectInput(input: Input, from?: string): { format: FormatDefini
       : `${input.name} is not a supported music file: neither its content nor its extension matches a format.${hint}`,
     { path: "$.inputPath", details: { allowed: readable } },
   );
+}
+
+/** The input of an operation as a SIDWave score; an input in another format is converted first. */
+export async function scoreOf(input: Input, args: Args, ctx: ToolExecutionContext) {
+  const { format } = detectInput(input, args.from);
+  if (format.id === "sidwave") return { text: scoreText(input), document: parseScore(input), converted: undefined };
+  if (format.read === undefined) throw new ToolValidationError(`${format.name} holds no score to read`, { path: "$.inputPath" });
+  const converted = await convert(input.bytes, {
+    inputName: input.name, to: "sidwave", from: format.id, song: args.song || undefined, seconds: args.durationSeconds,
+    readOptions: input.read, createEngine: engineFactory(ctx), signal: ctx.signal,
+  });
+  ctx.signal?.throwIfAborted();
+  const text = Buffer.from(converted.output).toString("utf8");
+  return { text, document: parseSidwave(text, hostSidwaveReadOptions), converted };
 }
 
 /** Conversion losses, the worst first, cut to `limit` entries. */

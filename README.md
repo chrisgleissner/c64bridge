@@ -641,6 +641,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |
 | `reconstruct` | Recover a score from a SID file or register trace, with a verdict. | `inputPath` | `outputPath`, `overwrite`, `includeScore`, `song`, `durationSeconds`, `from`, `system` | ✅ | ✅ | ✅ |
 | `record_analyze` | Analyze a recording from the Ultimate stream or host microphone on other backends. | `durationSeconds` | `expectedSidwave` | ✅ | ✅ | ✅ |
+| `render` | Render WAV by action: mix (default), stems (not SID), solo or mute (voice). | — | `sidwave`, `inputPath`, `action`, `voice`, `from`, `song`, `durationSeconds`, `model`, `outputPath`, `outputDir`, `overwrite` | ✅ | ✅ | ✅ |
 | `reset` | Reset SID registers. | — | `hard=false` | ✅ | ✅ | ✅ |
 | `retarget` | Adapt a score to a clock, SID model, SID count or budget. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `system`, `model`, `sids`, `budgetCycles`, `budgetBytes`, `allowChanges`, `forDevice` | ✅ | ✅ | ✅ |
 | `sample_render` | Render a SIDWAVE sample to WAV. | — | `definition`, `rate=4000`, `outputDir` | ✅ | ✅ | ✅ |

@@ -28,6 +28,7 @@ import { ToolError, ToolExecutionError, ToolValidationError } from "./errors.js"
 import type { ToolEffect } from "./access.js";
 import type { GroupedOperationConfig } from "./registry/utils.js";
 import { playDefinition } from "./sidwavePlay.js";
+import { renderDefinition } from "./sidwaveRender.js";
 import {
   backendOf, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
   planOutput, readFileInput, readInput, record, required, SCORE, SCORE_OUT, scoreText, writeArtifact, writeScore,
@@ -53,6 +54,7 @@ function fdiffSummary(diff: { equal: boolean; comparedCalls: number; differingCa
 
 const definitions: Definition[] = [
   playDefinition,
+  renderDefinition,
   {
     op: "formats", effect: "read", description: "List conversion formats.", optional: ["from"],
     run: async ({ from }) => {
