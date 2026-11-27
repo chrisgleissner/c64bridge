@@ -103,3 +103,4 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - Then: S5d (corpus dev runs, repairs, language extensions: exact-frequency, pitch-table, global-register-sequence, pulse width 0/wrap, sid-address, portamento/legato recovery, soft-start ramp), S5e, bench --verify, A1 v2, S7, S8, S9.
 - Ledger entries still to add: PR 12, PR 13 merges.
 - User decision 2026-11-27: the GoatTracker importer supports both GoatTracker 1.x and GoatTracker 2 song files.
+- User request 2026-11-27: deep dive of the most popular C64/SID music representations, composition tools and conversion paths, then import/export for all of them (survey: research/c64-music-formats-survey.md; work packages follow from it).
