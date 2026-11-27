@@ -10,13 +10,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildGame } from "./build.mjs";
 import { onset, readWav, rmsDb } from "./lib/audio.mjs";
 import { playSession } from "./lib/session.mjs";
 import { FPS, writePng } from "./lib/vice.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
 const root = process.env.SHOWCASE_DIR ?? path.join(os.homedir(), ".c64bridge", "sidwave-standalone", "showcase");
 const out = path.join(root, "verify");
 const FRAMES = Number(process.env.FRAMES ?? 9600);
@@ -98,4 +96,3 @@ const report = { frames: run.frames, seconds, run, screenshots: [...shots.values
 fs.writeFileSync(path.join(out, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 console.log(`report: ${path.join(out, "report.json")}`);
 if (failures.length) process.exitCode = 1;
-void here;

@@ -2,7 +2,7 @@
 //
 // The script plays through the joystick: title, a first game up to the second wave, then it stops dodging until
 // the ship is destroyed, waits on the game-over screen, returns to the title and starts a second game.
-import { JOY, STATE, gameReader, pilot } from "./pilot.mjs";
+import { JOY, gameReader, pilot } from "./pilot.mjs";
 import { startVice } from "./vice.mjs";
 
 export async function playSession(game, { frames, wav, warp = false, titleFrames = 400, carelessAfterWave2 = 500, onFrame, onSfx, logFile }) {
@@ -58,5 +58,3 @@ export async function playSession(game, { frames, wav, warp = false, titleFrames
   }
   return result;
 }
-
-export { STATE };

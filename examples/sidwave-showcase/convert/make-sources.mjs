@@ -2,7 +2,7 @@
 // Writes the two source files of the conversion demo from the note lists below. Both pieces are original music
 // written for this example; the MOD samples are synthesised here.
 //   harbour_lights.mid   Standard MIDI file, G major, 104 BPM, 16 bars: flute, plucked bass arpeggio, drums
-//   tin_robot.mod        ProTracker M.K. module, A minor, 125 BPM: drums, bass, lead, echo
+//   tin_robot.mod        ProTracker M.K. module, A minor, 125 BPM: drums, saw bass, triangle lead, echo
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,7 +99,7 @@ function samples() {
     { name: "snare", volume: 48, data: make(1600, (i) => (80 * noise() + 40 * Math.sin((2 * Math.PI * 190 * i) / 8287)) * Math.exp(-i / 380)) },
     { name: "hat", volume: 26, data: make(500, (i) => { const n = noise(); const high = n - previous; previous = n; return 60 * high * Math.exp(-i / 110); }) },
     { name: "saw bass", volume: 52, loop: true, data: make(64, (i) => 90 - (180 * i) / 63) },
-    { name: "pulse lead", volume: 40, loop: true, data: make(64, (i) => (i < 16 ? 90 : -30)) },
+    { name: "triangle lead", volume: 48, loop: true, data: make(64, (i) => (i < 32 ? -100 + (200 * i) / 32 : 100 - (200 * (i - 32)) / 32)) },
   ];
 }
 
