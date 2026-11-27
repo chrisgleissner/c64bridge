@@ -1,6 +1,6 @@
 # SIDWave prompt cookbook
 
-Six prompts for an AI client with C64 Bridge connected. Each ends in something you can hear. Paste a prompt as it is and replace the file names with your own.
+Six prompts for an AI client with C64 Bridge connected. Each ends in something you can hear. Paste a prompt as it is and replace the file names with your own. The two files that the musician prompts name are original pieces in the [showcase example](https://github.com/chrisgleissner/c64bridge/tree/main/examples/sidwave-showcase/convert).
 
 ## Before you start
 

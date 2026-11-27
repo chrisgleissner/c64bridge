@@ -3,19 +3,27 @@
 ## Before publishing (remove this section)
 
 - The release workflow builds the GitHub release body from the `## 1.5.0 - YYYY-MM-DD` entry of `CHANGELOG.md`. Rename `## Unreleased` to that heading. `npm run release:prepare` also prepends a list generated from commit subjects when it changes the version; replace it with the curated entry. As for 1.4.0, paste the text below into the GitHub release after the workflow has created it.
-- Fill or delete each `PLACEHOLDER`, here and in the SIDWave section of `README.md`. Clips and video come from the showcase work and need to be checked by ear.
+- The links to clips, video and PRG, here and in the SIDWave section of `README.md`, point to assets of the GitHub release `1.5.0`. They are not committed and the release workflow does not upload them, so every link returns 404 until you do. Check the clips and the video by ear first. After the workflow has created the release, run this on the machine that holds the files (`release-assets.txt` lists source and asset name):
+
+  ```sh
+  cd ~/.c64bridge/sidwave-standalone/showcase && d=$(mktemp -d) &&
+    grep -v '^#' release-assets.txt | while read -r source name; do cp "$source" "$d/$name"; done &&
+    gh release upload 1.5.0 "$d"/* -R chrisgleissner/c64bridge
+  ```
 - Run the cookbook prompts that lead the notes on the Ultimate 64. Until then keep the sentence that they have not been verified on hardware.
-- Update the figures if SIDWave changes before the release: reconstruction results, tracker fidelity, and the MOD short-loop limit (delete it if the fix is in the packaged version).
+- Update the figures if SIDWave changes before the release: reconstruction results, tracker fidelity, and the MOD short-loop limit (delete it if the fix is in the packaged version). After rebuilding the tarballs, also run `build.mjs`, `render.mjs`, `verify.mjs` and `record.mjs` in `examples/sidwave-showcase`, compare the figures in its README and in the showcase paragraph below, and replace the files to upload if they changed.
 
 ## Release text
 
 **Ask your AI for C64 music. Hear it on a real C64 or in VICE. Ship it in your game.**
 
-> **PLACEHOLDER, audio clip:** an original tune.
+> **Original music:** [Pulse Guard, in game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3) (71 s) · [Deep Field, title](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-deep-field.mp3) (77 s) · [Iron Moth, boss fight](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-iron-moth.mp3) (51 s)
 >
-> **PLACEHOLDER, audio clips:** a MIDI or module conversion, before and after.
+> **Conversion, source then SID (16 s each):** [MIDI](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) · [ProTracker module](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-mod-before-after.mp3)
 >
-> **PLACEHOLDER, video:** music and sound effects in a game, recorded from VICE.
+> **Video:** [one minute of Pulse Guard](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and sound effects, recorded from VICE
+
+The clips and the video come from [Pulse Guard](https://github.com/chrisgleissner/c64bridge/blob/main/examples/sidwave-showcase/README.md), a showcase game in the repository whose five songs and nine sound effects are one SIDWave score ([PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg), joystick in port 2). Its player and music take 14,925 bytes; the worst play call takes 5,392 of the 19,656 cycles of a PAL frame in the SIDWave emulator (5,507 with an effect started on every call), and the longest call measured in 191 seconds of scripted play in VICE took 5,383. The game has been run in VICE only; the MIDI source in the first conversion clip is played by a small synthesiser that is part of the example.
 
 C64 Bridge 1.5.0 adds SIDWave to your AI client: compose, convert, play, render and build SID music through the `c64_sound` tool.
 

@@ -18,11 +18,11 @@ A built-in, searchable knowledge base gives it access to C64 programming and har
 
 **Ask your AI for C64 music. Hear it on a real C64 or in VICE. Ship it in your game.**
 
-> **PLACEHOLDER, audio clip:** an original tune, to be added before the release.
->
-> **PLACEHOLDER, audio clips:** a conversion before and after, to be added before the release.
->
-> **PLACEHOLDER, video:** music and sound effects in a game, recorded from VICE, to be added before the release.
+Hear and see it, from the [Pulse Guard showcase](examples/sidwave-showcase/README.md), a game with original music and sound effects:
+
+- **Original music:** [Pulse Guard, in game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3) (71 s), [Deep Field, title](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-deep-field.mp3) (77 s) and [Iron Moth, boss fight](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-iron-moth.mp3) (51 s).
+- **Conversion, source then SID** (16 s each): [MIDI](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and [ProTracker module](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-mod-before-after.mp3). The MIDI source is played by a small synthesiser that is part of the example.
+- **Video:** [one minute of the game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and effects, recorded from VICE.
 
 - **Musicians: bring your song and hear it on the SID in one request.** `c64_sound` `play` reads MIDI, MusicXML, ProTracker modules, ABC, several SID tracker formats and more, converts the file where needed, starts it, saves an editable score and a PRG, and lists what the conversion lost, with counts.
 - **Game developers: music and sound effects with a measured cycle cost.** One score holds the songs and effects. The build is an assembler include for 64tass, ACME or ca65 (a KickAssembler include is also written, unverified) with the cycles per play call and the memory and zero page it uses, and it is refused when it exceeds your cycle limit.

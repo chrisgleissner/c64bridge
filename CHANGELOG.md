@@ -12,6 +12,7 @@
 - `c64_sound` ops `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks
 - `c64_sound` labels approximate imports (SID and register trace recovery, ABC, JCH, SID Factory II, CheeseCutter)
 - a SIDWave prompt cookbook and walkthroughs for musicians, game developers and archivists in the `sid-music` skill
+- Pulse Guard, a showcase game with an original SIDWave soundtrack and conversion demos, in `examples/sidwave-showcase` (repository only, not in the npm package)
 - SIDWave and the 6502 assembler come from the `sidwave` and `6502-toolkit` packages instead of workspace packages; SIDWave scores can use version 1.4 (songs and effects) and 1.5
 
 ### Bug Fixes
