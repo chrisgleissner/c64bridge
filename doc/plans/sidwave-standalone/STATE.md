@@ -147,3 +147,9 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - W20 reviewed and fixed, head 4839d33c on feat/sidwave-mcp. Waits for the registry release (S9). Before `npm ci` run `scripts/sidwave-dependency.mjs tarballs` (vendor/ is git-ignored; CI cannot install until the switch). Follow-ups: `compile_play` and `pipeline` reject score imports; shared property names loosen the published `generate` and `note_on` schema hints; background-task allowlist belongs to modern-mcp; U64 workflow not run.
 - Running: SF2 phase 1; S5d part 4 (sidwave-s5d4, feat/reconstruct-exact, briefs/brief-s5d4.md); codex ABC import (sidwave-textfmt, feat/formats-text; BASIC DATA and LilyPond export follow as separate specs); review of W13 (sidwave-devint).
 - Codex: at medium reasoning effort gpt-6-luna delivered stubs for the multi-format and the ABC specs; run-codex.sh now sets model_reasoning_effort=high (override with CODEX_EFFORT).
+
+### 16:15 update
+
+- Merged since the 16:00 note: sidwave PR 29 (assembler includes, relocation, cycle limit; KickAssembler unverified), PR 30 (ABC import).
+- Running: S5d part 4; W15 play/watch (sidwave-play, briefs/brief-w15.md); review of SF2 phase 1 (sidwave-formats2); finish and review of BASIC DATA export (sidwave-basic, codex stopped at its 5-hour limit).
+- Queue: LilyPond export, SF2 phase 2 (after phase 1 merges), W19 ease of use, W16, DMF, .mus, XM/IT, SWM gaps, W21/22, S8, A1 v2, held-out run after S5d, S9.
