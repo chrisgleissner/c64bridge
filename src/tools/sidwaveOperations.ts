@@ -29,7 +29,7 @@ import type { ToolEffect } from "./access.js";
 import type { GroupedOperationConfig } from "./registry/utils.js";
 import { playDefinition } from "./sidwavePlay.js";
 import { renderDefinition } from "./sidwaveRender.js";
-import { extractInstrumentsDefinition } from "./sidwaveArchive.js";
+import { extractInstrumentsDefinition, sidEditDefinition } from "./sidwaveArchive.js";
 import {
   backendOf, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
   planOutput, readFileInput, readInput, record, required, SCORE, SCORE_OUT, scoreText, writeArtifact, writeScore,
@@ -399,6 +399,7 @@ const definitions: Definition[] = [
       };
     },
   },
+  sidEditDefinition,
   {
     op: "compose", effect: "write", description: "Compose a new score with form and harmony, without playing.",
     optional: ["style", "profile", "seed", "system", "root", "cycleBudget", "outputPath", "overwrite", "includeScore"],

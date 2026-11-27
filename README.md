@@ -647,6 +647,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `retarget` | Adapt a score to a clock, SID model, SID count or budget. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `system`, `model`, `sids`, `budgetCycles`, `budgetBytes`, `allowChanges`, `forDevice` | ✅ | ✅ | ✅ |
 | `sample_render` | Render a SIDWAVE sample to WAV. | — | `definition`, `rate=4000`, `outputDir` | ✅ | ✅ | ✅ |
 | `set_volume` | Set SID volume ($D418). | `volume` | `filterMode` | ✅ | ✅ | ✅ |
+| `sid_edit` | Edit a copy by action: header (fields: name, author, released, clock, sidModel, startSong, ...) or songlength (durations "3:05 0:41" into a Songlengths database). | `inputPath`, `action` | `fields`, `durations`, `songlengthsPath`, `hvscDir`, `hvscPath`, `outputPath`, `overwrite` | ✅ | ✅ | ✅ |
 | `sid_info` | SID header, song lengths, STIL notes and player. | `inputPath` | `songlengthsPath`, `stilPath`, `hvscDir`, `hvscPath`, `sidIdPath` | ✅ | ✅ | ✅ |
 | `silence_all` | Silence all SID voices. Supports verification. | — | `verify=false` | ✅ | ✅ | ✅ |
 | `transform` | Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `semitones`, `bpm`, `factor`, `order`, `grid`, `seed`, `maxShift`, `from`, `to`, `scope` | ✅ | ✅ | ✅ |

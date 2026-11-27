@@ -118,7 +118,7 @@ const sidResetArgsSchema = objectSchema({
   description: "Reset or silence the SID chip.",
   properties: {
     hard: booleanSchema({
-      description: "If true, perform a hard register scrub; otherwise silence voices softly.",
+      description: "Full register scrub.",
       default: false,
     }),
   },
@@ -153,35 +153,31 @@ const sidNoteOnArgsSchema = objectSchema({
       default: "pulse",
     }),
     pulseWidth: numberSchema({
-      description: "Pulse width (0-4095). Used for pulse waveform.",
+      description: "For the pulse waveform.",
       integer: true,
       minimum: 0,
       maximum: 0x0fff,
       default: 0x0800,
     }),
     attack: numberSchema({
-      description: "Attack rate nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
       default: 1,
     }),
     decay: numberSchema({
-      description: "Decay rate nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
       default: 1,
     }),
     sustain: numberSchema({
-      description: "Sustain level nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,
       default: 15,
     }),
     release: numberSchema({
-      description: "Release rate nibble (0-15).",
       integer: true,
       minimum: 0,
       maximum: 15,

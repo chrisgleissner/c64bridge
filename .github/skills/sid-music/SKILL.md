@@ -41,6 +41,7 @@ These `c64_sound` operations work on host files and do not play anything (only `
 | Compile | `op: "compile"` with `output` prg, sid or game |
 | Render audio | `op: "render"` to WAV: the mix, `action: "stems"` for one file per voice of a score, `action: "solo"` or `"mute"` with `voice` (for a SID file this is diagnostic audio from a reconstruction) |
 | Reuse sounds | `op: "extract_instruments"` from a score or SID file writes a library; import it as the result field `use` shows |
+| Maintain a collection | `op: "sid_info"` for header, song lengths, STIL and player; `op: "sid_edit"` with `action` header (`fields`) or songlength (`durations`, `hvscDir`) writes a copy |
 | Study music | `op: "analyze_music"`, `op: "compare"`; `op: "sid_info"` with `hvscDir` for song lengths and STIL notes |
 | Recover a score | `op: "reconstruct"` from a SID file, a VICE dump or a siddump table |
 
