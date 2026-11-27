@@ -153,3 +153,10 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - Merged since the 16:00 note: sidwave PR 29 (assembler includes, relocation, cycle limit; KickAssembler unverified), PR 30 (ABC import).
 - Running: S5d part 4; W15 play/watch (sidwave-play, briefs/brief-w15.md); review of SF2 phase 1 (sidwave-formats2); finish and review of BASIC DATA export (sidwave-basic, codex stopped at its 5-hour limit).
 - Queue: LilyPond export, SF2 phase 2 (after phase 1 merges), W19 ease of use, W16, DMF, .mus, XM/IT, SWM gaps, W21/22, S8, A1 v2, held-out run after S5d, S9.
+
+## Priority change (user, 2026-11-27 ~16:35)
+
+User: "let's prioritize. i want low hanging fruits first so c64bridge can benefit from them in a new release".
+
+Release-first order (proposed to the user): merge the four in-flight items (PR 31, SF2 phase 1, W15, S5d part 4); finish W20 (codex on compile_play/pipeline imports), rebuild its tarballs, run the U64 workflow; publish 6502-toolkit and sidwave; switch the dependency; release c64bridge 1.5.0. No new large package starts before the release. Deferred: SF2 phase 2, W16, remaining W18 formats, W19/W21/W22 beyond release needs, S8, A1 v2, held-out run.
+Pending user answers: publish version (proposed 0.9.0, the earlier "no publish before S9" rule needs lifting); NPM_TOKEN secret is missing in chrisgleissner/sidwave (only CODECOV_TOKEN exists).
