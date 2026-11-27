@@ -150,3 +150,4 @@ This approves publishing `6502-toolkit` and `sidwave` 0.9.0 and the c64bridge 1.
 ## 2026-11-27 21:30
 
 Both packages are live on npm at 0.9.0 (provenance; each went through a short staged state). c64bridge PR 200 (`feat/sidwave-mcp`, b0e1c568, registry dependencies) is open: CI watch and an adversarial review of the delta are running. Next: merge on green, release 1.5.0 by the repository process, upload the assets in `showcase/release-assets.txt`, paste the curated notes, then finalise the continuation prompt and remind the user to delete the npm token.
+- 2026-11-27: PR 200 merged (ffda38af). Release PR 201 (`chore/release-1.5.0`, worktree `release-150`) open; final adversarial release check and asset refresh running. After merge: tag `1.5.0` on main, watch the release workflow (possible npm approval), upload assets, paste `showcase/release-body-1.5.0.md`.
