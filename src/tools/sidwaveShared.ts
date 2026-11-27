@@ -31,7 +31,7 @@ export type Args = {
   overwrite?: boolean; includeScore?: boolean; configure?: boolean; from?: string; to?: string; strict?: boolean; verify?: boolean; song?: number;
   voices?: number; system?: "PAL" | "NTSC"; model?: "6581" | "8580"; durationSeconds?: number; loop?: boolean;
   output?: "prg" | "sid" | "game"; origin?: number; dataOrigin?: number; zeroPage?: number; symbols?: readonly string[]; assembler?: string; relocation?: boolean; maxCycles?: number;
-  name?: string; licence?: string; author?: string; fields?: Record<string, unknown>; durations?: string;
+  name?: string; licence?: string; author?: string; fields?: Record<string, unknown>; durations?: string; includeOriginal?: boolean; rightsPermitted?: boolean;
   forDevice?: boolean; action?: string; semitones?: number; bpm?: number; factor?: number; order?: readonly string[];
   grid?: number; seed?: number; maxShift?: number; scope?: { voices?: string[]; sections?: string[] }; sids?: number;
   budgetCycles?: number; budgetBytes?: number; allowChanges?: boolean; level?: "T0" | "T1" | "A0" | "A1"; ladder?: boolean;
@@ -90,6 +90,8 @@ export const PROPERTIES: { [K in ArgName]-?: Schema<unknown> } = {
   author: text(),
   fields: optionalSchema(objectSchema({ properties: {}, additionalProperties: true })),
   durations: text(),
+  includeOriginal: flag(),
+  rightsPermitted: flag("You may redistribute the original."),
   forDevice: flag("Use the machine's clock and SID model."),
   action: text(),
   semitones: int(-96, 96),

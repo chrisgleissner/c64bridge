@@ -1,14 +1,18 @@
-/** `c64_sound` ops for collections: instrument libraries, SID header and Songlengths edits. */
+/** `c64_sound` ops for collections: instrument libraries, SID header and Songlengths edits, preservation bundles. */
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import {
   editSidHeader, hvscDatabases, hvscPathOf, parseSidFile, parseSonglengthList, songlengthsFormatOf, songlengthsKey,
   writeSonglengthsEntry, type SidEditFields,
 } from "sidwave";
-import { extractInstruments } from "sidwave/analyze";
-import { readHostFile, resolveHostPath } from "../hostPaths.js";
+import { createPreservation, extractInstruments, verifyPreservation } from "sidwave/analyze";
+import { defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
 import { ToolValidationError } from "./errors.js";
 import {
-  capped, engineFactory, isSid, planOutput, readFileInput, readInput, required, scoreOf, SCORE, type Args, type Definition, type Input,
+  capped, engineFactory, existsError, isSid, planOutput, readFileInput, readInput, required, scoreOf, SCORE, writeArtifact,
+  type Args, type Artifact, type Definition, type Input,
 } from "./sidwaveShared.js";
 
 const latin1File = async (path: string) => (await readHostFile(path)).toString("latin1");
@@ -120,6 +124,65 @@ export const sidEditDefinition: Definition = {
       action: "songlength", result: result.action, md5, ...artifact, database,
       changes: changes.items, ...(changes.omitted ? { changesOmitted: changes.omitted } : {}),
       ...(artifact.outputPath === database ? {} : { note: "The database is unchanged; pass its path as outputPath with overwrite: true to replace it." }),
+    };
+  },
+};
+
+export const preserveDefinition: Definition = {
+  op: "preserve", effect: "write",
+  description: "Preservation bundle by action: create (default; from a SID, into outputDir) or verify (inputPath: the bundle folder).",
+  required: ["inputPath"],
+  optional: ["action", "outputDir", "overwrite", "song", "durationSeconds", "level", "ladder", "stilPath", "hvscPath", "hvscDir", "includeOriginal", "rightsPermitted"],
+  run: async (args, ctx) => {
+    const action = args.action ?? "create";
+    if (action === "verify") {
+      const directory = resolveHostPath(args.inputPath!, { purpose: "write" });
+      if (!(await stat(directory).catch(() => undefined))?.isDirectory()) {
+        throw new ToolValidationError(`Not a bundle directory: ${directory}`, { path: "$.inputPath" });
+      }
+      // The library reads the files of the directory; each one must pass the host path rules. It refuses hidden names.
+      for (const name of await readdir(directory)) if (!name.startsWith(".")) resolveHostChildPath(directory, name);
+      const result = await verifyPreservation(directory, { engine: engineFactory(ctx)("sidlite"), signal: ctx.signal });
+      ctx.signal?.throwIfAborted();
+      const checks = capped([...result.checks].sort((a, b) => Number(a.ok) - Number(b.ok)), 20);
+      return {
+        action, ok: result.ok, verdict: result.verdict, checks: checks.items, ...(checks.omitted ? { checksOmitted: checks.omitted } : {}),
+        identityNotes: result.identityNotes, unauthenticated: result.unauthenticated,
+      };
+    }
+    if (action !== "create") throw new ToolValidationError("Unknown preserve action", { path: "$.action", details: { allowed: ["create", "verify"] } });
+    const input = await readFileInput(args.inputPath!);
+    checkSong(args, requireSid(input).songs);
+    if (args.includeOriginal && !args.rightsPermitted) {
+      throw new ToolValidationError("includeOriginal stores the original SID and needs rightsPermitted: true, your statement that it may be redistributed", { path: "$.rightsPermitted" });
+    }
+    const places = hvsc(args, input.file!);
+    if (args.stilPath !== undefined && places.path === undefined) {
+      throw new ToolValidationError("A STIL entry needs hvscPath or hvscDir", { path: "$.hvscPath" });
+    }
+    const stil = places.stil === undefined || places.path === undefined ? undefined : { text: await latin1File(places.stil), path: places.path };
+    const directory = args.outputDir !== undefined
+      ? resolveHostPath(args.outputDir, { purpose: "write" })
+      : resolveHostChildPath(defaultHostOutputDir("artifacts", "sidwave"), `${input.stem}-preserved-${randomUUID().slice(0, 8)}`);
+    // A bundle must be the only content of its directory, or verification reports the other files.
+    if (args.overwrite !== true && existsSync(directory) && (await readdir(directory)).length > 0) throw existsError(directory, "$.outputDir");
+    const engines = engineFactory(ctx);
+    const level = args.ladder === false ? "none" as const : args.level ?? "A1";
+    const bundle = await createPreservation(input.bytes, {
+      engine: engines("sidlite"), ...(level === "A1" || level === "none" ? { a1Engine: engines("residfp") } : {}),
+      song: args.song, seconds: args.durationSeconds, level, includeOriginal: args.includeOriginal, rightsPermitted: args.rightsPermitted,
+      stil, signal: ctx.signal,
+    });
+    ctx.signal?.throwIfAborted();
+    const planned = [...bundle.files].map(([name, content]) => ({ path: resolveHostChildPath(directory, name), content }));
+    if (planned.some(({ path }) => path === input.file)) throw new ToolValidationError(`The output file is an input file: ${input.file}`, { path: "$.outputDir" });
+    const files: Artifact[] = [];
+    for (const { path, content } of planned) files.push(await writeArtifact(path, content, args.overwrite === true, ctx));
+    const { verdict, horizon, source, rights, ambiguities } = bundle.manifest;
+    const open = capped(ambiguities, 10);
+    return {
+      action, outputDir: directory, files: files.map(({ outputPath, bytes, sha256 }) => ({ file: basename(outputPath), bytes, sha256 })),
+      verdict, horizon, source, rights, warnings: bundle.warnings, ambiguities: open.items, ...(open.omitted ? { ambiguitiesOmitted: open.omitted } : {}),
     };
   },
 };

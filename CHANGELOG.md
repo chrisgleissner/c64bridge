@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Features
+
+- `c64_sound` op `play`: play any readable music file or SIDWave score on the active backend, with a loss report
+- `c64_sound` op `compile`: assembler includes, relocation tables and a cycle limit for game builds
+- `c64_sound` ops `render` (mix, stems, solo, mute), `extract_instruments`, `sid_edit` and `preserve`
+
 ### Bug Fixes
 
 - resolve SIDWave imports and file samples safely in `compile_play` and `pipeline`

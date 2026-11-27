@@ -9,7 +9,7 @@ import { sidwaveOperationEffects, sidwaveOperations } from "../src/tools/sidwave
 import { createLogger } from "./meta/helpers.mjs";
 
 const READ = ["formats", "inspect", "validate", "lint", "analyze_music", "compare", "sid_info"];
-const WRITE = ["play", "render", "extract_instruments", "convert", "format", "compile", "transform", "retarget", "reconstruct", "sid_edit", "compose", "complete"];
+const WRITE = ["play", "render", "extract_instruments", "convert", "format", "compile", "transform", "retarget", "reconstruct", "sid_edit", "preserve", "compose", "complete"];
 
 const EXAMPLES = path.resolve("data/sound/examples");
 const SHORT = path.join(EXAMPLES, "fuer_elise.yaml");
