@@ -118,7 +118,7 @@ export const renderDefinition: Definition = {
       const index = ids.indexOf(args.voice!);
       if (index < 0) throw new ToolValidationError(`The score has no voice ${args.voice}`, { path: "$.voice", details: { allowed: ids } });
       // A voice that echoes, follows or doubles another one sounds only together with its source.
-      sounding = action === "solo" ? groups[index]! : ids.filter((id) => id !== args.voice);
+      sounding = action === "solo" ? groups[index]! : ids.filter((_, other) => !groups[other]!.includes(args.voice!));
       rendered = keepVoices(document, new Set(sounding));
     }
     const compiled = compileSidwaveBytes(rendered, { format: "sid", ...(document.songs ? { song } : {}) });

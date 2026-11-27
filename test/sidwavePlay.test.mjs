@@ -116,6 +116,14 @@ test("play runs a PRG unchanged", async () => {
   assert.deepEqual(ctx.played[0].bytes, prg);
 });
 
+test("play says whether the music loops and takes a PRG only from a file", async () => {
+  const looping = await playing({ sidwave: SCORE });
+  assert.match(looping.data.summary, /s loop\) on vice/);
+  const once = await playing({ sidwave: `${SCORE}end: { release: true }\n` });
+  assert.match(once.data.summary, /s once\) on vice/);
+  await refused({ sidwave: SCORE, from: "prg" }, /pass inputPath/);
+});
+
 test("play explains unsupported, ambiguous, unreadable and broken input", async () => {
   await refused({ inputPath: write("notes.txt", "hello") }, /not a supported music file.*allowed: .*midi/);
   await refused({ inputPath: write("disk.d64", Buffer.alloc(1000)) }, /c64_disk/);

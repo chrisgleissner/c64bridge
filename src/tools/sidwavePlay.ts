@@ -33,6 +33,7 @@ async function deploy(ctx: ToolExecutionContext, start: () => Promise<{ success:
 
 /** A PRG runs as it is. */
 async function playProgram(input: Input, ctx: ToolExecutionContext, backend: string, facade: Facade) {
+  if (input.file === undefined) throw new ToolValidationError("A PRG is a host file; pass inputPath", { path: "$.inputPath" });
   if (input.bytes.length < 3) throw new ToolValidationError(`${input.name} is too short to be a PRG`, { path: "$.inputPath" });
   await deploy(ctx, () => ctx.client.runPrg(input.bytes, facade), {});
   const loadAddress = input.bytes.readUInt16LE(0);
@@ -94,18 +95,19 @@ export const playDefinition: Definition = {
       });
       ctx.signal?.throwIfAborted();
     }
+    const document = converted ? parseSidwave(Buffer.from(converted.output).toString("utf8"), hostSidwaveReadOptions) : parseScore(input);
+    const songs = document.songs?.length ?? 1;
+    if (native && args.song !== undefined && args.song > songs) {
+      throw new ToolValidationError(`song must be 0..${songs} for this score`, { path: "$.song" });
+    }
     // A score file stays where it is; converted and inline scores are saved so that they can be edited.
     const score = converted ? await save(".sidwave.yaml", Buffer.from(converted.output))
       : input.file !== undefined ? { inputPath: input.file }
       : await save(".sidwave.yaml", scoreText(input));
     const saved = "outputPath" in score ? score.outputPath : score.inputPath;
 
-    const document = converted ? parseSidwave(Buffer.from(converted.output).toString("utf8"), hostSidwaveReadOptions) : parseScore(input);
-    const songs = document.songs?.length ?? 1;
-    if (native && args.song !== undefined && args.song > songs) {
-      throw new ToolValidationError(`song must be 0..${songs} for this score`, { path: "$.song" });
-    }
-    const compiled = compileSidwaveToPrg(document, native && args.song && document.songs ? { song: args.song - 1 } : {});
+    const song = native && args.song && document.songs ? args.song - 1 : undefined;
+    const compiled = compileSidwaveToPrg(document, song === undefined ? {} : { song });
     const program = { ...(await save(".prg", compiled.prg)), entryAddress: compiled.entryAddress };
 
     await deploy(ctx, () => startCompiledSidwave(ctx.client, document, compiled, backend, { configure: args.configure, facade }),
@@ -123,10 +125,11 @@ export const playDefinition: Definition = {
     const losses = converted ? lossReport(converted.losses, 15) : undefined;
     const title = document.song.title;
     const duration = Math.round(compiled.durationSeconds * 10) / 10;
+    const loops = document.songs ? document.songs[song ?? 0]!.loop : !document.end;
     const how = converted ? `${format.name}, ${reconstructed ? "reconstructed (approximate)" : "converted"}` : "SIDWave score";
     const lossCount = losses ? losses.total : 0;
     return {
-      summary: `Playing '${title}' (${how}; ${document.voices.length} voice${document.voices.length === 1 ? "" : "s"}, ${document.song.mode}, ${duration} s loop) on ${backend}.`
+      summary: `Playing '${title}' (${how}; ${document.voices.length} voice${document.voices.length === 1 ? "" : "s"}, ${document.song.mode}, ${duration} s ${loops ? "loop" : "once"}) on ${backend}.`
         + (converted ? ` ${lossCount ? `${lossCount} kind${lossCount === 1 ? "" : "s"} of conversion loss, see losses.` : "No conversion losses."}` : ""),
       playing: true, backend, method: "run_prg", detected: found,
       conversion: !converted ? "none" : reconstructed ? "reconstructed" : "converted",

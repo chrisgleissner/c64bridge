@@ -65,6 +65,24 @@ test("render solos and mutes a voice of a score and of a SID file", async () => 
   assert.ok(energy(isolated.outputPath) > 1000);
 });
 
+test("render mute also silences the voices that copy the muted voice", async () => {
+  const echo = SCORE
+    .replace("timeline:", "  - id: 3\n    waveform: sawtooth\n    echo: { voice: 2, delay: 6, volume: 0.5 }\ntimeline:");
+  const file = write("echo.sidwave.yaml", echo);
+  const mute = await ok({ op: "render", inputPath: file, action: "mute", voice: 2, durationSeconds: 2, outputPath: at("echo-mute.wav") });
+  assert.deepEqual(mute.soundingVoices, [1]);
+  const solo = await ok({ op: "render", inputPath: file, action: "solo", voice: 3, durationSeconds: 2, outputPath: at("echo-solo.wav") });
+  assert.deepEqual(solo.soundingVoices, [2, 3]);
+});
+
+test("render checks every stem file before it writes the first", async () => {
+  const directory = at("partial");
+  fs.mkdirSync(directory);
+  fs.writeFileSync(path.join(directory, "tune.v2.wav"), "kept");
+  await rejected({ op: "render", inputPath: score, action: "stems", durationSeconds: 1, outputDir: directory }, /v2\.wav exists/);
+  assert.deepEqual(fs.readdirSync(directory), ["tune.v2.wav"]);
+});
+
 test("render selects a song of a score with several songs", async () => {
   const songs = path.resolve("data/sound/examples/game_songs.yaml");
   const first = await ok({ op: "render", inputPath: songs, durationSeconds: 2, outputPath: at("song1.wav") });
