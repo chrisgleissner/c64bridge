@@ -140,3 +140,10 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - SF2 phase 1 (sidwave-formats2, b9145e3): final tests running.
 - W13 developer integration: codex on feat/developer-integration (sidwave-devint), spec briefs/codex-w13.md; follow-up not in spec: `--effects-only` build.
 - Helpers: briefs/watch-merge2.sh <pr> <branch> <sha> (merges only if green and not behind main), briefs/rebase-union.sh.
+
+### 16:00 update
+
+- Merged: sidwave PR 26 (S5d, ce4d843e).
+- W20 reviewed and fixed, head 4839d33c on feat/sidwave-mcp. Waits for the registry release (S9). Before `npm ci` run `scripts/sidwave-dependency.mjs tarballs` (vendor/ is git-ignored; CI cannot install until the switch). Follow-ups: `compile_play` and `pipeline` reject score imports; shared property names loosen the published `generate` and `note_on` schema hints; background-task allowlist belongs to modern-mcp; U64 workflow not run.
+- Running: SF2 phase 1; S5d part 4 (sidwave-s5d4, feat/reconstruct-exact, briefs/brief-s5d4.md); codex ABC import (sidwave-textfmt, feat/formats-text; BASIC DATA and LilyPond export follow as separate specs); review of W13 (sidwave-devint).
+- Codex: at medium reasoning effort gpt-6-luna delivered stubs for the multi-format and the ABC specs; run-codex.sh now sets model_reasoning_effort=high (override with CODEX_EFFORT).
