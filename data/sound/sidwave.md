@@ -1,19 +1,19 @@
-# SIDWAVE Format Specification
+# SIDWave Format Specification
 
-This document defines **SIDWAVE**, a declarative format for describing structured C64 SID compositions.
-SIDWAVE files are authored in YAML (or JSON) and compiled by the MCP server (`music_compile_and_play`) into a `.PRG` or `.SID` binary with a built-in frame-based player.
+This document defines **SIDWave**, a declarative format for describing structured C64 SID compositions.
+SIDWave files are authored in YAML (or JSON) and compiled by the MCP server (`music_compile_and_play`) into a `.PRG` or `.SID` binary with a built-in frame-based player.
 
 Pipeline:
 
-LLM → SIDWAVE (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VICE playback
+LLM → SIDWave (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VICE playback
 
 ---
 
 ## File and Schema Conventions
 
-- **Format name:** SIDWAVE
+- **Format name:** SIDWave
 - **File suffix:** `.sidwave.yaml` (or `.sid.yaml` for brevity)
-- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, `sidwave: 1.2`, or `sidwave: 1.3`
+- **Version field:** `sidwave: 1.0`, `sidwave: 1.1`, `sidwave: 1.2`, `sidwave: 1.3`, or `sidwave: 1.4`
 - **Schema file:** `sidwave.schema.json`
 - **Serialization:** YAML 1.2 or JSON
 
@@ -96,7 +96,7 @@ timeline:
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
 | `speed` | Player calls per frame, from 1 to 4. |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
-| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. 1.3 also accepts time signatures (see SIDWAVE 1.3). |
+| `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. 1.3 also accepts time signatures (see SIDWave 1.3). |
 | `tempo` | Beats (quarter notes) per minute, 30–220. Default 100. |
 | `mode` | `PAL` (985248 Hz clock, 50.12 frames/s) or `NTSC` (1022727 Hz clock, 59.83 frames/s). Default `PAL`. |
 | `length_bars` | Optional song length. Shorter than the timeline truncates it; longer repeats the timeline from the start. Default: the sum of the timeline's bars. |
@@ -230,7 +230,7 @@ Notes range from C0 to B7. At the PAL clock B7 exceeds the SID's 16-bit frequenc
 
 | Effect | Fields | Behaviour |
 | --- | --- | --- |
-| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional), `fade` (1.3, frames, optional; see SIDWAVE 1.3) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth` to within the SID's frequency resolution, about 6 cents at C0 and 3 cents at C1 on PAL), starting `delay` frames after the note. The upward swing must stay within the SID's highest frequency: on PAL a vibrato on A#7 can be at most 0.54 semitones deep, on NTSC B7 at most 0.19; deeper vibratos on such notes (including the highest note of a chord arpeggio) are rejected. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
+| `vibrato` | `depth` (semitones, 0.03–6), `rate` (Hz, 0.2–12), `delay` (frames, optional), `fade` (1.3, frames, optional; see SIDWave 1.3) | Triangle pitch modulation of ±`depth` semitones around the note (the upward and downward swings are computed separately, so both reach `depth` to within the SID's frequency resolution, about 6 cents at C0 and 3 cents at C1 on PAL), starting `delay` frames after the note. The upward swing must stay within the SID's highest frequency: on PAL a vibrato on A#7 can be at most 0.54 semitones deep, on NTSC B7 at most 0.19; deeper vibratos on such notes (including the highest note of a chord arpeggio) are rejected. The player samples the vibrato once per frame, so rates are limited to 12 Hz (about a quarter of the frame rate); faster rates would alias or cancel out. |
 | `pwm_sweep` | `depth` (fraction ≤ 1 or 12-bit units), `speed` (cycles per second) | Pulse width moves linearly between `pulse_width − depth` and `pulse_width + depth`, restarting at the base on each note. Pulse waveform only. |
 | `slide` | `depth` (semitones, ±24, non-zero), `speed` (frames, 1–255) | Each note starts `depth` semitones below the target (above when negative) and glides to it linearly in frequency, arriving after `speed` frames. The start note must itself be playable (C0..A#7 on PAL, C0..B7 on NTSC); otherwise the document is rejected. |
 | `filter_mod` | `sweep: "+500 over 8 steps"` (units: `steps`, `beats`, `bars`, `frames`; a step is one entry), or `{ sweep: 500, beats: 8 }` | Routes the voice through the filter while the pattern plays. At each repetition of the pattern the cutoff offset restarts at 0 and ramps to `sweep` (cutoff units, −2047..2047) over the given time, then holds. The resulting cutoff is clamped to 0..2047. The offset is removed when the section ends. |
@@ -265,7 +265,7 @@ Set either field on a named instrument or on a groove note object. Entry values 
 
 `c64_sound` with `op: generate` plays a seeded eight-bar piece once and returns
 a short summary and the resource URI for a bundled example in the chosen style.
-Set `includeScore: true` to receive the generated SIDWAVE source and lead timeline.
+Set `includeScore: true` to receive the generated SIDWave source and lead timeline.
 Like `play_preset`, it loads the song as a PRG with its own player,
 which replaces the program in memory. The styles are `chiptune` (130 BPM, speed 2), `ambient`
 (80 BPM) and `funk` (105 BPM). Use `seed` to reproduce the harmony and melody.
@@ -296,7 +296,7 @@ Use these names as voice defaults, groove note instruments, or drum kit entries.
 | `lib:sync_lead` | A hard synced saw with a short octave transient. |
 | `lib:pad_slow` | A slow triangle envelope with a cycling low-pass filter. |
 
-## SIDWAVE 1.1 authoring techniques
+## SIDWave 1.1 authoring techniques
 
 Share a voice between wavetable drums and filtered bass. Cycle chord tones quickly on a second voice and give the third voice a PWM lead with delayed vibrato and legato glides. Use hard restart for a fresh attack. Vary phrases with octave jumps or add a delayed copy to an otherwise free voice. The SID has one shared filter. The most recent active filter table controls its settings. Voice 1 takes its ring or sync source from voice 3, voice 2 from voice 1, and voice 3 from voice 2. Choose notes for that source voice when writing a ring or sync accent. Combined waveforms can be quieter and sound different on a 6581 and an 8580.
 
@@ -404,7 +404,7 @@ The compiler reports `worstCaseCyclesPerCall` and refuses a 1.2 score above the 
 
 For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and counts loop iterations across a raster line. Playback begins when it measures more than about 1.5 MHz or reaches the 4.25-second cap. A reset can trigger the full startup hold, while a reset-free launch can begin on the first check. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
 
-The SIDWAVE 1.2 player clears each SID at init, then raises its master volume
+The SIDWave 1.2 player clears each SID at init, then raises its master volume
 from zero by one step per video frame (about 20 ms on PAL or 17 ms on NTSC),
 even with a multispeed score. At the end of a play-once score without `end`
 it releases the voice gates and lowers the master volume at the same rate before
@@ -415,8 +415,8 @@ temporarily write their raw four-bit values to the volume register on their SID.
 ### Playback setup
 
 On Ultimate backends, `compile_play`, `pipeline`, `play_preset`, and `generate`
-start a SIDWAVE PRG without a reset when BASIC is idle at `READY.` or the
-SIDWAVE player owns the IRQ and the keyboard queue is idle. The server detaches
+start a SIDWave PRG without a reset when BASIC is idle at `READY.` or the
+SIDWave player owns the IRQ and the keyboard queue is idle. The server detaches
 the previous player, clears the SID registers, DMA-writes the PRG body, and
 queues a BASIC `SYS` command. Other machine states use the normal PRG runner.
 
@@ -579,13 +579,13 @@ volume changes more audible. [SID specification](sid-spec.md) and
 
 ### Not supported
 
-Time signatures other than those listed under SIDWAVE 1.3, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Time signatures other than those listed under SIDWave 1.3, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
 ## Arrangement, dynamics and long form (1.2)
 
-Everything in this chapter applies to `sidwave: 1.2` and `sidwave: 1.3` documents only. SIDWAVE 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
+Everything in this chapter applies to `sidwave: 1.2` and `sidwave: 1.3` documents only. SIDWave 1.0 and 1.1 documents compile to the same bytes as before (test/sidwaveCompat10). The 1.2 library drums, speed-independent timing and the stricter token parsing below are part of 1.2 and are not applied to older documents.
 
 ### Time units
 
@@ -762,7 +762,7 @@ The compile operations return `lint` (at most 12 aggregated entries, most severe
 
 Errors, not warnings: noise combined with another waveform in a wavetable `wave` (it can lock the noise register), a volume change on a digi SID, and a mirror or source channel that another voice scores.
 
-## SIDWAVE 1.3
+## SIDWave 1.3
 
 A `sidwave: 1.3` document accepts everything that 1.2 accepts and compiles it to the same PRG bytes
 (test/sidwave13Meter), so every statement about 1.2 documents in this file also holds for 1.3 documents. The
@@ -892,6 +892,322 @@ voices:
 timeline: [{ bars: 4, layers: { v1: m } }]
 ```
 
+## SIDWave 1.4
+
+A `sidwave: 1.4` document accepts everything that 1.3 accepts and compiles it to the same PRG bytes
+(test/sidwave14Songs: every 1.3 example, and the recorded hashes of all earlier examples in
+test/fixtures/sidwave-s4a/example-hashes.json), so every statement about 1.3 documents in this file also holds for
+1.4 documents. `songs` and `effects` are accepted only in 1.4: a 1.2 or 1.3 document that uses one of them is
+rejected with `songs require sidwave: 1.4` or `effects require sidwave: 1.4`.
+
+### Songs
+
+**Observed need.** A game or demo ships several songs (a title tune, an in-game loop, a game-over jingle) that use
+one set of instruments and patterns. Reproducer: `data/sound/examples/game_songs.yaml` written as three SIDWave 1.3
+documents (one `timeline` each) compiles to three PRGs of 2111, 2292 and 2082 bytes, 6485 bytes in total. Each PRG
+holds its own copy of the 6502 player, the instrument tables, the frequency tables and the variables, and a game
+has to load, place and start three players.
+
+**Why 1.3 cannot express it.** A document is one song: `timeline`, `loop_to`, `end`, `length_bars`, `tempo` and
+`speed` each exist once. A timeline can switch between sections but only in a fixed order, so a game that wants
+"play the in-game loop now" has no way to ask for it. Concatenating the three timelines into one would play them
+one after another and share one loop point and one tempo. Writing three documents duplicates the player and every
+shared edit has to be made three times.
+
+**Design.** An optional top-level `songs` list. Instruments, voices, patterns and named `sections` are shared. Every
+song has its own `timeline` and may set its own `loop`, `tempo` and `speed`. The player holds one block of code and
+one instrument table; `init` selects the song. When `songs` is absent, the document is one song exactly as in 1.3.
+
+```yaml
+sidwave: 1.4
+tempo: 110                     # default for songs that set no tempo
+speed: 1                       # default for songs that set no speed
+instruments:
+  lead: { waveform: pulse, adsr: [1, 5, 10, 4], pulse_width: 0.4 }
+  bass: { waveform: sawtooth, adsr: [0, 5, 9, 3] }
+voices:
+  - { id: 1, instrument: lead, patterns: { tune: { length: 1, bars: 1, groove: "A4 C5 E5 D5" }, run: { length: 0.5, bars: 1, groove: "A4 C5 E5 A5 G5 E5 C5 E5" } } }
+  - { id: 2, instrument: bass, patterns: { root: { length: 1, bars: 1, groove: "A2 ~ A2 ~" }, low: { length: 4, bars: 1, groove: "A1" } } }
+sections:
+  verse: { bars: 2, layers: { v1: tune, v2: root } }
+  drive: { bars: 2, layers: { v1: run, v2: root } }
+  fallen: { bars: 1, layers: { v2: low } }
+songs:
+  - name: title                # unique, at most 32 characters
+    timeline: [verse, drive, verse]
+  - name: ingame
+    tempo: 140
+    loop: drive                # section name or 1-based position: "verse" plays once, then "drive" repeats
+    timeline: [verse, drive]
+  - name: gameover
+    tempo: 90
+    loop: false                # plays once, fades out and stops
+    timeline: [fallen, { bars: 1, layers: { v2: low } }]
+```
+
+**Rejected alternative.** Several documents in one YAML stream (`---`). It duplicates instruments and patterns,
+so a shared edit must be made in every document, and the compiler would have to find out which parts the documents
+share. A `songs` list states the sharing.
+
+**Specification.**
+
+- `songs` is a list of 1 to 32 songs (the PSID speed field has one bit per song). A song has the fields `name`
+  (required, unique, 1 to 32 characters), `timeline` (required, at least one entry; the entries are those of the
+  top-level `timeline`, including named sections, `name*count` and `name+N`), `loop`, `tempo` and `speed`.
+  Unknown fields are rejected.
+- `loop` is `true` (the default: repeat from the start), `false` (play once, then stop; the player fades the SID
+  volume out as it does for a 1.2 piece that plays once), a section name, or a 1-based timeline position. The last
+  two repeat from that entry, as the top-level `loop_to` does. A song cannot hold an `end` block: for a release
+  tail, end the timeline with a bar of rests.
+- `tempo` (30 to 220) and `speed` (1 to 4) default to the document values. A song plays at its own frame rate, so
+  a song with `speed: 2` makes two play calls per video frame.
+- With `songs`, the document has no top-level `timeline`, `loop_to`, `end` or `length_bars` (each is rejected and
+  the message names the song field to use instead), and `samples.voices` and `samples.triggers` are rejected because
+  they are positioned on one timeline. Digi voices (`digi:`) play their samples from the layers of any song.
+- Song 0 is the default. The document-level view (`ParsedSidwave.timeline`, `speed`, `song.tempo`) describes song 0.
+- Limit: songs times voice channels (3 per SID) is at most 255, because the song tables are indexed with one byte.
+  With one SID that allows all 32 songs; with the eight SIDs of `ultisid8` it allows 10.
+- All songs share one instrument table, which is limited to 63 entries (an instrument used at different speeds or
+  detunings counts once for each variant).
+- A document with `songs` and a single song compiles to the same bytes as the same song written without `songs`.
+
+**Output.**
+
+- PRG: plays song 0, like the document without songs. `compileSidwaveToPrg(doc, { song: n })` makes the PRG play
+  song `n` (0-based) instead. The PRG installer does not select a song at run time; the entry `init` ($0810) does.
+- PSID: the header records `songs` and `startSong` (1, the first song) and sets speed bit `n` when song `n + 1` has
+  `speed` above 1. `init` takes the song in A as the PSID format defines it (0-based, the host passes the song
+  number minus one) and programs the CIA 1 latch of that song when songs differ in speed.
+- Game build (`compileSidwave(doc, { target: "game", ... })`): `init` takes the song in A. The contract lists every
+  song with its `playCallsPerFrame`, `loop` and length, and the cycles are measured for every song.
+- An index beyond the last song plays song 0 (in the PRG `init`, the PSID and the game build).
+- `init` resets every register-visible state of the player, so a song started after any other song writes the same
+  registers as after a fresh start, in the `init` call and in every later play call (tested for every song of a
+  five-song score with differing tempo, speed and loop behaviour). Three scratch bytes, `chip_last`,
+  `soft_target` and `soft_step`, may still hold the previous song's values right after `init`: every play call
+  writes each of them before it reads it, so after the first play call the player's RAM is identical to a fresh start.
+- A song with `loop: false` ends by itself and writes no further registers; call `init` to play another song.
+
+**Lint.** `UNUSED-PATTERN` (a voice pattern that no song plays), `UNUSED-SECTION` (a named section that no song
+uses) and `SONG-SILENT` (a song whose layers never play a pattern) are reported for documents with `songs`. Other
+findings carry the name of the song in front of their position. A song without a timeline, or with an empty one, is
+an error rather than a finding.
+
+**Player cost.** Measured on the bundled emulator with the same 3-voice song once, twice and eight times in one
+document (full song and one loop of each, `init` of each song included); the 1.3 row is the same song without `songs`:
+
+| Songs | PRG bytes | Bytes beyond the streams | Worst play call (cycles) | Worst `init` (cycles) |
+| --- | --- | --- | --- | --- |
+| 1.3 document, one song | 2111 | 0 | 1795 | 4190 |
+| 1 | 2111 | 0 | 1795 | 4190 |
+| 2 | 2561 | 102 | 1805 | 4445 |
+| 8 | 4763 | 216 | 1797 | 4370 |
+
+The song selector costs about 100 bytes plus about 19 bytes per song, and nothing per play call. A two-song
+document that plays the same song twice has the same peak per call as one song. The 10-cycle difference in the
+table comes from page-crossing penalties: indexed reads and taken branches cost one cycle more when they cross a
+page, and they cross differently when the code and tables move by 102 bytes (about 4 cycles on 8 of 600 calls). The
+estimator uses the union of the features of all songs, so a song that does not use a feature of another song is
+still estimated with it. The selector runs only in `init`. A value
+that differs between songs (the filter sweep step, the live voices, the play-once length, the CIA latch) is copied
+into the player's own location by `init`; a value that is the same in every song is not copied and costs nothing.
+
+### Effects
+
+**Observed need.** A game plays a short sound when something happens (a shot when the fire button goes down, a
+bounce when a sprite hits the screen edge) on top of music that keeps playing. Reproducer: the title tune of
+`data/sound/examples/game_songs.yaml` is playing and the player fires. The sound has to start within one frame of the
+button press, take one voice for a few frames, and give that voice back to the music, which has to be at the
+position it would have reached without the sound.
+
+**Why 1.3 and the 1.4 songs cannot express it.** A 1.3 score is a fixed sequence of play calls. A PRG has the three
+entries install, `init` and `play`, and a game build has `init`, `play` and `stop`; none of them takes an event
+(`test/sidwave14Effects`: "evidence for the need"). A sound written into the timeline plays at one fixed position of
+the song, not when the player presses a button. Songs are no substitute: the sound would be a fourth song, started with
+`init`, and `init` resets the whole player, so the title tune stops and starts over from its first play call when the
+game calls `init(0)` again (the same test plays 100 calls of the title, switches to a shot song for 8 calls and back,
+and the title writes its first call's registers again, not those of call 100). Two players, one for the music and one
+for the effects, cannot share the three voices of one SID without writing over each other.
+
+**Design.** An optional top-level `effects` mapping from the effect name to `{ priority, voices, steps }`. The player
+gets a second, small program, the effect engine, and a new entry `sfx`: A = effect index, Y = the voice (1 to 3) or $FF
+for any allowed voice. An effect owns a voice from the play call after `sfx` until its last step has run. While it
+does, the music keeps running (its notes, tables and loops advance as always) but writes the seven registers of that
+voice into a shadow instead of the SID; when the effect ends, the shadow is copied to the SID in the same play call,
+so the music continues at the position it has reached. When the document defines no effects the player has no engine
+and its bytes do not change.
+
+```yaml
+sidwave: 1.4
+# instruments, voices, patterns and a timeline as in any score
+effects:
+  pew:                         # effect 0
+    priority: 8                # 0 to 15
+    voices: [3]                # only voice 3 of the first SID may carry it (default: 1, 2 and 3)
+    steps:
+      - { freq: 2400, wave: pulse, pulse: 0.25, adsr: [0, 0, 15, 6] }   # first step: frequency 2400 Hz, lasts 1 play call
+      - { freq: 1800 }
+      - { freq: 900, wait: 2 }
+      - { gate: false, wait: 3 }                                          # release for 3 play calls
+  thud:                        # effect 1
+    priority: 5
+    steps:
+      - { freq: 90, wave: noise, adsr: [0, 5, 0, 4], wait: 5, filter: off }
+      - { gate: false, wait: 3 }
+```
+
+**Rejected alternative.** Effects as songs (above): `init` resets the player, so starting an effect stops the music.
+A variant that keeps the player running and only switches the stream pointers of one voice would put the effect into
+the voice's command stream, where it cannot be started at an arbitrary frame and has no priorities. The effect engine
+is separate from the streams.
+
+**Specification.**
+
+- `effects` is a mapping of up to 32 effects; the index of an effect is its position in the mapping (the order written),
+  which is the value of A for `sfx`. An empty mapping defines no effects and compiles to the same bytes as a document
+  without `effects`. A name has 1 to 32 letters, digits or underscores and does not start with a digit.
+- An effect has `priority` (required, whole number 0 to 15), `voices` (a list of 1 to 3 voice numbers from 1 to 3 without
+  repeats; default 1, 2, 3) and `steps` (1 to 255 steps). Unknown fields are rejected.
+- Voice numbers 1 to 3 are the three voices of the first SID in the `sids` order (the voice slots 0 to 2), whatever
+  the `id` of the voices of the score is. Effects never use the voices of a second or later SID, and a SID that holds
+  only the first three voices sounds as before. A voice that the score centres (`center:`, which also sounds on a mirror
+  channel on another SID) cannot carry effects, because the engine does not write the mirror channel: it is left out of
+  the default `voices`, and listing it is an error that names it. If that leaves an effect no voice, the effect is an
+  error.
+- A step has `freq`, `wave`, `pulse`, `adsr`, `gate`, `filter` and `wait`, all optional except that the first step needs a
+  `freq`.
+  - `freq` is a note name (C0 to B7, such as `C5` or `F#2`) or an exact frequency in Hz (1 to 3848) as a number or as
+    text such as `"880Hz"`. The player stores the frequency register for the PAL and for the NTSC clock and uses the one
+    of the clock that `init` was given.
+  - `wave` is `pulse`, `sawtooth`, `triangle`, `noise` or one of the combinations `tri+saw`, `tri+pulse`, `saw+pulse`
+    and `tri+saw+pulse`. `pulse` is a fraction (greater than 0 and up to 1) or a register value 1 to 4094. `adsr` is
+    `[attack, decay, sustain, release]`, four values 0 to 15. `gate` is `true` or `false`.
+  - `filter` is `off` or `keep`. `off` clears the filter routing bit of the voice (the voice bypasses the filter) until
+    a later step says `keep` or the effect ends; `keep` is the default and leaves the routing as the music sets it. The
+    change reaches the SID with the filter registers of the next play call, so the routing follows one play call later at
+    the start and at the end of the effect.
+  - `wait` is the number of play calls the step lasts, 1 to 255 (default 1).
+  - A field a step omits keeps the value of the steps before. The first step starts from `wave: pulse`, `pulse: 0.5`,
+    `adsr: [0, 0, 15, 0]` and `gate: true`, and writes all of them. A step writes only the fields it names.
+  - The first step writes the control register with the gate off before its other registers, so an effect that is
+    started again, or that takes over a voice with a held note, restarts its envelope.
+- Timing. `sfx` only records the request. The first step is applied in the next play call, after the music of that call,
+  so the latency is at most one play period. A step applied in call n lasts `wait` calls; the next step is applied in
+  call n + `wait`. An effect of T play calls owns its voice from the call after `sfx` for T + 1 calls: in the last
+  of them the voice is given back (the registers of the music are copied to the SID, the control register last).
+- The shadow holds what the music writes to the voice, including its gate. The copy at the end therefore includes the
+  gate state: a note that the music started while the effect ran sounds from its gate edge on, with the envelope the
+  music gives it; the voice does not wait for the next note.
+- Voice allocation. `sfx` checks, in this order: A is below the number of effects; the song has not ended (a play-once
+  score, see below); Y is $FF or 1 to 3 and, if given, is allowed for the effect. The candidates are the allowed voices
+  (or only the requested one). Then:
+  1. the lowest-numbered candidate that no effect owns is taken;
+  2. otherwise, if the candidate with the lowest priority (the lowest-numbered one among equals) runs an effect of
+     strictly lower priority than the new one, that effect is replaced;
+  3. otherwise, if a candidate runs the same effect (the same index, so the same priority), the effect starts again
+     on that voice;
+  4. otherwise the request is rejected.
+  An effect with priority 0 therefore never replaces another one and starts only on a free voice or restarts itself,
+  and an effect with priority 15 replaces any other effect. A rejected `sfx` changes no state.
+- Entry `sfx`: A = effect index, Y = voice or $FF. Returns carry clear when the effect was started and carry set when it
+  was rejected. Clobbers A, X, Y and the flags except that the caller's interrupt flag is restored. It runs with
+  interrupts disabled, so it may be called from the main program while a raster interrupt calls `play`; it must not be
+  called from an interrupt that can interrupt `play` itself. It writes no SID register. It uses only the player's own
+  RAM, no zero page and at most 5 bytes of stack including its return address.
+- `init` and `stop` cancel every effect without touching the effect's voice (`stop` silences all voices; `init` resets
+  the player). A running effect does not survive either call, and `sfx` can start effects again right after `init`.
+- A song that plays once (a score with an `end` block, or a song with `loop: false`) ends its effects with the song:
+  when the song has finished its last play call, running effects give their voices back (the registers of the music are
+  copied to the SID) and the usual release and volume fade follow. `sfx` is rejected from then on until `init`. An effect
+  that is longer than the song is therefore cut off at the end of the song. In a document with songs, effects are
+  accepted while a looping song plays.
+- All songs of a document share its effects. With multispeed (`speed` above 1) the steps are counted in play calls, not in
+  video frames.
+- Filter and volume. The music's filter cutoff, resonance and the chip volume are not touched by effects, except for
+  `filter: off` described above. An effect is as loud as the chip volume and the soft volume ramp of the music allow.
+
+**Output.**
+
+- PRG: the vectors are `$080D` (installer), `$0810` init, `$0813` play and, with effects, `$0816` sfx (`CompileResult.sfxAddress`,
+  3 bytes after the play vector, so a score without effects keeps its layout). From BASIC, `POKE 780,<effect>: POKE 782,255:
+  SYS 2070` starts effect `<effect>` on any voice (the registers A and Y are the values in 780 and 782; the carry flag of the
+  result is bit 0 of the value in 783). From machine code, `lda #<effect> : ldy #$FF : jsr $0816`. The BASIC program does not
+  need any other setup: the installer's interrupt calls `play`, which runs the effects.
+- PSID: the file is the same PRG body, so the entry is at `$0816` after loading at `$0801`, but PSID defines no way to call
+  it, so a player such as sidplayfp plays the music only. `compileSidwaveToSid` accepts the score and the music is
+  unchanged (tested).
+- Game build: `origin+9` is `jmp sfx` (a one byte `rts` stub when the score has no effects). The symbol files add
+  `sidwave_effects` (the count) and `sidwave_fx_<name>` (the index of each effect); the contract lists `effects` with
+  name, index, priority, voices, steps and frames, and the sfx entry's inputs, outputs and clobbered registers.
+  The cycles are measured twice: `cycles.worst` over the music alone, and `cycles.withEffects` over a run in which
+  every play call starts, restarts or replaces an effect on a rotating voice request, with `sfxWorst` for the `sfx` call.
+  `cycles.estimatedWorst` includes the effect engine and bounds both. The effect RAM (45 bytes for one SID, plus 4 with `filter: off`)
+  is part of `contract.ram`.
+- The estimator charges every score with effects up to 931 more cycles per play call with one SID (`40 + 7 x channels +
+  3 x 290`; 1066 with 335 instead of 290 when a step uses `filter: off`). A score whose music already uses most of the stock budget may therefore
+  need `cpu: turbo` with effects (the error message says so). Of the bundled examples, `chiptune_drive` (estimate 8356 without effects, 9287 with one) and `metal_sync` (8234, 9165) exceed the 8778 cycles of a stock PAL frame at speed 2 once they define any effect, and need `cpu: turbo` (a game build only warns); `funk_bass`, `drum_and_bass` and the other examples stay within budget.
+
+**Schema.** `data/sound/sidwave.schema.json` has the property `effects` (an object of at most 32 properties whose names
+match `^[A-Za-z_][A-Za-z0-9_]{0,31}$`), with the effect and step fields above and the same ranges.
+
+**Parser.** `parseEffects` and `parseEffectStep` in `src/sidwave.ts`. The parsed document has `effects` (`ParsedEffect[]`),
+absent when the mapping is empty. Errors carry the JSON path (`$.effects.zap.steps[2].wait`). `SIDWAVE_MAX_EFFECTS` (32) and
+`SIDWAVE_MAX_EFFECT_STEPS` (255) are exported.
+
+**Compiler.** `src/sidwaveEffects.ts` builds the step records (11 bytes each: flags, wait, PAL frequency, NTSC
+frequency, pulse width, control, attack/decay, sustain/release), the tables (allowed voices, priority and start address per
+effect) and the assembly of the engine. `src/sidwaveCompiler.ts` hooks it into the player when `effects` exist: the voice
+register write of the music jumps to a shadow copy for an owned voice; `play` calls the engine after the last chip;
+`init` and `game_stop` reset it; the end of a play-once song stops it; with `filter: off` the write of the filter routing
+register ($D417) is masked.
+
+**Tests.** `test/sidwave14Effects.test.mjs` (language, limits, records, longest and most effects, cost),
+`test/sidwave14EffectsRuntime.test.mjs` (the adversarial list: a trigger on every play call for 10 s, triggers on all voices at
+once, priority inversions, a trigger in the call that wraps the song loop, effects during multispeed, an effect running
+when `stop` is called, an effect longer than the play-once song) and `test/sidwave14EffectsCombos.test.mjs` (filter
+routing, two SIDs, a score with an `end` block, PRG and PSID). Every run plays the score with effects and the same score
+without effects on the bundled emulator, side by side, and after every play call checks four properties:
+
+1. the voices that no effect owns, and the filter and volume registers, are written exactly as in the plain run;
+2. the SID register image equals the plain run's for every voice that no effect owns, so an owned voice has its music values
+   again from the call in which its effect ends;
+3. every write to an owned voice has the program counter inside the effect engine, so no music write reaches an owned voice;
+4. an effect that `sfx` accepted writes its first registers in the very next play call (latency of one play period).
+
+Boundaries: 0 effects (`effects: {}`), 32 effects (and 33 rejected), an effect with 1 step, the longest effect (255 steps,
+each step's frequency checked across page boundaries of the data), priority 0 and 15 (and -1, 16 rejected), `voices` with one
+and three entries and with invalid numbers (0, 4, duplicates, text, an empty list), every step field and its invalid values,
+wait 1 and 255 (0 and 256 rejected). Combinations: several songs, multispeed, play-once songs and scores with an `end` block,
+two SIDs and a centred voice, filter routing, the game target (including a split data block and garbage-filled memory, with
+every write checked against the contract) and PRG and PSID output.
+
+**Player cost.** Measured on the bundled emulator (`src/sidwaveEmulator.ts`) with the three songs of `game_songs.yaml`
+(three voices, the 1.4 song selector) at origin $1000; "worst play call" is the highest cycle count of one call over a full
+pass plus one loop of every song, with the given number of effects started on every call:
+
+| Score | PRG bytes | Worst play call, no effect running | One effect running | Three effects running |
+| --- | --- | --- | --- | --- |
+| `game_songs` without effects | 3191 | 1878 | - | - |
+| 1 effect of 3 steps | 3832 | 1946 | 2181 | 2651 |
+| 3 effects of 6 steps | 3873 | 1946 | 2181 | 2643 |
+
+The first effect costs 604 bytes of engine code and tables, each further effect 4 bytes, each step 11 bytes, and `filter: off`
+74 bytes; the effect RAM is 45 bytes. Against the plain run at the same play call, the engine adds
+78 cycles while no effect runs (the owned-voice check of the three voices and the idle pass), 317 cycles with one effect
+starting a step on every call and 787 cycles with three (at origin $1000; the bound is checked at 19 origins, which differ
+in page crossings: the dearest call with three full steps adds 804 cycles, 958 with `filter: off`, against bounds of 931 and 1066). A call of `sfx` takes at most 361 cycles at
+the origin of these measurements and at most 403 at the dearest of 256 origins (page crossings); the bound is 430. The measured worst calls are
+well below the estimate (2584 without effects, 3785 with). The per-song estimates of a game build (`cycles.songs[k].estimatedWorst`)
+include the engine as well, so each bounds a run of that song with three effects running (tested).
+`test/sidwave14Effects.test.mjs` ("the measured cost of the effect engine stays below the compiler's bound") measures this
+on every run.
+
+**Documents without `effects` compile to identical bytes.** Nothing of the engine is generated without effects. The hash
+fixture `test/fixtures/sidwave-s4a/example-hashes.json` (PRG, play-once PRG and PSID of the 14 earlier examples) passes
+unchanged, and a document with `effects: {}` compiles to the same PRG and game bytes as the same document without the
+key (`test/sidwave14Effects`). A document with `sidwave: 1.3` (or 1.2, or none) that contains `effects` is rejected with
+`effects require sidwave: 1.4` (`$.effects`).
+
 ## Playable examples
 
 Open the composition index and use the names with `c64_sound` `play_preset`.
@@ -899,10 +1215,177 @@ The result includes the resource URI and a short summary. Set `includeScore: tru
 to include the YAML in the result. Each original YAML has a technique and form
 guide in its header. [Composition index](c64://sound/examples)
 
-- Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). They were rewritten in SIDWAVE 1.2 for 1.3.2; their 1.3.1 (SIDWAVE 1.1) texts are kept as test fixtures that pin the 1.1 compiler output.
+- Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). They were rewritten in SIDWave 1.2 for 1.3.2; their 1.3.1 (SIDWave 1.1) texts are kept as test fixtures that pin the 1.1 compiler output.
 - Use [acid bass](c64://sound/examples/acid_line) for filter accents, [the ballad](c64://sound/examples/arp_ballad) for chord arps and PWM, [drum and bass](c64://sound/examples/drum_and_bass) for multispeed breakbeats, and [the digi groove](c64://sound/examples/digi_groove) for CIA2 samples.
 - Use [metal](c64://sound/examples/metal_sync) for sync, ring and bends, [the chamber waltz](c64://sound/examples/chamber_waltz) for 3/4 counterpoint, and [the fanfare](c64://sound/examples/title_fanfare) for filtered brass and a held cadence.
+- Use [the game songs](c64://sound/examples/game_songs) for three songs (title, in-game loop, game-over jingle) in one player.
 - Use [stereo echo](c64://sound/examples/stereo_echo) for panning, [the orchestra](c64://sound/examples/ultisid_orchestra) for 24 voices, and [the nine-SID finale](c64://sound/examples/wall_of_sid) for the build to 27 voices. The last piece needs `configure: true` and a fitted SID in socket 1.
+
+## Asset libraries (SIDWave 1.4)
+
+A `sidwave: 1.4` score may import libraries of instruments, patterns and effects. Resolution happens before the score is
+parsed, so a score that uses libraries compiles to the bytes of the equivalent score with the library items written out.
+
+**Observed need.** A drum kit, a bass instrument or a sound effect set that several scores share is copied into each
+score today. Reproducer: the `kick`, `hat` and (in three of them) `snare` instruments are written out separately in
+`chiptune_drive.yaml`, `drum_and_bass.yaml`, `metal_sync.yaml` and `stereo_echo.yaml`; a fix to one copy does not reach
+the others, a copy has no record of where it came from or under which licence it may be used, and nothing detects that
+two copies have drifted apart. A composer who wants to publish a kit has no unit to publish.
+
+**Why 1.4 so far cannot express it.** The only names a score can refer to outside its own `instruments` are the
+built-in `lib:` instruments, a fixed list that ships with the compiler (see "Built-in instruments"). YAML anchors and
+aliases work inside one file only. There is no way to name another file, to say which version of it is meant, or to
+check that its content is what the author tested.
+
+**Design.** A library is a SIDWave file with `sidwave: 1.4`, a `library` block, and the maps `instruments`, `patterns`
+and `effects`. It has no voices, timeline or SID map. A library may import other libraries.
+
+```yaml
+sidwave: 1.4
+library:
+  name: my-drums             # letters, digits, dot, dash, underscore
+  version: 1.2.0             # major.minor.patch
+  licence: CC0-1.0           # SPDX identifier or expression
+  provenance: { author: A. Composer, source: "https://example.org/my-drums", created: 2026-11-27 }
+imports:
+  - { as: base, from: ./base.yaml, version: "^1.0.0" }
+instruments:
+  snare: { waveform: noise, adsr: [0, 6, 0, 0], wavetable: [{ wave: noise, note: C6 }, { gate: false }] }
+patterns:
+  beat: { length: 0.5, bars: 1, drums: { kit: { k: base.kick, s: snare }, steps: "k.s. k.s." } }
+effects:
+  pew: { priority: 8, steps: [{ freq: 2400, wave: pulse, adsr: [0, 0, 15, 6] }, { gate: false, wait: 3 }] }
+```
+
+A score lists the libraries it uses:
+
+```yaml
+imports:
+  - { as: drums, from: ./libs/drums.yaml, version: "^1.2.0", sha256: "<64 hexadecimal digits>", effects: [pew] }
+  - { as: pads, from: "pkg:sidwave-lib-pad/pad.yaml" }
+```
+
+- **Namespaces.** `as` names the namespace (letters, digits, underscore; `lib` is reserved). The score refers to
+  `drums.snare` as an instrument (`instrument:`, `@drums.snare` in a pattern, a `kit` entry) and to `drums.beat` as a
+  pattern in a layer (`layers: { v3: drums.beat }`, also in sequences and with modifiers such as `drums.beat^`). The
+  pattern is added to the voice of that layer under its qualified name. A library's own imports are reached as
+  `drums.base.kick`. Effect names do not allow a dot, so an effect is `drums_pew` (`drums_base_pew` for the effect `pew` of
+  a library imported as `base` by `drums`: the dots of the namespace become underscores). An import includes only the
+  effects it lists in `effects`. A library's own import may list effects too, and then every score that imports the
+  library gets them; a score may also list a nested effect as `base.pew` in its import of `drums`. Effects follow the
+  score's own effects in the order of the imports, each included once. Instruments and patterns are included only when the score, or a pattern that was included, refers to
+  them. The built-in `lib:` names are unchanged and may be used next to imports.
+- **Collisions** are errors that name the path: a score instrument, voice pattern or effect with the name of a library
+  item, and two imports with the same `as`.
+- **Resolution.** A local `from` is relative to the importing file. It must resolve (symbolic links followed) to a file
+  inside the directory of the score or of a directory on the library search path (`--allow-dir`, or `allowedDirs` of
+  `confinedReadOptions`). Absolute paths, URLs and anything that leaves those directories are errors; the compiler never
+  reads from the network. `pkg:<package>/<file>` resolves through `node_modules` of the importing file's directory and
+  its parents up to the score directory, then through `node_modules` of each search path directory, with the same
+  confinement. Limits: 16 levels of nested imports, 64 library files, 256 KiB per file, 2 MiB in total.
+- **Cycles** are errors that name the cycle: `import cycle: libs/a.yaml -> libs/b.yaml -> libs/a.yaml`.
+- **Pins.** `version` is a range: `1.2.3`, `^1.2.0`, `~1.2.0`, `1`, `1.x`, `>=1.0.0 <2.0.0`, alternatives with `||`
+  (no pre-release tags). `sha256` is the SHA-256 of the canonical library text: the file as written by `sidwave format`
+  (comments included, so a comment change changes the hash) without the `from` of its own imports. Leaving out `from`
+  lets a bundle move a library without changing its identity. The pin covers the dependency closure: for a library
+  with imports it is the SHA-256 of that text hash followed by the sorted pins of the libraries it imports (one per
+  line), so swapping a nested library changes the pin of every library above it. A library without imports has the
+  hash of its own text. A mismatch is an error that names both hashes. The pins written in a library's own imports are
+  checked in the same way.
+- **Reporting.** The parsed document has `libraries` and the compile summary (`sidwave compile --json`, or the
+  `libraries` of `compileSidwaveBytes`) lists each library that contributed an item: namespace, name, version,
+  `sha256` and licence. The command prints one line per library to standard error.
+- **`sidwave lock <score>`** writes the `sha256` of every import into the score in place (or to `-o`), after checking
+  `version`. The rest of the text, including comments, is kept. A second run changes nothing.
+- **`sidwave bundle <score> -o <dir>`** writes the score and the whole closure into one directory: the score under its
+  own name, the libraries as `libs/<name>-<version>.yaml`, every `from` rewritten to a relative path (a `pkg:` import
+  becomes a local one), and `bundle.json` with `format`, the score's file and hash, and for each library its file, name,
+  version, `sha256`, licence, provenance and imports. The bundle compiles with no `node_modules` and no other directory
+  to the same bytes. The target directory must be empty unless `--force` is given. `file:` samples of the score are
+  copied to `samples/` (confined like the compiler's reads, at most 16 MiB each and 64 MiB together), their paths in
+  the score are rewritten, and `bundle.json` lists each with its `sha256` and size. Sample paths are relative to the
+  working directory, so compile the bundle from inside its directory.
+
+**Rejected alternative.** Letting a score name any URL and fetching it was rejected: the compiler would make network
+requests while reading a document, a score would change its meaning when the remote file changes, and a bundle could not
+be compiled offline. Merging library names into the score's own names without a namespace was rejected because the
+reader could not tell which `kick` plays when a score and a library both define one. Libraries that carry a whole voice
+with a timeline were rejected because the timeline is the arrangement, which belongs to the score.
+
+**Schema.** `data/sound/sidwave.schema.json`: the score property `imports` (definition `import`) and the definition
+`libraryFile` for library files.
+
+**Parser and compiler.** `src/sidwaveLibs.ts` resolves the imports into an ordinary document (`expandImports`);
+`parseSidwave` calls it through the read option `imports`, which `confinedReadOptions(root, allowedDirs, scoreFile)`
+supplies. Without the option a score with `imports` is rejected, and a library file given to `parseSidwave` is rejected
+with a message that says to import it. The compiler and the player do not know about libraries.
+`src/cliAssets.ts` holds `lock` and `bundle`.
+
+**Cost.** None at run time. The player, the tables and the streams come from the expanded document, so a score with
+imports and the same score written out give identical PRG and PSID bytes (`test/sidwave14Libs.test.mjs`, "compiles to the
+bytes of the flattened score"). Only the items a score refers to are included, so an unused library adds nothing.
+
+**Older documents are unchanged.** A score without `imports` takes the same path as before: the hash fixture
+`test/fixtures/sidwave-s4a/example-hashes.json` passes with a library resolver supplied ("keep their recorded bytes").
+`imports` in a document that is not `sidwave: 1.4` is rejected with `imports require sidwave: 1.4`.
+
+**Tests.** `test/sidwave14Libs.test.mjs`: resolution, namespaces and nested libraries, collisions, cycles, the depth,
+size and count caps, path traversal (`../`, absolute, URLs, symbolic links to files and directories, `pkg:` escapes),
+version ranges and mismatches, hash mismatch and whitespace/location independence, malformed library files, lock, bundle
+round trip, the command line, and byte identity for scores without imports.
+
+## Composer 2 and completion
+
+`generateSidwave({ composer: 2, profile, seed, root, style, system })` selects composer 2. Without `composer: 2` the
+original generator runs and its output is unchanged for every existing style and seed. Composer 2 builds a score from a
+**profile**: a data record that fixes tempo, speed, metre, mode, form, voice layout, instrument palette, groove,
+syncopation, density, phrase length, harmonic rhythm and the key of the contrasting sections (33 profiles, listed in
+`data/compose/profiles.md`). The seed chooses everything else.
+
+- **Form**: AABA, verse and chorus, rondo, binary, through-composed, arch or a short loop, as named timeline sections with a
+  length in bars, a loop point (`loop_to`) or an `end`, and a dynamic level per section.
+- **Harmony**: a functional grammar (tonic, predominant, dominant) over the triads of the mode, cadences (authentic, half,
+  plagal, deceptive) at phrase ends, optional modulation of contrasting sections that returns through the home dominant.
+- **Melody and motif development**: one motif per piece and its development (sequence, inversion, augmentation,
+  fragmentation) shaped by a contour, with chord tones on beats and cadential endings; repeated sections ornament the lead.
+- **Counterpoint**: a counter line against the lead, built on chord tones with consonance on strong beats, no parallel
+  fifths or octaves, no crossing and a preference for contrary motion. `checkCounterpoint` reports violations of these rules.
+- **Rhythm**: groove tables per profile, syncopation, bass patterns and drum patterns with fills.
+- **Instrumentation**: lead, counter line, chord arpeggio, bass, percussion and pad on at most three voices per SID (one or
+  two SIDs), using library instruments without filter tables. The plan is checked against a cycle budget (default 80 percent
+  of a video frame divided by `speed`). By default the figure is the compiler's static upper bound for the worst player
+  call, reported as `cycles.kind: "estimated"`; with `measure: true` every call of one pass runs on the register-write 6502
+  interpreter and the figure is `"measured"`. An over-budget plan (the bound is measured first when it exceeds the budget)
+  loses its vibrato, then its pad, counter line, arpeggio and percussion voices, then one speed step, and the result lists the
+  repairs.
+
+`sidwave complete <score> --op continue|harmonise|accompany|fill-section` (library: `completeScore`) adds to an existing
+score of any version: a continuation in the key, tempo and instruments of the score with the motif of its last section,
+a harmony voice (chord arpeggio or counter line) under a melody voice, a bass line and percussion on free voices, or a
+named missing section. The operations add patterns, voices and timeline entries and never rewrite one that plays. A target
+voice that plays is refused. Unless `--no-verify` is given, the original and the completed score are run on a register-write
+6502 interpreter and the SID register writes of every protected voice are compared call by call; a difference stops the
+command and nothing is written. Two things are not compared, and the result names them (`ProtectedReport`):
+- **The ring-out tail.** A score with `end` plays on after its last timeline entry (the end hold and release). It is compared
+  for harmonise, accompany and fill-section in place or before later material. When new entries follow the original ones
+  (`continue`, and `fill-section` at the end) the tail no longer follows the last original entry; it is not compared and
+  `unprotectedTail` gives its call range and the reason.
+- **The hard restart before a continued voice.** In the last (longest hard restart in frames + 1) x speed calls of a voice's
+  last original section, when that voice plays there and continues, the comparison ends where the voice's gate is cleared, which
+  must be the same call in both scores (an appended score may clear it later in the last original entry, where the original's
+  gate-off can be its loop restart): the next attack's hard restart (gate off, zero envelope, the next note's frequency and pulse width) is written
+  there. Every call before it must be identical in all seven registers.
+
+New material for a voice that plays in the entry before starts with a rest, and material inserted before later entries ends
+with one, so that the notes around it keep their attacks. Inserting a section before later material is accepted only when it
+moves that material by a whole number of player calls. A fill-section in place can still be refused when the first note of the
+next section depends on the note before it (legato); nothing is written then. Scores with several songs, a tempo change or a
+section metre other than the song metre are refused. `--allow-dir` permits `file:` sample sources as in `compile`.
+
+`scripts/evaluate-composer.mjs` compares composer 2 with the version 1 generator on 33 profiles and held-out seeds
+(`data/compose/composer-eval.md`). The measures are proxies for technical correctness, lint, structure and variation, with
+the variation measures taken over the first 8 bars of the lead so that length does not decide them. They do not measure
+musical quality.
 
 ## Authoring and Validation
 
@@ -920,9 +1403,9 @@ guide in its header. [Composition index](c64://sound/examples)
 
 ## LLM Prompt Template
 
-> Compose an original 2-4 minute SID piece as **SIDWAVE 1.2** YAML conforming to `sidwave.schema.json`. Quote silent layers as `"-"`. Check `lint`, `arrangement` and `durationSeconds` in the compile result and fix every warning.
+> Compose an original 2-4 minute SID piece as **SIDWave 1.2** YAML conforming to `sidwave.schema.json`. Quote silent layers as `"-"`. Check `lint`, `arrangement` and `durationSeconds` in the compile result and fix every warning.
 
-SIDWAVE 1.2 quick reference:
+SIDWave 1.2 quick reference:
 
 - Header: `sidwave: 1.2`, `title`, `tempo`; `sids: [{ id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }]`; `kit: { k: lib:kick, s: lib:snare }`.
 - Durations of tables, vibrato, slides, portamento and hard restart count video frames at any `speed`.

@@ -428,7 +428,7 @@ Every runtime environment variable documented in `mcp.json` can be set in your M
 
 <!-- AUTO-GENERATED:MCP-DOCS-START -->
 
-This MCP server exposes **17 tools**, **53 resources**, and **11 prompts** for controlling your Commodore 64.
+This MCP server exposes **17 tools**, **54 resources**, and **11 prompts** for controlling your Commodore 64.
 
 See the [hardening behavior guide](doc/hardening-behavior.md) for host path restrictions, argument limits, task retention, cancellation and verification semantics.
 
@@ -714,6 +714,7 @@ VICE resources, snapshots.
 | `c64://sound/examples/chamber_waltz` | Three independent voices in 3/4 with no percussion |
 | `c64://sound/examples/title_fanfare` | Short filtered brass fanfare with timpani and a held cadence |
 | `c64://sound/examples/ultisid_orchestra` | Eight SIDs with divided strings, twin echo leads, arps and a drum kit |
+| `c64://sound/examples/game_songs` | SIDWave 1.4 songs: a title tune, an in-game loop and a game-over jingle that share one player |
 | `c64://sound/examples/wall_of_sid` | Nine SIDs and a gradual build to a 27-voice finale |
 | `c64://sound/examples/fuer_elise` | Legacy three-voice arrangement of Beethoven’s Bagatelle |
 | `c64://sound/sid/file-format` | Explains PSID/RSID headers, metadata blocks, and compatibility notes for imported music. |

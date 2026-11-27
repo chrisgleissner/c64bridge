@@ -353,6 +353,17 @@
       }
     },
     {
+      "name": "Level One",
+      "uri": "c64://sound/examples/game_songs",
+      "description": "SIDWave 1.4 songs: a title tune, an in-game loop and a game-over jingle that share one player",
+      "mimeType": "application/yaml",
+      "_meta": {
+        "domain": "audio",
+        "priority": "supplemental",
+        "order": 15
+      }
+    },
+    {
       "name": "Twenty-Seven Lanterns",
       "uri": "c64://sound/examples/wall_of_sid",
       "description": "Nine SIDs and a gradual build to a 27-voice finale",
@@ -360,7 +371,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "supplemental",
-        "order": 15
+        "order": 16
       }
     },
     {
@@ -371,7 +382,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "supplemental",
-        "order": 16
+        "order": 17
       }
     },
     {
@@ -382,7 +393,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "order": 17
+        "order": 18
       }
     },
     {
@@ -393,7 +404,7 @@
       "_meta": {
         "domain": "audio",
         "priority": "reference",
-        "order": 18
+        "order": 19
       }
     },
     {

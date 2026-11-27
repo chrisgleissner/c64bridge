@@ -1,1 +1,1 @@
-export * from "c64-asm6502/ioRange";
+export * from "6502-toolkit/ioRange";

@@ -1,1 +1,1 @@
-export * from "c64-asm6502/assembler";
+export * from "6502-toolkit/assembler";

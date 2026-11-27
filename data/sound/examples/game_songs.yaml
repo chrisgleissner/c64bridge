@@ -1,0 +1,57 @@
+# Three songs for a game | 110 BPM title tune, 140 in game, 90 game over | 4/4 | A minor | 1 SID
+# Techniques: SIDWave 1.4 songs. One set of instruments, patterns and named sections serves a title tune, an in-game loop and a game-over jingle; each song has its own timeline and tempo.
+# Learn: A game calls init with A = 0, 1 or 2 to switch songs. Song 0 and song 1 loop (song 1 returns to its "drive" section, so its intro plays once); song 2 plays once and ends in silence. The player stays one block of code for all three songs.
+# Accepted lint: HR-GAP: the title tune and the jingle rest on whole-bar chords on purpose, which leaves one gap between notes.
+sidwave: 1.4
+title: Level One
+tempo: 110
+mode: PAL
+sids:
+  - { id: sid1, address: "$D400", model: "8580" }
+instruments:
+  lead: { waveform: pulse, adsr: [1, 5, 10, 4], pulse_width: 0.4 }
+  bell: { waveform: triangle, adsr: [0, 6, 8, 6] }
+  arp: { waveform: pulse, adsr: [0, 4, 8, 3], pulse_width: 0.25 }
+  bass: { waveform: sawtooth, adsr: [0, 5, 9, 3] }
+voices:
+  - id: 1
+    name: Lead
+    instrument: lead
+    patterns:
+      theme: { length: 1, bars: 2, groove: "A4 C5 E5 D5 | C5 B4 A4 ~" }
+      theme2: { length: 1, bars: 2, groove: "F4 A4 C5 B4 | G4 B4 D5 ~" }
+      run: { length: 0.5, bars: 2, groove: "A4 C5 E5 A5 G5 E5 C5 E5 | F5 E5 D5 C5 B4 D5 G4 B4" }
+      fall: { length: 1, bars: 2, groove: "E5 D5 C5 B4 | A4 ~ ~ ~" }
+  - id: 2
+    name: Arpeggio
+    instrument: arp
+    patterns:
+      am: { length: 0.5, bars: 1, groove: "A3 C4 E4 C4 A3 C4 E4 C4" }
+      f: { length: 0.5, bars: 1, groove: "F3 A3 C4 A3 F3 A3 C4 A3" }
+      g: { length: 0.5, bars: 1, groove: "G3 B3 D4 B3 G3 B3 D4 B3" }
+      pad: { length: 4, bars: 1, groove: "E4@bell" }
+  - id: 3
+    name: Bass
+    instrument: bass
+    patterns:
+      root: { length: 1, bars: 2, groove: "A2 ~ A2 ~ | F2 ~ G2 ~" }
+      drive: { length: 0.5, bars: 1, groove: "A2 A2 A3 A2 A2 A3 A2 A3" }
+      low: { length: 4, bars: 1, groove: "A1" }
+sections:
+  intro: { bars: 2, layers: { v2: pad, v3: low } }
+  verse: { bars: 2, layers: { v1: theme, v2: "am", v3: root } }
+  bridge: { bars: 2, layers: { v1: theme2, v2: f, v3: drive } }
+  drive: { bars: 2, layers: { v1: run, v2: am, v3: drive } }
+  rise: { bars: 2, layers: { v1: fall, v2: g, v3: drive } }
+  fallen: { bars: 2, layers: { v1: fall, v2: pad, v3: low } }
+songs:
+  - name: title
+    timeline: [intro, verse, bridge, verse]
+  - name: ingame
+    tempo: 140
+    loop: drive
+    timeline: [intro, drive, rise, drive, bridge]
+  - name: gameover
+    tempo: 90
+    loop: false
+    timeline: [fallen, { bars: 2, layers: { v3: low } }]

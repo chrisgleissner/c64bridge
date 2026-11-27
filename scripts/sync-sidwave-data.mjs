@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The SIDWAVE specification, JSON schema and example scores live in packages/sidwave/data/sound. The public
+ * The SIDWAVE specification, JSON schema and example scores live in the sidwave package (node_modules/sidwave/data/sound). The public
  * paths data/sound/sidwave.md, data/sound/sidwave.schema.json and data/sound/examples/*.yaml (resources, RAG index,
  * schema URL in editors) are generated copies of those files.
  *
@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE = path.join(root, "packages/sidwave/data/sound");
+const SOURCE = path.join(root, "node_modules/sidwave/data/sound");
 const TARGET = path.join(root, "data/sound");
 
 /** Relative paths (posix) of the files that are copied. */
@@ -54,7 +54,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (process.argv.includes("--check")) {
     const drift = findDrift();
     if (drift.length) {
-      console.error(`Generated SIDWAVE data differs from packages/sidwave/data/sound:\n  ${drift.join("\n  ")}\nRun: node scripts/sync-sidwave-data.mjs`);
+      console.error(`Generated SIDWAVE data differs from the sidwave package (node_modules/sidwave/data/sound):\n  ${drift.join("\n  ")}\nRun: node scripts/sync-sidwave-data.mjs`);
       process.exit(1);
     }
   } else {

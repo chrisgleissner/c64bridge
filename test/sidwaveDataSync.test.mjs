@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { findDrift, listSyncedFiles } from "../scripts/sync-sidwave-data.mjs";
 
-test("data/sound holds exact copies of the SIDWAVE specification, schema and examples from packages/sidwave", () => {
+test("data/sound holds exact copies of the SIDWAVE specification, schema and examples from the sidwave package", () => {
   assert.ok(listSyncedFiles().length > 3);
   assert.deepEqual(findDrift(), [], "run node scripts/sync-sidwave-data.mjs");
 });

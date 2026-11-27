@@ -68,7 +68,7 @@ try {
 
   console.log("✔ Extracted tarball for inspection");
 
-  // The tarball bundles the workspace packages sidwave and c64-asm6502, which are not on the registry, so a plain
+  // The tarball bundles the workspace packages sidwave and 6502-toolkit, which are not on the registry, so a plain
   // `npm install` inside the extracted directory cannot resolve them. Install the tarball into an empty project, as a
   // user does, and import from the installed copy.
   const consumerDir = path.join(tempDir, "consumer");

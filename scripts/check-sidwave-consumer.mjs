@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Clean-consumer check. Packs c64-asm6502 and sidwave, installs the two tarballs in an empty project with npm,
+ * Clean-consumer check. Installs the sidwave and 6502-toolkit dependencies exactly as c64bridge's package.json
+ * names them (file: tarballs before the release, registry versions after) in an empty project with npm,
  * then parses and compiles an example score to PRG and PSID with an ESM program on Node and on Bun, and with the
  * installed `sidwave` command. The byte hashes must agree between runtimes and, with --baseline, equal the
  * values recorded for that example in the S0 baseline file.
  *
  *   node scripts/check-consumer.mjs [--baseline <sidwave-baseline.json>] [--example <name>] [--out <result.json>]
  *
- * This file lives in packages/scripts and refers only to its parent directory, so it runs in c64bridge and in the
- * standalone repository. Run the build first (npm run build); the script does not build.
+ * The script does not build and needs no c64bridge build.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const packagesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const option = (name) => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const example = option("--example") ?? "fuer_elise";
@@ -34,20 +34,20 @@ const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "sidwave-consumer-"));
 const result = { example, runtimes: {}, checks: [] };
 try {
-  const tarballs = [];
-  for (const dir of ["asm6502", "sidwave"]) {
-    const pkgDir = path.join(packagesRoot, dir);
-    if (!fs.existsSync(path.join(pkgDir, "dist"))) throw new Error(`${dir}/dist is missing; run the build first`);
-    const [info] = JSON.parse(run("npm", ["pack", "--json", "--pack-destination", work], { cwd: pkgDir }));
-    tarballs.push(path.join(work, info.filename));
-    result.checks.push({ pack: info.name, files: info.files.length, bytes: info.size });
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+  const specs = [];
+  for (const name of ["6502-toolkit", "sidwave"]) {
+    const spec = pkg.dependencies?.[name];
+    if (!spec) throw new Error(`package.json has no ${name} dependency`);
+    specs.push(spec.startsWith("file:") ? path.resolve(repoRoot, spec.slice(5)) : `${name}@${spec}`);
+    result.checks.push({ dependency: name, spec });
   }
   const consumer = path.join(work, "consumer");
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "package.json"), JSON.stringify({ name: "consumer", private: true, type: "module" }));
-  run("npm", ["install", "--no-audit", "--no-fund", "--no-package-lock", ...tarballs], { cwd: consumer });
+  run("npm", ["install", "--no-audit", "--no-fund", "--no-package-lock", ...specs], { cwd: consumer });
 
-  for (const name of ["sidwave", "c64-asm6502"]) {
+  for (const name of ["sidwave", "6502-toolkit"]) {
     const dir = path.join(consumer, "node_modules", name);
     if (fs.lstatSync(dir).isSymbolicLink()) throw new Error(`${name} is a symbolic link in the consumer project`);
     const stack = [dir];
@@ -79,7 +79,7 @@ console.log(JSON.stringify(out));
   for (const runtime of ["node", "bun"]) {
     const hashes = JSON.parse(run(runtime, ["compile.mjs", scoreFile], { cwd: consumer }));
     const version = run(runtime, ["--version"]).trim();
-    const bin = path.join(consumer, "node_modules", "sidwave", "dist", "bin.js");
+    const bin = path.join(consumer, "node_modules", "sidwave", "bin", "sidwave.js");
     const cliDir = path.join(consumer, `cli-${runtime}`);
     fs.mkdirSync(cliDir);
     const summary = JSON.parse(run(runtime, [bin, "compile", scoreFile, "--json"], { cwd: cliDir }));

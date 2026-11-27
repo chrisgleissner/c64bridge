@@ -84,7 +84,7 @@ test("assemblyToPrg roundtrips undocumented opcodes supported by the disassemble
   `;
 
   const first = assemblyToPrg(source);
-  const loadAddress = first.readUInt16LE(0);
+  const loadAddress = first[0] | (first[1] << 8);
   const firstLines = disassemble(first.subarray(2), loadAddress);
   const reassembledSource = [
     `org $${loadAddress.toString(16).toUpperCase().padStart(4, "0")}`,

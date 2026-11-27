@@ -24,7 +24,7 @@ test("HARD04-004 upload_run_asm hands its assembly result to the client instead 
   assert.equal(res.isError, undefined, JSON.stringify(res.content));
   assert.equal(seen.length, 1);
   assert.equal(seen[0].program, SOURCE);
-  assert.ok(seen[0].assembled && Buffer.isBuffer(seen[0].assembled.prg), "assembled result passed as second argument");
+  assert.ok(seen[0].assembled && seen[0].assembled.prg instanceof Uint8Array, "assembled result passed as second argument");
   assert.equal(seen[0].assembled.entryAddress, 0xc000);
 });
 
