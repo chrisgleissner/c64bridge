@@ -14,10 +14,31 @@ A built-in, searchable knowledge base gives it access to C64 programming and har
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
 
+## C64 music with SIDWave
+
+**Ask your AI for C64 music. Hear it on a real C64 or in VICE. Ship it in your game.**
+
+> **PLACEHOLDER, audio clip:** an original tune, to be added before the release.
+>
+> **PLACEHOLDER, audio clips:** a conversion before and after, to be added before the release.
+>
+> **PLACEHOLDER, video:** music and sound effects in a game, recorded from VICE, to be added before the release.
+
+- **Musicians: bring your song and hear it on the SID in one request.** `c64_sound` `play` reads MIDI, MusicXML, ProTracker modules, ABC, several SID tracker formats and more, converts the file where needed, starts it, saves an editable score and a PRG, and lists what the conversion lost, with counts.
+- **Game developers: music and sound effects with a measured cycle cost.** One score holds the songs and effects. The build is an assembler include for 64tass, ACME or ca65 (a KickAssembler include is also written, unverified) with the cycles per play call and the memory and zero page it uses, and it is refused when it exceeds your cycle limit.
+- **AI and retro enthusiasts: no C64 needed.** Compose a tune, render it to WAV, check the audio and play it in VICE. On a C64 Ultimate, Ultimate 64 or U2 cartridge, the same operations play it on the machine.
+
+> In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
+
+The [prompt cookbook](doc/sidwave-cookbook.md) has six prompts of this kind, each with what it produces. To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux); a VICE that C64 Bridge starts is otherwise silent.
+
+Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID Factory II and CheeseCutter imports are approximate. A single SID has three voices, and a conversion drops and reports the rest. [All sound operations](#c64_sound)
+
 ## Contents
 
 <!-- AUTO-GENERATED:TOC-START -->
 
+- [C64 music with SIDWave](#c64-music-with-sidwave)
 - [Quick start](#quick-start)
 - [Project showcases](#project-showcases)
 - [Configuration](#configuration)

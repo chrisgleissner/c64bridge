@@ -269,13 +269,16 @@ const RECOVERED = "Experimental recovery from register writes: an approximate sc
 const PARTIAL_IMPORTS: Readonly<Record<string, string>> = {
   abc: "ABC import is approximate: ornaments, chord symbols and voice overlays are omitted.",
   jch: "JCH import is approximate: the filter, most commands and per-voice looping are not imported.",
-  sf2: "SID Factory II import and export (driver 11) are approximate: playback differs from the original driver.",
+  sf2: "SID Factory II import (driver 11) is approximate: playback differs from the original driver.",
+  cheesecutter: "CheeseCutter import is approximate: playback differs from the original player.",
 };
 
-/** The label of a conversion that is approximate by nature, from the source format and, for exports, the target. */
-export function approximation(from: string, to?: string): { approximate?: true; approximateNote?: string } {
-  const note = PARTIAL_IMPORTS[from] ?? (findFormat(from)?.readIsApproximate ? RECOVERED : undefined)
-    ?? (to === "sf2" ? PARTIAL_IMPORTS.sf2 : undefined);
+/** Formats whose export embeds a driver file of the user, for which no operation has an argument. */
+export const DRIVER_EXPORTS: ReadonlySet<string> = new Set(["sf2", "cheesecutter"]);
+
+/** The label of a conversion that is approximate by nature, by its source format. */
+export function approximation(from: string): { approximate?: true; approximateNote?: string } {
+  const note = PARTIAL_IMPORTS[from] ?? (findFormat(from)?.readIsApproximate ? RECOVERED : undefined);
   return note === undefined ? {} : { approximate: true, approximateNote: note };
 }
 

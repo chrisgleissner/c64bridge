@@ -31,7 +31,7 @@ import { playDefinition } from "./sidwavePlay.js";
 import { renderDefinition } from "./sidwaveRender.js";
 import { extractInstrumentsDefinition, preserveDefinition, sidEditDefinition } from "./sidwaveArchive.js";
 import {
-  approximation, backendOf, capped, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
+  approximation, backendOf, capped, DRIVER_EXPORTS, deviceFacts, documentText, engineFactory, existsError, isSid, lossReport, operation, parseScore,
   planOutput, readFileInput, readInput, record, required, SCORE, SCORE_OUT, scoreText, writeArtifacts, writeScore,
   type ArgName, type Definition, type Input,
 } from "./sidwaveShared.js";
@@ -65,7 +65,7 @@ const definitions: Definition[] = [
         return {
           formats: all.map((f) => ({
             id: f.id, extensions: f.extensions, read: !f.read ? "no" : approximation(f.id).approximate ? "approximate" : "yes",
-            write: f.write, losses: f.lossSummary, ...approximation(f.id),
+            write: f.write && !DRIVER_EXPORTS.has(f.id), losses: f.lossSummary, ...approximation(f.id),
           })),
         };
       }
@@ -73,7 +73,10 @@ const definitions: Definition[] = [
       const format = all.find((f) => f.id === id);
       if (!format) throw new ToolValidationError(`Unknown format "${from}"`, { path: "$.from", details: { allowed: all.map((f) => f.id) } });
       const label = approximation(format.id);
-      return { format: { ...format, ...(label.approximate ? { readApproximate: format.read } : {}) }, ...label };
+      return {
+        format: { ...format, ...(label.approximate ? { readApproximate: format.read } : {}), ...(DRIVER_EXPORTS.has(format.id) ? { write: false } : {}) },
+        ...label,
+      };
     },
   },
   {
@@ -97,7 +100,7 @@ const definitions: Definition[] = [
         format: format.id, name: format.name, bytes: input.bytes.length,
         detectedBy: args.from !== undefined ? "from" : detection.best!.by,
         confidence: args.from !== undefined ? 1 : detection.best!.confidence,
-        readable: format.read !== undefined, writable: format.write !== undefined, ...approximation(format.id),
+        readable: format.read !== undefined, writable: format.write !== undefined && !DRIVER_EXPORTS.has(format.id), ...approximation(format.id),
         details, warnings: detection.warnings, candidates: detection.candidates,
       };
     },
@@ -108,6 +111,12 @@ const definitions: Definition[] = [
     run: async (args, ctx) => {
       const input = await readInput(args);
       const target = resolveTarget(args.to, args.outputPath === undefined ? undefined : basename(args.outputPath));
+      if (DRIVER_EXPORTS.has(target.id)) {
+        throw new ToolValidationError(
+          `Writing ${target.name} needs a driver file, which this operation does not take; use the command line: sidwave export score.yaml --driver <file>`,
+          { path: "$.to" },
+        );
+      }
       const output = planOutput(args, input.stem, target.extensions[0]!, [input.file]);
       const notices: string[] = [];
       const result = await convert(input.bytes, {
@@ -121,7 +130,7 @@ const definitions: Definition[] = [
       return {
         written: !strictFailed,
         ...(artifact ?? { note: "strict: content would be lost, so nothing was written" }),
-        from: result.from, to: result.to, chain: result.chain, ...approximation(result.from, result.to),
+        from: result.from, to: result.to, chain: result.chain, ...approximation(result.from),
         detectedBy: result.detected.viaFrom ? "from" : result.detected.by,
         severity: result.severity, losses: losses.losses, ...(losses.omitted ? { lossesOmitted: losses.omitted } : {}),
         ...(result.metrics ? { metrics: result.metrics } : {}),

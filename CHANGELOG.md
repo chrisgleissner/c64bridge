@@ -5,25 +5,20 @@
 ### Features
 
 - `c64_sound` op `play`: play any readable music file or SIDWave score on the active backend, with a loss report
-- `c64_sound` op `compile`: assembler includes, relocation tables and a cycle limit for game builds
-- `c64_sound` ops `render` (mix, stems, solo, mute), `extract_instruments`, `sid_edit` and `preserve`
+- `c64_sound` ops `formats`, `inspect`, `convert`, `validate`, `lint`, `format`, `transform`, `retarget`, `compose` and `complete`: convert, check, write and change SIDWave scores
+- `c64_sound` op `compile`: PRG, PSID and game builds with assembler includes, symbol files, relocation tables and a cycle limit
+- `c64_sound` ops `render` (mix, stems, solo, mute) and `extract_instruments`
+- `c64_sound` ops `reconstruct` (experimental), `analyze_music`, `compare`, `sid_info`, `sid_edit` and `preserve`
 - `c64_sound` ops `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks
-- `c64_sound` labels approximate imports (SID and register trace recovery, ABC, JCH, SID Factory II)
+- `c64_sound` labels approximate imports (SID and register trace recovery, ABC, JCH, SID Factory II, CheeseCutter)
+- a SIDWave prompt cookbook and walkthroughs for musicians, game developers and archivists in the `sid-music` skill
+- SIDWave and the 6502 assembler come from the `sidwave` and `6502-toolkit` packages instead of workspace packages; SIDWave scores can use version 1.4 (songs and effects) and 1.5
 
 ### Bug Fixes
 
 - resolve SIDWave imports and file samples safely in `compile_play` and `pipeline`
-- cancel synchronous `c64_sound` operations before they write
-- allow `c64_sound` `preserve` with `action: "verify"` in read-only mode
-- replace overwritten SIDWave output files, including a Songlengths database, as a whole
-- do not refuse `c64_sound` operations on host files while a task holds the exclusive lease
-
-
-
-
-
-
-
+- fix the sidplayfp power-on delay so reference renders are deterministic
+- warn that the HTTP transport under Bun does not cancel a call on client disconnect
 
 
 ## 1.4.0 - 2026-11-26

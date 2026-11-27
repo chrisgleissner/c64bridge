@@ -8,7 +8,7 @@ import { acquireLease } from "../src/tasks/resources.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { createLogger } from "./meta/helpers.mjs";
 import { SCORE, sidFile } from "./helpers/musicFixtures.mjs";
-import { ok, workspace } from "./helpers/sidwaveCalls.mjs";
+import { ok, rejected, workspace } from "./helpers/sidwaveCalls.mjs";
 
 const { at, write } = workspace("sidwave-consistency");
 const score = write("tune.sidwave.yaml", SCORE);
@@ -93,7 +93,7 @@ test("host file operations run while another task holds the exclusive lease; ope
 test("approximate formats are labelled in formats, inspect, convert, play and render", async () => {
   const { formats } = await ok({ op: "formats" });
   const labelled = formats.filter((format) => format.approximate).map((format) => format.id).sort();
-  assert.deepEqual(labelled, ["abc", "jch", "sf2", "sid", "siddump", "vice-dump"]);
+  assert.deepEqual(labelled, ["abc", "cheesecutter", "jch", "sf2", "sid", "siddump", "vice-dump"]);
   assert.ok(formats.filter((format) => format.approximate && format.read !== "no").every((format) => format.read === "approximate"));
   const one = await ok({ op: "formats", from: "jch" });
   assert.deepEqual([one.approximate, one.format.readApproximate], [true, true]);
@@ -109,6 +109,13 @@ test("approximate formats are labelled in formats, inspect, convert, play and re
   assert.match(recovered.approximateNote, /Experimental recovery/);
   const instruments = await ok({ op: "extract_instruments", inputPath: at("tune.sid"), durationSeconds: 2 });
   assert.match(instruments.approximateNote, /Experimental recovery/);
+});
+
+test("formats that need a driver file are listed and refused as not writable", async () => {
+  const { formats } = await ok({ op: "formats" });
+  assert.deepEqual(formats.filter((format) => ["sf2", "cheesecutter"].includes(format.id)).map((format) => format.write), [false, false]);
+  assert.equal((await ok({ op: "formats", from: "sf2" })).format.write, false);
+  for (const to of ["sf2", "cheesecutter"]) await rejected({ op: "convert", sidwave: SCORE, to }, /needs a driver file.*sidwave export/);
 });
 
 test("generate and note_on keep their limits in the merged c64_sound schema", () => {
