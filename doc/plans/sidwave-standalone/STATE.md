@@ -124,3 +124,10 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - MOD/JCH review (feat/import-mod-jch): merge after fixing 15-sample auto-detection (formats/mod.ts), JCH detection of unsupported versions (formats/jch.ts) and the bar-tempo loss text (modImport.ts:104-119). Follow-ups: rows-per-beat choice minimising mistimed rows, autocorrelation prefix sums/FFT in modSamples.ts (1 s of 1.6 s), `--sids` on convert, tighter MOD CPU budget, whole-word drum names, JCH wave-table dwell and row timing (pitch agreement 0.0-0.97 on 10 HVSC tunes).
 - feat/convert-limits c3efb2c: reviewed, ready for PR.
 - User directive 2026-11-27 (after the usage limit): minimal token use; Sonnet 5.5 drives the main session; Opus only for difficult research, specification and important reviews; good use of codex gpt-6-luna agents.
+
+## Session 2026-11-27 13:37 (lead resumed from handover)
+
+- Agents of the previous session were stopped by its end (S5d part 3, SF2 phase 1, W20). Uncommitted SF2 work is in worktree sidwave-formats2.
+- sidwave PR 25 (feat/convert-limits) open, merge watch running.
+- Running: codex on feat/import-mod-jch (must-fix items plus bounded follow-ups, spec briefs/codex-modjch.md; JCH wave-table dwell and row timing stay open); Sonnet on feat/cli-authoring (W14 blocker); Sonnet resuming SF2 phase 1.
+- Waiting for a free slot, in order: S5d CPU check, PR and merge (worktree sidwave-s5d, HANDOVER-S5d.md); W20 resume (brief-w20-mcp.md, head 19acd167).
