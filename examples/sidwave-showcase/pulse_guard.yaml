@@ -1,0 +1,385 @@
+# Pulse Guard: the complete soundtrack and sound effects of the showcase game, in one SIDWave score.
+# Original music written for this example. 1 SID (8580), PAL, one player call per frame.
+#
+# Songs (the index is the value of A for sidwave_init):
+#   0 title    "Deep Field"   93.98 BPM, 4/4, E minor. Atmospheric. Intro 4 | A 8 | B 8 | A' 8, loops to A.
+#   1 flight   "Pulse Guard"  150.37 BPM, 4/4, A minor. Driving. Intro 4 | A 8 | A' 8 | B 8 | break 4 | A' 8.
+#   2 boss     "Iron Moth"    150.37 BPM, 7/8, E minor / Phrygian. Intro 4 | A 8 | B 8 | break 4 | A' 8.
+#   3 clear    stage-clear jingle, plays once
+#   4 gameover game-over jingle, plays once
+#
+# Voices: 1 bass and drums (owns the filter), 2 chord arpeggios and hats, 3 lead.
+# Effects take voice 2 first; only large events may take the bass or the lead.
+sidwave: 1.4
+title: "Pulse Guard"
+author: "SIDWave showcase"
+mode: PAL
+tempo: 150.37
+sids:
+  - { id: sid1, address: "$D400", model: "8580", filter: { owner: v1, route: [1] } }
+kit: { k: kick, s: snare, h: hat, o: hat_open, t: tom_hi, u: tom_mid, w: tom_low }
+
+instruments:
+  # drums
+  kick:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    hard_restart: { test: true }
+    wavetable: [{ wave: noise, note: A6 }, { wave: pulse, note: A3, slide_to: C2, frames: 3 }, { gate: false }]
+    filtertable: [{ cutoff: "2.4kHz", resonance: 5, type: lowpass }]
+  snare:
+    waveform: pulse
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: tri, note: G3 }, { wave: noise, note: C6 }, { wave: noise, note: A5, frames: 4 }, { gate: false }]
+    filtertable: [{ cutoff: "250Hz", resonance: 3, type: highpass }]
+  hat:
+    hard_restart: { frames: 0 }
+    waveform: noise
+    adsr: [0, 3, 0, 0]
+    wavetable: [{ wave: noise, note: G7 }, { gate: false }]
+  hat_open:
+    waveform: noise
+    adsr: [0, 7, 0, 0]
+    wavetable: [{ wave: noise, note: F7, frames: 2 }]
+  tom_hi:
+    hard_restart: { frames: 0 }
+    waveform: triangle
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: noise, note: C5 }, { wave: tri, note: A3, slide_to: E3, frames: 4 }, { gate: false }]
+    filtertable: [{ cutoff: "2.4kHz", resonance: 3, type: lowpass }]
+  tom_mid:
+    hard_restart: { frames: 0 }
+    waveform: triangle
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: noise, note: A4 }, { wave: tri, note: E3, slide_to: B2, frames: 4 }, { gate: false }]
+    filtertable: [{ cutoff: "2.4kHz", resonance: 3, type: lowpass }]
+  tom_low:
+    hard_restart: { frames: 0 }
+    waveform: triangle
+    adsr: [0, 8, 0, 0]
+    wavetable: [{ wave: noise, note: F4 }, { wave: tri, note: B2, slide_to: E2, frames: 5 }, { gate: false }]
+    filtertable: [{ cutoff: "2.4kHz", resonance: 3, type: lowpass }]
+
+  # basses
+  bass:
+    waveform: pulse
+    pulse_width: 0.3
+    adsr: [0, 8, 9, 2]
+    pulsetable: [{ set: 0.5 }, { add: -90, frames: 12 }]
+    filtertable: [{ cutoff: "1.8kHz", resonance: 10, type: lowpass }, { add: -28, frames: 8 }]
+  boss_bass:
+    waveform: sawtooth
+    adsr: [0, 8, 10, 2]
+    filtertable: [{ cutoff: "2.2kHz", resonance: 12, type: lowpass }, { add: -42, frames: 7 }]
+  deep_bass:
+    waveform: sawtooth
+    adsr: [7, 9, 11, 9]
+    legato: false
+    filtertable:
+      loop: 1
+      steps: [{ cutoff: "260Hz", resonance: 7, type: lowpass }, { add: 3, frames: 90 }, { add: -3, frames: 90 }]
+  drive_pad_bass:
+    waveform: pulse
+    adsr: [1, 9, 8, 6]
+    pulsetable: { loop: 1, steps: [{ set: 0.22 }, { add: 22, frames: 60 }, { add: -22, frames: 60 }] }
+    filtertable: [{ cutoff: "1.1kHz", resonance: 8, type: lowpass }, { add: -3, frames: 40 }]
+
+  # chord arpeggios, one instrument per voicing (offsets from the written root)
+  min0:
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [0, 8, 7, 3]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 17, frames: 80 }, { add: -17, frames: 80 }] }
+    loop: 0
+    wavetable: [{ note: "+0" }, { note: "+3" }, { note: "+7" }]
+  min1:
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [0, 8, 7, 3]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 17, frames: 80 }, { add: -17, frames: 80 }] }
+    loop: 0
+    wavetable: [{ note: "+3" }, { note: "+7" }, { note: "+12" }]
+  maj0:
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [0, 8, 7, 3]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 17, frames: 80 }, { add: -17, frames: 80 }] }
+    loop: 0
+    wavetable: [{ note: "+0" }, { note: "+4" }, { note: "+7" }]
+  maj1:
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [0, 8, 7, 3]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 17, frames: 80 }, { add: -17, frames: 80 }] }
+    loop: 0
+    wavetable: [{ note: "+4" }, { note: "+7" }, { note: "+12" }]
+  maj2:
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [0, 8, 7, 3]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 17, frames: 80 }, { add: -17, frames: 80 }] }
+    loop: 0
+    wavetable: [{ note: "+7" }, { note: "+12" }, { note: "+16" }]
+  sus1:
+    waveform: pulse
+    pulse_width: 0.25
+    adsr: [0, 8, 7, 3]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.25 }, { add: 17, frames: 80 }, { add: -17, frames: 80 }] }
+    loop: 0
+    wavetable: [{ note: "+5" }, { note: "+7" }, { note: "+12" }]
+
+  # melodic
+  glass:
+    waveform: pulse
+    pulse_width: 0.18
+    adsr: [0, 9, 3, 8]
+    pulsetable: { reset: false, loop: 1, steps: [{ set: 0.18 }, { add: 9, frames: 120 }, { add: -9, frames: 120 }] }
+  horizon:
+    waveform: pulse
+    pulse_width: 0.45
+    adsr: [5, 9, 10, 9]
+    pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -19, frames: 70 }, { add: 19, frames: 70 }] }
+    vibrato: { depth: 0.28, rate: 5, delay: 18, fade: 24 }
+    portamento: 0
+  lead:
+    waveform: pulse
+    adsr: [0, 8, 10, 6]
+    pulsetable: { loop: 1, steps: [{ set: 0.12 }, { add: 70, frames: 22 }, { add: -70, frames: 22 }] }
+    vibrato: { depth: 0.32, rate: 6, delay: 11, fade: 10 }
+    wavetable: [{ note: "+12" }, { note: "+0" }]
+  hero:
+    waveform: pulse
+    adsr: [0, 9, 10, 7]
+    pulsetable: { loop: 1, steps: [{ set: 0.5 }, { add: -60, frames: 25 }, { add: 60, frames: 25 }] }
+    vibrato: { depth: 0.4, rate: 6, delay: 9, fade: 12 }
+    wavetable: [{ wave: pulse, note: "+12" }, { note: "+0" }]
+  fang:
+    waveform: sawtooth
+    adsr: [0, 9, 10, 5]
+    vibrato: { depth: 0.45, rate: 7, delay: 8, fade: 8 }
+    wavetable: [{ wave: noise, note: A5 }, { wave: saw, note: "+0" }]
+  fang_wide:
+    waveform: pulse
+    adsr: [0, 9, 10, 5]
+    pulsetable: { loop: 1, steps: [{ set: 0.08 }, { add: 120, frames: 16 }, { add: -120, frames: 16 }] }
+    vibrato: { depth: 0.45, rate: 7, delay: 8, fade: 8 }
+    wavetable: [{ wave: pulse, note: "+12", frames: 2 }, { note: "+0" }]
+
+voices:
+  - id: 1
+    name: BassDrums
+    role: bass
+    instrument: bass
+    patterns:
+      # ---- title: long swelling roots, one bar per pattern ----
+      t_a:  { length: 0.5, bars: 8, groove: "E2@deep_bass ~ ~ ~ ~ ~ B1@deep_bass ~ | C2@deep_bass ~ ~ ~ ~ ~ G2@deep_bass ~ | G1@deep_bass ~ ~ ~ ~ ~ D2@deep_bass ~ | D2@deep_bass ~ ~ ~ ~ ~ A1@deep_bass ~ | E2@deep_bass ~ ~ ~ ~ ~ B1@deep_bass ~ | C2@deep_bass ~ ~ ~ ~ ~ G2@deep_bass ~ | A1@deep_bass ~ ~ ~ ~ ~ E2@deep_bass ~ | B1@deep_bass ~ ~ ~ ~ ~ ~ ~" }
+      t_b:  { length: 0.5, bars: 8, groove: "C2@drive_pad_bass ~ ~ C2@drive_pad_bass ~ ~ G2@drive_pad_bass ~ | D2@drive_pad_bass ~ ~ D2@drive_pad_bass ~ ~ A2@drive_pad_bass ~ | B1@drive_pad_bass ~ ~ B1@drive_pad_bass ~ ~ F#2@drive_pad_bass ~ | E2@drive_pad_bass ~ ~ E2@drive_pad_bass ~ ~ B2@drive_pad_bass ~ | A1@drive_pad_bass ~ ~ A1@drive_pad_bass ~ ~ E2@drive_pad_bass ~ | D2@drive_pad_bass ~ ~ D2@drive_pad_bass ~ ~ A2@drive_pad_bass ~ | G1@drive_pad_bass ~ ~ G1@drive_pad_bass ~ ~ D2@drive_pad_bass ~ | B1@drive_pad_bass ~ ~ B1@drive_pad_bass ~ ~ F#2@drive_pad_bass ~" }
+      t_a2: { length: 0.5, bars: 8, groove: "k ~ E2@drive_pad_bass ~ ~ ~ B1@drive_pad_bass ~ | k ~ C2@drive_pad_bass ~ ~ ~ G2@drive_pad_bass ~ | k ~ G1@drive_pad_bass ~ ~ ~ D2@drive_pad_bass ~ | k ~ D2@drive_pad_bass ~ ~ ~ A1@drive_pad_bass ~ | k ~ E2@drive_pad_bass ~ ~ ~ B1@drive_pad_bass ~ | k ~ C2@drive_pad_bass ~ ~ ~ G2@drive_pad_bass ~ | k ~ A1@drive_pad_bass ~ ~ ~ E2@drive_pad_bass ~ | k ~ B1@drive_pad_bass ~ ~ ~ ~ ~" }
+      t_in: { length: 4, bars: 2, groove: "E2@deep_bass | C2@deep_bass" }
+      # ---- flight: one bar of sixteenths per chord ----
+      am: { length: 0.25, bars: 1, groove: "k ~ A1 A2 s ~ A1 A2 k ~ A1 k s ~ E2 A2" }
+      f:  { length: 0.25, bars: 1, groove: "k ~ F1 F2 s ~ F1 F2 k ~ F1 k s ~ C2 F2" }
+      c:  { length: 0.25, bars: 1, groove: "k ~ C2 C3 s ~ C2 C3 k ~ C2 k s ~ G2 C3" }
+      g:  { length: 0.25, bars: 1, groove: "k ~ G1 G2 s ~ G1 G2 k ~ G1 k s ~ D2 G2" }
+      em: { length: 0.25, bars: 1, groove: "k ~ E2 E3 s ~ E2 E3 k ~ E2 k s ~ B2 E3" }
+      gfill: { length: 0.25, bars: 1, groove: "k ~ G1 G2 s ~ G1 G2 k s ~ s t t u w" }
+      e:     { length: 0.25, bars: 1, groove: "k ~ E2 E3 s ~ E2 E3 k ~ E2 k s s s s" }
+      efill: { length: 0.25, bars: 1, groove: "k t t t k u u u k w w w s s s s" }
+      in1: { length: 0.25, bars: 1, groove: "k ~ A1 ~ ~ ~ A1 ~ k ~ A1 ~ ~ ~ A2 ~" }
+      brk_dm: { length: 0.25, bars: 1, groove: "k ~ D2 ~ ~ ~ ~ ~ s ~ D2 ~ A2 ~ D3 ~" }
+      brk_am: { length: 0.25, bars: 1, groove: "k ~ A1 ~ ~ ~ ~ ~ s ~ A1 ~ E2 ~ A2 ~" }
+      # ---- boss: bars of fourteen sixteenths ----
+      x_e:  { length: 0.25, bars: 1, groove: "k ~ E2@boss_bass E2@boss_bass s ~ E3@boss_bass E2@boss_bass k ~ G2@boss_bass E2@boss_bass s ~" }
+      x_f:  { length: 0.25, bars: 1, groove: "k ~ F2@boss_bass F2@boss_bass s ~ F3@boss_bass F2@boss_bass k ~ C3@boss_bass F2@boss_bass s ~" }
+      x_am: { length: 0.25, bars: 1, groove: "k ~ A1@boss_bass A1@boss_bass s ~ A2@boss_bass A1@boss_bass k ~ E2@boss_bass A1@boss_bass s ~" }
+      x_b:  { length: 0.25, bars: 1, groove: "k ~ B1@boss_bass B1@boss_bass s ~ B2@boss_bass B1@boss_bass k k F#2@boss_bass B1@boss_bass s s" }
+      x_c:  { length: 0.25, bars: 1, groove: "k ~ C2@boss_bass C2@boss_bass s ~ C3@boss_bass C2@boss_bass k ~ G2@boss_bass C2@boss_bass s ~" }
+      x_d:  { length: 0.25, bars: 1, groove: "k ~ D2@boss_bass D2@boss_bass s ~ D3@boss_bass D2@boss_bass k ~ A2@boss_bass D2@boss_bass s ~" }
+      x_in: { length: 0.25, bars: 2, groove: "k ~ ~ ~ E2@boss_bass ~ ~ ~ k ~ ~ ~ E2@boss_bass ~ | k ~ ~ ~ F2@boss_bass ~ ~ ~ k ~ s ~ s s" }
+      x_br: { length: 0.25, bars: 4, groove: "k ~ k ~ s ~ ~ k ~ k s ~ ~ ~ | t t t ~ u u u ~ w w w ~ s ~ | k t t k u u k w w k s s s ~ | s s t t u u w w s s s s s s" }
+      # ---- jingles ----
+      win:  { length: 0.5, bars: 3, groove: "k A1 s A2 k A1 s A2 | k D2 s D3 k E2 s E3 | A1 ~ ~ ~ ~ ~ ~ ~" }
+      over: { length: 0.5, bars: 4, groove: "E2@deep_bass ~ ~ ~ ~ ~ ~ ~ | C2@deep_bass ~ ~ ~ ~ ~ ~ ~ | A1@deep_bass ~ ~ ~ B1@deep_bass ~ ~ ~ | E1@deep_bass ~ ~ ~ ~ ~ ~ ~" }
+
+  - id: 2
+    name: Chords
+    role: arp
+    level: 9
+    instrument: glass
+    patterns:
+      # ---- title: broken chords in eighths ----
+      t_in: { length: 0.5, bars: 4, groove: "E3 B3 F#4 G4 B4 G4 F#4 B3 | C3 G3 B3 E4 G4 E4 B3 G3 | E3 B3 F#4 G4 B4 G4 F#4 B3 | C3 G3 B3 E4 G4 E4 B3 G3" }
+      t_a:  { length: 0.5, bars: 8, groove: "E3 B3 F#4 G4 B4 G4 F#4 B3 | C3 G3 B3 E4 G4 E4 B3 G3 | G3 B3 D4 F#4 B4 F#4 D4 B3 | D3 A3 D4 G4 F#4 D4 A3 F#3 | E3 B3 F#4 G4 B4 G4 F#4 B3 | C3 G3 B3 E4 G4 E4 B3 G3 | A3 C4 E4 G4 C5 G4 E4 C4 | B2 F#3 B3 E4 D#4 F#4 A4 F#4" }
+      t_b:  { length: 0.5, bars: 8, groove: "C3 G3 B3 E4 G4 E4 B3 G3 | D3 A3 D4 F#4 A4 F#4 D4 A3 | B2 F#3 A3 D4 F#4 D4 A3 F#3 | E3 B3 E4 G4 B4 G4 E4 B3 | A3 C4 E4 G4 C5 G4 E4 C4 | D3 A3 D4 F#4 A4 F#4 D4 A3 | G3 B3 D4 F#4 B4 F#4 D4 B3 | B2 F#3 A3 D#4 F#4 D#4 A3 F#3" }
+      # ---- flight: syncopated stabs with hats ----
+      am: { length: 0.25, bars: 1, groove: "A3@min0 ~ h A3@min0 ~ h A3@min0 ~ h ~ A3@min0 ~ h ~ A3@min0 h" }
+      f:  { length: 0.25, bars: 1, groove: "F3@maj1 ~ h F3@maj1 ~ h F3@maj1 ~ h ~ F3@maj1 ~ h ~ F3@maj1 h" }
+      c:  { length: 0.25, bars: 1, groove: "C3@maj2 ~ h C3@maj2 ~ h C3@maj2 ~ h ~ C3@maj2 ~ h ~ C3@maj2 h" }
+      g:  { length: 0.25, bars: 1, groove: "G3@maj1 ~ h G3@maj1 ~ h G3@maj1 ~ h ~ G3@maj1 ~ h ~ G3@maj1 h" }
+      em: { length: 0.25, bars: 1, groove: "E3@min1 ~ h E3@min1 ~ h E3@min1 ~ h ~ E3@min1 ~ h ~ E3@min1 h" }
+      esus: { length: 0.25, bars: 1, groove: "E3@sus1 ~ h E3@sus1 ~ h E3@sus1 ~ h ~ E3@sus1 ~ h ~ E3@sus1 h" }
+      e:    { length: 0.25, bars: 1, groove: "E3@maj1 ~ h E3@maj1 ~ h E3@maj1 ~ h ~ E3@maj1 ~ o ~ ~ ~" }
+      hats: { length: 0.25, bars: 1, groove: "h - h h h - h h h - h h h - o ~" }
+      brk_dm: { length: 0.5, bars: 1, groove: "- - h - D3@min1 ~ ~ o" }
+      brk_am: { length: 0.5, bars: 1, groove: "- - h - A3@min0 ~ ~ o" }
+      # ---- boss ----
+      x_e:  { length: 0.25, bars: 1, groove: "E3@min1 ~ h h E3@min1 ~ h h E3@min1 h E3@min1 ~ h h" }
+      x_f:  { length: 0.25, bars: 1, groove: "F3@maj1 ~ h h F3@maj1 ~ h h F3@maj1 h F3@maj1 ~ h h" }
+      x_am: { length: 0.25, bars: 1, groove: "A3@min0 ~ h h A3@min0 ~ h h A3@min0 h A3@min0 ~ h h" }
+      x_b:  { length: 0.25, bars: 1, groove: "B2@maj1 ~ h h B2@maj1 ~ h h B2@maj1 h B2@maj1 ~ o ~" }
+      x_c:  { length: 0.25, bars: 1, groove: "C3@maj2 ~ h h C3@maj2 ~ h h C3@maj2 h C3@maj2 ~ h h" }
+      x_d:  { length: 0.25, bars: 1, groove: "D3@maj1 ~ h h D3@maj1 ~ h h D3@maj1 h D3@maj1 ~ h h" }
+      x_br: { length: 0.25, bars: 4, groove: "- - - - - - - - - - - - - - | h - h - h - h - h - h - o ~ | h h - h h - h h - h h - o ~ | B2@maj1 ~ ~ ~ ~ ~ ~ B2@maj2 ~ ~ ~ ~ ~ ~" }
+      # ---- jingles ----
+      win:  { length: 0.5, bars: 3, groove: "A3@maj0 ~ ~ A3@maj0 ~ ~ A3@maj1 ~ | D3@maj1 ~ ~ D3@maj1 E3@maj1 ~ ~ ~ | A3@maj1 ~ ~ ~ ~ ~ ~ ~" }
+      over: { length: 0.5, bars: 4, groove: "E3 B3 E4 G4 B4 G4 E4 B3 | C3 G3 C4 E4 G4 E4 C4 G3 | A3 C4 E4 A4 B2 F#3 B3 D#4 | E3 B3 E4 G4 B4 ~ ~ ~" }
+
+  - id: 3
+    name: Lead
+    role: lead
+    level: 13
+    instrument: lead
+    patterns:
+      # ---- title theme ----
+      t_a:  { length: 0.5, bars: 8, groove: "B4@horizon ~ ~ ~ E5@horizon ~ F#5@horizon ~ | G5@horizon ~ ~ ~ E5@horizon ~ ~ ~ | D5@horizon ~ ~ ~ ~ ~ B4@horizon ~ | A4@horizon ~ ~ ~ ~ ~ ~ ~ | B4@horizon ~ ~ ~ ~ ~ G5@horizon ~ | G5@horizon ~ ~ ~ E5@horizon ~ B4@horizon ~ | C5@horizon ~ ~ ~ D5@horizon ~ E5@horizon ~ | E5@horizon ~ ~ ~ D#5@horizon ~ ~ ~" }
+      t_b:  { length: 0.5, bars: 8, groove: "G5@horizon ~ ~ E5@horizon ~ ~ B4@horizon ~ | A5@horizon ~ ~ F#5@horizon ~ ~ D5@horizon ~ | F#5@horizon ~ ~ D5@horizon ~ ~ A4@horizon B4@horizon | G4@horizon ~ ~ ~ ~ ~ B4@horizon D5@horizon | E5@horizon ~ ~ C5@horizon ~ ~ G5@horizon ~ | F#5@horizon ~ ~ A5@horizon ~ ~ ~ ~ | B5@horizon ~ ~ ~ A5@horizon ~ F#5@horizon ~ | F#5@horizon ~ ~ ~ D#5@horizon ~ ~ ~" }
+      t_a2: { length: 0.5, bars: 8, groove: "B4@horizon ~ ~ ~ E5@horizon F#5@horizon G5@horizon F#5@horizon | E5@horizon ~ ~ ~ ~ ~ B4@horizon D5@horizon | D5@horizon ~ B4@horizon ~ D5@horizon ~ F#5@horizon ~ | A5@horizon ~ G5@horizon ~ F#5@horizon ~ ~ ~ | B5@horizon ~ ~ ~ G5@horizon ~ F#5@horizon ~ | G5@horizon ~ ~ ~ ~ ~ E5@horizon ~ | C5@horizon E5@horizon ~ G5@horizon ~ ~ A5@horizon ~ | B5@horizon ~ ~ ~ ~ ~ - -" }
+      # ---- flight theme ----
+      pick:  { length: 0.5, bars: 1, groove: "- - - - - E4 G4 B4" }
+      a1: { length: 0.5, bars: 4, groove: "A4 ~ E5 ~ D5 C5 ~ A4 | C5 ~ ~ A4 ~ F4 A4 C5 | E5 ~ G5 ~ E5 D5 ~ C5 | D5 ~ ~ B4 ~ ~ G4 B4" }
+      a2: { length: 0.5, bars: 4, groove: "A4 ~ E5 ~ D5 C5 ~ E5 | F5 ~ ~ E5 ~ C5 A4 C5 | G5 ~ ~ E5 ~ G5 C6 ~ | B5 ~ A5 G5 ~ D5 ~ ~" }
+      v1: { length: 0.25, bars: 4, groove: "A4 ~ C5 E5 A5 ~ G5 E5 D5 ~ C5 ~ B4 C5 ~ A4 | C5 ~ F5 ~ A5 ~ G5 F5 E5 ~ C5 ~ A4 ~ C5 ~ | E5 ~ G5 ~ C6 ~ B5 G5 E5 ~ G5 ~ E5 D5 C5 ~ | D5 ~ G5 ~ B5 ~ A5 G5 D5 ~ B4 ~ D5 ~ G5 ~" }
+      v2: { length: 0.25, bars: 4, groove: "E5 A5 ~ E5 C5 ~ A4 ~ E5 ~ D5 C5 D5 ~ E5 ~ | F5 ~ ~ A5 ~ ~ C6 ~ A5 ~ F5 ~ C5 ~ F5 ~ | G5 ~ E5 G5 C6 ~ ~ ~ E6 ~ D6 C6 G5 ~ ~ ~ | D6 ~ ~ ~ B5 ~ G5 ~ A5 ~ B5 ~ D6 ~ ~ ~" }
+      b1: { length: 0.5, bars: 4, groove: "A5@hero ~ ~ ~ G5@hero F5@hero ~ C5@hero | B5@hero ~ ~ ~ A5@hero G5@hero ~ D5@hero | G5@hero ~ ~ B5@hero ~ ~ G5@hero E5@hero | A5@hero ~ ~ ~ ~ ~ E5@hero A5@hero" }
+      b2: { length: 0.5, bars: 4, groove: "C6@hero ~ ~ A5@hero ~ F5@hero A5@hero C6@hero | D6@hero ~ ~ B5@hero ~ G5@hero B5@hero D6@hero | E6@hero ~ ~ ~ B5@hero ~ A5@hero ~ | G#5@hero ~ ~ ~ ~ ~ ~ ~" }
+      brk: { length: 0.5, bars: 4, groove: "D5@hero F5@hero A5@hero ~ ~ - - - | C5@hero E5@hero A5@hero ~ ~ - - - | F5@hero A5@hero D6@hero ~ ~ - - - | B4@hero E5@hero G#5@hero B5@hero E6@hero ~ ~ ~" }
+      # ---- boss theme (seven eighths to the bar) ----
+      xa: { length: 0.5, bars: 8, groove: "E5@fang ~ ~ B4@fang E5@fang G5@fang ~ | F5@fang ~ ~ ~ C5@fang F5@fang A5@fang | G5@fang ~ ~ E5@fang B5@fang ~ G5@fang | A5@fang ~ ~ ~ F5@fang C6@fang ~ | C6@fang ~ ~ A5@fang E5@fang A5@fang C6@fang | A5@fang ~ ~ F5@fang C5@fang F5@fang A5@fang | B5@fang ~ ~ ~ F#5@fang ~ D#5@fang | D#5@fang F#5@fang B5@fang ~ D#6@fang ~ ~" }
+      xb: { length: 0.5, bars: 8, groove: "E5@fang_wide ~ G5@fang_wide ~ C6@fang_wide ~ ~ | F#5@fang_wide ~ A5@fang_wide ~ D6@fang_wide ~ ~ | E6@fang_wide ~ ~ ~ B5@fang_wide G5@fang_wide E5@fang_wide | B5@fang_wide ~ ~ ~ ~ ~ ~ | G5@fang_wide ~ E5@fang_wide ~ G5@fang_wide C6@fang_wide ~ | A5@fang_wide ~ F#5@fang_wide ~ A5@fang_wide D6@fang_wide ~ | C6@fang_wide ~ A5@fang_wide ~ F5@fang_wide A5@fang_wide C6@fang_wide | B5@fang_wide ~ ~ ~ D#6@fang_wide ~ ~" }
+      xa2: { length: 0.25, bars: 8, groove: "E5@fang_wide ~ B4@fang_wide ~ E5@fang_wide ~ G5@fang_wide ~ B5@fang_wide ~ G5@fang_wide ~ E5@fang_wide ~ | F5@fang_wide ~ ~ ~ A5@fang_wide ~ C6@fang_wide ~ A5@fang_wide ~ F5@fang_wide ~ C5@fang_wide ~ | G5@fang_wide ~ E5@fang_wide ~ G5@fang_wide ~ B5@fang_wide ~ E6@fang_wide ~ ~ ~ B5@fang_wide ~ | A5@fang_wide ~ ~ ~ C6@fang_wide ~ F6@fang_wide ~ C6@fang_wide ~ A5@fang_wide ~ F5@fang_wide ~ | E6@fang_wide ~ C6@fang_wide ~ A5@fang_wide ~ E5@fang_wide ~ A5@fang_wide ~ C6@fang_wide ~ E6@fang_wide ~ | F6@fang_wide ~ C6@fang_wide ~ A5@fang_wide ~ F5@fang_wide ~ A5@fang_wide ~ C6@fang_wide ~ F6@fang_wide ~ | F#6@fang_wide ~ ~ ~ D#6@fang_wide ~ B5@fang_wide ~ F#5@fang_wide ~ B5@fang_wide ~ D#6@fang_wide ~ | F#5@fang_wide ~ B5@fang_wide ~ D#6@fang_wide ~ F#6@fang_wide ~ A6@fang_wide ~ ~ ~ ~ ~" }
+      # ---- jingles ----
+      win:  { length: 0.5, bars: 3, groove: "E5@hero A5@hero C#6@hero E6@hero ~ C#6@hero E6@hero ~ | F#6@hero ~ D6@hero ~ G#5@hero B5@hero E6@hero ~ | A6@hero ~ ~ ~ ~ ~ ~ ~" }
+      over: { length: 0.5, bars: 4, groove: "G5@horizon ~ ~ F#5@horizon E5@horizon ~ B4@horizon ~ | C5@horizon ~ ~ E5@horizon G5@horizon ~ E5@horizon ~ | A4@horizon ~ C5@horizon ~ B4@horizon ~ D#5@horizon ~ | E5@horizon ~ ~ ~ ~ ~ - -" }
+
+sections:
+  # title
+  t_intro: { bars: 2, layers: { v2: t_in } }
+  t_enter: { bars: 2, layers: { v1: t_in, v2: t_in }, level: mf }
+  t_a:     { bars: 8, layers: { v1: t_a, v2: t_a, v3: t_a } }
+  t_b:     { bars: 8, layers: { v1: t_b, v2: "t_b", v3: t_b } }
+  t_a2:    { bars: 8, layers: { v1: t_a2, v2: t_a, v3: t_a2 } }
+  # flight
+  f_in1: { bars: 2, layers: { v1: "in1*2" } }
+  f_in2: { bars: 2, layers: { v1: "am em", v2: "hats em", v3: "- pick" } }
+  f_a:   { bars: 8, layers: { v1: "am f c g am f c gfill", v2: "am f c g am f c g", v3: "a1 a2" } }
+  f_av:  { bars: 8, layers: { v1: "am f c g am f c gfill", v2: "am f c g am f c g", v3: "v1 v2" } }
+  f_b:   { bars: 8, layers: { v1: "f g em am f g e efill", v2: "f g em am f g esus e", v3: "b1 b2" } }
+  f_br:  { bars: 4, layers: { v1: "brk_dm brk_am brk_dm efill", v2: "brk_dm brk_am brk_dm e", v3: brk } }
+  # boss
+  x_in: { bars: 4, meter: "7/8", layers: { v1: "x_in x_in", v2: "- - x_e x_f" } }
+  x_a:  { bars: 8, meter: "7/8", layers: { v1: "x_e x_f x_e x_f x_am x_f x_b x_b", v2: "x_e x_f x_e x_f x_am x_f x_b x_b", v3: xa } }
+  x_b:  { bars: 8, meter: "7/8", layers: { v1: "x_c x_d x_e x_e x_c x_d x_f x_b", v2: "x_c x_d x_e x_e x_c x_d x_f x_b", v3: xb } }
+  x_br: { bars: 4, meter: "7/8", layers: { v1: x_br, v2: x_br } }
+  x_a2: { bars: 8, meter: "7/8", layers: { v1: "x_e x_f x_e x_f x_am x_f x_b x_b", v2: "x_e x_f x_e x_f x_am x_f x_b x_b", v3: xa2 } }
+  # jingles
+  win:  { bars: 3, layers: { v1: win, v2: win, v3: win } }
+  over: { bars: 4, layers: { v1: over, v2: over, v3: over } }
+
+songs:
+  - { name: title, tempo: 93.98, loop: t_a, timeline: [t_intro, t_enter, t_a, t_b, t_a2] }
+  - { name: flight, loop: f_a, timeline: [f_in1, f_in2, f_a, f_av, f_b, f_br, f_av] }
+  - { name: boss, loop: x_a, timeline: [x_in, x_a, x_b, x_br, x_a2] }
+  - { name: clear, loop: false, timeline: [win] }
+  - { name: gameover, tempo: 93.98, loop: false, timeline: [over] }
+
+effects:
+  # index 0..8; sfx: A = index, Y = $FF
+  shot:
+    priority: 3
+    voices: [2]
+    steps:
+      - { freq: C6, wave: pulse, pulse: 0.2, adsr: [0, 4, 0, 2], filter: off }
+      - { freq: G5 }
+      - { freq: D5, pulse: 0.35 }
+      - { freq: A4 }
+      - { gate: false, wait: 2 }
+  ping:                       # enemy or boss hit, not destroyed
+    priority: 5
+    voices: [2]
+    steps:
+      - { freq: A6, wave: triangle, adsr: [0, 4, 0, 3], filter: off, wait: 2 }
+      - { freq: E6 }
+      - { gate: false, wait: 2 }
+  explode:
+    priority: 8
+    voices: [2, 1]
+    steps:
+      - { freq: 900, wave: noise, adsr: [0, 9, 0, 8], filter: off, wait: 2 }
+      - { freq: C3, wave: pulse, pulse: 0.5 }
+      - { freq: 600, wave: noise, wait: 3 }
+      - { freq: 420, wait: 3 }
+      - { freq: 260, wait: 4 }
+      - { freq: 150, wait: 5 }
+      - { gate: false, wait: 6 }
+  pickup:
+    priority: 7
+    voices: [2]
+    steps:
+      - { freq: E5, wave: triangle, adsr: [0, 6, 10, 6], filter: off, wait: 3 }
+      - { freq: B5, wait: 3 }
+      - { freq: E6, wait: 3 }
+      - { freq: G#6, wave: pulse, pulse: 0.5, wait: 4 }
+      - { gate: false, wait: 5 }
+  hurt:
+    priority: 12
+    voices: [2, 1]
+    steps:
+      - { freq: 1200, wave: noise, adsr: [0, 10, 8, 8], filter: off, wait: 2 }
+      - { freq: A3, wave: saw, wait: 3 }
+      - { freq: F3, wait: 3 }
+      - { freq: 300, wave: noise, wait: 4 }
+      - { freq: C#3, wave: saw, wait: 3 }
+      - { freq: A2, wait: 4 }
+      - { gate: false, wait: 8 }
+  bomb:
+    priority: 2
+    voices: [2]
+    steps:
+      - { freq: G4, wave: saw, adsr: [0, 6, 6, 4], filter: off, wait: 2 }
+      - { freq: E4, wait: 2 }
+      - { freq: C#4, wait: 2 }
+      - { gate: false, wait: 3 }
+  alarm:                      # boss warning
+    priority: 11
+    voices: [3, 2]
+    steps:
+      - { freq: B5, wave: pulse, pulse: 0.5, adsr: [0, 0, 12, 4], filter: off, wait: 8 }
+      - { freq: F5, wait: 8 }
+      - { freq: B5, wait: 8 }
+      - { freq: F5, wait: 8 }
+      - { freq: B5, wait: 8 }
+      - { freq: F5, wait: 8 }
+      - { gate: false, wait: 4 }
+  blast:                      # boss destroyed
+    priority: 14
+    voices: [1, 2, 3]
+    steps:
+      - { freq: 1800, wave: noise, adsr: [0, 11, 9, 11], filter: off, wait: 3 }
+      - { freq: 200, wave: saw, wait: 2 }
+      - { freq: 1100, wave: noise, wait: 5 }
+      - { freq: 150, wave: saw, wait: 2 }
+      - { freq: 700, wave: noise, wait: 8 }
+      - { freq: 420, wait: 10 }
+      - { freq: 220, wait: 12 }
+      - { freq: 110, wait: 14 }
+      - { gate: false, wait: 20 }
+  start:
+    priority: 13
+    voices: [3]
+    steps:
+      - { freq: E4, wave: pulse, pulse: 0.5, adsr: [0, 0, 13, 6], filter: off, wait: 3 }
+      - { freq: B4, wait: 3 }
+      - { freq: E5, wait: 3 }
+      - { freq: B5, wait: 3 }
+      - { freq: E6, wait: 8 }
+      - { gate: false, wait: 6 }
