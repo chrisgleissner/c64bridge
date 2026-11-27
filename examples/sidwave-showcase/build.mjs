@@ -65,8 +65,11 @@ function silentSongs(score) {
   return score.replace(/groove: "([^"]*)"/g, (_, groove) => `groove: "${groove.replace(/[^\s|]+/g, "-")}"`);
 }
 
-/** Options: `silentMusic` builds the effects-only variant used by verify.mjs under the file name `name`. */
-export async function buildGame({ quiet = false, silentMusic = false, name = "pulse_guard" } = {}) {
+/**
+ * Options: `silentMusic` builds the effects-only variant used by verify.mjs under the file name `name`; `dir` is the
+ * folder the three files are written to.
+ */
+export async function buildGame({ quiet = false, silentMusic = false, name = "pulse_guard", dir = out } = {}) {
   const { parseSidwave, compileSidwave, assemblyToPrgDetailed, version } = await loadSidwave();
   const read = (name) => fs.readFileSync(path.join(here, name), "utf8");
   const score = read("pulse_guard.yaml");
@@ -86,9 +89,9 @@ export async function buildGame({ quiet = false, silentMusic = false, name = "pu
   const prg = new Uint8Array(2 + end - LOAD);
   prg.set(program.prg, 0);
   prg.set(music.combined, 2 + MUSIC - LOAD);
-  fs.mkdirSync(out, { recursive: true });
-  fs.writeFileSync(path.join(out, `${name}.prg`), prg);
-  fs.writeFileSync(path.join(out, `${name}.labels.json`), `${JSON.stringify(labels, null, 1)}\n`);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${name}.prg`), prg);
+  fs.writeFileSync(path.join(dir, `${name}.labels.json`), `${JSON.stringify(labels, null, 1)}\n`);
   const { cycles } = music;
   const info = {
     sidwave: version,
@@ -100,12 +103,12 @@ export async function buildGame({ quiet = false, silentMusic = false, name = "pu
     cycles: { worst: cycles.worst, average: cycles.average, worstWithEffects: cycles.withEffects?.worst, sfxWorst: cycles.withEffects?.sfxWorst, upperBound: cycles.estimatedWorst, songs: cycles.songs },
     warnings: music.warnings,
   };
-  fs.writeFileSync(path.join(out, `${name}.build.json`), `${JSON.stringify(info, null, 2)}\n`);
+  fs.writeFileSync(path.join(dir, `${name}.build.json`), `${JSON.stringify(info, null, 2)}\n`);
   if (!quiet) {
     console.log(`out/pulse_guard.prg: ${prg.length} bytes (program ${info.programBytes}, player and music ${info.player.imageBytes} at $${MUSIC.toString(16)})`);
     console.log(`player cycles per call (SIDWave emulator): worst ${cycles.worst}, average ${Math.round(cycles.average)}, worst with effects ${info.cycles.worstWithEffects}, sfx call ${info.cycles.sfxWorst}`);
   }
-  return { prg, labels, info, file: path.join(out, `${name}.prg`) };
+  return { prg, labels, info, file: path.join(dir, `${name}.prg`) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await buildGame();

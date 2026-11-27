@@ -27,6 +27,7 @@ export const FORBIDDEN_PATTERNS = Object.freeze([
   /^src\//,
   /^test\//,
   /^doc\/img\//,
+  /^examples\//, // repository examples; data/sound/examples is a different folder and ships
   /^node_modules\//, // dependencies are installed from their own packages, never shipped inside this one
   /\.map$/,
   /\.tsbuildinfo$/,

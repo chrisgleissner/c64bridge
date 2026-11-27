@@ -6,17 +6,16 @@
 // emulation and stay in step. The finished video is cut from that session (title, first wave, boss, wave clear),
 // scaled to 1920 x 1080 without filtering, with the sound normalised to -16 LUFS.
 //
-// Output: <showcase directory>/video/pulse_guard.mp4. Needs x64sc, Xvfb and ffmpeg.
+// Output: <output directory>/video/pulse_guard.mp4. Needs x64sc, Xvfb and ffmpeg.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { buildGame } from "./build.mjs";
 import { ffmpeg, measure, normaliseFilter, onset, readWav, writeWav } from "./lib/audio.mjs";
 import { playSession } from "./lib/session.mjs";
+import { outputDir as root } from "./lib/sidwave.mjs";
 import { FPS } from "./lib/vice.mjs";
 
-const root = process.env.SHOWCASE_DIR ?? path.join(os.homedir(), ".c64bridge", "sidwave-standalone", "showcase");
 const out = path.join(root, "video");
 const work = path.join(root, "work");
 fs.mkdirSync(out, { recursive: true });

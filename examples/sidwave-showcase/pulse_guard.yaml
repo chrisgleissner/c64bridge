@@ -9,7 +9,8 @@
 #   4 gameover game-over jingle, plays once
 #
 # Voices: 1 bass and drums (owns the filter), 2 chord arpeggios and hats, 3 lead.
-# Effects take voice 2 first; only large events may take the bass or the lead.
+# Small effects use voice 2 only. Large events may take the bass or the lead; the player picks the lowest-numbered
+# free voice of those an effect lists.
 sidwave: 1.4
 title: "Pulse Guard"
 author: "SIDWave showcase"

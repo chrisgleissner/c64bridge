@@ -6,16 +6,15 @@
 //   run 2  the same game with silent songs, so that the recording holds the sound effects only: every effect is
 //          started by the game and audible after it starts
 //
-// Output: <showcase directory>/verify/ (screenshots, recordings, report.json). Needs x64sc, Xvfb and ffmpeg.
+// Output: <output directory>/verify/ (screenshots, recordings, report.json). Needs x64sc, Xvfb and ffmpeg.
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { buildGame } from "./build.mjs";
 import { onset, readWav, rmsDb } from "./lib/audio.mjs";
 import { playSession } from "./lib/session.mjs";
+import { outputDir as root } from "./lib/sidwave.mjs";
 import { FPS, writePng } from "./lib/vice.mjs";
 
-const root = process.env.SHOWCASE_DIR ?? path.join(os.homedir(), ".c64bridge", "sidwave-standalone", "showcase");
 const out = path.join(root, "verify");
 const FRAMES = Number(process.env.FRAMES ?? 9600);
 const REQUIRED = ["title", "play", "warn", "boss", "bossDies", "clear", "dies", "over"];
@@ -49,7 +48,7 @@ const run = await playSession(game, {
 const seconds = run.frames / FPS;
 console.log(`run 1: ${run.frames} frames (${seconds.toFixed(1)} s of C64 time)`);
 check(seconds >= 180, "the session covers at least three minutes");
-check(run.frameGaps === 0, `the frame interrupt ran in every frame (${run.frameGaps} gaps)`);
+check(run.frameGaps === 0 && run.rasterFrames === run.frames, `the frame interrupt ran in every frame (${run.frames} interrupts in ${run.rasterFrames} frames counted by CIA 1, ${run.frameGaps} gaps in the game's counter)`);
 const states = run.transitions.map((t) => t.state);
 for (const state of REQUIRED) check(states.includes(state), `state "${state}" reached`);
 check(states.indexOf("over") >= 0 && states.indexOf("play", states.indexOf("over")) > 0, "a second game starts after game over and the title");

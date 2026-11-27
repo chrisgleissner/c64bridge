@@ -6,17 +6,15 @@
 //                SID file with `sidwave convert`, then rendered)
 //
 // Every clip is normalised to -16 LUFS with a true peak below -1.5 dBTP and written as WAV and MP3 to
-// <showcase directory>/clips/, with the measurements in measurements.json and measurements.md.
+// <output directory>/clips/, with the measurements in measurements.json and measurements.md.
 // The MIDI "before" clip uses the small synthesiser of lib/preview-synth.mjs, so that no third-party sound font
 // is involved; the MOD "before" clip is decoded by ffmpeg (libopenmpt).
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { PEAK_CEILING_DBTP, TARGET_LUFS, ffmpeg, measure, normaliseFilter, readWav, writeWav } from "./lib/audio.mjs";
 import { renderMidi } from "./lib/preview-synth.mjs";
-import { showcaseDir, sidwaveCli } from "./lib/sidwave.mjs";
+import { outputDir as root, showcaseDir, sidwaveCli } from "./lib/sidwave.mjs";
 
-const root = process.env.SHOWCASE_DIR ?? path.join(os.homedir(), ".c64bridge", "sidwave-standalone", "showcase");
 const clips = path.join(root, "clips");
 const work = path.join(root, "work");
 fs.mkdirSync(clips, { recursive: true });

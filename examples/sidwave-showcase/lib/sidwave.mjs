@@ -1,5 +1,5 @@
-// Locates the `sidwave` package: the directory in SIDWAVE_DIR (a built checkout's `sidwave` folder), or the
-// package installed in node_modules.
+// Locates the `sidwave` package: the package installed in node_modules, or the directory in SIDWAVE_DIR (a built
+// checkout's `sidwave` folder).
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -29,3 +29,6 @@ export function sidwaveCli(args, options = {}) {
 }
 
 export const showcaseDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/** Where render.mjs, verify.mjs and record.mjs write: SHOWCASE_DIR, or the ignored folder out/ of this example. */
+export const outputDir = path.resolve(process.env.SHOWCASE_DIR ?? path.join(showcaseDir, "out"));

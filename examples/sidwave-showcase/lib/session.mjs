@@ -9,10 +9,11 @@ export async function playSession(game, { frames, wav, warp = false, titleFrames
   const vice = await startVice(game.file, { breakAddress: game.labels.irq, wav, warp, logFile });
   const { monitor } = vice;
   const read = gameReader(game.labels);
-  const result = { frames: 0, transitions: [], frameGaps: 0, maxScore: 0, maxWave: 0, overruns: 0, playMax: 0, minShield: 5 };
+  const result = { frames: 0, rasterFrames: 0, transitions: [], frameGaps: 0, maxScore: 0, maxWave: 0, overruns: 0, playMax: 0, minShield: 5 };
   try {
     if (onSfx) await monitor.breakAt(game.labels.sfx);
     const palette = await monitor.palette();
+    await monitor.startFrameCounter();
     let previous;
     let since = 0;
     let wave2 = 0;
@@ -53,6 +54,8 @@ export async function playSession(game, { frames, wav, warp = false, titleFrames
       await monitor.resume();
       await monitor.waitForStop();
     }
+    // Frames that passed on the machine while the interrupt ran result.frames times.
+    result.rasterFrames = await monitor.frameCounter();
   } finally {
     await vice.stop();
   }

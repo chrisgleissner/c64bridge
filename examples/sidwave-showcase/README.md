@@ -5,7 +5,7 @@ the game is one text file, [`pulse_guard.yaml`](pulse_guard.yaml): five songs an
 compiled by `sidwave compile --target game` and called from 6502 code.
 
 Shoot the drones, catch the green energy cells to restore your shield, and defeat the Iron Moth at the end of each
-wave. Each wave is faster and its boss tougher. Joystick in port 2.
+wave. Later waves are harder; the difficulty stops rising at wave 6. Joystick in port 2.
 
 | File | Content |
 | --- | --- |
@@ -20,17 +20,23 @@ wave. Each wave is faster and its boss tougher. Joystick in port 2.
 
 ## Build and run
 
-The scripts use the `sidwave` package. Install it, or point `SIDWAVE_DIR` at the `sidwave` folder of a built
-checkout (tested with sidwave `main` at `237a250`).
+The scripts use the `sidwave` and `6502-toolkit` packages that C64 Bridge depends on. In a checkout of this
+repository, with Node.js 24 or later:
 
 ```sh
-SIDWAVE_DIR=/path/to/sidwave/sidwave node examples/sidwave-showcase/build.mjs
+node scripts/sidwave-dependency.mjs tarballs   # only while package.json names file: tarballs for the two packages
+npm ci
+node examples/sidwave-showcase/build.mjs
 x64sc -autostart examples/sidwave-showcase/out/pulse_guard.prg
 ```
 
-`render.mjs`, `verify.mjs` and `record.mjs` also need `ffmpeg`; rendering needs the `libsidplayfp-wasm` peer
-dependency of `sidwave`; the last two need `x64sc` and `Xvfb`. They never play sound on the host: VICE records to a
-file. Their output goes to `~/.c64bridge/sidwave-standalone/showcase/` (`SHOWCASE_DIR` overrides it).
+The first command copies tarballs that `npm pack` made in a `sidwave` checkout (see the comment at the top of the
+script). `SIDWAVE_DIR` selects the `sidwave` folder of a built checkout instead of the installed package.
+
+`render.mjs`, `verify.mjs` and `record.mjs` also need `ffmpeg` (with `libopenmpt` for the module in `render.mjs`).
+Rendering uses `libsidplayfp-wasm`, which C64 Bridge installs. The last two need `x64sc` and `Xvfb` (tested on Linux
+with VICE 3.10). None of the three plays sound on the host: VICE records to a file or to its dummy device. Their output
+goes to `examples/sidwave-showcase/out/` (`SHOWCASE_DIR` overrides it).
 
 ## How the game calls the music
 
@@ -40,9 +46,11 @@ The build places the player at `$4000` and writes its symbols for the assembler 
 - One raster interrupt per frame calls `sidwave_play`. When the main program has asked for another song, the same
   interrupt calls `sidwave_init` with the song number instead, so the two calls never overlap.
 - The main program starts effects with `lda #sidwave_fx_shot : ldy #$ff : jsr sidwave_sfx`.
-- The player picks the voice. Most effects may only take the chord voice. Explosions and damage may also take the
-  bass voice. The start sound and the boss alarm may take the lead, and the final blast all three voices. A higher
-  priority replaces a lower one, and the music continues underneath at its current position.
+- The score lists the voices each effect may use, and the player picks one of them: the lowest-numbered free one.
+  Shots, hits, bombs and pickups use the chord voice (2). Explosions and damage use the bass voice (1) or the chord
+  voice, the boss alarm the chord or the lead voice, the start sound the lead voice (3), and the final blast any of the
+  three. When none is free, a higher priority replaces a lower one. The music continues underneath at its current
+  position.
 
 ## Player cost
 
@@ -66,9 +74,11 @@ PRG is 29 262 bytes.
 
 - every state was reached (title, wave, warning, boss, boss destroyed, wave cleared, ship destroyed, game over), and a
   second game started from the title;
-- the frame interrupt ran in every frame; the main loop took longer than one frame 3 times;
+- the frame interrupt ran in every frame (a CIA 1 timer started by the script counted as many frames as interrupts);
+  the main loop took longer than one frame 3 times;
 - the sound recording was audible in every state (-26 to -20 dBFS RMS) with no clipped sample;
-- in a second run with silent songs, all nine effects were requested by the game and audible afterwards.
+- in a second run with silent songs, the game requested all nine effects, and for each effect the median level in the
+  100 ms after a request was above -40 dBFS (the quietest, the start sound, -38 dBFS).
 
 The script's player dodges and shoots without pause, which is not how a person plays. The difficulty has not been
 tested with people. The game has been run in VICE only, not on hardware, and it is written for PAL.
@@ -93,7 +103,13 @@ the source and the result. Every conversion reports what it lost:
 | MIDI | 1 drum hit dropped (a simultaneous hit has priority); drum velocity is not imported |
 | MOD | channel 4 (72 notes) dropped because one SID has three voices; 52 set-volume effects approximated; samples replaced by SID waveforms and envelopes |
 
-The MOD import maps tracker notes to pitches without reading the length of a sample loop. The loops of this module
-are 64 bytes long, which comes out in the octave in which the module plays. A 32-byte loop came out an octave low.
+With `sidwave` main at `5746fb5`, the MOD import maps tracker notes to pitches without reading the length of a sample
+loop. The loops of this module are 64 bytes long, which comes out in the octave in which the module plays. A 32-byte
+loop came out an octave low.
 
-All music, code and artwork in this folder were made for this example.
+## Licence
+
+All music, code and artwork in this folder were made for this example and are covered by the licence of this repository
+(GPL-2.0-only, see [`LICENSE`](../../LICENSE)). No third-party music, player, driver, sample or sound font is included.
+The built PRG also contains the SIDWave player, which the `sidwave` package licenses with its Player Exception, and it
+copies the character set from the C64's ROM when it starts.

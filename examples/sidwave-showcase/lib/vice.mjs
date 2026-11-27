@@ -8,7 +8,9 @@ import fs from "node:fs";
 import net from "node:net";
 import zlib from "node:zlib";
 
-export const FPS = 985248 / (312 * 63); // PAL frames per second
+const CYCLES_PER_FRAME = 312 * 63; // PAL
+const TIMER_PERIOD = 4096; // less than half a frame, so that rounding to frames is exact
+export const FPS = 985248 / CYCLES_PER_FRAME; // PAL frames per second
 
 class Monitor {
   constructor(socket) {
@@ -90,6 +92,34 @@ class Monitor {
     body.writeUInt16LE(start, 1);
     body.writeUInt16LE(start + length - 1, 3);
     return (await this.send(0x01, body)).subarray(2);
+  }
+
+  /** Writes bytes as the CPU would, so that writes to I/O registers take effect. */
+  async write(start, bytes) {
+    const body = Buffer.alloc(8 + bytes.length);
+    body[0] = 1; // with side effects
+    body.writeUInt16LE(start, 1);
+    body.writeUInt16LE(start + bytes.length - 1, 3);
+    body.set(bytes, 8);
+    await this.send(0x02, body);
+  }
+
+  /**
+   * Starts CIA 1 as a cycle counter that runs independently of the program: timer B counts the underflows of timer A,
+   * which come every 4096 cycles. Pulse Guard uses neither timer.
+   */
+  async startFrameCounter() {
+    await this.write(0xdc0e, [0, 0]);
+    await this.write(0xdc04, [(TIMER_PERIOD - 1) & 0xff, (TIMER_PERIOD - 1) >> 8, 0xff, 0xff]);
+    await this.write(0xdc0f, [0x51]); // load, start, count underflows of timer A
+    await this.write(0xdc0e, [0x11]); // load, start
+  }
+
+  /** Whole PAL frames since startFrameCounter (up to 13000). */
+  async frameCounter() {
+    const [aLow, aHigh, bLow, bHigh] = await this.read(0xdc04, 4);
+    const cycles = (0xffff - (bLow + 256 * bHigh)) * TIMER_PERIOD + (TIMER_PERIOD - 1 - (aLow + 256 * aHigh));
+    return Math.round(cycles / CYCLES_PER_FRAME);
   }
 
   /** A CPU register: 0 A, 1 X, 2 Y, 3 PC. */
@@ -197,9 +227,42 @@ export function writePng(file, { width, height, rgb }, scale = 3) {
   fs.writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]));
 }
 
-function connect(port, attempts) {
+/**
+ * Whether process `pid` holds the socket that listens on 127.0.0.1:`port`. Another program may take the port between
+ * the check for a free port and the start of VICE; the script must not drive, or quit, an emulator it did not start.
+ * Without /proc (not Linux) this cannot be told, and the answer is true.
+ */
+export function listensOn(pid, port) {
+  let table;
+  try {
+    table = fs.readFileSync("/proc/net/tcp", "utf8");
+  } catch {
+    return true;
+  }
+  const local = `0100007F:${port.toString(16).toUpperCase().padStart(4, "0")}`;
+  const sockets = new Set(table.split("\n").map((line) => line.trim().split(/\s+/)).filter((f) => f[1] === local && f[3] === "0A").map((f) => `socket:[${f[9]}]`));
+  try {
+    return fs.readdirSync(`/proc/${pid}/fd`).some((fd) => {
+      try {
+        return sockets.has(fs.readlinkSync(`/proc/${pid}/fd/${fd}`));
+      } catch {
+        return false; // closed since the directory was read
+      }
+    });
+  } catch {
+    return false; // the process has ended
+  }
+}
+
+/** Connects once `ready` says that the port belongs to the expected process. */
+function connect(port, attempts, ready) {
   return new Promise((resolve, reject) => {
     const attempt = (left) => {
+      if (!ready()) {
+        if (left <= 0) reject(new Error(`the started VICE does not listen on port ${port}`));
+        else setTimeout(() => attempt(left - 1), 100);
+        return;
+      }
       const socket = net.connect({ host: "127.0.0.1", port });
       socket.once("connect", () => {
         socket.removeAllListeners("error");
@@ -284,7 +347,7 @@ export async function startVice(prg, { breakAddress, wav, warp = false, logFile 
     process.removeListener("SIGINT", onSignal);
   };
   try {
-    monitor = new Monitor(await connect(port, 150));
+    monitor = new Monitor(await connect(port, 150, () => listensOn(child.pid, port)));
     await monitor.breakAt(breakAddress);
     await monitor.resume();
     await monitor.waitForStop(60000);
