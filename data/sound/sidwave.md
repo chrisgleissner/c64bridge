@@ -1,11 +1,18 @@
 # SIDWave Format Specification
 
+**Using this specification with the c64bridge MCP server.** `c64_sound` with `op: compile_play` compiles a score
+and plays it, and `op: pipeline` also records and analyzes the output. Statements about the `sidwave` command apply
+to the command line. The server offers `c64_sound` operations such as `validate`, `lint`, `format`, `compile`,
+`convert`, `compose`, `complete` and `reconstruct`. Paragraphs introduced by **c64bridge** describe the server.
+
+LLM → SIDWave (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VICE playback
+
 This document defines **SIDWave**, a declarative format for describing structured C64 SID compositions.
-SIDWave files are authored in YAML (or JSON) and compiled by the MCP server (`music_compile_and_play`) into a `.PRG` or `.SID` binary with a built-in frame-based player.
+SIDWave files are authored in YAML (or JSON) and compiled by the `sidwave` command or library into a `.PRG` or `.SID` binary with a built-in frame-based player.
 
 Pipeline:
 
-LLM → SIDWave (YAML) → MCP compiler → PRG or PSID → C64 / Ultimate / VICE playback
+SIDWave (YAML) → sidwave compiler → PRG or PSID → C64 / Ultimate / VICE playback
 
 ---
 
@@ -96,6 +103,7 @@ timeline:
 | `instruments` | Optional named instrument map. Voices may select an instrument; `lib:name` selects a built-in recipe. |
 | `speed` | Player calls per frame, from 1 to 4 (to 8 in 1.5; see "Speed up to 8"). |
 | `player` | 1.5: player options `soft_start`, `idle_writes` and `start` (see "Player options"). |
+| `global_table` | 1.5: per-call values of the filter and volume registers (see "Global registers"). |
 | `tuning` | 1.5: `cents` shift and exact `registers` per note (see "Tuning"). |
 | `title`, `author` | Written to the PSID header (Latin-1, 32 characters). |
 | `meter` | Quarter notes per bar. Defaults to 4. In 1.2 use `meter: 3` for 3/4. 1.3 also accepts time signatures (see SIDWave 1.3). |
@@ -265,7 +273,7 @@ Set either field on a named instrument or on a groove note object. Entry values 
 
 ## Generated pieces
 
-`c64_sound` with `op: generate` plays a seeded eight-bar piece once and returns
+**c64bridge.** `c64_sound` with `op: generate` plays a seeded eight-bar piece once and returns
 a short summary and the resource URI for a bundled example in the chosen style.
 Set `includeScore: true` to receive the generated SIDWave source and lead timeline.
 Like `play_preset`, it loads the song as a PRG with its own player,
@@ -280,9 +288,19 @@ you customize the lead length, pattern or spacing. The accompaniment then runs
 to the end of the final bar. `waveform` overrides the lead sound, and `system`
 sets the score timing to PAL or NTSC. By default, timing follows the machine.
 
+`op: generate` uses composer 1. `op: compose` writes a composer 2 score without playing it.
+
+The next paragraph describes the command line.
+
+`sidwave generate --composer 1 --style <style> --seed <n>` writes a seeded eight-bar piece (`--bars` or `--minutes`
+change the length); the library function is `generateSidwave`. The styles are `chiptune` (130 BPM, speed 2), `ambient`
+(80 BPM) and `funk` (105 BPM). The same options and seed give the same harmony and melody. `--root` sets the tonic and
+lead register, and `--clock` selects PAL or NTSC timing. Composer 2, the command's default, is described under
+"Composer 2 and completion".
+
 ## Built-in instruments
 
-Use these names as voice defaults, groove note instruments, or drum kit entries. The recipes use techniques described in [SID programming best practices](sid-programming-best-practices.md) and the [SID specification](sid-spec.md).
+Use these names as voice defaults, groove note instruments, or drum kit entries. The recipes use techniques described in [SID programming best practices](https://github.com/chrisgleissner/c64bridge/blob/main/data/sound/sid-programming-best-practices.md) and the [SID specification](https://github.com/chrisgleissner/c64bridge/blob/main/data/sound/sid-spec.md).
 
 | Name | Sound |
 | --- | --- |
@@ -368,7 +386,7 @@ The compiler arranges the timeline into per-voice note events and encodes them a
 
 ## Multiple SIDs (1.2)
 
-List the SID windows in playback order, or use a layout from [Owner configurations](../ultimate/multisid.md#owner-configurations-and-settings). Use distinct IDs and distinct addresses from `$D400` through `$D7E0` in `$20` increments. The compiler refuses `$DE00–$DFFF`. Use PRG for a map with more than three SIDs. Before playing a multi-SID PRG, configure the device to decode those same windows.
+List the SID windows in playback order, or use a layout from [Owner configurations](https://github.com/chrisgleissner/c64bridge/blob/main/data/ultimate/multisid.md#owner-configurations-and-settings). Use distinct IDs and distinct addresses from `$D400` through `$D7E0` in `$20` increments. The compiler refuses `$DE00–$DFFF`. Use PRG for a map with more than three SIDs. Before playing a multi-SID PRG, configure the device to decode those same windows.
 
 | Layout | SID bases in voice order |
 |---|---|
@@ -400,11 +418,11 @@ timeline:
 
 Each SID's volume defaults to 15. Its `filter.filter_env.voices` uses local channels 1–3. A pattern's `filter_mod` affects the SID that plays the pattern. A SID's optional `filter.filter_mod` starts its ramp at the beginning of each pass. Its `steps` unit uses one beat per step. The most recent active filter table owns cutoff, mode and resonance for its own SID. Filter tables on other SIDs run independently. Top-level `global_fx.filter_env` applies to the first SID unless its own `filter_env` overrides it.
 
-The compiler warns if the sum of peak sawtooth sustain scaled by each SID's volume exceeds 10. The estimate assumes all SIDs could share a pan side because the score does not describe the hardware mixer. Keep the actual sum of `(volume / 15) × (sustain / 15)` per side at or below 10. [Ultimate multi-SID level measurements](../ultimate/multisid.md)
+The compiler warns if the sum of peak sawtooth sustain scaled by each SID's volume exceeds 10. The estimate assumes all SIDs could share a pan side because the score does not describe the hardware mixer. Keep the actual sum of `(volume / 15) × (sustain / 15)` per side at or below 10. [Ultimate multi-SID level measurements](https://github.com/chrisgleissner/c64bridge/blob/main/data/ultimate/multisid.md)
 
 The compiler reports `worstCaseCyclesPerCall` and refuses a 1.2 score above the 1 MHz budget for its selected video standard unless it declares `cpu: turbo`. The error gives the minimum CPU speed. Higher values of `speed` leave fewer cycles per player call. Song code and data must fit below `$D000`.
 
-For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and counts loop iterations across a raster line. Playback begins when it measures more than about 1.5 MHz or reaches the 4.25-second cap. A reset can trigger the full startup hold, while a reset-free launch can begin on the first check. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](../ultimate/hardware.md)
+For a turbo PRG, select `U64 Turbo Registers` on an Ultimate 64 or `C64U Turbo Registers` on a C64 Ultimate. The PRG requests top speed through `$D031` and counts loop iterations across a raster line. Playback begins when it measures more than about 1.5 MHz or reaches the 4.25-second cap. A reset can trigger the full startup hold, while a reset-free launch can begin on the first check. If the registers are unavailable and the score exceeds the stock budget, the PRG returns to BASIC without installing its IRQ. [Ultimate hardware turbo timing](https://github.com/chrisgleissner/c64bridge/blob/main/data/ultimate/hardware.md)
 
 The SIDWave 1.2 player clears each SID at init, then raises its master volume
 from zero by one step per video frame (about 20 ms on PAL or 17 ms on NTSC),
@@ -416,13 +434,14 @@ temporarily write their raw four-bit values to the volume register on their SID.
 
 ### Playback setup
 
-On Ultimate backends, `compile_play`, `pipeline`, `play_preset`, and `generate`
+**c64bridge.** On Ultimate backends, `compile_play`, `pipeline`, `play_preset`, `generate` and `play` (for music
+that it compiles to a SIDWave PRG)
 start a SIDWave PRG without a reset when BASIC is idle at `READY.` or the
 SIDWave player owns the IRQ and the keyboard queue is idle. The server detaches
 the previous player, clears the SID registers, DMA-writes the PRG body, and
 queues a BASIC `SYS` command. Other machine states use the normal PRG runner.
 
-The capture harness at `scripts/sidwave-hil.mjs` uses the same launcher.
+The capture harness at `scripts/sidwave-hil.mjs` in the c64bridge repository uses the same launcher.
 It starts recording before launching the score so the capture includes startup.
 
 These operations accept `configure: true`. On supported Ultimate firmware,
@@ -432,11 +451,33 @@ new windows afterward. It restores the changed settings when playback stops,
 is replaced, the machine resets, or the active backend switches. A dry run
 leaves the device alone.
 
-The three `ultisid8` layouts disable mirroring and split both UltiSIDs with `1/4 (A7,A8)`. The bases are `$D400` and `$D420`. The layouts map and enable the required sockets at `$D440` and `$D460`. For explicit maps, the server can configure subsets of those windows and maps using up to four unsplit decoders. Other maps require manual setup. [Owner configurations](../ultimate/multisid.md#owner-configurations-and-settings)
+With `configure: true`, the `ultisid8` layouts disable mirroring and split both UltiSIDs with `1/4 (A7,A8)`. The
+bases are `$D400` and `$D420`. The layouts map and enable the required sockets at `$D440` and `$D460`. For explicit
+maps, the server can configure subsets of those windows and maps using up to four unsplit decoders. Other maps
+require manual setup. For `cpu: turbo`, the server snapshots the turbo settings store and selects the registers mode
+advertised by firmware. Without `configure`, the playback result lists the needed device settings.
+[Owner configurations](../ultimate/multisid.md#owner-configurations-and-settings),
+[Ultimate turbo registers](../ultimate/hardware.md)
 
-For an explicit SID entry, `pan` takes `Center`, `Left 1` through `Left 5`, or `Right 1` through `Right 5`. All four parts of an UltiSID share its hardware mixer pan. The score can omit pan or repeat the same value across those parts. Conflicting values are refused. For `cpu: turbo`, the server snapshots the turbo settings store and selects the registers mode advertised by firmware. Without `configure`, the playback result lists the needed device settings. [Ultimate turbo registers](../ultimate/hardware.md)
+VICE playback through the server automatically sets and restores `SidStereo` and `Sid2AddressStart` through
+`Sid8AddressStart` using the Binary Monitor. These are the resources for the VICE 3.10 options `-sidextra` and
+`-sid2address` through `-sid8address`.
 
-VICE playback automatically sets and restores `SidStereo` and `Sid2AddressStart` through `Sid8AddressStart` using the Binary Monitor. These are the resources for the VICE 3.10 options `-sidextra` and `-sid2address` through `-sid8address`. VICE requires a primary SID at `$D400` and supports up to eight SIDs. Ultimate mixer pan and turbo settings apply to Ultimate hardware.
+The rest of this section describes the command line and the device settings that apply to both.
+
+`sidwave play --target u64 --host <h>` uploads the tune through the Ultimate REST API and does not change the device
+configuration. Before playing a score with several SIDs or `cpu: turbo`, set the SID addresses, sockets, mixer and turbo
+settings on the device. This target has not been tested on hardware.
+
+The three `ultisid8` layouts expect mirroring to be disabled and both UltiSIDs to be split with `1/4 (A7,A8)`, with base
+addresses `$D400` and `$D420`. The layouts expect the required sockets at `$D440` and `$D460`.
+[Owner configurations](https://github.com/chrisgleissner/c64bridge/blob/main/data/ultimate/multisid.md#owner-configurations-and-settings)
+
+For an explicit SID entry, `pan` takes `Center`, `Left 1` through `Left 5`, or `Right 1` through `Right 5`. All four parts of an UltiSID share its hardware mixer pan. The score can omit pan or repeat the same value across those parts. Conflicting values are refused.
+
+For VICE, set the SID addresses with the options `-sidextra` and `-sid2address` through `-sid8address` of VICE 3.10
+(`sidwave play --target vice --vice-arg <arg>`). VICE requires a primary SID at `$D400` and supports up to eight SIDs.
+Ultimate mixer pan and turbo settings apply to Ultimate hardware.
 
 ## Advanced techniques (1.2)
 
@@ -445,7 +486,7 @@ VICE playback automatically sets and restores `SidStereo` and `Sid2AddressStart`
 Declare a destination voice with `echo: { voice: 1, delay: 6, volume: 0.4, detune: -7 }` or `unison: { voice: 1, detune: 8 }`. The destination takes its notes and instruments from the named source voice. Put the source in the timeline. The copy follows that source automatically.
 
 - Echo shifts note onsets and releases by `delay` player calls and scales sustain by `volume` (0–1). The initial attack still uses the source attack and decay. Echoes that run beyond the end of the song are clipped, except after the last notes of a score with `end: { release: true }`, whose tail waits for them. Place the echo on another SID and pan it separately on the mixer to spread it in stereo.
-- Unison starts on the same call on another SID, but the player writes the copy's registers later in that call. On an Ultimate 64 at 1 MHz, the copy in stereo_echo sounded 3.17 ms after its source; under `cpu: turbo` the lag is 0.2–1.3 ms. With zero detune a 1 MHz unison is therefore a width effect, not a centre placement; `center: true` writes both copies together. Detune is in cents (±100), defaults to +5 for unison and 0 for echo, and also applies to arpeggios, wavetable pitch changes and glides. Doubling an oscillator at the same pitch does not produce a predictable increase in level. To tune a separately scored voice, give it `detune` in cents (±100). Two independently programmed oscillators can be detuned on the same SID. [Ultimate multi-SID measurements](../ultimate/multisid.md)
+- Unison starts on the same call on another SID, but the player writes the copy's registers later in that call. On an Ultimate 64 at 1 MHz, the copy in stereo_echo sounded 3.17 ms after its source; under `cpu: turbo` the lag is 0.2–1.3 ms. With zero detune a 1 MHz unison is therefore a width effect, not a centre placement; `center: true` writes both copies together. Detune is in cents (±100), defaults to +5 for unison and 0 for echo, and also applies to arpeggios, wavetable pitch changes and glides. Doubling an oscillator at the same pitch does not produce a predictable increase in level. To tune a separately scored voice, give it `detune` in cents (±100). Two independently programmed oscillators can be detuned on the same SID. [Ultimate multi-SID measurements](https://github.com/chrisgleissner/c64bridge/blob/main/data/ultimate/multisid.md)
 
 ### Chord arpeggios and pitch bends
 
@@ -455,17 +496,26 @@ Use `{ note: C4, bend: { to: G4, frames: 6 } }` to start at C4 and reach G4 in s
 
 ### Gate timing and oscillator reset
 
-An instrument can set `hard_restart: { frames: 3, adsr: [0, 0, 0, 1], test: true }`. Before the next attack, the player clears GATE for the requested calls, loads the restart ADSR, and optionally holds the oscillator TEST bit. The next attack writes the note's ADSR and clears the restart TEST bit. The default is a two-call restart with zero ADSR. `frames: 0` keeps the regular ADSR and releases GATE before the next attack. `gate_off: 4` on a groove note releases it four calls before its written end, or earlier if the next attack needs a restart. Adjacent legato notes keep the gate on. [SID control register](sid-spec.md)
+An instrument can set `hard_restart: { frames: 3, adsr: [0, 0, 0, 1], test: true }`. Before the next attack, the player clears GATE for the requested calls, loads the restart ADSR, and optionally holds the oscillator TEST bit. The next attack writes the note's ADSR and clears the restart TEST bit. The default is a two-call restart with zero ADSR. `frames: 0` keeps the regular ADSR and releases GATE before the next attack. `gate_off: 4` on a groove note releases it four calls before its written end, or earlier if the next attack needs a restart. Adjacent legato notes keep the gate on. [SID control register](https://github.com/chrisgleissner/c64bridge/blob/main/data/sound/sid-spec.md)
 
 ### CIA2 volume digis
+
+**c64bridge.** Never send raw PCM through tool arguments beyond a few hundred samples. A `file:` source read by the
+server follows the [host path and size rules](../../doc/hardening-behavior.md) in place of the command line's
+`--allow-dir` rule.
+
+To preview a sample, use `c64_sound` with `op: sample_render` and optional `definition`,
+`rate` and `outputDir`. It defaults to a kick at 4,000 Hz and writes its
+quantized output as a mono WAV under `artifacts/samples`. Pass its returned
+`outputPath` as `wavPath` to `c64_sound` with `op: analyze` to analyze the file
+without recording from a device.
 
 Use standalone PRG output. A digi-only score can declare `voices: []` at the
 top level and an empty set of layers in its timeline. Put named sounds in
 `samples.defs` and schedule them under `samples.voices` or `samples.triggers`.
 The default target is the first SID.
 
-Never send raw PCM through tool arguments beyond a few hundred samples. Describe
-the sound with `synth:`, or generate PCM with your own code and use `file:`.
+Describe a sound with `synth:`, or generate PCM with your own code and use `file:`.
 For tiny sounds, use `b64:` containing 4-bit volume levels, two samples per
 byte, high nibble first.
 
@@ -489,7 +539,7 @@ samples:
 | Source | Parameters |
 | --- | --- |
 | `synth` | `layers` mixes up to 16 oscillators. Each supports `osc: sine\|triangle\|square\|saw\|noise`, `freq`, optional exponential sweep `to`, `ms`, `gain`, and square wave `duty`. Give frequencies in Hz or as notes such as `A4`. A single oscillator can put these fields directly in `synth`. |
-| `file` | A host path to mono or stereo WAV (8/16/24-bit PCM or float32), or mono raw `.u8` or little-endian `.s16` with `file_rate` in Hz. [Host path and size rules](../../doc/hardening-behavior.md) apply. |
+| `file` | A host path to mono or stereo WAV (8/16/24-bit PCM or float32), or mono raw `.u8` or little-endian `.s16` with `file_rate` in Hz. The command line reads it only below the current directory or an `--allow-dir` directory, up to 16 MiB. |
 | `kit` | Original hits `kick`, `snare`, `clap`, `hat`, `tom`, and `zap`. |
 | `b64` or `hex` | Exact volume nibbles. `base64` is an alias for `b64`. Each decoded byte is two samples. Each hex digit is one sample, including for odd lengths. |
 
@@ -502,7 +552,7 @@ resonances to the sound. A synth with only a formant defaults to a square wave.
 `crush: { bits: 6, rate: 2000 }` reduces the amplitude resolution and holds
 each sample at the requested rate. `seed` makes noise repeatable.
 
-The server mixes to mono, removes DC, and filters out frequencies that would
+The compiler mixes to mono, removes DC, and filters out frequencies that would
 alias before converting to the requested rate. For `synth`, `file`, and `kit`,
 `trim: true` skips quiet edges and peak normalization uses the full range by default.
 `gain_db: 0` keeps the input gain. Other values set the gain in dB in place of
@@ -534,7 +584,7 @@ the 7-cycle hardware entry and the KERNAL jump. PAL has a 123-cycle period at
 lower the maximum base rate. The compiler gives that maximum
 when the timer period is too short, and budgets NMI time alongside the score IRQ.
 Turn off other users of CIA2 timer A, such as KERNAL RS-232, before starting the
-PRG. [CIA timers and interrupt registers](../io/cia-spec.md)
+PRG. [CIA timers and interrupt registers](https://github.com/chrisgleissner/c64bridge/blob/main/data/io/cia-spec.md)
 
 The PRG uses `ceil(samples / 2)` bytes per definition, or 2,000 bytes per second
 at 4 kHz and 4,000 at 8 kHz. Triggers reuse that data. The compile report includes
@@ -546,11 +596,8 @@ the original signal or the measured error is zero. The report also gives
 `sampleBytes`, `bytesBelowD000` after reserving the BASIC terminator,
 `digiCyclesPerCall` and `digiWorstCaseCyclesPerNmi`.
 
-**Preview.** Use `c64_sound` with `op: sample_render` and optional `definition`,
-`rate` and `outputDir`. It defaults to a kick at 4,000 Hz and writes its
-quantized output as a mono WAV under `artifacts/samples`. Pass its returned
-`outputPath` as `wavPath` to `c64_sound` with `op: analyze` to analyze the file
-without recording from a device.
+**Preview.** The command line has no sample preview. In the library, `renderSample` and `sampleWav` from
+`sidwave/pcm` give the quantized output of one definition as a mono WAV.
 
 **SID output.** CIA2 timer A changes the low nibble of `$D418` (or the target
 SID's equivalent register) and preserves the filter mode in the high nibble.
@@ -563,8 +610,8 @@ much quieter on an 8580 without a DC offset. Playback uses the existing volume
 writes and leaves selection of any DC offset method to the machine setup. With
 UltiSID, use a non-Off **Digis Level** under **UltiSID Configuration** (default
 Medium). Higher settings improve sample audibility and can make ordinary
-volume changes more audible. [SID specification](sid-spec.md) and
-[Ultimate multi-SID settings](../ultimate/multisid.md)
+volume changes more audible. [SID specification](https://github.com/chrisgleissner/c64bridge/blob/main/data/sound/sid-spec.md) and
+[Ultimate multi-SID settings](https://github.com/chrisgleissner/c64bridge/blob/main/data/ultimate/multisid.md)
 
 ### Additional library instruments
 
@@ -581,7 +628,7 @@ volume changes more audible. [SID specification](sid-spec.md) and
 
 ### Not supported
 
-Time signatures other than those listed under SIDWave 1.3, per-note velocity, multiple subtunes, and arbitrary memory/register writes. Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
+Per-note velocity, time signatures other than those listed under SIDWave 1.3, and arbitrary memory or register writes. SIDWave 1.4 adds several songs in one score; SIDWave 1.5 adds a limited set of SID register writes (`global_table`, `player.init`, `player.start` and the wavetable step `reg`). Instrument recipes are starting points rather than emulations of any commercial player or specific SID model.
 
 ---
 
@@ -1287,6 +1334,11 @@ volume from there, so the start volume holds only until that call; set `soft_sta
 **Rejected alternative.** An `init` register list written by the init routine instead of in play calls. The original writes
 in play calls, and the F-diff compares call by call, so a write in the init call would be in the wrong call.
 
+`player.init` lists up to 32 register writes of the first SID that `init` makes after it has cleared the chip. It
+describes a tune whose init leaves values in registers that its player does not write again, such as the envelope of a
+voice that has not played. A start step may be empty (`[]`): the player then writes nothing in that call, as a tune does
+that skips writes in its first calls. Recovery emits both only for the state it observes before the first row.
+
 #### Tuning: `tuning.cents` and `tuning.registers`
 
 **Reproducer.** Gate-on frequency registers that no equal-temperament note produces under any single detune, for example
@@ -1359,33 +1411,89 @@ speed 5 or more is less than one player call at tempos up to 220.
 
 **Design.** In 1.5, `speed` is 1 to 8 and pattern length and groove `len` are at least 1/128 beat. A note still lasts at least
 one frame (`speed` calls). The compiler's cycle budget check still applies: at the higher speeds the 1.4 player needs more cycles per
-call than one call period holds at 1 MHz, and such a score is rejected with `use cpu: turbo`. Seven of the 24 development tunes are
-rejected for that reason (speeds 4 to 8), so the recovered score does not compile for them.
-
-**Known limit.** At speed 8 the first note of a score lasts one call fewer than its row count (gate off at call 29 instead of 30
-in the round-trip test), because the player's first row starts one call into the song at that speed. A recovered speed-8 score
-therefore has a first note one call shorter than the tune; later notes are exact. This is open (`todo` in `reconstructRepairs.test.mjs`).
+call than one call period holds at 1 MHz, and such a score is rejected with `use cpu: turbo` unless the measurement described under
+"Cycle budget" shows that it fits.
 
 **Rejected alternative.** Mapping a multi-speed tune onto a slower grid: the call timing then differs.
 
-#### Not designed here
+#### Cycle budget
 
-SID addresses in a multi-SID score exist already (`sids[].address`), so recovery of tunes with several SIDs is a recovery
-change (the recovery emits only SID 1 today), not a language change. A table of global volume, filter and routing steps
-(`global_table`) is not implemented: 10 of 24 tunes change the filter or volume registers outside any note, and the S5d work did not reach it.
+The compiler's cycle estimate is a static upper bound. For a `sidwave: 1.5` score whose estimate exceeds the 1 MHz
+budget, the compiler runs the assembled player on its 6502 emulator over init, every call of the song and one further pass
+of its loop. With a `global_table` that loops, the run is extended until every alignment of the two loops has occurred; when
+that needs more than 100,000 calls, or the table keeps looping after an explicit `end`, 170 cycles are added for the table
+instead. When the worst measured call plus 50
+cycles fits the budget, the score compiles without `cpu: turbo` and a
+warning gives both numbers. Documents with several songs, effects or samples keep the estimate, as do older versions.
+
+#### Global registers: `global_table`
+
+**Reproducer.** A tune whose player writes `$D417` or `$D418` with values that change independently of the notes: a
+routing bit set in the middle of a note, a volume that is rewritten per call, or a cutoff sweep that runs while no voice
+uses the filter.
+
+**Why 1.4 cannot express it.** The player computes `$D415` to `$D418` from the SID's filter settings and from the filter
+table of the sounding note. Nothing sets them on a timeline of their own.
+
+**Evidence.** Filter and volume were among the most frequent differing classes of the 24 development tunes.
+
+**Design.**
+
+```yaml
+sidwave: "1.5"
+player: { soft_start: false }
+global_table:
+  loop: 1
+  steps:
+    - { d415: 0, d416: 32, d417: 0xF1, d418: 0x1F, calls: 4 }
+    - { d416_add: 8, calls: 16 }
+    - { d416_add: -8, calls: 16 }
+```
+
+Each step lasts `calls` player calls (1 to 255). `d415` to `d418` set a register at the start of the step; a register
+that a step does not name keeps its value. `d416_add` adds a signed value to `$D416`, modulo 256, in every call of the
+step. The first step sets every register that any step names. After the last step the table continues at `loop`, with the
+values the registers then hold, or keeps the last values when there is no `loop`. A table has at most 2048 steps.
+
+The table owns the registers that it names: the player no longer writes them, so filter tables and filter settings have no
+effect on those registers. The other registers of the four stay with the player. The table runs once per call from the
+first call after `player.start`, `init` restarts it, and a song loop does not. A table that names `d418` needs
+`player.soft_start: false` and cannot be combined with `samples`. The construct supports one SID and cannot be combined
+with `songs` or `effects`.
+
+Event-based exports (MIDI, MusicXML, the tracker formats) report the table as not exported.
+
+Recovery emits the table only when a score without it differs from the tune in the filter or volume class, and keeps it
+only when it brings the two traces closer; the instruments of such a score have no filter tables.
+
+**Rejected alternative.** A filter table that belongs to a voice cannot describe a register that changes while that voice
+plays no note, and it cannot describe `$D418` at all.
+
+#### Wavetable waveform `none`
+
+`hard_restart` accepts `wave: none` too: the restart calls then hold no waveform bits (`$08` with `test`).
+
+A wavetable step with `wave: none` writes a control register without waveform bits, with the `test`, `gate`, `ring` and
+`sync` flags of the step. Many players start a note with the test bit alone (`$09`); earlier versions require a waveform
+(`$41`). The construct requires `sidwave: 1.5`.
 
 ## Playable examples
 
-Open the composition index and use the names with `c64_sound` `play_preset`.
+**c64bridge.** Open the [composition index](c64://sound/examples) and use the names with `c64_sound` `play_preset`.
 The result includes the resource URI and a short summary. Set `includeScore: true`
 to include the YAML in the result. Each original YAML has a technique and form
-guide in its header. [Composition index](c64://sound/examples)
+guide in its header. `wall_of_sid` needs `configure: true` and a fitted SID in socket 1.
 
-- Start with [chiptune](c64://sound/examples/chiptune_drive), [ambient](c64://sound/examples/ambient_filter), or [funk](c64://sound/examples/funk_bass). They were rewritten in SIDWave 1.2 for 1.3.2; their 1.3.1 (SIDWave 1.1) texts are kept as test fixtures that pin the 1.1 compiler output.
-- Use [acid bass](c64://sound/examples/acid_line) for filter accents, [the ballad](c64://sound/examples/arp_ballad) for chord arps and PWM, [drum and bass](c64://sound/examples/drum_and_bass) for multispeed breakbeats, and [the digi groove](c64://sound/examples/digi_groove) for CIA2 samples.
-- Use [metal](c64://sound/examples/metal_sync) for sync, ring and bends, [the chamber waltz](c64://sound/examples/chamber_waltz) for 3/4 counterpoint, and [the fanfare](c64://sound/examples/title_fanfare) for filtered brass and a held cadence.
-- Use [the game songs](c64://sound/examples/game_songs) for three songs (title, in-game loop, game-over jingle) in one player.
-- Use [stereo echo](c64://sound/examples/stereo_echo) for panning, [the orchestra](c64://sound/examples/ultisid_orchestra) for 24 voices, and [the nine-SID finale](c64://sound/examples/wall_of_sid) for the build to 27 voices. The last piece needs `configure: true` and a fitted SID in socket 1.
+The `sidwave examples` command below is the command line equivalent.
+
+`sidwave examples` lists the bundled scores. `sidwave examples <name>` prints one, and `-o <dir>` writes it to a file.
+Each original score has a technique and form guide in its header.
+
+- Start with chiptune ([`chiptune_drive`](c64://sound/examples/chiptune_drive)), ambient ([`ambient_filter`](c64://sound/examples/ambient_filter)), or funk ([`funk_bass`](c64://sound/examples/funk_bass)). They were rewritten in SIDWave 1.2 for 1.3.2; their 1.3.1 (SIDWave 1.1) texts are kept as test fixtures that pin the 1.1 compiler output.
+- Use acid bass ([`acid_line`](c64://sound/examples/acid_line)) for filter accents, the ballad ([`arp_ballad`](c64://sound/examples/arp_ballad)) for chord arps and PWM, drum and bass ([`drum_and_bass`](c64://sound/examples/drum_and_bass)) for multispeed breakbeats, and the digi groove ([`digi_groove`](c64://sound/examples/digi_groove)) for CIA2 samples.
+- Use metal ([`metal_sync`](c64://sound/examples/metal_sync)) for sync, ring and bends, the chamber waltz ([`chamber_waltz`](c64://sound/examples/chamber_waltz)) for 3/4 counterpoint, and the fanfare ([`title_fanfare`](c64://sound/examples/title_fanfare)) for filtered brass and a held cadence.
+- Use the game songs ([`game_songs`](c64://sound/examples/game_songs)) for three songs (title, in-game loop, game-over jingle) in one player.
+- Use stereo echo ([`stereo_echo`](c64://sound/examples/stereo_echo)) for panning, the orchestra ([`ultisid_orchestra`](c64://sound/examples/ultisid_orchestra)) for 24 voices, and the nine-SID finale ([`wall_of_sid`](c64://sound/examples/wall_of_sid)) for the build to 27 voices. The last piece needs the SID addresses configured on the device and a fitted SID in socket 1.
 
 ## Asset libraries (SIDWave 1.4)
 
