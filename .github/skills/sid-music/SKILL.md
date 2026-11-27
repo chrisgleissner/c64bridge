@@ -66,7 +66,7 @@ These `c64_sound` operations work on host files and do not play anything (only `
 ## Workflow: game music with effects and budgets
 
 1. Read the effects and songs chapters of `c64://sound/sidwave/spec` and the example `c64://sound/examples/game_songs`. Write a score with `songs` and `effects`.
-2. Execute `c64_sound` with `op: "lint"`, then `op: "compile"` with `output: "game"`, `origin` (page-aligned free memory, for example `0x8000`), `symbols` for the assembler in use and `outputDir`.
+2. Execute `c64_sound` with `op: "lint"`, then `op: "compile"` with `output: "game"`, `origin` (page-aligned free memory, for example `0x8000`), `outputDir`, and `assembler` (`64tass`, `acme`, `kickass` or `ca65`) for one self-contained source include, `symbols` for symbol files, `relocation: true` for the bytes that change when the build moves by pages, and `maxCycles` to refuse a build whose play call is too slow.
 3. Check the budget: `cycles.worst` (and `cycles.withEffects`) against the raster time the game leaves, and `contract.memory` and `contract.zeroPage` against its memory map. To meet a budget execute `op: "retarget"` with `budgetCycles` or `budgetBytes`; `allowChanges: true` permits lossy steps, which must be reported.
 4. Run it inside a program with `c64_program` `op: "upload_run_asm"`. Follow `contract.registers`; for the origin `$8000`:
 

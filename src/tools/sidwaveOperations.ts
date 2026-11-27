@@ -9,9 +9,9 @@ import { basename } from "node:path";
 import YAML from "yaml";
 import {
   compileSidwaveBytes, compileSidwave, completeScore, convert, describeSidwave,
-  generateSidwave, hvscDatabases, hvscPathOf, identifySidPlayer, lintSidwave, parseSidFile, parseSidIdConfig,
+  generateSidwave, renderSidwaveGameInclude, sidwaveRelocationTable, hvscDatabases, hvscPathOf, identifySidPlayer, lintSidwave, parseSidFile, parseSidIdConfig,
   parseSonglengths, parseStil, PROFILES, queryStil, sidInfo, validationFailure,
-  DEFAULT_MUSIC_SEED, MUSIC_STYLES, type MusicStyle, type SidwaveSymbolFormat,
+  DEFAULT_MUSIC_SEED, MUSIC_STYLES, type MusicStyle, type SidwaveAssembler, type SidwaveGameOptions, type SidwaveSymbolFormat,
 } from "sidwave";
 import { analyzeScore, analyzeSid, compare } from "sidwave/analyze";
 import {
@@ -155,7 +155,7 @@ const definitions: Definition[] = [
   },
   {
     op: "compile", effect: "write", description: "Compile a score to PRG, SID or game files, without playing.",
-    optional: [...SCORE, "output", "outputPath", "outputDir", "overwrite", "loop", "song", "origin", "dataOrigin", "zeroPage", "symbols", "forDevice"],
+    optional: [...SCORE, "output", "outputPath", "outputDir", "overwrite", "loop", "song", "origin", "dataOrigin", "zeroPage", "symbols", "assembler", "relocation", "maxCycles", "forDevice"],
     run: async (args, ctx) => {
       const input = await readInput(args);
       const document = parseScore(input);
@@ -171,6 +171,8 @@ const definitions: Definition[] = [
       const target = { backend, ...(device ? { device } : {}) };
 
       if (kind !== "game") {
+        const gameOnly = (["assembler", "relocation", "maxCycles"] as const).find((name) => args[name] !== undefined);
+        if (gameOnly) throw new ToolValidationError(`${gameOnly} needs output: "game"`, { path: "$.output" });
         const compiled = compileSidwaveBytes(document, { format: kind, loop: args.loop, song: args.song });
         const artifact = await planOutput(args, input.stem, `.${kind}`, [input.file]).write(compiled.bytes, ctx);
         const { warnings: compileWarnings, ...summary } = compiled.summary;
@@ -179,10 +181,16 @@ const definitions: Definition[] = [
 
       const origin = required(args, "origin") as number;
       if (args.outputPath !== undefined) throw new ToolValidationError("A game build writes several files; pass outputDir", { path: "$.outputPath" });
-      const build = compileSidwave(document, {
+      const options: SidwaveGameOptions = {
         target: "game", origin, dataOrigin: args.dataOrigin, zeroPage: args.zeroPage,
-        symbols: args.symbols as SidwaveSymbolFormat[] | undefined, loop: args.loop,
-      });
+        symbols: args.symbols as SidwaveSymbolFormat[] | undefined, loop: args.loop, maxCycles: args.maxCycles,
+      };
+      // Everything that can fail is computed before the first file is written.
+      const build = compileSidwave(document, options);
+      const include = args.assembler === undefined
+        ? undefined
+        : renderSidwaveGameInclude(build, args.assembler as SidwaveAssembler, document.song.title);
+      const relocation = args.relocation ? sidwaveRelocationTable(document, options) : undefined;
       const directory = args.outputDir !== undefined
         ? resolveHostPath(args.outputDir, { purpose: "write" })
         : resolveHostChildPath(defaultHostOutputDir("artifacts", "sidwave"), `${input.stem}-game-${randomUUID().slice(0, 8)}`);
@@ -191,6 +199,8 @@ const definitions: Definition[] = [
         ...(build.data ? [[`${input.stem}.data.bin`, build.data] as [string, Uint8Array]] : []),
         ...Object.entries(build.symbols).map(([format, content]) =>
           [`${input.stem}.${format === "json" ? "symbols.json" : format}`, content] as [string, string]),
+        ...(include === undefined ? [] : [[`${input.stem}.inc`, include] as [string, string]]),
+        ...(relocation === undefined ? [] : [[`${input.stem}.reloc.json`, `${JSON.stringify(relocation)}\n`] as [string, string]]),
       ];
       const planned = outputs.map(([name, content]) => ({ path: resolveHostChildPath(directory, name), content }));
       // Check every file first, so a refusal does not leave half of a build behind.
@@ -206,6 +216,9 @@ const definitions: Definition[] = [
         outputDir: directory, files, ...target,
         contract: { system, entryPoints, registers, memory, zeroPage, sidRegisters, interrupts, maxStackBytes, playCallsPerFrame, songs, effects },
         cycles: build.cycles, durationSeconds: build.durationSeconds, warnings: [...build.warnings, ...warnings],
+        ...(relocation ? {
+          relocation: { playerOffsets: relocation.player.length, dataOffsets: relocation.data.length, granularity: relocation.granularity },
+        } : {}),
       };
     },
   },

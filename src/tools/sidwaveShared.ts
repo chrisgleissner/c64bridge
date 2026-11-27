@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 import YAML from "yaml";
-import { classifyError, parseSidwave, SIDWAVE_SYMBOL_FORMATS, MUSIC_STYLES, type ConvertResult, type SidwaveReadOptions } from "sidwave";
+import { classifyError, parseSidwave, SIDWAVE_ASSEMBLERS, SIDWAVE_SYMBOL_FORMATS, MUSIC_STYLES, type ConvertResult, type SidwaveReadOptions } from "sidwave";
 import { createLibsidplayfpEngine, type SidEmulation, type SidEngine, type TraceRequest, type RenderRequest } from "sidwave/engine";
 import { detectFormat, findFormat, formatDefinitions, type FormatDefinition } from "sidwave/export";
 import { formatSidwave } from "sidwave/format";
@@ -30,7 +30,7 @@ export type Args = {
   sidwave?: string | Record<string, unknown>; inputPath?: string; comparePath?: string; outputPath?: string; outputDir?: string;
   overwrite?: boolean; includeScore?: boolean; configure?: boolean; from?: string; to?: string; strict?: boolean; verify?: boolean; song?: number;
   voices?: number; system?: "PAL" | "NTSC"; model?: "6581" | "8580"; durationSeconds?: number; loop?: boolean;
-  output?: "prg" | "sid" | "game"; origin?: number; dataOrigin?: number; zeroPage?: number; symbols?: readonly string[];
+  output?: "prg" | "sid" | "game"; origin?: number; dataOrigin?: number; zeroPage?: number; symbols?: readonly string[]; assembler?: string; relocation?: boolean; maxCycles?: number;
   forDevice?: boolean; action?: string; semitones?: number; bpm?: number; factor?: number; order?: readonly string[];
   grid?: number; seed?: number; maxShift?: number; scope?: { voices?: string[]; sections?: string[] }; sids?: number;
   budgetCycles?: number; budgetBytes?: number; allowChanges?: boolean; level?: "T0" | "T1" | "A0" | "A1"; ladder?: boolean;
@@ -81,6 +81,9 @@ export const PROPERTIES: { [K in ArgName]-?: Schema<unknown> } = {
   dataOrigin: int(0, 0xffff),
   zeroPage: int(2, 0xfb),
   symbols: optionalSchema(arraySchema(stringSchema({ enum: [...SIDWAVE_SYMBOL_FORMATS] }))),
+  assembler: text({ enum: [...SIDWAVE_ASSEMBLERS], description: "Also write a source include." }),
+  relocation: flag("Also write a relocation table."),
+  maxCycles: int(1, undefined, "Limit per play call."),
   forDevice: flag("Use the machine's clock and SID model."),
   action: text(),
   semitones: int(-96, 96),

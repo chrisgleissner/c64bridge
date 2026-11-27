@@ -622,7 +622,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `analyze_music` | Key, form, voices, techniques and resources of a score or SID. | — | `sidwave`, `inputPath`, `song`, `durationSeconds` | ✅ | ✅ | ✅ |
 | `capture_samples` | Capture Ultimate stereo PCM. | — | `count=256`, `encoding="base64"` | ✅ |  |  |
 | `compare` | Compare two scores or SIDs: register differences and verification level. | `comparePath` | `sidwave`, `inputPath`, `song`, `durationSeconds`, `level`, `ladder` | ✅ | ✅ | ✅ |
-| `compile` | Compile a score to PRG, SID or game files, without playing. | — | `sidwave`, `inputPath`, `output`, `outputPath`, `outputDir`, `overwrite`, `loop`, `song`, `origin`, `dataOrigin`, `zeroPage`, `symbols`, `forDevice` | ✅ | ✅ | ✅ |
+| `compile` | Compile a score to PRG, SID or game files, without playing. | — | `sidwave`, `inputPath`, `output`, `outputPath`, `outputDir`, `overwrite`, `loop`, `song`, `origin`, `dataOrigin`, `zeroPage`, `symbols`, `assembler`, `relocation`, `maxCycles`, `forDevice` | ✅ | ✅ | ✅ |
 | `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
 | `complete` | Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Supports verification. | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `bars`, `voice`, `target`, `bass`, `drums`, `section`, `after`, `at`, `seed`, `harmony`, `instrument`, `verify` | ✅ | ✅ | ✅ |
 | `compose` | Compose a new score with form and harmony, without playing. | — | `style`, `profile`, `seed`, `system`, `root`, `cycleBudget`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
