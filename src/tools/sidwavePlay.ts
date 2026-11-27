@@ -20,6 +20,10 @@ type Facade = Parameters<typeof resolveSidSystem>[2];
 /** Seconds of a SID tune reconstructed for VICE by default: a few seconds of work; 180 s takes over a minute. */
 const SID_HORIZON_SECONDS = 30;
 
+/** Managed VICE launches use the dummy sound device, which is right for tests and wrong for a listener. */
+const SILENT_VICE_NOTE = "A VICE that c64bridge starts has no audio output unless VICE_ARGS names a sound device "
+  + "(Linux: -sounddev pulse). op render writes the music to a WAV file.";
+
 /** Stops generated playback, starts the new program and fails with the saved files when the machine refuses it. */
 async function deploy(ctx: ToolExecutionContext, start: () => Promise<{ success: boolean; details?: unknown }>, files: Record<string, unknown>) {
   ctx.signal?.throwIfAborted();
@@ -121,6 +125,7 @@ export const playDefinition: Definition = {
       warnings.push(`The score is ${document.song.mode} but the machine is ${machine.system}; use op retarget to adapt it.`);
     }
     if (label.approximateNote) warnings.push(label.approximateNote);
+    if (backend === "vice" && !(process.env.VICE_ARGS ?? "").includes("-sounddev")) warnings.push(SILENT_VICE_NOTE);
     if (format.id === "sid") {
       warnings.push(`VICE cannot start a SID file, so an approximate score was reconstructed from the first ${report?.horizon?.seconds} s and played (durationSeconds sets the length). On c64u or u2 the original SID plays unchanged.`);
     }

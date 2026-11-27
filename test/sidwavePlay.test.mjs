@@ -124,6 +124,22 @@ test("play says whether the music loops and takes a PRG only from a file", async
   await refused({ sidwave: SCORE, from: "prg" }, /pass inputPath/);
 });
 
+test("play says when a VICE started by c64bridge is silent", async () => {
+  const previous = process.env.VICE_ARGS;
+  const silent = async (value) => {
+    if (value === undefined) delete process.env.VICE_ARGS;
+    else process.env.VICE_ARGS = value;
+    return (await playing({ sidwave: SCORE })).data.warnings.some((warning) => /no audio output/.test(warning));
+  };
+  try {
+    assert.equal(await silent(undefined), true);
+    assert.equal(await silent("-sounddev pulse"), false);
+  } finally {
+    if (previous === undefined) delete process.env.VICE_ARGS;
+    else process.env.VICE_ARGS = previous;
+  }
+});
+
 test("play explains unsupported, ambiguous, unreadable and broken input", async () => {
   await refused({ inputPath: write("notes.txt", "hello") }, /not a supported music file.*allowed: .*midi/);
   await refused({ inputPath: write("disk.d64", Buffer.alloc(1000)) }, /c64_disk/);

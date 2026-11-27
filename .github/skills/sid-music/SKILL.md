@@ -46,7 +46,7 @@ These `c64_sound` operations work on host files and do not play anything (only `
 | Study music | `op: "analyze_music"`, `op: "compare"`; `op: "sid_info"` with `hvscDir` for song lengths and STIL notes |
 | Recover a score (experimental) | `op: "reconstruct"` from a SID file, a VICE dump or a siddump table: an approximate score with a verdict |
 
-`op: "analyze"` is different from `analyze_music`: it judges recorded audio. Reading a SID file, rendering WAV and verification trace the tune on an emulated SID, so give long tunes a `durationSeconds` horizon. `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks (`c64_system` `start_task` with `operation: "c64_sound.render"` and its `arguments`). Results with `approximate: true` (SID and register trace recovery, ABC, JCH, SID Factory II import or export) must be reported as approximate.
+`op: "analyze"` is different from `analyze_music`: it judges recorded audio. Reading a SID file, rendering WAV and verification trace the tune on an emulated SID, so give long tunes a `durationSeconds` horizon. `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks (`c64_system` `start_task` with `name`, `operation: "c64_sound.render"` and its `arguments`, then `op: "task_result"` with `name` and `waitMs`). Rendering can take close to the length of the audio for each output file, so use a task for stems or songs over 30 s when the client limits the duration of a call. Results with `approximate: true` (SID and register trace recovery, ABC, JCH, SID Factory II import or export) must be reported as approximate.
 
 ## Workflow: compose, compile, deploy, capture, verify
 
@@ -59,38 +59,75 @@ These `c64_sound` operations work on host files and do not play anything (only `
    - VICE: `record_analyze` records the host microphone, not the emulator. To capture the emulator, the operator starts the server with `VICE_ARGS="-sounddev wav -soundarg <file>.wav -limitcycles 20000000"` (use `-sounddev dump` for register writes). VICE completes the file when it ends. Then run `c64_sound` `op: "analyze"` with `wavPath`, or compare the note starts of a dump with `op: "convert"` `to: "vice-dump"` of the same score.
    - Without a capture, say that playback was started and not verified.
 
-## Workflow: reconstruct a SID, verify, transform, deploy
+A VICE that c64bridge starts has no audio output unless `VICE_ARGS` names a sound device (Linux: `-sounddev pulse`). Say so when the user expects to hear it, and offer `op: "render"`.
 
-1. Execute `c64_sound` with `op: "sid_info"` for the subtunes, clock, SID model and song length.
-2. Execute `c64_sound` with `op: "reconstruct"`, the `song` and a `durationSeconds` horizon.
-3. Report the `verdict` and horizon unchanged: `strict_exact` (same register writes at the same calls), `register_state_exact` (same register state, timing of writes differs), `differs` (see `fdiff.differingClasses`) or `recompile_failed` (the recovered score does not compile; see `compile.error` and try a shorter horizon). Never call a result exact without that verdict.
-4. For a second opinion execute `c64_sound` with `op: "compare"`, `inputPath` the SID, `comparePath` the score and the `level` the user needs.
-5. Edit with `op: "transform"` or `op: "retarget"`, then deploy and verify as in the workflow above.
+## Walkthrough: musician (bring a song, hear it on the SID)
 
-## Workflow: game music with effects and budgets
+1. Select the backend with `c64_select_backend`. The user's files must be in the folder the server runs in (or another allowed directory).
+2. Execute `c64_sound` with `op: "play"` and `inputPath`. Report `summary`, every entry of `losses` and `warnings`, and the saved score and PRG paths.
+3. For audio files execute `c64_sound` with `op: "render"` and the same `inputPath` (`outputPath` ending in `.wav`), then `action: "stems"` with `outputDir` for one WAV per voice. Report the conversion losses of the result.
+4. To change the music, execute `c64_sound` with `op: "convert"` and `to: "sidwave"` (or use the score `play` saved), then `op: "transform"` (`transpose` with `semitones`, `set_tempo` with `bpm`) or `op: "complete"` (`continue` with `bars`; `accompany` with `bass` or `drums` writes only to a voice that does not play yet). Each call writes a new score: pass its `outputPath` on, then `op: "play"` and `op: "render"` it.
+5. The importer keeps three voices per SID; `voices` in `op: "play"` and `op: "convert"` asks for more, which need further SIDs. A loss message that names `--sids` means this argument.
 
-1. Read the effects and songs chapters of `c64://sound/sidwave/spec` and the example `c64://sound/examples/game_songs`. Write a score with `songs` and `effects`.
-2. Execute `c64_sound` with `op: "lint"`, then `op: "compile"` with `output: "game"`, `origin` (page-aligned free memory, for example `0x8000`), `outputDir`, and `assembler` (`64tass`, `acme`, `kickass` or `ca65`) for one self-contained source include, `symbols` for symbol files, `relocation: true` for the bytes that change when the build moves by pages, and `maxCycles` to refuse a build whose play call is too slow.
-3. Check the budget: `cycles.worst` (and `cycles.withEffects`) against the raster time the game leaves, and `contract.memory` and `contract.zeroPage` against its memory map. To meet a budget execute `op: "retarget"` with `budgetCycles` or `budgetBytes`; `allowChanges: true` permits lossy steps, which must be reported.
-4. Run it inside a program with `c64_program` `op: "upload_run_asm"`. Follow `contract.registers`; for the origin `$8000`:
+## Walkthrough: game developer (music, effects, cycle budget, assembler include)
+
+1. Execute `c64_sound` with `op: "compose"` (`style`, `seed`, `cycleBudget`, `outputPath`), or write a score with `songs`.
+2. For sound effects, edit the score file: set `sidwave: "1.4"` (a composed score says `"1.2"`) and add top-level `effects`. Read the effects chapter of `c64://sound/sidwave/spec`; the index of an effect is its position. Voice 2 (the arpeggio in composed scores) is usually the one to give up:
+
+```yaml
+effects:
+  coin:
+    priority: 8
+    voices: [2]
+    steps:
+      - { freq: B5, wave: pulse, pulse: 0.25, adsr: [0, 0, 15, 6], wait: 4 }
+      - { freq: E6, wait: 10 }
+      - { gate: false, wait: 6 }
+```
+
+3. Execute `c64_sound` with `op: "validate"`, `op: "lint"`, then `op: "compile"` with `output: "game"`, `origin` (page-aligned free memory, for example `32768`), `outputDir`, `assembler` (`64tass`, `acme`, `kickass` or `ca65`) for one self-contained source include, `symbols` for symbol files, `relocation: true` for the bytes that change when the build moves by pages, and `maxCycles` to refuse a build whose play call is too slow. The `kickass` and `ca65` includes have not been verified with those assemblers.
+4. Check the budget: `cycles.worst` (and `cycles.withEffects`) against the raster time the game leaves, and `contract.memory` and `contract.zeroPage` against its memory map. To meet a budget execute `op: "retarget"` with `budgetCycles` or `budgetBytes`; `allowChanges: true` permits lossy steps, which must be reported. A `verdict` of `infeasible` means the written score does not fit: compose again with `cycleBudget`, or simplify it.
+5. Run it in a test program with `c64_program` `op: "upload_run_asm"`. The built-in assembler reads the `acme` or `64tass` include; give its absolute path. The include defines `sidwave_init`, `sidwave_play`, `sidwave_sfx` and `sidwave_fx_<name>` and sets its own origin, so put it last and the program below the build. This program plays the music and starts the `coin` effect when fire is pressed on joystick 2 (omit those lines for a score without effects):
 
 ```asm
-* = $7FC0
+* = $7F80
 start:   sei
          lda #$00          ; song index
          ldx #$FF          ; read the PAL/NTSC flag
-         jsr $8000         ; init
+         jsr sidwave_init
+         lda #$10
+         sta held
 frame:   lda #$F8
 wait:    cmp $D012
          bne wait
 leave:   cmp $D012
          beq leave
-         jsr $8003         ; play, contract.playCallsPerFrame times a frame
+         jsr sidwave_play  ; contract.playCallsPerFrame times a frame
+         lda $DC00         ; joystick 2, bit 4 low: fire
+         and #$10
+         cmp held
+         beq frame
+         sta held
+         cmp #$00
+         bne frame
+         lda #sidwave_fx_coin
+         ldy #$FF          ; any allowed voice
+         jsr sidwave_sfx
          jmp frame
-         ; an effect: lda #index, ldy #$FF (any voice), jsr $8009
-         .res $8000 - *
-         .incbin "/absolute/path/to/song.bin"
+held:    .byte 0
+         .include "/absolute/path/to/title.inc"
 ```
+
+6. Press fire with `c64_input` `op: "joystick"`, `action: "tap"`, `port: 2`, `controls: ["fire"]`.
+7. To hear the music without an emulator, `c64_sound` `op: "render"` writes it (not the effects) to WAV.
+
+## Walkthrough: archivist (identify, preserve, listen to a SID file)
+
+1. Execute `c64_sound` with `op: "sid_info"` for author, subtunes, clock and SID model; add `hvscDir` for song lengths and STIL notes from the user's HVSC copy.
+2. Execute `c64_sound` with `op: "preserve"` (`inputPath`, `outputDir`; this traces the tune and can take a minute), then `op: "preserve"` with `action: "verify"` and the bundle folder. Report the verdict unchanged. `ok: true` means the bundle is intact and reproduces its stored result, not that the score matches the original. The default level reports `A1` as not evaluated because no ROMs are passed.
+3. To listen, execute `c64_sound` with `op: "render"` for the original (`action` mix), and `action: "solo"` with `voice` 1, 2 and 3. Voice audio comes from a reconstructed score and is diagnostic.
+4. `op: "play"` starts the original SID on `c64u` and `u2`. On `vice` it plays an approximate reconstruction of the first 30 s (`durationSeconds` sets more).
+5. For an editable score execute `c64_sound` with `op: "reconstruct"`, the `song` and a `durationSeconds` horizon. Report the `verdict` and horizon unchanged: `strict_exact` (same register writes at the same calls), `register_state_exact` (same register state, timing of writes differs), `differs` (see `fdiff.differingClasses`) or `recompile_failed` (see `compile.error` and try a shorter horizon). Never call a result exact without that verdict. For a second opinion use `op: "compare"` with `inputPath` the SID, `comparePath` the score and a `level`.
 
 ## Validation
 

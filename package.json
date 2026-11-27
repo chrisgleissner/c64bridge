@@ -121,6 +121,7 @@
     "doc/u2/**",
     "doc/vice/**",
     "doc/hardening-behavior.md",
+    "doc/sidwave-cookbook.md",
     "scripts/cli.js",
     "scripts/start.mjs",
     "scripts/invoke-bun.mjs",
