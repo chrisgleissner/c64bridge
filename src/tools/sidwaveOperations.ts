@@ -27,7 +27,7 @@ import {
   humanise, quantise, restructure, scaleTempo, setTempo, SidwaveTransformError, substituteInstrument, transpose,
 } from "sidwave/transform";
 import { DEFAULT_MAX_READ_BYTES, defaultHostOutputDir, readHostFile, resolveHostChildPath, resolveHostPath } from "../hostPaths.js";
-import { hostSidwaveImportResolver, hostSidwaveReadOptions } from "../sidwaveHost.js";
+import { hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
 import { getPlatformStatus } from "../platform.js";
 import { playbackSetupWarnings, resolveSidSystem } from "./audio.js";
 import { cancelledResult, type ToolExecutionContext, type ToolRunResult } from "./types.js";
@@ -147,7 +147,7 @@ async function readInput(args: Args): Promise<Input> {
   }
   if (args.inputPath === undefined) {
     const source = typeof args.sidwave === "string" ? args.sidwave : JSON.stringify(args.sidwave);
-    return { bytes: Buffer.from(source, "utf8"), name: "score.yaml", stem: "score", read: hostSidwaveReadOptions };
+    return { bytes: Buffer.from(source, "utf8"), name: "score.yaml", stem: "score", read: hostSidwaveReadOptionsFor() };
   }
   return readFileInput(args.inputPath);
 }
@@ -164,7 +164,7 @@ async function readFileInput(inputPath: string): Promise<Input> {
   const name = basename(file);
   const stem = basename(name, extname(name)).replace(/\.sidwave$/i, "");
   // Libraries of a score's `imports` are resolved next to the score and may not leave its directory.
-  return { bytes, name, stem, file, read: { ...hostSidwaveReadOptions, imports: hostSidwaveImportResolver(file) } };
+  return { bytes, name, stem, file, read: hostSidwaveReadOptionsFor(file) };
 }
 
 const scoreText = (input: Input) => input.bytes.toString("utf8");

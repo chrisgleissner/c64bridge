@@ -26,7 +26,7 @@ import {
 import { sidwaveSetupWarnings, validateViceSidwaveMap } from "../sidwavePlaybackConfig.js";
 import { getPlatformStatus } from "../platform.js";
 import { readPcmFile } from "sidwave/pcm";
-import { hostSidwaveFileReader, hostSidwaveReadOptions } from "../sidwaveHost.js";
+import { hostSidwaveFileReader, hostSidwaveReadOptions, hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
 import { resolveHostPath } from "../hostPaths.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -1072,7 +1072,7 @@ export const audioModule = defineToolModule({
             dryRun: parsed.dryRun,
           });
 
-          const document = parseSidwave(source, hostSidwaveReadOptions);
+          const document = parseSidwave(source, hostSidwaveReadOptionsFor());
           if (!parsed.dryRun && platform === "vice") validateViceSidwaveMap(document);
           const compiled = compileSidwaveToPrg(document);
           const sidFile = outputFormat === "sid" ? compileSidwaveToSid(document, compiled.prg, { entryAddress: compiled.entryAddress }) : undefined;

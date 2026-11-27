@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- resolve SIDWave imports and file samples safely in `compile_play` and `pipeline`
+
 
 
 

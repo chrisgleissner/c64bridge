@@ -1,6 +1,6 @@
 import { parseSidwave, midiToHz } from "sidwave/sidwave";
 import { arrangeSidwave } from "sidwave/compiler";
-import { hostSidwaveReadOptions } from "../sidwaveHost.js";
+import { hostSidwaveReadOptionsFor } from "../sidwaveHost.js";
 
 // Minimal ambient types for dynamic imports
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,7 +287,7 @@ export async function analyzePcm(
   let expected: ReturnType<typeof parseSidwave> | undefined;
   if (expectedSidwave) {
     try {
-      expected = parseSidwave(expectedSidwave as any, hostSidwaveReadOptions);
+      expected = parseSidwave(expectedSidwave as any, hostSidwaveReadOptionsFor());
     } catch {
       expected = undefined;
     }

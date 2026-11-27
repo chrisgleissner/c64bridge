@@ -422,6 +422,42 @@ test("imports may not leave the score directory or read hidden files, directly o
   await rejected({ op: "inspect", inputPath: at("confined/score/song.yaml") }, /hidden component/);
 });
 
+test("pkg: imports and relative names with a colon obey the same host path rules", async () => {
+  fs.mkdirSync(at("pkg/score/node_modules/p"), { recursive: true });
+  write("pkg/score/node_modules/p/lib.yaml", library());
+  write("pkg/score/node_modules/p/.hidden.yaml", library());
+  write("pkg/score/.hidden.yaml", library());
+  write("pkg/score/server.yaml", library());
+  fs.symlinkSync(at("pkg/score/server.yaml"), at("pkg/score/node_modules/p/server.yaml"));
+  fs.symlinkSync(at("pkg/score/.hidden.yaml"), at("pkg/score/a:b.yaml"));
+  write("pkg/score/nested.yaml", library('imports:\n  - { as: y, from: "pkg:p/.hidden.yaml" }\n'));
+  const check = (from) => sound({ op: "validate", inputPath: write("pkg/score/song.yaml", importing(from)) });
+  assert.equal((await check("pkg:p/lib.yaml")).data.valid, true);
+  const configured = process.env.C64BRIDGE_CONFIG;
+  process.env.C64BRIDGE_CONFIG = at("pkg/score/server.yaml");
+  try {
+    for (const [from, refusal] of [
+      ["pkg:p/.hidden.yaml", /hidden component/],
+      ["nested.yaml", /hidden component/],
+      ["a:b.yaml", /hidden component/],
+      ["pkg:p/server.yaml", /server configuration or state file/],
+    ]) {
+      const { result, text } = await check(from);
+      assert.equal(result.isError, true, from);
+      assert.match(text, refusal, from);
+    }
+    // A file outside the allowed roots is refused the same way whether or not it exists.
+    for (const from of ["/etc/hostname", "/etc/c64bridge-no-such-file"].map((file) => path.relative(at("pkg/score"), file))) {
+      const { result, text } = await check(from);
+      assert.equal(result.isError, true, from);
+      assert.match(text, /outside the allowed directories/, from);
+    }
+  } finally {
+    if (configured === undefined) delete process.env.C64BRIDGE_CONFIG;
+    else process.env.C64BRIDGE_CONFIG = configured;
+  }
+});
+
 test("an existing output file is refused before any long work, and a game build never replaces its input", async () => {
   const sid = (await ok({ op: "compile", sidwave: SCORE, output: "sid", outputPath: at("early.sid") })).outputPath;
   const taken = write("taken.yaml", "keep");

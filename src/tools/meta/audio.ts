@@ -4,7 +4,7 @@ import { cancelGeneratedSidPlayback, playbackSetupWarnings, startCompiledSidwave
 import { clearViceSymbols } from "../translation/symbolRegistry.js";
 import { compileSidwaveToPrg, compileSidwaveToSid, validateSidwavePsidMap } from "sidwave/compiler";
 import { parseSidwave } from "sidwave/sidwave";
-import { hostSidwaveReadOptions } from "../../sidwaveHost.js";
+import { hostSidwaveReadOptions, hostSidwaveReadOptionsFor } from "../../sidwaveHost.js";
 import { noAudioMeasurement, recordAndAnalyzeAudio } from "../../audio/record_and_analyze_audio.js";
 import type { ToolDefinition, ToolExecutionContext } from "../types.js";
 import { jsonResult } from "../responses.js";
@@ -506,7 +506,7 @@ export const tools: ToolDefinition[] = [
         const silenceWaitMs = parsed.silenceWaitMs ?? DEFAULT_SILENCE_WAIT_MS;
         const expectedSidwave = normalizeSidwaveInput(parsed.expectedSidwave ?? parsed.sidwave ?? parsed.cpg);
 
-        const document = parseSidwave(source, hostSidwaveReadOptions);
+        const document = parseSidwave(source, hostSidwaveReadOptionsFor());
         if (format === "sid") validateSidwavePsidMap(document);
         const compiled = compileSidwaveToPrg(document);
 
