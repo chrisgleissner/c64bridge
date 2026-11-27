@@ -146,3 +146,7 @@ This approves publishing `6502-toolkit` and `sidwave` 0.9.0 and the c64bridge 1.
 ## 2026-11-27 20:55: waiting for the user's staged-publish approval
 
 `6502-toolkit@0.9.0` was tagged and its release workflow succeeded on the second attempt (run 46063487341; the first failed on the timing flake "trace operations scale about linearly"). npm holds the version as a staged publish: the registry shows only the placeholder `0.0.0-stage`. The user must approve it with 2FA (npmjs.com "Staged Packages", or `npm stage list` and `npm stage approve <stage-id>`). Then: tag `sidwave@0.9.0` on 623f1ac9, ask the user to approve that stage too, switch c64bridge with `scripts/sidwave-dependency.mjs registry --sidwave 0.9.0 --toolkit 0.9.0`, PR, CI, merge, release 1.5.0. The U64 verification is done (Ultimate 64 Elite, firmware 3.15a, `feat/sidwave-mcp` at ef2c5660).
+
+## 2026-11-27 21:30
+
+Both packages are live on npm at 0.9.0 (provenance; each went through a short staged state). c64bridge PR 200 (`feat/sidwave-mcp`, b0e1c568, registry dependencies) is open: CI watch and an adversarial review of the delta are running. Next: merge on green, release 1.5.0 by the repository process, upload the assets in `showcase/release-assets.txt`, paste the curated notes, then finalise the continuation prompt and remind the user to delete the npm token.
