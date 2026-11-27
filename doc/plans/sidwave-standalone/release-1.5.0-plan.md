@@ -24,7 +24,7 @@ Open before release, and only the user can resolve them:
 |---|---|---|
 | sidwave main | | PRs up to #33 merged (play and watch #32, SF2 and CheeseCutter phase 1 #33) |
 | S5d part 4 | `feat/reconstruct-exact` (`sidwave-s5d4`) | CPU comparison; then review, PR, merge |
-| WP1 MCP features | `feat/sidwave-mcp` (`sidwave-mcp`, c64bridge repo) | WP1 reviewed, WP2 done at `daf2178a`; WP2 review and WP3b running (`brief-wp3b.md`). Native PSID playback on VICE not built (not small) |
+| WP1 MCP features | `feat/sidwave-mcp` (`sidwave-mcp`, c64bridge repo) | WP1, WP2 and WP3b done and WP2 reviewed at `bfff10ad`; cookbook `doc/sidwave-cookbook.md` (six prompts pass on VICE), release notes `doc/plans/sidwave-standalone/release-notes-1.5.0.md` with placeholders. Native PSID playback on VICE not built (not small). MCP refuses SF2 and CheeseCutter export (no driver argument) |
 | WP3a showcase | `feat/sidwave-showcase` (`sidwave-showcase`, c64bridge repo) | done at `b15a8578`; needs review and the user's ear (clips and video in `~/.c64bridge/sidwave-standalone/showcase/`, sent to the user). Library worktree `sidwave-showcase-lib`. MOD loop-length bug found: fix on `fix/mod-loop-pitch` (`brief-modloop.md`) |
 
 ## Work packages, in order
@@ -115,3 +115,13 @@ Finish in this order and stop adding scope at the first point where quota will n
 - Never commit GPL drivers, players, songs or signature files.
 - No process-name matching (`pkill`, `pgrep`, `ps | grep`), no sleep polling, no `git stash`, never push `main` directly.
 - Test at milestones: build and changed tests locally; full suites, Bun and coverage in pull request CI.
+
+## Remaining steps (2026-11-27 19:30)
+
+1. Merge S5d part 4 (or release without it) and the MOD loop fix.
+2. Integrate `feat/sidwave-showcase` into `feat/sidwave-mcp`, fill the README and release-note placeholders, rebuild the tarballs, update figures in the release notes.
+3. Independent review of the whole MCP branch including the WP3b documents.
+4. U64 runs of the headline cookbook prompts and native SID playback (all-clear from peer sessions first).
+5. User: listen to clips and video; decide whether managed VICE plays sound by default (silent today); approve publishing; add `NPM_TOKEN`.
+6. WP4 release.
+
