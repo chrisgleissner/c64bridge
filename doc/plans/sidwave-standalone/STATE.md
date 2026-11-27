@@ -91,3 +91,14 @@ Branches in flight (historical, before the S2 merge) (all local worktrees under 
 - `feat/sidwave-sidfile` (sidwave-sidfile): SID file module 4c00c5c1. Same destination.
 Then: PR 1 gate = independent review (Sonnet reviewer that wrote none of it), U64 check (ask peer c64bridge-64 for all-clear; it holds the U64 until it releases), CI green, rebase, merge. Then create chrisgleissner/sidwave from the split output (D8), port the three feature branches there as PRs.
 Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (resets ~19:10). Pause new agent work until reset.
+
+## Next action (2026-11-27, usage limit reached)
+
+- Merged: sidwave PR 11 (reconstruct IR/F-diff/corpus, 1cc368e0).
+- In CI with auto-merge watch: PR 12 (asset libraries; CI moved to Bun 1.4.5 because 1.3.1 aborts in its DFG JIT), PR 13 (verify CLI, CLI contract, A1 approximate; fixes for Bun shim notDeepEqual/doesNotMatch, exit 3 for missing song, Object.groupBy removed for Node 20). Check `gh pr view 12|13`; if not merged, read the failed log and fix.
+- Waiting for PR 13, then rebase onto its CLI contract (cliCore.ts, envelope, classifyError, EXIT_INPUT), PR, merge:
+  - `sidwave-retarget` feat/retarget (review fixes done, 70924d6).
+  - `sidwave-interchange` feat/interchange (items 1-3 + review fixes 0533fad; integrate `render --stems` into PR 13's render; then items 4-6: MusicXML, GoatTracker with gt2reloc, Furnace).
+  - `sidwave-recover` feat/reconstruct-recover (S5c; strict verdict; strict pass rates 8/8 basic, pulse, arpeggio, hard restart, vibrato, filter; multispeed 2/8; combined 3/8; generator 0/8). Needs a short re-review of the fixes before the PR.
+- Then: S5d (corpus dev runs, repairs, language extensions: exact-frequency, pitch-table, global-register-sequence, pulse width 0/wrap, sid-address, portamento/legato recovery, soft-start ramp), S5e, bench --verify, A1 v2, S7, S8, S9.
+- Ledger entries still to add: PR 12, PR 13 merges.
