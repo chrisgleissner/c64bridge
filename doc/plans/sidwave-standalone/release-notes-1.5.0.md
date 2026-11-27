@@ -1,8 +1,8 @@
-# c64bridge 1.5.0 release notes (draft)
+# c64bridge 1.5.0 release notes
 
 ## Before publishing (remove this section)
 
-- The release workflow builds the GitHub release body from the `## 1.5.0 - YYYY-MM-DD` entry of `CHANGELOG.md`. Rename `## Unreleased` to that heading. `npm run release:prepare` also prepends a list generated from commit subjects when it changes the version; replace it with the curated entry. It does not update `mcp/server.json`: run `npm run build` after it and commit the result, or the workflow's metadata check fails on the tag. As for 1.4.0, paste the text below into the GitHub release after the workflow has created it.
+- The release workflow builds the GitHub release body from the `## 1.5.0 - 2026-11-27` entry of `CHANGELOG.md`. As for 1.4.0, replace that body with the release text below (everything under `## Release text`, without that heading) after the workflow has created the release.
 - The links to clips, video and PRG, here and in the SIDWave section of `README.md`, point to assets of the GitHub release `1.5.0`. They are not committed and the release workflow does not upload them, so every link returns 404 until you do. Check the clips and the video by ear first. After the workflow has created the release, run this on the machine that holds the files (`release-assets.txt` lists source and asset name):
 
   ```sh
@@ -22,7 +22,7 @@
 >
 > **Video:** [one minute of Pulse Guard](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and sound effects, recorded from VICE
 
-The clips and the video come from [Pulse Guard](https://github.com/chrisgleissner/c64bridge/blob/main/examples/sidwave-showcase/README.md), a showcase game in the repository whose five songs and nine sound effects are one SIDWave score ([PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg), joystick in port 2). Its player and music take 14,925 bytes; the worst play call takes 5,392 of the 19,656 cycles of a PAL frame in the SIDWave emulator (5,507 with an effect started on every call), and the longest call measured in 191 seconds of scripted play in VICE took 5,383. The game was played through in VICE only; on an Ultimate 64 its title screen, title song and the start of a game were checked. The MIDI source in the first conversion clip is played by a small synthesiser that is part of the example.
+The clips and the video come from [Pulse Guard](https://github.com/chrisgleissner/c64bridge/blob/main/examples/sidwave-showcase/README.md), a showcase game in the repository whose five songs and nine sound effects are one SIDWave score ([PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg), joystick in port 2). Its player and music take 14,925 bytes; the worst play call takes 5,392 of the 19,656 cycles of a PAL frame in the SIDWave emulator (5,507 with an effect started on every call), and the longest call measured in 191 seconds of scripted play in VICE took 5,383. Play beyond the start of a game was tested by a script in VICE only; on an Ultimate 64 the title screen, the title song and the start of a game were checked. The MIDI source in the first conversion clip is played by a small synthesiser that is part of the example.
 
 C64 Bridge 1.5.0 adds SIDWave to your AI client: compose, convert, play, render and build SID music through the `c64_sound` tool.
 
@@ -36,7 +36,7 @@ One operation, `play`, takes a MIDI, MusicXML, ProTracker, ABC, GoatTracker, Fur
 
 One score holds several songs and up to 32 prioritised sound effects that borrow a voice while the music continues. `compile` writes the player and data, a source include for 64tass, ACME, ca65 or KickAssembler, symbol files and a relocation table. It reports the worst measured cycles per play call, an upper bound, and the memory, zero page and registers the player uses, and `maxCycles` refuses a build that is too slow.
 
-> Compose chiptune title music for my game and add a jump sound and a coin sound. Build both for $8000 as a 64tass include with at most 8000 cycles per play call, tell me the measured worst case, and run it in VICE in a test program that plays the coin sound when I press fire.
+> Compose chiptune title music for my game and add a jump sound and a coin sound. Build it for $8000 as a 64tass include with at most 8000 cycles per play call, tell me the measured worst case, and run it in VICE in a test program that plays the coin sound when I press fire.
 
 ### AI and retro enthusiasts: no C64 needed
 
@@ -75,8 +75,16 @@ Every conversion says what it dropped or approximated, with counts. `strict` wri
 - **VICE** cannot start a SID file: `play` reconstructs its first 30 seconds (`durationSeconds` sets more) and plays that. A VICE that C64 Bridge starts has no sound unless `VICE_ARGS` names a sound device.
 - **KickAssembler** includes have not been verified with KickAssembler. The 64tass, ACME and ca65 includes have been assembled with those tools.
 - **Audio checks** analyze the mixed signal. `preserve` and `compare` report the A1 audio level as not evaluated, because they take no ROM files.
-- **Machine defaults:** `forDevice` uses the machine's clock and SID model, not its SID count.
+- **Machine defaults:** `forDevice` uses the machine's clock and, on Ultimate hardware, its SID model. It does not use the SID count.
 
 ## Compatibility
 
 No existing operation or resource URI was removed or renamed. SIDWave and the 6502 assembler now come from the `sidwave` and `6502-toolkit` npm packages instead of workspace packages. Node.js 24 or later is required, as before.
+
+## Fixes
+
+- `compile_play` and `pipeline` resolve SIDWave imports and file samples safely.
+- Reference renders are deterministic: the sidplayfp power-on delay is fixed.
+- C64 Bridge warns that the HTTP transport under Bun does not cancel a call when the client disconnects.
+
+**Full Changelog**: https://github.com/chrisgleissner/c64bridge/compare/1.4.0...1.5.0
