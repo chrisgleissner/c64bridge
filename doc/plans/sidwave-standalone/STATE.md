@@ -113,3 +113,11 @@ Quota at 16:00 local 2026-11-26: Claude 5h 18 % (resets ~17:40), Codex 5h 3 % (r
 - User directive 2026-11-27: use codex gpt-6-luna extensively for well-bounded, fully specified tasks; review all codex output with Sonnet and fix findings; do not cut corners; commit and push often (feature branches pushed after each commit).
 - User directive 2026-11-27: "https://github.com/Chordian/sidfactory2 enjoys a lot of community traction, so its support must be excellent." Plan: descriptor-driven SF2 reader for all shipped drivers (11.x incl. multi-SID, 12-16, NP20), the .sf2 file itself as oracle, per-driver quality targets (gate median >= 0.95, note median >= 0.9), driver frequency tables via SIDWave 1.5 tuning.registers, export to every writable driver, import of SF2-packed .sid files, round-trip preservation of names and auxiliary data.
 - User directive 2026-11-27: SID Factory II imports GoatTracker, CheeseCutter and MOD, so SIDWave must as well (SF2 also ships a JCH NP20.gX converter). GoatTracker on main, CheeseCutter on feat/formats-ct-sf2; MOD and JCH import queued as brief scratchpad/brief-mod-jch.md, ahead of the W17 codex fixes. CheeseCutter: release 2.9.0 csdb.dk/release/?id=157512, sources github.com/theyamo/CheeseCutter (local checkout at v2.10); ct2util oracle via a locally installed LDC or the win32 build under wine.
+- 2026-11-27 (usage limit reached): merged sidwave #23 (convert hub). Open: #24 HVSC tools (rebased 0600c4d, merge job running). Pending:
+  - W14 feat/cli-authoring: re-review blocker, checkSidwaveCompiles misses effect-heavy players under 20 KB (sidwaveCompiler.ts:497-513); generate --force on read-only dir with a writable file is refused; format help should mention moved trailing comments.
+  - S5d feat/reconstruct-corpus-dev e33ce28: review clean; held for the CPU jump 1.71 to 4.73 s per minute (agent measuring).
+  - feat/convert-limits: codex diff under Sonnet review.
+  - feat/import-mod-jch: under review.
+  - feat/formats-ct-sf2: SF2 phase 1 running, brief scratchpad/brief-sf2-excellent.md.
+  - feat/sidwave-mcp (c64bridge W20): started, brief scratchpad/brief-w20-mcp.md.
+  - Not started: S5d part 4, W13, W15, W16, W18, W19, W21/22, S8, A1 v2, S9 release.
