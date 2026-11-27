@@ -13,7 +13,7 @@
  *       Exit 1 while any dependency still uses a file: specifier. Run it in the release PR.
  *
  * After editing package.json the script refreshes package-lock.json and, when bun is on PATH, bun.lock, unless
- * --no-install is given.
+ * --no-install is given. Run it again after rebuilding the tarballs, then `npm ci`.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -55,8 +55,23 @@ function findTarball(dir, name) {
   return path.join(dir, matches[0]);
 }
 
+/**
+ * Removes the two packages from package-lock.json. npm keeps the recorded integrity of a file: dependency whose path and
+ * version are unchanged, so a rebuilt tarball would otherwise fail to install with EINTEGRITY.
+ */
+function dropLockEntries() {
+  const lockPath = path.join(root, "package-lock.json");
+  if (!fs.existsSync(lockPath)) return;
+  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  for (const key of Object.keys(lock.packages ?? {})) {
+    if (PACKAGES.some((name) => key === `node_modules/${name}` || key.endsWith(`/node_modules/${name}`))) delete lock.packages[key];
+  }
+  fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+}
+
 function refreshLocks() {
   if (args.includes("--no-install")) return;
+  dropLockEntries();
   const npm = spawnSync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: root, stdio: "inherit" });
   if (npm.status !== 0) fail("npm install --package-lock-only failed");
   const bun = spawnSync("bun", ["install", "--lockfile-only"], { cwd: root, stdio: "inherit" });
