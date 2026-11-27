@@ -140,3 +140,5 @@ Finish in this order and stop adding scope at the first point where quota will n
 "i changed my mind. i now just want you to proceed to the point where we have a release 1.5.0 of c64bridge which correctly pulls in the sidwave release. the subsequent tasks must then be written into a markdown continuation prompt in the c64bridge-workspace folder, clearly dated so I can easily find it. now carry on."
 
 This approves publishing `6502-toolkit` and `sidwave` 0.9.0 and the c64bridge 1.5.0 release, including the tags. It replaces "continue into the deferred items". Listening to the clips and the U64 run no longer block the release; if the U64 run does not happen, the release notes keep saying that hardware is unverified. Continuation prompt: `/home/chris/dev/c64/c64bridge-workspace/prompts/2026-11-27-sidwave-continuation-after-c64bridge-1.5.0.md`.
+
+- User reminder (2026-11-27): once the npm release exists, change the "status: pre-release" badge on https://github.com/chrisgleissner/sidwave. Also update the README sentences that say nothing is published (install section, comparison table "Last npm release", status and roadmap).
