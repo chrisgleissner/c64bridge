@@ -78,7 +78,7 @@ Acceptance: unit tests per operation with effect level and host path confinement
 Claims to keep or avoid:
 
 - SID reconstruction is "experimental: an approximate score with a verdict". No real development tune matched exactly at the last merge; check the S5d part 4 report before writing.
-- SID Factory II support means driver 11.
+- SID Factory II support means driver 11, and playback fidelity is partial. Medians against the original driver over 54 example songs (PR 33): import gate 0.957, note 0.709; export gate 0.979, note 0.756. Say "import and export", never "exact". Weakest songs: Cracked Down (0.17 import), Scotch Koczka (0.11 export). Showcase material for the release must be checked by ear.
 - JCH import is approximate. Do not name KickAssembler as verified.
 - Every conversion reports what it lost, with counts.
 
