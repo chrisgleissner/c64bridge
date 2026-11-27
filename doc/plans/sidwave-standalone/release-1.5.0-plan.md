@@ -118,8 +118,8 @@ Finish in this order and stop adding scope at the first point where quota will n
 
 ## Remaining steps (2026-11-27 19:30)
 
-1. Merge S5d part 4 (or release without it) and the MOD loop fix.
-2. Integrate `feat/sidwave-showcase` into `feat/sidwave-mcp`, fill the README and release-note placeholders, rebuild the tarballs, update figures in the release notes.
+1. Merge S5d part 4 (independent review running on `feat/reconstruct-exact`; or release without it) and the MOD loop fix (PR 34, CI).
+2. (running, `brief-integrate.md`) Integrate `feat/sidwave-showcase` into `feat/sidwave-mcp`, fill the README and release-note placeholders, rebuild the tarballs, update figures in the release notes.
 3. Independent review of the whole MCP branch including the WP3b documents.
 4. U64 runs of the headline cookbook prompts and native SID playback (all-clear from peer sessions first).
 5. User: listen to clips and video; decide whether managed VICE plays sound by default (silent today); approve publishing; add `NPM_TOKEN`.
