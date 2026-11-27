@@ -24,7 +24,7 @@ Open before release, and only the user can resolve them:
 |---|---|---|
 | sidwave main | | PRs up to #33 merged (play and watch #32, SF2 and CheeseCutter phase 1 #33) |
 | S5d part 4 | `feat/reconstruct-exact` (`sidwave-s5d4`) | CPU comparison; then review, PR, merge |
-| WP1 MCP features | `feat/sidwave-mcp` (`sidwave-mcp`, c64bridge repo) | implemented at `106a6933`; review and WP2 running (`brief-wp2.md`) |
+| WP1 MCP features | `feat/sidwave-mcp` (`sidwave-mcp`, c64bridge repo) | WP1 reviewed, WP2 done at `daf2178a`; WP2 review and WP3b running (`brief-wp3b.md`). Native PSID playback on VICE not built (not small) |
 | WP3a showcase | `feat/sidwave-showcase` (`sidwave-showcase`, c64bridge repo) | running (`brief-wp3a.md`) |
 
 ## Work packages, in order
