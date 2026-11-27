@@ -172,8 +172,12 @@ irq:    cld
         lda sh_exp
         sta $d017
         sta $d01d
-        lda border
+        lda border              ; write the border only when it changes: on a newer VIC-II every write
+        cmp border_shown        ; to a colour register leaves a grey dot
+        beq .same
         sta $d020
+        sta border_shown
+.same:
         jsr scroll_stars
         lda song_req
         bmi .play
@@ -737,7 +741,7 @@ play_update:
         jsr spawn
 .done:  rts
 
-WAVE_SPAWNS = 38
+WAVE_SPAWNS = 48
 
 ; common_update: player, shots, objects, collisions and messages; used by every state with a live ship
 common_update:
@@ -880,12 +884,12 @@ spawn:  jsr free_slot
         clc
         adc tmp
         sta tmp
-        lda #58
+        lda #44
         sec
         sbc tmp
-        cmp #20
+        cmp #18
         bcs .int
-        lda #20
+        lda #18
 .int:   sta spawn_wait
         lda #34
         sta oy,x
@@ -989,7 +993,7 @@ mv_drone:
         adc sine,y
         sta ox,x
         lda otimer,x
-        and #3
+        and #1
         bne .b
         inc oy,x
 .b:     rts
@@ -1198,7 +1202,7 @@ hit_shots:
         lda #0
         sta shot_y,y
         sty tmp2
-        lda #4
+        lda #2
         sta boss_flash
         lda #$10
         ldy #$00
@@ -2029,6 +2033,7 @@ play_max:   !byte 0,0
 song_req:   !byte 0
 tmpirq:     !byte 0
 border:     !byte 0
+border_shown: !byte 0
 star_div:   !byte 0
 star0:      !byte 0
 star1:      !byte 0

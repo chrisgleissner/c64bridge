@@ -70,7 +70,7 @@ instruments:
   boss_bass:
     waveform: sawtooth
     adsr: [0, 8, 10, 2]
-    filtertable: [{ cutoff: "2.2kHz", resonance: 12, type: lowpass }, { add: -42, frames: 7 }]
+    filtertable: [{ cutoff: "2.4kHz", resonance: 12, type: lowpass }, { add: -33, frames: 8 }]
   deep_bass:
     waveform: sawtooth
     adsr: [7, 9, 11, 9]

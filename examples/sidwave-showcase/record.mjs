@@ -54,10 +54,10 @@ if ([play, warn, boss, dies, clear].includes(undefined)) throw new Error(`the se
 const nextWave = session.transitions.find((t) => t.state === "play" && t.frame > clear)?.frame;
 const s = (seconds) => Math.round(seconds * FPS);
 const cuts = [
-  [0, play + s(17)], // title, then the start of the first wave
+  [0, play + s(19)], // title, then the start of the first wave
   [warn - s(5), boss + s(Math.min(14, (dies - boss) / FPS))], // end of the wave, warning, boss
 ];
-if (dies - cuts[1][1] > 1) cuts.push([dies - s(3), (nextWave ?? clear) + s(4)]);
+if (dies - s(3) > cuts[1][1]) cuts.push([dies - s(3), (nextWave ?? clear) + s(4)]);
 else cuts[1][1] = (nextWave ?? clear) + s(4);
 for (const cut of cuts) cut[1] = Math.min(cut[1], session.frames);
 
