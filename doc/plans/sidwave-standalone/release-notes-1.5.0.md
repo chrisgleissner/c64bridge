@@ -2,7 +2,7 @@
 
 ## Before publishing (remove this section)
 
-- The release workflow builds the GitHub release body from the `## 1.5.0 - YYYY-MM-DD` entry of `CHANGELOG.md`. Rename `## Unreleased` to that heading. `npm run release:prepare` also prepends a list generated from commit subjects when it changes the version; replace it with the curated entry. As for 1.4.0, paste the text below into the GitHub release after the workflow has created it.
+- The release workflow builds the GitHub release body from the `## 1.5.0 - YYYY-MM-DD` entry of `CHANGELOG.md`. Rename `## Unreleased` to that heading. `npm run release:prepare` also prepends a list generated from commit subjects when it changes the version; replace it with the curated entry. It does not update `mcp/server.json`: run `npm run build` after it and commit the result, or the workflow's metadata check fails on the tag. As for 1.4.0, paste the text below into the GitHub release after the workflow has created it.
 - The links to clips, video and PRG, here and in the SIDWave section of `README.md`, point to assets of the GitHub release `1.5.0`. They are not committed and the release workflow does not upload them, so every link returns 404 until you do. Check the clips and the video by ear first. After the workflow has created the release, run this on the machine that holds the files (`release-assets.txt` lists source and asset name):
 
   ```sh
@@ -10,7 +10,7 @@
     grep -v '^#' release-assets.txt | while read -r source name; do cp "$source" "$d/$name"; done &&
     gh release upload 1.5.0 "$d"/* -R chrisgleissner/c64bridge
   ```
-- Update the figures if SIDWave changes before the release: reconstruction results, tracker fidelity, and the MOD short-loop limit (delete it if the fix is in the packaged version). After rebuilding the tarballs, also run `build.mjs`, `render.mjs`, `verify.mjs` and `record.mjs` in `examples/sidwave-showcase`, compare the figures in its README and in the showcase paragraph below, and replace the files to upload if they changed.
+- Update the figures if the SIDWave version changes before the release: reconstruction results and tracker fidelity. After such a change, also run `build.mjs`, `render.mjs`, `verify.mjs` and `record.mjs` in `examples/sidwave-showcase`, compare the figures in its README and in the showcase paragraph below, and replace the files to upload if they changed.
 
 ## Release text
 
@@ -71,7 +71,7 @@ Every conversion says what it dropped or approximated, with counts. `strict` wri
 - **CheeseCutter** fidelity is also partial: over 12 example songs, 0.989 gate and 0.849 note on import, 0.997 and 0.883 on export.
 - **SID Factory II and CheeseCutter export** needs a driver file that you supply: `convert` takes it as `driverPath` (an existing song of that format or its player binary). No driver is included.
 - **JCH** import is approximate and reads version 20.G: the filter, most commands and per-voice looping are not imported. **ABC** import omits ornaments, chord symbols and voice overlays.
-- **Voices:** one SID has three. A conversion drops further voices and reports them. Module samples become SID waveforms and envelopes. A module sample with a very short loop can be imported an octave low.
+- **Voices:** one SID has three. A conversion drops further voices and reports them. Module samples become SID waveforms and envelopes.
 - **VICE** cannot start a SID file: `play` reconstructs its first 30 seconds (`durationSeconds` sets more) and plays that. A VICE that C64 Bridge starts has no sound unless `VICE_ARGS` names a sound device.
 - **KickAssembler** includes have not been verified with KickAssembler. The 64tass, ACME and ca65 includes have been assembled with those tools.
 - **Audio checks** analyze the mixed signal. `preserve` and `compare` report the A1 audio level as not evaluated, because they take no ROM files.

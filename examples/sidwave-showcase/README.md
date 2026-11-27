@@ -24,14 +24,12 @@ The scripts use the `sidwave` and `6502-toolkit` packages that C64 Bridge depend
 repository, with Node.js 24 or later:
 
 ```sh
-node scripts/sidwave-dependency.mjs tarballs   # only while package.json names file: tarballs for the two packages
 npm ci
 node examples/sidwave-showcase/build.mjs
 x64sc -autostart examples/sidwave-showcase/out/pulse_guard.prg
 ```
 
-The first command copies tarballs that `npm pack` made in a `sidwave` checkout (see the comment at the top of the
-script). `SIDWAVE_DIR` selects the `sidwave` folder of a built checkout instead of the installed package.
+`SIDWAVE_DIR` selects the `sidwave` folder of a built checkout instead of the installed package.
 
 `render.mjs`, `verify.mjs` and `record.mjs` also need `ffmpeg` (with `libopenmpt` for the module in `render.mjs`).
 Rendering uses `libsidplayfp-wasm`, which C64 Bridge installs. The last two need `x64sc` and `Xvfb` (tested on Linux
@@ -104,10 +102,6 @@ the source and the result. Every conversion reports what it lost:
 | --- | --- |
 | MIDI | 1 drum hit dropped (a simultaneous hit has priority); drum velocity is not imported |
 | MOD | channel 4 (72 notes) dropped because one SID has three voices; 52 set-volume effects approximated; samples replaced by SID waveforms and envelopes |
-
-With `sidwave` main at `5746fb5`, the MOD import maps tracker notes to pitches without reading the length of a sample
-loop. The loops of this module are 64 bytes long, which comes out in the octave in which the module plays. A 32-byte
-loop came out an octave low.
 
 ## Licence
 
