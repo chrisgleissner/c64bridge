@@ -17,6 +17,9 @@ function samples(file) {
   assert.equal(bytes.readUInt32LE(24), 48_000);
   return new Int16Array(bytes.buffer.slice(bytes.byteOffset + 44, bytes.byteOffset + bytes.length));
 }
+/** Compared as buffers: a failing deep comparison of long sample arrays spends minutes on its diff. */
+const differ = (a, b) => !fs.readFileSync(a).equals(fs.readFileSync(b));
+
 /** Energy around the mean: an idle SID adds a constant offset. */
 const energy = (file) => {
   const data = samples(file);
@@ -52,14 +55,25 @@ test("render solos and mutes a voice of a score and of a SID file", async () => 
   const solo = await render("solo.wav", { inputPath: score, action: "solo", voice: 1 });
   const mute = await render("mute.wav", { inputPath: score, action: "mute", voice: 1 });
   assert.deepEqual([solo.soundingVoices, mute.soundingVoices], [[1], [2]]);
-  assert.notDeepEqual(samples(solo.outputPath), samples(mix.outputPath));
-  assert.notDeepEqual(samples(solo.outputPath), samples(mute.outputPath));
+  assert.ok(differ(solo.outputPath, mix.outputPath));
+  assert.ok(differ(solo.outputPath, mute.outputPath));
   assert.ok(energy(solo.outputPath) < energy(mix.outputPath));
   const isolated = await render("sid-solo.wav", { inputPath: sid, action: "solo", voice: 2 });
   assert.deepEqual([isolated.voice, isolated.method], [2, "reconstruct-and-recompile"]);
   assert.equal(typeof isolated.coupling.nonAdditive, "boolean");
   assert.equal(typeof isolated.reconstructionStrictExact, "boolean");
   assert.ok(energy(isolated.outputPath) > 1000);
+});
+
+test("render selects a song of a score with several songs", async () => {
+  const songs = path.resolve("data/sound/examples/game_songs.yaml");
+  const first = await ok({ op: "render", inputPath: songs, durationSeconds: 2, outputPath: at("song1.wav") });
+  const second = await ok({ op: "render", inputPath: songs, song: 2, durationSeconds: 2, outputPath: at("song2.wav") });
+  assert.ok(differ(second.outputPath, first.outputPath));
+  const stems = await ok({ op: "render", inputPath: songs, song: 2, action: "stems", durationSeconds: 2, outputDir: at("song2-stems") });
+  assert.deepEqual(stems.files.map((file) => file.voices), [undefined, [1], [2], [3]]);
+  assert.ok(differ(path.join(stems.outputDir, "game_songs.mix.wav"), first.outputPath));
+  await rejected({ op: "render", inputPath: songs, song: 9 }, /song must be 1\.\.3/);
 });
 
 test("render refuses impossible requests, protected paths and read-only mode", async () => {
