@@ -128,7 +128,7 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
           const line = text.split("\n").find((entry) => entry.startsWith(`- ${operation.op} `) || entry.startsWith(`- ${operation.op}:`));
           assert.ok(line, `${descriptor.name} description should list op ${operation.op}`);
           if (operation.required.length > 0) {
-            assert.ok(line.includes(`Required inputs: ${operation.required.join(", ")}.`), `${descriptor.name}.${operation.op}: ${line}`);
+            assert.ok(line.includes(`Required: ${operation.required.join(", ")}.`), `${descriptor.name}.${operation.op}: ${line}`);
           }
           for (const name of operation.optional) {
             assert.ok(line.includes(name), `${descriptor.name}.${operation.op} should name optional ${name}`);

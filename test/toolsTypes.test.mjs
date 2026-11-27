@@ -98,9 +98,9 @@ test("discriminatedUnionSchema flattens variants into a single object schema", (
   assert.ok(union.description.includes("Memory operations"));
   assert.ok(union.description.includes("read:"));
   assert.ok(union.description.includes("write:"));
-  assert.ok(union.description.includes("Required inputs: address."));
-  assert.ok(union.description.includes("Optional inputs: length."));
-  assert.ok(union.description.includes("Required inputs: address, data."));
+  assert.ok(union.description.includes("Required: address."));
+  assert.ok(union.description.includes("Optional: length."));
+  assert.ok(union.description.includes("Required: address, data."));
   assert.deepEqual(union.properties[OPERATION_DISCRIMINATOR].enum, ["read", "write"]);
   assert.deepEqual(union.required, [OPERATION_DISCRIMINATOR]);
   assert.deepEqual(union["x-c64bridge-operations"].map((operation) => ({

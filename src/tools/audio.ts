@@ -99,12 +99,12 @@ const sidVolumeArgsSchema = objectSchema({
   description: "Set the SID master volume (0-15).",
   properties: {
     volume: numberSchema({
-      description: "SID master volume 0-15. Writes all of $D418, clearing filter mode bits.",
+      description: "Writes all of $D418.",
       minimum: 0,
       maximum: 15,
     }),
     filterMode: optionalSchema(numberSchema({
-      description: "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+      description: "$D418 bits 4-7: low/band/high-pass, voice 3 off.",
       integer: true,
       minimum: 0,
       maximum: 15,
@@ -136,7 +136,7 @@ const sidNoteOnArgsSchema = objectSchema({
       default: 1,
     }),
     note: optionalSchema(stringSchema({
-      description: "Musical note like A4, C#5, or Bb3. Overrides frequencyHz if provided.",
+      description: "Note such as C#5; overrides frequencyHz.",
       pattern: NOTE_PATTERN,
     })),
     frequencyHz: optionalSchema(numberSchema({
@@ -144,7 +144,7 @@ const sidNoteOnArgsSchema = objectSchema({
       minimum: 1,
     })),
     system: optionalSchema(stringSchema({
-      description: "PAL or NTSC for the note frequency. Default: read from the machine ($02A6).",
+      description: "Default: the machine's ($02A6).",
       enum: ["PAL", "NTSC"],
     })),
     waveform: stringSchema({
@@ -209,7 +209,7 @@ const sidSilenceArgsSchema = objectSchema({
   description: "Silence all SID voices with an optional verification capture.",
   properties: {
     verify: optionalSchema(booleanSchema({
-      description: "Record audio after silencing to confirm the output is quiet.",
+      description: "Check that the output is quiet.",
       default: false,
     }), false),
   },
@@ -217,7 +217,7 @@ const sidSilenceArgsSchema = objectSchema({
 });
 
 const sidFileSchema = stringSchema({
-  description: "SID, PRG or audio file path (absolute or Ultimate).",
+  description: "File path (host or Ultimate).",
   minLength: 1,
 });
 
@@ -226,7 +226,7 @@ const sidplayFileArgsSchema = objectSchema({
   properties: {
     path: sidFileSchema,
     songnr: optionalSchema(numberSchema({
-      description: "Song number within the SID file (0-based index).",
+      description: "Subtune from 1; 0: start song.",
       integer: true,
       minimum: 0,
     })),
@@ -266,7 +266,7 @@ const musicGenerateArgsSchema = objectSchema({
 
 const sidwaveSourceSchema: Schema<string | Record<string, unknown>> = {
   jsonSchema: {
-    description: "SIDWAVE composition represented as YAML/JSON text or an already parsed object.",
+    description: "SIDWAVE score: YAML/JSON text or object.",
     type: ["string", "object"],
   } satisfies JsonSchema,
   parse(value: unknown, path?: string) {
@@ -292,11 +292,11 @@ const musicCompileArgsSchema = objectSchema({
     sidwave: optionalSchema(sidwaveSourceSchema),
     cpg: optionalSchema(sidwaveSourceSchema),
     format: optionalSchema(stringSchema({
-      description: "Source format hint when providing raw text.",
+      description: "Raw text format.",
       enum: ["yaml", "json"],
     })),
     output: optionalSchema(stringSchema({
-      description: "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere).",
+      description: "SID playback needs c64u or u2; SID export with dryRun works anywhere.",
       enum: ["prg", "sid"],
       default: "prg",
     }), "prg"),
@@ -305,7 +305,7 @@ const musicCompileArgsSchema = objectSchema({
       default: false,
     }), false),
     outputPath: optionalSchema(stringSchema({
-      description: "Host file for the compiled PRG or SID (allowed directories only). Works with dryRun.",
+      description: "Host PRG or SID file. Works with dryRun.",
       minLength: 1,
     })),
   },
@@ -331,7 +331,7 @@ const analyzeAudioArgsSchema = objectSchema({
   properties: {
     wavPath: optionalSchema(stringSchema({ minLength: 1 })),
     request: optionalSchema(stringSchema({
-      description: "Verification goal wording; \"does it sound right\" requests add a verdict.",
+      description: "\"Does it sound right\" adds a verdict.",
       minLength: 1,
     }), "analyze the SID output"),
     durationSeconds: optionalSchema(numberSchema({

@@ -1,6 +1,6 @@
 ---
 name: sid-music
-description: Use when the user wants SID music or sound effects, such as presets, composing, converting music formats, reconstructing or inspecting SID files, game music, SID registers, or audio analysis.
+description: Use when the user wants SID music or sound effects, such as playing a music file, presets, composing, converting music formats, reconstructing or inspecting SID files, game music, SID registers, or audio analysis.
 ---
 
 ## Intent
@@ -14,6 +14,10 @@ Use this skill for preset music demos, SIDWAVE composition, direct voice control
 - Desired format for custom work: direct voice events, SIDWAVE, or BASIC playback.
 - Input files for conversion or reconstruction, and the target format, clock, SID model or CPU budget.
 
+## Play any music file
+
+To play a file or score the user has, execute `c64_sound` with `op: "play"` and `inputPath` (or `sidwave`). It detects SIDWave, SID, MIDI, MusicXML, MOD, tracker and notation files and PRG, converts when needed for the machine's clock, saves the score and PRG and starts them. Report `summary`, every loss and warning, and the saved paths. `approximate: true` means a reconstruction (a SID file on VICE): say so, and set `durationSeconds` for more than the first 30 s. Pass `from` only when detection fails, `configure: true` for more than three voices on an Ultimate. Edit the saved score with `op: "transform"` or `op: "retarget"` and play it again.
+
 ## Execution
 
 1. For a quick demo, execute `c64_sound` with `op: "play_preset"`; use `chiptune_drive` by default and keep `fuer_elise` available when explicitly requested.
@@ -25,7 +29,7 @@ Use this skill for preset music demos, SIDWAVE composition, direct voice control
 
 ## Offline operations
 
-These `c64_sound` operations work on host files and do not play anything. Give the score as `inputPath` or inline as `sidwave`. Without `outputPath` an operation writes a new file below `artifacts/sidwave/` (a score with `imports`: next to its input file) and returns its path; an existing file is replaced only with `overwrite: true`. `includeScore: true` also returns the written score.
+These `c64_sound` operations work on host files and do not play anything (only `play` starts the machine). Give the score as `inputPath` or inline as `sidwave`. Without `outputPath` an operation writes a new file below `artifacts/sidwave/` (a score with `imports`: next to its input file) and returns its path; an existing file is replaced only with `overwrite: true`. `includeScore: true` also returns the written score.
 
 | Task | Operations |
 | --- | --- |

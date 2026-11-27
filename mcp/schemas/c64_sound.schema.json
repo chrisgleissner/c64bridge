@@ -4,6 +4,7 @@
     "op": {
       "type": "string",
       "enum": [
+        "play",
         "sample_render",
         "capture_samples",
         "set_volume",
@@ -37,6 +38,79 @@
       ],
       "description": "Selects the operation."
     },
+    "sidwave": {
+      "type": [
+        "string",
+        "object",
+        "null"
+      ],
+      "description": "Inline score (text or object). Limits depend on op."
+    },
+    "inputPath": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Host input file.",
+      "minLength": 1
+    },
+    "from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "song": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 256
+    },
+    "voices": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 24
+    },
+    "system": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Default: the machine's ($02A6). Limits depend on op.",
+      "enum": [
+        "PAL",
+        "NTSC"
+      ]
+    },
+    "durationSeconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Override capture duration in seconds. Limits depend on op.",
+      "minimum": 0.5,
+      "maximum": 600
+    },
+    "configure": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "Set up SID playback."
+    },
+    "outputDir": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
     "definition": {
       "type": [
         "object",
@@ -53,13 +127,6 @@
       "minimum": 16,
       "maximum": 8000,
       "default": 4000
-    },
-    "outputDir": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "minLength": 1
     },
     "count": {
       "type": [
@@ -85,7 +152,7 @@
     },
     "volume": {
       "type": "number",
-      "description": "SID master volume 0-15. Writes all of $D418, clearing filter mode bits.",
+      "description": "Writes all of $D418.",
       "minimum": 0,
       "maximum": 15
     },
@@ -94,7 +161,7 @@
         "integer",
         "null"
       ],
-      "description": "Optional $D418 bits 4-7 (0-15: low-pass, band-pass, high-pass, voice 3 off). Default 0 clears them.",
+      "description": "$D418 bits 4-7: low/band/high-pass, voice 3 off.",
       "minimum": 0,
       "maximum": 15
     },
@@ -117,7 +184,7 @@
         "string",
         "null"
       ],
-      "description": "Musical note like A4, C#5, or Bb3. Overrides frequencyHz if provided.",
+      "description": "Note such as C#5; overrides frequencyHz.",
       "pattern": "^([A-Ga-g])([#b]?)(-?\\d+)$"
     },
     "frequencyHz": {
@@ -127,17 +194,6 @@
       ],
       "description": "Explicit frequency in Hz. Used when note is omitted.",
       "minimum": 1
-    },
-    "system": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "description": "PAL or NTSC for the note frequency. Default: read from the machine ($02A6). Limits depend on op.",
-      "enum": [
-        "PAL",
-        "NTSC"
-      ]
     },
     "waveform": {
       "type": [
@@ -192,11 +248,11 @@
         "boolean",
         "null"
       ],
-      "description": "Record audio after silencing to confirm the output is quiet. Limits depend on op."
+      "description": "Check that the output is quiet. Limits depend on op."
     },
     "path": {
       "type": "string",
-      "description": "SID, PRG or audio file path (absolute or Ultimate).",
+      "description": "File path (host or Ultimate).",
       "minLength": 1
     },
     "songnr": {
@@ -204,7 +260,7 @@
         "integer",
         "null"
       ],
-      "description": "Song number within the SID file (0-based index).",
+      "description": "Subtune from 1; 0: start song.",
       "minimum": 0
     },
     "includeScore": {
@@ -212,13 +268,6 @@
         "boolean",
         "null"
       ]
-    },
-    "configure": {
-      "type": [
-        "boolean",
-        "null"
-      ],
-      "description": "Set up SID playback."
     },
     "root": {
       "type": [
@@ -300,28 +349,20 @@
       "minimum": 0,
       "maximum": 4294967295
     },
-    "sidwave": {
-      "type": [
-        "string",
-        "object",
-        "null"
-      ],
-      "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object. Limits depend on op."
-    },
     "cpg": {
       "type": [
         "string",
         "object",
         "null"
       ],
-      "description": "SIDWAVE composition represented as YAML/JSON text or an already parsed object. Limits depend on op."
+      "description": "SIDWAVE score: YAML/JSON text or object. Limits depend on op."
     },
     "format": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Source format hint when providing raw text.",
+      "description": "Raw text format.",
       "enum": [
         "yaml",
         "json"
@@ -332,7 +373,7 @@
         "string",
         "null"
       ],
-      "description": "Target format. PRG works everywhere; SID playback needs C64U/U64 or U2 (SID export with dryRun works everywhere). Limits depend on op.",
+      "description": "SID playback needs c64u or u2; SID export with dryRun works anywhere. Limits depend on op.",
       "enum": [
         "prg",
         "sid",
@@ -352,7 +393,7 @@
         "string",
         "null"
       ],
-      "description": "Host file for the compiled PRG or SID (allowed directories only). Works with dryRun.",
+      "description": "Host PRG or SID file. Works with dryRun.",
       "minLength": 1
     },
     "platforms": {
@@ -473,33 +514,9 @@
         "string",
         "null"
       ],
-      "description": "Verification goal wording; \"does it sound right\" requests add a verdict.",
+      "description": "\"Does it sound right\" adds a verdict.",
       "minLength": 1,
       "default": "analyze the SID output"
-    },
-    "durationSeconds": {
-      "type": [
-        "number",
-        "null"
-      ],
-      "description": "Override capture duration in seconds. Limits depend on op.",
-      "minimum": 0.5,
-      "maximum": 600
-    },
-    "from": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "minLength": 1
-    },
-    "inputPath": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "description": "Host input file.",
-      "minLength": 1
     },
     "to": {
       "type": [
@@ -521,22 +538,6 @@
         "null"
       ],
       "description": "Write nothing if content is lost."
-    },
-    "song": {
-      "type": [
-        "integer",
-        "null"
-      ],
-      "minimum": 0,
-      "maximum": 256
-    },
-    "voices": {
-      "type": [
-        "integer",
-        "null"
-      ],
-      "minimum": 1,
-      "maximum": 24
     },
     "model": {
       "type": [
@@ -866,6 +867,6 @@
   "required": [
     "op"
   ],
-  "description": "Sound operations.\n\nOperations:\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional inputs: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional inputs: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required inputs: volume. Optional inputs: filterMode.\n- reset [write]: Reset SID registers. Optional inputs: hard.\n- note_on [write]: Start a SID voice. Optional inputs: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required inputs: voice.\n- silence_all [write]: Silence all SID voices. Optional inputs: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required inputs: path. Optional inputs: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required inputs: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional inputs: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional inputs: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional inputs: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional inputs: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional inputs: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required inputs: durationSeconds. Optional inputs: expectedSidwave.\n- formats: List conversion formats. Optional inputs: from.\n- inspect: Detect and describe a music file. Optional inputs: sidwave, inputPath, from.\n- convert [write]: Convert between music formats. Optional inputs: sidwave, inputPath, to, from, outputPath, overwrite, strict, verify, song, voices, system, model, durationSeconds, includeScore.\n- validate: Check a score. Optional inputs: sidwave, inputPath.\n- lint: List a score's musical and hardware problems. Optional inputs: sidwave, inputPath, loop.\n- format [write]: Write a score in canonical form. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore.\n- compile [write]: Compile a score to PRG, SID or game files, without playing. Optional inputs: sidwave, inputPath, output, outputPath, outputDir, overwrite, loop, song, origin, dataOrigin, zeroPage, symbols, forDevice.\n- transform [write]: Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). Required inputs: action. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore, semitones, bpm, factor, order, grid, seed, maxShift, from, to, scope.\n- retarget [write]: Adapt a score to a clock, SID model, SID count or budget. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore, system, model, sids, budgetCycles, budgetBytes, allowChanges, forDevice.\n- reconstruct [write]: Recover a score from a SID file or register trace, with a verdict. Required inputs: inputPath. Optional inputs: outputPath, overwrite, includeScore, song, durationSeconds, from, system.\n- analyze_music: Key, form, voices, techniques and resources of a score or SID. Optional inputs: sidwave, inputPath, song, durationSeconds.\n- compare: Compare two scores or SIDs: register differences and verification level. Required inputs: comparePath. Optional inputs: sidwave, inputPath, song, durationSeconds, level, ladder.\n- sid_info: SID header, song lengths, STIL notes and player. Required inputs: inputPath. Optional inputs: songlengthsPath, stilPath, hvscDir, hvscPath, sidIdPath.\n- compose [write]: Compose a new score with form and harmony, without playing. Optional inputs: style, profile, seed, system, root, cycleBudget, outputPath, overwrite, includeScore.\n- complete [write]: Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Required inputs: action. Optional inputs: sidwave, inputPath, outputPath, overwrite, includeScore, bars, voice, target, bass, drums, section, after, at, seed, harmony, instrument, verify.",
+  "description": "Sound operations.\n\nOperations:\n- play [write]: Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses. Optional: sidwave, inputPath, from, song, voices, system, durationSeconds, configure, outputDir.\n- sample_render [write]: Render a SIDWAVE sample to WAV. Optional: definition, rate, outputDir.\n- capture_samples [c64u]: Capture Ultimate stereo PCM. Optional: count, encoding.\n- set_volume [write]: Set SID volume ($D418). Required: volume. Optional: filterMode.\n- reset [write]: Reset SID registers. Optional: hard.\n- note_on [write]: Start a SID voice. Optional: voice, note, frequencyHz, system, waveform, pulseWidth, attack, decay, sustain, release.\n- note_off [write]: Release a SID voice. Required: voice.\n- silence_all [write]: Silence all SID voices. Optional: verify.\n- play_sid_file [c64u, u2] [write]: Play an Ultimate SID file. Required: path. Optional: songnr.\n- play_mod_file [c64u, u2] [write]: Play an Ultimate MOD file. Required: path.\n- generate [write]: Compose and play a seeded SIDWAVE PRG (replaces the program in memory). Optional: includeScore, configure, root, pattern, steps, tempoMs, waveform, preset, system, style, seed.\n- compile_play [write]: Compile and optionally play SIDWAVE. Optional: configure, sidwave, cpg, format, output, dryRun, outputPath.\n- play_preset [write]: Compile and play a built-in SID preset. Optional: includeScore, configure, preset, platforms, verify, analysisDurationSeconds, waitBeforeCaptureMs, restoreActiveBackend.\n- pipeline [write]: Compile, play and analyze SIDWAVE. Optional: configure, sidwave, cpg, output, waitBeforeCaptureMs, analysisDurationSeconds, expectedSidwave, verifySilenceBefore, verifySilenceAfter, silenceDurationSeconds, silenceRmsThreshold, postSilenceWaitMs, silenceWaitMs.\n- analyze: Analyze SID playback or a host WAV. Optional: wavPath, request, durationSeconds, expectedSidwave.\n- record_analyze: Analyze a recording from the Ultimate stream or host microphone on other backends. Required: durationSeconds. Optional: expectedSidwave.\n- formats: List conversion formats. Optional: from.\n- inspect: Detect and describe a music file. Optional: sidwave, inputPath, from.\n- convert [write]: Convert between music formats. Optional: sidwave, inputPath, to, from, outputPath, overwrite, strict, verify, song, voices, system, model, durationSeconds, includeScore.\n- validate: Check a score. Optional: sidwave, inputPath.\n- lint: List a score's musical and hardware problems. Optional: sidwave, inputPath, loop.\n- format [write]: Write a score in canonical form. Optional: sidwave, inputPath, outputPath, overwrite, includeScore.\n- compile [write]: Compile a score to PRG, SID or game files, without playing. Optional: sidwave, inputPath, output, outputPath, outputDir, overwrite, loop, song, origin, dataOrigin, zeroPage, symbols, forDevice.\n- transform [write]: Edit a score by action: transpose (semitones), set_tempo (bpm), scale_tempo (factor), restructure (order), quantise (grid), humanise (seed, maxShift), substitute_instrument (from, to). Required: action. Optional: sidwave, inputPath, outputPath, overwrite, includeScore, semitones, bpm, factor, order, grid, seed, maxShift, from, to, scope.\n- retarget [write]: Adapt a score to a clock, SID model, SID count or budget. Optional: sidwave, inputPath, outputPath, overwrite, includeScore, system, model, sids, budgetCycles, budgetBytes, allowChanges, forDevice.\n- reconstruct [write]: Recover a score from a SID file or register trace, with a verdict. Required: inputPath. Optional: outputPath, overwrite, includeScore, song, durationSeconds, from, system.\n- analyze_music: Key, form, voices, techniques and resources of a score or SID. Optional: sidwave, inputPath, song, durationSeconds.\n- compare: Compare two scores or SIDs: register differences and verification level. Required: comparePath. Optional: sidwave, inputPath, song, durationSeconds, level, ladder.\n- sid_info: SID header, song lengths, STIL notes and player. Required: inputPath. Optional: songlengthsPath, stilPath, hvscDir, hvscPath, sidIdPath.\n- compose [write]: Compose a new score with form and harmony, without playing. Optional: style, profile, seed, system, root, cycleBudget, outputPath, overwrite, includeScore.\n- complete [write]: Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Required: action. Optional: sidwave, inputPath, outputPath, overwrite, includeScore, bars, voice, target, bass, drums, section, after, at, seed, harmony, instrument, verify.",
   "additionalProperties": false
 }

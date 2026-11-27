@@ -205,10 +205,10 @@ export function discriminatedUnionSchema(options: DiscriminatedUnionSchemaOption
     if (opValue) {
       opValues.push(opValue);
       const requiredSummary = requiredInputs.length > 0
-        ? ` Required inputs: ${requiredInputs.join(", ")}.`
+        ? ` Required: ${requiredInputs.join(", ")}.`
         : "";
       const optionalSummary = optionalInputs.length > 0
-        ? ` Optional inputs: ${optionalInputs.join(", ")}.`
+        ? ` Optional: ${optionalInputs.join(", ")}.`
         : "";
       opDescriptions.push(`${opValue}: ${variantDesc || `Operation ${opValue}`}${requiredSummary}${optionalSummary}`);
       operationMetadata.push({

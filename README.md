@@ -614,7 +614,7 @@ Switch the active backend between C64U/U64 hardware, U2-family cartridges, and t
 
 #### c64_sound
 
-SID control, playback, composition, SIDWave conversion and audio analysis.
+Play any music file (op play). SID control, composition, SIDWave conversion, audio analysis.
 
 | Operation | Description | Required Inputs | Optional Inputs | C64U | U2 | VICE |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -635,6 +635,7 @@ SID control, playback, composition, SIDWave conversion and audio analysis.
 | `note_off` | Release a SID voice. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Start a SID voice. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile, play and analyze SIDWAVE. Supports verification. | — | `configure`, `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
+| `play` | Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses. | — | `sidwave`, `inputPath`, `from`, `song`, `voices`, `system`, `durationSeconds`, `configure`, `outputDir` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play an Ultimate MOD file. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |

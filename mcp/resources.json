@@ -651,7 +651,7 @@
     {
       "name": "Skill: sid-music",
       "uri": "c64://skills/sid-music",
-      "description": "Use when the user wants SID music or sound effects, such as presets, composing, converting music formats, reconstructing or inspecting SID files, game music, SID registers, or audio analysis.",
+      "description": "Use when the user wants SID music or sound effects, such as playing a music file, presets, composing, converting music formats, reconstructing or inspecting SID files, game music, SID registers, or audio analysis.",
       "mimeType": "text/markdown"
     },
     {

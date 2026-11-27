@@ -34,6 +34,6 @@
   "required": [
     "op"
   ],
-  "description": "VICE emulator operations.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required inputs: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required inputs: name, value.\n- snapshot_save [write]: Save snapshot. Required inputs: path.\n- snapshot_restore [destructive]: Restore snapshot. Required inputs: path.\n- version: VICE version.",
+  "description": "VICE emulator operations.\n\nOperations:\n- resource_get: Read a VICE configuration resource (safe prefixes only). Required: name.\n- resource_set [write]: Write a VICE configuration resource (safe prefixes only). Required: name, value.\n- snapshot_save [write]: Save snapshot. Required: path.\n- snapshot_restore [destructive]: Restore snapshot. Required: path.\n- version: VICE version.",
   "additionalProperties": false
 }

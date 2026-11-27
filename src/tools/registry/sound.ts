@@ -76,6 +76,8 @@ const sampleRenderArgsSchema = objectSchema({
 });
 
 const soundOperations: GroupedOperationConfig[] = [
+  // First, because it is the one operation that plays whatever the user has.
+  ...sidwaveOperations.filter(({ op }) => op === "play"),
   {
     op: "sample_render",
     schema: sampleRenderArgsSchema.jsonSchema,
@@ -271,7 +273,7 @@ const soundOperations: GroupedOperationConfig[] = [
     ),
     handler: async (rawArgs, ctx) => invokeModuleTool(audioModule, "record_and_analyze_audio", rawArgs, ctx),
   },
-  ...sidwaveOperations,
+  ...sidwaveOperations.filter(({ op }) => op !== "play"),
 ];
 
 const soundOperationHandlers = createOperationHandlers(soundOperations);
@@ -290,7 +292,7 @@ export const soundModuleGroup = defineToolModule({
   tools: [
     {
       name: "c64_sound",
-      description: "SID control, playback, composition, SIDWave conversion and audio analysis.",
+      description: "Play any music file (op play). SID control, composition, SIDWave conversion, audio analysis.",
       summary: "Adjusts SID registers, plays files, composes music, and runs verification captures.",
       inputSchema: discriminatedUnionSchema({
         description: "Sound operations.",

@@ -1,6 +1,7 @@
-// End to end on a real VICE: compose, compile, play, capture and verify, all through the MCP server.
+// End to end on a real VICE, all through the MCP server: compose, compile, play, capture and verify; a game build;
+// and op play with a MIDI file, a ProTracker module, a SIDWave score and a SID file.
 //
-// Runs only with C64BRIDGE_SIDWAVE_VICE_E2E=1 (needs x64sc and Xvfb; takes about 45 s of real time):
+// Runs only with C64BRIDGE_SIDWAVE_VICE_E2E=1 (needs x64sc and Xvfb; takes about two minutes of real time):
 //   C64BRIDGE_SIDWAVE_VICE_E2E=1 node scripts/run-tests.mjs test/sidwaveViceE2e.test.mjs
 // VICE_PORT (default 6523) and VICE_XVFB_DISPLAY (default :123) select the private emulator instance.
 import test from "#test/runner";
@@ -11,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { createConnectedClient } from "./helpers/mcpTestClient.mjs";
+import { BASS, MELODY, midiFile, MOD_NOTES, modFile, SCORE, sidFile } from "./helpers/musicFixtures.mjs";
 
 const enabled = process.env.C64BRIDGE_SIDWAVE_VICE_E2E === "1";
 const port = Number(process.env.VICE_PORT || 6523);
@@ -18,9 +20,9 @@ const display = process.env.VICE_XVFB_DISPLAY || ":123";
 /** About 20 s of PAL machine time: the boot and well over 10 s of music. */
 const RUN_CYCLES = 20_000_000;
 
-const serverEnv = (viceArgs) => ({
+const serverEnv = (viceArgs, cycles = RUN_CYCLES) => ({
   C64_MODE: "vice", C64BRIDGE_CONFIG: "", VICE_PORT: String(port), VICE_XVFB_DISPLAY: display, FORCE_XVFB: "1",
-  VICE_VISIBLE: "false", VICE_WARP: "false", VICE_TEST_TARGET: "", VICE_ARGS: `${viceArgs} -limitcycles ${RUN_CYCLES}`,
+  VICE_VISIBLE: "false", VICE_WARP: "false", VICE_TEST_TARGET: "", VICE_ARGS: `${viceArgs} -limitcycles ${cycles}`,
 });
 
 /** The program of the sid-music skill's game workflow: init once, then one play call a frame. */
@@ -119,8 +121,8 @@ function connections(t, work) {
     }
     fs.rmSync(work, { recursive: true, force: true });
   });
-  return async (viceArgs) => {
-    const connection = await createConnectedClient({ env: serverEnv(viceArgs) });
+  return async (viceArgs, cycles) => {
+    const connection = await createConnectedClient({ env: serverEnv(viceArgs, cycles) });
     opened.push(connection);
     return connection;
   };
@@ -179,4 +181,51 @@ test("a game build runs inside an example program on VICE", { skip: !enabled, ti
   await callTool(client, "c64_program", { op: "upload_run_asm", program: hostProgram(path.join(work, "build", "level.bin")) });
   await emulatorEnded();
   t.diagnostic(`verified ${verifyNotes(reference.outputPath, dump)} notes, worst play call ${build.cycles.worst} cycles`);
+});
+
+const SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+/** The PAL SID frequency register value of a note such as C4. */
+const palRegister = (note) => ((440 * 2 ** ((SEMITONES[note[0]] + 12 * (Number(note.at(-1)) + 1) - 69) / 12)) * 16_777_216) / 985_248;
+const amigaPeriods = { "C-2": 428, "E-2": 339, "G-2": 285, "C-3": 214 };
+
+/** Some voice of the dump starts notes whose frequencies are `expected` (register values or ratios), in order. */
+function assertMelody(dump, expected, { relative = false } = {}) {
+  const text = fs.readFileSync(dump, "utf8");
+  const voices = [0, 1, 2].map((voice) => noteStarts(text, voice));
+  const matches = (notes) => notes.some((_, start) => expected.every((value, offset) => {
+    const got = relative ? notes[start + offset] / notes[start] : notes[start + offset];
+    return Math.abs(got / value - 1) < 0.006;
+  }));
+  assert.ok(voices.some(matches), `no voice plays ${expected.map((v) => v.toFixed(relative ? 3 : 0)).join(" ")}; got ${JSON.stringify(voices.map((v) => v.slice(0, 12)))}`);
+}
+
+test("play starts a MIDI file, a MOD, a SIDWave score and a SID file on VICE", { skip: !enabled, timeout: 600_000 }, async (t) => {
+  assert.equal(await portInUse(), false, `port ${port} is in use; set VICE_PORT to a free port`);
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "c64bridge-sidwave-play-"));
+  const connect = connections(t, work);
+  const melody = MELODY.map(palRegister);
+  const modRatios = MOD_NOTES.map((note) => amigaPeriods[MOD_NOTES[0]] / amigaPeriods[note]);
+  const inputs = [
+    ["tune.mid", await midiFile(), "midi", "converted", (dump) => { assertMelody(dump, melody); assertMelody(dump, BASS.map(palRegister)); }],
+    ["tune.mod", modFile(), "mod", "converted", (dump) => assertMelody(dump, modRatios, { relative: true })],
+    ["tune.sidwave.yaml", SCORE, "sidwave", "none", (dump) => assertMelody(dump, melody)],
+    ["tune.sid", sidFile(), "sid", "reconstructed", (dump) => assertMelody(dump, melody)],
+  ];
+  for (const [name, content, format, conversion, check] of inputs) {
+    const file = path.join(work, name);
+    fs.writeFileSync(file, content);
+    const dump = path.join(work, `${format}.dump`);
+    const connection = await connect(`-sounddev dump -soundarg ${dump}`, 14_000_000);
+    const started = Date.now();
+    const played = await sound(connection.client, { op: "play", inputPath: file, outputDir: path.join(work, "out") });
+    const elapsed = Date.now() - started;
+    assert.deepEqual([played.playing, played.backend, played.detected.format, played.conversion], [true, "vice", format, conversion]);
+    await emulatorEnded();
+    check(dump);
+    // The captured register writes also match an offline trace of the score that play saved.
+    const score = played.score.outputPath ?? played.score.inputPath;
+    const reference = await sound(connection.client, { op: "convert", inputPath: score, to: "vice-dump", durationSeconds: 5, outputPath: path.join(work, `${format}.reference.dump`) });
+    t.diagnostic(`${format}: ${played.summary} Started after ${elapsed} ms; ${verifyNotes(reference.outputPath, dump)} notes verified`);
+    await connection.close();
+  }
 });
