@@ -37,7 +37,7 @@ export type Args = {
   budgetCycles?: number; budgetBytes?: number; allowChanges?: boolean; level?: "T0" | "T1" | "A0" | "A1"; ladder?: boolean;
   songlengthsPath?: string; stilPath?: string; hvscDir?: string; hvscPath?: string; sidIdPath?: string; style?: string;
   profile?: string; root?: string; cycleBudget?: number; bars?: number; voice?: number; target?: number; bass?: number;
-  drums?: number; section?: string; after?: string; at?: number; harmony?: "arp" | "line"; instrument?: string;
+  drums?: number; section?: string; after?: string; at?: number; harmony?: "arp" | "line"; instrument?: string; driverPath?: string;
 };
 export type ArgName = keyof Args;
 
@@ -132,6 +132,7 @@ export const PROPERTIES: { [K in ArgName]-?: Schema<unknown> } = {
   at: int(1),
   harmony: text({ enum: ["arp", "line"] }),
   instrument: text(),
+  driverPath: text({ description: "sf2 or ct driver: a song or player." }),
 };
 
 /* ------------------------------------------------------------------------------------------------ host input/output */
@@ -222,6 +223,11 @@ async function replaceFile(path: string, bytes: Uint8Array): Promise<void> {
 async function storeArtifact(path: string, content: Uint8Array | string, overwrite: boolean): Promise<Artifact> {
   const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : content;
   await mkdir(dirname(path), { recursive: true });
+  // The path was checked before the work started, which can take minutes. A directory or symbolic link replaced since
+  // then would redirect the write, so the path is checked again and must still resolve to itself.
+  if (resolveHostPath(path, { purpose: "write" }) !== path) {
+    throw new ToolValidationError(`The output path changed while the operation ran: ${path}`, { path: "$.outputPath" });
+  }
   if (overwrite) {
     await replaceFile(path, bytes);
   } else {
@@ -273,7 +279,7 @@ const PARTIAL_IMPORTS: Readonly<Record<string, string>> = {
   cheesecutter: "CheeseCutter import is approximate: playback differs from the original player.",
 };
 
-/** Formats whose export embeds a driver file of the user, for which no operation has an argument. */
+/** Formats whose export embeds a driver file of the user, given to `convert` as `driverPath`. */
 export const DRIVER_EXPORTS: ReadonlySet<string> = new Set(["sf2", "cheesecutter"]);
 
 /** The label of a conversion that is approximate by nature, by its source format. */

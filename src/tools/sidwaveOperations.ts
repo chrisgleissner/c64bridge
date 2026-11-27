@@ -65,7 +65,7 @@ const definitions: Definition[] = [
         return {
           formats: all.map((f) => ({
             id: f.id, extensions: f.extensions, read: !f.read ? "no" : approximation(f.id).approximate ? "approximate" : "yes",
-            write: f.write && !DRIVER_EXPORTS.has(f.id), losses: f.lossSummary, ...approximation(f.id),
+            write: f.write, ...(DRIVER_EXPORTS.has(f.id) ? { writeNeeds: "driverPath" } : {}), losses: f.lossSummary, ...approximation(f.id),
           })),
         };
       }
@@ -74,7 +74,7 @@ const definitions: Definition[] = [
       if (!format) throw new ToolValidationError(`Unknown format "${from}"`, { path: "$.from", details: { allowed: all.map((f) => f.id) } });
       const label = approximation(format.id);
       return {
-        format: { ...format, ...(label.approximate ? { readApproximate: format.read } : {}), ...(DRIVER_EXPORTS.has(format.id) ? { write: false } : {}) },
+        format: { ...format, ...(label.approximate ? { readApproximate: format.read } : {}), ...(DRIVER_EXPORTS.has(format.id) ? { writeNeeds: "driverPath" } : {}) },
         ...label,
       };
     },
@@ -100,29 +100,35 @@ const definitions: Definition[] = [
         format: format.id, name: format.name, bytes: input.bytes.length,
         detectedBy: args.from !== undefined ? "from" : detection.best!.by,
         confidence: args.from !== undefined ? 1 : detection.best!.confidence,
-        readable: format.read !== undefined, writable: format.write !== undefined && !DRIVER_EXPORTS.has(format.id), ...approximation(format.id),
+        readable: format.read !== undefined, writable: format.write !== undefined, ...(DRIVER_EXPORTS.has(format.id) ? { writeNeeds: "driverPath" } : {}),
+        ...approximation(format.id),
         details, warnings: detection.warnings, candidates: detection.candidates,
       };
     },
   },
   {
     op: "convert", effect: "write", description: "Convert between music formats.",
-    optional: [...SCORE, "to", "from", "outputPath", "overwrite", "strict", "verify", "song", "voices", "system", "model", "durationSeconds", "includeScore"],
+    optional: [...SCORE, "to", "from", "outputPath", "overwrite", "strict", "verify", "song", "voices", "sids", "system", "model", "durationSeconds", "includeScore", "driverPath"],
     run: async (args, ctx) => {
       const input = await readInput(args);
       const target = resolveTarget(args.to, args.outputPath === undefined ? undefined : basename(args.outputPath));
-      if (DRIVER_EXPORTS.has(target.id)) {
+      if (DRIVER_EXPORTS.has(target.id) && args.driverPath === undefined) {
         throw new ToolValidationError(
-          `Writing ${target.name} needs a driver file, which this operation does not take; use the command line: sidwave export score.yaml --driver <file>`,
-          { path: "$.to" },
+          `Writing ${target.name} needs a driver file: pass driverPath, an existing song of that format or its player binary`,
+          { path: "$.driverPath" },
         );
       }
-      const output = planOutput(args, input.stem, target.extensions[0]!, [input.file]);
+      if (!DRIVER_EXPORTS.has(target.id) && args.driverPath !== undefined) {
+        throw new ToolValidationError(`driverPath applies to ${[...DRIVER_EXPORTS].join(" and ")} output only`, { path: "$.driverPath" });
+      }
+      const driver = args.driverPath === undefined ? undefined : await readFileInput(args.driverPath);
+      const output = planOutput(args, input.stem, target.extensions[0]!, [input.file, driver?.file]);
       const notices: string[] = [];
       const result = await convert(input.bytes, {
-        inputName: input.name, to: target.id, from: args.from, song: args.song, voices: args.voices, mode: args.system,
+        inputName: input.name, to: target.id, from: args.from, song: args.song, voices: args.voices, sids: args.sids, mode: args.system,
         model: args.model, seconds: args.durationSeconds, verify: args.verify === true, readOptions: input.read,
         createEngine: engineFactory(ctx), signal: ctx.signal, notice: (message) => notices.push(message),
+        ...(driver ? { driver: driver.bytes } : {}),
       });
       const strictFailed = args.strict === true && result.severity === "lost";
       const artifact = strictFailed ? undefined : await output.write(result.output, ctx);

@@ -7,7 +7,10 @@ import { runWithInlineWindow, waitForTask, cancelTask, __resetForTests } from ".
 import { acquireLease } from "../src/tasks/resources.js";
 import { toolRegistry } from "../src/tools/registry/index.js";
 import { createLogger } from "./meta/helpers.mjs";
-import { SCORE, sidFile } from "./helpers/musicFixtures.mjs";
+import { CT } from "sidwave/export";
+import { parseSidwave } from "sidwave";
+import { writeArtifact } from "../src/tools/sidwaveShared.js";
+import { SCORE, modFile, sidFile } from "./helpers/musicFixtures.mjs";
 import { ok, rejected, workspace } from "./helpers/sidwaveCalls.mjs";
 
 const { at, write } = workspace("sidwave-consistency");
@@ -111,11 +114,64 @@ test("approximate formats are labelled in formats, inspect, convert, play and re
   assert.match(instruments.approximateNote, /Experimental recovery/);
 });
 
-test("formats that need a driver file are listed and refused as not writable", async () => {
+/**
+ * A CheeseCutter player binary for the export: a PRG at $0E00 with the pointer table the exporter reads. It holds no
+ * player code; every table gets its own 1 KiB block and every sequence its own page.
+ */
+function cheeseCutterStub() {
+  const image = new Uint8Array(CT.IMAGE);
+  const tables = Object.values(CT.OFS);
+  for (let index = 0; index < CT.PTR_COUNT; index += 1) {
+    const at = tables.includes(index) ? 0x1000 + tables.indexOf(index) * 0x400 : 0x0e00;
+    image[CT.PTR_TABLE + index * 2] = at & 0xff;
+    image[CT.PTR_TABLE + index * 2 + 1] = at >> 8;
+  }
+  const low = 0x1000 + tables.indexOf(CT.OFS.sequenceLow) * 0x400;
+  const high = 0x1000 + tables.indexOf(CT.OFS.sequenceHigh) * 0x400;
+  for (let sequence = 0; sequence < CT.SEQUENCES; sequence += 1) {
+    image[low + sequence] = 0;
+    image[high + sequence] = 0x7f + sequence;
+  }
+  return Buffer.concat([Buffer.from([0x00, 0x0e]), image.subarray(0x0e00, 0xff00)]);
+}
+
+test("formats that need a driver file are written only with driverPath", async () => {
   const { formats } = await ok({ op: "formats" });
-  assert.deepEqual(formats.filter((format) => ["sf2", "cheesecutter"].includes(format.id)).map((format) => format.write), [false, false]);
-  assert.equal((await ok({ op: "formats", from: "sf2" })).format.write, false);
-  for (const to of ["sf2", "cheesecutter"]) await rejected({ op: "convert", sidwave: SCORE, to }, /needs a driver file.*sidwave export/);
+  assert.deepEqual(formats.filter((format) => ["sf2", "cheesecutter"].includes(format.id)).map((format) => [format.write, format.writeNeeds]), [[true, "driverPath"], [true, "driverPath"]]);
+  assert.equal((await ok({ op: "formats", from: "sf2" })).format.writeNeeds, "driverPath");
+  for (const to of ["sf2", "cheesecutter"]) await rejected({ op: "convert", sidwave: SCORE, to }, /needs a driver file: pass driverPath/);
+  const driver = write("player.prg", cheeseCutterStub());
+  await rejected({ op: "convert", sidwave: SCORE, to: "midi", driverPath: driver }, /driverPath applies to sf2 and cheesecutter/);
+  await rejected({ op: "convert", sidwave: SCORE, to: "cheesecutter", driverPath: "/etc/passwd" }, /outside the allowed directories/);
+  await rejected({ op: "convert", sidwave: SCORE, to: "cheesecutter", driverPath: driver, outputPath: driver, overwrite: true }, /output file is an input file/);
+  await rejected({ op: "convert", sidwave: SCORE, to: "sf2", driverPath: driver }, /SID Factory II/);
+  const data = await ok({ op: "convert", sidwave: SCORE, to: "cheesecutter", driverPath: driver, outputPath: at("tune.ct") });
+  assert.equal(data.to, "cheesecutter");
+  assert.equal((await ok({ op: "inspect", inputPath: data.outputPath })).format, "cheesecutter");
+  assert.deepEqual(fs.readFileSync(driver), cheeseCutterStub());
+});
+
+test("sids keeps the fourth channel of a module, and applies to MOD input only", async () => {
+  const module = modFile();
+  // Channels 3 and 4 play a note on every fourth row as well.
+  for (let row = 0; row < 64; row += 4) for (const channel of [2, 3]) module.set([0x01, 0xac, 0x10, 0], 1084 + (row * 4 + channel) * 4);
+  const input = write("four.mod", module);
+  const one = await ok({ op: "convert", inputPath: input, to: "sidwave", outputPath: at("four-1.yaml") });
+  assert.match(JSON.stringify(one.losses), /Channels 4 are not imported/);
+  const two = await ok({ op: "convert", inputPath: input, to: "sidwave", sids: 2, outputPath: at("four-2.yaml") });
+  assert.doesNotMatch(JSON.stringify(two.losses), /Channels 4 are not imported/);
+  assert.equal(parseSidwave(fs.readFileSync(two.outputPath, "utf8")).voices.length, 4);
+  await rejected({ op: "convert", sidwave: SCORE, to: "midi", sids: 2 }, /MOD input/);
+  await rejected({ op: "play", sidwave: SCORE, sids: 2 }, /sids applies to a MOD file only/);
+});
+
+test("an output path that changed while the operation ran is not written", async () => {
+  const planned = at("moved/out.bin");
+  fs.mkdirSync(at("elsewhere"));
+  // The directory of the planned path is replaced by a link to another directory after the path was checked.
+  fs.symlinkSync(at("elsewhere"), at("moved"));
+  await assert.rejects(writeArtifact(planned, "x", false, {}), /output path changed while the operation ran/);
+  assert.deepEqual(fs.readdirSync(at("elsewhere")), []);
 });
 
 test("generate and note_on keep their limits in the merged c64_sound schema", () => {

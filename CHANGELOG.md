@@ -8,6 +8,7 @@
 - `c64_sound` ops `formats`, `inspect`, `convert`, `validate`, `lint`, `format`, `transform`, `retarget`, `compose` and `complete`: convert, check, write and change SIDWave scores
 - `c64_sound` op `compile`: PRG, PSID and game builds with assembler includes, symbol files, relocation tables and a cycle limit
 - `c64_sound` ops `render` (mix, stems, solo, mute) and `extract_instruments`
+- `c64_sound` op `convert` writes SID Factory II and CheeseCutter files with a driver file of the user (`driverPath`); `play` and `convert` take `sids` to keep more than three channels of a MOD file
 - `c64_sound` ops `reconstruct` (experimental), `analyze_music`, `compare`, `sid_info`, `sid_edit` and `preserve`
 - `c64_sound` ops `convert`, `reconstruct`, `render`, `analyze_music` and `compare` can run as background tasks
 - `c64_sound` labels approximate imports (SID and register trace recovery, ABC, JCH, SID Factory II, CheeseCutter)

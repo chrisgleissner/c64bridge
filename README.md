@@ -25,14 +25,14 @@ Hear and see it, from the [Pulse Guard showcase](examples/sidwave-showcase/READM
 - **Video:** [one minute of the game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and effects, recorded from VICE.
 
 - **Musicians: bring your song and hear it on the SID in one request.** `c64_sound` `play` reads MIDI, MusicXML, ProTracker modules, ABC, several SID tracker formats and more, converts the file where needed, starts it, saves an editable score and a PRG, and lists what the conversion lost, with counts.
-- **Game developers: music and sound effects with a measured cycle cost.** One score holds the songs and effects. The build is an assembler include for 64tass, ACME or ca65 (a KickAssembler include is also written, unverified) with the cycles per play call and the memory and zero page it uses, and it is refused when it exceeds your cycle limit.
+- **Game developers: music and sound effects with a measured cycle cost.** One score holds the songs and effects. The build is an assembler include for 64tass, ACME or ca65 (KickAssembler is also offered, unverified) with the cycles per play call and the memory and zero page it uses, and it is refused when it exceeds your cycle limit.
 - **AI and retro enthusiasts: no C64 needed.** Compose a tune, render it to WAV, check the audio and play it in VICE. On a C64 Ultimate, Ultimate 64 or U2 cartridge, the same operations play it on the machine.
 
 > In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
 
 The [prompt cookbook](doc/sidwave-cookbook.md) has six prompts of this kind, each with what it produces. To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux); a VICE that C64 Bridge starts is otherwise silent.
 
-Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID Factory II and CheeseCutter imports are approximate. A single SID has three voices, and a conversion drops and reports the rest. [All sound operations](#c64_sound)
+Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID Factory II and CheeseCutter imports are approximate, and writing SID Factory II or CheeseCutter needs your own driver file. A single SID has three voices, and a conversion drops and reports the rest. [All sound operations](#c64_sound)
 
 ## Contents
 
@@ -647,7 +647,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `compile_play` | Compile and optionally play SIDWAVE. | — | `configure`, `sidwave`, `cpg`, `format`, `output="prg"`, `dryRun=false`, `outputPath` | ✅ | ✅ | ✅ |
 | `complete` | Extend a score by action: continue (bars), harmonise (voice, target), accompany (bass, drums), fill-section (section). Supports verification. | `action` | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore`, `bars`, `voice`, `target`, `bass`, `drums`, `section`, `after`, `at`, `seed`, `harmony`, `instrument`, `verify` | ✅ | ✅ | ✅ |
 | `compose` | Compose a new score with form and harmony, without playing. | — | `style="chiptune"`, `profile`, `seed`, `system`, `root`, `cycleBudget`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
-| `convert` | Convert between music formats. Supports verification. | — | `sidwave`, `inputPath`, `to`, `from`, `outputPath`, `overwrite`, `strict`, `verify`, `song`, `voices`, `system`, `model`, `durationSeconds`, `includeScore` | ✅ | ✅ | ✅ |
+| `convert` | Convert between music formats. Supports verification. | — | `sidwave`, `inputPath`, `to`, `from`, `outputPath`, `overwrite`, `strict`, `verify`, `song`, `voices`, `sids`, `system`, `model`, `durationSeconds`, `includeScore`, `driverPath` | ✅ | ✅ | ✅ |
 | `extract_instruments` | Save the instruments of a score or SID as an importable library. | — | `sidwave`, `inputPath`, `from`, `song`, `durationSeconds`, `name`, `licence`, `author`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
 | `format` | Write a score in canonical form. | — | `sidwave`, `inputPath`, `outputPath`, `overwrite`, `includeScore` | ✅ | ✅ | ✅ |
 | `formats` | List conversion formats. | — | `from` | ✅ | ✅ | ✅ |
@@ -657,7 +657,7 @@ Play any music file (op play). SID control, composition, SIDWave conversion, aud
 | `note_off` | Release a SID voice. | `voice` | — | ✅ | ✅ | ✅ |
 | `note_on` | Start a SID voice. | — | `voice=1`, `note`, `frequencyHz`, `system`, `waveform="pulse"`, `pulseWidth=2048`, `attack=1`, `decay=1`, `sustain=15`, `release=3` | ✅ | ✅ | ✅ |
 | `pipeline` | Compile, play and analyze SIDWAVE. Supports verification. | — | `configure`, `sidwave`, `cpg`, `output="prg"`, `waitBeforeCaptureMs=500`, `analysisDurationSeconds=3`, `expectedSidwave`, `verifySilenceBefore=false`, `verifySilenceAfter=false`, `silenceDurationSeconds=1.5`, `silenceRmsThreshold=0.02`, `postSilenceWaitMs=200`, `silenceWaitMs=150` | ✅ | ✅ | ✅ |
-| `play` | Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses. | — | `sidwave`, `inputPath`, `from`, `song`, `voices`, `system`, `durationSeconds`, `configure`, `outputDir` | ✅ | ✅ | ✅ |
+| `play` | Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses. | — | `sidwave`, `inputPath`, `from`, `song`, `voices`, `sids`, `system`, `durationSeconds`, `configure`, `outputDir` | ✅ | ✅ | ✅ |
 | `play_mod_file` | Play an Ultimate MOD file. | `path` | — | ✅ | ✅ |  |
 | `play_preset` | Compile and play a built-in SID preset. Supports verification. | — | `includeScore`, `configure`, `preset="chiptune_drive"`, `platforms`, `verify=false`, `analysisDurationSeconds=4`, `waitBeforeCaptureMs=400`, `restoreActiveBackend=true` | ✅ | ✅ | ✅ |
 | `play_sid_file` | Play an Ultimate SID file. | `path` | `songnr` | ✅ | ✅ |  |

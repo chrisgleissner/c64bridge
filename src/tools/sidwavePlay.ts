@@ -65,11 +65,12 @@ async function playSid(args: Args, input: Input, ctx: ToolExecutionContext, back
 export const playDefinition: Definition = {
   op: "play", effect: "write",
   description: "Play any music file (SIDWave, SID, MIDI, MOD, tracker and notation formats, PRG): detects, converts, runs, reports losses.",
-  optional: [...SCORE, "from", "song", "voices", "system", "durationSeconds", "configure", "outputDir"],
+  optional: [...SCORE, "from", "song", "voices", "sids", "system", "durationSeconds", "configure", "outputDir"],
   run: async (args, ctx) => {
     const input = await readInput(args);
     const detected = detectInput(input, args.from);
     const format = detected.format;
+    if (args.sids !== undefined && format.id !== "mod") throw new ToolValidationError("sids applies to a MOD file only", { path: "$.sids" });
     const facade = await ctx.client.pinFacade?.();
     const backend = facade?.type ?? backendOf(ctx);
     const found = {
@@ -91,7 +92,7 @@ export const playDefinition: Definition = {
     const notices: string[] = [];
     if (!native) {
       converted = await convert(input.bytes, {
-        inputName: input.name, to: "sidwave", from: format.id, song: args.song || undefined, voices: args.voices,
+        inputName: input.name, to: "sidwave", from: format.id, song: args.song || undefined, voices: args.voices, sids: args.sids,
         mode: machine.system, seconds: args.durationSeconds ?? (format.id === "sid" ? SID_HORIZON_SECONDS : undefined),
         title: format.id === "sid" ? parseSidFile(input.bytes).name || undefined : undefined,
         readOptions: input.read, createEngine: engineFactory(ctx),
