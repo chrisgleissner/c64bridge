@@ -122,6 +122,9 @@ export function diagnoseCrash(input: CrashInput): CrashReport {
     verdict = "pc_outside_code";
     const caller = returns[0] === undefined ? undefined : describe((returns[0] - 3) & 0xffff, symbols);
     notes.push(`PC at ${label(pc)}, outside the code range ${formatWord(codeRange!.start)}-${formatWord(codeRange!.end)}${caller ? `, called from ${label(caller)}` : "; no return address was found on the stack"}.`);
+    if (counting) {
+      notes.push("The frame counter changed, so the program still runs. VICE takes the samples at frame boundaries, where a ROM routine or an interrupt handler outside the code range can be sampled every time.");
+    }
   } else if (last.sp < STACK_LOW_LIMIT) {
     verdict = "stack_low";
     notes.push(`SP is ${formatByte(last.sp)}: the stack is close to overflowing.`);

@@ -76,6 +76,12 @@ test("a changing frame counter shows that a repeated PC is a wait loop", () => {
   assert.equal(diagnose([0xc007, 0xc007], { ...bytes, frameCounter: { first: 5, last: 5 } }).verdict, "stuck_pc");
 });
 
+test("a changing frame counter is noted when every sample is outside the code range", () => {
+  const report = diagnose([0xea31, 0xea31], { codeRange: { start: 0xc000, end: 0xc0ff }, frameCounter: { first: 1, last: 3 } });
+  assert.equal(report.verdict, "pc_outside_code");
+  assert.ok(report.notes.some((note) => note.includes("still runs")), report.notes.join(" "));
+});
+
 test("a stop during sampling is reported as such", () => {
   const report = diagnose([0xc001, 0xc001], { halted: true });
   assert.equal(report.verdict, "running");
