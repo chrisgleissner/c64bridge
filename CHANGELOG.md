@@ -4,6 +4,8 @@
 
 ### Features
 
+- `c64_debug` op `diagnose` (VICE): a crash verdict (`jam`, `pc_outside_code`, `stack_low`, `stuck_pc` or `running`) with PC, registers, vectors, stack return addresses and loaded symbols
+- `c64_debug` op `profile_border` (VICE and the C64U/U64 video stream): raster lines, jitter, approximate cycles and overrun per `$D020` marker colour
 - the `game-development` skill describes sound effects through the `sidwave` game build: the `sfx` entry, voice selection and the measured cycles for the frame budget
 
 ## 1.5.0 - 2026-11-27
