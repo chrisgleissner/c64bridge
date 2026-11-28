@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- the `game-development` skill describes sound effects through the `sidwave` game build: the `sfx` entry, voice selection and the measured cycles for the frame budget
+
 ## 1.5.0 - 2026-11-27
 
 ### Features
