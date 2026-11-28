@@ -2,45 +2,27 @@
 
 **Give your coding agent a C64 it can test on.**
 
-C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents such as Claude Code and Codex to VICE or Ultimate hardware. Your agent can run a PRG, read the screen or RAM, and use the results to debug.
-
-A built-in, searchable knowledge base gives it access to C64 programming and hardware expertise.
-
-![Logo](./doc/img/logo.png)
-
 [![npm](https://img.shields.io/npm/v/c64bridge.svg)](https://www.npmjs.com/package/c64bridge)
 [![Build](https://img.shields.io/github/actions/workflow/status/chrisgleissner/c64bridge/ci.yaml)](https://github.com/chrisgleissner/c64bridge/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/github/chrisgleissner/c64bridge/graph/badge.svg?token=AS9D41Y5EG)](https://codecov.io/github/chrisgleissner/c64bridge)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-forestgreen)](doc/developer.md)
 
-## C64 music with SIDWave
+C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents such as Claude Code and Codex to the VICE emulator or to Ultimate hardware.
 
-**Ask your AI for C64 music. Hear it on a real C64 or in VICE. Ship it in your game.**
+![Logo](./doc/img/logo.png)
 
-Hear and see it, from the [Pulse Guard showcase](examples/sidwave-showcase/README.md), a game with original music and sound effects:
+Your agent can:
 
-- **Original music:** [Pulse Guard, in game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3) (71 s), [Deep Field, title](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-deep-field.mp3) (77 s) and [Iron Moth, boss fight](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-iron-moth.mp3) (51 s).
-- **Conversion, source then SID** (16 s each): [MIDI](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and [ProTracker module](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-mod-before-after.mp3). The MIDI source is played by a small synthesiser that is part of the example.
-- **Video:** [one minute of the game](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) with music and effects, recorded from VICE.
-
-- **Musicians: bring your song and hear it on the SID in one request.** `c64_sound` `play` reads MIDI, MusicXML, ProTracker modules, ABC, several SID tracker formats and more, converts the file where needed, starts it, saves an editable score and a PRG, and lists what the conversion lost, with counts.
-- **Game developers: music and sound effects with a measured cycle cost.** One score holds the songs and effects. The build is an assembler include for 64tass, ACME or ca65 (KickAssembler is also offered, unverified) with the cycles per play call and the memory and zero page it uses, and it is refused when it exceeds your cycle limit.
-- **AI and retro enthusiasts: no C64 needed.** Compose a tune, render it to WAV, check the audio and play it in VICE. On a C64 Ultimate, Ultimate 64 or U2 cartridge, the same operations play it on the machine.
-
-> In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
-
-The [prompt cookbook](doc/sidwave-cookbook.md) has six prompts of this kind, each with what it produces. To hear VICE, set `VICE_ARGS=-sounddev pulse` (Linux); a VICE that C64 Bridge starts is otherwise silent.
-
-Hardware status: playback of a MIDI file, a ProTracker module, a SIDWave score and SIDWave-built SID files, the game music test program and the start of the showcase game were checked on an Ultimate 64 Elite (firmware 3.15a) by reading its memory. Nobody listened, and nothing was verified on a C64 Ultimate or a U2 cartridge. [Details](doc/sidwave-cookbook.md#verification-on-an-ultimate-64)
-
-Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID Factory II and CheeseCutter imports are approximate, and writing SID Factory II or CheeseCutter needs your own driver file. A single SID has three voices, and a conversion drops and reports the rest. [All sound operations](#c64_sound)
+- **Run and debug.** Start a PRG, read the screen or RAM, set breakpoints in VICE, and use the results to fix the program.
+- **Drive real hardware.** Upload programs, mount disks and change settings on a C64 Ultimate, Ultimate 64 or U2 cartridge.
+- **Make SID music.** Compose, convert and play music, and build it into a game.
+- **Look things up.** Search a built-in knowledge base on C64 programming and hardware.
 
 ## Contents
 
 <!-- AUTO-GENERATED:TOC-START -->
 
-- [C64 music with SIDWave](#c64-music-with-sidwave)
 - [Quick start](#quick-start)
 - [Project showcases](#project-showcases)
 - [Configuration](#configuration)
@@ -58,7 +40,6 @@ Limits: SID file reconstruction is experimental and approximate. JCH, ABC, SID F
 You need Node.js 24 or later with npm, an MCP client, and either VICE or a reachable Ultimate device. [Node.js downloads](https://nodejs.org/en/download)
 
 Install C64 Bridge by registering it with your client. The client launches `npx -y c64bridge@latest`, which fetches the npm package as needed and starts the local server over stdio.
-
 
 ### 1. Choose a target
 
@@ -149,7 +130,7 @@ For a C64 Ultimate or Ultimate 64, ask for the `c64u` backend. For a U2-family c
 
 ![VICE text screen displaying HELLO VICE](doc/img/backend-switch/hello-vice.png)
 
-The agent should report seeing `HELLO VICE` on the emulated screen. The bridge runs the program and returns the observed text. The same run-and-check loop lets the agent catch a wrong value in RAM or confirm that a game reacts to input.
+The agent should report seeing `HELLO VICE` on the emulated screen. The bridge runs the program and returns the observed text. The same run-and-check loop lets the agent catch a wrong value in RAM or confirm that a game reacts to input. It works the same way on hardware: [C64 Ultimate greeting screenshot](doc/img/backend-switch/hello-c64u.png).
 
 If the tools are missing, check that your client has enabled `c64bridge` and can find Node.js 24 or later. If a call fails, check the active backend in `c64://platform/status`. [Troubleshooting](doc/troubleshooting-mcp.md)
 
@@ -159,21 +140,27 @@ Try one of these after the tour. Each example gives the agent a concrete task an
 
 ### Develop a game
 
-Tell your agent whether you’re targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout, and asset loading.
+Tell your agent whether you are targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout and asset loading.
 
-Start with a small 6510 routine or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input, and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
+Start with a small 6510 routine, or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
 
 > Run my PRG in VICE with its symbol file. Break at the player update routine, then resume and check whether pressing fire spawns a projectile.
 
-### Compose for the SID
+### Compose for the SID with SIDWave
 
-Give your agent a score or a musical idea. It can use the SIDWAVE manual to turn instruments, patterns, and sections into a playable arrangement. Compile to check the arrangement and lint findings before listening to it on your target. Your agent can also convert between music formats, recover an editable score from a SID tune with a stated verdict, retarget a score to another clock or SID, and build a player for use inside a game. [Sound tools](#c64_sound)
+SIDWave is a text format and compiler for SID music. Give your agent a musical idea, a score, or a file such as a MIDI tune or a ProTracker module. It can compose, play, convert and render the music, and build a player with sound effects for your game. Every conversion lists what it lost. [Sound tools](#c64_sound)
 
-Export a PRG or PSID. Use PRG for layouts with more than three SIDs. A compatible Ultimate setup can address up to ten SIDs, depending on the model and fitted chips.
+> In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
 
-> Play Stereo Echo on my Ultimate, then show me how the score places its lead and echoes across the two SIDs.
+- **Listen:** [in-game music](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3), a [MIDI conversion](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and a [video](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) from the [Pulse Guard showcase game](examples/sidwave-showcase/README.md).
+- **Learn more:** [prompt cookbook](doc/sidwave-cookbook.md), [example scores](data/sound/examples/) and the [SIDWave format](data/sound/sidwave.md).
 
-Listen to **Arp Ballad**, **Drum and Bass**, or **Stereo Echo** and open the matching YAML to see how each was built. [Audio downloads](https://github.com/chrisgleissner/c64bridge/releases) · [Example scores](data/sound/examples/)
+Good to know:
+
+- VICE started by C64 Bridge is silent unless you set a sound device, for example `VICE_ARGS=-sounddev pulse` on Linux.
+- SID reconstruction and several tracker imports are approximate.
+- Music playback was checked on an Ultimate 64 Elite, not on a C64 Ultimate or a U2 cartridge. [Verification details](doc/sidwave-cookbook.md#verification-on-an-ultimate-64)
+- Scores with more than three SIDs need PRG output. A suitably equipped Ultimate can address up to ten.
 
 ### Use Ultimate hardware
 
@@ -223,8 +210,6 @@ Without a `u2` section, the U2 backend can use C64U settings. If you supply a se
 `C64_MODE` pins the initial target. Without it, the server prefers configured backends in this order: `c64u`, `u2`, `vice`. With none configured, it probes the default Ultimate endpoint at `c64u:80` and selects VICE if the probe fails.
 
 Use `c64_select_backend` to switch among the available backends without restarting. Include the target in each prompt when switching, for example `u2: list drives` or `c64u: run this PRG`. The `c64://platform/status` resource shows which backend is active and which are available.
-
-The same screen check can run on hardware. [C64 Ultimate greeting screenshot](doc/img/backend-switch/hello-c64u.png)
 
 ### VICE setup
 
@@ -322,9 +307,14 @@ npm start             # launch the local stdio server
 
 See `./build --help` for coverage, RAG rebuilds, package checks, and release commands. To run a local npm installation, use `npx c64bridge` from the project where you installed it.
 
-The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code project configuration](.mcp.json) launch the source checkout. In VS Code, the [C64 custom agent](.github/agents/c64.agent.md) is available for the project’s C64 workflows. In Claude Code, approve the project server when prompted. To start a stdio session by hand, run `npm start` from the checkout or `npx -y c64bridge@latest` for the published package. It waits for MCP requests on stdin.
+The checkout also includes client configuration that runs your local sources:
 
-`npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit updated generated files alongside MCP server changes. The package check in CI rebuilds and fails if the committed files are stale. [Developer guide](doc/developer.md)
+- **VS Code:** [`.vscode/mcp.json`](.vscode/mcp.json), plus the [C64 custom agent](.github/agents/c64.agent.md) for the project's C64 workflows.
+- **Claude Code:** [`.mcp.json`](.mcp.json). Approve the project server when prompted.
+
+To start a stdio session by hand, run `npm start` from the checkout, or `npx -y c64bridge@latest` for the published package. The server then waits for MCP requests on stdin.
+
+`npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit the updated files together with your MCP server changes; the package check in CI fails if they are stale. [Developer guide](doc/developer.md)
 
 ## Documentation
 
@@ -338,7 +328,7 @@ The checked-in [VS Code configuration](.vscode/mcp.json) and [Claude Code projec
 Your agent can consult these manuals through MCP while it works. The links below are there for when you want to look up a detail yourself.
 
 - **Game development** · [Reading plan by game type](data/gamedev/index.md) · [Frame timing and memory layout](data/gamedev/architecture.md) · [Toolchains](data/gamedev/toolchain.md)
-- **SID composition** · [SIDWAVE format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md)
+- **SID composition** · [SIDWave format](data/sound/sidwave.md) · [SID registers](data/sound/sid-spec.md) · [Multi-SID layouts](data/ultimate/multisid.md)
 - **Ultimate hardware** · [Turbo and board settings](data/ultimate/hardware.md) · [REU](data/ultimate/reu.md) · [UCI](data/ultimate/uci.md) · [UPIC](data/ultimate/upic.md)
 - **VICE debugging** · [Binary Monitor](data/vice/vice-binary-monitor-spec.md)
 
