@@ -148,14 +148,14 @@ Start with a small 6510 routine, or bring a PRG and its symbol file. In VICE, th
 
 [![Pulse Guard: title screen, gameplay and the Iron Moth boss](doc/img/pulse-guard.gif)](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4)
 
-Pulse Guard is a vertical shooter for the PAL C64 with five songs and nine sound effects, all in one SIDWave score. An AI coding agent (Claude Sonnet) wrote the code, graphics and music, and later review passes fixed defects.
+Pulse Guard is a vertical shooter for the PAL C64 with five songs and nine sound effects, all in one [SIDWave](#compose-for-the-sid-with-sidwave) score. An AI coding agent (Claude Sonnet) wrote the code, graphics and music, and later review passes fixed defects.
 
 [Video with sound](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) (1 minute) · [Download the PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg) (joystick in port 2) · [Source and build instructions](examples/sidwave-showcase/README.md)
 
 <details>
 <summary>The prompt that created it</summary>
 
-This is an excerpt from the brief the agent received, quoted word for word. The full brief also set working rules, such as using only original material. Another Claude agent wrote the brief from the maintainer's request for release material.
+These are items 1, 2 and 5 of the work list in the brief the agent received, quoted word for word. The full brief also asked for audio clips and a video, and set working rules, such as using only original or public-domain material. Another Claude agent wrote the brief from the maintainer's request for release material.
 
 ```text
 1. A small showcase game with original music and sound effects (SIDWave effects engine with
