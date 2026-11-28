@@ -341,7 +341,7 @@ const profileBorderArgsSchema = objectSchema({
 });
 
 const diagnoseArgsSchema = objectSchema({
-  description: "Crash verdict from PC, stack, vectors; VICE only.",
+  description: "Crash verdict from PC, stack, vectors.",
   properties: {
     op: literalSchema("diagnose"),
     samples: optionalInteger(2, 10, 3),
@@ -776,12 +776,6 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
   diagnose: async (args, ctx) => {
     try {
       const parsed = diagnoseArgsSchema.parse(args);
-      if (ctx.platform.id !== "vice") {
-        throw new ToolValidationError(
-          `diagnose runs on the vice backend only; the hardware path for ${ctx.platform.id} is not implemented yet.`,
-          { path: "$.op" },
-        );
-      }
       const range = parsed.codeRange as { start: string; end: string } | undefined;
       const codeRange = range
         ? { start: parseAddress(range.start, "codeRange.start"), end: parseAddress(range.end, "codeRange.end") }
@@ -1013,8 +1007,10 @@ export const debugModuleGroup = defineToolModule({
         wait_for_state: "read", nuclear_reset: "destructive", continue_execution: "write",
         profile_border: "read", diagnose: "read",
       },
-      // diagnose reaches its handler on every backend, which reports that the hardware path is missing.
-      operationPlatforms: { profile_border: ["c64u", "vice"], diagnose: ["c64u", "u2", "vice"] },
+      operationPlatforms: { profile_border: ["c64u", "vice"], diagnose: ["vice"] },
+      unsupportedPlatformMessage: (op, platform) => op === "diagnose"
+        ? `diagnose runs on the vice backend only; the hardware path for ${platform} is not implemented yet.`
+        : undefined,
       tags: ["debug", "breakpoint", "registers", "grouped"],
       examples: [
         {

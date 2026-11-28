@@ -2468,6 +2468,9 @@ export class C64Client {
   private async captureViceFrames(viceFacade: ViceBackend, count: number, includeBorder: boolean): Promise<FrameCaptureResult> {
     const frames: CapturedFrame[] = [];
     const warnings = new Set<string>();
+    if (count > 1 && viceFacade.isCpuStopped?.()) {
+      warnings.add("The CPU is stopped, so VICE renders no new frames: all captured frames show the same picture.");
+    }
     for (let index = 0; index < count; index += 1) {
       const snapshot = await this.captureViceDisplaySnapshot(viceFacade);
       const { frame, warning } = this.normaliseViceDisplaySnapshot(snapshot, includeBorder);

@@ -78,7 +78,7 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
       );
       const bytes = Buffer.byteLength(JSON.stringify(listResult));
       // 71 KB until the fifteen offline SIDWave operations of c64_sound (about 6 KB) were added.
-      // c64_debug profile_border and diagnose added 846 bytes: 76,698 measured.
+      // c64_debug profile_border and diagnose added 834 bytes: 76,686 measured.
       assert.ok(bytes < 76_750, `tools/list is ${bytes} bytes`);
       const soundSchema = JSON.stringify(listResult.tools.find(({ name }) => name === "c64_sound").inputSchema);
       for (const name of ["chiptune_drive", "stereo_echo", "wall_of_sid"]) {

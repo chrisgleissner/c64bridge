@@ -8,6 +8,14 @@
 - `c64_debug` op `profile_border` (VICE and the C64U/U64 video stream): raster lines, jitter, approximate cycles and overrun per `$D020` marker colour
 - the `game-development` skill describes sound effects through the `sidwave` game build: the `sfx` entry, voice selection and the measured cycles for the frame budget
 
+### Bug Fixes
+
+- `c64://platform/status` lists a tool as available on a backend when one of its operations runs there
+- `c64_graphics` op `capture_frame` on a stopped VICE warns that several frames are one picture
+- the `sid-music` skill states that play-call cycles are multiplied by the play calls per frame
+
+
+
 ## 1.5.0 - 2026-11-27
 
 ### Features

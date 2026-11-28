@@ -513,7 +513,7 @@ Grouped entry point for VICE debugger operations (breakpoints, registers, steppi
 | `continue_execution` | Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). | — | — |  |  | ✅ |
 | `create_checkpoint` | Create a new checkpoint (breakpoint) in VICE. | `address` | `endAddress`, `stopOnHit=true`, `enabled=true`, `temporary=false`, `label`, `operations`, `memspace` |  |  | ✅ |
 | `delete_checkpoint` | Remove a checkpoint by id. | `id` | — |  |  | ✅ |
-| `diagnose` | Crash verdict from PC, stack, vectors; VICE only. | — | `samples`, `sampleIntervalMs`, `codeRange`, `stackDepth`, `frameCounter` | ✅ | ✅ | ✅ |
+| `diagnose` | Crash verdict from PC, stack, vectors. | — | `samples`, `sampleIntervalMs`, `codeRange`, `stackDepth`, `frameCounter` |  |  | ✅ |
 | `get_checkpoint` | Fetch a single checkpoint by id. | `id` | — |  |  | ✅ |
 | `get_monitor_state` | Read CPU registers and return the current monitor state. | — | `memspace` |  |  | ✅ |
 | `get_registers` | Read register values, optionally filtered by name or id. | — | `memspace`, `registers` |  |  | ✅ |

@@ -39,6 +39,14 @@ test("includeBorder returns the whole canvas", async () => {
   assert.equal(frames[0].height, 6);
 });
 
+test("several frames of a stopped CPU come with a warning that they are one picture", async () => {
+  const { client } = viceClient(() => snapshot(1));
+  const backend = await client.facadePromise;
+  backend.isCpuStopped = () => true;
+  assert.ok((await client.captureFrames({ count: 2 })).warnings[0].includes("CPU is stopped"));
+  assert.equal((await client.captureFrames({ count: 1 })).warnings, undefined);
+});
+
 test("a monitor error is not retried", async () => {
   const { client, calls } = viceClient(() => { throw new Error("VICE session lost: connection reset"); });
   const started = Date.now();

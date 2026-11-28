@@ -7,6 +7,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { C64Client } from "../src/c64Client.js";
 import { diagnoseCrash, returnAddresses } from "../src/testing/crashDiagnosis.js";
 import { debugModuleGroup } from "../src/tools/debug.js";
+import { describePlatformCapabilities } from "../src/platform.js";
+import { classifyOperation } from "../src/tasks/resources.js";
+import { toolRegistry } from "../src/tools/registry/index.js";
 import { clearViceSymbols, setViceSymbols } from "../src/tools/translation/symbolRegistry.js";
 import { startViceMockServer } from "../src/vice/mockServer.js";
 import { startMockC64Server } from "../scripts/mockC64Server.mjs";
@@ -188,9 +191,10 @@ test("c64_debug profile_border against the VICE mock returns the documented shap
 
 test("on c64u diagnose is refused and profile_border captures the video stream", async () => {
   await withMocks("c64u", async (client) => {
-    const refused = await debugModuleGroup.invoke("c64_debug", { op: "diagnose" }, context(client, "c64u"));
-    assert.equal(refused.isError, true);
-    assert.ok(refused.content[0].text.includes("not implemented yet"), refused.content[0].text);
+    for (const id of ["c64u", "u2"]) {
+      await assert.rejects(() => debugModuleGroup.invoke("c64_debug", { op: "diagnose" }, context(client, id)),
+        (error) => error.name === "ToolValidationError" && error.message.includes("not implemented yet"));
+    }
     const result = await debugModuleGroup.invoke("c64_debug", {
       op: "profile_border", markers: [{ name: "work", color: 2 }], idleColor: 15, frames: 1,
     }, context(client, "c64u"));
@@ -210,6 +214,24 @@ test("profile_border refuses a paused VICE, which renders no new frames", async 
     assert.ok(result.content[0].text.includes("running CPU"), result.content[0].text);
     await client.explicitResume();
   });
+});
+
+test("profile_border takes the capture lease class, as capture_frame does", () => {
+  for (const backend of ["c64u", "vice"]) {
+    assert.equal(classifyOperation("c64_debug", "profile_border", "read", backend), "capture");
+  }
+  assert.equal(classifyOperation("c64_debug", "get_registers", "read", "vice"), "interrupting-read");
+});
+
+test("platform status lists c64_debug on c64u with profile_border as its only operation there", () => {
+  const { platforms } = describePlatformCapabilities(toolRegistry.list());
+  assert.ok(platforms.c64u.tools.includes("c64_debug"));
+  assert.ok(platforms.c64u.unsupported_operations.includes("c64_debug.diagnose"));
+  assert.ok(platforms.c64u.unsupported_operations.includes("c64_debug.get_registers"));
+  assert.ok(!platforms.c64u.unsupported_operations.includes("c64_debug.profile_border"));
+  assert.ok(platforms.u2.unsupported_tools.includes("c64_debug"));
+  assert.ok(platforms.vice.tools.includes("c64_debug"));
+  assert.ok(!platforms.vice.unsupported_operations.some((operation) => operation.startsWith("c64_debug.")));
 });
 
 test("profile_border refuses a shared marker colour and a backend without frame capture", async () => {
