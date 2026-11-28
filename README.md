@@ -144,13 +144,46 @@ Start with a small 6510 routine, or bring a PRG and its symbol file. In VICE, th
 
 > Run my PRG in VICE with its symbol file. Break at the player update routine, then resume and check whether pressing fire spawns a projectile.
 
+#### Pulse Guard: a game built by an agent
+
+[![Pulse Guard: title screen, gameplay and the Iron Moth boss](doc/img/pulse-guard.gif)](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4)
+
+Pulse Guard is a vertical shooter for the PAL C64 with five songs and nine sound effects, all in one SIDWave score. An AI coding agent (Claude Sonnet) wrote the code, graphics and music, and later review passes fixed defects.
+
+[Video with sound](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) (1 minute) · [Download the PRG](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.prg) (joystick in port 2) · [Source and build instructions](examples/sidwave-showcase/README.md)
+
+<details>
+<summary>The prompt that created it</summary>
+
+This is an excerpt from the brief the agent received, quoted word for word. The full brief also set working rules, such as using only original material. Another Claude agent wrote the brief from the maintainer's request for release material.
+
+```text
+1. A small showcase game with original music and sound effects (SIDWave effects engine with
+   priorities), built with `sidwave compile --target game` and an assembler include or symbols, in
+   `examples/sidwave-showcase/`: source, score(s), a build script, the PRG, a short README with the
+   measured player cycle cost. It must be fun for at least a minute and look presentable (title
+   screen, readable graphics). Extend the existing example programs if that is the fastest route to
+   good quality.
+
+2. Two or three original demo tunes in clearly different styles (for example driving chiptune,
+   atmospheric, boss fight), written as SIDWave scores, musically careful: structure with intro,
+   themes and variation, working bass and drums, no wrong notes against the harmony. Plus
+   self-authored or clearly public-domain source material for a conversion demo: one MIDI file and
+   one tracker file authored by you.
+
+5. Verify the game in VICE: screenshots at key states, input via the monitor or joystick emulation,
+   no crash over a 3 minute run, music and effects audible in the sound dump.
+```
+
+</details>
+
 ### Compose for the SID with SIDWave
 
 SIDWave is a text format and compiler for SID music. Give your agent an idea, a score, a MIDI tune or a ProTracker module. It can compose, convert, play and render music, and lists what each conversion lost. For games, it builds music and sound effects for 64tass, ACME or ca65, within your cycle limit. [Sound tools](#c64_sound)
 
 > In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
 
-- **Listen:** [in-game music](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3), [MIDI before and after](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and a [video](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) of the [Pulse Guard game](examples/sidwave-showcase/README.md).
+- **Listen:** [in-game music](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3), [MIDI before and after](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and a [video](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) of [Pulse Guard](#pulse-guard-a-game-built-by-an-agent).
 - **Learn:** [prompt cookbook](doc/sidwave-cookbook.md), [format](data/sound/sidwave.md), [example scores](data/sound/examples/) and [audio downloads](https://github.com/chrisgleissner/c64bridge/releases/tag/1.5.0).
 - **Sound:** A VICE started by C64 Bridge is silent unless you set, for example, `VICE_ARGS=-sounddev pulse` (Linux).
 - **Limits:** SID file reconstruction is experimental. It is approximate, as are ABC and some tracker imports. More than three SIDs require PRG output.
