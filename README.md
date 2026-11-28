@@ -14,9 +14,9 @@ C64 Bridge is a Model Context Protocol (MCP) server that connects coding agents 
 
 Your agent can:
 
-- **Run and debug.** Start a PRG, read the screen or RAM, set breakpoints in VICE, and use the results to fix the program.
+- **Run and debug.** Start a program, read the screen or RAM, set breakpoints in VICE, and use the results to fix the program.
 - **Drive real hardware.** Upload programs, mount disks and change settings on a C64 Ultimate, Ultimate 64 or U2 cartridge.
-- **Make SID music.** Compose, convert and play music, and build it into a game.
+- **Make SID music.** Compose, convert and play music for the C64 sound chip, and build it into a game.
 - **Look things up.** Search a built-in knowledge base on C64 programming and hardware.
 
 ## Contents
@@ -43,8 +43,6 @@ Install C64 Bridge by registering it with your client. The client launches `npx 
 
 ### 1. Choose a target
 
-C64 Bridge connects your coding agent to VICE or Ultimate hardware.
-
 | Target | Requirements |
 | --- | --- |
 | **C64 Ultimate / Ultimate 64** | Device reachable at hostname `c64u` (port 80). [C64 Ultimate](https://www.commodore.net/) · [Ultimate 64](https://ultimate64.com/) |
@@ -55,7 +53,7 @@ The installation examples assume these hostnames. If your hardware uses a differ
 
 ### 2. Install and start
 
-Choose your client and target. All methods run the latest published C64 Bridge using `npx -y c64bridge@latest`.
+Choose the setup for your client and target.
 
 #### Installation shortcuts
 
@@ -136,11 +134,11 @@ If the tools are missing, check that your client has enabled `c64bridge` and can
 
 ## Project showcases
 
-Try one of these after the tour. Each example gives the agent a concrete task and a way to inspect the result.
+Try one of these after your Hello World run. Each example gives the agent a concrete task and a way to inspect the result.
 
 ### Develop a game
 
-Tell your agent whether you are targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo and REU. It can use the bundled game development manual to plan the frame budget, memory layout and asset loading.
+Tell your agent whether you are targeting a stock PAL or NTSC C64, or an Ultimate with features such as turbo mode and a RAM Expansion Unit (REU). It can use the bundled game development manual to plan the frame budget, memory layout and asset loading.
 
 Start with a small 6510 routine, or bring a PRG and its symbol file. In VICE, the agent can break at your labels, step through code, send joystick input and inspect RAM. Switch to hardware to check raster timing and Ultimate features. [Program tools](#c64_program) · [VICE debugger](#c64_debug)
 
@@ -148,19 +146,15 @@ Start with a small 6510 routine, or bring a PRG and its symbol file. In VICE, th
 
 ### Compose for the SID with SIDWave
 
-SIDWave is a text format and compiler for SID music. Give your agent a musical idea, a score, or a file such as a MIDI tune or a ProTracker module. It can compose, play, convert and render the music, and build a player with sound effects for your game. Every conversion lists what it lost. [Sound tools](#c64_sound)
+SIDWave is a text format and compiler for SID music. Give your agent an idea, a score, a MIDI tune or a ProTracker module. It can compose, convert, play and render music, and lists what each conversion lost. For games, it builds music and sound effects for 64tass, ACME or ca65, within your cycle limit. [Sound tools](#c64_sound)
 
 > In VICE: play my MIDI file harbour_lights.mid on the C64's SID and tell me what was lost in the conversion.
 
-- **Listen:** [in-game music](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3), a [MIDI conversion](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and a [video](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) from the [Pulse Guard showcase game](examples/sidwave-showcase/README.md).
-- **Learn more:** [prompt cookbook](doc/sidwave-cookbook.md), [example scores](data/sound/examples/) and the [SIDWave format](data/sound/sidwave.md).
-
-Good to know:
-
-- VICE started by C64 Bridge is silent unless you set a sound device, for example `VICE_ARGS=-sounddev pulse` on Linux.
-- SID reconstruction and several tracker imports are approximate.
-- Music playback was checked on an Ultimate 64 Elite, not on a C64 Ultimate or a U2 cartridge. [Verification details](doc/sidwave-cookbook.md#verification-on-an-ultimate-64)
-- Scores with more than three SIDs need PRG output. A suitably equipped Ultimate can address up to ten.
+- **Listen:** [in-game music](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp3), [MIDI before and after](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-midi-before-after.mp3) and a [video](https://github.com/chrisgleissner/c64bridge/releases/download/1.5.0/sidwave-showcase-pulse-guard.mp4) of the [Pulse Guard game](examples/sidwave-showcase/README.md).
+- **Learn:** [prompt cookbook](doc/sidwave-cookbook.md), [format](data/sound/sidwave.md), [example scores](data/sound/examples/) and [audio downloads](https://github.com/chrisgleissner/c64bridge/releases/tag/1.5.0).
+- **Sound:** A VICE started by C64 Bridge is silent unless you set, for example, `VICE_ARGS=-sounddev pulse` (Linux).
+- **Limits:** SID file reconstruction is experimental. It is approximate, as are ABC and some tracker imports. More than three SIDs require PRG output.
+- **Hardware:** Playback was checked only on an Ultimate 64 Elite, by reading its memory. Nobody listened. [Details](doc/sidwave-cookbook.md#verification-on-an-ultimate-64)
 
 ### Use Ultimate hardware
 
@@ -314,13 +308,13 @@ The checkout also includes client configuration that runs your local sources:
 
 To start a stdio session by hand, run `npm start` from the checkout, or `npx -y c64bridge@latest` for the published package. The server then waits for MCP requests on stdin.
 
-`npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit the updated files together with your MCP server changes; the package check in CI fails if they are stale. [Developer guide](doc/developer.md)
+`npm run build` regenerates the contents list, the two reference sections below, and the static MCP interface. Commit the updated files together with your MCP server changes. The package check in CI fails if they are stale. [Developer guide](doc/developer.md)
 
 ## Documentation
 
 ### Setup and troubleshooting
 
-- **First run** · Choose a target, connect your client, and run a greeting. [Hello World tour](#quick-start)
+- **First run** · Choose a target, connect your client, and run a greeting. [Quick start](#quick-start)
 - **Startup and connection issues** · Check the session logs in `~/.c64bridge/diagnostics/`. Set `LOG_LEVEL=debug` for more detail. [Troubleshooting guide](doc/troubleshooting-mcp.md)
 
 ### Bundled manuals
