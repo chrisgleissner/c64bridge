@@ -61,7 +61,11 @@ test("platform status lists unsupported operations per backend", async () => {
   const u2 = markdown.slice(markdown.indexOf("### U2"), markdown.indexOf("### VICE"));
   assert.match(u2, /Unsupported operations of supported tools \(\d+\):.*`c64_input\.joystick`/);
   const c64u = markdown.slice(markdown.indexOf("### C64U"), markdown.indexOf("### U2"));
-  assert.match(c64u, /Unsupported operations of supported tools: _none_/);
+  // c64_debug runs only profile_border on c64u, so its other operations, and no others, are listed.
+  const listed = /Unsupported operations of supported tools \(\d+\): (.*)/.exec(c64u)[1].split(", ");
+  assert.ok(listed.includes("`c64_debug.diagnose`"));
+  assert.ok(!listed.includes("`c64_debug.profile_border`"));
+  assert.ok(listed.every((operation) => operation.startsWith("`c64_debug.")), listed.join(", "));
 });
 
 test("platform status reports the active access mode", async () => {
