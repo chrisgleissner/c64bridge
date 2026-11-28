@@ -53,6 +53,7 @@ test("only the chosen border column is read, and the longest run counts", () => 
   const two = frame(20, 4);
   two.pixels.set(frame(100, 7).pixels.subarray(100 * WIDTH, 107 * WIDTH), 100 * WIDTH);
   assert.equal(profile([two]).lines.max, 7);
+  assert.equal(profile([two]).splitFrames, 1);
   const rightOnly = frame(0, 0);
   for (let row = 50; row < 53; row += 1) rightOnly.pixels[row * WIDTH + borderColumnX(WIDTH, "right")] = 2;
   assert.equal(profile([rightOnly]).framesSeen, 0);

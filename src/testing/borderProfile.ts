@@ -38,6 +38,8 @@ export interface BorderMarkerReport {
   readonly approxCycles: MeanRange | null;
   /** The colour is in the first or the last captured row of at least one frame. */
   readonly overrun: boolean;
+  /** Frames in which the colour is in more than one run of rows; only the longest run is measured. */
+  readonly splitFrames: number;
 }
 
 /** CPU cycles of one raster line: PAL 6569, NTSC 6567R8. Bad lines and sprite DMA are not subtracted. */
@@ -79,19 +81,26 @@ export function borderColumnX(width: number, column: BorderColumn): number {
   return column === "left" ? inset : width - 1 - inset;
 }
 
-/** Longest run of consecutive rows showing `color`; the first one when two runs have the same length. */
-function longestRun(column: readonly number[], color: number): { first: number; length: number } | null {
+/**
+ * Longest run of consecutive rows showing `color`, the first one when two runs have the same length,
+ * and whether there is more than one run.
+ */
+function longestRun(column: readonly number[], color: number): { first: number; length: number; split: boolean } | null {
   let best: { first: number; length: number } | null = null;
+  let runs = 0;
   let start = -1;
   for (let row = 0; row <= column.length; row += 1) {
     if (row < column.length && column[row] === color) {
       if (start < 0) start = row;
       continue;
     }
-    if (start >= 0 && (!best || row - start > best.length)) best = { first: start, length: row - start };
+    if (start >= 0) {
+      runs += 1;
+      if (!best || row - start > best.length) best = { first: start, length: row - start };
+    }
     start = -1;
   }
-  return best;
+  return best ? { ...best, split: runs > 1 } : null;
 }
 
 function range(values: readonly number[]): Range {
@@ -116,11 +125,13 @@ export function profileBorder(
     const firsts: number[] = [];
     const lengths: number[] = [];
     let overrun = false;
+    let splitFrames = 0;
     for (const column of columns) {
       const run = longestRun(column, marker.color);
       if (!run) continue;
       firsts.push(run.first);
       lengths.push(run.length);
+      if (run.split) splitFrames += 1;
       if (column[0] === marker.color || column[column.length - 1] === marker.color) overrun = true;
     }
     const seen = lengths.length;
@@ -134,6 +145,7 @@ export function profileBorder(
       jitterLines: lines ? lines.max - lines.min : null,
       approxCycles: seen > 0 ? meanRange(lengths.map((length) => length * cycles)) : null,
       overrun,
+      splitFrames,
     };
   });
 }

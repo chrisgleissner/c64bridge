@@ -15,8 +15,13 @@ export interface CrashInput {
   readonly samples: readonly CpuSample[];
   /** 65536 bytes, read while the last sample's registers were current. */
   readonly memory: Uint8Array;
-  /** The CPU was already stopped, so the samples cannot show whether the PC moves. */
+  /**
+   * The CPU was stopped when the last sample was taken and was not resumed: either from the start
+   * (one sample) or by a stop during sampling. The PC cannot then be judged as not moving.
+   */
   readonly halted?: boolean;
+  /** Values of the program's frame counter at the first and the last sample. */
+  readonly frameCounter?: { readonly first: number; readonly last: number };
   readonly codeRange?: { readonly start: number; readonly end: number };
   /** Stack bytes to scan for return addresses. */
   readonly stackDepth: number;
@@ -103,8 +108,11 @@ export function diagnoseCrash(input: CrashInput): CrashReport {
   const returns = returnAddresses(memory, last.sp, input.stackDepth);
   const notes: string[] = [];
   if (input.halted) {
-    notes.push("The CPU was already stopped and was not resumed: one sample was taken, so a PC that does not move cannot be detected.");
+    notes.push(samples.length === 1
+      ? "The CPU was already stopped and was not resumed: one sample was taken, so a PC that does not move cannot be detected."
+      : `The CPU stopped during sampling (checkpoint, step or pause) and was not resumed: ${samples.length} samples were taken, and a PC that does not move cannot be detected.`);
   }
+  const counting = input.frameCounter !== undefined && input.frameCounter.first !== input.frameCounter.last;
 
   let verdict: CrashVerdict = "running";
   if (JAM_OPCODES.has(opcode) && samePc) {
@@ -117,10 +125,13 @@ export function diagnoseCrash(input: CrashInput): CrashReport {
   } else if (last.sp < STACK_LOW_LIMIT) {
     verdict = "stack_low";
     notes.push(`SP is ${formatByte(last.sp)}: the stack is close to overflowing.`);
+  } else if (samePc && !input.halted && samples.length > 1 && counting) {
+    notes.push(`Every sample had the PC at ${label(pc)}, but the frame counter changed, so the program is running. VICE takes the samples at frame boundaries, where a wait loop can show the same PC.`);
   } else if (samePc && !input.halted && samples.length > 1) {
     verdict = "stuck_pc";
     const [line] = disassemble(memory.subarray(last.pc, Math.min(last.pc + 3, 0x10000)), last.pc, 1, symbols);
     if (line) notes.push(`The PC did not move: ${`${line.mnemonic} ${line.operandLabel ?? line.operand}`.trim()} at ${label(pc)}.`);
+    notes.push("VICE takes the samples at frame boundaries; pass frameCounter to tell a frame wait loop from a hang.");
   } else if (outside(last.pc)) {
     notes.push(`The PC of the last sample, ${label(pc)}, is outside the code range, but not every sample is: this can be an interrupt or a ROM call.`);
   }

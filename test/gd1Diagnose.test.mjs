@@ -67,6 +67,18 @@ test("a moving PC is running, a low SP is stack_low, and one halted sample is no
   assert.ok(halted.notes.some((note) => note.includes("already stopped")));
 });
 
+test("a changing frame counter shows that a repeated PC is a wait loop", () => {
+  const bytes = { memory: memory({ 0xc007: [0x4c, 0x07, 0xc0] }) };
+  assert.equal(diagnose([0xc007, 0xc007], { ...bytes, frameCounter: { first: 5, last: 7 } }).verdict, "running");
+  assert.equal(diagnose([0xc007, 0xc007], { ...bytes, frameCounter: { first: 5, last: 5 } }).verdict, "stuck_pc");
+});
+
+test("a stop during sampling is reported as such", () => {
+  const report = diagnose([0xc001, 0xc001], { halted: true });
+  assert.equal(report.verdict, "running");
+  assert.ok(report.notes[0].includes("stopped during sampling"), report.notes[0]);
+});
+
 test("vectors and the processor port come from the memory image; without labels addresses are hex", () => {
   const report = diagnose([0xc001, 0xc004], { symbols: new Map() });
   assert.deepEqual(report.vectors.irq0314, { address: "$EA31" });
@@ -185,6 +197,18 @@ test("on c64u diagnose is refused and profile_border captures the video stream",
     assert.equal(result.isError, undefined, JSON.stringify(result.content));
     assert.equal(result.structuredContent.data.source, "video-stream");
     assert.equal(result.structuredContent.data.framesCaptured, 1);
+  });
+});
+
+test("profile_border refuses a paused VICE, which renders no new frames", async () => {
+  await withMocks("vice", async (client) => {
+    assert.equal((await client.explicitPause()).success, true);
+    const result = await debugModuleGroup.invoke("c64_debug", {
+      op: "profile_border", markers: [{ name: "work", color: 2 }], idleColor: 0,
+    }, context(client, "vice"));
+    assert.equal(result.isError, true);
+    assert.ok(result.content[0].text.includes("running CPU"), result.content[0].text);
+    await client.explicitResume();
   });
 });
 

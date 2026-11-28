@@ -738,6 +738,10 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       if (markers.some((marker) => marker.color === idleColor)) {
         throw new ToolValidationError("idleColor must differ from every marker colour.", { path: "$.idleColor" });
       }
+      // A stopped emulator renders nothing, so every requested frame would be the same picture.
+      if (ctx.platform.id === "vice" && (await cpuState(ctx)) === "stopped") {
+        throw new ToolValidationError("profile_border needs a running CPU; resume it first (c64_debug op continue_execution).", { path: "$.op" });
+      }
       const requested = (parsed.frames as number | undefined) ?? 8;
       // The same capture as c64_graphics capture_frame, on both backends.
       const capture = await ctx.client.captureFrames({ count: requested, includeBorder: true });
@@ -748,6 +752,11 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       const given = parsed.standard as VideoStandard | undefined;
       const standard = given ?? standardFromHeight(frames[0]!.height);
       const report = profileBorder(frames, { markers, column: (parsed.column as BorderColumn | undefined) ?? "left", standard });
+      const warnings = [
+        ...(capture.warnings ?? []),
+        ...report.filter((marker) => marker.splitFrames > 0).map((marker) =>
+          `Marker "${marker.name}" appears in separate runs of rows in ${marker.splitFrames} frame(s); lines and approxCycles cover only the longest run.`),
+      ];
       return jsonResult(
         {
           source: capture.backend === "vice" ? "vice" : "video-stream",
@@ -756,7 +765,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
           framesCaptured: frames.length,
           framesLost: Math.max(requested - frames.length, missingFrameNumbers(frames.map((frame) => frame.frameNumber))),
           markers: report,
-          ...(capture.warnings?.length ? { warnings: capture.warnings } : {}),
+          ...(warnings.length ? { warnings } : {}),
         },
         { success: true, framesCaptured: frames.length },
       );
@@ -795,6 +804,9 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
         samples: result.samples,
         memory: result.memory,
         halted: result.halted,
+        ...(result.counterFirst !== undefined && result.counterLast !== undefined
+          ? { frameCounter: { first: result.counterFirst, last: result.counterLast } }
+          : {}),
         ...(codeRange ? { codeRange } : {}),
         stackDepth: (parsed.stackDepth as number | undefined) ?? 16,
         symbols,
@@ -816,7 +828,7 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
                   address: formatWord(counter),
                   ...(counterSymbol ? { symbol: counterSymbol } : {}),
                   first: result.counterFirst,
-                  last: result.memory[counter]! | (result.memory[counter + 1]! << 8),
+                  last: result.counterLast,
                 },
               }
             : {}),
@@ -912,8 +924,8 @@ async function checkpointsAtPc(ctx: DebugCtx, pc: number | undefined): Promise<n
 
 /**
  * Takes register samples while the CPU runs between them, and reads the 64 KB the CPU sees together
- * with the last one. A CPU that is already stopped (pause, checkpoint or step) is not resumed: it
- * gets one sample. Each sample holds the CPU with an owned pause, which leaves it as it was found.
+ * with the last one. A stopped CPU (pause, checkpoint or step) is not resumed: the sample taken then
+ * is the last one. Each sample holds the CPU with an owned pause, which leaves it as it was found.
  */
 async function sampleCpu(ctx: DebugCtx, options: { samples: number; intervalMs: number; counter?: number }) {
   const metadata = await registerMetadata(ctx, 0);
@@ -943,7 +955,8 @@ async function sampleCpu(ctx: DebugCtx, options: { samples: number; intervalMs: 
       }
       if (final) {
         const memory = await ctx.client.readMemoryRaw(0, 0x10000, pause.facade);
-        return { samples, memory, halted, registers, counterFirst, warnings };
+        const counterLast = options.counter === undefined ? undefined : memory[options.counter]! | (memory[options.counter + 1]! << 8);
+        return { samples, memory, halted, registers, counterFirst, counterLast, warnings };
       }
     } finally {
       const released = await pause.release();
