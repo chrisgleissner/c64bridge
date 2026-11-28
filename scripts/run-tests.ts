@@ -31,6 +31,8 @@ const DEFAULT_VICE_MOCK_TEST_FILES = [
 const DEFAULT_VICE_DEVICE_TEST_FILES = [
   "test/device.test.mjs",
   "test/vice/viceSmokeTest.ts",
+  "test/gd1BorderProfile.test.mjs",
+  "test/gd1Diagnose.test.mjs",
 ];
 const BUN_ONLY_TEST_IMPORT_RE = /from\s+["']bun:test["']/;
 const BUN_RUNTIME_REQUIRED_TEST_FILES = new Set([

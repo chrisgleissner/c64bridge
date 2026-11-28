@@ -513,12 +513,14 @@ Grouped entry point for VICE debugger operations (breakpoints, registers, steppi
 | `continue_execution` | Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit). | — | — |  |  | ✅ |
 | `create_checkpoint` | Create a new checkpoint (breakpoint) in VICE. | `address` | `endAddress`, `stopOnHit=true`, `enabled=true`, `temporary=false`, `label`, `operations`, `memspace` |  |  | ✅ |
 | `delete_checkpoint` | Remove a checkpoint by id. | `id` | — |  |  | ✅ |
+| `diagnose` | Crash verdict from PC, stack, vectors. | — | `samples`, `sampleIntervalMs`, `codeRange`, `stackDepth`, `frameCounter` |  |  | ✅ |
 | `get_checkpoint` | Fetch a single checkpoint by id. | `id` | — |  |  | ✅ |
 | `get_monitor_state` | Read CPU registers and return the current monitor state. | — | `memspace` |  |  | ✅ |
 | `get_registers` | Read register values, optionally filtered by name or id. | — | `memspace`, `registers` |  |  | ✅ |
 | `list_checkpoints` | List all active VICE checkpoints (breakpoints). | — | — |  |  | ✅ |
 | `list_registers` | List available registers (metadata). | — | `memspace` |  |  | ✅ |
 | `nuclear_reset` | Kill and restart the VICE process (managed instances only). | — | — |  |  | ✅ |
+| `profile_border` | Raster lines per $D020 marker colour; cycles approximate. | `markers`, `idleColor` | `frames`, `column`, `standard` | ✅ |  | ✅ |
 | `set_condition` | Attach a conditional expression to a checkpoint. | `id`, `expression` | — |  |  | ✅ |
 | `set_registers` | Write register values. | `writes` | `memspace` |  |  | ✅ |
 | `step` | Single-step CPU execution. | — | `count=1`, `mode` |  |  | ✅ |

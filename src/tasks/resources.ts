@@ -43,7 +43,7 @@ const TASK_MANAGEMENT_OPS: ReadonlySet<string> = new Set([
 ]);
 const RESET_POWER_OPS: ReadonlySet<string> = new Set(["reset", "reboot", "poweroff", "power_cycle", "nuclear_reset"]);
 const CAPTURE_OPS: ReadonlySet<string> = new Set([
-  "capture_frame", "capture_samples", "record_analyze", "bundle_run",
+  "capture_frame", "capture_samples", "record_analyze", "bundle_run", "profile_border",
 ]);
 const PROGRAM_START_OPS: ReadonlySet<string> = new Set([
   "load_prg", "run_prg", "run_crt", "upload_run_basic", "upload_run_asm", "batch_run", "cross_platform_greeting",

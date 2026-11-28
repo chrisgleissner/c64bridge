@@ -512,6 +512,11 @@ export interface ToolDefinition {
   readonly prerequisites?: readonly string[];
   readonly supportedPlatforms?: readonly PlatformId[];
   readonly operationPlatforms?: Record<string, readonly PlatformId[]>;
+  /**
+   * Replaces the unsupported-backend error of a call with a validation error carrying this message,
+   * for example for an operation whose path for another backend does not exist yet.
+   */
+  readonly unsupportedPlatformMessage?: (op: string | undefined, platform: PlatformId) => string | undefined;
   readonly operationToolNames?: Record<string, string>;
   /** Effect of every operation of a grouped tool; every operation must be listed. */
   readonly operationEffects?: Record<string, ToolEffect>;
@@ -641,6 +646,8 @@ export function defineToolModule(config: ToolModuleConfig): ToolModule {
       const status = ctx.platform ?? getPlatformStatus();
       const setter = ctx.setPlatform ?? setPlatform;
       if (!isPlatformSupported(status.id, platforms)) {
+        const message = tool.unsupportedPlatformMessage?.(getSelectedOperation(args), status.id);
+        if (message) throw new ToolValidationError(message, { path: "$.op" });
         throw new ToolUnsupportedPlatformError(
           resolveUnsupportedToolName(name, tool, args),
           status.id,

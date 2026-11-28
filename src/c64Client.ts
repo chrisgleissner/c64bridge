@@ -2474,6 +2474,10 @@ export class C64Client {
       frames.push(frame);
       if (warning) warnings.add(warning);
     }
+    // Checked after the capture, so that a checkpoint hit between two frames is reported too.
+    if (count > 1 && viceFacade.isCpuStopped?.()) {
+      warnings.add("The CPU is stopped, so VICE renders no new frames: frames captured after the stop show the same picture.");
+    }
 
     return { backend: "vice", frames, ...(warnings.size > 0 ? { warnings: [...warnings] } : {}) };
   }

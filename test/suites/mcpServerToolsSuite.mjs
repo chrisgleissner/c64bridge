@@ -70,15 +70,16 @@ export function registerMcpServerToolsTests(withSharedMcpClient) {
     });
   });
 
-  test("tools/list stays below 76 KB and omits the duplicated per-op schemas", async () => {
+  test("tools/list stays below 76.75 KB and omits the duplicated per-op schemas", async () => {
     await withSharedMcpClient(async ({ client }) => {
       const listResult = await client.request(
         { method: "tools/list", params: {} },
         ListToolsResultSchema,
       );
       const bytes = Buffer.byteLength(JSON.stringify(listResult));
-      // 71 KB until the fifteen offline SIDWave operations of c64_sound (about 6 KB) were added; 75.5 KB measured.
-      assert.ok(bytes < 76_000, `tools/list is ${bytes} bytes`);
+      // 71 KB until the fifteen offline SIDWave operations of c64_sound (about 6 KB) were added.
+      // c64_debug profile_border and diagnose added 834 bytes: 76,686 measured.
+      assert.ok(bytes < 76_750, `tools/list is ${bytes} bytes`);
       const soundSchema = JSON.stringify(listResult.tools.find(({ name }) => name === "c64_sound").inputSchema);
       for (const name of ["chiptune_drive", "stereo_echo", "wall_of_sid"]) {
         assert.ok(soundSchema.includes(`"${name}"`), `play_preset advertises ${name}`);

@@ -77,6 +77,10 @@ export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
   for (const tool of tools) {
     const supported = tool.metadata.platforms ?? ["c64u"];
     for (const id of ["c64u", "u2", "vice"] as const) {
+      // Operations that run on this backend although their tool does not (c64_debug profile_border).
+      const added = Object.entries(tool.metadata.operationPlatforms ?? {})
+        .filter(([, platforms]) => platforms.includes(id))
+        .map(([op]) => op);
       if (supported.includes(id)) {
         map[id].available.push(tool.name);
         // Operations of an available tool that this backend does not provide.
@@ -84,6 +88,11 @@ export function describePlatformCapabilities(tools: readonly ToolDescriptor[]) {
           if (platforms.length > 0 && !platforms.includes(id)) {
             map[id].unsupportedOperations.push(`${tool.name}.${op}`);
           }
+        }
+      } else if (added.length > 0) {
+        map[id].available.push(tool.name);
+        for (const op of Object.keys(tool.metadata.operationEffects ?? {})) {
+          if (!added.includes(op)) map[id].unsupportedOperations.push(`${tool.name}.${op}`);
         }
       } else {
         map[id].unsupported.push(tool.name);

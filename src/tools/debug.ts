@@ -23,7 +23,11 @@ import {
   toolErrorResult,
   unknownErrorResult,
 } from "./errors.js";
-import { clearViceSymbols } from "./translation/symbolRegistry.js";
+import { clearViceSymbols, getViceSymbols } from "./translation/symbolRegistry.js";
+import { acquireOwnedPause, resumeWarning } from "./pauseGuard.js";
+import { diagnoseCrash, formatWord, nearestSymbol, type CpuSample } from "../testing/crashDiagnosis.js";
+import { missingFrameNumbers, profileBorder, standardFromHeight, type BorderColumn, type VideoStandard } from "../testing/borderProfile.js";
+import { setTimeout as delay } from "node:timers/promises";
 import { ADDRESS_FORMS, parseAddressArg } from "./memory.js";
 
 interface DebugOperationMap extends OperationMap {
@@ -61,6 +65,8 @@ interface DebugOperationMap extends OperationMap {
   readonly wait_for_state: { readonly expectedPC?: string; readonly timeoutMs?: number; readonly pollMs?: number };
   readonly nuclear_reset: Record<string, never>;
   readonly continue_execution: Record<string, never>;
+  readonly profile_border: Record<string, unknown>;
+  readonly diagnose: Record<string, unknown>;
 }
 
 interface RegisterSelector {
@@ -303,6 +309,55 @@ const continueExecutionArgsSchema = objectSchema({
   additionalProperties: false,
 });
 
+/** Publishes a short JSON schema in tools/list and keeps the full validation of `schema`. */
+function listed<T>(schema: Schema<T>, jsonSchema: Schema<T>["jsonSchema"]): Schema<T> {
+  return { jsonSchema, parse: (value, path) => schema.parse(value, path) };
+}
+
+const INTEGER = { type: "integer" } as const;
+
+const borderColorSchema = listed(numberSchema({ integer: true, minimum: 0, maximum: 15 }), INTEGER);
+
+function optionalInteger(minimum: number, maximum: number, fallback: number) {
+  return listed(optionalSchema(numberSchema({ integer: true, minimum, maximum }), fallback), INTEGER);
+}
+
+const profileBorderArgsSchema = objectSchema({
+  description: "Raster lines per $D020 marker colour; cycles approximate.",
+  properties: {
+    op: literalSchema("profile_border"),
+    markers: listed(arraySchema(objectSchema<{ name: string; color: number }>({
+      properties: { name: stringSchema({ minLength: 1 }), color: borderColorSchema },
+      required: ["name", "color"],
+      additionalProperties: false,
+    }), { minItems: 1, maxItems: 8 }), { type: "array", items: { properties: { name: {}, color: {} } } }),
+    idleColor: borderColorSchema,
+    frames: optionalInteger(1, 32, 8),
+    column: listed(optionalSchema(stringSchema({ enum: ["left", "right"] }), "left"), { enum: ["left", "right"] }),
+    standard: listed(optionalSchema(stringSchema({ enum: ["pal", "ntsc"] })), { enum: ["pal", "ntsc"] }),
+  },
+  required: ["op", "markers", "idleColor"],
+  additionalProperties: false,
+});
+
+const diagnoseArgsSchema = objectSchema({
+  description: "Crash verdict from PC, stack, vectors.",
+  properties: {
+    op: literalSchema("diagnose"),
+    samples: optionalInteger(2, 10, 3),
+    sampleIntervalMs: optionalInteger(10, 1000, 50),
+    codeRange: listed(optionalSchema(objectSchema<{ start: string; end: string }>({
+      properties: { start: stringSchema({ minLength: 1 }), end: stringSchema({ minLength: 1 }) },
+      required: ["start", "end"],
+      additionalProperties: false,
+    })), { type: "object", properties: { start: {}, end: {} } }),
+    stackDepth: optionalInteger(2, 64, 16),
+    frameCounter: listed(optionalSchema(stringSchema({ minLength: 1 })), { type: "string" }),
+  },
+  required: ["op"],
+  additionalProperties: false,
+});
+
 const debugOperationSchemas = [
   listCheckpointsArgsSchema,
   getCheckpointArgsSchema,
@@ -319,6 +374,8 @@ const debugOperationSchemas = [
   waitForStateArgsSchema,
   nuclearResetArgsSchema,
   continueExecutionArgsSchema,
+  profileBorderArgsSchema,
+  diagnoseArgsSchema,
 ] as const;
 
 const checkpointLabels = new Map<number, string>();
@@ -670,6 +727,113 @@ const debugOperationHandlers: OperationHandlerMap<DebugOperationMap> = {
       return handleToolError(error);
     }
   },
+  profile_border: async (args, ctx) => {
+    try {
+      const parsed = profileBorderArgsSchema.parse(args);
+      const markers = parsed.markers as readonly { name: string; color: number }[];
+      const idleColor = parsed.idleColor as number;
+      if (new Set(markers.map((marker) => marker.color)).size !== markers.length) {
+        throw new ToolValidationError("Each marker needs its own colour.", { path: "$.markers" });
+      }
+      if (markers.some((marker) => marker.color === idleColor)) {
+        throw new ToolValidationError("idleColor must differ from every marker colour.", { path: "$.idleColor" });
+      }
+      // A stopped emulator renders nothing, so every requested frame would be the same picture.
+      if (ctx.platform.id === "vice" && (await cpuState(ctx)) === "stopped") {
+        throw new ToolValidationError("profile_border needs a running CPU; resume it first (c64_debug op continue_execution).", { path: "$.op" });
+      }
+      const requested = (parsed.frames as number | undefined) ?? 8;
+      // The same capture as c64_graphics capture_frame, on both backends.
+      const capture = await ctx.client.captureFrames({ count: requested, includeBorder: true });
+      const frames = capture.frames.filter((frame) => frame.complete && frame.pixels.length >= frame.width * frame.height);
+      if (frames.length === 0) {
+        throw new ToolExecutionError("No complete video frame was captured.");
+      }
+      const given = parsed.standard as VideoStandard | undefined;
+      const standard = given ?? standardFromHeight(frames[0]!.height);
+      const report = profileBorder(frames, { markers, column: (parsed.column as BorderColumn | undefined) ?? "left", standard });
+      const warnings = [
+        ...(capture.warnings ?? []),
+        ...report.filter((marker) => marker.splitFrames > 0).map((marker) =>
+          `Marker "${marker.name}" appears in separate runs of rows in ${marker.splitFrames} frame(s); lines and approxCycles cover only the longest run.`),
+      ];
+      return jsonResult(
+        {
+          source: capture.backend === "vice" ? "vice" : "video-stream",
+          standard,
+          standardSource: given ? "argument" : `detected from the frame height (${frames[0]!.height} rows)`,
+          framesCaptured: frames.length,
+          framesLost: Math.max(requested - frames.length, missingFrameNumbers(frames.map((frame) => frame.frameNumber))),
+          markers: report,
+          ...(warnings.length ? { warnings } : {}),
+        },
+        { success: true, framesCaptured: frames.length },
+      );
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
+  diagnose: async (args, ctx) => {
+    try {
+      const parsed = diagnoseArgsSchema.parse(args);
+      const range = parsed.codeRange as { start: string; end: string } | undefined;
+      const codeRange = range
+        ? { start: parseAddress(range.start, "codeRange.start"), end: parseAddress(range.end, "codeRange.end") }
+        : undefined;
+      if (codeRange && codeRange.end < codeRange.start) {
+        throw new ToolValidationError("codeRange.end is below codeRange.start.", { path: "$.codeRange.end" });
+      }
+      const counterArg = parsed.frameCounter as string | undefined;
+      const counter = counterArg === undefined ? undefined : parseAddress(counterArg, "frameCounter");
+      if (counter !== undefined && counter > 0xfffe) {
+        throw new ToolValidationError("frameCounter is two bytes and must end at $FFFF or below.", { path: "$.frameCounter" });
+      }
+      const result = await sampleCpu(ctx, {
+        samples: (parsed.samples as number | undefined) ?? 3,
+        intervalMs: (parsed.sampleIntervalMs as number | undefined) ?? 50,
+        ...(counter !== undefined ? { counter } : {}),
+      });
+      const symbols = getViceSymbols();
+      const report = diagnoseCrash({
+        samples: result.samples,
+        memory: result.memory,
+        halted: result.halted,
+        ...(result.counterFirst !== undefined && result.counterLast !== undefined
+          ? { frameCounter: { first: result.counterFirst, last: result.counterLast } }
+          : {}),
+        ...(codeRange ? { codeRange } : {}),
+        stackDepth: (parsed.stackDepth as number | undefined) ?? 16,
+        symbols,
+      });
+      const { verdict, pc, opcodeAtPc, port01, vectors, stack, notes } = report;
+      const counterSymbol = counter === undefined ? undefined : nearestSymbol(counter, symbols);
+      return jsonResult(
+        {
+          verdict,
+          pc,
+          opcodeAtPc,
+          registers: result.registers,
+          port01,
+          vectors,
+          stack,
+          ...(counter !== undefined
+            ? {
+                frameCounter: {
+                  address: formatWord(counter),
+                  ...(counterSymbol ? { symbol: counterSymbol } : {}),
+                  first: result.counterFirst,
+                  last: result.counterLast,
+                },
+              }
+            : {}),
+          notes: [...notes, ...result.warnings],
+        },
+        { success: true, verdict },
+      );
+    } catch (error) {
+      return handleToolError(error);
+    }
+  },
 };
 
 
@@ -752,6 +916,49 @@ async function checkpointsAtPc(ctx: DebugCtx, pc: number | undefined): Promise<n
   }
 }
 
+/**
+ * Takes register samples while the CPU runs between them, and reads the 64 KB the CPU sees together
+ * with the last one. A stopped CPU (pause, checkpoint or step) is not resumed: the sample taken then
+ * is the last one. Each sample holds the CPU with an owned pause, which leaves it as it was found.
+ */
+async function sampleCpu(ctx: DebugCtx, options: { samples: number; intervalMs: number; counter?: number }) {
+  const metadata = await registerMetadata(ctx, 0);
+  const samples: CpuSample[] = [];
+  const warnings: string[] = [];
+  let counterFirst: number | undefined;
+  for (let index = 0; ; index += 1) {
+    if (index > 0) await delay(options.intervalMs);
+    const halted = (await cpuState(ctx)) === "stopped";
+    const final = halted || index === options.samples - 1;
+    const pause = await acquireOwnedPause(ctx.client);
+    if (!pause.result.success) {
+      throw new ToolExecutionError("The CPU could not be paused for a register sample.", { details: { result: pause.result.details } });
+    }
+    try {
+      const values = await ctx.client.viceRegistersGet(0);
+      const registers = formatRegisters(values, metadata);
+      const named = (name: string) => {
+        const value = registers.find((register) => register.name?.toUpperCase() === name)?.value;
+        if (value === undefined) throw new ToolExecutionError(`VICE reported no ${name} register.`);
+        return value;
+      };
+      samples.push({ pc: named("PC"), sp: named("SP") & 0xff });
+      if (index === 0 && options.counter !== undefined) {
+        const bytes = await ctx.client.readMemoryRaw(options.counter, 2, pause.facade);
+        counterFirst = bytes[0]! | (bytes[1]! << 8);
+      }
+      if (final) {
+        const memory = await ctx.client.readMemoryRaw(0, 0x10000, pause.facade);
+        const counterLast = options.counter === undefined ? undefined : memory[options.counter]! | (memory[options.counter + 1]! << 8);
+        return { samples, memory, halted, registers, counterFirst, counterLast, warnings };
+      }
+    } finally {
+      const released = await pause.release();
+      if (!released.success) warnings.push(resumeWarning(released.details));
+    }
+  }
+}
+
 /** After a step the registers are a convenience: a failed read leaves them out instead of failing the step. */
 async function registerSnapshotAfterStep(ctx: DebugCtx): Promise<{ registers?: ReturnType<typeof formatRegisters>; pc?: number }> {
   try {
@@ -775,7 +982,7 @@ const debugOperationDispatcher = createOperationDispatcher<DebugOperationMap>(
 
 export const debugModuleGroup = defineToolModule({
   domain: "debug",
-  summary: "VICE Binary Monitor debugger operations (breakpoints, registers, stepping).",
+  summary: "VICE Binary Monitor debugger operations (breakpoints, registers, stepping), crash diagnosis and border profiling.",
   resources: ["c64://assembly/6510-spec", "c64://memory/map"],
   prompts: ["assembly-program", "memory-debug"],
   defaultTags: ["debug", "vice"],
@@ -798,7 +1005,12 @@ export const debugModuleGroup = defineToolModule({
         toggle_checkpoint: "write", set_condition: "write", list_registers: "read", get_registers: "read",
         set_registers: "write", step: "write", step_return: "write", get_monitor_state: "read",
         wait_for_state: "read", nuclear_reset: "destructive", continue_execution: "write",
+        profile_border: "read", diagnose: "read",
       },
+      operationPlatforms: { profile_border: ["c64u", "vice"], diagnose: ["vice"] },
+      unsupportedPlatformMessage: (op, platform) => op === "diagnose"
+        ? `diagnose runs on the vice backend only; the hardware path for ${platform} is not implemented yet.`
+        : undefined,
       tags: ["debug", "breakpoint", "registers", "grouped"],
       examples: [
         {

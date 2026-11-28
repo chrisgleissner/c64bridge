@@ -213,6 +213,8 @@ test("run-tests curates default VICE matrix files around supported suites", () =
   assert.deepEqual(resolveDefaultMatrixTestFiles("vice", "device"), [
     "test/device.test.mjs",
     "test/vice/viceSmokeTest.ts",
+    "test/gd1BorderProfile.test.mjs",
+    "test/gd1Diagnose.test.mjs",
   ]);
 });
 

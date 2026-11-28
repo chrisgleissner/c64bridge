@@ -3269,7 +3269,9 @@
               "get_monitor_state",
               "wait_for_state",
               "nuclear_reset",
-              "continue_execution"
+              "continue_execution",
+              "profile_border",
+              "diagnose"
             ],
             "description": "Selects the operation."
           },
@@ -3483,12 +3485,58 @@
             "minimum": 10,
             "maximum": 1000,
             "default": 100
+          },
+          "markers": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "name": {},
+                "color": {}
+              }
+            }
+          },
+          "idleColor": {
+            "type": "integer"
+          },
+          "frames": {
+            "type": "integer"
+          },
+          "column": {
+            "enum": [
+              "left",
+              "right"
+            ]
+          },
+          "standard": {
+            "enum": [
+              "pal",
+              "ntsc"
+            ]
+          },
+          "samples": {
+            "type": "integer"
+          },
+          "sampleIntervalMs": {
+            "type": "integer"
+          },
+          "codeRange": {
+            "type": "object",
+            "properties": {
+              "start": {},
+              "end": {}
+            }
+          },
+          "stackDepth": {
+            "type": "integer"
+          },
+          "frameCounter": {
+            "type": "string"
           }
         },
         "required": [
           "op"
         ],
-        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id. Required: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required: address. Optional: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required: id, expression.\n- list_registers: List available registers (metadata). Optional: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Optional: memspace, registers.\n- set_registers [write]: Write register values. Required: writes. Optional: memspace.\n- step [write]: Single-step CPU execution. Optional: count, mode.\n- step_return [write]: Continue execution until the current routine returns.\n- get_monitor_state: Read CPU registers and return the current monitor state. Optional: memspace.\n- wait_for_state: Wait until the CPU is stopped (checkpoint or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled. Optional: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [destructive]: Kill and restart the VICE process (managed instances only).\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).",
+        "description": "Available debugger operations.\n\nOperations:\n- list_checkpoints: List all active VICE checkpoints (breakpoints).\n- get_checkpoint: Fetch a single checkpoint by id. Required: id.\n- create_checkpoint [write]: Create a new checkpoint (breakpoint) in VICE. Required: address. Optional: endAddress, stopOnHit, enabled, temporary, label, operations, memspace.\n- delete_checkpoint [write]: Remove a checkpoint by id. Required: id.\n- toggle_checkpoint [write]: Enable or disable a checkpoint by id. Required: id, enabled.\n- set_condition [write]: Attach a conditional expression to a checkpoint. Required: id, expression.\n- list_registers: List available registers (metadata). Optional: memspace.\n- get_registers: Read register values, optionally filtered by name or id. Optional: memspace, registers.\n- set_registers [write]: Write register values. Required: writes. Optional: memspace.\n- step [write]: Single-step CPU execution. Optional: count, mode.\n- step_return [write]: Continue execution until the current routine returns.\n- get_monitor_state: Read CPU registers and return the current monitor state. Optional: memspace.\n- wait_for_state: Wait until the CPU is stopped (checkpoint or step) and, with expectedPC, PC equals it, or the timeout elapses. Without a debug session the registers are polled. Optional: expectedPC, timeoutMs, pollMs.\n- nuclear_reset [destructive]: Kill and restart the VICE process (managed instances only).\n- continue_execution [write]: Exit the Binary Monitor and resume CPU execution (BM 0xAA Exit).\n- profile_border [c64u, vice]: Raster lines per $D020 marker colour; cycles approximate. Required: markers, idleColor. Optional: frames, column, standard.\n- diagnose [vice]: Crash verdict from PC, stack, vectors. Optional: samples, sampleIntervalMs, codeRange, stackDepth, frameCounter.",
         "additionalProperties": false
       },
       "annotations": {
@@ -3503,6 +3551,15 @@
         "platforms": [
           "vice"
         ],
+        "operationPlatforms": {
+          "profile_border": [
+            "c64u",
+            "vice"
+          ],
+          "diagnose": [
+            "vice"
+          ]
+        },
         "operationEffects": {
           "list_checkpoints": "read",
           "get_checkpoint": "read",
@@ -3518,7 +3575,9 @@
           "get_monitor_state": "read",
           "wait_for_state": "read",
           "nuclear_reset": "destructive",
-          "continue_execution": "write"
+          "continue_execution": "write",
+          "profile_border": "read",
+          "diagnose": "read"
         }
       }
     },
